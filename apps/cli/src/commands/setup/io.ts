@@ -35,6 +35,12 @@ export function defaultPrompt(): SetupPromptAdapter {
       const answer = await readline.question(`${message}\n${labels}\n> `);
       return parseMultiSelectAnswer(answer, choices);
     },
+    pause() {
+      readline.pause();
+    },
+    resume() {
+      readline.resume();
+    },
     close() {
       readline.close();
     },

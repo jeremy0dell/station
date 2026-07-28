@@ -14,6 +14,12 @@ export const setupActionKinds = [
 ] as const;
 export const setupActionStatuses = ["pending", "completed", "failed", "skipped"] as const;
 export const supportedHarnessIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
+export const setupHarnessSelectionSources = [
+  "configured",
+  "explicit",
+  "inferred",
+  "unresolved",
+] as const;
 
 export const SetupTierSchema = z.enum(setupTiers);
 export const SetupStatusSchema = z.enum(setupStatuses);
@@ -21,13 +27,36 @@ export const SetupModeSchema = z.enum(setupModes);
 export const SetupActionKindSchema = z.enum(setupActionKinds);
 export const SetupActionStatusSchema = z.enum(setupActionStatuses);
 export const SupportedHarnessIdSchema = z.enum(supportedHarnessIds);
+export const SetupHarnessSelectionSourceSchema = z.enum(setupHarnessSelectionSources);
+export const SetupHarnessTrackingFactSchema = z
+  .object({
+    harnessId: SupportedHarnessIdSchema,
+    capability: z.enum(["supported", "unsupported"]),
+    requested: z.boolean().optional(),
+    installed: z.boolean().optional(),
+    detail: z.string().min(1).optional(),
+    probeFailed: z.boolean().optional(),
+  })
+  .strict()
+  .superRefine((fact, context) => {
+    if (
+      fact.capability === "unsupported" &&
+      (fact.requested !== undefined ||
+        fact.installed !== undefined ||
+        fact.probeFailed !== undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Unsupported tracking facts cannot include status fields.",
+      });
+    }
+  });
 
 export type SetupTier = z.infer<typeof SetupTierSchema>;
-export type SetupStatus = z.infer<typeof SetupStatusSchema>;
 export type SetupMode = z.infer<typeof SetupModeSchema>;
-export type SetupActionKind = z.infer<typeof SetupActionKindSchema>;
-export type SetupActionStatus = z.infer<typeof SetupActionStatusSchema>;
 export type SupportedHarnessId = z.infer<typeof SupportedHarnessIdSchema>;
+export type SetupHarnessSelectionSource = z.infer<typeof SetupHarnessSelectionSourceSchema>;
+export type SetupHarnessTrackingFact = z.infer<typeof SetupHarnessTrackingFactSchema>;
 
 export const SetupCheckSchema = z
   .object({
@@ -63,6 +92,7 @@ export const SetupSummarySchema = z
     requiredMissing: z.number().int().nonnegative(),
     warnings: z.number().int().nonnegative(),
     selectedActions: z.number().int().nonnegative(),
+    selectionSource: SetupHarnessSelectionSourceSchema,
     selectedHarness: SupportedHarnessIdSchema.optional(),
     configPath: z.string(),
   })
@@ -85,7 +115,6 @@ export const SetupPlanSchema = z
 
 export type SetupCheck = z.infer<typeof SetupCheckSchema>;
 export type SetupAction = z.infer<typeof SetupActionSchema>;
-export type SetupSummary = z.infer<typeof SetupSummarySchema>;
 export type SetupPlan = z.infer<typeof SetupPlanSchema>;
 
 export type SetupDependencyFact = {
@@ -132,21 +161,40 @@ export type SetupXcodeFact =
       message: string;
     };
 
+type SetupGitRepositoryFact = {
+  status: "ok";
+  repository: "present";
+  root: string;
+  defaultBranch: string;
+  repoName: string;
+};
+
+type SetupGitOutsideRepositoryFact = {
+  status: "ok";
+  repository: "absent";
+  defaultBranch: string;
+  message: string;
+};
+
+type SetupGitCapabilityFailureFact = {
+  status: "missing";
+  reason: "git-absent" | "git-unusable";
+  defaultBranch: string;
+  message: string;
+};
+
+type SetupGitRepositoryFailureFact = {
+  status: "missing";
+  reason: "repository-unusable" | "dubious-ownership";
+  defaultBranch: string;
+  message: string;
+};
+
 export type SetupGitFact =
-  | {
-      status: "ok";
-      root: string;
-      defaultBranch: string;
-      repoName: string;
-    }
-  | {
-      status: "missing";
-      // "git-absent": the git binary is not installed (bare-machine case).
-      // "not-a-repo": git works but the cwd is not inside a repository.
-      reason: "git-absent" | "not-a-repo";
-      defaultBranch: string;
-      message: string;
-    };
+  | SetupGitRepositoryFact
+  | SetupGitOutsideRepositoryFact
+  | SetupGitCapabilityFailureFact
+  | SetupGitRepositoryFailureFact;
 
 export type SetupHarnessFact = {
   id: SupportedHarnessId;
@@ -297,6 +345,7 @@ export type SetupFacts = {
   launchers: SetupLaunchersFact;
   git: SetupGitFact;
   harnesses: readonly SetupHarnessFact[];
+  harnessTracking: readonly SetupHarnessTrackingFact[];
   config: SetupConfigFact;
   tmuxBinding: SetupTmuxBindingFact;
 };

@@ -2,7 +2,7 @@ import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codexHookPayloadToHarnessEventReport, compactCodexHookPayload } from "@station/codex";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import type { HarnessEventReport, HarnessEventReportReceipt } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
@@ -33,6 +33,7 @@ import {
   providerIngressSpoolDir,
   startObserverServer,
 } from "../../src/internal";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -257,16 +258,17 @@ describe("observer hook spool drain", () => {
     });
     const { socketPath } = await createTempSocketPath();
 
-    const serverPromise = startObserverServer({
+    const server = await startObserverServer({
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
     });
+    const startupReconcile = fixture.api.reconcile("observer.startup");
 
     await waitFor(async () => (await probeObserverSocket(socketPath)).status === "listening");
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     gate.resolve();
-    const server = await serverPromise;
+    await startupReconcile;
     await expect(fileExists(spoolPath)).resolves.toBe(false);
     await server.close();
     fixture.sqlite.close();
@@ -294,16 +296,17 @@ describe("observer hook spool drain", () => {
     });
     const { socketPath } = await createTempSocketPath();
 
-    const serverPromise = startObserverServer({
+    const server = await startObserverServer({
       socketPath,
       api: fixture.api,
       clock: fixture.clock,
     });
+    const startupReconcile = fixture.api.reconcile("observer.startup");
 
     await waitFor(async () => processingStarted);
     await expect(fileExists(spoolPath)).resolves.toBe(true);
     gate.resolve();
-    const server = await serverPromise;
+    await startupReconcile;
     await expect(fileExists(spoolPath)).resolves.toBe(false);
     await server.close();
     fixture.sqlite.close();
@@ -460,6 +463,7 @@ function createFixture(
     persistenceHealth: persistence,
     commandQueue: queue,
     eventBus,
+    diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     ...(options.providerHookIngress === undefined
       ? {}
       : { providerHookIngress: options.providerHookIngress }),
@@ -516,6 +520,7 @@ function codexHarnessReport(reportId: string, toolUseId: string): HarnessEventRe
 
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

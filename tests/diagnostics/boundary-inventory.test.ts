@@ -299,6 +299,152 @@ describe("boundary inventory guard", () => {
     expect([...violations].sort()).toEqual([]);
   });
 
+  it("isolates local Git metadata mechanics behind application-owned ports", async () => {
+    const refreshPath = join(process.cwd(), "apps/observer/src/metadata/refresh.ts");
+    const portsPath = join(process.cwd(), "apps/observer/src/metadata/ports.ts");
+    const runtimePath = join(process.cwd(), "apps/observer/src/runtime/api.ts");
+    const refreshSource = await readFile(refreshPath, "utf8");
+    const portsSource = await readFile(portsPath, "utf8");
+    const runtimeSource = await readFile(runtimePath, "utf8");
+
+    const refreshImports = sourceImports(refreshSource, refreshPath).map(
+      (entry) => entry.specifier,
+    );
+    expect(refreshImports).toContain("./ports.js");
+    expect(refreshImports).not.toEqual(
+      expect.arrayContaining([
+        "./gitCommand.js",
+        "./gitRefInvalidation.js",
+        "./localGitChangeSummary.js",
+        "node:fs",
+        "node:path",
+        "@station/runtime/externalCommand",
+      ]),
+    );
+
+    const portDeclarationNames = [
+      "WorktreeMetadataTarget",
+      "WorktreeChangeBaseSelection",
+      "WorktreeChangeReadRequest",
+      "WorktreeChangeEvidence",
+      "WorktreeChangeReadResult",
+      "WorktreeChangeSource",
+      "WorktreeMetadataInvalidationSource",
+    ];
+    const portFacts = declarationFacts(portsSource, portsPath, portDeclarationNames);
+    expect(portFacts.declarations).toEqual(portDeclarationNames);
+    expect(portFacts.identifiers).not.toEqual(
+      expect.arrayContaining([
+        "path",
+        "cwd",
+        "ExternalCommandRunner",
+        "FSWatcher",
+        "WatchDirectory",
+      ]),
+    );
+
+    const metadataFiles = (
+      await sourceFilesAt(join(process.cwd(), "apps/observer/src/metadata"))
+    ).filter(isProductionSourceFile);
+    const nodeFsImporters: string[] = [];
+    const commandRunnerOwners: string[] = [];
+    for (const file of metadataFiles) {
+      const source = await readFile(file, "utf8");
+      const path = relative(process.cwd(), file);
+      if (sourceImports(source, file).some((entry) => entry.specifier === "node:fs")) {
+        nodeFsImporters.push(path);
+      }
+      if (/\bExternalCommandRunner\b/.test(source)) commandRunnerOwners.push(path);
+    }
+    expect(nodeFsImporters).toEqual(["apps/observer/src/metadata/gitRefInvalidation.ts"]);
+    expect(commandRunnerOwners.sort()).toEqual([
+      "apps/observer/src/metadata/gitCommand.ts",
+      "apps/observer/src/metadata/localGitChangeSummary.ts",
+    ]);
+
+    const runtimeImports = sourceImports(runtimeSource, runtimePath).map(
+      (entry) => entry.specifier,
+    );
+    expect(runtimeImports).toEqual(
+      expect.arrayContaining([
+        "../metadata/gitRefInvalidation.js",
+        "../metadata/localGitChangeSummary.js",
+        "../metadata/ports.js",
+      ]),
+    );
+  });
+
+  it("isolates local diagnostic evidence behind an application-owned port", async () => {
+    const collectorPath = join(process.cwd(), "apps/observer/src/diagnostics/collector.ts");
+    const portPath = join(process.cwd(), "apps/observer/src/diagnostics/evidenceSource.ts");
+    const adapterPath = join(process.cwd(), "apps/observer/src/diagnostics/localEvidenceSource.ts");
+    const apiPath = join(process.cwd(), "apps/observer/src/runtime/api.ts");
+    const mainPath = join(process.cwd(), "apps/observer/src/runtime/main.ts");
+    const [collectorSource, portSource, adapterSource, apiSource, mainSource] = await Promise.all(
+      [collectorPath, portPath, adapterPath, apiPath, mainPath].map((path) =>
+        readFile(path, "utf8"),
+      ),
+    );
+
+    const collectorImports = sourceImports(collectorSource, collectorPath).map(
+      (entry) => entry.specifier,
+    );
+    expect(collectorImports).toContain("./evidenceSource.js");
+    expect(collectorImports).not.toEqual(
+      expect.arrayContaining([
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "@station/observability/logger",
+        "@station/observability/retention",
+      ]),
+    );
+    expect(collectorSource).not.toMatch(
+      /\b(?:readJsonlLog|scanLocalStateUsage|componentLogPath|readdir|stat)\b/,
+    );
+
+    const portImports = sourceImports(portSource, portPath).map((entry) => entry.specifier);
+    expect(portImports).toEqual(["@station/contracts"]);
+    expect(portSource).not.toMatch(
+      /\b(?:node:fs|node:path|Persistence|ProviderRegistry|ObserverCore|Sqlite|SpoolStore)\b/,
+    );
+
+    const diagnosticsFiles = (
+      await sourceFilesAt(join(process.cwd(), "apps/observer/src/diagnostics"))
+    ).filter(isProductionSourceFile);
+    const traversalOwners: string[] = [];
+    for (const file of diagnosticsFiles) {
+      const source = await readFile(file, "utf8");
+      const imports = sourceImports(source, file).map((entry) => entry.specifier);
+      if (
+        imports.some((specifier) => specifier.startsWith("node:fs")) ||
+        /\b(?:readJsonlLog|scanLocalStateUsage|readdir|stat)\b/.test(source)
+      ) {
+        traversalOwners.push(relative(process.cwd(), file));
+      }
+    }
+    expect(traversalOwners).toEqual(["apps/observer/src/diagnostics/localEvidenceSource.ts"]);
+
+    expect(sourceImports(mainSource, mainPath).map((entry) => entry.specifier)).toContain(
+      "../diagnostics/localEvidenceSource.js",
+    );
+    expect(mainSource).toContain("createLocalDiagnosticEvidenceSource({");
+    expect(sourceImports(apiSource, apiPath).map((entry) => entry.specifier)).toContain(
+      "../diagnostics/evidenceSource.js",
+    );
+    expect(apiSource).not.toContain("localEvidenceSource");
+
+    expect(portSource).toMatch(
+      /\/\*\*[\s\S]*?\* DRIVEN PORT[\s\S]*?export interface DiagnosticEvidenceSource/,
+    );
+    expect(adapterSource).toMatch(
+      /\/\*\*[\s\S]*?\* ADAPTER[\s\S]*?export function createLocalDiagnosticEvidenceSource/,
+    );
+    expect(collectorSource).toMatch(
+      /\/\*\*[\s\S]*?\* USE CASE[\s\S]*?export async function collectDiagnosticSnapshot/,
+    );
+  });
+
   it("centralizes safe-error and external-command shape inspection in runtime", async () => {
     const files = await sourceFiles();
     const violations: string[] = [];
@@ -384,6 +530,33 @@ async function noSqliteImportViolations(entryPath: string): Promise<string[]> {
   }
 
   return violations;
+}
+
+function declarationFacts(
+  source: string,
+  path: string,
+  declarationNames: readonly string[],
+): { declarations: string[]; identifiers: string[] } {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+  const expected = new Set(declarationNames);
+  const declarations: string[] = [];
+  const identifiers = new Set<string>();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+      expected.has(statement.name.text)
+    ) {
+      declarations.push(statement.name.text);
+      const visit = (node: ts.Node): void => {
+        if (ts.isIdentifier(node)) identifiers.add(node.text);
+        ts.forEachChild(node, visit);
+      };
+      ts.forEachChild(statement, visit);
+    }
+  }
+
+  return { declarations, identifiers: [...identifiers] };
 }
 
 type SourceImport = { specifier: string; runtime: boolean };

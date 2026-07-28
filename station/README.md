@@ -90,6 +90,10 @@ warning rather than refusing to start.
   accumulates below), `shift` holds a fixed distance from the bottom (the view
   slides), `follow` snaps back to the live bottom. At the bottom every mode
   tracks live output identically.
+- `scrollback_lines` (integer `0`-`10000`, default `10000`) — normal-buffer
+  history retained by each pane screen; lower values reduce memory and resize
+  work, and changes apply to newly created screens. Warm Host reattachment uses
+  a separate, smaller raw-output replay budget.
 
 ## Persistence (aux panes + layout)
 

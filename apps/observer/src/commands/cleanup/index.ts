@@ -5,6 +5,4 @@ export {
   resolveRowForSession,
   resolveSessionOrThrow,
   resolveWorktreeRowOrThrow,
-  sessionMissingError,
-  snapshotWorktreeMissingError,
 } from "./resolve.js";

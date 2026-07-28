@@ -1,5 +1,1 @@
-export {
-  type HarnessConfigMutationError,
-  type SetHarnessInstallHooksInTomlOptions,
-  setHarnessInstallHooksInToml,
-} from "./installHooks.js";
+export { setHarnessInstallHooksInToml } from "./installHooks.js";

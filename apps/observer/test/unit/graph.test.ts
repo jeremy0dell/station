@@ -11,11 +11,10 @@ import {
   buildStationSnapshot,
   type ObserverSessionMetadata,
   type ObserverTurnReadiness,
+  projectProviderHealthOntoSnapshot,
 } from "../../src/reconcile/graph";
-import {
-  type ObserverHarnessRun,
-  observerHarnessRunFromRun,
-} from "../../src/reconcile/harnessEventStatus";
+import type { ObserverHarnessRun } from "../../src/reconcile/harnessEventStatus";
+import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const generatedAt = "2026-05-20T12:00:00.000Z";
 const observerStartedAt = "2026-05-20T11:55:00.000Z";
@@ -170,6 +169,53 @@ function build(overrides: {
 }
 
 describe("observer graph derivation", () => {
+  it("projects one provider health result without rebuilding unrelated alerts", () => {
+    const worktreeHealth: ProviderHealth = {
+      ...worktreeProviderHealth,
+      status: "unavailable",
+    };
+    const harnessHealth: ProviderHealth = {
+      providerId: "fake-harness",
+      providerType: "harness",
+      status: "unavailable",
+      lastCheckedAt: generatedAt,
+    };
+    const snapshot = build({
+      projects: projects.slice(0, 1),
+      providerHealth: {
+        "fake-worktree": worktreeHealth,
+        "fake-harness": harnessHealth,
+      },
+    });
+    const harnessAlert = snapshot.alerts.find((alert) => alert.provider === "fake-harness");
+    if (harnessAlert === undefined) {
+      throw new Error("Expected a harness health alert.");
+    }
+    const unrelatedAlert = {
+      id: "alert_unrelated",
+      severity: "warn" as const,
+      message: "Unrelated warning.",
+      createdAt: observerStartedAt,
+    };
+    snapshot.alerts.push(unrelatedAlert);
+    const projectedAt = "2026-05-20T12:01:00.000Z";
+
+    const projected = projectProviderHealthOntoSnapshot({
+      snapshot,
+      health: { ...worktreeProviderHealth, lastCheckedAt: projectedAt },
+      projectedAt,
+    });
+
+    expect(projected.generatedAt).toBe(projectedAt);
+    expect(projected.providerHealth["fake-worktree"]?.status).toBe("healthy");
+    expect(projected.projects[0]?.health.status).toBe("healthy");
+    expect(projected.alerts).toEqual([harnessAlert, unrelatedAlert]);
+    expect(projected.alerts[0]).toBe(harnessAlert);
+    expect(projected.alerts[1]).toBe(unrelatedAlert);
+    expect(projected.observer.healthy).toBe(false);
+    expect(snapshot.providerHealth["fake-worktree"]?.status).toBe("unavailable");
+  });
+
   it("counts one canonical session alongside ten unattached worktrees", () => {
     const attached = worktree("wt_web_session", "web", "session");
     const unattached = Array.from({ length: 10 }, (_, index) =>

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import {
+  DEFAULT_SCROLLBACK_LINES,
+  MAX_SCROLLBACK_LINES,
+} from "../../config/stationConfig.js";
 import { waitFor } from "../testing/waitFor.js";
-import { buildVisibleRows } from "./rows.js";
 import { createStationVtScreen } from "./screen.js";
 
 describe("vt screen throughput", () => {
@@ -17,6 +20,65 @@ describe("vt screen throughput", () => {
       await waitFor(() => screen.getVersion() >= 1);
       // Versions scale with elapsed time / interval, never with chunk count.
       expect(screen.getVersion()).toBeLessThanOrEqual(4);
+    } finally {
+      screen.dispose();
+    }
+  });
+
+  it("normalizes direct consumers to the workspace scrollback bounds", () => {
+    const aboveMaximum = createStationVtScreen({
+      size: { cols: 20, rows: 5 },
+      scrollback: Number.MAX_SAFE_INTEGER,
+    });
+    const belowMinimum = createStationVtScreen({
+      size: { cols: 20, rows: 5 },
+      scrollback: -1,
+    });
+    const fractional = createStationVtScreen({
+      size: { cols: 20, rows: 5 },
+      scrollback: 2.9,
+    });
+    const nonFinite = createStationVtScreen({
+      size: { cols: 20, rows: 5 },
+      scrollback: Number.NaN,
+    });
+    try {
+      expect(aboveMaximum.unsafeEngine.options.scrollback).toBe(MAX_SCROLLBACK_LINES);
+      expect(belowMinimum.unsafeEngine.options.scrollback).toBe(0);
+      expect(fractional.unsafeEngine.options.scrollback).toBe(2);
+      expect(nonFinite.unsafeEngine.options.scrollback).toBe(DEFAULT_SCROLLBACK_LINES);
+    } finally {
+      aboveMaximum.dispose();
+      belowMinimum.dispose();
+      fractional.dispose();
+      nonFinite.dispose();
+    }
+  });
+
+  it("keeps default scrollback bounded across wide-screen reflow", async () => {
+    const screen = createStationVtScreen({ size: { cols: 120, rows: 24 } });
+    try {
+      for (let start = 0; start < DEFAULT_SCROLLBACK_LINES + 100; start += 100) {
+        screen.feed(
+          Array.from(
+            { length: 100 },
+            (_, offset) => `${String(start + offset).padStart(5, "0")} ${"x".repeat(100)}\r\n`,
+          ).join(""),
+        );
+      }
+      await screen.whenIdle();
+      expect(screen.bufferStats().baseY).toBe(DEFAULT_SCROLLBACK_LINES);
+      expect(screen.bufferStats().length).toBeLessThanOrEqual(DEFAULT_SCROLLBACK_LINES + 24);
+
+      screen.resize({ cols: 60, rows: 24 });
+      await screen.whenIdle();
+      expect(screen.bufferStats().baseY).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES);
+      expect(screen.bufferStats().length).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES + 24);
+
+      screen.resize({ cols: 120, rows: 24 });
+      await screen.whenIdle();
+      expect(screen.bufferStats().baseY).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES);
+      expect(screen.bufferStats().length).toBeLessThanOrEqual(MAX_SCROLLBACK_LINES + 24);
     } finally {
       screen.dispose();
     }

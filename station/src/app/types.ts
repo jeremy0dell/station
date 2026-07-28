@@ -3,7 +3,6 @@ import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,
   TuiIslandConfig,
-  TuiWidgetConfig,
 } from "@station/dashboard-core/widgets/types";
 import type { StoreApi } from "zustand/vanilla";
 import type { Automation, ScrollOnOutputMode } from "../config/stationConfig.js";
@@ -49,6 +48,8 @@ export type CreateStationOptions = {
   shellAutoCloseOverlay?: boolean;
   /** Scroll-position-on-output policy for panes; default freeze. */
   scrollOnOutput?: ScrollOnOutputMode;
+  /** Normal-buffer history retained per new pane, bounded by the workspace safety ceiling. */
+  scrollbackLines?: number;
   /** Native Station overlay size as terminal percentages; defaults come from `[workspace]`. */
   overlayWidthPercent?: number;
   overlayHeightPercent?: number;

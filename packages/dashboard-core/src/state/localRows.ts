@@ -12,6 +12,7 @@ import type { TuiState } from "./types.js";
 export type PendingCreateSessionRow = {
   localId: string;
   projectId: string;
+  title: string;
   branch: string;
   harnessProvider?: ProviderId;
   createdAt: string;
@@ -21,6 +22,7 @@ export type PendingCreateSessionRow = {
 export type FailedCreateSessionRow = {
   localId: string;
   projectId: string;
+  title: string;
   branch: string;
   error: SafeError;
   expiresAt: number;
@@ -140,6 +142,7 @@ export function failPendingCreateSessionRow(
         {
           localId,
           projectId: row.projectId,
+          title: row.title,
           branch: row.branch,
           error,
           expiresAt,

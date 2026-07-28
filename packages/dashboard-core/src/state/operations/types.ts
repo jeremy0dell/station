@@ -4,6 +4,7 @@ export type CreateSessionOperation = {
   type: "createSession";
   localId: string;
   projectId: string;
+  title: string;
   branch: string;
   harnessProvider: ProviderId;
   command: Extract<StationCommand, { type: "session.create" }>;
@@ -14,6 +15,7 @@ export type ForkSessionOperation = {
   localId: string;
   projectId: string;
   sourceWorktreeId: WorktreeId;
+  title: string;
   branch: string;
   command: Extract<StationCommand, { type: "session.fork" }>;
 };

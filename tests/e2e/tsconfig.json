@@ -7,6 +7,8 @@
     "types": ["node", "vitest/globals"]
   },
   "files": [
+    "full-session-lifecycle/session-cleanup-scripted.test.ts",
+    "full-session-lifecycle/session-create-scripted.test.ts",
     "setup-guided-feedback.test.ts",
     "worktrunk-real.test.ts",
     "real/real-worktrunk-hooks.test.ts"

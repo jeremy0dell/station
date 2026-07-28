@@ -112,6 +112,11 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
     edge may mark the completed turn `idle` and ready. Markerless legacy
     producers retain their historical low-level completion semantics during a
     rolling upgrade.
+11. **Startup evidence revalidates health; it does not define it.** After an
+    accepted, projected report with normalized status `starting`, Observer
+    eagerly re-probes that provider only when current health is `unavailable`.
+    The authoritative probe result updates health; startup traffic never assigns
+    `healthy`, `idle`, or turn readiness directly.
 
 ## Target Taxonomy (HarnessSignal)
 

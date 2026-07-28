@@ -133,9 +133,9 @@ function Review({
         width={width}
         label="Name"
         labelWidth={10}
-        value={state.branch}
+        value={state.title}
         focused={focus === "name"}
-        {...(state.nameSource === "generated" ? { valueColor: STATION_COLORS.gray } : {})}
+        {...(state.titleSource === "generated" ? { valueColor: STATION_COLORS.gray } : {})}
       />
       <SheetLabelValue
         width={width}
@@ -165,7 +165,7 @@ function EditName({
 }) {
   const labelText = ` ${"Name".padEnd(10)} `;
   const inputLength =
-    (state.draftName.value.length === 0 ? state.branch.length : state.draftName.value.length) + 1;
+    (state.draftName.value.length === 0 ? state.title.length : state.draftName.value.length) + 1;
   const padding = spaces(Math.max(0, width - labelText.length - inputLength));
   return (
     <>
@@ -177,7 +177,7 @@ function EditName({
         labelWidth={10}
         value={
           <span>
-            <EditableTextInputView {...state.draftName} placeholder={state.branch} />
+            <EditableTextInputView {...state.draftName} placeholder={state.title} />
             {padding}
           </span>
         }

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import {
   createCommandQueue,
   createObserverApi,
@@ -22,6 +22,7 @@ import {
   FakeWorktreeProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import { FakeDiagnosticEvidenceSource } from "../../../apps/observer/test/support/diagnosticEvidenceSources.js";
 import { createUnexpectedProjectConfigWriter } from "../../../apps/observer/test/support/projectConfigWriter.js";
 import { createTempSocketPath } from "../../support/sockets";
 
@@ -43,12 +44,16 @@ describe("full session cleanup e2e", () => {
     const terminal = new FakeTerminalProvider({
       now,
       onLaunch: async ({ launchPlan }) => {
+        const sessionId = launchPlan.env?.STATION_SESSION_ID;
+        if (sessionId === undefined) {
+          throw new Error("Expected Station session identity in the launch plan.");
+        }
         harness.addRun(
           createFakeHarnessRun({
             id: "run_web_cleanup",
             projectId: "web",
             worktreeId: "wt_web_cleanup",
-            sessionId: launchPlan.env?.STATION_SESSION_ID,
+            sessionId,
             state: "working",
             now,
           }),
@@ -92,11 +97,12 @@ describe("full session cleanup e2e", () => {
       persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       socketPath,
       stateDir,
     });
-    const server = await startObserverServer({ socketPath, api, clock, drainOnStart: false });
+    const server = await startObserverServer({ socketPath, api, clock });
     const client = createObserverClient({ socketPath, requestId: requestIds() });
 
     try {
@@ -154,6 +160,7 @@ describe("full session cleanup e2e", () => {
 function configFor(root: string, stateDir: string, socketPath: string): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: { stateDir, socketPath },
     defaults: {
       worktreeProvider: "fake-worktree",

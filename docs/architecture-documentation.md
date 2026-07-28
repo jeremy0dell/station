@@ -15,8 +15,8 @@ defines the small JSDoc language that makes those seams recognizable in source.
 This document does not define the Observer's boundaries, flows, or known
 deviations. See [Observer Architecture](observer-architecture.md) for those
 decisions and [Architecture](architecture.md) for the repository-wide system
-map. Ordinary code comments continue to follow the concise, load-bearing
-comment rules in `AGENTS.md`.
+map. Ordinary code comments are outside this marker standard and should remain
+concise, preserving only load-bearing intent.
 
 ## Controlled Roles
 

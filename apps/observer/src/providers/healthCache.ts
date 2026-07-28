@@ -19,6 +19,8 @@ export type ProviderHealthCacheOptions = ProviderHealthCacheTuning & {
   targets: readonly ProviderHealthProbeTarget[];
 };
 
+export type ProviderHealthProbeCompletedListener = (health: ProviderHealth) => Promise<void> | void;
+
 type CacheEntry = {
   health: ProviderHealth;
   refreshedAtMs: number;
@@ -26,8 +28,8 @@ type CacheEntry = {
 
 /**
  * Out-of-band provider health cache: reconcile reads synchronously and never
- * awaits a health probe. Probes run at boot, on TTL expiry
- * (stale-while-revalidate), and eagerly after a provider read failure.
+ * awaits a health probe. Each unique probe notifies completion listeners before
+ * its in-flight slot clears, including boot, stale, and eager refreshes.
  * `stn doctor` keeps probing providers live, bypassing this cache.
  */
 export class ProviderHealthCache {
@@ -37,6 +39,7 @@ export class ProviderHealthCache {
   readonly #clock: RuntimeClock;
   readonly #entries = new Map<string, CacheEntry>();
   readonly #inFlight = new Map<string, Promise<void>>();
+  readonly #probeCompletedListeners = new Set<ProviderHealthProbeCompletedListener>();
 
   constructor(options: ProviderHealthCacheOptions) {
     this.#targets = new Map(options.targets.map((target) => [target.providerId, target]));
@@ -69,6 +72,13 @@ export class ProviderHealthCache {
     });
     this.#inFlight.set(providerId, probe);
     return probe;
+  }
+
+  onProbeCompleted(listener: ProviderHealthProbeCompletedListener): () => void {
+    this.#probeCompletedListeners.add(listener);
+    return () => {
+      this.#probeCompletedListeners.delete(listener);
+    };
   }
 
   async refreshAll(): Promise<void> {
@@ -112,6 +122,10 @@ export class ProviderHealthCache {
           capabilities: target.capabilities(),
         };
     this.#entries.set(target.providerId, { health, refreshedAtMs: this.#nowMs() });
+    const notifications = Array.from(this.#probeCompletedListeners, (listener) =>
+      Promise.resolve().then(() => listener(health)),
+    );
+    await Promise.allSettled(notifications);
   }
 
   #nowMs(): number {

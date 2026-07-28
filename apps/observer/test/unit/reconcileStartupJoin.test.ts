@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 import { emptyStationSnapshot, fakeObserverCommandQueue } from "../support/testObserver";
 
@@ -88,7 +89,12 @@ function controllableCore(): { core: ObserverCore; scans: ControlledScan[] } {
       new Promise<StationSnapshot>((resolve) => {
         scans.push({ reason, snapshot: emptyStationSnapshot(now), resolve });
       }),
-    projectHarnessEventStatus: async () => ({ projected: false, events: [] }),
+    commitProviderHealthProbe: () => Promise.resolve(undefined),
+    projectHarnessEventStatus: async () => ({
+      projected: false,
+      snapshot: emptyStationSnapshot(now),
+      events: [],
+    }),
     clearTurnReadiness: () => undefined,
     updateConfig: () => undefined,
     getProjects: () => [],
@@ -118,6 +124,7 @@ function createJoinApi(core: ObserverCore) {
     },
     commandQueue: fakeObserverCommandQueue(),
     eventBus: createObserverEventBus(),
+    diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     clock,
     metadataRefresh: {
       refresh: async () => undefined,

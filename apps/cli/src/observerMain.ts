@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { runObserverMain } from "@station/observer";
 import { type CreateProviderRegistryOptions, createProviderRegistry } from "./observerProviders.js";
+import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 export type RunCliObserverMainOptions = {
   preparePiExtension?: (stateDir: string) => string | Promise<string>;
@@ -17,6 +18,8 @@ export async function runCliObserverMain(
   argv: readonly string[] = process.argv.slice(2),
   options: RunCliObserverMainOptions = {},
 ): Promise<number> {
+  const providerHookIngressLauncher =
+    options.providerHookIngressLauncher ?? resolveDefaultIngressLauncher();
   return runObserverMain([...argv], {
     providerRegistryFactory: async (config, providerOptions) => {
       const registryOptions: CreateProviderRegistryOptions = {};
@@ -28,9 +31,7 @@ export async function runCliObserverMain(
           providerOptions.stateDir,
         );
       }
-      if (options.providerHookIngressLauncher !== undefined) {
-        registryOptions.providerHookIngressLauncher = options.providerHookIngressLauncher;
-      }
+      registryOptions.providerHookIngressLauncher = providerHookIngressLauncher;
       return createProviderRegistry(config, registryOptions);
     },
   });

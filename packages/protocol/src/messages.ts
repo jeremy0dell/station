@@ -97,14 +97,6 @@ export const ProtocolEventEnvelopeSchema = z
   })
   .strict();
 
-export type ProtocolEventEnvelope = z.infer<typeof ProtocolEventEnvelopeSchema>;
-
-export const ProtocolMessageSchema = z.union([
-  ProtocolRequestSchema,
-  ProtocolResponseSchema,
-  ProtocolEventEnvelopeSchema,
-]);
-
 export const SnapshotGetParamsSchema = z
   .object({
     includeDebug: z.boolean().optional(),

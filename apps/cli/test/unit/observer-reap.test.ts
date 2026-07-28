@@ -1,10 +1,6 @@
+import { type ObserverProcessEntry, parseObserverProcessList } from "@station/observer/internal";
 import { describe, expect, it } from "vitest";
-import {
-  type ObserverProcessEntry,
-  parseObserverPsOutput,
-  runObserverReap,
-  selectReapPlan,
-} from "../../src/observerReap.js";
+import { runObserverReap, selectReapPlan } from "../../src/observerReap.js";
 
 const SOCK = "/Users/u/.local/state/station/observer.sock";
 const OTHER = "/Users/u/.local/state/unrelated/observer.sock";
@@ -20,14 +16,14 @@ function proc(
     : { pid, argv, startToken: token, socketPath };
 }
 
-describe("parseObserverPsOutput", () => {
+describe("parseObserverProcessList", () => {
   it("keeps real node observerMain.js processes and resolves their socket", () => {
     const out = [
       " 3740 Sat Jul  4 17:45:33 2026 /opt/node/bin/node /repo/apps/cli/dist/observerMain.js --socket /a/o.sock",
       "19359 Sat Jul  4 17:47:24 2026 /bin/zsh -c grep observerMain.js in some command",
       "  501 Fri Jan  2 09:00:00 2026 /usr/bin/ssh -N host",
     ].join("\n");
-    const entries = parseObserverPsOutput(out);
+    const entries = parseObserverProcessList(out);
     expect(entries).toHaveLength(1);
     expect(entries[0]?.pid).toBe(3740);
     expect(entries[0]?.startToken).toBe("Sat Jul  4 17:45:33 2026");
@@ -37,7 +33,7 @@ describe("parseObserverPsOutput", () => {
   it("excludes a shell wrapper whose argv mentions observerMain.js (self-match guard)", () => {
     const out =
       "88888 Sat Jul  4 17:47:24 2026 /bin/zsh -c ps -axww | grep observerMain.js --state-dir /x";
-    expect(parseObserverPsOutput(out)).toEqual([]);
+    expect(parseObserverProcessList(out)).toEqual([]);
   });
 
   it("keeps only the exact compiled stn observer command shape", () => {
@@ -48,7 +44,7 @@ describe("parseObserverPsOutput", () => {
       " 4004 Sat Jul  4 17:45:36 2026 /bin/zsh -c /opt/station/stn __observer --socket /wrong/o.sock",
     ].join("\n");
 
-    expect(parseObserverPsOutput(out)).toEqual([
+    expect(parseObserverProcessList(out)).toEqual([
       expect.objectContaining({ pid: 4001, socketPath: "/compiled/o.sock" }),
     ]);
   });

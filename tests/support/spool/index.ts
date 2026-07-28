@@ -39,10 +39,6 @@ export async function readHarnessEventReportSpoolRecord(
   );
 }
 
-export async function fileMode(path: string): Promise<number> {
-  return (await stat(path)).mode & 0o777;
-}
-
 export async function fileExists(path: string): Promise<boolean> {
   try {
     await stat(path);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { runProviderIngressMain } from "./ingress/command.js";
-import { readStdinIfAvailable } from "./ingress/stdin.js";
+import { readStdinIfAvailable } from "./stdin.js";
 
 /** Owns one raw-stdin read, renders the ingress result, and applies its exit code. */
 export async function runCliIngressMain(

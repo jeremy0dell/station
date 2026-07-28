@@ -13,7 +13,7 @@ import {
   resolveWorktreeRemovalTarget,
   resolveWorktreeRowOrThrow,
 } from "../../src/internal";
-import { observerHarnessRunFromRun } from "../../src/reconcile/harnessEventStatus";
+import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const now = "2026-05-21T12:00:00.000Z";
 

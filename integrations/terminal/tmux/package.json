@@ -19,7 +19,6 @@
   "dependencies": {
     "@station/config": "workspace:*",
     "@station/contracts": "workspace:*",
-    "@station/observability": "workspace:*",
     "@station/runtime": "workspace:*",
     "zod": "^4.1.12"
   },

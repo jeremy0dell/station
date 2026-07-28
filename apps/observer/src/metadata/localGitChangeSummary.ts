@@ -1,41 +1,31 @@
 import { normalize } from "node:path";
-import type {
-  ProviderProjectConfig,
-  SafeError,
-  WorktreeChangeSummary,
-  WorktreePullRequest,
-} from "@station/contracts";
+import type { SafeError, WorktreeChangeSummary } from "@station/contracts";
 import { WorktreeChangeSummarySchema } from "@station/contracts";
 import {
   type ExternalCommandRunner,
   type RuntimeClock,
+  safeErrorFromUnknown,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
-import { type GitCommandContext, runGitCommand, runOptionalGitCommand } from "./gitCommand.js";
+import { type GitCommandContext, runGitCommand } from "./gitCommand.js";
+import {
+  type LocalGitMetadataWorktree,
+  matchesExpectedLocalGitMetadataTarget,
+  type ResolveLocalGitMetadataWorktree,
+} from "./localGitWorktree.js";
+import type {
+  WorktreeChangeBaseSelection,
+  WorktreeChangeEvidence,
+  WorktreeChangeReadRequest,
+  WorktreeChangeSource,
+} from "./ports.js";
 
-export type LocalGitWorktree = {
-  id: string;
-  projectId: string;
-  path: string;
-  branch: string;
-  state?: string;
-  pr?: WorktreePullRequest;
-};
-
-export type LocalGitChangeSummaryInput = {
-  project: ProviderProjectConfig;
-  worktree: LocalGitWorktree;
-  cachedPullRequest?: WorktreePullRequest;
+export type CreateLocalGitWorktreeChangeSourceOptions = {
+  resolveWorktree: ResolveLocalGitMetadataWorktree;
   timeoutMs?: number;
   clock?: RuntimeClock;
   runner?: ExternalCommandRunner;
-  signal?: AbortSignal;
-};
-
-export type LocalGitChangeSummaryResult = {
-  summary: WorktreeChangeSummary;
-  cacheKey: string;
 };
 
 export type ParsedGitNumstat = {
@@ -52,40 +42,94 @@ type ResolvedBase = {
 
 const defaultGitTimeoutMs = 200;
 
-export async function readLocalGitChangeSummary(
-  input: LocalGitChangeSummaryInput,
-): Promise<LocalGitChangeSummaryResult | undefined> {
-  if (input.worktree.state !== undefined && input.worktree.state !== "exists") {
-    return undefined;
-  }
+/**
+ * ADAPTER
+ *
+ * Translates Station worktree identity into bounded local Git reads and strictly
+ * validated branch-diff evidence.
+ */
+export function createLocalGitWorktreeChangeSource(
+  options: CreateLocalGitWorktreeChangeSourceOptions,
+): WorktreeChangeSource {
+  const clock = options.clock ?? systemClock;
+  const timeoutMs = options.timeoutMs ?? defaultGitTimeoutMs;
 
-  const clock = input.clock ?? systemClock;
-  const checkedAt = toIsoTimestamp(clock.now());
+  return {
+    read: async (request) => {
+      const resolution = options.resolveWorktree(request.target);
+      if (resolution.status !== "resolved") {
+        return { status: resolution.status };
+      }
+      const { worktree } = resolution;
+      if (!matchesExpectedLocalGitMetadataTarget(worktree, request.target)) {
+        return { status: "superseded" };
+      }
+
+      try {
+        const evidence = await readResolvedLocalGitChangeSummary({
+          request,
+          worktree,
+          clock,
+          timeoutMs,
+          ...(options.runner === undefined ? {} : { runner: options.runner }),
+        });
+        const currentResolution = options.resolveWorktree(request.target);
+        if (currentResolution.status !== "resolved") {
+          return { status: currentResolution.status };
+        }
+        const currentWorktree = currentResolution.worktree;
+        if (
+          !matchesExpectedLocalGitMetadataTarget(currentWorktree, request.target) ||
+          currentWorktree.path !== worktree.path
+        ) {
+          return { status: "superseded" };
+        }
+        return evidence === undefined
+          ? { status: "unavailable" }
+          : { status: "available", evidence };
+      } catch (error) {
+        const currentResolution = options.resolveWorktree(request.target);
+        if (currentResolution.status !== "resolved") {
+          return { status: currentResolution.status };
+        }
+        if (
+          !matchesExpectedLocalGitMetadataTarget(currentResolution.worktree, request.target) ||
+          currentResolution.worktree.path !== worktree.path
+        ) {
+          return { status: "superseded" };
+        }
+        throw safeErrorFromUnknown(error, {
+          tag: "LocalGitMetadataError",
+          code: "LOCAL_GIT_CHANGE_SUMMARY_FAILED",
+          message: "Local Git change summary read failed.",
+        });
+      }
+    },
+  };
+}
+
+async function readResolvedLocalGitChangeSummary(input: {
+  request: WorktreeChangeReadRequest;
+  worktree: LocalGitMetadataWorktree;
+  clock: RuntimeClock;
+  timeoutMs: number;
+  runner?: ExternalCommandRunner;
+}): Promise<WorktreeChangeEvidence | undefined> {
+  const checkedAt = toIsoTimestamp(input.clock.now());
   const command: GitCommandContext = {
     cwd: input.worktree.path,
-    timeoutMs: input.timeoutMs ?? defaultGitTimeoutMs,
+    timeoutMs: input.timeoutMs,
+    signal: input.request.signal,
   };
   if (input.runner !== undefined) command.runner = input.runner;
-  if (input.signal !== undefined) command.signal = input.signal;
 
   const headSha = await resolveRequiredRef(command, "HEAD", "HEAD");
   const remotes = await listRemotes(command);
-  const baseInput: {
-    command: GitCommandContext;
-    project: ProviderProjectConfig;
-    worktree: LocalGitWorktree;
-    cachedPullRequest?: WorktreePullRequest;
-    remotes: string[];
-  } = {
+  const base = await resolveBase({
     command,
-    project: input.project,
-    worktree: input.worktree,
+    baseSelection: input.request.baseSelection,
     remotes,
-  };
-  if (input.cachedPullRequest !== undefined) {
-    baseInput.cachedPullRequest = input.cachedPullRequest;
-  }
-  const base = await resolveBase(baseInput);
+  });
   if (base === undefined) {
     return undefined;
   }
@@ -112,8 +156,8 @@ export async function readLocalGitChangeSummary(
   return {
     summary,
     cacheKey: changeSummaryCacheKey({
-      projectId: input.project.id,
-      worktreeId: input.worktree.id,
+      projectId: input.worktree.projectId,
+      worktreeId: input.worktree.worktreeId,
       path: input.worktree.path,
       branch: input.worktree.branch,
       headSha,
@@ -203,15 +247,13 @@ export function changeSummaryCacheKey(input: {
 
 async function resolveBase(input: {
   command: GitCommandContext;
-  project: ProviderProjectConfig;
-  worktree: LocalGitWorktree;
-  cachedPullRequest?: WorktreePullRequest;
+  baseSelection: WorktreeChangeBaseSelection;
   remotes: string[];
 }): Promise<ResolvedBase | undefined> {
   const configuredBases = [
-    input.cachedPullRequest?.baseRef ?? input.worktree.pr?.baseRef,
-    input.project.defaultBranch,
-    input.project.worktrunk.base,
+    input.baseSelection.cachedPullRequestBase ?? input.baseSelection.observedPullRequestBase,
+    input.baseSelection.defaultBranch,
+    input.baseSelection.worktrunkBase,
   ];
 
   for (const base of configuredBases) {
@@ -370,13 +412,10 @@ async function runOptionalGit(
   command: GitCommandContext,
   args: string[],
 ): Promise<string | undefined> {
-  return (
-    await runOptionalGitCommand(command, args, {
-      maxOutputChars: 64 * 1024,
-      errorOnNonZeroExit: () =>
-        localGitMetadataError("LOCAL_GIT_COMMAND_FAILED", "Git command failed."),
-    })
-  )?.stdout;
+  const result = await runGitCommand(command, args, {
+    maxOutputChars: 64 * 1024,
+  });
+  return result.exitCode === 0 ? result.stdout : undefined;
 }
 
 async function runGit(command: GitCommandContext, args: string[]) {

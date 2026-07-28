@@ -1,4 +1,4 @@
-import type { TmuxConfig } from "@station/config";
+import type { TmuxConfig, TmuxPopupScope } from "@station/config";
 import { normalizeObservedPath } from "@station/contracts";
 import { stableName } from "@station/runtime";
 
@@ -10,6 +10,7 @@ export type TmuxWorkbenchConfig = {
   popupWidth: string;
   popupHeight: string;
   popupPosition: string;
+  popupScope: TmuxPopupScope;
 };
 
 export type TmuxSessionOption = {
@@ -25,6 +26,7 @@ export const defaultTmuxWorkbenchConfig: TmuxWorkbenchConfig = {
   popupWidth: "50%",
   popupHeight: "50%",
   popupPosition: "C",
+  popupScope: "server",
 };
 
 export const defaultTmuxWorkbenchSessionOptions: readonly TmuxSessionOption[] = [
@@ -42,6 +44,7 @@ export function resolveTmuxWorkbenchConfig(config: TmuxConfig = {}): TmuxWorkben
     popupWidth: config.popupWidth ?? defaultTmuxWorkbenchConfig.popupWidth,
     popupHeight: config.popupHeight ?? defaultTmuxWorkbenchConfig.popupHeight,
     popupPosition: config.popupPosition ?? defaultTmuxWorkbenchConfig.popupPosition,
+    popupScope: config.popupScope ?? defaultTmuxWorkbenchConfig.popupScope,
   };
 }
 

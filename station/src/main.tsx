@@ -1,16 +1,12 @@
-import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { createCliRenderer } from "@opentui/core";
+import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
-import {
-  type ClipboardCommand,
-  createClipboardEffects,
-} from "./copy/clipboard.js";
-import { createInternalClipboard } from "./copy/internalClipboard.js";
+import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
+import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
 import {
   getOrCreateStationHotRuntime,
@@ -55,23 +51,6 @@ function readShellAutoCloseOverlay(value: string | undefined): boolean {
   throw new Error(
     `Unsupported STATION_SHELL_AUTOCLOSE=${value}. Expected "1"/"true" or "0"/"false".`,
   );
-}
-
-// Best-effort: a missing clipboard binary (the `error` event) or a write
-// failure is swallowed — the OSC 52 / internal sinks still carry the yank.
-function spawnClipboard(command: ClipboardCommand, text: string): void {
-  try {
-    const child = spawn(command.command, [...command.args], {
-      stdio: ["pipe", "ignore", "ignore"],
-    });
-    child.on("error", () => {});
-    // Guard the stdin stream too: a child that exits before draining makes the
-    // write below emit an async EPIPE that the sync try/catch can't catch.
-    child.stdin?.on("error", () => {});
-    child.stdin?.end(text);
-  } catch {
-    // ignore: clipboard CLI not present
-  }
 }
 
 /**
@@ -215,16 +194,12 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     applyRestoreSeeds(stationRuntime.registry, restorePlan.seeds);
   }
 
-  // Internal buffer + OSC 52 (to the host) + a spawned platform clipboard CLI.
-  const internalClipboard = createInternalClipboard();
-  const clipboardEffects = createClipboardEffects({
-    internal: internalClipboard,
-    env: process.env,
+  const clipboardEffects = createRuntimeClipboardEffects({
+    env,
     platform: process.platform,
     // OSC 52 goes to the outer terminal, not the PTY; a short escape the terminal
     // consumes without disturbing OpenTUI's rendering.
     writeToHost: (sequence) => process.stdout.write(sequence),
-    spawnClipboard: (command, text) => spawnClipboard(command, text),
   });
 
   const station = createStation({
@@ -232,6 +207,7 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     stationClient,
     registry: stationRuntime.registry,
     scrollOnOutput: stationConfig.config.scroll_on_output,
+    scrollbackLines: stationConfig.config.scrollback_lines,
     overlayWidthPercent: stationConfig.config.overlay_width_percent,
     overlayHeightPercent: stationConfig.config.overlay_height_percent,
     automations: stationConfig.config.automations,
@@ -250,7 +226,7 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
       process.exit(0);
     },
   });
-  let rendererForInput: { destroy(): void } | undefined;
+  let rendererForInput: CliRenderer | undefined;
   let rootForShutdown: { unmount(): void } | undefined;
 
   // Under `bun --hot`, OpenTUI's stdin ownership is a process-global that outlives
@@ -265,9 +241,13 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
   // apart (Shift+Enter and friends). See singleInstance.ts.
   await rivalsReaped;
 
+  const copySelectedText = createOpenTuiSelectionCopyHandler(
+    () => rendererForInput,
+    clipboardEffects,
+  );
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
-    prependInputHandlers: [station.stationInput.handleSequence],
+    prependInputHandlers: [copySelectedText, station.stationInput.handleSequence],
     useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
   });
   rendererForInput = renderer;

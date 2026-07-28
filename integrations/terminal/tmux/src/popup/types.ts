@@ -52,6 +52,7 @@ export type TmuxClientIdentity = {
 
 export type TmuxPersistentPopupSessionOptions = {
   command?: string;
+  focusClientId?: string;
   runner?: ExternalCommandRunner;
   timeoutMs?: number;
   tuiCommand?: string;
@@ -65,6 +66,7 @@ export type TmuxPopupCommandInputOptions = {
 
 export type TmuxPopupDismissOptions = {
   command?: string;
+  config?: TmuxConfig;
   env?: NodeJS.ProcessEnv;
   focusClientId?: string;
   runner?: ExternalCommandRunner;
@@ -82,6 +84,7 @@ export type TmuxPopupFocusTarget = {
 
 export type TmuxPopupFocusOriginOptions = {
   command?: string;
+  config?: TmuxConfig;
   env?: NodeJS.ProcessEnv;
   focusClientId?: string;
   runner?: ExternalCommandRunner;

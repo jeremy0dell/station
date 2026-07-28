@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
 import {
-  type ClientFeatureFlags,
   type ClientFeatureFlagsForDefinitions,
   clientFeatureFlagKeys,
   createClientFeatureFlagsSchema,
   createEvaluatedFeatureFlagsSchema,
-  type EvaluatedFeatureFlags,
   type EvaluatedFeatureFlagsForDefinitions,
   type FeatureFlagConfig,
   type FeatureFlagConfigForDefinitions,
@@ -93,14 +91,6 @@ export function clientFeatureFlagsForDefinitions<Definitions extends FeatureFlag
     revision: evaluated.revision,
     flags,
   }) as ClientFeatureFlagsForDefinitions<Definitions>;
-}
-
-export function defaultEvaluatedFeatureFlags(): EvaluatedFeatureFlags {
-  return createFeatureFlagEvaluator().all();
-}
-
-export function defaultClientFeatureFlags(): ClientFeatureFlags {
-  return createFeatureFlagEvaluator().clientSnapshot();
 }
 
 function featureFlagRevision(input: { seed: string; flags: Record<string, boolean> }): string {

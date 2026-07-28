@@ -11,6 +11,7 @@ import type { ProviderHookReceipt } from "@station/contracts";
 import { ProviderHookReceiptSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { resolveLocalPath, systemClock, toIsoTimestamp } from "@station/runtime";
 import { type ExecutableArgv, selfExecArgv } from "../selfExec.js";
+import { readStdinIfAvailable } from "../stdin.js";
 import {
   type ProviderHookSenderDeps,
   type ProviderHookSenderOptions,
@@ -21,7 +22,6 @@ import {
   sendPiHookPayload,
   sendWorktrunkHookEvent,
 } from "./sender.js";
-import { readStdinIfAvailable } from "./stdin.js";
 
 export type ProviderIngressCommandOptions = {
   stdin?: string;

@@ -1,35 +1,23 @@
+export { classifyHarnessRunStatus } from "./classify.js";
 export {
-  type ClassifyHarnessRunStatusOptions,
-  classifyHarnessRunStatus,
-} from "./classify.js";
-export {
-  type CompactPayloadOptions,
   compactPayloadByFieldNames,
   jsonByteCount,
   type PayloadCompactionResult,
 } from "./compaction.js";
 export {
   HarnessProviderError,
-  type HarnessProviderErrorClass,
   harnessProviderErrorClass,
   harnessProviderErrorFromUnknown,
 } from "./errors.js";
 export {
   applyCorrelation,
   correlateTerminalBoundHarnessEvent,
-  type HarnessEventCorrelation,
-  type HarnessEventDiagnosticsInput,
   harnessEventDiagnostics,
   reportCorrelation,
-  terminalForCwd,
-  terminalForId,
-  worktreeForCwd,
-  worktreeForId,
-  worktreeForPath,
 } from "./events.js";
+export { createHarnessHookAdapter } from "./hookAdapter.js";
+export { createJsonHookConfigEditor, isJsonObject } from "./hooks/jsonConfig.js";
 export {
-  assignDefined,
-  type CommonLaunchEnvOptions,
   type CommonProviderDataInput,
   commonProviderData,
   harnessLaunchEnv,
@@ -38,11 +26,7 @@ export {
 } from "./launch.js";
 export {
   type CommonHarnessProviderOptions,
-  type CommonHookDoctorOptions,
   createTerminalBoundHarnessProvider,
-  type HarnessHealthSpec,
-  type HarnessHookDoctorOptionsInput,
-  type HarnessIngestSpec,
   harnessCommand,
   harnessHealth,
   harnessHookDoctorOptions,

@@ -356,7 +356,7 @@ describe("Station app composition", () => {
     expect(service.reportedExits).toEqual(["native:wt_station_idle"]);
   });
 
-  it("can preserve live PTYs across HMR-style composition disposal", () => {
+  it("preserves live screens while applying refreshed scrollback to future HMR spawns", async () => {
     const store = createStationStore();
     const firstSource = new FakeStationSource(manyProjectsSnapshot());
     const firstService = new FakeTuiObserverService(manyProjectsSnapshot());
@@ -372,6 +372,7 @@ describe("Station app composition", () => {
       },
       shutdown: () => {},
       createTerminal: () => scripted.terminal,
+      scrollbackLines: 1,
     });
     teardowns.push(() => first.dispose());
 
@@ -391,6 +392,7 @@ describe("Station app composition", () => {
 
     const secondSource = new FakeStationSource(manyProjectsSnapshot());
     const secondService = new FakeTuiObserverService(manyProjectsSnapshot());
+    const secondScripted = createScriptedTerminal();
     const second = createStation({
       store,
       clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
@@ -402,8 +404,26 @@ describe("Station app composition", () => {
         stop: () => secondSource.stop(),
       },
       shutdown: () => {},
+      createTerminal: () => secondScripted.terminal,
+      scrollbackLines: 3,
     });
     teardowns.push(() => second.dispose());
+
+    const secondPaneId = "pane-hmr-second";
+    store.actions.createPane(secondPaneId, { role: "shell" });
+    second.registry.ensure(secondPaneId, { cwd: "/tmp" });
+    second.registry.resize(secondPaneId, { cols: 80, rows: 24 });
+
+    const output = Array.from({ length: 40 }, (_, index) => `line-${index}\r\n`).join("");
+    scripted.helpers.emitData(output);
+    secondScripted.helpers.emitData(output);
+    await Promise.all([
+      second.registry.get(paneId)?.screen?.whenIdle(),
+      second.registry.get(secondPaneId)?.screen?.whenIdle(),
+    ]);
+
+    expect(second.registry.get(paneId)?.screen?.bufferStats().baseY).toBe(1);
+    expect(second.registry.get(secondPaneId)?.screen?.bufferStats().baseY).toBe(3);
 
     scripted.helpers.emitExit({ exitCode: 0 });
 

@@ -74,6 +74,7 @@ export type RouteOutcome =
   | {
       kind: "pane-launch-new-session";
       projectId: string;
+      title: string;
       branch: string;
       harness: ProviderId;
     }
@@ -85,6 +86,7 @@ export type RouteOutcome =
       kind: "pane-launch-fork";
       projectId: string;
       sourceWorktreeId: string;
+      title: string;
       branch: string;
       copyDirty: boolean;
     }
@@ -118,12 +120,14 @@ export function paneLaunchManagedOutcome(target: {
  */
 export function paneLaunchNewSessionOutcome(target: {
   projectId: string;
+  title: string;
   branch: string;
   harness: ProviderId;
 }): Extract<RouteOutcome, { kind: "pane-launch-new-session" }> {
   return {
     kind: "pane-launch-new-session",
     projectId: target.projectId,
+    title: target.title,
     branch: target.branch,
     harness: target.harness,
   };
@@ -137,6 +141,7 @@ export function paneLaunchNewSessionOutcome(target: {
 export function paneLaunchForkSessionOutcome(target: {
   projectId: string;
   sourceWorktreeId: string;
+  title: string;
   branch: string;
   copyDirty: boolean;
 }): Extract<RouteOutcome, { kind: "pane-launch-fork" }> {
@@ -144,6 +149,7 @@ export function paneLaunchForkSessionOutcome(target: {
     kind: "pane-launch-fork",
     projectId: target.projectId,
     sourceWorktreeId: target.sourceWorktreeId,
+    title: target.title,
     branch: target.branch,
     copyDirty: target.copyDirty,
   };

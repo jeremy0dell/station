@@ -26,14 +26,12 @@ export type AddProjectStartChoice = {
 export type AddProjectStartState = AddProjectBaseState & {
   mode: "start";
   choices: AddProjectStartChoice[];
-  selectedIndex: number;
 };
 
 export type AddProjectChooseState = AddProjectBaseState & {
   mode: "choose";
   currentPath: string;
   entries: TuiFolderEntry[];
-  selectedIndex: number;
   filter: string;
   filterMode: boolean;
   loading: boolean;
@@ -80,12 +78,10 @@ export type CreateAddProjectFlowInput = {
 };
 
 export type AddProjectFlowAction =
-  | { type: "move"; delta: number }
-  | { type: "select"; index: number }
-  | { type: "startOpen" }
-  | { type: "chooseOpen" }
+  | { type: "startOpen"; path: string }
+  | { type: "chooseOpen"; path: string }
   | { type: "chooseParent" }
-  | { type: "chooseSelected" }
+  | { type: "chooseSelected"; path: string }
   | { type: "folderLoaded"; result: TuiFolderReadResult }
   | { type: "folderLoadFailed"; path: string; error: SafeError }
   | { type: "folderSearchLoaded"; result: TuiFolderSearchResult }

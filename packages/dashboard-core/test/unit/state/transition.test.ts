@@ -1,10 +1,12 @@
 import {
+  addTuiToast,
   createInitialTuiState,
   deriveTuiInputMode,
   handleTuiKey,
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
   selectDashboardViewport,
+  type TuiKey,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
@@ -15,6 +17,44 @@ import {
 } from "../../fixtures/snapshots.js";
 
 describe("TUI screen transitions", () => {
+  it("dismisses a visible error with Esc before the dashboard popup", () => {
+    const state = addTuiToast(
+      createInitialTuiState({
+        initialSnapshot: createDashboardSnapshot(),
+        runtime: { persistentPopup: true, canDismissPopup: true },
+      }),
+      { kind: "error", message: "Worktree remove failed." },
+      1_000,
+    );
+
+    const dismissedError = handleTuiKey(state, { input: "", escape: true });
+    expect(dismissedError.state.toasts).toEqual([]);
+    expect(dismissedError.dismissPopup).toBeUndefined();
+
+    const dismissedPopup = handleTuiKey(dismissedError.state, { input: "", escape: true });
+    expect(dismissedPopup.dismissPopup).toBe(true);
+
+    const closedImmediately = handleTuiKey(state, { input: "Q" });
+    expect(closedImmediately.dismissPopup).toBe(true);
+    expect(closedImmediately.state.toasts).toHaveLength(1);
+  });
+
+  it("does not let a hidden error intercept Esc from an open modal", () => {
+    const state = addTuiToast(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      { kind: "error", message: "Worktree remove failed." },
+      1_000,
+    );
+    const help = handleTuiKey(state, { input: "H" }).state;
+
+    const closedHelp = handleTuiKey(help, { input: "", escape: true });
+    expect(closedHelp.state.screen).toEqual({ name: "dashboard" });
+    expect(closedHelp.state.toasts).toHaveLength(1);
+
+    const dismissedError = handleTuiKey(closedHelp.state, { input: "", escape: true });
+    expect(dismissedError.state.toasts).toEqual([]);
+  });
+
   it("opens remove session slot selection from the dashboard", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const transition = handleTuiKey(state, { input: "X" });
@@ -710,7 +750,7 @@ describe("TUI screen transitions", () => {
     { input: "N" },
     { input: "", escape: true },
     { input: "\r", return: true },
-  ])("cancels remove confirmation without a command", (key) => {
+  ])("cancels remove confirmation without a command", (key: TuiKey) => {
     const state = handleTuiKey(
       handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
         input: "X",
@@ -749,6 +789,14 @@ describe("TUI screen transitions", () => {
           },
         },
       },
+    });
+    const operation = submitted.operations?.[0];
+    if (operation?.type !== "createSession") throw new Error("expected create operation");
+    expect(operation.title).toBe(operation.branch);
+    expect(operation.command.payload.title).toBe(operation.branch);
+    expect(submitted.state.localRows.pendingCreate[0]).toMatchObject({
+      title: operation.title,
+      branch: operation.branch,
     });
   });
 

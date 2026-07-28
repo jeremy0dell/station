@@ -1,7 +1,5 @@
 import type { TuiHelpContentLine } from "../../state/keymap.js";
 
-export { TUI_HELP_CONTENT } from "../../state/keymap.js";
-
 export type HelpPanelLayout = {
   left: number;
   top: number;

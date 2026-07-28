@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
+  createLocalDiagnosticEvidenceSource,
   createObserverCore,
   createObserverEventBus,
   createSqliteObserverPersistence,
@@ -110,9 +111,14 @@ describe("scripted agent lifecycle", () => {
     const diagnostics = await collectDiagnosticSnapshot({
       config: config(root, stateDir),
       core,
-      persistence,
+      commandJournal: persistence,
+      eventJournal: persistence,
       persistenceHealth: persistence,
-      paths: { stateDir, diagnosticsDir: join(stateDir, "diagnostics") },
+      evidenceSource: createLocalDiagnosticEvidenceSource({
+        stateDir,
+        diagnosticsDir: join(stateDir, "diagnostics"),
+        logPaths: [join(stateDir, "logs", "observer.jsonl")],
+      }),
       clock: { now: () => new Date(now) },
     });
     const manifest = await writeDebugBundle({
@@ -247,6 +253,7 @@ function worktree(path: string) {
 function config(root: string, stateDir: string): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: {
       stateDir,
       socketPath: join(root, "run", "observer.sock"),

@@ -9,7 +9,6 @@ import {
   ProviderIdSchema,
   SchemaVersionSchema,
   SessionIdSchema,
-  STATION_SCHEMA_VERSION,
   TerminalTargetIdSchema,
   TimestampSchema,
   WorktreeIdSchema,
@@ -32,16 +31,6 @@ export const TraceContextSchema = z
   .strict();
 
 export type TraceContext = z.infer<typeof TraceContextSchema>;
-
-export const DiagnosticContextSchema = z
-  .object({
-    traceId: TraceIdSchema.optional(),
-    spanId: SpanIdSchema.optional(),
-    operation: nonEmptyStringSchema.optional(),
-  })
-  .strict();
-
-export type DiagnosticContext = z.infer<typeof DiagnosticContextSchema>;
 
 export const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 export const LogComponentSchema = z.enum([
@@ -294,8 +283,6 @@ export const DiagnosticQuestionSchema = z
   })
   .strict();
 
-export type DiagnosticQuestion = z.infer<typeof DiagnosticQuestionSchema>;
-
 export const DiagnosticEvidenceIndexSchema = z
   .object({
     schemaVersion: SchemaVersionSchema,
@@ -386,14 +373,3 @@ export const DebugBundleManifestSchema = z
   .strict();
 
 export type DebugBundleManifest = z.infer<typeof DebugBundleManifestSchema>;
-
-export const EMPTY_REDACTION_REPORT: RedactionReport = {
-  policyVersion: "station-redaction-v1",
-  generatedAt: "2026-05-20T00:00:00.000Z",
-  redactedFields: [],
-  redactedPatterns: [],
-  replacements: 0,
-  suspiciousSecretsFound: 0,
-};
-
-export const DEFAULT_DIAGNOSTIC_SCHEMA_VERSION = STATION_SCHEMA_VERSION;

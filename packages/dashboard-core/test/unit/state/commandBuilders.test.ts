@@ -2,6 +2,7 @@ import {
   buildCleanupCommand,
   buildCreateSessionCommand,
   buildFocusCommand,
+  buildForkSessionCommand,
   buildRenameSessionCommand,
   buildResumeAgentCommand,
   buildStartAgentCommand,
@@ -93,6 +94,7 @@ describe("TUI command builders", () => {
     expect(
       buildCreateSessionCommand({
         project,
+        title: "Dashboard launch",
         branch: "feature/new-dashboard",
         harnessProvider: "codex",
         initialPrompt: "wire the dashboard",
@@ -101,6 +103,7 @@ describe("TUI command builders", () => {
       type: "session.create",
       payload: {
         projectId: "web",
+        title: "Dashboard launch",
         branch: "feature/new-dashboard",
         harness: { provider: "codex", mode: "interactive" },
         terminal: { provider: "tmux", layout: "agent-build-shell", focus: false },
@@ -116,6 +119,7 @@ describe("TUI command builders", () => {
     expect(
       buildCreateSessionCommand({
         project,
+        title: "Hexagonal PT 12",
         branch: "feature/new-dashboard",
         harnessProvider: "opencode",
       }),
@@ -123,9 +127,33 @@ describe("TUI command builders", () => {
       type: "session.create",
       payload: {
         projectId: "web",
+        title: "Hexagonal PT 12",
         branch: "feature/new-dashboard",
         harness: { provider: "opencode", mode: "interactive" },
         terminal: { provider: "tmux", layout: "agent-build-shell", focus: false },
+      },
+    });
+  });
+
+  it("builds session.fork with an independent title and branch", () => {
+    const project = createDashboardSnapshot().projects[0];
+
+    expect(
+      buildForkSessionCommand({
+        project,
+        sourceWorktreeId: "wt_web_idle",
+        title: "Hexagonal PT 12",
+        branch: "fix-nav-mobile-fork",
+        copyDirty: true,
+      }),
+    ).toMatchObject({
+      type: "session.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: "wt_web_idle",
+        title: "Hexagonal PT 12",
+        branch: "fix-nav-mobile-fork",
+        copyDirty: true,
       },
     });
   });

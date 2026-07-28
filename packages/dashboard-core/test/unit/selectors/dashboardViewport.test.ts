@@ -1,5 +1,6 @@
 import {
   createInitialTuiState,
+  rowGridInputForViewportItem,
   selectDashboardItems,
   selectDashboardViewport,
 } from "@station/dashboard-core";
@@ -130,6 +131,7 @@ describe("dashboard viewport selector", () => {
             {
               localId: "local_create_1",
               projectId: "web",
+              title: "Hexagonal PT 12",
               branch: "feature/pending",
               harnessProvider: "codex",
               createdAt: "2026-05-31T12:00:00.000Z",
@@ -144,12 +146,19 @@ describe("dashboard viewport selector", () => {
 
     expect(
       viewport.items.map((item) =>
-        item.type === "createLocalRow" ? `${item.type}:${item.row.branch}` : item.id,
+        item.type === "createLocalRow" ? `${item.type}:${item.row.title}` : item.id,
       ),
-    ).toContain("createLocalRow:feature/pending");
+    ).toContain("createLocalRow:Hexagonal PT 12");
     expect(viewport.rowChoices.map((choice) => choice.value.worktree.branch)).not.toContain(
       "feature/pending",
     );
+    const localItem = viewport.items.find((item) => item.type === "createLocalRow");
+    if (localItem === undefined) throw new Error("expected optimistic row");
+    expect(rowGridInputForViewportItem(localItem, new Map())).toMatchObject({
+      cells: {
+        title: { segments: [{ kind: "text", text: "Hexagonal PT 12" }] },
+      },
+    });
   });
 
   it("suppresses matching pending create local rows when observer truth has the row", () => {
@@ -163,6 +172,7 @@ describe("dashboard viewport selector", () => {
             {
               localId: "local_create_1",
               projectId: "web",
+              title: "Hexagonal PT 12",
               branch: "fix-nav-mobile",
               harnessProvider: "codex",
               createdAt: "2026-05-31T12:00:00.000Z",
@@ -196,7 +206,8 @@ describe("dashboard viewport selector", () => {
             {
               localId: "local_create_1",
               projectId: "web",
-              branch: "bbb pending task",
+              title: "bbb pending task",
+              branch: "station-pending-1",
               harnessProvider: "codex",
               createdAt: "2026-05-31T12:00:00.000Z",
             },
@@ -213,13 +224,39 @@ describe("dashboard viewport selector", () => {
         .filter((item) => item.type === "session" || item.type === "createLocalRow")
         .slice(0, 3)
         .map((item) =>
-          item.type === "session" ? `session:${item.row.id}` : `create:${item.row.branch}`,
+          item.type === "session" ? `session:${item.row.id}` : `create:${item.row.title}`,
         ),
     ).toEqual([
       "session:ses_wt_web_stuck",
       "create:bbb pending task",
       "session:ses_wt_web_working",
     ]);
+  });
+
+  it("searches optimistic rows by both title and hidden branch", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "local_create_search",
+            projectId: "web",
+            title: "Hexagonal PT 12",
+            branch: "station-e91f2b",
+            createdAt: "2026-05-31T12:00:00.000Z",
+          },
+        ],
+        failedCreate: [],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+
+    for (const searchQuery of ["hexagonal", "e91f2b"]) {
+      const items = selectDashboardItems(snapshot, { ...state, searchQuery });
+      expect(items.some((item) => item.type === "createLocalRow")).toBe(true);
+    }
   });
 
   it("renders one observer row when branch metadata changes but the session title stays stable", () => {

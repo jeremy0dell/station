@@ -54,7 +54,7 @@ Coverage: full. `PermissionRequest` and `Notification` drive **needs attention**
 
 Events (`integrations/harness/codex/src/ingressRules.ts`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SubagentStart`, `Stop`.
 
-Hooks: a dedicated `station` profile (`station.config.toml`) under `~/.codex` calls `station-codex-hook.sh`.
+Hooks: a dedicated `station` profile (`station.config.toml`) under `~/.codex` calls `station-codex-hook.sh`. Setup can prove that Station's current profile and script artifacts are prepared, but Codex may still require review of the current definition through `/hooks`. Setup does not bypass trust, inspect private trust state, or force `[features] hooks = true`, so preparation is not proof that Codex executed the hook.
 
 Coverage: full. `PermissionRequest` drives **needs attention**, a completed `Stop` drives **idle**, and `stop_hook_active` keeps **working**. Codex has no session-end hook, so **exited** is inferred from process state.
 
@@ -106,9 +106,27 @@ Pi has no universal typed event for extension dialogs, permission prompts, or
 plan approval UI, so those remain invisible. Question prose and options never
 leave the Pi adapter and are never classified as plan intent.
 
+## Preparation and launch gates
+
+For the effective global default and every harness explicitly selected during
+guided setup, Claude, Codex, Cursor, and OpenCode require both
+`install_hooks = true` and current Station-owned artifacts. Setup exposes these
+as required `harness-tracking:<id>` checks and re-probes after applying changes.
+The Observer uses the same provider-neutral `hooksStatus()` capability before a
+new managed launch, so missing or drifted artifacts fail closed for all four.
+Focusing an existing session still happens before that new-launch gate.
+
+Pi is different: its extension is materialized and loaded as part of Station's
+launch composition, not installed into an external provider home. Providers
+without a managed external artifact retain fail-open launch behavior; Station
+does not invent a hook-install contract for them.
+
+"Prepared" means Station config requests tracking and Station's files are
+current. Runtime "Ready" requires event evidence and is not claimed by setup.
+
 ## Installing hooks
 
-Every harness except Pi is wired up the same way:
+Every artifact-backed harness is wired up the same way:
 
 ```sh
 stn hooks doctor <harness>     # is the hook installed and current?
@@ -116,4 +134,4 @@ stn hooks install <harness>    # write or update the hook
 stn hooks uninstall <harness>  # remove it
 ```
 
-`<harness>` is one of `claude`, `codex`, `cursor`, or `opencode`. Pi needs no install step because its extension loads in-process. `stn doctor` reports the status of every configured harness.
+`<harness>` is one of `claude`, `codex`, `cursor`, or `opencode`. Pi needs no install step because its extension loads in-process. `stn setup` normally performs required preparation after consent, while these commands repair or inspect individual providers. `stn doctor` reports the status of every configured harness.

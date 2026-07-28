@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
   getOrCreateStationHotRuntime,
-  STATION_HOT_RUNTIME_VERSION,
   type StationHotRuntime,
   type StationHotSlots,
 } from "./stationHotRuntime.js";
@@ -14,6 +13,7 @@ import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js"
 
 const FREEZE_CONFIG: WorkspaceConfig = {
   scroll_on_output: "freeze",
+  scrollback_lines: 10_000,
   overlay_width_percent: 60,
   overlay_height_percent: 60,
   welcome_on_boot: false,
@@ -21,6 +21,7 @@ const FREEZE_CONFIG: WorkspaceConfig = {
 };
 const FOLLOW_CONFIG: WorkspaceConfig = {
   scroll_on_output: "follow",
+  scrollback_lines: 10_000,
   overlay_width_percent: 60,
   overlay_height_percent: 60,
   welcome_on_boot: false,
@@ -28,6 +29,7 @@ const FOLLOW_CONFIG: WorkspaceConfig = {
 };
 const INTRO_CONFIG: WorkspaceConfig = {
   scroll_on_output: "freeze",
+  scrollback_lines: 10_000,
   overlay_width_percent: 60,
   overlay_height_percent: 60,
   welcome_on_boot: true,
@@ -54,7 +56,7 @@ describe("station hot runtime", () => {
     expect(second.store.getState().workspace.activePaneId).toEqual("pane-second");
   });
 
-  it("reboots an incompatible runtime clean and disposes its old PTYs", () => {
+  it("reboots a pre-scrollback v3 runtime and disposes its old PTYs", () => {
     const slots = createSlots();
     const oldStore = createStationStore();
     const paneId = agentWorktreePaneId("wt_station_idle");
@@ -63,7 +65,7 @@ describe("station hot runtime", () => {
     const oldRegistry = createPtyRegistry({ createTerminal: () => scripted.terminal });
     oldRegistry.resize(paneId, { cols: 80, rows: 24 });
     const oldRuntime: StationHotRuntime = {
-      version: STATION_HOT_RUNTIME_VERSION - 1,
+      version: 3,
       store: oldStore,
       registry: oldRegistry,
     };

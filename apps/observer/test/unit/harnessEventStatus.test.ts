@@ -12,9 +12,9 @@ import {
   decayStaleBusyStatuses,
   externalHarnessRunId,
   type ObserverHarnessRun,
-  observerHarnessRunFromRun,
   synthesizeExternalHarnessRuns,
 } from "../../src/reconcile/harnessEventStatus";
+import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const runObservedAt = "2026-05-21T12:00:00.000Z";
 const eventObservedAt = "2026-05-21T12:00:01.000Z";
@@ -512,6 +512,7 @@ function observation(
     harnessRunId?: string | undefined;
     sessionId?: string | undefined;
     worktreeId?: string | undefined;
+    terminalTargetId?: string | undefined;
     nativeSessionId?: string | undefined;
     rawEventType?: string;
     observedAt?: string;
@@ -527,6 +528,7 @@ function observation(
   if (input.harnessRunId !== undefined) payload.harnessRunId = input.harnessRunId;
   if (input.sessionId !== undefined) payload.sessionId = input.sessionId;
   if (input.worktreeId !== undefined) payload.worktreeId = input.worktreeId;
+  if (input.terminalTargetId !== undefined) payload.terminalTargetId = input.terminalTargetId;
   if (input.nativeSessionId !== undefined) payload.nativeSessionId = input.nativeSessionId;
   if (input.rawEventType !== undefined) payload.rawEventType = input.rawEventType;
 

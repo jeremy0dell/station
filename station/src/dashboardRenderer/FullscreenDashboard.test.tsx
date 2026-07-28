@@ -219,7 +219,10 @@ async function render(
   size: { width: number; height: number } = SURFACE,
   effects: DashboardMouseEffects = TEST_EFFECTS,
 ) {
-  const setup = await testRender(<FullscreenDashboard store={store} effects={effects} />, size);
+  const setup = await testRender(
+    <FullscreenDashboard store={store} effects={effects} onCopyNotice={() => {}} />,
+    size,
+  );
   await setup.flush();
   teardowns.push(() =>
     actOn(async () => {

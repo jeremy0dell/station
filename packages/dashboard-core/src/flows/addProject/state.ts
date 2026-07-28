@@ -1,6 +1,5 @@
 import { createStepWizardState, enterWizardStep } from "../stepWizard.js";
 import { normalizeProjectId } from "./input.js";
-import { addProjectRows } from "./rows.js";
 import type {
   AddProjectChooseState,
   AddProjectFailedState,
@@ -26,7 +25,6 @@ export function createAddProjectStartState(input: CreateAddProjectFlowInput): Ad
     mode: wizard.mode,
     stepHistory: wizard.stepHistory,
     firstProject: input.firstProject === true,
-    selectedIndex: 0,
     choices: startChoices(input.cwd, input.homeDir),
   };
 }
@@ -41,7 +39,6 @@ export function chooseStateForLoadedFolder(
     ...wizardFieldsFor(state, "choose"),
     currentPath,
     entries,
-    selectedIndex: 0,
     filter: "",
     filterMode: false,
     loading: false,
@@ -112,18 +109,6 @@ export function reviewWithoutEditingId(state: AddProjectReviewState): AddProject
 export function withoutSearchError(state: AddProjectChooseState): AddProjectChooseState {
   const { searchError: _searchError, ...nextState } = state;
   return nextState;
-}
-
-export function clampChooseSelection(state: AddProjectChooseState): AddProjectChooseState {
-  const count = addProjectRows(state).length;
-  return { ...state, selectedIndex: clampIndex(state.selectedIndex, 0, count - 1) };
-}
-
-export function clampIndex(value: number, min: number, max: number): number {
-  if (max < min) {
-    return min;
-  }
-  return Math.min(max, Math.max(min, value));
 }
 
 function wizardFieldsFor<TMode extends AddProjectStep>(

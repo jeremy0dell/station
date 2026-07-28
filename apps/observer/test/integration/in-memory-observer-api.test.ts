@@ -1,4 +1,4 @@
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { type HarnessEventObservation, STATION_SCHEMA_VERSION } from "@station/contracts";
 import {
   createFakeHarnessRun,
@@ -8,16 +8,21 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCommandQueue } from "../../src/commands/queue";
 import { registerObserverCommandHandlers } from "../../src/commands/router";
 import type { PersistenceHealthSource } from "../../src/persistence/ports";
 import { ProviderRegistry } from "../../src/providers/registry";
-import { createObserverCore } from "../../src/reconcile/core";
+import { createObserverCore, type ObserverCore } from "../../src/reconcile/core";
 import { createObserverApi } from "../../src/runtime/api";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
+import {
+  FakeWorktreeChangeSource,
+  FakeWorktreeMetadataInvalidationSource,
+} from "../support/worktreeMetadataSources.js";
 
 const now = "2026-05-20T12:00:00.000Z";
 const healthStub = {
@@ -28,7 +33,7 @@ const healthStub = {
   lastCheckedAt: now,
 };
 
-describe("Observer API with in-memory persistence", () => {
+describe("Observer API composition with in-memory persistence", () => {
   it("runs core, commands, ingress, diagnostics, and shutdown without SQLite", async () => {
     const clock = { now: () => new Date(now) };
     const idFactory = observerIds();
@@ -37,8 +42,14 @@ describe("Observer API with in-memory persistence", () => {
     const commandQueue = createCommandQueue({ persistence, clock, idFactory, eventBus });
     const providers = fakeProviders();
     const core = createObserverCore({ config, providers, persistence, clock });
-    let metadataStopped = false;
+    const lifecycle: string[] = [];
+    const worktreeChangeSource = new FakeWorktreeChangeSource();
+    const worktreeMetadataInvalidationSource = new FakeWorktreeMetadataInvalidationSource();
+    worktreeMetadataInvalidationSource.onShutdown = async () => {
+      lifecycle.push("metadata");
+    };
     const persistenceHealth: PersistenceHealthSource = { health: () => healthStub };
+    const diagnosticEvidenceSource = new FakeDiagnosticEvidenceSource();
     const api = createObserverApi({
       core,
       providers,
@@ -46,17 +57,16 @@ describe("Observer API with in-memory persistence", () => {
       persistenceHealth,
       commandQueue,
       eventBus,
+      diagnosticEvidenceSource,
       clock,
       config,
-      stateDir: "/tmp/station-no-sqlite-observer",
       hookReconcileDebounceMs: 0,
-      metadataRefresh: {
-        refresh: async () => undefined,
-        shutdown: async () => {
-          metadataStopped = true;
-        },
+      worktreeChangeSource,
+      worktreeMetadataInvalidationSource,
+      onStop: async () => {
+        lifecycle.push("onStop");
+        await commandQueue.shutdown();
       },
-      onStop: () => commandQueue.shutdown(),
     });
     registerObserverCommandHandlers({
       projectConfigWriter: createUnexpectedProjectConfigWriter(),
@@ -94,6 +104,15 @@ describe("Observer API with in-memory persistence", () => {
       ],
     });
     await initialEvents.return?.();
+    await waitFor(() => worktreeChangeSource.requests.length > 0);
+    expect(worktreeChangeSource.requests[0]?.target).toMatchObject({
+      worktreeId: "wt_web_task",
+      projectId: "web",
+      branch: "task",
+    });
+    expect(worktreeMetadataInvalidationSource.replacements[0]).toEqual([
+      expect.objectContaining({ worktreeId: "wt_web_task", projectId: "web", branch: "task" }),
+    ]);
 
     const command = await api.dispatch({
       type: "observer.reconcile",
@@ -145,16 +164,147 @@ describe("Observer API with in-memory persistence", () => {
       sqlite: healthStub,
     });
     await expect(api.collectDiagnostics({ includeLogs: false })).resolves.toMatchObject({
-      observerHealth: { sqlite: healthStub },
+      observerHealth: {
+        sqlite: healthStub,
+        stateDir: "memory://state",
+        socketPath: "memory://observer-socket",
+      },
+      localState: { stateDir: "memory://state" },
+      hookSpool: { path: "urn:station:hook-spool" },
       commands: [expect.objectContaining({ id: command.commandId, status: "succeeded" })],
       events: expect.arrayContaining([
         expect.objectContaining({ type: "providerHook.ingested", hookId: "hook_memory_1" }),
       ]),
     });
+    await expect(api.runDoctor()).resolves.toMatchObject({
+      logs: { paths: ["queue://observer-log", "queue://hook-log"] },
+      debugBundle: { diagnosticsDir: "memory://diagnostics" },
+    });
+    expect(diagnosticEvidenceSource.readRecentLogsCalls).toEqual([50]);
 
     await expect(api.stop()).resolves.toMatchObject({ stopped: true, at: now });
-    expect(metadataStopped).toBe(true);
+    expect(worktreeMetadataInvalidationSource.shutdownCount).toBe(1);
+    expect(lifecycle).toEqual(["metadata", "onStop"]);
+    const requestsAfterStop = worktreeChangeSource.requests.length;
+    await api.reconcile("after-stop-direct-test");
+    await settleBackgroundWork();
+    expect(worktreeChangeSource.requests).toHaveLength(requestsAfterStop);
     await expect(commandQueue.drain()).resolves.toBeUndefined();
+  });
+
+  it("clears cached local evidence when composition sees a matching missing worktree", async () => {
+    const clock = { now: () => new Date(now) };
+    const idFactory = observerIds();
+    const persistence = createInMemoryObserverPersistence({ clock, idFactory });
+    const eventBus = createObserverEventBus();
+    const commandQueue = createCommandQueue({ persistence, clock, idFactory, eventBus });
+    const providers = fakeProviders();
+    const core = createObserverCore({ config, providers, persistence, clock });
+    const missingSnapshot = structuredClone(await core.reconcile("missing-worktree-fixture"));
+    const row = missingSnapshot.rows.find((candidate) => candidate.id === "wt_web_task");
+    if (row === undefined) throw new Error("Expected fake worktree row.");
+    row.worktree.state = "missing";
+    const missingCore: ObserverCore = {
+      ...core,
+      reconcile: async () => missingSnapshot,
+      getSnapshot: () => missingSnapshot,
+    };
+    await persistence.upsertWorktreeMetadataCurrent({
+      worktreeId: row.id,
+      kind: "change_summary",
+      cacheKey: "cached-before-missing",
+      expiresAt: "2026-05-20T12:05:00.000Z",
+      payload: {
+        kind: "branch_diff",
+        additions: 3,
+        deletions: 1,
+        source: "local_git",
+        checkedAt: now,
+      },
+    });
+    const invalidationSource = new FakeWorktreeMetadataInvalidationSource();
+    const api = createObserverApi({
+      core: missingCore,
+      providers,
+      persistence,
+      persistenceHealth: { health: () => healthStub },
+      commandQueue,
+      eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
+      clock,
+      config,
+      worktreeMetadataInvalidationSource: invalidationSource,
+      onStop: async () => commandQueue.shutdown(),
+    });
+
+    await api.reconcile("missing-worktree-cache-clear");
+    await waitFor(async () => {
+      const rows = await persistence.listWorktreeMetadataCurrent({
+        kind: "change_summary",
+        includeExpired: true,
+        now,
+      });
+      return rows.length === 0;
+    });
+
+    expect(invalidationSource.replacements[0]).toEqual([]);
+    await expect(api.stop()).resolves.toMatchObject({ stopped: true });
+  });
+
+  it("waits for an in-flight provider health publication before stopping", async () => {
+    const clock = { now: () => new Date(now) };
+    const idFactory = observerIds();
+    const persistence = createInMemoryObserverPersistence({ clock, idFactory });
+    const eventBus = createObserverEventBus();
+    const commandQueue = createCommandQueue({ persistence, clock, idFactory, eventBus });
+    const providers = fakeProviders();
+    const core = createObserverCore({ config, providers, persistence, clock });
+    const commitProviderHealthProbe = core.commitProviderHealthProbe.bind(core);
+    let releaseCommit: () => void = () => undefined;
+    const commitBlocked = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    let markCommitStarted: () => void = () => undefined;
+    const commitStarted = new Promise<void>((resolve) => {
+      markCommitStarted = resolve;
+    });
+    vi.spyOn(core, "commitProviderHealthProbe").mockImplementation(async (health) => {
+      markCommitStarted();
+      await commitBlocked;
+      return commitProviderHealthProbe(health);
+    });
+    let markMetadataStopped: () => void = () => undefined;
+    const metadataStopped = new Promise<void>((resolve) => {
+      markMetadataStopped = resolve;
+    });
+    const onStop = vi.fn(async () => undefined);
+    const api = createObserverApi({
+      core,
+      providers,
+      persistence,
+      persistenceHealth: { health: () => healthStub },
+      commandQueue,
+      eventBus,
+      diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
+      clock,
+      config,
+      metadataRefresh: {
+        refresh: async () => undefined,
+        shutdown: async () => markMetadataStopped(),
+      },
+      onStop,
+    });
+
+    const refresh = providers.healthCache.refresh(providers.worktree.id);
+    await commitStarted;
+    const stop = api.stop();
+    await metadataStopped;
+
+    expect(onStop).not.toHaveBeenCalled();
+    releaseCommit();
+    await expect(stop).resolves.toMatchObject({ stopped: true });
+    await expect(refresh).resolves.toBeUndefined();
+    expect(onStop).toHaveBeenCalledOnce();
   });
 });
 
@@ -241,8 +391,22 @@ function observerIds() {
   };
 }
 
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (await predicate()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error("Timed out waiting for background metadata work.");
+}
+
+async function settleBackgroundWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
 const config: StationConfig = {
   schemaVersion: 1,
+  workspace: DEFAULT_WORKSPACE_CONFIG,
   defaults: {
     worktreeProvider: "fake-worktree",
     terminal: "fake-terminal",

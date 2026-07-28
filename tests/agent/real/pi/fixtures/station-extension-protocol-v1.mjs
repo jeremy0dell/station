@@ -2,6 +2,11 @@ import { spawn } from "node:child_process";
 
 const legacyEvents = ["session_start", "agent_start", "agent_end", "session_shutdown"];
 
+/**
+ * Pi loads this compatibility fixture by file path.
+ *
+ * @knipignore
+ */
 export default function legacyStationPiExtension(pi) {
   for (const eventType of legacyEvents) {
     pi.on(eventType, async (_event, context) => {

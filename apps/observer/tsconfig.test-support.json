@@ -4,5 +4,11 @@
     "noEmit": true,
     "rootDir": "."
   },
-  "include": ["test/support/inMemoryObserverPersistence.ts", "test/support/projectConfigWriter.ts"]
+  "include": [
+    "test/support/diagnosticEvidenceSources.ts",
+    "test/support/harnessRuns.ts",
+    "test/support/inMemoryObserverPersistence.ts",
+    "test/support/projectConfigWriter.ts",
+    "test/support/worktreeMetadataSources.ts"
+  ]
 }

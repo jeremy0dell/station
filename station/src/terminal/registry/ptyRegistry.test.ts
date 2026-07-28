@@ -132,23 +132,50 @@ describe("createPtyRegistry", () => {
     expect(secondHandler).toEqual([PANE_A]);
   });
 
-  it("uses refreshed runtime defaults for future lazy spawns only", () => {
+  it("uses refreshed runtime defaults for future lazy spawns only", async () => {
     const first = createScriptedTerminal();
     const second = createScriptedTerminal();
     const registry = createPtyRegistry({
       createTerminal: () => first.terminal,
       scrollOnOutput: "freeze",
+      scrollbackLines: 1,
     });
 
     registry.resize(PANE_A, SIZE);
     registry.setRuntimeOptions({
       createTerminal: () => second.terminal,
       scrollOnOutput: "follow",
+      scrollbackLines: 3,
     });
     registry.resize(PANE_B, SIZE);
 
     expect(registry.get(PANE_A)?.terminal).toBe(first.terminal);
     expect(registry.get(PANE_B)?.terminal).toBe(second.terminal);
+
+    const output = Array.from({ length: 40 }, (_, index) => `line-${index}\r\n`).join("");
+    first.helpers.emitData(output);
+    second.helpers.emitData(output);
+    await Promise.all([
+      registry.get(PANE_A)?.screen?.whenIdle(),
+      registry.get(PANE_B)?.screen?.whenIdle(),
+    ]);
+
+    expect(registry.get(PANE_A)?.screen?.bufferStats().baseY).toBe(1);
+    expect(registry.get(PANE_B)?.screen?.bufferStats().baseY).toBe(3);
+  });
+
+  it("disables scrollback when the configured depth is zero", async () => {
+    const { registry, scripted } = harness();
+    registry.setRuntimeOptions({ scrollOnOutput: "freeze", scrollbackLines: 0 });
+    registry.resize(PANE_A, SIZE);
+
+    scripted[0].helpers.emitData(
+      Array.from({ length: 20 }, (_, index) => `line-${index}\r\n`).join(""),
+    );
+    const screen = registry.get(PANE_A)?.screen;
+    await screen?.whenIdle();
+
+    expect(screen?.bufferStats().baseY).toBe(0);
   });
 
   it("round-trips device queries from the screen back to the pty", async () => {

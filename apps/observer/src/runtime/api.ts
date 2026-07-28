@@ -12,6 +12,7 @@ import type {
   ObserverApi,
   ObserverHealth,
   ObserverStopReceipt,
+  ProviderHealth,
   ProviderHookEvent,
   ProviderHookReceipt,
   ReconcileReceipt,
@@ -19,15 +20,20 @@ import type {
   StationEvent,
 } from "@station/contracts";
 import { STARTUP_RECONCILE_REASONS, STATION_SCHEMA_VERSION } from "@station/contracts";
-import { type RuntimeClock, systemClock, toIsoTimestamp } from "@station/runtime";
+import {
+  type RuntimeClock,
+  safeErrorFromUnknown,
+  systemClock,
+  toIsoTimestamp,
+} from "@station/runtime";
 import type { CommandQueue } from "../commands/queue.js";
 import { commandRecordFromPersisted } from "../commands/record.js";
 import {
   collectDiagnosticSnapshot,
-  type DiagnosticRuntimePaths,
   type ObserverDiagnosticsDeps,
   runDoctor,
 } from "../diagnostics/collector.js";
+import type { DiagnosticEvidenceSource } from "../diagnostics/evidenceSource.js";
 import {
   createHarnessIngressQueue,
   type HarnessIngressQueue,
@@ -42,6 +48,13 @@ import {
   createFilesystemProviderIngressSpoolStore,
   providerIngressSpoolDepth,
 } from "../hooks/spool.js";
+import { createLocalGitWorktreeMetadataInvalidationSource } from "../metadata/gitRefInvalidation.js";
+import { createLocalGitWorktreeChangeSource } from "../metadata/localGitChangeSummary.js";
+import type { ResolveLocalGitMetadataWorktree } from "../metadata/localGitWorktree.js";
+import type {
+  WorktreeChangeSource,
+  WorktreeMetadataInvalidationSource,
+} from "../metadata/ports.js";
 import {
   createWorktreeMetadataRefreshService,
   type WorktreeMetadataRefreshService,
@@ -73,6 +86,7 @@ export type CreateObserverApiOptions = {
   persistenceHealth: PersistenceHealthSource;
   commandQueue: CommandQueue;
   eventBus: ObserverEventBus;
+  diagnosticEvidenceSource: DiagnosticEvidenceSource;
   clock?: RuntimeClock;
   providerHookIngress?: ProviderHookIngress;
   harnessEventReportIngestion?: HarnessEventReportIngestion;
@@ -82,13 +96,13 @@ export type CreateObserverApiOptions = {
   /** Exact handoff selector; legacy callers fall back to the core snapshot version. */
   observerBuildVersion?: string;
   stateDir?: string;
-  diagnosticsDir?: string;
-  logPaths?: string[];
   logger?: StationLogger;
   config?: StationConfig;
   configPath?: string;
   configDiagnostics?: ConfigDiagnostic[];
   metadataRefresh?: WorktreeMetadataRefreshService;
+  worktreeChangeSource?: WorktreeChangeSource;
+  worktreeMetadataInvalidationSource?: WorktreeMetadataInvalidationSource;
   onStop?: () => Promise<void> | void;
   hookReconcileDebounceMs?: number;
 };
@@ -96,12 +110,47 @@ export type CreateObserverApiOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Wires Observer use cases, durable adapters, ingress workers, scheduling, and
- * exact build publication behind the application API.
+ * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
+ * evidence roles, ingress workers, provider-health publication, scheduling, exact
+ * build publication, and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
   const reconciling = { reconciling: false };
+  const providerHealthCache = options.providers?.healthCache;
+  const pendingProviderHealthPublications = new Set<Promise<void>>();
+  let acceptingProviderHealthPublications = true;
+
+  const publishProviderHealthProbe = async (health: ProviderHealth): Promise<void> => {
+    try {
+      const event = await options.core.commitProviderHealthProbe(health);
+      if (event !== undefined) {
+        options.eventBus.publish(event);
+      }
+    } catch (error) {
+      await options.logger
+        ?.error("Completed provider health probe could not be published.", {
+          provider: health.providerId,
+          error,
+        })
+        .catch(() => undefined);
+    }
+  };
+
+  const unsubscribeProviderHealth = providerHealthCache?.onProbeCompleted((health) => {
+    if (!acceptingProviderHealthPublications) {
+      return;
+    }
+    const publication = publishProviderHealthProbe(health);
+    pendingProviderHealthPublications.add(publication);
+    void publication.finally(() => pendingProviderHealthPublications.delete(publication));
+    return publication;
+  });
+  const stopProviderHealthPublication = async (): Promise<void> => {
+    acceptingProviderHealthPublications = false;
+    unsubscribeProviderHealth?.();
+    await Promise.all(pendingProviderHealthPublications);
+  };
 
   // Assigned after metadataRefresh + the drainer (which need the scheduler); the
   // scheduler/launch closures only read it once a reconcile actually runs.
@@ -150,6 +199,10 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   };
+  if (providerHealthCache !== undefined) {
+    harnessReportDeps.refreshProviderHealth = (providerId) =>
+      providerHealthCache.refresh(providerId);
+  }
 
   const harnessIngressQueue = buildHarnessIngressQueue(
     options,
@@ -209,7 +262,14 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
 
   const api: ObserverApi = {
     health: () => buildHealth(options, clock, harnessIngressQueue),
-    stop: () => buildStop(options, harnessIngressQueue, metadataRefresh, clock),
+    stop: () =>
+      buildStop(
+        options,
+        harnessIngressQueue,
+        metadataRefresh,
+        stopProviderHealthPublication,
+        clock,
+      ),
     getSnapshot: async () => options.core.getSnapshot(),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
@@ -253,7 +313,31 @@ async function prepareExternalLaunchSafe(
   params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
 ): ReturnType<ObserverApi["prepareExternalLaunch"]> {
   const deps = assertProvidersAvailable(options);
-  const { outcome, reconcile } = await prepareExternalLaunch(deps, params);
+  let result: Awaited<ReturnType<typeof prepareExternalLaunch>>;
+  try {
+    result = await prepareExternalLaunch(deps, params);
+  } catch (cause) {
+    const error = safeErrorFromUnknown(cause, {
+      tag: "ExternalLaunchError",
+      code: "EXTERNAL_LAUNCH_PREPARE_FAILED",
+      message: "External agent launch preparation failed.",
+    });
+    if (error.code === "HARNESS_HOOKS_NOT_INSTALLED") {
+      const attributes: Record<string, unknown> = {
+        error,
+        projectId: params.projectId,
+        worktreeId: params.worktreeId,
+      };
+      if (params.harness !== undefined) {
+        attributes.harnessProvider = params.harness;
+      }
+      await options.logger
+        ?.warn("External agent launch rejected because harness hooks are unavailable.", attributes)
+        .catch(() => undefined);
+    }
+    throw cause;
+  }
+  const { outcome, reconcile } = result;
   if (reconcile) {
     reconcileAfterExternalLaunch(
       reconcileDeps,
@@ -298,6 +382,7 @@ function assertProvidersAvailable(options: CreateObserverApiOptions): ExternalLa
     persistence: options.persistence,
     clock: options.clock,
     configPath: options.configPath,
+    logger: options.logger,
   };
 }
 
@@ -309,12 +394,52 @@ function buildMetadataRefresh(
   if (options.metadataRefresh !== undefined) return options.metadataRefresh;
   if (options.config === undefined) return undefined;
 
+  const resolveWorktree: ResolveLocalGitMetadataWorktree = (target) => {
+    const row = options.core
+      .getSnapshot()
+      .rows.find((candidate) => candidate.id === target.worktreeId);
+    if (
+      row === undefined ||
+      row.projectId !== target.projectId ||
+      row.branch !== target.branch ||
+      row.registrationIdentity !== target.registrationIdentity
+    ) {
+      return { status: "superseded" };
+    }
+    if (row.worktree.state !== "exists") {
+      return { status: "unavailable" };
+    }
+    const worktree = {
+      worktreeId: row.id,
+      projectId: row.projectId,
+      branch: row.branch,
+      path: row.path,
+      ...(row.registrationIdentity === undefined
+        ? {}
+        : { registrationIdentity: row.registrationIdentity }),
+    };
+    return { status: "resolved", worktree };
+  };
+  const worktreeChangeSource =
+    options.worktreeChangeSource ?? createLocalGitWorktreeChangeSource({ resolveWorktree, clock });
+  const invalidationOptions: Parameters<
+    typeof createLocalGitWorktreeMetadataInvalidationSource
+  >[0] = {
+    resolveWorktree,
+    requestReconcile: scheduler.request,
+  };
+  if (options.logger !== undefined) invalidationOptions.logger = options.logger;
+  const worktreeMetadataInvalidationSource =
+    options.worktreeMetadataInvalidationSource ??
+    createLocalGitWorktreeMetadataInvalidationSource(invalidationOptions);
+
   const metadataRefreshOptions: Parameters<typeof createWorktreeMetadataRefreshService>[0] = {
     projects: providerProjectsFromConfig(options.config),
     persistence: options.persistence,
     requestReconcile: scheduler.request,
     clock,
-    watchGitRefs: true,
+    worktreeChangeSource,
+    worktreeMetadataInvalidationSource,
   };
   if (options.logger !== undefined) {
     metadataRefreshOptions.logger = options.logger;
@@ -415,10 +540,13 @@ async function buildStop(
   options: CreateObserverApiOptions,
   harnessIngressQueue: HarnessIngressQueue,
   metadataRefresh: WorktreeMetadataRefreshService | undefined,
+  stopProviderHealthPublication: () => Promise<void>,
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
+  const providerHealthStopped = stopProviderHealthPublication();
   await harnessIngressQueue.shutdown();
-  await metadataRefresh?.shutdown?.();
+  await metadataRefresh?.shutdown();
+  await providerHealthStopped;
   await options.onStop?.();
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
@@ -438,22 +566,14 @@ async function getCommandById(
 function buildDiagnosticDeps(
   options: CreateObserverApiOptions,
   clock: RuntimeClock,
-): ObserverDiagnosticsDeps & { paths: DiagnosticRuntimePaths } {
-  const stateDir = options.stateDir ?? process.cwd();
-  const paths: DiagnosticRuntimePaths = {
-    stateDir,
-    diagnosticsDir: options.diagnosticsDir ?? `${stateDir}/diagnostics`,
-  };
-  if (options.socketPath !== undefined) paths.socketPath = options.socketPath;
-  if (options.hookSpoolDir !== undefined) paths.hookSpoolDir = options.hookSpoolDir;
-  if (options.logPaths !== undefined) paths.logPaths = options.logPaths;
-
-  const deps: ObserverDiagnosticsDeps & { paths: DiagnosticRuntimePaths } = {
+): ObserverDiagnosticsDeps {
+  const deps: ObserverDiagnosticsDeps = {
     config: options.config ?? emptyConfig(),
     core: options.core,
-    persistence: options.persistence,
+    commandJournal: options.persistence,
+    eventJournal: options.persistence,
     persistenceHealth: options.persistenceHealth,
-    paths,
+    evidenceSource: options.diagnosticEvidenceSource,
     clock,
   };
   if (options.configPath !== undefined) deps.configPath = options.configPath;
@@ -465,4 +585,3 @@ function buildDiagnosticDeps(
 }
 
 export { agentStateChangedEventsFromReconcile } from "./agentEvents.js";
-export { elapsedMs } from "./reconcileProfiling.js";

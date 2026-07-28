@@ -1,4 +1,4 @@
-import type { ProviderId, StationSnapshot } from "@station/contracts";
+import type { ProviderId } from "@station/contracts";
 import type { TuiViewState } from "@station/dashboard-core";
 import {
   choiceValueByKey,
@@ -6,7 +6,6 @@ import {
   isSelectionKey,
   keyChoices,
   SELECTION_KEYS,
-  selectDashboardSessionRows,
   selectNewSessionHarnessChoices,
   selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
@@ -17,10 +16,6 @@ import {
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
-
-function visibleRows(snapshot: StationSnapshot, state: TuiViewState) {
-  return selectProjectGroups(snapshot, state).flatMap((group) => group.rows);
-}
 
 describe("TUI selectors", () => {
   it("assigns selection keys in order without 0 or uppercase keys and caps at 35", () => {
@@ -185,36 +180,32 @@ describe("TUI selectors", () => {
     );
   });
 
-  it("resolves session row labels from titles with pending overrides", () => {
+  it("resolves session labels with pending overrides", () => {
     const snapshot = createDashboardSnapshot();
-    const titled = {
-      ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_idle" ? { ...session, title: "Readable feature task" } : session,
-      ),
-    };
-    const row = selectDashboardSessionRows(titled).find(
-      (candidate) => candidate.id === "ses_wt_web_idle",
-    );
-    if (row === undefined) throw new Error("missing fixture session row");
+    const session = snapshot.sessions.find((candidate) => candidate.id === "ses_wt_web_idle");
+    if (session === undefined) throw new Error("missing fixture session");
+    const titled = { ...session, title: "Readable feature task" };
 
-    expect(sessionRowDisplayTitle(row, createInitialTuiState().localRows)).toBe(
+    expect(sessionRowDisplayTitle({ session: titled }, createInitialTuiState().localRows)).toBe(
       "Readable feature task",
     );
     expect(
-      sessionRowDisplayTitle(row, {
-        pendingCreate: [],
-        failedCreate: [],
-        pendingRemove: [],
-        pendingStart: [],
-        pendingRenameTitles: {
-          ses_wt_web_idle: {
-            sessionId: "ses_wt_web_idle",
-            title: "Optimistic readable title",
-            createdAt: "2026-05-31T12:00:00.000Z",
+      sessionRowDisplayTitle(
+        { session: titled },
+        {
+          pendingCreate: [],
+          failedCreate: [],
+          pendingRemove: [],
+          pendingStart: [],
+          pendingRenameTitles: {
+            ses_wt_web_idle: {
+              sessionId: "ses_wt_web_idle",
+              title: "Optimistic readable title",
+              createdAt: "2026-05-31T12:00:00.000Z",
+            },
           },
         },
-      }),
+      ),
     ).toBe("Optimistic readable title");
   });
 
@@ -241,9 +232,11 @@ describe("TUI selectors", () => {
       localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
       selection: new Map(),
     };
-    expect(visibleRows(snapshot, searched).map((candidate) => candidate.id)).toEqual([
-      "ses_wt_web_idle",
-    ]);
+    expect(
+      selectProjectGroups(snapshot, searched)
+        .flatMap((group) => group.rows)
+        .map((candidate) => candidate.id),
+    ).toEqual(["ses_wt_web_idle"]);
 
     const collapsed: TuiViewState = {
       searchQuery: "",
@@ -256,7 +249,9 @@ describe("TUI selectors", () => {
     const groups = selectProjectGroups(snapshot, collapsed);
     expect(groups.find((group) => group.project.id === "web")?.collapsed).toBe(true);
     expect(
-      visibleRows(snapshot, collapsed).map((candidate) => candidate.worktree.projectId),
+      selectProjectGroups(snapshot, collapsed)
+        .flatMap((group) => group.rows)
+        .map((candidate) => candidate.worktree.projectId),
     ).toEqual(["api"]);
   });
 
@@ -271,7 +266,7 @@ describe("TUI selectors", () => {
       selection: new Map(),
     };
 
-    expect(visibleRows(snapshot, searched)).toEqual([]);
+    expect(selectProjectGroups(snapshot, searched).flatMap((group) => group.rows)).toEqual([]);
   });
 
   it("searches by resolved session title while sorting uses resolved titles", () => {
@@ -293,9 +288,11 @@ describe("TUI selectors", () => {
       selection: new Map(),
     };
 
-    expect(visibleRows(titled, searched).map((candidate) => candidate.id)).toEqual([
-      "ses_wt_web_stuck",
-    ]);
+    expect(
+      selectProjectGroups(titled, searched)
+        .flatMap((group) => group.rows)
+        .map((candidate) => candidate.id),
+    ).toEqual(["ses_wt_web_stuck"]);
 
     const web = selectProjectGroups(titled, createInitialTuiState()).find(
       (group) => group.project.id === "web",

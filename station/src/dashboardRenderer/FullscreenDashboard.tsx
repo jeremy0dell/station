@@ -28,10 +28,12 @@ import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMous
 export function FullscreenDashboard({
   store,
   effects,
+  onCopyNotice,
   hoverEnabled = true,
 }: {
   store: StoreApi<TuiStore>;
   effects: DashboardMouseEffects;
+  onCopyNotice: (text: string) => void;
   hoverEnabled?: boolean;
 }) {
   const { width, height } = useTerminalDimensions();
@@ -47,7 +49,12 @@ export function FullscreenDashboard({
     <StationHoverProvider value={hoverEnabled}>
       <StationMouseProvider value={dispatch}>
         <box width={width} height={height} flexDirection="column">
-          <DashboardRoot store={store} columns={width} rows={height} />
+          <DashboardRoot
+            store={store}
+            columns={width}
+            rows={height}
+            onCopyNotice={onCopyNotice}
+          />
           <DashboardFrameTitle
             store={store}
             frame={{ left: 0, top: 0, width }}

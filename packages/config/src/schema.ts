@@ -8,9 +8,9 @@ import { DEFAULT_WORKSPACE_CONFIG, WorkspaceConfigSchema } from "./workspace.js"
 
 export {
   type Automation,
-  type AutomationStep,
+  DEFAULT_SCROLLBACK_LINES,
   DEFAULT_WORKSPACE_CONFIG,
-  SCROLL_ON_OUTPUT_MODES,
+  MAX_SCROLLBACK_LINES,
   type ScrollOnOutputMode,
   type WorkspaceConfig,
   WorkspaceConfigSchema,
@@ -30,14 +30,10 @@ export const ProjectDefaultsSchema = z
   })
   .strict();
 
-export type ProjectDefaults = z.infer<typeof ProjectDefaultsSchema>;
-
 export const ProjectLocalDefaultsSchema = ProjectDefaultsSchema.pick({
   harness: true,
   layout: true,
 }).partial();
-
-export type ProjectLocalDefaults = z.infer<typeof ProjectLocalDefaultsSchema>;
 
 export const ProjectWorktrunkConfigSchema = z
   .object({
@@ -49,16 +45,12 @@ export const ProjectWorktrunkConfigSchema = z
   })
   .strict();
 
-export type ProjectWorktrunkConfig = z.infer<typeof ProjectWorktrunkConfigSchema>;
-
 export const ProjectLocalConfigRefSchema = z
   .object({
     enabled: z.boolean(),
     path: nonEmptyStringSchema,
   })
   .strict();
-
-export type ProjectLocalConfigRef = z.infer<typeof ProjectLocalConfigRefSchema>;
 
 export const ProjectDisplayConfigSchema = z
   .object({
@@ -67,16 +59,12 @@ export const ProjectDisplayConfigSchema = z
   })
   .strict();
 
-export type ProjectDisplayConfig = z.infer<typeof ProjectDisplayConfigSchema>;
-
 export const ProjectRecoveryBreadcrumbsSchema = z
   .object({
     location: z.enum(["external", "worktree", "provider-native", "disabled"]),
     path: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ProjectRecoveryBreadcrumbs = z.infer<typeof ProjectRecoveryBreadcrumbsSchema>;
 
 export const ProjectConfigSchema = z
   .object({
@@ -109,8 +97,6 @@ export const ObserverConfigSchema = z
   })
   .strict();
 
-export type ObserverConfig = z.infer<typeof ObserverConfigSchema>;
-
 export const ConfigDefaultsSchema = z
   .object({
     worktreeProvider: providerIdSchema,
@@ -121,8 +107,6 @@ export const ConfigDefaultsSchema = z
     harnessPermissionMode: HarnessPermissionModeSchema.optional(),
   })
   .strict();
-
-export type ConfigDefaults = z.infer<typeof ConfigDefaultsSchema>;
 
 export const WorktreeWorktrunkConfigSchema = z
   .object({
@@ -138,15 +122,15 @@ export const WorktreeWorktrunkConfigSchema = z
   })
   .strict();
 
-export type WorktreeWorktrunkConfig = z.infer<typeof WorktreeWorktrunkConfigSchema>;
-
 export const WorktreeProvidersConfigSchema = z
   .object({
     worktrunk: WorktreeWorktrunkConfigSchema.optional(),
   })
   .strict();
 
-export type WorktreeProvidersConfig = z.infer<typeof WorktreeProvidersConfigSchema>;
+export const TmuxPopupScopeSchema = z.enum(["server", "client"]);
+
+export type TmuxPopupScope = z.infer<typeof TmuxPopupScopeSchema>;
 
 export const TmuxConfigSchema = z
   .object({
@@ -159,6 +143,7 @@ export const TmuxConfigSchema = z
     popupWidth: nonEmptyStringSchema.optional(),
     popupHeight: nonEmptyStringSchema.optional(),
     popupPosition: nonEmptyStringSchema.optional(),
+    popupScope: TmuxPopupScopeSchema.optional(),
   })
   .strict();
 
@@ -169,8 +154,6 @@ export const TerminalProvidersConfigSchema = z
     tmux: TmuxConfigSchema.optional(),
   })
   .strict();
-
-export type TerminalProvidersConfig = z.infer<typeof TerminalProvidersConfigSchema>;
 
 export const HarnessProviderConfigSchema = z
   .object({
@@ -192,8 +175,6 @@ export const ClaudeHarnessPermissionModeSchema = z.union([
   z.literal("auto"),
 ]);
 
-export type ClaudeHarnessPermissionMode = z.infer<typeof ClaudeHarnessPermissionModeSchema>;
-
 export const ClaudeHarnessProviderConfigSchema = HarnessProviderConfigSchema.extend({
   permissionMode: ClaudeHarnessPermissionModeSchema.optional(),
 });
@@ -206,15 +187,11 @@ export const HarnessProvidersConfigSchema = z
   })
   .catchall(HarnessProviderConfigSchema);
 
-export type HarnessProvidersConfig = z.infer<typeof HarnessProvidersConfigSchema>;
-
 export const HooksConfigSchema = z
   .object({
     event: z.array(ObserverEventHookConfigSchema).optional(),
   })
   .strict();
-
-export type HooksConfig = z.infer<typeof HooksConfigSchema>;
 
 export const TuiTimeWidgetConfigSchema = z
   .object({
@@ -247,8 +224,6 @@ export const TuiFleetWidgetConfigSchema = z
   })
   .strict();
 
-export type TuiFleetWidgetConfig = z.infer<typeof TuiFleetWidgetConfigSchema>;
-
 /** Open-PR count derived from the snapshot; no external data source. */
 export const TuiPrsWidgetConfigSchema = z
   .object({
@@ -256,8 +231,6 @@ export const TuiPrsWidgetConfigSchema = z
     enabled: z.boolean().optional(),
   })
   .strict();
-
-export type TuiPrsWidgetConfig = z.infer<typeof TuiPrsWidgetConfigSchema>;
 
 export const TuiTimezoneZoneSchema = z
   .object({
@@ -286,8 +259,6 @@ export const TuiMoonWidgetConfigSchema = z
     enabled: z.boolean().optional(),
   })
   .strict();
-
-export type TuiMoonWidgetConfig = z.infer<typeof TuiMoonWidgetConfigSchema>;
 
 export const TuiWidgetConfigSchema = z.discriminatedUnion("type", [
   TuiTimeWidgetConfigSchema,
@@ -328,15 +299,11 @@ export const GithubRepositoryConfigSchema = z
   })
   .strict();
 
-export type GithubRepositoryConfig = z.infer<typeof GithubRepositoryConfigSchema>;
-
 export const RepositoryProvidersConfigSchema = z
   .object({
     github: GithubRepositoryConfigSchema.optional(),
   })
   .strict();
-
-export type RepositoryProvidersConfig = z.infer<typeof RepositoryProvidersConfigSchema>;
 
 export const ObservabilityRetentionComponentsSchema = z
   .object({
@@ -348,10 +315,6 @@ export const ObservabilityRetentionComponentsSchema = z
   })
   .strict();
 
-export type ObservabilityRetentionComponents = z.infer<
-  typeof ObservabilityRetentionComponentsSchema
->;
-
 export const ObservabilityRetentionSqliteSchema = z
   .object({
     eventsMaxDays: z.number().int().positive().optional(),
@@ -361,18 +324,12 @@ export const ObservabilityRetentionSqliteSchema = z
   })
   .strict();
 
-export type ObservabilityRetentionSqlite = z.infer<typeof ObservabilityRetentionSqliteSchema>;
-
 export const ObservabilityRetentionDebugBundlesSchema = z
   .object({
     maxBundles: z.number().int().positive().optional(),
     maxDays: z.number().int().positive().optional(),
   })
   .strict();
-
-export type ObservabilityRetentionDebugBundles = z.infer<
-  typeof ObservabilityRetentionDebugBundlesSchema
->;
 
 export const ObservabilityRetentionHookSpoolSchema = z
   .object({
@@ -381,8 +338,6 @@ export const ObservabilityRetentionHookSpoolSchema = z
     failedMaxItems: z.number().int().positive().optional(),
   })
   .strict();
-
-export type ObservabilityRetentionHookSpool = z.infer<typeof ObservabilityRetentionHookSpoolSchema>;
 
 export const ObservabilityRetentionConfigSchema = z
   .object({
@@ -405,8 +360,6 @@ export const ObservabilityConfigSchema = z
   })
   .strict();
 
-export type ObservabilityConfig = z.infer<typeof ObservabilityConfigSchema>;
-
 export const ProjectLocalConfigSchema = z
   .object({
     schemaVersion: ConfigSchemaVersionSchema,
@@ -418,7 +371,7 @@ export const ProjectLocalConfigSchema = z
 
 export type ProjectLocalConfig = z.infer<typeof ProjectLocalConfigSchema>;
 
-export const ParsedStationConfigSchema = z
+export const StationConfigSchema = z
   .object({
     schemaVersion: ConfigSchemaVersionSchema,
     observer: ObserverConfigSchema.optional(),
@@ -439,7 +392,4 @@ export const ParsedStationConfigSchema = z
   })
   .strict();
 
-export const StationConfigSchema = ParsedStationConfigSchema;
-
-export type ParsedStationConfig = z.infer<typeof ParsedStationConfigSchema>;
-export type StationConfig = ParsedStationConfig;
+export type StationConfig = z.infer<typeof StationConfigSchema>;

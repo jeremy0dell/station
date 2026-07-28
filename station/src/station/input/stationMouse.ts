@@ -123,7 +123,13 @@ export type StationMouseOutcome =
    * Station pane. The create-hint click counterpart of the keyboard Enter on the
    * New Session review screen.
    */
-  | { kind: "launch-new-session"; projectId: string; branch: string; harness: ProviderId }
+  | {
+      kind: "launch-new-session";
+      projectId: string;
+      title: string;
+      branch: string;
+      harness: ProviderId;
+    }
   /**
    * Consumed; the router should seed a worktree off a source and host its agent
    * in a Station pane. The fork-button click counterpart of the keyboard Enter on
@@ -133,6 +139,7 @@ export type StationMouseOutcome =
       kind: "launch-fork";
       projectId: string;
       sourceWorktreeId: string;
+      title: string;
       branch: string;
       copyDirty: boolean;
     };
@@ -145,6 +152,11 @@ const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "removeChooseSlot",
   "renameChooseSlot",
   "forkChooseSlot",
+]);
+const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
+  "addProjectStart",
+  "addProjectChoose",
+  "addProjectFilter",
 ]);
 
 export function routeStationMouse(
@@ -263,7 +275,7 @@ export function routeStationMouse(
       addWidgetSettingsPickerChoice(store, target.index);
       return { kind: "handled" };
     case "addProjectRow":
-      if (mode !== "addProject") {
+      if (!ADD_PROJECT_ROW_MODES.has(mode)) {
         return { kind: "handled" };
       }
       selectAddProjectRow(store, target.index);
@@ -296,6 +308,7 @@ export function routeStationMouse(
         kind: "launch-fork",
         projectId: submit.projectId,
         sourceWorktreeId: submit.sourceWorktreeId,
+        title: submit.title,
         branch: submit.branch,
         copyDirty: submit.copyDirty,
       };
@@ -306,10 +319,7 @@ export function routeStationMouse(
   }
 }
 
-function routeDashboardRow(
-  store: StoreApi<TuiStore>,
-  rowId: string,
-): StationMouseOutcome {
+function routeDashboardRow(store: StoreApi<TuiStore>, rowId: string): StationMouseOutcome {
   const target = resolveRowAgentTarget(store, rowId);
   return target.kind === "launch-managed"
     ? fromRowAgentTarget(target)
@@ -394,6 +404,7 @@ function fromQuickSessionSubmit(
     return {
       kind: "launch-new-session",
       projectId: result.projectId,
+      title: result.title,
       branch: result.branch,
       harness: result.harness,
     };

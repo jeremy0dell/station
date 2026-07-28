@@ -71,6 +71,7 @@ export function StationApp({
           store={stationViewStore}
           topRowWidgets={topRowWidgets}
           dispatchMouse={dispatchMouse}
+          onCopyNotice={onCopySelection}
           widthPercent={overlayWidthPercent}
           heightPercent={overlayHeightPercent}
         />

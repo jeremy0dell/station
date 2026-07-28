@@ -1,20 +1,11 @@
 import type { TmuxCommandInput } from "../command.js";
-import {
-  resolveTmuxGlobalOption,
-  runTmuxPopupCommand,
-  runTmuxPopupQuery,
-  setTmuxGlobalOption,
-} from "./command.js";
-import {
-  activePopupClaimOption,
-  activePopupClientOption,
-  focusPopupClientOption,
-} from "./constants.js";
+import { resolveTmuxGlobalOption, runTmuxPopupCommand, runTmuxPopupQuery } from "./command.js";
 import {
   isSafePopupClientName,
   type PopupActiveClaim,
   parsePopupActiveClaim,
 } from "./fastProtocol.js";
+import { serverPopupStateKeys, type TmuxPopupStateKeys } from "./scope.js";
 
 export type TmuxActivePopupClaimState =
   | { kind: "absent" }
@@ -29,24 +20,25 @@ function optionEqualsFormat(optionName: string, value: string | undefined): stri
   return `#{==:#{${optionName}},${formatLiteral(value ?? "")}}`;
 }
 
-function claimEqualsFormat(value: string | undefined): string {
-  return optionEqualsFormat(activePopupClaimOption, value);
+function claimEqualsFormat(value: string | undefined, state: TmuxPopupStateKeys): string {
+  return optionEqualsFormat(state.activeClaimOption, value);
 }
 
-function legacyPopupCondition(clientId: string): string {
-  return `#{&&:${claimEqualsFormat(undefined)},#{||:${optionEqualsFormat(activePopupClientOption, clientId)},${optionEqualsFormat(focusPopupClientOption, clientId)}}}`;
+function legacyPopupCondition(clientId: string, state: TmuxPopupStateKeys): string {
+  return `#{&&:${claimEqualsFormat(undefined, state)},#{||:${optionEqualsFormat(state.activeClientOption, clientId)},${optionEqualsFormat(state.focusClientOption, clientId)}}}`;
 }
 
-function legacyPopupClearCommands(clientId: string): string {
+function legacyPopupClearCommands(clientId: string, state: TmuxPopupStateKeys): string {
   return [
-    `if-shell -F "${optionEqualsFormat(activePopupClientOption, clientId)}" "set-option -gq -u ${activePopupClientOption}"`,
-    `if-shell -F "${optionEqualsFormat(focusPopupClientOption, clientId)}" "set-option -gq -u ${focusPopupClientOption}"`,
+    `if-shell -F "${optionEqualsFormat(state.activeClientOption, clientId)}" "set-option -gq -u ${state.activeClientOption}"`,
+    `if-shell -F "${optionEqualsFormat(state.focusClientOption, clientId)}" "set-option -gq -u ${state.focusClientOption}"`,
   ].join(" ; ");
 }
 
 async function runLegacyPopupActionIfUnclaimed(
   input: TmuxCommandInput & { clientId: string },
   close: boolean,
+  state: TmuxPopupStateKeys,
 ): Promise<boolean> {
   if (!isSafePopupClientName(input.clientId)) {
     return false;
@@ -54,13 +46,13 @@ async function runLegacyPopupActionIfUnclaimed(
   const miss = "STATION_POPUP_CAS_MISS";
   const commands = [
     ...(close ? [`display-popup -c ${input.clientId} -C`] : []),
-    legacyPopupClearCommands(input.clientId),
+    legacyPopupClearCommands(input.clientId, state),
   ].join(" ; ");
   const result = await runTmuxPopupQuery(input, {
     args: [
       "if-shell",
       "-F",
-      legacyPopupCondition(input.clientId),
+      legacyPopupCondition(input.clientId, state),
       commands,
       `display-message -p ${miss}`,
     ],
@@ -73,8 +65,9 @@ async function runLegacyPopupActionIfUnclaimed(
 
 export async function resolveActivePopupClaimState(
   input: TmuxCommandInput,
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<TmuxActivePopupClaimState> {
-  const raw = await resolveTmuxGlobalOption(input, activePopupClaimOption, {
+  const raw = await resolveTmuxGlobalOption(input, state.activeClaimOption, {
     operation: "provider.tmux.popup.activeClaim",
     message: "tmux failed to resolve the active station popup claim.",
     timeoutMessage: "tmux active popup claim lookup timed out.",
@@ -89,39 +82,34 @@ export async function resolveActivePopupClaimState(
 export async function compareAndSetActivePopupClaim(
   input: TmuxCommandInput,
   options: { expected?: string; replacement: string },
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<boolean> {
   await runTmuxPopupCommand(input, {
     args: [
       "if-shell",
       "-F",
-      claimEqualsFormat(options.expected),
-      `set-option -gq ${activePopupClaimOption} ${options.replacement}`,
+      claimEqualsFormat(options.expected, state),
+      `set-option -gq ${state.activeClaimOption} ${options.replacement}`,
     ],
     operation: "provider.tmux.popup.replaceActiveClaim",
     message: "tmux failed to claim the active station popup.",
     timeoutMessage: "tmux active popup claim update timed out.",
   });
-  return (await resolveTmuxGlobalOption(input, activePopupClaimOption)) === options.replacement;
-}
-
-export async function setPopupClaimMirrors(
-  input: TmuxCommandInput & { clientId: string },
-): Promise<void> {
-  await setActivePopupClient(input);
-  await setFocusPopupClient(input);
+  return (await resolveTmuxGlobalOption(input, state.activeClaimOption)) === options.replacement;
 }
 
 export async function clearActivePopupClaimIfCurrent(
   input: TmuxCommandInput,
   options: { claim: string; clientId: string },
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<void> {
   const clearCommands = [
-    `set-option -gq -u ${activePopupClaimOption}`,
-    `if-shell -F "#{==:#{${activePopupClientOption}},${options.clientId}}" "set-option -gq -u ${activePopupClientOption}"`,
-    `if-shell -F "#{==:#{${focusPopupClientOption}},${options.clientId}}" "set-option -gq -u ${focusPopupClientOption}"`,
+    `set-option -gq -u ${state.activeClaimOption}`,
+    `if-shell -F "#{==:#{${state.activeClientOption}},${options.clientId}}" "set-option -gq -u ${state.activeClientOption}"`,
+    `if-shell -F "#{==:#{${state.focusClientOption}},${options.clientId}}" "set-option -gq -u ${state.focusClientOption}"`,
   ].join(" ; ");
   await runTmuxPopupCommand(input, {
-    args: ["if-shell", "-F", claimEqualsFormat(options.claim), clearCommands],
+    args: ["if-shell", "-F", claimEqualsFormat(options.claim, state), clearCommands],
     operation: "provider.tmux.popup.clearActiveClaim",
     message: "tmux failed to clear the active station popup claim.",
     timeoutMessage: "tmux active popup claim cleanup timed out.",
@@ -130,24 +118,26 @@ export async function clearActivePopupClaimIfCurrent(
 
 export async function clearLegacyPopupStateIfUnclaimed(
   input: TmuxCommandInput & { clientId: string },
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<boolean> {
-  return runLegacyPopupActionIfUnclaimed(input, false);
+  return runLegacyPopupActionIfUnclaimed(input, false, state);
 }
 
 export async function clearLegacyFocusIfUnclaimed(
   input: TmuxCommandInput & { clientId: string },
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<boolean> {
   if (!isSafePopupClientName(input.clientId)) {
     return false;
   }
   const miss = "STATION_POPUP_CAS_MISS";
-  const condition = `#{&&:${claimEqualsFormat(undefined)},${optionEqualsFormat(focusPopupClientOption, input.clientId)}}`;
+  const condition = `#{&&:${claimEqualsFormat(undefined, state)},${optionEqualsFormat(state.focusClientOption, input.clientId)}}`;
   const result = await runTmuxPopupQuery(input, {
     args: [
       "if-shell",
       "-F",
       condition,
-      `set-option -gq -u ${focusPopupClientOption}`,
+      `set-option -gq -u ${state.focusClientOption}`,
       `display-message -p ${miss}`,
     ],
     operation: "provider.tmux.popup.clearLegacyFocus",
@@ -159,41 +149,16 @@ export async function clearLegacyFocusIfUnclaimed(
 
 export async function dismissLegacyPopupIfUnclaimed(
   input: TmuxCommandInput & { clientId: string },
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<boolean> {
-  return runLegacyPopupActionIfUnclaimed(input, true);
-}
-
-export async function replaceLegacyPopupIfUnclaimed(
-  input: TmuxCommandInput & { clientId: string; previousClientId?: string },
-): Promise<boolean> {
-  if (
-    !isSafePopupClientName(input.clientId) ||
-    (input.previousClientId !== undefined && !isSafePopupClientName(input.previousClientId))
-  ) {
-    return false;
-  }
-  const miss = "STATION_POPUP_CAS_MISS";
-  const condition = `#{&&:${claimEqualsFormat(undefined)},${optionEqualsFormat(activePopupClientOption, input.previousClientId)}}`;
-  const commands = [
-    ...(input.previousClientId === undefined
-      ? []
-      : [`display-popup -c ${input.previousClientId} -C`]),
-    `set-option -gq ${activePopupClientOption} ${input.clientId}`,
-    `set-option -gq ${focusPopupClientOption} ${input.clientId}`,
-  ].join(" ; ");
-  const result = await runTmuxPopupQuery(input, {
-    args: ["if-shell", "-F", condition, commands, `display-message -p ${miss}`],
-    operation: "provider.tmux.popup.replaceLegacyState",
-    message: "tmux failed to replace the legacy station popup state.",
-    timeoutMessage: "tmux legacy popup state replacement timed out.",
-  });
-  return result.stdout.trim() !== miss;
+  return runLegacyPopupActionIfUnclaimed(input, true, state);
 }
 
 export async function resolveActivePopupClient(
   input: TmuxCommandInput,
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<string | undefined> {
-  return resolveTmuxGlobalOption(input, activePopupClientOption, {
+  return resolveTmuxGlobalOption(input, state.activeClientOption, {
     operation: "provider.tmux.popup.activeClient",
     message: "tmux failed to resolve the active station popup.",
     timeoutMessage: "tmux active popup lookup timed out.",
@@ -202,30 +167,11 @@ export async function resolveActivePopupClient(
 
 export async function resolveFocusPopupClient(
   input: TmuxCommandInput,
+  state: TmuxPopupStateKeys = serverPopupStateKeys,
 ): Promise<string | undefined> {
-  return resolveTmuxGlobalOption(input, focusPopupClientOption, {
+  return resolveTmuxGlobalOption(input, state.focusClientOption, {
     operation: "provider.tmux.popup.focusClient",
     message: "tmux failed to resolve the station popup focus client.",
     timeoutMessage: "tmux popup focus client lookup timed out.",
-  });
-}
-
-export async function setActivePopupClient(
-  input: TmuxCommandInput & { clientId: string },
-): Promise<void> {
-  await setTmuxGlobalOption(input, activePopupClientOption, input.clientId, {
-    operation: "provider.tmux.popup.setActiveClient",
-    message: "tmux failed to record the active station popup.",
-    timeoutMessage: "tmux active popup update timed out.",
-  });
-}
-
-export async function setFocusPopupClient(
-  input: TmuxCommandInput & { clientId: string },
-): Promise<void> {
-  await setTmuxGlobalOption(input, focusPopupClientOption, input.clientId, {
-    operation: "provider.tmux.popup.setFocusClient",
-    message: "tmux failed to record the station popup focus client.",
-    timeoutMessage: "tmux popup focus client update timed out.",
   });
 }

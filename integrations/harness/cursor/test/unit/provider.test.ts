@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -61,6 +61,30 @@ describe("CursorHarnessProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([["--version"]]);
   });
 
+  it("reports unrequested and missing hook preparation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-provider-missing-"));
+    const previousCursorHome = process.env.STATION_CURSOR_HOME;
+    process.env.STATION_CURSOR_HOME = root;
+    try {
+      await expect(createCursorHarnessProvider().hooksStatus?.()).resolves.toMatchObject({
+        provider: "cursor",
+        requested: false,
+        installed: false,
+      });
+      await expect(
+        createCursorHarnessProvider({ installHooks: true }).hooksStatus?.(),
+      ).resolves.toMatchObject({
+        provider: "cursor",
+        requested: true,
+        installed: false,
+        message: expect.stringContaining("missing or stale"),
+      });
+    } finally {
+      if (previousCursorHome === undefined) delete process.env.STATION_CURSOR_HOME;
+      else process.env.STATION_CURSOR_HOME = previousCursorHome;
+    }
+  });
+
   it("uses observer hook paths when checking installed hook diagnostics", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cursor-provider-"));
     const hookScriptPath = join(root, "state", "hooks", "station-cursor-hook.sh");
@@ -91,12 +115,27 @@ describe("CursorHarnessProvider", () => {
         autoStartFromHooks: false,
       });
 
-      await expect(provider.doctorChecks()).resolves.toContainEqual(
+      const doctorChecks = provider.doctorChecks;
+      if (doctorChecks === undefined) throw new Error("Cursor doctor checks are unavailable.");
+      await expect(doctorChecks()).resolves.toContainEqual(
         expect.objectContaining({
           name: "cursor-hooks",
           status: "ok",
         }),
       );
+      await expect(provider.hooksStatus?.()).resolves.toMatchObject({
+        provider: "cursor",
+        requested: true,
+        installed: true,
+      });
+
+      await writeFile(hookScriptPath, "# drifted\n", "utf8");
+      await expect(provider.hooksStatus?.()).resolves.toMatchObject({
+        provider: "cursor",
+        requested: true,
+        installed: false,
+        message: expect.stringContaining("missing or stale"),
+      });
     } finally {
       if (previousCursorHome === undefined) {
         delete process.env.STATION_CURSOR_HOME;
@@ -145,6 +184,52 @@ describe("CursorHarnessProvider", () => {
       } else {
         process.env.STATION_CURSOR_HOME = previousCursorHome;
       }
+    }
+  });
+
+  it("routes shared-home hooks through the launching runtime", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cursor-shared-home-"));
+    const runtimeA = {
+      configPath: join(root, "runtime-a", "config.toml"),
+      observerSocketPath: join(root, "runtime-a", "observer.sock"),
+      stateDir: join(root, "runtime-a", "state"),
+      hookSpoolDir: join(root, "runtime-a", "state", "spool", "hooks"),
+    };
+    const runtimeB = {
+      configPath: join(root, "runtime-b", "config.toml"),
+      observerSocketPath: join(root, "runtime-b", "observer.sock"),
+      stateDir: join(root, "runtime-b", "state"),
+      hookSpoolDir: join(root, "runtime-b", "state", "spool", "hooks"),
+    };
+    const previousCursorHome = process.env.STATION_CURSOR_HOME;
+    process.env.STATION_CURSOR_HOME = root;
+    try {
+      await installCursorHooks({
+        homeDir: root,
+        stationConfigPath: runtimeA.configPath,
+        observerSocketPath: runtimeA.observerSocketPath,
+        stateDir: runtimeA.stateDir,
+        hookSpoolDir: runtimeA.hookSpoolDir,
+        autoStartFromHooks: false,
+      });
+      const providerB = createCursorHarnessProvider({
+        installHooks: true,
+        ...runtimeB,
+        autoStartFromHooks: false,
+      });
+
+      await expect(providerB.hooksStatus?.()).resolves.toMatchObject({ installed: true });
+      await expect(providerB.buildLaunch(request())).resolves.toMatchObject({
+        env: {
+          STATION_CONFIG_PATH: runtimeB.configPath,
+          STATION_OBSERVER_SOCKET_PATH: runtimeB.observerSocketPath,
+          STATION_OBSERVER_STATE_DIR: runtimeB.stateDir,
+          STATION_HOOK_SPOOL_DIR: runtimeB.hookSpoolDir,
+        },
+      });
+    } finally {
+      if (previousCursorHome === undefined) delete process.env.STATION_CURSOR_HOME;
+      else process.env.STATION_CURSOR_HOME = previousCursorHome;
     }
   });
 

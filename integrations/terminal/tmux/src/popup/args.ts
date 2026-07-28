@@ -84,8 +84,12 @@ function transientPopupCommandOptions(options: BuildTmuxPopupArgsOptions): {
   return input;
 }
 
-export function buildPersistentPopupTuiCommand(tuiCommand: string): string {
-  return ["env", "STATION_TUI_POPUP=1", "STATION_FOCUS_PROVIDER=tmux", tuiCommand].join(" ");
+export function buildPersistentPopupTuiCommand(tuiCommand: string, focusClientId?: string): string {
+  const envAssignments = ["STATION_TUI_POPUP=1", "STATION_FOCUS_PROVIDER=tmux"];
+  if (focusClientId !== undefined && focusClientId.length > 0) {
+    envAssignments.push(`STATION_FOCUS_CLIENT_ID=${quoteShellValue(focusClientId)}`);
+  }
+  return ["env", ...envAssignments, tuiCommand].join(" ");
 }
 
 export function buildTmuxPopupArgs(options: BuildTmuxPopupArgsOptions = {}): string[] {

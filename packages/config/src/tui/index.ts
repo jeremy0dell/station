@@ -1,6 +1,1 @@
-export {
-  replaceTuiWidgets,
-  type SetTuiWidgetsOptions,
-  type SetTuiWidgetsResult,
-  setTuiWidgetsInConfig,
-} from "./widgets.js";
+export { setTuiWidgetsInConfig } from "./widgets.js";

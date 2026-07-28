@@ -75,11 +75,7 @@ export const HarnessEventReportCorrelationSchema = z
   })
   .strict();
 
-export type HarnessEventReportCorrelation = z.infer<typeof HarnessEventReportCorrelationSchema>;
-
 export const HarnessEventReportDiagnosticsSchema = HarnessEventDiagnosticsSchema;
-
-export type HarnessEventReportDiagnostics = z.infer<typeof HarnessEventReportDiagnosticsSchema>;
 
 export const HarnessEventReportSchema = z
   .object({
@@ -151,13 +147,23 @@ export function parseStationHookIdentityPayload(
   return result.success ? result.data : undefined;
 }
 
+export const ProviderHookCwdPayloadSchema = z
+  .object({
+    cwd: nonEmptyStringSchema,
+  })
+  .passthrough();
+
+/** Parses provider-origin cwd without validating unrelated native payload fields. */
+export function parseProviderHookCwd(payload: unknown): string | undefined {
+  const result = ProviderHookCwdPayloadSchema.safeParse(payload);
+  return result.success ? result.data.cwd : undefined;
+}
+
 export const ProviderHookEventNamePayloadSchema = z
   .object({
     hook_event_name: nonEmptyStringSchema.optional(),
   })
   .passthrough();
-
-export type ProviderHookEventNamePayload = z.infer<typeof ProviderHookEventNamePayloadSchema>;
 
 export function parseProviderHookEventName(payload: unknown): string | undefined {
   const result = ProviderHookEventNamePayloadSchema.safeParse(payload);
@@ -269,8 +275,6 @@ export const ObserverEventHookFilterSchema = z
     harnessEventType: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ObserverEventHookFilter = z.infer<typeof ObserverEventHookFilterSchema>;
 
 export const ObserverEventHookConfigSchema = z
   .object({

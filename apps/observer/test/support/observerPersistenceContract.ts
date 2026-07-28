@@ -745,6 +745,48 @@ export function observerPersistenceContract(
         });
       });
 
+      it("optionally coalesces unchanged direct observations", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.recordProviderObservation({
+            ...healthObservation("healthy", now),
+            expiresAt: later,
+            coalesceUnchanged: true,
+          });
+          await persistence.recordProviderObservation({
+            ...healthObservation("healthy", later),
+            expiresAt: latest,
+            coalesceUnchanged: true,
+          });
+
+          let observations = await persistence.listProviderObservations({
+            entityKind: "provider_health",
+            includeExpired: true,
+            now: later,
+          });
+          expect(observations).toEqual([
+            expect.objectContaining({
+              observedAt: later,
+              expiresAt: latest,
+              payload: expect.objectContaining({ lastCheckedAt: later, status: "healthy" }),
+            }),
+          ]);
+
+          await persistence.recordProviderObservation({
+            ...healthObservation("degraded", latest),
+            coalesceUnchanged: true,
+          });
+          observations = await persistence.listProviderObservations({
+            entityKind: "provider_health",
+            includeExpired: true,
+            now: latest,
+          });
+          expect(observations.map((observation) => observation.payload.status)).toEqual([
+            "healthy",
+            "degraded",
+          ]);
+        });
+      });
+
       it("selects the latest observation by timestamp and then generated ID", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           const first = createFakeWorktree({
@@ -2507,7 +2549,10 @@ function providerHookEvent(hookId: string): StationEvent {
   };
 }
 
-function healthObservation(status: "healthy" | "degraded"): RecordProviderObservationInput {
+function healthObservation(
+  status: "healthy" | "degraded",
+  observedAt = now,
+): RecordProviderObservationInput {
   return {
     provider: "fake-harness",
     providerType: "harness",
@@ -2517,9 +2562,9 @@ function healthObservation(status: "healthy" | "degraded"): RecordProviderObserv
       providerId: "fake-harness",
       providerType: "harness",
       status,
-      lastCheckedAt: now,
+      lastCheckedAt: observedAt,
     },
-    observedAt: now,
+    observedAt,
   };
 }
 

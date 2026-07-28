@@ -3,7 +3,7 @@ import {
   dashboardFooterLabel,
   handleTuiKey,
   isSlotKey,
-  TUI_HELP_CONTENT,
+  QUIT_HINT_DISMISS_ERROR,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { matchDashboardBinding } from "../../../src/state/keymap.js";
@@ -34,16 +34,6 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "i", ctrl: true })?.action).toBe("tui.focus.nextNeedsMe");
     expect(isSlotKey({ input: "i" })).toBe(true);
     expect(matchDashboardBinding({ input: "i" })?.action).toBe("tui.row.activateSlot");
-  });
-
-  it("keeps dashboard help content independent of screen key metadata", () => {
-    expect(TUI_HELP_CONTENT).toEqual(
-      expect.arrayContaining([
-        { key: "↑/↓", description: "move cursor" },
-        { key: "N", description: "new session" },
-        { key: "Q", description: "quit or close popup" },
-      ]),
-    );
   });
 });
 
@@ -100,5 +90,21 @@ describe("dashboard footer", () => {
       expect(label).not.toContain("N new");
       expect(label).not.toContain("delete");
     }
+  });
+
+  it("keeps error dismissal and close copy visible at compact widths", () => {
+    expect(dashboardFooterLabel({ columns: 120, quitHint: QUIT_HINT_DISMISS_ERROR })).toContain(
+      QUIT_HINT_DISMISS_ERROR,
+    );
+    expect(dashboardFooterLabel({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
+      QUIT_HINT_DISMISS_ERROR,
+    );
+    expect(
+      dashboardFooterLabel({
+        columns: 40,
+        quitHint: QUIT_HINT_DISMISS_ERROR,
+        firstRun: true,
+      }),
+    ).toBe(QUIT_HINT_DISMISS_ERROR);
   });
 });

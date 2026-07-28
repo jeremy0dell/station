@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
-  ParsedStationConfigSchema,
+  DEFAULT_SCROLLBACK_LINES,
+  MAX_SCROLLBACK_LINES,
   ProjectConfigSchema,
   ProjectLocalConfigSchema,
   StationConfigSchema,
@@ -8,19 +9,21 @@ import {
   WorkspaceConfigSchema,
 } from "@station/config";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 const fixtureUrl = (path: string) => new URL(`../fixtures/${path}`, import.meta.url);
 
-async function loadJson(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(fixtureUrl(path), "utf8"));
+async function loadJson(path: string): Promise<Record<string, unknown>> {
+  return z
+    .record(z.string(), z.unknown())
+    .parse(JSON.parse(await readFile(fixtureUrl(path), "utf8")));
 }
 
 describe("config schemas", () => {
   it("validates parsed config objects without loading TOML or expanding paths", async () => {
     const config = await loadJson("valid-config.json");
-    const parsed = ParsedStationConfigSchema.parse(config);
+    const parsed = StationConfigSchema.parse(config);
 
-    expect(StationConfigSchema.parse(config)).toEqual(parsed);
     expect(parsed.projects).toHaveLength(2);
     expect(parsed.projects[0]?.root).toBe("~/projects/web");
     expect(parsed.projects[0]?.localConfig).toEqual({
@@ -33,7 +36,7 @@ describe("config schemas", () => {
   });
 
   it("exports ProjectConfig as a focused project-level schema", async () => {
-    const config = ParsedStationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse(await loadJson("valid-config.json"));
 
     for (const project of config.projects) {
       expect(ProjectConfigSchema.parse(project)).toEqual(project);
@@ -51,7 +54,7 @@ describe("config schemas", () => {
   });
 
   it("rejects invalid parsed config objects", async () => {
-    expect(ParsedStationConfigSchema.safeParse(await loadJson("invalid-config.json")).success).toBe(
+    expect(StationConfigSchema.safeParse(await loadJson("invalid-config.json")).success).toBe(
       false,
     );
     expect(
@@ -63,7 +66,7 @@ describe("config schemas", () => {
   });
 
   it("validates observability retention config", async () => {
-    const config = ParsedStationConfigSchema.parse(await loadJson("retention-config.json"));
+    const config = StationConfigSchema.parse(await loadJson("retention-config.json"));
 
     expect(config.observability?.retention).toMatchObject({
       maxDays: 7,
@@ -76,7 +79,7 @@ describe("config schemas", () => {
       },
     });
     expect(
-      ParsedStationConfigSchema.safeParse({
+      StationConfigSchema.safeParse({
         ...config,
         observability: {
           retention: {
@@ -88,8 +91,9 @@ describe("config schemas", () => {
   });
 
   it("accepts production feature flags and rejects unknown flags", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       featureFlags: {
         sessionResumeAgent: true,
       },
@@ -99,7 +103,7 @@ describe("config schemas", () => {
       sessionResumeAgent: true,
     });
     expect(
-      ParsedStationConfigSchema.safeParse({
+      StationConfigSchema.safeParse({
         ...config,
         featureFlags: {
           "test.fake": true,
@@ -109,8 +113,9 @@ describe("config schemas", () => {
   });
 
   it("accepts per-harness resume opt-in", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       harness: {
         codex: {
           resume: true,
@@ -122,8 +127,9 @@ describe("config schemas", () => {
   });
 
   it("validates configured TUI widgets", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       tui: {
         widgets: [
           {
@@ -154,7 +160,7 @@ describe("config schemas", () => {
     // But the root config attaches [tui] best-effort: bad widget values degrade
     // to `tui: undefined` rather than failing the whole config parse.
     expect(
-      ParsedStationConfigSchema.parse({
+      StationConfigSchema.parse({
         ...config,
         tui: { widgets: [{ type: "weather", city: "" }] },
       }).tui,
@@ -162,8 +168,9 @@ describe("config schemas", () => {
   });
 
   it("accepts terminal tmux command config", async () => {
-    const config = ParsedStationConfigSchema.parse({
-      ...(await loadJson("valid-config.json")),
+    const baseConfig = StationConfigSchema.parse(await loadJson("valid-config.json"));
+    const config = StationConfigSchema.parse({
+      ...baseConfig,
       terminal: {
         tmux: {
           command: "/opt/homebrew/bin/tmux",
@@ -173,7 +180,7 @@ describe("config schemas", () => {
 
     expect(config.terminal?.tmux?.command).toBe("/opt/homebrew/bin/tmux");
     expect(
-      ParsedStationConfigSchema.safeParse({
+      StationConfigSchema.safeParse({
         ...config,
         terminal: {
           tmux: {
@@ -184,18 +191,33 @@ describe("config schemas", () => {
     ).toBe(false);
   });
 
-  it("accepts omitted and empty TUI widget config", async () => {
-    const config = await loadJson("valid-config.json");
+  it("accepts tmux popup scopes and rejects unsupported ownership modes", async () => {
+    const config = StationConfigSchema.parse({
+      ...(await loadJson("valid-config.json")),
+      terminal: { tmux: { popupScope: "client" } },
+    });
 
-    expect(ParsedStationConfigSchema.parse(config).tui).toBeUndefined();
+    expect(config.terminal?.tmux?.popupScope).toBe("client");
     expect(
-      ParsedStationConfigSchema.parse({
+      StationConfigSchema.safeParse({
+        ...config,
+        terminal: { tmux: { popupScope: "window" } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts omitted and empty TUI widget config", async () => {
+    const config = StationConfigSchema.parse(await loadJson("valid-config.json"));
+
+    expect(config.tui).toBeUndefined();
+    expect(
+      StationConfigSchema.parse({
         ...config,
         tui: {},
       }).tui,
     ).toEqual({});
     expect(
-      ParsedStationConfigSchema.parse({
+      StationConfigSchema.parse({
         ...config,
         tui: {
           widgets: [],
@@ -248,7 +270,7 @@ describe("config schemas", () => {
 });
 
 describe("workspace config", () => {
-  it("fills an empty [workspace] with defaults (60% overlay, freeze, welcome on, see-diff)", () => {
+  it("fills an empty [workspace] with defaults (10k scrollback, 60% overlay, freeze, welcome on, see-diff)", () => {
     const workspace = WorkspaceConfigSchema.parse({});
     const expectedWatchCommand =
       'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; { git diff --no-color "$base" -- . || true; git ls-files --others --exclude-standard -- . | while IFS= read -r file; do [ -e "$file" ] || continue; printf "\\n"; git diff --no-color --no-index -- /dev/null "$file" || true; done; }';
@@ -259,6 +281,7 @@ describe("workspace config", () => {
     ].join(" ");
 
     expect(workspace.scroll_on_output).toBe("freeze");
+    expect(workspace.scrollback_lines).toBe(DEFAULT_SCROLLBACK_LINES);
     expect(workspace.overlay_width_percent).toBe(60);
     expect(workspace.overlay_height_percent).toBe(60);
     expect(workspace.welcome_on_boot).toBe(true);
@@ -283,11 +306,13 @@ describe("workspace config", () => {
   it("accepts the valid scroll-on-output modes and applies per-step automation defaults", () => {
     const workspace = WorkspaceConfigSchema.parse({
       scroll_on_output: "shift",
+      scrollback_lines: 5_000,
       overlay_width_percent: 70,
       overlay_height_percent: 65,
       automations: [{ id: "build", label: "Build", steps: [{ command: "pnpm build" }] }],
     });
     expect(workspace.scroll_on_output).toBe("shift");
+    expect(workspace.scrollback_lines).toBe(5_000);
     expect(workspace.overlay_width_percent).toBe(70);
     expect(workspace.overlay_height_percent).toBe(65);
     expect(workspace.automations[0]?.steps[0]).toMatchObject({
@@ -297,6 +322,13 @@ describe("workspace config", () => {
       run: "execute",
       focus: false,
     });
+  });
+
+  it("accepts disabled and maximum scrollback depths", () => {
+    expect(WorkspaceConfigSchema.parse({ scrollback_lines: 0 }).scrollback_lines).toBe(0);
+    expect(
+      WorkspaceConfigSchema.parse({ scrollback_lines: MAX_SCROLLBACK_LINES }).scrollback_lines,
+    ).toBe(MAX_SCROLLBACK_LINES);
   });
 
   it("treats an explicit empty automations array as the off switch", () => {
@@ -370,6 +402,11 @@ describe("workspace config", () => {
 
   it("rejects an unknown scroll mode, unknown keys, stepless and duplicate automations", () => {
     expect(WorkspaceConfigSchema.safeParse({ scroll_on_output: "bounce" }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ scrollback_lines: -1 }).success).toBe(false);
+    expect(WorkspaceConfigSchema.safeParse({ scrollback_lines: 1.5 }).success).toBe(false);
+    expect(
+      WorkspaceConfigSchema.safeParse({ scrollback_lines: MAX_SCROLLBACK_LINES + 1 }).success,
+    ).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ overlay_width_percent: 101 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ overlay_height_percent: 9 }).success).toBe(false);
     expect(WorkspaceConfigSchema.safeParse({ welcome: true }).success).toBe(false);

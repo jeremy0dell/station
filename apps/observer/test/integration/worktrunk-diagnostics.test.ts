@@ -12,6 +12,7 @@ import {
 } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
 import { ProviderRegistry, runDoctor } from "../../src/internal";
+import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -85,10 +86,11 @@ describe("Worktrunk diagnostics", () => {
       config: stationConfig,
       configPath: incumbentStationConfigPath,
       core,
-      persistence,
+      commandJournal: persistence,
+      eventJournal: persistence,
       persistenceHealth: persistence,
       providers,
-      paths: { stateDir: incumbentStateDir },
+      evidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
     };
 
@@ -157,10 +159,11 @@ describe("Worktrunk diagnostics", () => {
     const report = await runDoctor({
       config: config(stateDir),
       core,
-      persistence,
+      commandJournal: persistence,
+      eventJournal: persistence,
       persistenceHealth: persistence,
       providers,
-      paths: { stateDir },
+      evidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
     });
 
@@ -241,10 +244,11 @@ describe("Worktrunk diagnostics", () => {
       {
         config: stationConfig,
         core,
-        persistence,
+        commandJournal: persistence,
+        eventJournal: persistence,
         persistenceHealth: persistence,
         providers,
-        paths: { stateDir },
+        evidenceSource: new FakeDiagnosticEvidenceSource(),
         clock,
       },
       { projectId: "web" },
@@ -328,10 +332,11 @@ describe("Worktrunk diagnostics", () => {
       {
         config: stationConfig,
         core,
-        persistence,
+        commandJournal: persistence,
+        eventJournal: persistence,
         persistenceHealth: persistence,
         providers,
-        paths: { stateDir },
+        evidenceSource: new FakeDiagnosticEvidenceSource(),
         clock,
       },
       { projectId: "web" },
@@ -411,10 +416,11 @@ describe("Worktrunk diagnostics", () => {
     const report = await runDoctor({
       config: stationConfig,
       core,
-      persistence,
+      commandJournal: persistence,
+      eventJournal: persistence,
       persistenceHealth: persistence,
       providers,
-      paths: { stateDir },
+      evidenceSource: new FakeDiagnosticEvidenceSource(),
       clock,
       providerDoctorTimeoutMs: 250,
     });

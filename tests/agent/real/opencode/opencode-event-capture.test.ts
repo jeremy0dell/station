@@ -2,11 +2,12 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StationConfig } from "@station/config";
+import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
 import { writeDebugBundle } from "@station/observability";
 import {
   collectDiagnosticSnapshot,
   createCommandQueue,
+  createLocalDiagnosticEvidenceSource,
   createObserverApi,
   createObserverCore,
   createObserverEventBus,
@@ -118,6 +119,13 @@ describeRealOpenCode("real OpenCode event capture", () => {
       providerTimeoutMs: 20_000,
     });
     const queue = createCommandQueue({ persistence, clock, idFactory, eventBus });
+    const diagnosticEvidenceSource = createLocalDiagnosticEvidenceSource({
+      stateDir,
+      socketPath,
+      diagnosticsDir: join(stateDir, "diagnostics"),
+      logPaths: [join(stateDir, "logs", "observer.jsonl"), join(stateDir, "logs", "hooks.jsonl")],
+      hookSpoolDir,
+    });
     const api = createObserverApi({
       core,
       providers,
@@ -125,6 +133,7 @@ describeRealOpenCode("real OpenCode event capture", () => {
       persistenceHealth: persistence,
       commandQueue: queue,
       eventBus,
+      diagnosticEvidenceSource,
       clock,
       config: testConfig,
       socketPath,
@@ -136,7 +145,6 @@ describeRealOpenCode("real OpenCode event capture", () => {
       socketPath,
       api,
       clock,
-      drainOnStart: false,
     });
     cleanupTasks.push(async () => {
       await server.close();
@@ -306,12 +314,18 @@ async function writeFailureBundle(input: {
   const snapshot = await collectDiagnosticSnapshot({
     config: input.config,
     core: input.core,
-    persistence: input.persistence,
+    commandJournal: input.persistence,
+    eventJournal: input.persistence,
     persistenceHealth: input.persistence,
-    paths: {
+    evidenceSource: createLocalDiagnosticEvidenceSource({
       stateDir: input.stateDir,
       diagnosticsDir: input.diagnosticsDir,
-    },
+      logPaths: [
+        join(input.stateDir, "logs", "observer.jsonl"),
+        join(input.stateDir, "logs", "hooks.jsonl"),
+      ],
+      hookSpoolDir: join(input.stateDir, "spool", "hooks"),
+    }),
     clock: { now: () => new Date(now) },
   });
   await writeDebugBundle({
@@ -330,6 +344,7 @@ function config(input: {
 }): StationConfig {
   return {
     schemaVersion: 1,
+    workspace: DEFAULT_WORKSPACE_CONFIG,
     observer: {
       stateDir: input.stateDir,
       socketPath: input.socketPath,

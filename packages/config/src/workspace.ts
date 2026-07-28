@@ -15,6 +15,11 @@ import { z } from "zod";
 export const SCROLL_ON_OUTPUT_MODES = ["freeze", "shift", "follow"] as const;
 export type ScrollOnOutputMode = (typeof SCROLL_ON_OUTPUT_MODES)[number];
 
+/** Default normal-buffer history retained by each native pane screen. */
+export const DEFAULT_SCROLLBACK_LINES = 10_000;
+/** Initial safety ceiling; raise only with representative multi-pane memory and reflow evidence. */
+export const MAX_SCROLLBACK_LINES = DEFAULT_SCROLLBACK_LINES;
+
 /**
  * One automation pane: split from `origin` or `previous`, write or execute its
  * command, and optionally focus it.
@@ -28,8 +33,6 @@ const AutomationStepSchema = z
     focus: z.boolean().default(false),
   })
   .strict();
-
-export type AutomationStep = z.infer<typeof AutomationStepSchema>;
 
 /**
  * Named user-triggerable pane layout for the focused worktree; `enabled:false`
@@ -81,6 +84,12 @@ const DEFAULT_DIFF_AUTOMATION: Automation = {
 export const WorkspaceConfigSchema = z
   .object({
     scroll_on_output: z.enum(SCROLL_ON_OUTPUT_MODES).default("freeze"),
+    scrollback_lines: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_SCROLLBACK_LINES)
+      .default(DEFAULT_SCROLLBACK_LINES),
     overlay_width_percent: z.number().int().min(10).max(100).default(60),
     overlay_height_percent: z.number().int().min(10).max(100).default(60),
     // Show the welcome screen as an intro over the restored layout on every cold

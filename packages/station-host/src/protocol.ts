@@ -93,16 +93,10 @@ export const HostSpawnResultSchema = z.object({ ptyId: idSchema, pid: z.number()
 export type HostSpawnResult = z.infer<typeof HostSpawnResultSchema>;
 
 export const HostWriteParamsSchema = z.object({ ptyId: idSchema, data: z.string() }).strict();
-export type HostWriteParams = z.infer<typeof HostWriteParamsSchema>;
-
 export const HostResizeParamsSchema = z
   .object({ ptyId: idSchema, cols: z.number().int(), rows: z.number().int() })
   .strict();
-export type HostResizeParams = z.infer<typeof HostResizeParamsSchema>;
-
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
-export type HostOkResult = z.infer<typeof HostOkResultSchema>;
-
 export const HostListEntrySchema = HostPtyIdentitySchema.extend({
   ptyId: idSchema,
   pid: z.number().int(),
@@ -113,19 +107,11 @@ export const HostListEntrySchema = HostPtyIdentitySchema.extend({
 export type HostListEntry = z.infer<typeof HostListEntrySchema>;
 
 export const HostListResultSchema = z.object({ ptys: z.array(HostListEntrySchema) }).strict();
-export type HostListResult = z.infer<typeof HostListResultSchema>;
-
 export const HostFocusParamsSchema = z.object({ ptyId: idSchema }).strict();
-export type HostFocusParams = z.infer<typeof HostFocusParamsSchema>;
-
 export const HostCloseParamsSchema = z
   .object({ ptyId: idSchema, confirm: z.literal(true) })
   .strict();
-export type HostCloseParams = z.infer<typeof HostCloseParamsSchema>;
-
 export const HostCloseResultSchema = z.object({ closed: z.boolean() }).strict();
-export type HostCloseResult = z.infer<typeof HostCloseResultSchema>;
-
 export const HostHealthResultSchema = z
   .object({
     ok: z.literal(true),
@@ -161,8 +147,6 @@ export function classifyHostCompatibility(
 export const HostStopIfIdleParamsSchema = z
   .object({ requestingBuildVersion: z.string().min(1) })
   .strict();
-export type HostStopIfIdleParams = z.infer<typeof HostStopIfIdleParamsSchema>;
-
 export const HostStopIfIdleResultSchema = z.object({ stopping: z.literal(true) }).strict();
 export type HostStopIfIdleResult = z.infer<typeof HostStopIfIdleResultSchema>;
 
@@ -190,8 +174,6 @@ export const HostAttachAckSchema = z
 export type HostAttachAck = z.infer<typeof HostAttachAckSchema>;
 
 export const HostDetachParamsSchema = z.object({ ptyId: idSchema }).strict();
-export type HostDetachParams = z.infer<typeof HostDetachParamsSchema>;
-
 export const HostFrameSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("data"), ptyId: idSchema, data: z.string() }).strict(),
   z

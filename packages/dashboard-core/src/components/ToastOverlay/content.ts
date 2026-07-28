@@ -1,6 +1,5 @@
-// The pure toast presentation — title by kind, border color name by kind,
-// detail assembly, text width. Render adapters map the color names to their
-// own palette (Ink color names, Station theme hex).
+// Pure toast presentation: title, readable copy text, detail assembly, and
+// border color. Render adapters map color names to their own palette.
 import type { TuiToastEntry } from "../../state/types.js";
 
 export type ToastBorderColorName = "red" | "gray" | "green";
@@ -30,6 +29,16 @@ export function toastTitle(entry: TuiToastEntry): string {
   return entry.toast.message === "Observer reconnected." ? "connected" : "saved";
 }
 
+/** The complete readable notice copied by the explicit toast action. */
+export function toastCopyText(entry: TuiToastEntry): string {
+  const lines = [toastTitle(entry), entry.toast.message];
+  const detail = toastDetail(entry);
+  if (detail !== undefined) {
+    lines.push(detail);
+  }
+  return lines.join("\n");
+}
+
 export function toastBorderColor(entry: TuiToastEntry): ToastBorderColorName {
   if (entry.toast.kind === "error") {
     return "red";
@@ -38,8 +47,4 @@ export function toastBorderColor(entry: TuiToastEntry): ToastBorderColorName {
     return "gray";
   }
   return "green";
-}
-
-export function toastTextWidth(contentWidth: number): number {
-  return Math.max(1, contentWidth - 2);
 }

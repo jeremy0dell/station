@@ -11,11 +11,11 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createObserverCore, ProviderRegistry } from "../../src/internal";
 import { createSqliteObserverPersistence } from "../../src/persistence";
 import { openObserverSqlite } from "../../src/sqlite";
-import { createTestObserverCore } from "../support/testObserver";
+import { createTestObserver, createTestObserverCore } from "../support/testObserver";
 
 const now = "2026-05-20T12:00:00.000Z";
 
@@ -185,6 +185,143 @@ describe("observer reconcile persistence", () => {
     const observations = await persistence.listProviderObservations();
     const healthRows = observations.filter((item) => item.entityKind === "provider_health");
     expect(healthRows.map((row) => row.payload.status)).toEqual(["unknown", "unknown", "unknown"]);
+    sqlite.close();
+  });
+
+  it("publishes completed provider probes without another reconcile", async () => {
+    let currentTime = now;
+    let healthStatus: "healthy" | "unavailable" = "unavailable";
+    const providers = providersWithOneSession();
+    vi.spyOn(providers.worktree, "health").mockImplementation(async () => ({
+      providerId: providers.worktree.id,
+      providerType: "worktree",
+      status: healthStatus,
+      lastCheckedAt: currentTime,
+      capabilities: providers.worktree.capabilities(),
+    }));
+    const clock = { now: () => new Date(currentTime) };
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config,
+      providers,
+      clock,
+    });
+    const events = eventBus.subscribe({ type: "provider.healthChanged" })[Symbol.asyncIterator]();
+
+    const unavailableEvent = events.next();
+    await providers.healthCache.refresh(providers.worktree.id);
+
+    expect(await unavailableEvent).toMatchObject({
+      done: false,
+      value: {
+        type: "provider.healthChanged",
+        provider: "fake-worktree",
+        health: { status: "unavailable" },
+      },
+    });
+    expect(core.getSnapshot()).toMatchObject({
+      observer: { healthy: false },
+      providerHealth: { "fake-worktree": { status: "unavailable" } },
+      projects: [{ health: { providerId: "fake-worktree", status: "unavailable" } }],
+      alerts: [{ provider: "fake-worktree", severity: "error" }],
+    });
+
+    currentTime = "2026-05-20T12:01:00.000Z";
+    healthStatus = "healthy";
+    const healthyEvent = events.next();
+    await providers.healthCache.refresh(providers.worktree.id);
+
+    expect(await healthyEvent).toMatchObject({
+      done: false,
+      value: {
+        type: "provider.healthChanged",
+        provider: "fake-worktree",
+        health: { status: "healthy" },
+      },
+    });
+    expect(core.getSnapshot()).toMatchObject({
+      observer: { healthy: true },
+      providerHealth: { "fake-worktree": { status: "healthy" } },
+      projects: [{ health: { providerId: "fake-worktree", status: "healthy" } }],
+      alerts: [],
+    });
+    expect(core.getHealth().providerHealth["fake-worktree"]?.status).toBe("healthy");
+
+    currentTime = "2026-05-20T12:02:00.000Z";
+    const repeatedHealthyEvent = events.next();
+    await providers.healthCache.refresh(providers.worktree.id);
+    expect(await repeatedHealthyEvent).toMatchObject({
+      done: false,
+      value: {
+        type: "provider.healthChanged",
+        provider: "fake-worktree",
+        health: { status: "healthy", lastCheckedAt: currentTime },
+      },
+    });
+
+    await expect(
+      core.commitProviderHealthProbe({
+        providerId: "fake-worktree",
+        providerType: "worktree",
+        status: "unavailable",
+        lastCheckedAt: now,
+      }),
+    ).resolves.toBeUndefined();
+    expect(core.getSnapshot().providerHealth["fake-worktree"]?.status).toBe("healthy");
+    const healthRows = await persistence.listProviderObservations({
+      entityKind: "provider_health",
+    });
+    expect(healthRows.map((row) => row.payload.status)).toEqual(["unavailable", "healthy"]);
+    expect(healthRows[1]?.observedAt).toBe(currentTime);
+
+    await events.return?.();
+    await api.stop();
+    sqlite.close();
+  });
+
+  it("publishes once when reconcile consumes the completed cache object first", async () => {
+    const providers = providersWithOneSession();
+    const project = config.projects[0];
+    if (project === undefined) {
+      throw new Error("Expected the test project fixture.");
+    }
+    const worktrees = await providers.worktree.listWorktrees(project);
+    let releaseWorktreeRead: () => void = () => undefined;
+    const listWorktrees = vi.spyOn(providers.worktree, "listWorktrees").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseWorktreeRead = () => resolve(worktrees);
+        }),
+    );
+    const clock = { now: () => new Date(now) };
+    const { sqlite, persistence, eventBus, core, api } = createTestObserver({
+      config,
+      providers,
+      clock,
+    });
+    const publish = vi.spyOn(eventBus, "publish");
+
+    const reconcile = core.reconcile("health-publication-race");
+    await vi.waitFor(() => expect(listWorktrees).toHaveBeenCalledOnce());
+    const refresh = providers.healthCache.refresh("fake-harness");
+    await vi.waitFor(() =>
+      expect(providers.healthCache.read("fake-harness")?.status).toBe("healthy"),
+    );
+    releaseWorktreeRead();
+    await reconcile;
+    await refresh;
+
+    const harnessHealthEvents = publish.mock.calls
+      .map(([event]) => event)
+      .filter(
+        (event) => event.type === "provider.healthChanged" && event.provider === "fake-harness",
+      );
+    expect(harnessHealthEvents).toHaveLength(1);
+    const healthRows = await persistence.listProviderObservations({
+      entityKind: "provider_health",
+    });
+    expect(healthRows.filter((row) => row.provider === "fake-harness")).toHaveLength(1);
+
+    await api.stop();
     sqlite.close();
   });
 

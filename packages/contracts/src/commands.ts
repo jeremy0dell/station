@@ -8,7 +8,7 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 
 export const CommandSourceSchema = z
   .object({
@@ -26,8 +26,6 @@ export const CreateWorktreePayloadSchema = z
     source: CommandSourceSchema.optional(),
   })
   .strict();
-
-export type CreateWorktreePayload = z.infer<typeof CreateWorktreePayloadSchema>;
 
 export const RemoveWorktreePayloadSchema = z
   .object({
@@ -52,8 +50,6 @@ export const ForkWorktreePayloadSchema = z
     copyDirty: z.boolean().optional(),
   })
   .strict();
-
-export type ForkWorktreePayload = z.infer<typeof ForkWorktreePayloadSchema>;
 
 export const HarnessCommandOptionsSchema = z
   .object({
@@ -95,6 +91,7 @@ export const CreateSessionPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
     branch: nonEmptyStringSchema,
+    title: userFacingTitleSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     source: CommandSourceSchema.optional(),
     harness: HarnessCommandOptionsSchema,
@@ -102,8 +99,6 @@ export const CreateSessionPayloadSchema = z
     initialPrompt: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type CreateSessionPayload = z.infer<typeof CreateSessionPayloadSchema>;
 
 export const StartAgentPayloadSchema = z
   .object({
@@ -115,8 +110,6 @@ export const StartAgentPayloadSchema = z
   })
   .strict();
 
-export type StartAgentPayload = z.infer<typeof StartAgentPayloadSchema>;
-
 export const ResumeAgentPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -127,13 +120,12 @@ export const ResumeAgentPayloadSchema = z
   })
   .strict();
 
-export type ResumeAgentPayload = z.infer<typeof ResumeAgentPayloadSchema>;
-
 export const ForkSessionPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
     sourceWorktreeId: WorktreeIdSchema,
     branch: nonEmptyStringSchema,
+    title: userFacingTitleSchema.optional(),
     base: nonEmptyStringSchema.optional(),
     copyDirty: z.boolean().optional(),
     harness: StartAgentHarnessCommandOptionsSchema.optional(),
@@ -141,8 +133,6 @@ export const ForkSessionPayloadSchema = z
     initialPrompt: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ForkSessionPayload = z.infer<typeof ForkSessionPayloadSchema>;
 
 export const TerminalFocusPayloadSchema = z
   .object({
@@ -180,16 +170,12 @@ export const CloseSessionPayloadSchema = z
   })
   .strict();
 
-export type CloseSessionPayload = z.infer<typeof CloseSessionPayloadSchema>;
-
 export const RenameSessionPayloadSchema = z
   .object({
     sessionId: SessionIdSchema,
-    title: nonEmptyStringSchema,
+    title: userFacingTitleSchema,
   })
   .strict();
-
-export type RenameSessionPayload = z.infer<typeof RenameSessionPayloadSchema>;
 
 export const AcknowledgeTurnPayloadSchema = z
   .object({
@@ -198,15 +184,11 @@ export const AcknowledgeTurnPayloadSchema = z
   })
   .strict();
 
-export type AcknowledgeTurnPayload = z.infer<typeof AcknowledgeTurnPayloadSchema>;
-
 export const ObserverReconcilePayloadSchema = z
   .object({
     reason: nonEmptyStringSchema.optional(),
   })
   .strict();
-
-export type ObserverReconcilePayload = z.infer<typeof ObserverReconcilePayloadSchema>;
 
 export const AddProjectPayloadSchema = z
   .object({

@@ -26,8 +26,6 @@ export const HarnessResumeTargetSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-export type HarnessResumeTarget = z.infer<typeof HarnessResumeTargetSchema>;
-
 export const HarnessResumeOptionsSchema = z
   .object({
     target: HarnessResumeTargetSchema,

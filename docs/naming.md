@@ -122,6 +122,8 @@ Provider hooks are ingress. Observer event hooks are egress.
 Retired internal aliases are removed rather than preserved during the private
 preview:
 
+- Use the `ProviderHook*` names instead of the removed `HookReceipt`, `HookSpoolRecord`, `HookPayloadSummary`, and `HookScopeDecision` aliases.
+- Use the `ObserverEventHook*` names instead of the removed `EventHookFilter`, `EventHookConfig`, and `EventHookInvocation` aliases.
 - Generated scripts call `observer.ingestProviderHookEvent`.
 - `hook.ingested` and `hook.spoolDrained` are removed, not aliased. Use `providerHook.ingested` and `providerHook.spoolDrained`; the retired strings error as input rather than silently upgrading.
 - `hookSpool` names are acceptable for filesystem compatibility, but new code should prefer `providerHookSpool` or a broader `providerIngressSpool` when the spool contains both provider hook events and harness event reports.

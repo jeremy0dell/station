@@ -41,11 +41,11 @@ export type CreateSessionForkHandlerOptions = {
 };
 
 /**
- * Fork branches off an existing worktree: it creates a new worktree on a new branch
- * based on the source branch HEAD, copies the source's uncommitted working tree into
- * it (when copyDirty), then launches a fresh agent. It inherits the source worktree's
- * harness and reuses the same launch seam as session.create/startAgent. There is no
- * live-agent guard on the source — the source agent keeps running.
+ * USE CASE
+ *
+ * Fork an existing worktree onto an internal branch, persist an independent
+ * user-facing title, optionally copy dirty state, and launch a fresh agent.
+ * The source agent remains live and its remembered harness is inherited.
  */
 export function createSessionForkHandler(options: CreateSessionForkHandlerOptions): CommandHandler {
   const idFactory = {
@@ -128,7 +128,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
-        title: payload.branch.trim(),
+        title: payload.title ?? payload.branch,
         clock: options.clock,
       });
       seededSessionTitle = true;

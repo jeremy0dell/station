@@ -6,7 +6,10 @@ import {
   activateCompletedConfigWrite,
   applyOptions,
   collectForCommand,
+  collectSetupPlanForCommand,
+  collectSetupPlanFromFacts,
   coreReadyForConfigWrite,
+  depsWithBrewBinPath,
   isConfigAction,
   isHookSetupAction,
   isInstallAction,
@@ -18,12 +21,7 @@ import {
   isHarnessInstallAction,
   missingHarnessInstallActions,
 } from "../harnessInstall.js";
-import {
-  harnessSupportsSetupHooks,
-  isSupportedHarnessId,
-  resolveSetupHarnessSelection,
-  type SetupHarnessSelection,
-} from "../harnessSelection.js";
+import { isSupportedHarnessId, type SetupHarnessSelection } from "../harnessSelection.js";
 import { defaultPrompt, renderOptions, write } from "../io.js";
 import type { SetupAction, SetupFacts, SetupPlan, SupportedHarnessId } from "../model.js";
 import { buildSetupPlan } from "../planner.js";
@@ -56,238 +54,357 @@ async function runGuidedSetupWithPrompt(
     deps,
     "Core setup: required tools and one or more agents. Add your first project in STATION.\n\n",
   );
-  let facts = await collectForCommand("apply", options, deps, {});
+  const initialFacts = await collectForCommand("apply", options, deps, {});
 
   // Bootstrap layer (macOS): Command Line Tools, then Homebrew — the prerequisites
   // for git and every brew-installed tool below. Resolving these can change what is
   // installable, so it runs before the plan is built.
-  const bootstrap = await ensureBootstrapTools(facts, options, deps, prompt);
+  const bootstrap = await ensureBootstrapTools(initialFacts, options, deps, prompt);
   if (bootstrap.halt) return { code: 1 };
-  if (bootstrap.facts !== undefined) facts = bootstrap.facts;
+  const bootstrappedFacts = bootstrap.facts ?? initialFacts;
 
-  let plan = buildSetupPlan(facts, { configWrite: await planSetupConfigWrite(facts) });
+  const coreTools = await ensureRequiredTools(bootstrappedFacts, options, deps, prompt);
+  if (coreTools.status === "halt") return { code: 1 };
+
+  const availableHarnessFacts = await ensureHarnessAvailable(
+    options,
+    deps,
+    prompt,
+    coreTools.facts,
+  );
+  if (availableHarnessFacts === undefined) return { code: 1 };
+
+  const reprobeDeps = depsWithBrewBinPath(depsWithHarnessBinPaths(deps, availableHarnessFacts));
+  const harnessChoice = await selectGuidedHarnesses(availableHarnessFacts, prompt, deps);
+  if (harnessChoice.status === "halt") return { code: 1 };
+  const selectedHarnessIds = harnessChoice.selectedHarnessIds;
+
+  const linkedFacts = await maybeLinkStationLaunchers(
+    availableHarnessFacts,
+    options,
+    reprobeDeps,
+    prompt,
+  );
+  const hookPreferences = await promptHookPreferences(linkedFacts, prompt);
+  const preflight = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
+    ...(selectedHarnessIds === undefined ? {} : { selectedHarnessIds }),
+    planConfigWrite: true,
+    ...hookPreferences,
+  });
+  const unavailableHarnessIds = findUnavailableRequiredHarnesses(preflight.harnessSelection);
+  if (unavailableHarnessIds.length > 0) {
+    await write(
+      deps,
+      `Required agent CLIs are unavailable: ${unavailableHarnessIds.join(", ")}.\n`,
+    );
+    return { code: 1 };
+  }
+  if (!(await confirmRequiredHarnessTracking(preflight.plan, prompt, deps))) return { code: 1 };
+  if (!coreReadyForConfigWrite(preflight.plan)) {
+    await write(deps, renderSetupApplyResult(preflight.plan, renderOptions(deps)));
+    return { code: 1 };
+  }
+
+  const configActivation = await writeAndActivateConfig(
+    preflight.plan,
+    preflight.facts,
+    prompt,
+    deps,
+  );
+  if (configActivation.status === "halt") return { code: 1 };
+
+  // Provider artifacts must target the config already activated by the Observer.
+  if (!(await installSelectedHooks(preflight.plan, deps))) return { code: 1 };
+
+  const tmuxPopupState = await collectGuidedPopupState({
+    configWritten: configActivation.writtenPlan !== undefined,
+    preflight,
+    options,
+    reprobeDeps,
+    selectedHarnessIds,
+  });
+  await offerWorktrunkShellIntegration(preflight.plan, preflight.facts, prompt, deps);
+  await offerTmuxPopupBinding({
+    facts: tmuxPopupState.facts,
+    plan: tmuxPopupState.plan,
+    options,
+    deps,
+    prompt,
+  });
+
+  // Successful actions do not prove readiness; rebuild the plan from current config and artifacts.
+  const finalState = await collectSetupPlanForCommand(
+    "apply",
+    options,
+    reprobeDeps,
+    selectedHarnessPlanInput(selectedHarnessIds),
+  );
+  await write(deps, renderSetupApplyResult(finalState.plan, renderOptions(deps)));
+  return { code: finalState.plan.summary.requiredOk ? 0 : 1 };
+}
+
+type GuidedFactsResult = { status: "continue"; facts: SetupFacts } | { status: "halt" };
+
+type GuidedHarnessChoice =
+  | { status: "continue"; selectedHarnessIds: readonly SupportedHarnessId[] | undefined }
+  | { status: "halt" };
+
+type GuidedConfigActivation =
+  | { status: "continue"; writtenPlan: SetupPlan | undefined }
+  | { status: "halt" };
+
+async function ensureRequiredTools(
+  facts: SetupFacts,
+  options: SetupCommandOptions,
+  deps: SetupCommandDeps,
+  prompt: SetupPromptAdapter,
+): Promise<GuidedFactsResult> {
+  const initialState = await collectSetupPlanFromFacts(facts, deps, { planConfigWrite: true });
+  const plan = initialState.plan;
   await write(deps, renderSetupPlan(plan, renderOptions(deps)));
+  const installActions = plan.actions.filter(
+    (action) => isInstallAction(action) && action.selected,
+  );
+  if (installActions.length === 0) return { status: "continue", facts: initialState.facts };
 
-  const installActions = plan.actions.filter(isInstallAction).filter((action) => action.selected);
-  if (installActions.length > 0) {
-    const accepted = await prompt.confirm("Install missing required tools?");
-    if (!accepted) {
-      await write(deps, "No changes made.\n");
-      return { code: 1 };
-    }
-    const installResult = await applySetupPlan(
+  if (!(await prompt.confirm("Install missing required tools?"))) {
+    await write(deps, "No changes made.\n");
+    return { status: "halt" };
+  }
+  const installResult = await withPromptPaused(prompt, () =>
+    applySetupPlan(
       plan,
-      // brew lives in the brew prefix, which the current PATH usually lacks right
-      // after a fresh install; run the installs with it prepended.
+      // A fresh Homebrew install usually has not updated the current process PATH yet.
       applyOptions(depsWithBrewBinPath(deps), {
         actionFilter: isInstallAction,
         announceActions: true,
         showCommandOutput: true,
       }),
-    );
-    if (installResult.failedAction !== undefined) {
-      await write(
-        deps,
-        renderSetupApplyResult(markRequiredIncomplete(installResult.plan), renderOptions(deps)),
-      );
-      return { code: 1 };
-    }
-    // Brew installs land in the brew prefix, which is typically not on the current
-    // PATH; re-probe with it prepended so the freshly installed tools are detected.
-    facts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
-  }
-
-  const harnessFacts = await ensureHarnessAvailable(options, deps, prompt, facts);
-  if (harnessFacts === undefined) {
-    return { code: 1 };
-  }
-  facts = harnessFacts;
-
-  const availableHarnesses = facts.harnesses.filter((harness) => harness.status === "ok");
-  if (availableHarnesses.length === 0) {
-    const noHarnessPlan = buildSetupPlan(facts);
-    await write(deps, renderSetupApplyResult(noHarnessPlan, renderOptions(deps)));
-    return { code: 1 };
-  }
-  const selectedIds =
-    availableHarnesses.length > 1
-      ? (
-          await prompt.selectMany(
-            "Select agent CLIs to enable (comma-separated; first is the default for new configs).",
-            availableHarnesses.map((harness) => ({
-              value: harness.id,
-              label: harness.label,
-            })),
-          )
-        ).filter(isSupportedHarnessId)
-      : availableHarnesses.map((harness) => harness.id);
-  if (selectedIds.length === 0) {
-    await write(deps, "Select at least one available agent CLI.\n");
-    return { code: 1 };
-  }
-
-  facts = await maybeLinkStationLaunchers(facts, options, deps, prompt);
-  const harnessSelection = resolveSetupHarnessSelection(facts, selectedIds);
-  const refreshedIds = new Set(harnessSelection.selected.map((harness) => harness.id));
-  const unavailableIds = [...new Set(selectedIds)].filter((id) => !refreshedIds.has(id));
-  if (unavailableIds.length > 0) {
+    ),
+  );
+  if (installResult.failedAction !== undefined) {
     await write(
       deps,
-      `Selected agent CLIs are no longer available: ${unavailableIds.join(", ")}.\n`,
+      renderSetupApplyResult(markRequiredIncomplete(installResult.plan), renderOptions(deps)),
     );
-    return { code: 1 };
+    return { status: "halt" };
+  }
+  const refreshedFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
+  return { status: "continue", facts: refreshedFacts };
+}
+
+async function selectGuidedHarnesses(
+  facts: SetupFacts,
+  prompt: SetupPromptAdapter,
+  deps: SetupCommandDeps,
+): Promise<GuidedHarnessChoice> {
+  const availableHarnesses = facts.harnesses.filter((harness) => harness.status === "ok");
+  if (availableHarnesses.length === 0) {
+    await write(deps, renderSetupApplyResult(buildSetupPlan(facts), renderOptions(deps)));
+    return { status: "halt" };
+  }
+  if (!shouldPromptHarnessSelection(facts, availableHarnesses.length)) {
+    return { status: "continue", selectedHarnessIds: undefined };
   }
 
-  const hookPreferences = await promptHookPreferences(facts, prompt, harnessSelection);
-  const configWrite = await planSetupConfigWrite(facts, {
-    harnessSelection,
-    ...hookPreferences,
+  const configuredDefault =
+    facts.config.status === "valid" ? facts.config.defaults.harness : undefined;
+  const orderedHarnesses = [...availableHarnesses].sort((left, right) => {
+    if (left.id === configuredDefault) return -1;
+    if (right.id === configuredDefault) return 1;
+    return 0;
   });
-  plan = buildSetupPlan(facts, { configWrite, harnessSelection, ...hookPreferences });
-  if (!coreReadyForConfigWrite(plan)) {
-    await write(deps, renderSetupApplyResult(plan, renderOptions(deps)));
-    return { code: 1 };
+  const selectedValues = await prompt.selectMany(
+    "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
+    orderedHarnesses.map((harness) => ({ value: harness.id, label: harness.label })),
+  );
+  const selectedHarnessIds = selectedValues.filter(isSupportedHarnessId);
+  if (selectedHarnessIds.length === 0) {
+    await write(deps, "Select at least one available agent CLI.\n");
+    return { status: "halt" };
   }
+  return { status: "continue", selectedHarnessIds };
+}
 
-  const configActions = plan.actions.filter(isConfigAction).filter((action) => action.selected);
-  let writtenPlan: SetupPlan | undefined;
-  if (configActions.length > 0) {
-    const accepted = await prompt.confirm("Write core STATION config?");
-    if (!accepted) {
-      await write(deps, "Config was not written.\n");
-      return { code: 1 };
-    }
-    const writeResult = await applySetupPlan(
-      plan,
-      applyOptions(deps, { actionFilter: isConfigAction, announceActions: true }),
-    );
-    if (writeResult.failedAction !== undefined) {
-      await write(deps, "Config write failed. Run: stn setup plan\n");
-      return { code: 1 };
-    }
-    writtenPlan = writeResult.plan;
+function shouldPromptHarnessSelection(facts: SetupFacts, availableCount: number): boolean {
+  return facts.config.status !== "invalid" && availableCount > 1;
+}
+
+function findUnavailableRequiredHarnesses(
+  harnessSelection: SetupHarnessSelection,
+): SupportedHarnessId[] {
+  const selectedIds = new Set(harnessSelection.selected.map((harness) => harness.id));
+  return harnessSelection.requiredHarnessIds.filter((id) => !selectedIds.has(id));
+}
+
+function selectedHarnessPlanInput(selectedHarnessIds: readonly SupportedHarnessId[] | undefined): {
+  selectedHarnessIds?: readonly SupportedHarnessId[];
+} {
+  if (selectedHarnessIds === undefined) return {};
+  return { selectedHarnessIds };
+}
+
+async function writeAndActivateConfig(
+  plan: SetupPlan,
+  facts: SetupFacts,
+  prompt: SetupPromptAdapter,
+  deps: SetupCommandDeps,
+): Promise<GuidedConfigActivation> {
+  const configWriteSelected = plan.actions.some(
+    (action) => isConfigAction(action) && action.selected,
+  );
+  if (!configWriteSelected) return { status: "continue", writtenPlan: undefined };
+
+  if (!(await prompt.confirm("Write core STATION config?"))) {
+    await write(deps, "Config was not written.\n");
+    return { status: "halt" };
   }
+  const writeResult = await applySetupPlan(
+    plan,
+    applyOptions(deps, { actionFilter: isConfigAction, announceActions: true }),
+  );
+  if (writeResult.failedAction !== undefined) {
+    await write(deps, "Config write failed. Run: stn setup plan\n");
+    return { status: "halt" };
+  }
+  const activationError = await activateCompletedConfigWrite(writeResult.plan, facts.homeDir, deps);
+  if (activationError !== undefined) return { status: "halt" };
+  return { status: "continue", writtenPlan: writeResult.plan };
+}
 
-  const hookActions = plan.actions.filter(isHookSetupAction).filter((action) => action.selected);
-  let hookInstallFailed = false;
+async function installSelectedHooks(plan: SetupPlan, deps: SetupCommandDeps): Promise<boolean> {
+  const hookActions = plan.actions.filter((action) => isHookSetupAction(action) && action.selected);
+  let failed = false;
   // Hook providers are independent; one failed installer must not suppress the rest.
   for (const action of hookActions) {
     const hookResult = await applySetupPlan(
       { ...plan, actions: [action] },
-      applyOptions(deps, {
-        announceActions: true,
-        showCommandOutput: true,
-      }),
+      applyOptions(deps, { announceActions: true, showCommandOutput: true }),
     );
-    if (hookResult.failedAction !== undefined) {
-      hookInstallFailed = true;
-    }
+    if (hookResult.failedAction !== undefined) failed = true;
   }
-  if (hookInstallFailed) {
+  if (failed) {
     await write(deps, "Hook install failed. Fix the install error, then run: stn setup\n");
   }
+  return !failed;
+}
 
-  const activationError =
-    writtenPlan === undefined
-      ? undefined
-      : await activateCompletedConfigWrite(writtenPlan, facts.homeDir, deps);
-  if (hookInstallFailed || activationError !== undefined) {
-    return { code: 1 };
-  }
+type GuidedPopupState = { facts: SetupFacts; plan: SetupPlan };
 
-  let tmuxPopupFacts = facts;
-  let tmuxPopupPlan = plan;
-  if (writtenPlan !== undefined) {
-    tmuxPopupFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
-    tmuxPopupPlan = buildSetupPlan(tmuxPopupFacts);
-  }
+type TmuxPopupInput = GuidedPopupState & {
+  options: SetupCommandOptions;
+  deps: SetupCommandDeps;
+  prompt: SetupPromptAdapter;
+};
 
-  const shellIntegration = plan.actions.find(
-    (action) => action.id === "worktrunk-shell-integration",
+function collectGuidedPopupState(input: {
+  configWritten: boolean;
+  preflight: GuidedPopupState;
+  options: SetupCommandOptions;
+  reprobeDeps: SetupCommandDeps;
+  selectedHarnessIds: readonly SupportedHarnessId[] | undefined;
+}): Promise<GuidedPopupState> {
+  if (!input.configWritten) return Promise.resolve(input.preflight);
+  return collectSetupPlanForCommand(
+    "apply",
+    input.options,
+    input.reprobeDeps,
+    selectedHarnessPlanInput(input.selectedHarnessIds),
   );
-  if (shellIntegration !== undefined) {
-    const accepted = await prompt.confirm("Install Worktrunk shell integration?");
-    if (accepted) {
-      await installWorktrunkShellIntegration(shellIntegration, plan, facts, deps);
-    }
-  }
+}
 
-  const tmuxPopupBindingActions = tmuxPopupPlan.actions.filter(isTmuxPopupBindingAction);
-  const popupCommand = formatCommand([tmuxPopupFacts.launchers.station.command, "popup"]);
+async function offerWorktrunkShellIntegration(
+  plan: SetupPlan,
+  facts: SetupFacts,
+  prompt: SetupPromptAdapter,
+  deps: SetupCommandDeps,
+): Promise<void> {
+  const action = plan.actions.find((candidate) => candidate.id === "worktrunk-shell-integration");
+  if (action === undefined) return;
+  if (await prompt.confirm("Install Worktrunk shell integration?")) {
+    await installWorktrunkShellIntegration(action, plan, facts, deps);
+  }
+}
+
+async function offerTmuxPopupBinding(input: TmuxPopupInput): Promise<void> {
+  const { facts, plan, prompt, deps } = input;
+  const bindingActions = plan.actions.filter(isTmuxPopupBindingAction);
+  const popupCommand = formatCommand([facts.launchers.station.command, "popup"]);
   const bindingKey =
-    tmuxPopupFacts.tmuxBinding.status === "conflict"
-      ? undefined
-      : tmuxPopupFacts.tmuxBinding.bindingKey;
-  let tmuxPopupFeedback =
-    tmuxPopupFacts.tmuxBinding.status === "ok"
-      ? renderTmuxPopupFeedback(
-          true,
-          tmuxPopupFacts.tmuxBinding.liveStatus === "loaded",
-          tmuxPopupFacts.tmuxBinding.bindingKey,
-          popupCommand,
-        )
-      : undefined;
-  if (tmuxPopupBindingActions.length > 0 && bindingKey !== undefined) {
+    facts.tmuxBinding.status === "conflict" ? undefined : facts.tmuxBinding.bindingKey;
+  const currentFeedback = currentTmuxPopupFeedback(facts, popupCommand);
+
+  let feedback = currentFeedback;
+  if (bindingActions.length > 0 && bindingKey !== undefined) {
     const accepted = await prompt.confirm("Install or load tmux popup binding?");
     if (accepted) {
-      const bindingResult = await applySetupPlan(
-        {
-          ...tmuxPopupPlan,
-          actions: tmuxPopupBindingActions.map((action) => ({ ...action, selected: true })),
-        },
-        applyOptions(deps, { announceActions: true, showCommandOutput: true }),
-      );
-      const completed = new Set(
-        bindingResult.plan.actions
-          .filter((action) => action.status === "completed")
-          .map((action) => action.id),
-      );
-      let liveLoaded = tmuxPopupFacts.tmuxBinding.liveStatus === "loaded";
-      if (completed.has("tmux-live-popup-binding")) {
-        const recheckOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
-          homeDir: tmuxPopupFacts.homeDir,
-          launcherCommand: tmuxPopupFacts.tmuxBinding.launcherCommand,
-          runShellCommand: tmuxPopupFacts.tmuxBinding.runShellCommand,
-          tmuxCommand: tmuxPopupFacts.tmux.resolvedPath ?? tmuxPopupFacts.tmux.command,
-        };
-        const env = deps.env ?? options.env;
-        if (env !== undefined) recheckOptions.env = env;
-        if (deps.fs !== undefined) recheckOptions.fs = deps.fs;
-        if (deps.runner !== undefined) recheckOptions.runner = deps.runner;
-        liveLoaded = (await checkSetupTmuxBinding(recheckOptions)).liveStatus === "loaded";
-      }
-      tmuxPopupFeedback = renderTmuxPopupFeedback(
-        tmuxPopupFacts.tmuxBinding.status === "ok" || completed.has("tmux-popup-binding"),
-        liveLoaded,
-        bindingKey,
-        popupCommand,
-        bindingResult.failedAction !== undefined,
-      );
+      feedback = await applyTmuxPopupBinding(input, bindingActions, bindingKey, popupCommand);
     } else {
-      tmuxPopupFeedback =
-        tmuxPopupFacts.tmuxBinding.status === "ok"
-          ? renderTmuxPopupFeedback(
-              true,
-              tmuxPopupFacts.tmuxBinding.liveStatus === "loaded",
-              tmuxPopupFacts.tmuxBinding.bindingKey,
-              popupCommand,
-            )
-          : `Tmux popup binding was not changed. Direct fallback: ${popupCommand}\n`;
+      feedback =
+        currentFeedback ?? `Tmux popup binding was not changed. Direct fallback: ${popupCommand}\n`;
     }
   }
+  if (feedback !== undefined) await write(deps, feedback);
+}
 
-  if (tmuxPopupFeedback !== undefined) {
-    await write(deps, tmuxPopupFeedback);
-  }
+function currentTmuxPopupFeedback(facts: SetupFacts, popupCommand: string): string | undefined {
+  if (facts.tmuxBinding.status !== "ok") return undefined;
+  return renderTmuxPopupFeedback({
+    persisted: true,
+    liveLoaded: facts.tmuxBinding.liveStatus === "loaded",
+    bindingKey: facts.tmuxBinding.bindingKey,
+    popupCommand,
+    repairIncomplete: false,
+  });
+}
 
-  await write(
-    deps,
-    renderSetupApplyResult(
-      { ...plan, summary: { ...plan.summary, workflowReady: true, requiredOk: true } },
-      renderOptions(deps),
-    ),
+async function applyTmuxPopupBinding(
+  input: TmuxPopupInput,
+  bindingActions: readonly SetupAction[],
+  bindingKey: string,
+  popupCommand: string,
+): Promise<string> {
+  const { facts, plan, deps } = input;
+  const result = await applySetupPlan(
+    {
+      ...plan,
+      actions: bindingActions.map((action) => ({ ...action, selected: true })),
+    },
+    applyOptions(deps, { announceActions: true, showCommandOutput: true }),
   );
-  return { code: 0 };
+  const completedIds = new Set(
+    result.plan.actions.flatMap((action) => (action.status === "completed" ? [action.id] : [])),
+  );
+  const liveLoaded = await recheckTmuxPopupBinding(input, completedIds);
+  return renderTmuxPopupFeedback({
+    persisted: facts.tmuxBinding.status === "ok" || completedIds.has("tmux-popup-binding"),
+    liveLoaded,
+    bindingKey,
+    popupCommand,
+    repairIncomplete: result.failedAction !== undefined,
+  });
+}
+
+async function recheckTmuxPopupBinding(
+  input: TmuxPopupInput,
+  completedIds: ReadonlySet<string>,
+): Promise<boolean> {
+  const { facts, options, deps } = input;
+  if (!completedIds.has("tmux-live-popup-binding")) {
+    return facts.tmuxBinding.liveStatus === "loaded";
+  }
+  const recheckOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
+    homeDir: facts.homeDir,
+    launcherCommand: facts.tmuxBinding.launcherCommand,
+    runShellCommand: facts.tmuxBinding.runShellCommand,
+    tmuxCommand: facts.tmux.resolvedPath ?? facts.tmux.command,
+  };
+  const env = deps.env ?? options.env;
+  if (env !== undefined) recheckOptions.env = env;
+  if (deps.fs !== undefined) recheckOptions.fs = deps.fs;
+  if (deps.runner !== undefined) recheckOptions.runner = deps.runner;
+  const rechecked = await checkSetupTmuxBinding(recheckOptions);
+  return rechecked.liveStatus === "loaded";
 }
 
 async function installWorktrunkShellIntegration(
@@ -341,32 +458,31 @@ async function pathExists(path: string, deps: SetupCommandDeps): Promise<boolean
   }
 }
 
-function renderTmuxPopupFeedback(
-  persisted: boolean,
-  liveLoaded: boolean,
-  bindingKey: string,
-  popupCommand: string,
-  repairIncomplete = false,
-): string {
-  const lines = persisted
-    ? [
-        `Tmux popup binding: tmux prefix + ${bindingKey} is ${
-          liveLoaded
-            ? "persisted and loaded in the current tmux server"
-            : "persisted for future tmux servers; no current server was live-loaded"
-        }.`,
-      ]
-    : ["Tmux popup binding was not persisted. Run stn setup to retry."];
-  if (repairIncomplete) {
+function renderTmuxPopupFeedback(input: {
+  persisted: boolean;
+  liveLoaded: boolean;
+  bindingKey: string;
+  popupCommand: string;
+  repairIncomplete: boolean;
+}): string {
+  let status: string;
+  if (!input.persisted) {
+    status = "Tmux popup binding was not persisted. Run stn setup to retry.";
+  } else if (input.liveLoaded) {
+    status = `Tmux popup binding: tmux prefix + ${input.bindingKey} is persisted and loaded in the current tmux server.`;
+  } else {
+    status = `Tmux popup binding: tmux prefix + ${input.bindingKey} is persisted for future tmux servers; no current server was live-loaded.`;
+  }
+  const lines = [status];
+  if (input.repairIncomplete) {
     lines.push("Tmux popup binding repair was incomplete; run stn setup to retry.");
   }
-  lines.push(`Direct fallback: ${popupCommand}`);
+  lines.push(`Direct fallback: ${input.popupCommand}`);
   return `${lines.join("\n")}\n`;
 }
 
 type HookPreferences = {
   installWorktrunkHooks?: boolean;
-  installHarnessHooks?: readonly SupportedHarnessId[];
 };
 
 // Kicks the macOS bootstrap installers (Command Line Tools, then Homebrew) behind
@@ -383,9 +499,11 @@ async function ensureBootstrapTools(
       "Install Xcode Command Line Tools now? (runs xcode-select --install)",
     );
     if (accepted) {
-      await applySetupPlan(
-        harnessInstallPlan(facts, [commandLineToolsInstallAction()]),
-        applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+      await withPromptPaused(prompt, () =>
+        applySetupPlan(
+          harnessInstallPlan(facts, [commandLineToolsInstallAction()]),
+          applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+        ),
       );
       // The CLT installer runs asynchronously in its own window; we cannot continue
       // until it finishes, so stop here and have the user re-run.
@@ -402,7 +520,8 @@ async function ensureBootstrapTools(
     return { halt: true };
   }
 
-  if (facts.brew.status === "missing" && coreToolsNeedBrew(facts)) {
+  if (facts.brew.status === "missing" && setupShouldOfferBrew(facts)) {
+    const requiredForCoreTools = coreToolsNeedBrew(facts);
     const accepted = await prompt.confirm(
       "Install Homebrew now? (runs the official Homebrew installer)",
     );
@@ -410,17 +529,26 @@ async function ensureBootstrapTools(
       await write(deps, brewMissingCallout(facts));
       return {};
     }
-    const result = await applySetupPlan(
-      harnessInstallPlan(facts, [homebrewInstallAction()]),
-      applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+    await write(
+      deps,
+      "\nInstalling Homebrew...\nLive installer output is shown below. Station will continue when this installer exits.\n\n",
+    );
+    const result = await withPromptPaused(prompt, () =>
+      applySetupPlan(
+        harnessInstallPlan(facts, [homebrewInstallAction()]),
+        applyOptions(deps, { showCommandOutput: true }),
+      ),
     );
     if (result.failedAction !== undefined) {
-      await write(
-        deps,
-        "Homebrew install failed. Install it from https://brew.sh, then run: stn setup\n",
-      );
-      return { halt: true };
+      await write(deps, "\nHomebrew install failed.\n");
+      if (requiredForCoreTools) {
+        await write(deps, "Install it from https://brew.sh, then run: stn setup\n");
+        return { halt: true };
+      }
+      await write(deps, "Continuing with non-Homebrew agent installers where supported.\n");
+      return {};
     }
+    await write(deps, "\nHomebrew install completed.\n");
     // Re-probe with the brew prefix on PATH so the just-installed brew (and the
     // core tools it can now install) are detected in the main plan.
     return { facts: await collectForCommand("apply", options, depsWithBrewBinPath(deps), {}) };
@@ -441,7 +569,7 @@ function commandLineToolsInstallAction(): SetupAction {
   };
 }
 
-function homebrewInstallAction(): SetupAction {
+export function homebrewInstallAction(): SetupAction {
   return {
     id: "install-homebrew",
     kind: "run-command",
@@ -452,7 +580,13 @@ function homebrewInstallAction(): SetupAction {
     command: [
       "/bin/bash",
       "-c",
-      "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)",
+      [
+        "set -eu",
+        'installer="$(mktemp)"',
+        "trap 'rm -f \"$installer\"' EXIT",
+        'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$installer"',
+        '/bin/bash "$installer"',
+      ].join("; "),
     ],
   };
 }
@@ -467,7 +601,17 @@ function coreToolsNeedBrew(facts: SetupFacts): boolean {
   );
 }
 
+function setupShouldOfferBrew(facts: SetupFacts): boolean {
+  return (
+    coreToolsNeedBrew(facts) ||
+    (facts.xcode.applicable && !facts.harnesses.some((harness) => harness.status === "ok"))
+  );
+}
+
 function brewMissingCallout(facts: SetupFacts): string {
+  if (!coreToolsNeedBrew(facts)) {
+    return "Homebrew was not installed. Setup will offer non-Homebrew agent installers where supported.\n\n";
+  }
   const lines = [
     "Homebrew is required to install the missing core tools.",
     "  Install Homebrew first: https://brew.sh",
@@ -509,7 +653,6 @@ async function maybeLinkStationLaunchers(
 async function promptHookPreferences(
   facts: SetupFacts,
   prompt: SetupPromptAdapter,
-  harnessSelection: SetupHarnessSelection,
 ): Promise<HookPreferences> {
   const preferences: HookPreferences = {};
   if (
@@ -519,19 +662,30 @@ async function promptHookPreferences(
   ) {
     preferences.installWorktrunkHooks = await prompt.confirm("Install Worktrunk lifecycle hooks?");
   }
-  const installHarnessHooks: SupportedHarnessId[] = [];
-  for (const harness of harnessSelection.selected) {
-    if (!harnessSupportsSetupHooks(harness.id) || facts.config.status === "invalid") {
-      continue;
-    }
-    if (await prompt.confirm(`Install ${harness.label} agent hooks?`)) {
-      installHarnessHooks.push(harness.id);
-    }
-  }
-  if (installHarnessHooks.length > 0) {
-    preferences.installHarnessHooks = installHarnessHooks;
-  }
   return preferences;
+}
+
+async function confirmRequiredHarnessTracking(
+  plan: SetupPlan,
+  prompt: SetupPromptAdapter,
+  deps: SetupCommandDeps,
+): Promise<boolean> {
+  const trackingActions = plan.actions.filter(
+    (action) => action.selected && action.tier === "required" && action.data?.setupRole === "hook",
+  );
+  for (const action of trackingActions) {
+    const accepted = await prompt.confirm(
+      `${action.label}? Station requires tracking to observe the selected agent's activity.`,
+    );
+    if (!accepted) {
+      await write(
+        deps,
+        "Required agent tracking was declined; config and provider tracking artifacts were not changed.\n",
+      );
+      return false;
+    }
+  }
+  return true;
 }
 
 function shouldPromptLauncherLink(facts: SetupFacts): boolean {
@@ -561,9 +715,12 @@ async function ensureHarnessAvailable(
   );
 
   const selectedActions: SetupAction[] = [];
-  for (const action of missingHarnessInstallActions(facts.harnesses)) {
-    const command = action.command === undefined ? action.label : formatCommand(action.command);
-    const accepted = await prompt.confirm(`${action.label}? (${command})`);
+  for (const action of missingHarnessInstallActions(facts.harnesses, {
+    brewAvailable: facts.brew.status === "ok",
+    homeDir: facts.homeDir,
+    macos: facts.xcode.applicable,
+  })) {
+    const accepted = await prompt.confirm(`${action.label}? (${action.message})`);
     if (accepted) {
       selectedActions.push({ ...action, selected: true });
     }
@@ -582,28 +739,60 @@ async function ensureHarnessAvailable(
     return undefined;
   }
 
-  const result = await applySetupPlan(
-    harnessInstallPlan(facts, selectedActions),
-    applyOptions(deps, {
-      actionFilter: isHarnessInstallAction,
-      announceActions: true,
-      showCommandOutput: true,
-    }),
-  );
-  if (result.failedAction !== undefined) {
-    await write(deps, "Agent CLI install failed. Fix the install error, then run: stn setup\n");
-    return undefined;
+  const installDeps = depsWithBrewBinPath(depsWithHarnessBinPaths(deps, facts));
+  const failedHarnessIds = new Set<SupportedHarnessId>();
+  for (const action of selectedActions) {
+    const harnessId = action.data?.harness;
+    const harness = facts.harnesses.find((candidate) => candidate.id === harnessId);
+    const label = harness?.label ?? action.label;
+    await write(
+      deps,
+      `\nInstalling ${label}...\nLive installer output is shown below. Station will continue when this installer exits.\n\n`,
+    );
+    const result = await withPromptPaused(prompt, () =>
+      applySetupPlan(
+        harnessInstallPlan(facts, [action]),
+        applyOptions(installDeps, {
+          actionFilter: isHarnessInstallAction,
+          showCommandOutput: true,
+        }),
+      ),
+    );
+    if (result.failedAction === undefined) {
+      await write(deps, `\n${label} install completed.\n`);
+    } else {
+      await write(deps, `\n${label} install failed. Continuing to the next selected agent.\n`);
+    }
+    if (
+      result.failedAction !== undefined &&
+      harnessId !== undefined &&
+      isSupportedHarnessId(harnessId)
+    ) {
+      failedHarnessIds.add(harnessId);
+    }
   }
 
-  // Compose both prefixes: the agent CLI lands in ~/.local/bin, but the core tools
-  // installed earlier this session live in the brew prefix — without it they re-read
-  // as missing and overwrite the good facts, dead-ending config write on a fresh Mac.
-  const refreshedFacts = await collectForCommand(
-    "apply",
-    options,
-    depsWithBrewBinPath(depsWithUserBinPath(deps, facts)),
-    {},
-  );
+  const refreshedFacts = await collectForCommand("apply", options, installDeps, {});
+  const stillMissing = selectedActions.flatMap((action) => {
+    const harnessId = action.data?.harness;
+    if (harnessId === undefined || !isSupportedHarnessId(harnessId)) return [];
+    const available = refreshedFacts.harnesses.some(
+      (harness) => harness.id === harnessId && harness.status === "ok",
+    );
+    return available ? [] : [harnessId];
+  });
+  for (const harnessId of stillMissing) failedHarnessIds.add(harnessId);
+
+  if (failedHarnessIds.size > 0) {
+    const labels = refreshedFacts.harnesses
+      .filter((harness) => failedHarnessIds.has(harness.id))
+      .map((harness) => `  - ${harness.label}`);
+    await write(
+      deps,
+      ["These selected agent CLIs are still unavailable:", ...labels, ""].join("\n"),
+    );
+  }
+
   if (refreshedFacts.harnesses.some((harness) => harness.status === "ok")) {
     return refreshedFacts;
   }
@@ -620,26 +809,10 @@ async function ensureHarnessAvailable(
   return undefined;
 }
 
-function depsWithUserBinPath(deps: SetupCommandDeps, facts: SetupFacts): SetupCommandDeps {
+function depsWithHarnessBinPaths(deps: SetupCommandDeps, facts: SetupFacts): SetupCommandDeps {
   const env = { ...(deps.env ?? process.env) };
+  env.PATH = prependPath(`${facts.homeDir}/.opencode/bin`, env.PATH);
   env.PATH = prependPath(`${facts.homeDir}/.local/bin`, env.PATH);
-  return { ...deps, env };
-}
-
-// Standard Homebrew prefix bin dirs: Apple Silicon, Intel, and Linuxbrew. A fresh
-// shell or GUI-launched process usually has none of these on PATH right after the
-// installer runs, so a re-probe would not see brew or the tools it just installed.
-const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
-
-// Make the brew prefixes resolvable for re-probes that follow `brew install`. Without
-// this, a fresh Apple-Silicon Mac reports brew (and every brew-installed core tool)
-// still missing right after a successful install, and the guided run exits 1.
-// APPEND (not prepend): the caller's existing PATH keeps precedence, so we only add a
-// fallback for tools that were just installed and aren't already resolvable elsewhere
-// — this avoids shadowing the caller's chosen tools with brew's copies.
-function depsWithBrewBinPath(deps: SetupCommandDeps): SetupCommandDeps {
-  const env = { ...(deps.env ?? process.env) };
-  env.PATH = brewBinDirs.reduce((path, dir) => appendPath(path, dir), env.PATH);
   return { ...deps, env };
 }
 
@@ -650,9 +823,12 @@ function prependPath(path: string, existing: string | undefined): string {
   return existing.split(":").includes(path) ? existing : `${path}:${existing}`;
 }
 
-function appendPath(existing: string | undefined, path: string): string {
-  if (existing === undefined || existing.length === 0) {
-    return path;
+async function withPromptPaused<T>(prompt: SetupPromptAdapter, task: () => Promise<T>): Promise<T> {
+  // Readline must release stdin while an inherited-stdio installer owns the terminal.
+  prompt.pause?.();
+  try {
+    return await task();
+  } finally {
+    prompt.resume?.();
   }
-  return existing.split(":").includes(path) ? existing : `${existing}:${path}`;
 }

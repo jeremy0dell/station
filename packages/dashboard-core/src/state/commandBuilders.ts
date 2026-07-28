@@ -23,6 +23,7 @@ export type CleanupActionKind =
 
 export type CreateSessionCommandInput = {
   project: ProjectView;
+  title: string;
   branch: string;
   harnessProvider: ProviderId;
   initialPrompt?: string;
@@ -36,6 +37,7 @@ export type RenameSessionCommandInput = {
 export type ForkSessionCommandInput = {
   project: ProjectView;
   sourceWorktreeId: WorktreeId;
+  title: string;
   branch: string;
   base?: string;
   copyDirty?: boolean;
@@ -184,6 +186,7 @@ export function buildRemoveWorktreeCommand(row: WorktreeRow, force: boolean): St
 export function buildCreateSessionCommand(input: CreateSessionCommandInput): StationCommand {
   const payload: Extract<StationCommand, { type: "session.create" }>["payload"] = {
     projectId: input.project.id,
+    title: input.title,
     branch: input.branch,
     harness: {
       provider: input.harnessProvider,
@@ -208,6 +211,7 @@ export function buildForkSessionCommand(input: ForkSessionCommandInput): Station
   const payload: Extract<StationCommand, { type: "session.fork" }>["payload"] = {
     projectId: input.project.id,
     sourceWorktreeId: input.sourceWorktreeId,
+    title: input.title,
     branch: input.branch,
     terminal: {
       provider: input.project.defaults.terminal,
@@ -263,13 +267,6 @@ export function buildRemoveProjectCommand(
     payload: {
       projectId: input.projectId,
     },
-  };
-}
-
-export function buildReconcileCommand(reason?: string): StationCommand {
-  return {
-    type: "observer.reconcile",
-    payload: reason === undefined ? {} : { reason },
   };
 }
 

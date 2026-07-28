@@ -38,7 +38,7 @@ if (process.argv[2] === "--socket-server-child") {
   await runController(parseControllerArgs(process.argv.slice(2)));
 }
 
-async function runController({ rounds }) {
+async function runController({ rounds, threeContenderRounds }) {
   const { observerBootClaimPath } = await import(observerInternalUrl);
   assert.equal(typeof observerBootClaimPath, "function");
 
@@ -49,7 +49,6 @@ async function runController({ rounds }) {
 
   let initialClaimIdentity;
   let maximumCriticalSectionConcurrency = 0;
-  const threeContenderRounds = 10;
 
   try {
     for (let round = 0; round < rounds; round += 1) {
@@ -491,12 +490,26 @@ async function runChild(flags) {
 
 function parseControllerArgs(args) {
   if (args[0] === "--") args = args.slice(1);
-  if (args.length === 0) return { rounds: 50 };
-  assert.deepEqual(args.slice(0, 1), ["--rounds"], "Usage: --rounds <positive integer>");
-  assert.equal(args.length, 2, "Usage: --rounds <positive integer>");
-  const rounds = Number(args[1]);
-  assert.ok(Number.isSafeInteger(rounds) && rounds > 0, "--rounds must be a positive integer.");
-  return { rounds };
+  assert.equal(
+    args.length % 2,
+    0,
+    "Usage: [--rounds <positive integer>] [--three-contender-rounds <positive integer>]",
+  );
+
+  const options = { rounds: 50, threeContenderRounds: 10 };
+  const seen = new Set();
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index];
+    const value = Number(args[index + 1]);
+    assert.equal(seen.has(flag), false, `Duplicate controller flag ${flag}.`);
+    assert.ok(Number.isSafeInteger(value) && value > 0, `${flag} must be a positive integer.`);
+    seen.add(flag);
+
+    if (flag === "--rounds") options.rounds = value;
+    else if (flag === "--three-contender-rounds") options.threeContenderRounds = value;
+    else throw new Error(`Unsupported controller flag ${flag}.`);
+  }
+  return options;
 }
 
 function parseFlags(args) {

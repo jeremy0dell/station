@@ -21,7 +21,13 @@ export type TuiInputMode =
   | "newSessionPickAgent"
   | "projectDefaultAgent"
   | "projectSettings"
-  | "addProject"
+  | "addProjectStart"
+  | "addProjectChoose"
+  | "addProjectFilter"
+  | "addProjectReview"
+  | "addProjectEditId"
+  | "addProjectSuccess"
+  | "addProjectFailed"
   | "widgetSettings";
 
 export function deriveTuiInputMode(state: TuiState): TuiInputMode {
@@ -50,7 +56,14 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       if (screen.flow.mode === "pickProject") return "newSessionPickProject";
       return "newSessionPickAgent";
     case "addProject":
-      return "addProject";
+      if (screen.flow.mode === "start") return "addProjectStart";
+      if (screen.flow.mode === "choose") {
+        return screen.flow.filterMode ? "addProjectFilter" : "addProjectChoose";
+      }
+      if (screen.flow.mode === "review") {
+        return screen.flow.editingId === undefined ? "addProjectReview" : "addProjectEditId";
+      }
+      return screen.flow.mode === "success" ? "addProjectSuccess" : "addProjectFailed";
     case "projectDefaultAgent":
       return "projectDefaultAgent";
     case "projectSettings":
@@ -228,27 +241,8 @@ export type TuiHelpContentLine =
   | { text: string; align?: "center" }
   | { key: string; description: string };
 
-export const TUI_HELP_CONTENT = [
-  { text: "station help", align: "center" as const },
-  { text: "" },
-  { key: "↑/↓", description: "move cursor" },
-  { key: "↵", description: "open focused session" },
-  { key: "tab", description: "next session needing you" },
-  { key: "wheel", description: "scroll dashboard" },
-  { key: "1-9/a-z", description: "choose visible item" },
-  { key: "N", description: "new session" },
-  { key: "R", description: "rename session" },
-  { key: "X", description: "delete session" },
-  { key: "C", description: "collapse project" },
-  { key: "P", description: "project settings" },
-  { key: "/", description: "search" },
-  { key: "Z", description: "refresh snapshot" },
-  { key: "H / ?", description: "help" },
-  { key: "Q", description: "quit or close popup" },
-  { key: "Esc", description: "back/cancel" },
-] as const satisfies readonly TuiHelpContentLine[];
-
 export const QUIT_HINT_CLOSE = "Q/esc:close";
+export const QUIT_HINT_DISMISS_ERROR = "Esc:dismiss  Q:close";
 
 export function dashboardFooterLabel({
   columns,
@@ -263,11 +257,19 @@ export function dashboardFooterLabel({
     ? `↵ add first project  A add project  ${quitHint}`
     : `↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
   const compactFirstRun = `↵ add first project  ${quitHint}`;
-  const compactClose = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${QUIT_HINT_CLOSE}`;
+  const compact = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${quitHint}`;
   if (firstRun && full.length > columns) {
-    return compactFirstRun;
+    return quitHint === QUIT_HINT_DISMISS_ERROR && compactFirstRun.length > columns
+      ? quitHint
+      : compactFirstRun;
   }
-  return quitHint === QUIT_HINT_CLOSE && full.length > columns ? compactClose : full;
+  if (full.length <= columns) {
+    return full;
+  }
+  if (quitHint === QUIT_HINT_CLOSE) {
+    return compact;
+  }
+  return compact.length <= columns ? compact : quitHint;
 }
 
 export function isSlotKey(key: TuiKey): boolean {

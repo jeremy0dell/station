@@ -23,6 +23,7 @@ import {
 } from "@station/runtime";
 import { createCommandQueue } from "../commands/queue.js";
 import { registerObserverCommandHandlers } from "../commands/router.js";
+import { createLocalDiagnosticEvidenceSource } from "../diagnostics/localEvidenceSource.js";
 import { createFeatureFlagEvaluator } from "../features/evaluator.js";
 import {
   createObserverEventHookRuntime,
@@ -100,9 +101,9 @@ export type RunObserverMainDeps = {
 /**
  * COMPOSITION ROOT
  *
- * Claims boot ownership, branches on four-state socket evidence before
- * constructing providers, and owns bind, pidfile, and ownership-aware shutdown
- * before releasing the claim and publishing exact build health.
+ * Claims boot ownership, branches on four-state socket evidence, selects
+ * Observer-private infrastructure from resolved runtime identity, and owns bind,
+ * pidfile, ownership-aware shutdown, and exact build health publication.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -142,7 +143,8 @@ export async function runObserverMain(
   try {
     const processEvidence = deps.processEvidence ?? createLocalObserverProcessEvidence();
     const socketProbe = await probeObserverSocket(socketPath, {
-      socketHolders: (path) => processEvidence.socketHolders(path),
+      timeoutMs: DEFAULT_STARTUP_TIMEOUT_MS,
+      socketHolders: (path: string) => processEvidence.socketHolders(path),
     });
     if (socketProbe.status === "inaccessible") throw socketProbe.error;
     if (socketProbe.status === "listening") {
@@ -223,6 +225,13 @@ async function runClaimedObserverRuntime(input: {
   const persistence = createSqliteObserverPersistence({ sqlite, clock: systemClock });
   const eventBus = createObserverEventBus();
   const logger = createObserverLogger({ stateDir, clock: systemClock });
+  const diagnosticEvidenceSource = createLocalDiagnosticEvidenceSource({
+    stateDir,
+    socketPath,
+    diagnosticsDir: join(stateDir, "diagnostics"),
+    logPaths: [componentLogPath(stateDir, "observer"), componentLogPath(stateDir, "hook")],
+    hookSpoolDir: spoolDir,
+  });
   const projectConfigWriter = createProjectConfigWriter({
     homeDir,
     ...(options.configPath === undefined ? {} : { configPath: loadedConfig.configPath }),
@@ -230,9 +239,8 @@ async function runClaimedObserverRuntime(input: {
   const pruneAt = toIsoTimestamp(systemClock.now());
   await persistence.pruneExpiredProviderObservations(pruneAt);
   const commandQueue = createCommandQueue({ persistence, clock: systemClock, eventBus, logger });
-  // Fire-and-forget boot probes: snapshots read cached results and fill in as they land.
+  // Fire-and-forget version probes only populate provider-owned cache state.
   void providers.refreshHarnessVersions();
-  void providers.healthCache.refreshAll();
   const featureFlags = createFeatureFlagEvaluator({
     ...(config.featureFlags === undefined ? {} : { overrides: config.featureFlags }),
     revisionSeed: loadedConfig.configPath,
@@ -364,18 +372,19 @@ async function runClaimedObserverRuntime(input: {
     persistenceHealth: persistence,
     commandQueue,
     eventBus,
+    diagnosticEvidenceSource,
     hookSpoolDir: spoolDir,
     socketPath,
     observerBuildVersion: buildVersion,
     stateDir,
-    diagnosticsDir: join(stateDir, "diagnostics"),
-    logPaths: [componentLogPath(stateDir, "observer"), componentLogPath(stateDir, "hook")],
     config,
     ...(options.configPath === undefined ? {} : { configPath: loadedConfig.configPath }),
     configDiagnostics: loadedConfig.diagnostics,
     clock: systemClock,
     logger,
   });
+  // Register health publication before boot probes so every completed result reaches the snapshot.
+  void providers.healthCache.refreshAll();
   const api: ObserverApi = {
     ...observerApi,
     health: () => startupGate.runHealth(observerApi.health),
@@ -399,7 +408,6 @@ async function runClaimedObserverRuntime(input: {
       socketPath,
       api,
       clock: systemClock,
-      drainOnStart: false,
       guardOperation: startupGate.assertReadyForOperation,
     });
     ownsSocket = true;
