@@ -645,6 +645,22 @@ describe("tmux popup", () => {
     expect(fake.globalOptions.get("@station_popup_ui_route")).toBe(replacementRoute);
   });
 
+  it("opens through fallback ownership when fast popup registration fails", async () => {
+    const fake = createPopupTmux({ failFastRegistration: true, root: "/opt/station/bin" });
+
+    await expect(
+      openTmuxPopup({
+        checkoutRoot: fake.root,
+        env: { TMUX: "/tmp/tmux/default,1,0" },
+        runner: fake.runner,
+      }),
+    ).resolves.toEqual({ opened: true });
+
+    expect(fake.globalOptions.has("@station_popup_ui_route")).toBe(false);
+    expect(fake.globalOptions.get("@station_popup_active_claim")).toMatch(/^v1\.open\./);
+    expect(fake.executedPopupActions.some((action) => action.includes("display-popup"))).toBe(true);
+  });
+
   it("prefers only a live same-root dev UI and rejects stale or wrong-root registrations", async () => {
     const fake = createPopupTmux({
       devCommand: "node dev-ui tui --popup --persistent",
@@ -793,6 +809,7 @@ type PopupFakeOptions = {
   devRoot?: string;
   devSession?: string;
   displayExit?: number;
+  failFastRegistration?: boolean;
   malformedRoute?: string;
   registered?: boolean;
   replaceClaimBeforeCleanup?: string;
@@ -913,6 +930,9 @@ function createPopupTmux(options: PopupFakeOptions = {}) {
       return tmuxCommandResult(input);
     }
     if (args[0] === "set-option") {
+      if (options.failFastRegistration === true && args.includes("@station_popup_ui_lease")) {
+        throw Object.assign(new Error("fast registration failed"), { code: 1 });
+      }
       applySetOption(args, globalOptions, sessionOptions, sessionSignatures);
       return tmuxCommandResult(input);
     }

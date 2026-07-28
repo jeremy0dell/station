@@ -155,6 +155,41 @@ describe("preparePackagedPtyRuntime", () => {
     expect(await pathExists(dead)).toBe(false);
   });
 
+  it("keeps the current helper usable when stale cache removals fail", async () => {
+    const state = await stateDir();
+    const ctty = join(state, "run", "assets", "ctty");
+    const dead = join(ctty, "old-dead");
+    const deadLease = join(dead, ".leases", "2147483647-dead");
+    await mkdir(dirname(deadLease), { recursive: true });
+    await writeFile(deadLease, "");
+    const attempts: Array<{ path: string; recursive: boolean }> = [];
+
+    const runtime = await preparePty(state, {
+      removeStalePath: async (
+        path: string,
+        options: { force: true; recursive?: true },
+      ): Promise<void> => {
+        attempts.push({ path, recursive: options.recursive === true });
+        throw new Error("stale cleanup denied");
+      },
+    });
+    runtimes.push(runtime);
+
+    expect(attempts).toEqual([
+      { path: deadLease, recursive: false },
+      { path: dead, recursive: true },
+    ]);
+    expect(await pathExists(dead)).toBe(true);
+    const identityDirs = (await readdir(ctty, { withFileTypes: true })).filter(
+      (entry) => entry.isDirectory() && !entry.name.endsWith(".lock"),
+    );
+    const current = identityDirs.find((entry) => entry.name !== "old-dead");
+    expect(current).toBeDefined();
+    expect(await pathExists(join(ctty, current?.name ?? "missing", "station-ctty-helper"))).toBe(
+      true,
+    );
+  });
+
   it("reclaims an extraction lock owned by a dead process", async () => {
     const state = await stateDir();
     const first = await preparePty(state);

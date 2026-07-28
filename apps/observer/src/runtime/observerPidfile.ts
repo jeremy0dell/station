@@ -155,7 +155,21 @@ export async function removeObserverProcessIdentity(
   try {
     await unlink(claimedPath);
   } catch (error) {
-    await restoreClaimedIdentity(claimedPath, path).catch(() => undefined);
+    try {
+      await restoreClaimedIdentity(claimedPath, path);
+    } catch (restoreError) {
+      // SafeError fields keep the dual failure searchable while `errors` retains both causes.
+      throw Object.assign(
+        new AggregateError(
+          [error, restoreError],
+          "Observer process identity could not be removed or restored.",
+        ),
+        {
+          tag: "ObserverLifecycleError",
+          code: "OBSERVER_IDENTITY_REMOVE_AND_RESTORE_FAILED",
+        },
+      );
+    }
     throw error;
   }
   await syncDirectory(dirname(path));
