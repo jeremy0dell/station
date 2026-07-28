@@ -114,9 +114,10 @@ bun run station:isolated:stop     # tear down the observer + host for this workt
   `STATION_OBSERVER_SOCKET_PATH` (so Station connects to this observer);
 - sets `CODEX_HOME=.dev-state/codex-home`, seeds it with a symlink to your real
   `~/.codex/auth.json` (shared login) and a copy of `config.toml` (isolated
-  snapshot), and installs the codex status hooks **there** — so the launch guard
-  (below) is satisfied and launched agents report to **this** observer, with your
-  global `~/.codex` left untouched;
+  snapshot), enables hooks in the isolated `station` profile, and installs the
+  codex status hooks **there** — so the launch guard (below) is satisfied and
+  launched agents report to **this** observer, with your global `~/.codex` left
+  untouched;
 - installs the claude status hook for the isolated observer (its artifact + script
   land under `.dev-state/observer`, which is what the launch guard checks) so a
   claude-default worktree also clears the guard; sets

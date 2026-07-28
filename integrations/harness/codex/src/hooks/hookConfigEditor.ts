@@ -31,6 +31,18 @@ export function stringifyTomlDocument(document: Record<string, unknown>): string
   return result.endsWith("\n") ? result : `${result}\n`;
 }
 
+/** Enables hooks only for isolated devbox profiles; normal setup preserves user feature flags. */
+export function enableCodexHooksFeature(
+  document: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = cloneRecord(document);
+  const featuresRecord = recordValue(next.features);
+  const features = featuresRecord === undefined ? {} : cloneRecord(featuresRecord);
+  features.hooks = true;
+  next.features = features;
+  return next;
+}
+
 export function installCodexHookCommands(
   document: Record<string, unknown>,
   commands: Record<CodexHookEventName, string>,

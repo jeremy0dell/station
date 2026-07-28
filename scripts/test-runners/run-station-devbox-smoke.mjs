@@ -8,7 +8,7 @@
 // then STOPS the devbox, so a live devbox here will be stopped.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, readdirSync, statSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,9 @@ const socketDir = join(
 const observerSock = join(socketDir, "observer.sock");
 const hostSock = join(socketDir, "station-host.sock");
 const hooksDir = join(ds, "observer", "hooks");
+const hookLog = join(ds, "observer", "logs", "hooks.jsonl");
+const codexHookScript = join(hooksDir, "station-codex-hook.sh");
+const codexProfileConfig = join(ds, "codex-home", "station.config.toml");
 const globalStateFragment = join(".local", "state", "station");
 let socketRestricted = false;
 
@@ -51,15 +54,11 @@ try {
   );
   assertNoGlobalLeak(start.stdout, "start");
   assert(existsSync(observerSock), `isolated observer socket not created at ${observerSock}`);
-
-  // Claude parity: the isolated hook install must land artifacts under .dev-state.
-  const claudeArtifacts = existsSync(hooksDir)
-    ? readdirSync(hooksDir).filter((file) => file.includes("claude"))
-    : [];
   assert(
-    claudeArtifacts.length > 0,
-    `no isolated Claude hook artifacts under ${hooksDir} — claude parity install did not run`,
+    /^hooks\s*=\s*true\s*$/m.test(readFileSync(codexProfileConfig, "utf8")),
+    `isolated Codex profile does not enable hooks: ${codexProfileConfig}`,
   );
+  assertHookDoctors("initial start");
 
   // status through the wrapper reports the isolated socket; the direct isolated
   // observer status must not leak the global state dir.
@@ -117,17 +116,24 @@ try {
     "restoring socket access did not reconnect to the original devbox Observer",
   );
 
+  devbox(["restart"], "restart");
+  const restartedStatus = spawnChecked("node", [cli, "--config", cfg, "observer", "status"], {
+    label: "restarted isolated observer status",
+  });
+  assert(
+    JSON.parse(restartedStatus.stdout).health?.pid !== originalPid,
+    "devbox restart did not replace the isolated Observer",
+  );
+  assertHookDoctors("restart");
+  assertCodexHookDelivery();
+
   // stop removes the isolated observer + host sockets (teardown scoped to .dev-state).
   devbox(["stop"], "stop");
   assert(!existsSync(observerSock), `stop did not remove ${observerSock}`);
   assert(!existsSync(hostSock), `stop did not remove ${hostSock}`);
 
   process.stdout.write(
-    `${JSON.stringify(
-      { status: "station:devbox smoke passed", devboxState: ds, claudeArtifacts },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify({ status: "station:devbox smoke passed", devboxState: ds }, null, 2)}\n`,
   );
 } catch (error) {
   // Best-effort teardown so a failed assertion never leaves the observer running.
@@ -168,6 +174,72 @@ function assertNoGlobalLeak(output, label) {
   );
 }
 
+function assertHookDoctors(label) {
+  for (const provider of ["codex", "claude", "cursor", "opencode"]) {
+    const result = spawnChecked("node", [cli, "--config", cfg, "hooks", "doctor", provider], {
+      label: `${label} ${provider} hook doctor`,
+      env: {
+        ...process.env,
+        CLAUDE_CONFIG_DIR: join(ds, "claude-home"),
+        CODEX_HOME: join(ds, "codex-home"),
+        OPENCODE_CONFIG_DIR: join(ds, "opencode-config"),
+        STATION_CURSOR_HOME: join(ds, "cursor-home"),
+      },
+    });
+    const doctor = JSON.parse(result.stdout);
+    assert(
+      doctor.status === "ok" && doctor.installed === true,
+      `${label} left ${provider} hooks unhealthy\n${result.stdout}`,
+    );
+  }
+}
+
+function assertCodexHookDelivery() {
+  assert(existsSync(codexHookScript), `Codex hook script missing at ${codexHookScript}`);
+  const recordsBefore = readJsonl(hookLog).length;
+  const payload = JSON.stringify({
+    session_id: `devbox-smoke-${process.pid}`,
+    transcript_path: null,
+    cwd: repoRoot,
+    hook_event_name: "SessionStart",
+    model: "gpt-5.6-sol",
+    permission_mode: "bypassPermissions",
+    source: "startup",
+  });
+  spawnChecked(codexHookScript, [], {
+    label: "restarted Codex hook delivery",
+    input: payload,
+    env: {
+      ...process.env,
+      STATION_CONFIG_PATH: cfg,
+      STATION_HOOK_SPOOL_DIR: join(ds, "observer", "spool", "hooks"),
+      STATION_OBSERVER_SOCKET_PATH: observerSock,
+      STATION_SESSION_ID: `devbox-smoke-session-${process.pid}`,
+      STATION_STATE_DIR: join(ds, "observer"),
+      STATION_WORKTREE_ID: `devbox-smoke-worktree-${process.pid}`,
+      STATION_WORKTREE_PATH: repoRoot,
+    },
+  });
+  const newRecords = readJsonl(hookLog).slice(recordsBefore);
+  assert(
+    newRecords.some(
+      (record) =>
+        record.provider === "codex" &&
+        record.attributes?.status === "ingested" &&
+        record.attributes?.event === "SessionStart",
+    ),
+    `Codex hook did not deliver to the restarted Observer\n${JSON.stringify(newRecords, null, 2)}`,
+  );
+}
+
+function readJsonl(path) {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line));
+}
+
 function spawnChecked(command, args, options) {
   const result = spawnResult(command, args, options);
   if (result.error !== undefined) {
@@ -187,6 +259,7 @@ function spawnResult(command, args, options = {}) {
     encoding: "utf8",
     timeout: timeoutMs,
     env: options.env ?? process.env,
+    input: options.input,
   });
 }
 
