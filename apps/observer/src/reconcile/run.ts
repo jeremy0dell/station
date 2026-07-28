@@ -37,6 +37,7 @@ import type {
   PersistedSessionHarnessExecution,
   PersistedSessionTurnReadiness,
   ReconcileStore,
+  ReconcileWorktreeDisplayTitleInput,
   SessionHarnessDerivedStateRepair,
   SessionStore,
   WorktreeMetadataStore,
@@ -44,6 +45,7 @@ import type {
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
+import { resolveWorktreeDisplayTitle } from "../worktreeDisplayTitle.js";
 import { buildStationSnapshot, safeErrorToProviderHealth } from "./graph.js";
 import {
   applyHarnessEventStatusOverlays,
@@ -132,7 +134,8 @@ export function buildInitialSnapshot(input: {
 /**
  * USE CASE
  *
- * Rebuilds the Observer graph from provider reads and accepted durable evidence.
+ * Rebuilds the Observer graph after overlaying durable worktree titles on provider observations.
+ * The same resolved title records feed snapshot composition and atomic reconcile persistence.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
   const started = toIsoTimestamp(input.read.clock.now());
@@ -220,12 +223,44 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     metadataInput.persistence = input.persistence;
   }
   const worktreesForSnapshot = await worktreesWithCachedMetadata(metadataInput);
-  const sessionMetadata =
-    input.persistence === undefined ? [] : await input.persistence.listSessions();
-  const recoveryHandles =
-    input.persistence === undefined ? [] : await input.persistence.listSessionRecoveryHandles();
-  const turnReadiness =
-    input.persistence === undefined ? [] : await input.persistence.listSessionTurnReadiness();
+  const [sessionMetadata, persistedWorktreeDisplayTitles, recoveryHandles, turnReadiness] =
+    input.persistence === undefined
+      ? [[], [], [], []]
+      : await Promise.all([
+          input.persistence.listSessions(),
+          input.persistence.listWorktreeDisplayTitles(),
+          input.persistence.listSessionRecoveryHandles(),
+          input.persistence.listSessionTurnReadiness(),
+        ]);
+  const configuredProjectIds = new Set(input.projects.map((project) => project.id));
+  const titleSessionEvidence = reattachSessionTitleEvidence({
+    sessions: sessionMetadata,
+    harnessRuns,
+    terminalTargets,
+  });
+  const worktreeDisplayTitles: ReconcileWorktreeDisplayTitleInput[] = worktreesForSnapshot
+    .filter(
+      (worktree) => worktree.state === "exists" && configuredProjectIds.has(worktree.projectId),
+    )
+    .map((worktree) => {
+      const existing = persistedWorktreeDisplayTitles.find(
+        (title) => title.projectId === worktree.projectId && title.worktreeId === worktree.id,
+      );
+      if (existing !== undefined) return existing;
+      return {
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        title: resolveWorktreeDisplayTitle({
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          branch: worktree.branch,
+          canonicalTitles: persistedWorktreeDisplayTitles,
+          sessions: titleSessionEvidence,
+        }),
+        createdAt: finishedAt,
+        updatedAt: finishedAt,
+      };
+    });
   const lastReconcile: ReconcileTiming = {
     reason: input.reason,
     startedAt: started,
@@ -250,6 +285,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     terminalTargets,
     harnessRuns,
     sessionMetadata,
+    worktreeDisplayTitles,
     recoveryHandles,
     turnReadiness,
     ...(input.featureFlags === undefined ? {} : { featureFlags: input.featureFlags }),
@@ -261,6 +297,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     worktrees: worktreeResult.worktrees,
     terminalTargets,
     harnessRuns: harnessRuns.map((harnessRun) => harnessRun.run),
+    worktreeDisplayTitles,
     providerHealth,
     observedAt: finishedAt,
     providerObservationRetentionDays: retentionDays,
@@ -297,6 +334,37 @@ export function harnessesFromRegistry(providers: ProviderRegistry): SnapshotHarn
       harness.updateAvailable = harness.installedVersion !== harness.latestVersion;
     }
     return harness;
+  });
+}
+
+function reattachSessionTitleEvidence(input: {
+  sessions: Awaited<ReturnType<SessionStore["listSessions"]>>;
+  harnessRuns: readonly ObserverHarnessRun[];
+  terminalTargets: readonly TerminalTargetObservation[];
+}): Awaited<ReturnType<SessionStore["listSessions"]>> {
+  return input.sessions.map((session) => {
+    const currentWorktreeIds = new Set<string>();
+    for (const harnessRun of input.harnessRuns) {
+      if (
+        harnessRun.run.sessionId === session.id &&
+        harnessRun.run.projectId === session.projectId &&
+        harnessRun.run.worktreeId !== undefined
+      ) {
+        currentWorktreeIds.add(harnessRun.run.worktreeId);
+      }
+    }
+    for (const terminal of input.terminalTargets) {
+      if (
+        terminal.sessionId === session.id &&
+        terminal.projectId === session.projectId &&
+        terminal.worktreeId !== undefined
+      ) {
+        currentWorktreeIds.add(terminal.worktreeId);
+      }
+    }
+    if (currentWorktreeIds.size !== 1) return session;
+    const [worktreeId] = currentWorktreeIds;
+    return worktreeId === undefined ? session : { ...session, worktreeId };
   });
 }
 
@@ -915,6 +983,7 @@ async function persistReconcileResult(input: {
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: HarnessRunObservation[];
+  worktreeDisplayTitles: ReconcileWorktreeDisplayTitleInput[];
   providerHealth: Record<string, ProviderHealth>;
   observedAt: string;
   providerObservationRetentionDays: number;
@@ -928,6 +997,7 @@ async function persistReconcileResult(input: {
     worktrees: input.worktrees,
     terminalTargets: input.terminalTargets,
     harnessRuns: input.harnessRuns,
+    worktreeDisplayTitles: input.worktreeDisplayTitles,
     providerHealth: input.providerHealth,
     observedAt: input.observedAt,
     providerObservationRetentionDays: input.providerObservationRetentionDays,

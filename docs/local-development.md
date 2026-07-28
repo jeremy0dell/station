@@ -11,6 +11,46 @@ tmux popup — and the headless CLI).
 > [architecture.md](architecture.md); for the Station OpenTUI/React UI in
 > `station/` see [tui.md](tui.md).
 
+## Fast path: test another worktree and keep current sessions
+
+Open a second terminal, enter the worktree whose code you want to test, and run
+its checkout-local devbox:
+
+```bash
+cd /path/to/the-worktree
+git branch --show-current
+
+test -d node_modules || pnpm install --frozen-lockfile
+test -d station/node_modules || (cd station && bun install)
+pnpm station:devbox dev
+```
+
+That command builds and runs **that worktree's code** against that worktree's
+`.dev-state`, checkout-keyed socket, Observer, provider homes, and Station Host.
+A devbox running from another checkout—and every session hosted by it—keeps
+running. Quitting this Station UI also leaves this checkout's hosted sessions
+running so the same command can reattach later.
+
+If that worktree already has a devbox and you then change code outside
+`station/src/**`, run `pnpm station:devbox restart` there before reopening
+`pnpm station:devbox dev`; the restart is scoped to that worktree and preserves
+its persistent Host and agents. Do not use
+`pnpm station:link`, `pnpm station:reset`, or the global Observer while comparing
+branches.
+
+For example, to validate native OSC 8 rendering, open a shell pane in the
+isolated Station UI and run:
+
+```sh
+printf '\033]8;;https://github.com/jeremy0dell/station/issues/196\033\\#196\033]8;;\033\\ plain\n'
+```
+
+The `#196` label should expose that exact URI through the outer terminal's usual
+hyperlink gesture, while `plain` must not. OSC 8 carries the URI rather than a
+color or underline, so the terminal decides how to style the link. Repeat after
+scrolling, resizing, quitting, and reopening the isolated Station UI to cover
+viewport and Host replay behavior.
+
 ---
 
 ## 1. The one thing to understand: isolate the observer
@@ -430,10 +470,11 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   reported "unavailable" and PTYs fall back to non-persistent with no error. Set
   `STATION_HOST_ENTRY` only to override the resolved path (non-standard
   layout / pinned host build).
-- **"<harness> status hooks are not installed" on launch** → the launch path
-  (`externalLaunch.ts` → `assertHooksInstalledOrThrow`) refuses to spawn an agent
-  whose status hooks aren't installed *for this observer*, so it never spawns a
-  half-wired agent. Supported provider hooks normally live in global provider
+- **"<harness> status hooks are not installed" on launch** → the shared launch
+  preflight refreshes only the selected harness health and then refuses to spawn
+  an agent whose required status hooks aren't installed *for this observer*.
+  New, Fork, classic create/start/resume, and the final terminal-open boundary
+  use the same policy; focusing an existing live agent skips it. Supported provider hooks normally live in global provider
   homes (`~/.codex`, `~/.claude`, `~/.cursor`, or `~/.config/opencode`), so the
   isolated lanes redirect those homes before installing hooks. Codex uses
   `CODEX_HOME`; Claude uses `CLAUDE_CONFIG_DIR`; Cursor uses `STATION_CURSOR_HOME`;

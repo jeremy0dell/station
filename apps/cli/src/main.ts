@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "@station/config";
-import { isSafeError, type RuntimeSafeError, stationBuildInfo } from "@station/runtime";
+import {
+  isSafeError,
+  providerHookArtifactOwner,
+  type RuntimeSafeError,
+  stationBuildInfo,
+} from "@station/runtime";
 import { parseRequiredOptionValue } from "./args.js";
 import type { CliRunOptions, CliRunResult } from "./cliTypes.js";
 import {
@@ -89,7 +94,7 @@ function defaultCommandEnv(options: CliRunOptions): CliEnv {
  * ADAPTER
  *
  * Translates process arguments, output, and exit semantics around `runCli` while composing
- * process-owned provider-hook identity.
+ * process-owned provider-hook launcher and artifact-owner identity.
  */
 export async function runCliMain(
   argv: readonly string[] = process.argv.slice(2),
@@ -126,6 +131,9 @@ function withProcessComposition(options: CliRunOptions): CliRunOptions {
   return {
     ...options,
     providerHookIngressLauncher,
+    providerHookArtifactOwner:
+      options.providerHookArtifactOwner ??
+      providerHookArtifactOwner(providerHookIngressLauncher, stationBuildInfo()),
   };
 }
 
@@ -135,13 +143,14 @@ function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions
     setupDeps.providerHookIngressLauncher = options.providerHookIngressLauncher;
   }
   setupDeps.probeHarnessHooksStatus ??= (harnessId, configPath) =>
-    probeHarnessHooksStatus(
-      harnessId,
-      configPath,
-      options.providerHookIngressLauncher === undefined
+    probeHarnessHooksStatus(harnessId, configPath, {
+      ...(options.providerHookIngressLauncher === undefined
         ? {}
-        : { ingressLauncher: options.providerHookIngressLauncher },
-    );
+        : { ingressLauncher: options.providerHookIngressLauncher }),
+      ...(options.providerHookArtifactOwner === undefined
+        ? {}
+        : { artifactOwner: options.providerHookArtifactOwner }),
+    });
   return {
     ...options,
     setupDeps,

@@ -1,9 +1,13 @@
 import { spawn, spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createObserverClient } from "../../packages/protocol/src/index.js";
+import {
+  expectedProviderHookScript,
+  providerHookOwnerMarker,
+} from "../../packages/runtime/src/index.js";
 import { waitForSocketClosed } from "../support/sockets";
 
 const shellIntegrationMarker = "# Worktrunk shell integration";
@@ -67,6 +71,109 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).not.toContain("\n  stn doctor\n");
       expect(result.stdout).not.toContain("\n  stn\n");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it("refuses a foreign Codex hook in guided and noninteractive setup until takeover", async () => {
+    const fixture = await createFixture({ harness: "codex", shell: "zsh" });
+    const hookDir = join(fixture.home, ".local", "state", "station", "hooks");
+    const hookScriptPath = join(hookDir, "station-codex-hook.sh");
+    const foreignOwner = {
+      schemaVersion: 1 as const,
+      launcher: "/opt/station/bin/stn-ingress",
+      runtimeKind: "compiled" as const,
+      version: "0.7.1",
+      buildIdentity: "a".repeat(64),
+    };
+    const foreignScript = expectedProviderHookScript({
+      provider: "codex",
+      options: { hookBin: foreignOwner.launcher, artifactOwner: foreignOwner },
+    });
+    await mkdir(hookDir, { recursive: true });
+    await writeFile(hookScriptPath, foreignScript, "utf8");
+    try {
+      const guided = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: ["n", "n", "y", "y", "n", "n"],
+      });
+
+      expect(guided.timedOut).toBe(false);
+      expect(guided.exitCode).toBe(1);
+      expect(`${guided.stdout}\n${guided.stderr}`).toContain(
+        "stn hooks install codex --yes --takeover",
+      );
+      await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(foreignScript);
+      expect((await readdir(hookDir)).some((name) => name.includes(".bak"))).toBe(false);
+
+      const check = await runStation(["--config", fixture.configPath, "setup", "check", "--json"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: [],
+      });
+      const checkPlan = JSON.parse(check.stdout) as {
+        checks: Array<{ id: string; details?: Record<string, string> }>;
+      };
+      expect(
+        checkPlan.checks.find((candidate) => candidate.id === "harness-tracking:codex")?.details,
+      ).toEqual(
+        expect.objectContaining({
+          ownership: "different-owner",
+          currentLauncher: foreignOwner.launcher,
+          currentBuildIdentity: foreignOwner.buildIdentity,
+          requestedLauncher: join(process.cwd(), "bin", "stn-ingress"),
+        }),
+      );
+
+      const noninteractive = await runStation(
+        ["--config", fixture.configPath, "setup", "apply", "--yes"],
+        { cwd: fixture.repo, env: fixture.env, answers: [] },
+      );
+      expect(noninteractive.exitCode).toBe(1);
+      expect(`${noninteractive.stdout}\n${noninteractive.stderr}`).toContain(
+        "stn hooks install codex --yes --takeover",
+      );
+      await expect(readFile(hookScriptPath, "utf8")).resolves.toBe(foreignScript);
+
+      const repaired = await runStation(
+        [
+          "--config",
+          fixture.configPath,
+          "hooks",
+          "install",
+          "codex",
+          "--yes",
+          "--takeover",
+          "--hook-bin",
+          join(process.cwd(), "bin", "stn-ingress"),
+        ],
+        { cwd: fixture.repo, env: fixture.env, answers: [] },
+      );
+      expect(repaired.exitCode, `${repaired.stdout}\n${repaired.stderr}`).toBe(0);
+      const repairedScript = await readFile(hookScriptPath, "utf8");
+      expect(repairedScript).not.toBe(foreignScript);
+      expect(repairedScript).toContain(join(process.cwd(), "bin", "stn-ingress"));
+      expect(repairedScript).toContain("station-provider-artifact-owner:v1:");
+      expect(repairedScript).not.toContain(providerHookOwnerMarker(foreignOwner));
+
+      const repairedCheck = await runStation(
+        ["--config", fixture.configPath, "setup", "check", "--json"],
+        { cwd: fixture.repo, env: fixture.env, answers: [] },
+      );
+      const repairedPlan = JSON.parse(repairedCheck.stdout) as {
+        checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
+      };
+      expect(
+        repairedPlan.checks.find((candidate) => candidate.id === "harness-tracking:codex"),
+      ).toMatchObject({
+        status: "ok",
+        details: {
+          ownership: "same-owner",
+          requestedLauncher: join(process.cwd(), "bin", "stn-ingress"),
+        },
+      });
     } finally {
       await fixture.cleanup();
     }

@@ -23,6 +23,12 @@ Status: current living doc for development, test, and documentation workflow.
 Do not use `station:dev` as a catch-all name until it truthfully owns the UI,
 CLI/package, observer, provider, protocol, and host restart boundaries.
 
+To test a different worktree without interrupting the devbox or hosted sessions
+from this checkout, open a second terminal, `cd` to the worktree under test, and
+run `pnpm station:devbox dev` there. Devbox state, sockets, Observer, Host, and
+provider homes are checkout-local. See the copy-paste recipe in
+[Local development](local-development.md#fast-path-test-another-worktree-and-keep-current-sessions).
+
 - `pnpm stn` opens the normal station popup from the current checkout's built CLI when run inside tmux.
 - `pnpm stn tui` opens the normal station TUI fullscreen from the current checkout's built CLI.
 - Source popup registrations are scoped to the canonical checkout root that
@@ -357,6 +363,16 @@ must show B's build and protocol versions. Legacy or different-protocol hosts
 refuse automatic replacement and must be stopped explicitly only after their
 sessions are accounted for.
 
+## Hosted Workflow Security
+
+External GitHub Actions must use reviewed full commit SHAs with human-readable version comments. Repository-local actions and reusable workflows are tied to the checked-out commit and are exempt from external pinning. Every checkout disables persisted credentials.
+
+Dependabot proposes individual action-pin updates each week. Reviewers must verify official repository ownership, release notes, changed runtime and permissions, and the tag-to-SHA correspondence before merging; Dependabot is an update mechanism, not an approval mechanism.
+
+The nightly Claude compatibility lane intentionally resolves npm's current `latest` release once, validates and installs that exact version, and records the resolved version, installed version, and registry-reported integrity in the run summary. That integrity value is run evidence, not an independent trust root. Authentication uses a dedicated, limited, environment-scoped credential available only to the real-Claude execution step.
+
+Release write access is limited to jobs that create, inspect, or publish draft releases. Public-install verification is tokenless. `tests/diagnostics/ci-workflow-policy.test.ts` enforces action pins, checkout credential handling, release permissions, and nightly secret scope.
+
 ## Experimental Pre-Alpha Release
 
 Before tagging, an administrator must enable GitHub immutable releases; the
@@ -665,6 +681,15 @@ check/plan must report selection required and dry-run/apply must perform zero
 writes. For Codex, verify setup does not mutate trust or `[features] hooks`, the
 Prepared output names `/hooks` review, and approving the current definition can
 produce a Station event.
+
+For shared-hook ownership acceptance, use two Station launchers and one isolated
+provider home. Install each target with launcher A, then run plan, doctor, and
+install from launcher B. Plan and doctor must identify A as the current owner;
+`install --yes` must leave every provider artifact byte-for-byte unchanged and
+report the ownership conflict. `install --yes --takeover` must transfer the
+marker and generated command to B. Repeat uninstall from A to prove it cannot
+remove B's artifact. Finally run setup apply from A and confirm setup reports the
+conflict without synthesizing `--takeover`.
 
 Preserve the exact command and output at the first failure; for a runtime
 failure with no known trace ID, start with `stn debug trace --latest-failure`.

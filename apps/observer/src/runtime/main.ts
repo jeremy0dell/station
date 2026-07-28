@@ -17,10 +17,15 @@ import type {
 import { componentLogPath } from "@station/observability";
 import {
   parseStationObserverBuildVersion,
+  safeErrorFromUnknown,
   stationObserverBuildVersion,
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import {
+  assertHarnessLaunchPreconditionsOrThrow,
+  type HarnessLaunchPreflight,
+} from "../commands/harnessLaunchPreflight.js";
 import { createCommandQueue } from "../commands/queue.js";
 import { registerObserverCommandHandlers } from "../commands/router.js";
 import { createLocalDiagnosticEvidenceSource } from "../diagnostics/localEvidenceSource.js";
@@ -254,6 +259,13 @@ async function runClaimedObserverRuntime(input: {
     featureFlags,
     version: observerVersion,
   });
+  const launchPreflight: HarnessLaunchPreflight = (providerId, signal) =>
+    assertHarnessLaunchPreconditionsOrThrow({
+      providers,
+      providerId,
+      ...(options.configPath === undefined ? {} : { stationConfigPath: loadedConfig.configPath }),
+      ...(signal === undefined ? {} : { signal }),
+    });
   registerObserverCommandHandlers({
     queue: commandQueue,
     core,
@@ -266,6 +278,7 @@ async function runClaimedObserverRuntime(input: {
     clock: systemClock,
     logger,
     projectConfigWriter,
+    launchPreflight,
   });
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
 
@@ -322,11 +335,16 @@ async function runClaimedObserverRuntime(input: {
           try {
             await removeObserverProcessIdentity(processIdentity);
           } catch (error) {
+            const cleanupError = safeErrorFromUnknown(error, {
+              tag: "ObserverLifecycleError",
+              code: "OBSERVER_IDENTITY_REMOVE_FAILED",
+              message: "Observer process identity could not be removed.",
+            });
             await logger
               .warn("Observer process identity could not be removed during shutdown.", {
                 socketPath,
                 pid: processIdentity.pid,
-                error,
+                error: cleanupError,
               })
               .catch(() => undefined);
           }

@@ -16,9 +16,7 @@ on:
         required: true
         type: boolean
 
-permissions:
-  actions: read
-  contents: write
+permissions: {}
 
 concurrency:
   group: promote-release-${{ inputs.tag }}
@@ -28,6 +26,9 @@ jobs:
   promote:
     if: inputs.manual_acceptance
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
     steps:
       - name: Verify accepted candidate and publish its draft
         env:
@@ -152,8 +153,7 @@ jobs:
   verify-public-install:
     name: verify public install (${{ matrix.target }})
     needs: promote
-    permissions:
-      contents: read
+    permissions: {}
     strategy:
       fail-fast: false
       matrix:

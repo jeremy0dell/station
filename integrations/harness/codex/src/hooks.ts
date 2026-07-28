@@ -1,6 +1,7 @@
 // Installs/uninstalls the STATION hook into Codex's hook config.
 // Upstream hook contract: https://developers.openai.com/codex/hooks
 // STATION ingress flow: docs/harness-ingress.md. Generated command + payload must match the ingress parser.
+import type { ProviderHookArtifactOwner, ProviderHookArtifactOwnership } from "@station/contracts";
 import {
   commandLine,
   createHookSetupFileOps,
@@ -48,6 +49,8 @@ export type CodexHookPlanOptions = {
   autoStartFromHooks?: boolean;
   stationConfigPath?: string;
   hookBin?: string;
+  artifactOwner?: ProviderHookArtifactOwner;
+  takeover?: boolean;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
 };
@@ -78,6 +81,7 @@ export type CodexHookPlan = {
   generatedGlobalCleanup: CodexGeneratedGlobalHookCleanup;
   before: string;
   after: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type CodexHookInstallResult = CodexHookPlan & {
@@ -102,6 +106,7 @@ export type CodexHookDoctorResult = {
   commands: Record<CodexHookEventName, string>;
   generatedGlobalCleanup: CodexGeneratedGlobalHookCleanup;
   message: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type CodexHookScriptOptions = ProviderHookScriptOptions & {
@@ -153,9 +158,11 @@ export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promis
     expectedCommands: (path) => expectedCodexHookCommands({ hookScriptPath: path }),
     expectedScript: script,
     extraChanged: generatedGlobalCleanup.changed,
+    provider: "codex",
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
   });
 
-  return {
+  const result: CodexHookPlan = {
     provider: "codex",
     configPath,
     profileName: CODEX_STATION_PROFILE_NAME,
@@ -172,6 +179,8 @@ export async function planCodexHooks(options: CodexHookPlanOptions = {}): Promis
     before: plan.before,
     after: plan.after,
   };
+  if (plan.ownership !== undefined) result.ownership = plan.ownership;
+  return result;
 }
 
 export async function installCodexHooks(
@@ -188,6 +197,9 @@ export async function installCodexHooks(
     configChanged: plan.configChanged,
     scriptChanged: plan.scriptChanged,
     fileOps,
+    provider: "codex",
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
   let baseBackupPath: string | undefined;
   if (plan.generatedGlobalCleanup.changed) {
@@ -196,6 +208,13 @@ export async function installCodexHooks(
   }
 
   const result = installResultFromPlan(plan, true);
+  if (options.artifactOwner !== undefined) {
+    result.ownership = {
+      status: "same-owner",
+      requested: options.artifactOwner,
+      currentLauncher: options.artifactOwner.launcher,
+    };
+  }
   assignBackupPaths(result, { profileBackupPath, baseBackupPath });
   return result;
 }
@@ -223,6 +242,9 @@ export async function uninstallCodexHooks(
     documentContainsCommand,
     expectedCommands: (path) => expectedCodexHookCommands({ hookScriptPath: path }),
     fileOps,
+    provider: "codex",
+    ...(options.artifactOwner === undefined ? {} : { artifactOwner: options.artifactOwner }),
+    ...(options.takeover === undefined ? {} : { takeover: options.takeover }),
   });
   let baseBackupPath: string | undefined;
   if (generatedGlobalCleanup.changed) {
@@ -282,30 +304,40 @@ export async function doctorCodexHooks(
       commands: plan.commands,
       generatedGlobalCleanup: plan.generatedGlobalCleanup,
       message: withObsoleteHookRemediation(message, obsoleteEvents, obsoleteRemediation),
+      ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
     };
   }
 
   const installed = plan.missing.length === 0 && !plan.scriptChanged;
-  return {
+  const ownershipConflict =
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
+  const result: CodexHookDoctorResult = {
     provider: "codex",
     configPath: plan.configPath,
     profileName: plan.profileName,
     profileConfigPath: plan.profileConfigPath,
     baseConfigPath: plan.baseConfigPath,
     hookScriptPath: plan.hookScriptPath,
-    status: installed && !generatedGlobalInstalled && !obsoleteGeneratedInstalled ? "ok" : "warn",
-    installed,
+    status:
+      installed && !generatedGlobalInstalled && !obsoleteGeneratedInstalled && !ownershipConflict
+        ? "ok"
+        : "warn",
+    installed: installed && !ownershipConflict,
     missing: plan.missing,
     commands: plan.commands,
     generatedGlobalCleanup: plan.generatedGlobalCleanup,
-    message: doctorMessage({
-      installed,
-      generatedGlobalInstalled,
-      obsoleteEvents,
-      obsoleteRemediation,
-      plan,
-    }),
+    message: ownershipConflict
+      ? `Codex hook artifact ownership conflicts with this Station runtime; run \`stn hooks install codex --yes --takeover\` only to transfer it.`
+      : doctorMessage({
+          installed,
+          generatedGlobalInstalled,
+          obsoleteEvents,
+          obsoleteRemediation,
+          plan,
+        }),
   };
+  if (plan.ownership !== undefined) result.ownership = plan.ownership;
+  return result;
 }
 
 function expectedCodexHookCommands(input: {
@@ -336,6 +368,7 @@ function installResultFromPlan(plan: CodexHookPlan, installed: boolean): CodexHo
     before: plan.before,
     after: plan.after,
     installed,
+    ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
   };
 }
 

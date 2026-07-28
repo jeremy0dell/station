@@ -7,6 +7,7 @@ import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
+import type { HarnessLaunchPreflight } from "../harnessLaunchPreflight.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
 import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
@@ -14,7 +15,7 @@ import {
   assertNoCurrentAgent,
   buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
-  deleteSessionTitleSeedBestEffort,
+  discardSessionSeedBestEffort,
   findProjectOrThrow,
   lookupWorktree,
   publishSessionCreated,
@@ -22,7 +23,7 @@ import {
   resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
-  seedSessionTitle,
+  seedSession,
   throwIfAborted,
   validateSnapshotRow,
   worktreeObservationFromRow,
@@ -32,6 +33,7 @@ export type CreateSessionStartAgentHandlerOptions = {
   getProjects: () => readonly ProviderProjectConfig[];
   providers: ProviderRegistry;
   terminalIntentRunner: TerminalIntentRunner;
+  launchPreflight: HarnessLaunchPreflight;
   core: ObserverCore;
   persistence: SessionStore & EventJournal;
   eventBus?: ObserverEventBus | undefined;
@@ -41,6 +43,12 @@ export type CreateSessionStartAgentHandlerOptions = {
   commandTimeoutMs?: number | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical
+ * display title. Failed launches discard only the fresh session projection.
+ */
 export function createSessionStartAgentHandler(
   options: CreateSessionStartAgentHandlerOptions,
 ): CommandHandler {
@@ -88,19 +96,20 @@ export function createSessionStartAgentHandler(
       })) ??
       project.defaults.harness;
     resolveHarnessProviderOrThrow(options.providers, harnessProviderId);
+    await options.launchPreflight(harnessProviderId, context.signal);
 
-    let seededSessionTitle = false;
+    let sessionSeeded = false;
 
     try {
-      await seedSessionTitle({
+      await seedSession({
         persistence: options.persistence,
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
-        title: worktree.branch,
+        initialTitle: row?.title ?? worktree.branch,
         clock: options.clock,
       });
-      seededSessionTitle = true;
+      sessionSeeded = true;
       throwIfAborted(context.signal);
 
       const receipt = await options.terminalIntentRunner.submitIntent(
@@ -128,8 +137,8 @@ export function createSessionStartAgentHandler(
       }
       throwIfAborted(context.signal);
     } catch (error) {
-      if (seededSessionTitle) {
-        await deleteSessionTitleSeedBestEffort({
+      if (sessionSeeded) {
+        await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
           context,

@@ -1,4 +1,5 @@
 import { dirname } from "node:path";
+import type { ProviderHookArtifactOwnership } from "@station/contracts";
 import { stationUiInstallHint } from "../../stationWorkspace.js";
 import { setupLauncherExecutable } from "./checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
@@ -413,6 +414,8 @@ function harnessTrackingCheck(
     if (assessment.requested !== undefined) details.requested = String(assessment.requested);
     if (assessment.installed !== undefined) details.installed = String(assessment.installed);
   }
+  const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
+  if (fact?.ownership !== undefined) addHookOwnershipDetails(details, fact.ownership);
   return {
     id: `harness-tracking:${harnessId}`,
     tier: required ? "required" : "recommended",
@@ -421,6 +424,25 @@ function harnessTrackingCheck(
     message: assessment.message,
     details,
   };
+}
+
+function addHookOwnershipDetails(
+  details: Record<string, string>,
+  ownership: ProviderHookArtifactOwnership,
+): void {
+  details.ownership = ownership.status;
+  details.requestedLauncher = ownership.requested.launcher;
+  details.requestedRuntimeKind = ownership.requested.runtimeKind;
+  details.requestedRuntimeVersion = ownership.requested.version;
+  details.requestedBuildIdentity = ownership.requested.buildIdentity;
+  if (ownership.status === "same-owner" || ownership.status === "different-owner") {
+    details.currentLauncher = ownership.currentLauncher;
+  }
+  if (ownership.status === "different-owner" && ownership.current !== undefined) {
+    details.currentRuntimeKind = ownership.current.runtimeKind;
+    details.currentRuntimeVersion = ownership.current.version;
+    details.currentBuildIdentity = ownership.current.buildIdentity;
+  }
 }
 
 function assessHarnessTracking(

@@ -14,12 +14,22 @@ jobs:
   claude-real:
     if: github.repository_owner == 'jeremy0dell'
     runs-on: ubuntu-24.04
+    environment: nightly-agent-smoke
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - name: Verify checkout removed GitHub credentials
+        run: |
+          if git config --local --get-regexp '^http\..*\.extraheader$'; then
+            echo "::error::Checkout credentials remained in repository Git configuration."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.x
       - name: Enable pnpm 11
@@ -38,20 +48,52 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends tmux
-          npm install -g @anthropic-ai/claude-code
+
+          claude_version="$(npm view @anthropic-ai/claude-code@latest version)"
+          node -e '
+            const version = process.argv[1];
+            const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+            if (!semver.test(version)) throw new Error(`Invalid Claude Code version: ${version}`);
+          ' "$claude_version"
+          claude_integrity="$(
+            npm view "@anthropic-ai/claude-code@$claude_version" dist.integrity
+          )"
+          case "$claude_integrity" in
+            sha512-*) ;;
+            *) echo "::error::Claude Code registry metadata has no SHA-512 integrity value."; exit 1 ;;
+          esac
+
+          npm install -g "@anthropic-ai/claude-code@$claude_version"
+          npm list -g "@anthropic-ai/claude-code@$claude_version" --depth=0
+          installed_version="$(
+            npm list -g @anthropic-ai/claude-code --depth=0 --json |
+              node -e '
+                let input = "";
+                process.stdin.setEncoding("utf8");
+                process.stdin.on("data", (chunk) => { input += chunk; });
+                process.stdin.on("end", () => {
+                  process.stdout.write(
+                    JSON.parse(input).dependencies["@anthropic-ai/claude-code"].version,
+                  );
+                });
+              '
+          )"
+          test "$installed_version" = "$claude_version"
+          {
+            echo "### Nightly Claude Code"
+            echo
+            echo "- Resolved latest version: \`$claude_version\`"
+            echo "- Registry-reported integrity: \`$claude_integrity\`"
+            echo "- Installed version: \`$installed_version\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Real Claude launch + hook-capture smoke
-        # Non-interactive Claude auth. Either secret is enough. Scoped to this step
-        # only so the secrets are never in scope for `pnpm install`/`pnpm build`/`npm
-        # install -g` third-party lifecycle scripts.
+        # This environment-scoped key belongs only to the limited nightly service account.
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ] && [ -z "${ANTHROPIC_API_KEY}" ]; then
-            # Surface as an annotation so a deleted/never-configured secret silently
-            # disabling this version-skew tripwire is visible in the run summary.
-            echo "::warning::No Claude auth secret (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY) configured; skipping the real-agent version-skew smoke."
-            exit 0
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::The dedicated nightly ANTHROPIC_API_KEY is not configured."
+            exit 1
           fi
           pnpm test:agent:nightly

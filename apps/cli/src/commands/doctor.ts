@@ -1,6 +1,11 @@
 import { stat } from "node:fs/promises";
 import type { StationConfig } from "@station/config";
-import type { DoctorCheck, DoctorOptions, DoctorReport } from "@station/contracts";
+import type {
+  DoctorCheck,
+  DoctorOptions,
+  DoctorReport,
+  ProviderHookArtifactOwner,
+} from "@station/contracts";
 import { DoctorOptionsSchema } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import {
@@ -26,6 +31,7 @@ export type DoctorCommandOptions = {
   config?: StationConfig;
   configPath?: string;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
   timeoutMs?: number;
 };
 
@@ -43,6 +49,9 @@ export async function runDoctorCommand(
   const hookRuntimeOptions: ProviderHookRuntimeOptions = {};
   if (options.providerHookIngressLauncher !== undefined) {
     hookRuntimeOptions.ingressLauncher = options.providerHookIngressLauncher;
+  }
+  if (options.providerHookArtifactOwner !== undefined) {
+    hookRuntimeOptions.artifactOwner = options.providerHookArtifactOwner;
   }
   if (options.configPath !== undefined) {
     hookRuntimeOptions.stationConfigPath = options.configPath;

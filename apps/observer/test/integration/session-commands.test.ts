@@ -3,6 +3,8 @@ import type {
   BuildHarnessLaunchRequest,
   HarnessLaunchPlan,
   HarnessProvider,
+  ProviderHealth,
+  SafeError,
   TerminalIntent,
   TerminalIntentReceipt,
 } from "@station/contracts";
@@ -16,7 +18,7 @@ import {
   FakeTerminalProvider,
   FakeWorktreeProvider,
 } from "@station/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createFeatureFlagEvaluator } from "../../src/features/evaluator";
 import {
   createCommandQueue,
@@ -225,6 +227,44 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("fails session.create with the original health error before owned mutation", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const terminal = new FakeTerminalProvider({ now });
+    const error = unavailableHarnessError();
+    const fixture = createFixture({
+      worktree,
+      terminal,
+      harness: unavailableHarness(error),
+      sessionIds: ["ses_should_not_exist"],
+    });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.create",
+      payload: {
+        projectId: "web",
+        branch: "blocked-create",
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error,
+    });
+    expect(
+      (await fixture.persistence.listEvents({ commandId: receipt.commandId })).map(
+        (event) => event.type,
+      ),
+    ).toEqual(["command.accepted", "command.started", "command.failed"]);
+    expect(worktree.snapshot()).toMatchObject({ worktrees: [], created: [], removed: [] });
+    expect(terminal.snapshot()).toMatchObject({ targets: [], launches: [] });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("submits session.fork launch work through the command composition runner", async () => {
     const terminalIntentRunner = new CapturingTerminalIntentRunner();
     const worktree = new FakeWorktreeProvider({ now });
@@ -305,16 +345,61 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
-  it("routes Pi session.create through observer command launch wiring", async () => {
+  it("fails session.fork before creating its owned worktree or title", async () => {
+    const source = createFakeWorktree({
+      id: "wt_web_fork_gate_source",
+      projectId: "web",
+      branch: "fork-gate-source",
+      now,
+    });
+    const worktree = new FakeWorktreeProvider({ now, worktrees: [source] });
     const terminal = new FakeTerminalProvider({ now });
     const fixture = createFixture({
+      worktree,
       terminal,
-      harness: createPiHarnessProvider({
-        command: "pi-test",
-        extensionPath: "/tmp/station/piExtension.js",
-        configPath: "/tmp/station/config.toml",
-        now: () => new Date(now),
-      }),
+      harness: unavailableHarness(),
+      sessionIds: ["ses_should_not_exist"],
+    });
+    await fixture.core.reconcile("pre-fork-preflight");
+    const titlesBefore = await fixture.persistence.listWorktreeDisplayTitles();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: source.id,
+        branch: "blocked-fork",
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: unavailableHarnessError(),
+    });
+    expect(worktree.snapshot().worktrees).toEqual([source]);
+    expect(worktree.snapshot().created).toEqual([]);
+    expect(worktree.snapshot().removed).toEqual([]);
+    expect(terminal.snapshot()).toMatchObject({ targets: [], launches: [] });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual(titlesBefore);
+    fixture.sqlite.close();
+  });
+
+  it("routes Pi session.create through observer command launch wiring", async () => {
+    const terminal = new FakeTerminalProvider({ now });
+    const harness = createPiHarnessProvider({
+      command: "pi-test",
+      extensionPath: "/tmp/station/piExtension.js",
+      configPath: "/tmp/station/config.toml",
+      now: () => new Date(now),
+    });
+    vi.spyOn(harness, "health").mockResolvedValue(healthyHarnessHealth(harness));
+    const fixture = createFixture({
+      terminal,
+      harness,
       sessionIds: ["ses_web_feature"],
     });
 
@@ -372,12 +457,21 @@ describe("session command vertical slice", () => {
 
   it("routes Cursor session.create through observer command launch wiring", async () => {
     const terminal = new FakeTerminalProvider({ now });
+    const harness = createCursorHarnessProvider({
+      command: "agent-test",
+      now: () => new Date(now),
+    });
+    vi.spyOn(harness, "health").mockResolvedValue(healthyHarnessHealth(harness));
+    vi.spyOn(harness, "hooksStatus").mockResolvedValue({
+      provider: "cursor",
+      requested: true,
+      installed: true,
+      missing: [],
+      message: "Installed.",
+    });
     const fixture = createFixture({
       terminal,
-      harness: createCursorHarnessProvider({
-        command: "agent-test",
-        now: () => new Date(now),
-      }),
+      harness,
       sessionIds: ["ses_web_feature"],
     });
 
@@ -642,6 +736,8 @@ describe("session command vertical slice", () => {
       },
     ]);
     expect(worktree.snapshot().worktrees).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
     fixture.sqlite.close();
   });
 
@@ -859,8 +955,17 @@ describe("session command vertical slice", () => {
     });
     expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
       id: "wt_web_feature",
+      title: "Readable feature task",
       branch: "feature",
+      path: "/tmp/station/web/feature",
     });
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+      expect.objectContaining({
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        title: "Readable feature task",
+      }),
+    ]);
     expect(
       (await fixture.persistence.listEvents({ commandId: receipt.commandId })).map(
         (event) => event.type,
@@ -917,6 +1022,24 @@ describe("session command vertical slice", () => {
       sessionIds: ["ses_existing"],
     });
     await fixture.core.reconcile("pre-start-agent");
+    await fixture.persistence.seedSession({
+      sessionId: "ses_previous_title",
+      projectId: "web",
+      worktreeId: "wt_web_existing",
+      initialTitle: "existing",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.persistence.renameSession({
+      sessionId: "ses_previous_title",
+      title: "Durable existing workspace",
+      renamedAt: now,
+    });
+    await fixture.persistence.markSessionsEnded({
+      subject: { kind: "session", sessionId: "ses_previous_title" },
+      endedAt: now,
+    });
+    await fixture.core.reconcile("pre-start-agent-renamed");
 
     await fixture.queue.dispatch({
       type: "session.startAgent",
@@ -941,10 +1064,20 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot().focusContexts).toEqual([
       { origin: { provider: "tmux", clientId: "client_1" } },
     ]);
-    expect(fixture.core.getSnapshot().rows[0]?.agent).toMatchObject({
-      sessionId: "ses_existing",
-      state: "working",
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      title: "Durable existing workspace",
+      branch: "existing",
+      agent: {
+        sessionId: "ses_existing",
+        state: "working",
+      },
     });
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_existing",
+        title: "Durable existing workspace",
+      }),
+    ]);
     fixture.sqlite.close();
   });
 
@@ -1096,6 +1229,46 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("fails session.startAgent before title, session, or terminal mutation", async () => {
+    const existing = createFakeWorktree({
+      id: "wt_web_start_gate",
+      projectId: "web",
+      branch: "start-gate",
+      now,
+    });
+    const worktree = new FakeWorktreeProvider({ now, worktrees: [existing] });
+    const terminal = new FakeTerminalProvider({ now });
+    const fixture = createFixture({
+      worktree,
+      terminal,
+      harness: unavailableHarness(),
+      sessionIds: ["ses_should_not_exist"],
+    });
+    await fixture.core.reconcile("pre-start-preflight");
+    const titlesBefore = await fixture.persistence.listWorktreeDisplayTitles();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.startAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: existing.id,
+        harness: { provider: "fake-harness" },
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: unavailableHarnessError(),
+    });
+    expect(worktree.snapshot()).toMatchObject({ worktrees: [existing], created: [], removed: [] });
+    expect(terminal.snapshot()).toMatchObject({ targets: [], launches: [] });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual(titlesBefore);
+    fixture.sqlite.close();
+  });
+
   it("rejects session.resumeAgent while the feature flag is disabled", async () => {
     const fixture = createFixture({
       worktree: new FakeWorktreeProvider({
@@ -1236,6 +1409,149 @@ describe("session command vertical slice", () => {
     ).not.toHaveProperty("endedAt");
     expect(fixture.core.getSnapshot().sessions).toEqual([
       expect.objectContaining({ id: "ses_previous", origin: "station" }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("fails session.resumeAgent before reopening or terminal mutation", async () => {
+    const existing = createFakeWorktree({
+      id: "wt_web_resume_gate",
+      projectId: "web",
+      branch: "resume-gate",
+      now,
+    });
+    const worktree = new FakeWorktreeProvider({ now, worktrees: [existing] });
+    const terminal = new FakeTerminalProvider({ now });
+    const fixture = createFixture({
+      worktree,
+      terminal,
+      harness: unavailableHarness(),
+      featureFlags: { sessionResumeAgent: true },
+      sessionIds: ["ses_should_not_exist"],
+    });
+    const handle = await fixture.persistence.upsertSessionRecoveryHandle({
+      id: "report_resume_gate",
+      provider: "fake-harness",
+      projectId: "web",
+      worktreeId: existing.id,
+      target: { kind: "native-session", id: "native_resume_gate" },
+      cwd: existing.path,
+      observedAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-resume-preflight");
+    const titlesBefore = await fixture.persistence.listWorktreeDisplayTitles();
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.resumeAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: existing.id,
+        recoveryHandleId: handle.id,
+        terminal: { provider: "fake-terminal" },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: unavailableHarnessError(),
+    });
+    expect(worktree.snapshot()).toMatchObject({ worktrees: [existing], created: [], removed: [] });
+    expect(terminal.snapshot()).toMatchObject({ targets: [], launches: [] });
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual(titlesBefore);
+    fixture.sqlite.close();
+  });
+
+  it("mints a fresh resume identity while preserving the canonical worktree title", async () => {
+    const harness = new FakeHarnessProvider({ now });
+    const terminal = new FakeTerminalProvider({
+      now,
+      onLaunch: async ({ launchPlan }) => {
+        harness.addRun(
+          createFakeHarnessRun({
+            id: "run_resume_fresh",
+            projectId: "web",
+            worktreeId: "wt_web_resume_fresh",
+            sessionId: launchPlan.env?.STATION_SESSION_ID,
+            state: "working",
+            now,
+          }),
+        );
+      },
+    });
+    const fixture = createFixture({
+      terminal,
+      harness,
+      featureFlags: { sessionResumeAgent: true },
+      sessionIds: ["ses_resume_fresh"],
+      worktree: new FakeWorktreeProvider({
+        now,
+        worktrees: [
+          createFakeWorktree({
+            id: "wt_web_resume_fresh",
+            projectId: "web",
+            branch: "resume-fresh",
+            now,
+          }),
+        ],
+      }),
+    });
+    await fixture.core.reconcile("pre-resume-fresh");
+    await fixture.persistence.seedSession({
+      sessionId: "ses_resume_history",
+      projectId: "web",
+      worktreeId: "wt_web_resume_fresh",
+      initialTitle: "resume-fresh",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.persistence.renameSession({
+      sessionId: "ses_resume_history",
+      title: "Durable resumed workspace",
+      renamedAt: now,
+    });
+    await fixture.persistence.markSessionsEnded({
+      subject: { kind: "session", sessionId: "ses_resume_history" },
+      endedAt: now,
+    });
+    const handle = await fixture.persistence.upsertSessionRecoveryHandle({
+      id: "report_resume_fresh",
+      provider: "fake-harness",
+      projectId: "web",
+      worktreeId: "wt_web_resume_fresh",
+      target: { kind: "native-session", id: "native_resume_fresh" },
+      cwd: "/tmp/station/web/resume-fresh",
+      observedAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-resume-fresh-command");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.resumeAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: "wt_web_resume_fresh",
+        recoveryHandleId: handle.id,
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      title: "Durable resumed workspace",
+      branch: "resume-fresh",
+      agent: { sessionId: "ses_resume_fresh", state: "working" },
+    });
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_resume_fresh",
+        title: "Durable resumed workspace",
+      }),
     ]);
     fixture.sqlite.close();
   });
@@ -1592,6 +1908,13 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot().closed).toEqual(["term_fake"]);
     expect(worktree.snapshot().removed).toEqual([]);
     expect(await fixture.persistence.listSessions()).toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+      expect.objectContaining({
+        projectId: "web",
+        worktreeId: "wt_web_cleanup_start",
+        title: "cleanup-start",
+      }),
+    ]);
     fixture.sqlite.close();
   });
 
@@ -1836,6 +2159,32 @@ class CapturingTerminalIntentRunner implements TerminalIntentRunner {
   }
 }
 
+function unavailableHarnessError(): SafeError {
+  return {
+    tag: "ProviderUnavailableError",
+    code: "FAKE_CLI_MISSING",
+    message: "The selected harness CLI is unavailable.",
+    provider: "fake-harness",
+  };
+}
+
+function unavailableHarness(error: SafeError = unavailableHarnessError()): FakeHarnessProvider {
+  return new FakeHarnessProvider({
+    now,
+    health: { status: "unavailable", lastError: error },
+  });
+}
+
+function healthyHarnessHealth(harness: HarnessProvider): ProviderHealth {
+  return {
+    providerId: harness.id,
+    providerType: "harness",
+    status: "healthy",
+    lastCheckedAt: now,
+    capabilities: harness.capabilities(),
+  };
+}
+
 describe("worktree.create command", () => {
   it("creates a worktree with no session, agent, or terminal launch", async () => {
     // Station's New Session uses worktree.create then hosts the agent itself, so
@@ -1863,6 +2212,28 @@ describe("worktree.create command", () => {
         (event) => event.type,
       ),
     ).toEqual(["command.accepted", "command.started", "command.succeeded"]);
+    fixture.sqlite.close();
+  });
+
+  it("preflights launch-bound creates before worktree mutation", async () => {
+    const worktree = new FakeWorktreeProvider({ now });
+    const fixture = createFixture({ worktree, harness: unavailableHarness() });
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.create",
+      payload: {
+        projectId: "web",
+        branch: "blocked-native-create",
+        launchHarness: "fake-harness",
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: unavailableHarnessError(),
+    });
+    expect(worktree.snapshot()).toMatchObject({ worktrees: [], created: [], removed: [] });
     fixture.sqlite.close();
   });
 });
@@ -1948,6 +2319,38 @@ describe("worktree.fork command", () => {
       error: { code: "WORKTREE_NOT_FOUND" },
     });
     expect(fixture.core.getSnapshot().rows).toEqual([]);
+    fixture.sqlite.close();
+  });
+
+  it("preflights launch-bound forks before creating a second worktree", async () => {
+    const source = createFakeWorktree({
+      id: "wt_web_native_fork_source",
+      projectId: "web",
+      branch: "native-fork-source",
+      now,
+    });
+    const worktree = new FakeWorktreeProvider({ now, worktrees: [source] });
+    const fixture = createFixture({ worktree, harness: unavailableHarness() });
+    await fixture.core.reconcile("pre-native-fork-preflight");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.fork",
+      payload: {
+        projectId: "web",
+        sourceWorktreeId: source.id,
+        branch: "blocked-native-fork",
+        launchHarness: "fake-harness",
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: unavailableHarnessError(),
+    });
+    expect(worktree.snapshot().worktrees).toEqual([source]);
+    expect(worktree.snapshot().created).toEqual([]);
+    expect(worktree.snapshot().removed).toEqual([]);
     fixture.sqlite.close();
   });
 });

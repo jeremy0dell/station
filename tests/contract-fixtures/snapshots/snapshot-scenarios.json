@@ -1,6 +1,6 @@
 {
   "noProjects": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -25,7 +25,7 @@
     "alerts": []
   },
   "multipleProjects": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -113,7 +113,7 @@
     "alerts": []
   },
   "zeroWorktreeProject": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -164,7 +164,7 @@
     "alerts": []
   },
   "noAgentWorktree": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -205,6 +205,7 @@
         "id": "wt_web_feature_auth",
         "projectId": "web",
         "projectLabel": "web",
+        "title": "feature/auth",
         "branch": "feature/auth",
         "path": "/tmp/station-fixtures/web/worktrees/feature-auth",
         "worktree": {
@@ -236,7 +237,7 @@
     "alerts": []
   },
   "idleAgent": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -277,6 +278,7 @@
         "id": "wt_web_idle",
         "projectId": "web",
         "projectLabel": "web",
+        "title": "idle-agent",
         "branch": "idle-agent",
         "path": "/tmp/station-fixtures/web/worktrees/idle-agent",
         "worktree": {
@@ -366,7 +368,7 @@
     "alerts": []
   },
   "workingAgent": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -407,6 +409,7 @@
         "id": "wt_api_cache",
         "projectId": "api",
         "projectLabel": "api",
+        "title": "feature/cache",
         "branch": "feature/cache",
         "path": "/tmp/station-fixtures/api/worktrees/feature-cache",
         "worktree": {
@@ -453,7 +456,7 @@
     "alerts": []
   },
   "needsAttentionAgent": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -494,6 +497,7 @@
         "id": "wt_web_payments",
         "projectId": "web",
         "projectLabel": "web",
+        "title": "feature/payments",
         "branch": "feature/payments",
         "path": "/tmp/station-fixtures/web/worktrees/feature-payments",
         "worktree": {
@@ -539,7 +543,7 @@
     "alerts": []
   },
   "stuckAgent": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -580,6 +584,7 @@
         "id": "wt_api_stuck",
         "projectId": "api",
         "projectLabel": "api",
+        "title": "debug/stuck-agent",
         "branch": "debug/stuck-agent",
         "path": "/tmp/station-fixtures/api/worktrees/debug-stuck-agent",
         "worktree": {
@@ -626,7 +631,7 @@
     "alerts": []
   },
   "exitedAgent": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -667,6 +672,7 @@
         "id": "wt_web_exited",
         "projectId": "web",
         "projectLabel": "web",
+        "title": "bugfix/exited-agent",
         "branch": "bugfix/exited-agent",
         "path": "/tmp/station-fixtures/web/worktrees/bugfix-exited-agent",
         "worktree": {
@@ -710,7 +716,7 @@
     "alerts": []
   },
   "unknownLowConfidence": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -751,6 +757,7 @@
         "id": "wt_mobile_unknown",
         "projectId": "mobile",
         "projectLabel": "mobile",
+        "title": "feature/offline-mode",
         "branch": "feature/offline-mode",
         "path": "/tmp/station-fixtures/mobile/worktrees/feature-offline-mode",
         "worktree": {
@@ -796,7 +803,7 @@
     "alerts": []
   },
   "orphanedTerminalTarget": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -831,7 +838,7 @@
     ]
   },
   "providerFailure": {
-    "schemaVersion": "0.8.0",
+    "schemaVersion": "0.9.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,

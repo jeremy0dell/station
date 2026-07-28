@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ObserverProcessIdentity } from "@station/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { safeErrorFromUnknown } from "@station/runtime";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createObserverProcessIdentity,
   observerPidfilePath,
@@ -12,12 +13,41 @@ import {
   removeObserverProcessIdentity,
 } from "../../src/runtime/observerPidfile.js";
 
+const pidfileFailures = vi.hoisted(() => ({
+  failClaimedLink: false,
+  failClaimedUnlink: false,
+  linkError: new Error("pidfile restoration failed"),
+  unlinkError: new Error("pidfile removal failed"),
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...original,
+    link: async (...args: Parameters<typeof original.link>) => {
+      if (pidfileFailures.failClaimedLink && String(args[0]).endsWith(".remove")) {
+        throw pidfileFailures.linkError;
+      }
+      return original.link(...args);
+    },
+    unlink: async (...args: Parameters<typeof original.unlink>) => {
+      if (pidfileFailures.failClaimedUnlink && String(args[0]).endsWith(".remove")) {
+        throw pidfileFailures.unlinkError;
+      }
+      return original.unlink(...args);
+    },
+  };
+});
+
 describe("observer pidfile", () => {
   let dir: string | undefined;
 
   afterEach(async () => {
+    pidfileFailures.failClaimedLink = false;
+    pidfileFailures.failClaimedUnlink = false;
     if (dir !== undefined) {
       await rm(dir, { recursive: true, force: true });
+      dir = undefined;
     }
   });
 
@@ -173,6 +203,44 @@ describe("observer pidfile", () => {
     await expect(removeObserverProcessIdentity(processIdentity(socketPath))).rejects.toThrow();
     await expect(readFile(path, "utf8")).resolves.toBe("{}\n");
     await expect(readdir(dir)).resolves.toEqual([basename(observerPidfilePath(socketPath))]);
+  });
+
+  it("preserves both failures when pidfile removal and restoration fail", async () => {
+    dir = await mkdtemp(join(tmpdir(), "stn-pidfile-"));
+    const socketPath = join(dir, "observer.sock");
+    const identity = processIdentity(socketPath);
+    await publishObserverProcessIdentity(identity);
+    pidfileFailures.failClaimedUnlink = true;
+    pidfileFailures.failClaimedLink = true;
+
+    let failure: unknown;
+    try {
+      await removeObserverProcessIdentity(identity);
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([
+      pidfileFailures.unlinkError,
+      pidfileFailures.linkError,
+    ]);
+    expect((failure as AggregateError).message).toContain("could not be removed or restored");
+    expect(
+      safeErrorFromUnknown(failure, {
+        tag: "ObserverLifecycleError",
+        code: "OBSERVER_IDENTITY_REMOVE_FAILED",
+        message: "Observer process identity could not be removed.",
+      }),
+    ).toEqual({
+      tag: "ObserverLifecycleError",
+      code: "OBSERVER_IDENTITY_REMOVE_AND_RESTORE_FAILED",
+      message: "Observer process identity could not be removed or restored.",
+    });
+    await expect(readObserverProcessIdentity(socketPath)).resolves.toBeUndefined();
+    const entries = await readdir(dir);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatch(/^\.observer\.pid\..+\.remove$/);
   });
 });
 

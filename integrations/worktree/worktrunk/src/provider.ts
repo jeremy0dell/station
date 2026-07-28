@@ -73,8 +73,9 @@ const defaultCapabilities: WorktreeCapabilities = {
  *
  * Translates Worktrunk lifecycle output and commands into Station worktree contracts.
  * Hook diagnostics use an atomic requester runtime when supplied and retain the whole Observer composition
- * expectation as a fallback. Checkout roots are validated before Worktrunk runs, and removal revalidates
- * native Git identity, path, and branch before mutation.
+ * expectation as a fallback. Checkout roots are validated before Worktrunk runs, managed roots override
+ * Worktrunk's project-specific path templates, and removal revalidates native Git identity, path, and
+ * branch before mutation.
  */
 export class WorktrunkProvider implements WorktreeProvider {
   readonly id: ProviderId = "worktrunk";
@@ -89,6 +90,7 @@ export class WorktrunkProvider implements WorktreeProvider {
   readonly #resolveRegistrationIdentity: (worktreePath: string) => Promise<string | undefined>;
   readonly #observations = new Map<string, WorktreeObservation>();
   readonly #projects = new Map<string, ProviderProjectConfig>();
+  readonly #projectConfigIdentifiers = new Map<string, string | null>();
 
   constructor(options: WorktrunkProviderOptions = {}) {
     this.#command = options.command ?? process.env.STATION_WORKTRUNK_BIN ?? "wt";
@@ -198,6 +200,9 @@ export class WorktrunkProvider implements WorktreeProvider {
         if (runtime.stationConfigPath !== undefined) {
           expectation.stationConfigPath = runtime.stationConfigPath;
         }
+        if (runtime.artifactOwner !== undefined) {
+          expectation.artifactOwner = runtime.artifactOwner;
+        }
       }
       const hookOptions: Parameters<typeof doctorWorktrunkHooks>[0] = {
         expectation,
@@ -215,7 +220,11 @@ export class WorktrunkProvider implements WorktreeProvider {
       if (result.status !== "ok") {
         check.error = {
           tag: "WorktrunkHookSetupError",
-          code: "WORKTRUNK_HOOKS_MISSING",
+          code:
+            result.ownership?.status === "different-owner" ||
+            result.ownership?.status === "unknown-owner"
+              ? "WORKTRUNK_HOOK_OWNERSHIP_CONFLICT"
+              : "WORKTRUNK_HOOKS_MISSING",
           message: result.message,
           provider: this.id,
         };
@@ -292,6 +301,7 @@ export class WorktrunkProvider implements WorktreeProvider {
       providerId: this.id,
       observedAt: toIsoTimestamp(this.#clock.now()),
     });
+    this.#projectConfigIdentifiers.set(project.id, worktrunkProjectConfigIdentifier(observations));
     return Promise.all(
       observations.map((observation) => this.#withRegistrationIdentity(observation)),
     );
@@ -301,8 +311,11 @@ export class WorktrunkProvider implements WorktreeProvider {
     this.#projects.set(request.project.id, request.project);
     await this.#assertProjectRootUsable(request.project);
     const base = request.base ?? request.project.worktrunk.base;
+    const pathEnv = worktreePathEnv(request.project, request.branch, request.path);
+    const managedPathArgs = await this.#managedWorktreePathArgs(request.project, pathEnv);
     const output = await this.#run(
       this.#args([
+        ...managedPathArgs,
         "switch",
         ...this.#automationHookArgs(),
         "--create",
@@ -318,7 +331,7 @@ export class WorktrunkProvider implements WorktreeProvider {
         ...(base === undefined ? {} : { unresolvedBase: base }),
       },
       {},
-      worktreePathEnv(request.project, request.branch, request.path),
+      pathEnv,
     );
 
     const commandObservations = parseCommandObservation(output.stdout, {
@@ -575,6 +588,25 @@ export class WorktrunkProvider implements WorktreeProvider {
 
   #args(args: string[]): string[] {
     return this.#configPath === undefined ? args : ["--config", this.#configPath, ...args];
+  }
+
+  async #managedWorktreePathArgs(
+    project: ProviderProjectConfig,
+    env: Record<string, string> | undefined,
+  ): Promise<string[]> {
+    const worktreePath = env?.WORKTRUNK_WORKTREE_PATH;
+    if (worktreePath === undefined) {
+      return [];
+    }
+    if (!this.#projectConfigIdentifiers.has(project.id)) {
+      await this.#readWorktrees(project, { retries: 0 });
+    }
+    const identifier = this.#projectConfigIdentifiers.get(project.id);
+    if (identifier === undefined || identifier === null) {
+      return [];
+    }
+    // Worktrunk applies a user [projects.<id>] path after the environment, so use its higher-precedence command config too.
+    return ["--config-set", worktrunkProjectPathOverride(identifier, worktreePath)];
   }
 
   #automationHookArgs(): string[] {
@@ -886,7 +918,7 @@ function worktrunkSubcommand(args: readonly string[]): string {
     if (arg === undefined) {
       continue;
     }
-    if (arg === "--config" || arg === "-C") {
+    if (arg === "--config" || arg === "--config-set" || arg === "-C") {
       index += 1;
       continue;
     }
@@ -946,6 +978,33 @@ function isMainWorktree(project: ProviderProjectConfig, observation: WorktreeObs
     samePath(observation.path, project.root) ||
     (defaultBranch !== undefined && observation.branch === defaultBranch)
   );
+}
+
+function worktrunkProjectConfigIdentifier(
+  observations: readonly WorktreeObservation[],
+): string | null {
+  const remoteIdentifiers = new Set<string>();
+  for (const observation of observations) {
+    if (observation.remote !== undefined) {
+      remoteIdentifiers.add(
+        `${observation.remote.host}/${observation.remote.owner}/${observation.remote.repo}`,
+      );
+    }
+  }
+  if (remoteIdentifiers.size > 0) {
+    return remoteIdentifiers.size === 1 ? ([...remoteIdentifiers][0] ?? null) : null;
+  }
+
+  const primaryCheckoutPaths = new Set(
+    observations
+      .filter((observation) => observation.isPrimaryCheckout === true)
+      .map((observation) => observation.path),
+  );
+  return primaryCheckoutPaths.size === 1 ? ([...primaryCheckoutPaths][0] ?? null) : null;
+}
+
+function worktrunkProjectPathOverride(identifier: string, worktreePath: string): string {
+  return `projects.${JSON.stringify(identifier)}.worktree-path=${JSON.stringify(worktreePath)}`;
 }
 
 function worktreePathEnv(

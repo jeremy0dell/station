@@ -291,10 +291,19 @@ describe("createManagedLaunchAttempt", () => {
       },
     });
 
-    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
-    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    const failure = await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    const retry = await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
 
     expect(harness.prepareCalls).toHaveLength(2);
+    expect(failure).toEqual({
+      kind: "preparation-failed",
+      error: {
+        tag: "ClientObserverError",
+        code: "CLIENT_OBSERVER_OPERATION_FAILED",
+        message: "The Station could not complete the observer operation.",
+      },
+    });
+    expect(retry).toEqual({ kind: "settled" });
     expect(harness.calls).toEqual([
       `ensure:${PANE_ID}`,
       `pane:${PANE_ID}:primary-agent`,
@@ -371,9 +380,10 @@ describe("createManagedLaunchAttempt", () => {
       },
     });
 
-    await failing.runManagedLaunchAttempt(PANE_ID, TARGET);
+    const result = await failing.runManagedLaunchAttempt(PANE_ID, TARGET);
     await failing.runManagedLaunchAttempt(PANE_ID, TARGET);
 
+    expect(result).toEqual({ kind: "settled" });
     expect(failing.prepareCalls).toHaveLength(2);
     expect(failing.calls).toEqual([]);
     expect(failing.lastToast()?.message).toContain("attachment failed");

@@ -21,11 +21,11 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.x
       - name: Validate release tag
@@ -82,11 +82,11 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.x
       - name: Enable pnpm 11
@@ -119,11 +119,11 @@ jobs:
             target: darwin-arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.x
       - name: Enable pnpm 11
@@ -168,7 +168,7 @@ jobs:
             echo "runner=$RUNNER_LABEL"
             echo "floor=$floor"
           } > "platform-metadata-$TARGET.txt"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: native-${{ matrix.target }}
           path: |
@@ -189,11 +189,11 @@ jobs:
     outputs:
       release_id: ${{ steps.release.outputs.release_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: native-*
           path: release
@@ -335,7 +335,7 @@ jobs:
               releaseId: $releaseId,
               checksumFileSha256: $checksumFileSha256
             }' > candidate/manifest.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: release/candidate
@@ -364,7 +364,7 @@ jobs:
             target: darwin-arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           ref: ${{ needs.validate.outputs.commit }}
@@ -537,7 +537,7 @@ jobs:
       # GitHub exposes draft releases only to identities with push access.
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: release-candidate-input-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: candidate
@@ -601,7 +601,7 @@ jobs:
           done
           cmp candidate/SHA256SUMS downloaded/SHA256SUMS
           (cd downloaded && sha256sum -c SHA256SUMS)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: accepted-release-candidate-${{ needs.validate.outputs.version }}-attempt-${{ github.run_attempt }}
           path: candidate

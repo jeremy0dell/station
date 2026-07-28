@@ -156,8 +156,8 @@ Composition is intentionally split:
 
 1. `apps/cli/src/observerProviders.ts` constructs concrete integrations,
    assigns provider roles, composes the fallback Worktrunk provider-hook
-   expectation from resolved runtime paths and the Observer ingress launcher, and
-   supplies a `ProviderRegistry` factory.
+   expectation from resolved runtime paths plus the Observer ingress launcher
+   and artifact owner, and supplies a `ProviderRegistry` factory.
 2. `apps/observer/src/runtime/main.ts` loads config and constructs Observer-
    private infrastructure: SQLite, persistence, logging, project-config, and local
    diagnostic-evidence adapters, event bus, command queue, core, handlers, ingress
@@ -211,7 +211,7 @@ areas contain the following responsibilities:
 
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
-| `commands/` | command queue, routing, scopes, cancellation, terminal-intent execution, and command use cases | Driving application behavior; terminal-intent execution coordinates terminal and harness ports as a use case. |
+| `commands/` | command queue, routing, scopes, cancellation, launch preflight, terminal-intent execution, and command use cases | Driving application behavior; launch preflight and terminal-intent execution coordinate provider ports as use cases. |
 | `reconcile/` | provider reads, correlation, graph construction, projection, and core state | Reconcile use case plus deterministic policies; provider I/O remains at its driven edges. `run.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
@@ -243,7 +243,7 @@ No single layer owns all truth.
 | Provider observations | Each provider is authoritative only for external facts it can prove. Live reads and normalized ingress observations may be persisted with retention, but cached evidence does not outrank a newer provider read. |
 | Provider-owned identity | Worktree, target, harness-run, native execution, and external endpoint identity stays owned by the provider that minted it. Application code may carry opaque IDs but must not reconstruct their format. |
 | Observer-minted state | Command, event, error, report, session, correlation, readiness, and recovery identities are legitimate internal facts minted by the observer. The observer does not invent external facts. |
-| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, native-execution bindings, metadata caches, recovery handles, and readiness. It is not an external provider's source of truth. |
+| Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. |
 | Local Git metadata evidence | Local Git is authoritative only for checkout-local `HEAD`, refs, merge-base, and numstat at read time. Command failures retain cached evidence through the TTL and mark it stale, while a matching checkout reported unavailable clears its local-change row; superseded identities cannot mutate either row. Ref-watch notifications are hints that request reconcile, never metadata or UI mutations themselves. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. Its `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. It corroborates process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
@@ -417,8 +417,11 @@ trace-correlated diagnostic evidence.
 ### Reconciliation
 
 Reconcile reads worktree and terminal actors, derives the worktree context for
-harness reads, applies cached metadata and durable overlays, correlates the
-graph, persists the result, and replaces the in-memory snapshot. It then
+harness reads, applies cached metadata and durable overlays, resolves one effective display title
+per current worktree, correlates the graph, persists the same title records with the result, and
+replaces the in-memory snapshot. Existing canonical titles win; missing authority initializes from
+the best non-ended custom session evidence before branch fallback, using insert-only reconcile
+persistence so stale evidence cannot overwrite a concurrent rename. It then
 publishes state-change and reconcile events and schedules metadata refresh.
 
 Session reconciliation keeps the newest explicitly open Station-owned durable
@@ -542,19 +545,47 @@ replay guarantee requires sequence identity, retention semantics, bounded
 subscriber behavior, and a protocol contract rather than an adapter-local
 patch.
 
+### Managed Launch Preflight
+
+`assertHarnessLaunchPreconditionsOrThrow` is the ephemeral policy shared by
+classic session commands, launch-bound worktree commands, terminal-intent
+execution, and external launch. It resolves only the selected active harness,
+rejects providers that cannot launch, awaits a fresh single-flight health probe,
+and rejects only proven `unavailable` health while preserving the provider's
+exact error. `healthy`, `degraded`, and `unknown` remain launchable. It then uses
+the provider-neutral optional `hooksStatus()` capability and fails closed when
+requested Station tracking artifacts are absent, disabled, or cannot be
+inspected. Providers without that capability, including Pi, intentionally pass.
+Command cancellation is checked around shared health and hook work without
+cancelling a health flight shared by another caller.
+
+The facts remain independently authoritative: capability, provider health,
+hook installation, setup checks, and runtime signals do not collapse into a
+readiness record, catalog, persistence model, or background worker. Optional
+`launchHarness` on `worktree.create` and `worktree.fork` marks only mutations
+immediately followed by a managed launch; worktree-only callers omit it. Classic
+create, fork, start, and resume run the gate after read-only validation and
+before owned title, worktree, session, terminal, or process mutation. Terminal
+intent execution repeats it immediately before opening the workspace to close
+the final race.
+
+A late classic failure uses the command's identity-bound cleanup for resources
+that command owns. A native Station create or fork never creates a replacement:
+the already-created worktree remains, no title, target, or process is added, and
+Station presents the attempt as a bounded failed optimistic row. Existing-live
+focus returns before any health or hook probe.
+
 ### External Launch
 
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
-opaquely, and request reconcile after relevant lifecycle changes. Before a new
-managed harness session is launched, the use case calls the provider-neutral
-optional `hooksStatus()` capability and fails closed when requested Station
-tracking artifacts are absent or drifted. Claude, Codex, Cursor, and OpenCode —
-the four providers whose external artifacts setup installs — implement this
-capability. Providers without an equivalent managed external artifact retain
-the deliberate fail-open behavior; Pi is not forced through this gate. Focusing
-an existing session precedes the gate.
+opaquely, and request reconcile after relevant lifecycle changes. Returning an
+existing live session precedes launch preflight. A new managed session repeats
+the full selected-harness preflight immediately before title, target, or process
+mutation, then durably seeds the session from canonical worktree title authority
+before target registration and process launch. Failed launch cleanup releases
+any opened target and discards only the fresh session projection.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new
@@ -575,7 +606,9 @@ health, persistence health, durable Observer records, config diagnostics,
 provider checks, and local runtime evidence. CLI full-doctor requests carry one
 strict provider-neutral hook-runtime context containing the requester's ingress
 launcher, socket, state and spool paths, auto-start policy, and optional Station
-config path. Provider hook adapters map the applicable fields from that context
+config path. It also carries the generated-artifact owner: canonical launcher,
+source or compiled runtime kind, display version, and immutable build identity.
+Provider hook adapters map the applicable fields from that context
 without mixing requester and Observer identities, so Worktrunk, Claude, Codex,
 Cursor, and OpenCode compare hook artifacts using the requester runtime identity
 even when an exact-build Observer from another checkout serves the request. Direct
@@ -645,10 +678,12 @@ when it changes several tables:
   hook-processing completion across observations/native bindings/readiness.
 - `ObservationStore` owns typed provider observations, current-observation
   queries, and expiry.
-- `ReconcileStore` owns the complete atomic `persistReconcileResult` operation.
-- `SessionStore` owns explicit session lifecycle, durable provider-native
-  execution bindings, titles, recovery handles, turn readiness, and
-  purpose-specific remembered-harness lookup.
+- `ReconcileStore` owns the complete atomic `persistReconcileResult` operation, including
+  insert-only initialization of missing canonical worktree titles before session projection sync.
+- `SessionStore` owns explicit session lifecycle, canonical worktree-scoped title authority,
+  synchronized per-session title projections, durable provider-native execution bindings,
+  recovery handles, turn readiness, and purpose-specific remembered-harness lookup. Rename,
+  fresh-session seeding, and confirmed worktree retirement keep their multi-table changes atomic.
 - `WorktreeMetadataStore` owns current change, pull-request, and check metadata
   plus its expiry.
 

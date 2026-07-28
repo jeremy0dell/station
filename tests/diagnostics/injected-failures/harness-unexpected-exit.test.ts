@@ -16,6 +16,7 @@ describe("harness unexpected exit diagnostic", () => {
               id: "wt_web_exit",
               projectId: "web",
               projectLabel: "web",
+              title: "feature/exit",
               branch: "feature/exit",
               path: "/tmp/station/web/exit",
               worktree: { state: "exists", source: "worktrunk" },

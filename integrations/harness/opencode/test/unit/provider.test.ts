@@ -303,12 +303,20 @@ describe("OpenCodeHarnessProvider", () => {
     const requesterStateDir = join(root, "requester", "state");
     const requesterHookSpoolDir = join(requesterStateDir, "spool", "hooks");
     const requesterObserverSocketPath = join(root, "requester", "run", "observer.sock");
+    const requesterOwner = {
+      schemaVersion: 1 as const,
+      launcher: join(root, "requester", "bin", "stn-ingress"),
+      runtimeKind: "source" as const,
+      version: "0.0.0-pre-alpha.4",
+      buildIdentity: "a".repeat(64),
+    };
 
     await installOpenCodePlugin({
       opencodeConfigDir,
       observerSocketPath: requesterObserverSocketPath,
       stateDir: requesterStateDir,
       hookSpoolDir: requesterHookSpoolDir,
+      artifactOwner: requesterOwner,
     });
 
     const provider = createOpenCodeHarnessProvider({
@@ -323,18 +331,18 @@ describe("OpenCodeHarnessProvider", () => {
 
     const doctorChecks = provider.doctorChecks;
     if (doctorChecks === undefined) throw new Error("OpenCode doctor checks are unavailable.");
-    await expect(
-      doctorChecks({
-        providerHookRuntime: {
-          ingressLauncher: join(root, "requester", "bin", "stn-ingress"),
-          observerSocketPath: requesterObserverSocketPath,
-          stateDir: requesterStateDir,
-          hookSpoolDir: requesterHookSpoolDir,
-          autoStartFromHooks: false,
-          stationConfigPath: join(root, "requester", "config.toml"),
-        },
-      }),
-    ).resolves.toEqual(
+    const context = {
+      providerHookRuntime: {
+        ingressLauncher: requesterOwner.launcher,
+        observerSocketPath: requesterObserverSocketPath,
+        stateDir: requesterStateDir,
+        hookSpoolDir: requesterHookSpoolDir,
+        autoStartFromHooks: false,
+        stationConfigPath: join(root, "requester", "config.toml"),
+        artifactOwner: requesterOwner,
+      },
+    };
+    await expect(doctorChecks(context)).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "opencode-plugin",
@@ -342,6 +350,10 @@ describe("OpenCodeHarnessProvider", () => {
         }),
       ]),
     );
+    await expect(provider.hooksStatus?.(context)).resolves.toMatchObject({
+      installed: true,
+      ownership: { status: "same-owner", requested: requesterOwner },
+    });
   });
 
   it("classifies and ingests OpenCode observations through provider-local parsing", async () => {

@@ -1,11 +1,12 @@
 import type { StationConfig } from "@station/config";
-import type { SafeError } from "@station/contracts";
+import type { ProviderHookArtifactOwner, SafeError } from "@station/contracts";
 import type { CliCommandRunContext } from "./types.js";
 
 export type LoadedCommandOptions = {
   config?: StationConfig;
   configPath?: string;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
 };
 
 type LoadedConfigCommandOptions = LoadedCommandOptions & {
@@ -22,6 +23,9 @@ export function loadedCommandOptions(context: CliCommandRunContext): LoadedComma
   }
   if (context.options.providerHookIngressLauncher !== undefined) {
     options.providerHookIngressLauncher = context.options.providerHookIngressLauncher;
+  }
+  if (context.options.providerHookArtifactOwner !== undefined) {
+    options.providerHookArtifactOwner = context.options.providerHookArtifactOwner;
   }
   return options;
 }
@@ -45,8 +49,4 @@ export function hookCommandExitCode(result: object): number {
 
 export function actionNeedsYes(action: string): boolean {
   return action === "install" || action === "uninstall";
-}
-
-export function capitalize(value: string): string {
-  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "@station/cli";
 import { loadConfig } from "@station/config";
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import { providerHookCommandLine } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import { createProviderRegistry } from "../../src/observerProviders";
@@ -155,6 +156,84 @@ describe("CLI Worktrunk hook commands", () => {
     );
   });
 
+  it("aligns an explicit hook executable with Worktrunk artifact ownership", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-cli-wt-hook-bin-owner-"));
+    const configPath = await writeConfig(root);
+    const worktrunkConfigPath = join(root, "worktrunk", "config.toml");
+    const defaultOwner = artifactOwner(join(root, "installed", "stn-ingress"), "compiled", "a");
+    const customHookBin = join(root, "custom-stn-ingress");
+    await writeFile(customHookBin, "#!/bin/sh\nexit 0\n", "utf8");
+    await chmod(customHookBin, 0o700);
+    const options = {
+      providerHookIngressLauncher: defaultOwner.launcher,
+      providerHookArtifactOwner: defaultOwner,
+    };
+    const args = ["--worktrunk-config", worktrunkConfigPath];
+
+    await runCli(
+      ["--config", configPath, "hooks", "install", "worktrunk", "--yes", ...args],
+      options,
+    );
+    const beforeConflict = await readFile(worktrunkConfigPath, "utf8");
+    await expect(
+      runCli(
+        [
+          "--config",
+          configPath,
+          "hooks",
+          "install",
+          "worktrunk",
+          "--yes",
+          "--hook-bin",
+          customHookBin,
+          ...args,
+        ],
+        options,
+      ),
+    ).rejects.toMatchObject({ code: "PROVIDER_HOOK_OWNERSHIP_CONFLICT" });
+    await expect(readFile(worktrunkConfigPath, "utf8")).resolves.toBe(beforeConflict);
+
+    const customOwner = { ...defaultOwner, launcher: customHookBin };
+    await expect(
+      runCli(
+        [
+          "--config",
+          configPath,
+          "hooks",
+          "install",
+          "worktrunk",
+          "--yes",
+          "--takeover",
+          "--hook-bin",
+          customHookBin,
+          ...args,
+        ],
+        options,
+      ),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { ownership: { status: "same-owner", requested: customOwner } },
+    });
+    await expect(
+      runCli(
+        [
+          "--config",
+          configPath,
+          "hooks",
+          "doctor",
+          "worktrunk",
+          "--hook-bin",
+          customHookBin,
+          ...args,
+        ],
+        options,
+      ),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { ownership: { status: "same-owner", requested: customOwner } },
+    });
+  });
+
   it("installs through both worktrunk hooks and generic hooks aliases", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-cli-wt-hooks-"));
     const configPath = await writeConfig(root);
@@ -262,4 +341,18 @@ async function writeConfig(root: string, worktrunkCommand = "wt"): Promise<strin
     ].join("\n"),
   );
   return configPath;
+}
+
+function artifactOwner(
+  launcher: string,
+  runtimeKind: "compiled" | "source",
+  digit: string,
+): ProviderHookArtifactOwner {
+  return {
+    schemaVersion: 1,
+    launcher,
+    runtimeKind,
+    version: runtimeKind === "compiled" ? "0.7.1" : "0.0.0-pre-alpha.4",
+    buildIdentity: digit.repeat(64),
+  };
 }

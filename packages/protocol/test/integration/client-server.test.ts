@@ -47,8 +47,12 @@ describe("protocol client/server", () => {
     });
 
     const command: StationCommand = {
-      type: "observer.reconcile",
-      payload: { reason: "protocol-test" },
+      type: "worktree.create",
+      payload: {
+        projectId: "web",
+        branch: "feature/protocol-test",
+        launchHarness: "codex",
+      },
     };
     await expect(client.dispatch(command)).resolves.toEqual({
       commandId: "cmd_1",
@@ -57,7 +61,8 @@ describe("protocol client/server", () => {
     });
     await expect(client.getCommand("cmd_1")).resolves.toMatchObject({
       id: "cmd_1",
-      type: "observer.reconcile",
+      type: "worktree.create",
+      command: { payload: { launchHarness: "codex" } },
     });
     await expect(client.reconcile("manual")).resolves.toMatchObject({
       schemaVersion: STATION_SCHEMA_VERSION,
@@ -556,7 +561,7 @@ describe("protocol client/server", () => {
         tag: "ProtocolError",
         code: "PROTOCOL_SCHEMA_MISMATCH",
         message:
-          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.8.0.",
+          "Observer protocol schema mismatch: the observer responded with schema 9.9.9, but this CLI expects schema 0.9.0.",
         hint: expect.stringContaining("A different STATION checkout"),
       });
     } finally {

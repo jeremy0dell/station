@@ -6,6 +6,10 @@ import {
   StationHostProviderError,
 } from "@station/host";
 import { describe, expect, it } from "bun:test";
+import {
+  resetTerminalDiagnosticsForTest,
+  terminalCorruptionCounters,
+} from "../diagnostics.js";
 import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -407,6 +411,45 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.kill();
     await flush();
     expect(tracking.closes).toEqual(["pty-reattach"]);
+  });
+
+  it("reports an owned PTY close failure after immediate pane disposal", async () => {
+    resetTerminalDiagnosticsForTest();
+    try {
+      const ctrl = controllableAttachment(ack({ ptyId: "pty-close-failure" }));
+      let clientCreations = 0;
+      let closerDisposed = false;
+      const terminal = createHostAttachedTerminal({
+        hostSocketPath: "/tmp/x.sock",
+        ptyId: "pty-close-failure",
+        owned: true,
+        size: { cols: 80, rows: 24 },
+        clientFactory: () => {
+          clientCreations += 1;
+          if (clientCreations === 1) {
+            return clientForAttach(async () => ctrl.attachment);
+          }
+          return {
+            ...clientForAttach(async () => ctrl.attachment, () => {
+              closerDisposed = true;
+            }),
+            close: async () => {
+              throw new Error("host close failed");
+            },
+          } satisfies StationHostClient;
+        },
+      });
+      await flush();
+
+      expect(() => terminal.kill()).not.toThrow();
+      terminal.dispose();
+      await flush();
+
+      expect(terminalCorruptionCounters()["terminal_diagnostic:host_close_failed"]).toBe(1);
+      expect(closerDisposed).toBe(true);
+    } finally {
+      resetTerminalDiagnosticsForTest();
+    }
   });
 
   it("kill() is a no-op for an attach-only (agent) terminal", async () => {

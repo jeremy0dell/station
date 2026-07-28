@@ -1,5 +1,5 @@
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
-import type { ProviderId } from "@station/contracts";
+import type { ProviderId, SafeError } from "@station/contracts";
 import type { TuiStore } from "@station/dashboard-core";
 import { StationHostProviderError } from "@station/host";
 import type { StoreApi } from "zustand/vanilla";
@@ -64,6 +64,12 @@ type ManagedLaunchContext = {
 
 type PreparedLaunch = Awaited<ReturnType<ObserverService["prepareExternalLaunch"]>>;
 
+export type ManagedLaunchAttemptResult =
+  | { kind: "settled" }
+  | { kind: "preparation-failed"; error: SafeError };
+
+const SETTLED_RESULT: ManagedLaunchAttemptResult = { kind: "settled" };
+
 type ManagedLaunchAction =
   | {
       kind: "open-pane";
@@ -82,10 +88,12 @@ function pushToast(
   runtime.stationViewStore?.getState().pushToast({ kind, message });
 }
 
+function pushSafeError(runtime: ManagedLaunchRuntime, error: SafeError): void {
+  runtime.stationViewStore?.getState().pushToast(safeErrorToNotice(error));
+}
+
 function pushError(runtime: ManagedLaunchRuntime, error: unknown): void {
-  runtime.stationViewStore
-    ?.getState()
-    .pushToast(safeErrorToNotice(toSafeError(error, { clientLabel: "Station" })));
+  pushSafeError(runtime, toSafeError(error, { clientLabel: "Station" }));
 }
 
 function createContext(
@@ -184,12 +192,19 @@ async function prepareLaunch(
   runtime: ManagedLaunchRuntime,
   service: ObserverService,
   target: ManagedLaunchTarget,
-): Promise<PreparedLaunch | undefined> {
+): Promise<
+  | { kind: "prepared"; launch: PreparedLaunch }
+  | Extract<ManagedLaunchAttemptResult, { kind: "preparation-failed" }>
+> {
   try {
-    return await service.prepareExternalLaunch(buildPrepareParams(target));
+    return {
+      kind: "prepared",
+      launch: await service.prepareExternalLaunch(buildPrepareParams(target)),
+    };
   } catch (error) {
-    pushError(runtime, error);
-    return undefined;
+    const safeError = toSafeError(error, { clientLabel: "Station" });
+    pushSafeError(runtime, safeError);
+    return { kind: "preparation-failed", error: safeError };
   }
 }
 
@@ -348,21 +363,22 @@ async function runManagedLaunchAttempt(
   runtime: ManagedLaunchRuntime,
   paneId: PaneId,
   target: ManagedLaunchTarget,
-): Promise<void> {
+): Promise<ManagedLaunchAttemptResult> {
   const context = createContext(runtime, paneId, target);
   const service = await runPreflight(runtime, context);
   if (service === undefined) {
-    return;
+    return SETTLED_RESULT;
   }
   try {
-    const prepared = await prepareLaunch(runtime, service, target);
-    if (prepared === undefined) {
-      return;
+    const preparation = await prepareLaunch(runtime, service, target);
+    if (preparation.kind === "preparation-failed") {
+      return preparation;
     }
-    const action = await resolvePreparedLaunch(runtime, prepared, target);
+    const action = await resolvePreparedLaunch(runtime, preparation.launch, target);
     if (action !== undefined) {
       await performPreparedAction(runtime, context, service, action);
     }
+    return SETTLED_RESULT;
   } finally {
     runtime.launchesInFlight.delete(paneId);
   }
@@ -374,7 +390,7 @@ async function runManagedLaunchAttempt(
  */
 export function createManagedLaunchAttempt(
   deps: ManagedLaunchAttemptDeps,
-): (paneId: PaneId, target: ManagedLaunchTarget) => Promise<void> {
+): (paneId: PaneId, target: ManagedLaunchTarget) => Promise<ManagedLaunchAttemptResult> {
   const runtime: ManagedLaunchRuntime = {
     ...deps,
     launchesInFlight: new Set<PaneId>(),

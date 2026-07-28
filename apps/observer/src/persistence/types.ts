@@ -199,6 +199,16 @@ export type PersistedWorktreeMetadataCurrent<
 
 export type PersistedSessionLifecycle = "legacy" | "open" | "ended";
 
+export type PersistedWorktreeDisplayTitle = {
+  projectId: string;
+  worktreeId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReconcileWorktreeDisplayTitleInput = PersistedWorktreeDisplayTitle;
+
 export type PersistedSession = {
   id: string;
   projectId: string;
@@ -241,6 +251,7 @@ export type PersistReconcileResultInput = {
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: HarnessRunObservation[];
+  worktreeDisplayTitles?: ReconcileWorktreeDisplayTitleInput[];
   providerHealth?: Record<string, ProviderHealth>;
   observedAt?: string;
   expiresAt?: string | undefined;

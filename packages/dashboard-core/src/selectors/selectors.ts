@@ -234,10 +234,10 @@ export function sessionForWorktreeRow(
 }
 
 export function sessionRowDisplayTitle(
-  row: Pick<DashboardSessionRow, "session">,
+  row: Pick<DashboardSessionRow, "session" | "worktree">,
   localRows: TuiLocalRows,
 ): string {
-  return pendingRenameTitles(localRows)[row.session.id]?.title ?? row.session.title;
+  return pendingRenameTitles(localRows)[row.session.id]?.title ?? row.worktree.title;
 }
 
 /**

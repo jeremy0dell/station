@@ -151,6 +151,7 @@ export const WorktreeRowSchema = z
     id: WorktreeIdSchema,
     projectId: ProjectIdSchema,
     projectLabel: nonEmptyStringSchema,
+    title: nonEmptyStringSchema,
     branch: nonEmptyStringSchema,
     path: nonEmptyStringSchema,
     registrationIdentity: nonEmptyStringSchema.optional(),

@@ -203,6 +203,50 @@ const providerHookAbsolutePathSchema = nonEmptyStringSchema.refine(
   "Provider hook runtime paths must be absolute.",
 );
 
+export const ProviderHookArtifactOwnerSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    launcher: providerHookAbsolutePathSchema,
+    runtimeKind: z.enum(["compiled", "source"]),
+    version: nonEmptyStringSchema,
+    buildIdentity: z.string().regex(/^[0-9a-f]{64}$/u),
+  })
+  .strict();
+
+export type ProviderHookArtifactOwner = z.infer<typeof ProviderHookArtifactOwnerSchema>;
+
+export const ProviderHookArtifactOwnershipSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("absent"),
+      requested: ProviderHookArtifactOwnerSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("same-owner"),
+      requested: ProviderHookArtifactOwnerSchema,
+      currentLauncher: providerHookAbsolutePathSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("different-owner"),
+      requested: ProviderHookArtifactOwnerSchema,
+      currentLauncher: providerHookAbsolutePathSchema,
+      current: ProviderHookArtifactOwnerSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("unknown-owner"),
+      requested: ProviderHookArtifactOwnerSchema,
+    })
+    .strict(),
+]);
+
+export type ProviderHookArtifactOwnership = z.infer<typeof ProviderHookArtifactOwnershipSchema>;
+
 export const ProviderHookRuntimeSchema = z
   .object({
     ingressLauncher: providerHookAbsolutePathSchema,
@@ -211,6 +255,7 @@ export const ProviderHookRuntimeSchema = z
     hookSpoolDir: providerHookAbsolutePathSchema,
     autoStartFromHooks: z.boolean(),
     stationConfigPath: providerHookAbsolutePathSchema.optional(),
+    artifactOwner: ProviderHookArtifactOwnerSchema.optional(),
   })
   .strict();
 
@@ -226,7 +271,8 @@ export type ProviderDoctorContext = {
 
 /**
  * Import-safe hook-install status for launch gates: `installed` is the gate,
- * `requested` separates missing hooks from config that never asked for them.
+ * `requested` separates missing hooks from config that never asked for them, and
+ * ownership preserves requester-versus-artifact provenance for setup diagnostics.
  */
 export type HarnessHooksStatus = {
   provider: ProviderId;
@@ -234,6 +280,7 @@ export type HarnessHooksStatus = {
   requested: boolean;
   missing: string[];
   message: string;
+  ownership?: ProviderHookArtifactOwnership;
 };
 
 export type OpenWorkspaceRequest = {

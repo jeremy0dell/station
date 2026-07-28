@@ -108,7 +108,7 @@ describe("observe snapshot context", () => {
 
 function snapshotFixture(): StationSnapshot {
   return {
-    schemaVersion: "0.8.0",
+    schemaVersion: "0.9.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.0.0", healthy: true },
     providerHealth: {},
@@ -160,6 +160,7 @@ function rowFixture(): WorktreeRow {
     id: "wt_api",
     projectId: "api",
     projectLabel: "api",
+    title: "feature/cache",
     branch: "feature/cache",
     path: "/tmp/api/feature-cache",
     worktree: {
@@ -213,7 +214,7 @@ function sessionFixture(): SessionView {
     },
     terminal: {
       provider: "tmux",
-      exists: true,
+      state: "open",
     },
     status: {
       value: "working",

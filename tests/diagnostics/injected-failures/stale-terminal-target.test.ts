@@ -16,6 +16,7 @@ describe("stale terminal target diagnostic", () => {
               id: "wt_web_stale",
               projectId: "web",
               projectLabel: "web",
+              title: "feature/stale-terminal",
               branch: "feature/stale-terminal",
               path: "/tmp/station/web/stale-terminal",
               worktree: { state: "exists", source: "worktrunk" },
