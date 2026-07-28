@@ -165,6 +165,120 @@ describe("WorktrunkProvider", () => {
     ]);
   });
 
+  it("keeps managed roots authoritative over Worktrunk project path templates", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const managedProject = {
+      ...project,
+      worktrunk: {
+        ...project.worktrunk,
+        managedRoot: "/tmp/home/.worktrees/web",
+        includeMain: false,
+        includeExternal: false,
+      },
+    };
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.[0] === "list") {
+          return result(
+            input,
+            JSON.stringify([
+              {
+                path: "/tmp/station/web",
+                branch: "main",
+                is_main: true,
+                repo: { host: "github.com", owner: "acme", name: "web" },
+              },
+            ]),
+          );
+        }
+        return result(
+          input,
+          JSON.stringify([{ path: "/tmp/home/.worktrees/web/feature", branch: "feature" }]),
+        );
+      },
+    });
+
+    await expect(
+      provider.createWorktree({ project: managedProject, branch: "feature" }),
+    ).resolves.toMatchObject({
+      path: "/tmp/home/.worktrees/web/feature",
+    });
+    expect(calls.map((call) => call.args)).toEqual([
+      ["list", "--format=json"],
+      [
+        "--config-set",
+        'projects."github.com/acme/web".worktree-path="/tmp/home/.worktrees/web/feature"',
+        "switch",
+        "--create",
+        "feature",
+        "--base",
+        "main",
+        "--no-cd",
+        "--format=json",
+      ],
+    ]);
+    expect(calls[1]?.env).toEqual({
+      WORKTRUNK_WORKTREE_PATH: "/tmp/home/.worktrees/web/feature",
+    });
+  });
+
+  it("overrides path-keyed Worktrunk project templates for repositories without remotes", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const managedProject = {
+      ...project,
+      root: "/tmp/station/web-linked",
+      worktrunk: {
+        ...project.worktrunk,
+        managedRoot: "/tmp/home/.worktrees/web",
+        includeMain: false,
+        includeExternal: false,
+      },
+    };
+    const provider = testProvider({
+      command: "wt",
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        calls.push(input);
+        if (input.args?.[0] === "list") {
+          return result(
+            input,
+            JSON.stringify([
+              {
+                path: "/tmp/station/web",
+                branch: "main",
+                is_main: true,
+              },
+            ]),
+          );
+        }
+        return result(
+          input,
+          JSON.stringify([{ path: "/tmp/home/.worktrees/web/feature", branch: "feature" }]),
+        );
+      },
+    });
+
+    await expect(
+      provider.createWorktree({ project: managedProject, branch: "feature" }),
+    ).resolves.toMatchObject({
+      path: "/tmp/home/.worktrees/web/feature",
+    });
+    expect(calls[1]?.args).toEqual([
+      "--config-set",
+      'projects."/tmp/station/web".worktree-path="/tmp/home/.worktrees/web/feature"',
+      "switch",
+      "--create",
+      "feature",
+      "--base",
+      "main",
+      "--no-cd",
+      "--format=json",
+    ]);
+  });
+
   it("directs created worktrees into the managed root through Worktrunk config env", async () => {
     const calls: ExternalCommandInput[] = [];
     const managedProject = {
@@ -194,7 +308,7 @@ describe("WorktrunkProvider", () => {
       id: expect.stringMatching(/^wt_web_feature_[a-f0-9]{10}$/),
       path: "/tmp/station/web/.worktrees/feature",
     });
-    expect(calls[0]?.env).toEqual({
+    expect(calls[1]?.env).toEqual({
       WORKTRUNK_WORKTREE_PATH: "/tmp/station/web/.worktrees/feature",
     });
   });
@@ -228,7 +342,7 @@ describe("WorktrunkProvider", () => {
       id: expect.stringMatching(/^wt_web_feature_[a-f0-9]{10}$/),
       path: "/tmp/home/.worktrees/web/feature",
     });
-    expect(calls[0]?.env).toEqual({
+    expect(calls[1]?.env).toEqual({
       WORKTRUNK_WORKTREE_PATH: "/tmp/home/.worktrees/web/feature",
     });
   });
@@ -262,7 +376,7 @@ describe("WorktrunkProvider", () => {
       id: expect.stringMatching(/^wt_web_feature-auth-[a-f0-9]{10}_[a-f0-9]{10}$/),
       path: expect.stringMatching(/^\/tmp\/station\/web\/\.worktrees\/feature-auth-[a-f0-9]{10}$/),
     });
-    expect(calls[0]?.env).toEqual({
+    expect(calls[1]?.env).toEqual({
       WORKTRUNK_WORKTREE_PATH: expect.stringMatching(
         /^\/tmp\/station\/web\/\.worktrees\/feature-auth-[a-f0-9]{10}$/,
       ),
@@ -678,10 +792,30 @@ describe("WorktrunkProvider", () => {
   });
 
   it("classifies duplicate branch failures and preserves external command diagnostics", async () => {
+    const managedProject = {
+      ...project,
+      worktrunk: {
+        ...project.worktrunk,
+        managedRoot: "/tmp/home/.worktrees/web",
+      },
+    };
     const provider = testProvider({
       command: "wt",
       clock: { now: () => new Date(now) },
-      runner: async () => {
+      runner: async (input) => {
+        if (input.args?.[0] === "list") {
+          return result(
+            input,
+            JSON.stringify([
+              {
+                path: "/tmp/station/web",
+                branch: "main",
+                is_main: true,
+                repo: { host: "github.com", owner: "acme", name: "web" },
+              },
+            ]),
+          );
+        }
         throw Object.assign(new Error("wt failed"), {
           code: 128,
           stderr: "fatal: a branch named 'feature' already exists",
@@ -690,7 +824,9 @@ describe("WorktrunkProvider", () => {
       },
     });
 
-    await expect(provider.createWorktree({ project, branch: "feature" })).rejects.toMatchObject({
+    await expect(
+      provider.createWorktree({ project: managedProject, branch: "feature" }),
+    ).rejects.toMatchObject({
       tag: "WorktreeProviderError",
       code: "WORKTRUNK_BRANCH_EXISTS",
       hint: expect.stringContaining("different branch"),
@@ -699,7 +835,8 @@ describe("WorktrunkProvider", () => {
           type: "external_command",
           provider: "worktrunk",
           operation: "provider.worktrunk.switch",
-          command: "wt switch --create feature --base main --no-cd --format=json",
+          command:
+            'wt --config-set projects."github.com/acme/web".worktree-path="/tmp/home/.worktrees/web/feature" switch --create feature --base main --no-cd --format=json',
           cwd: "/tmp/station/web",
           exitCode: 128,
           stderrSnippet: "fatal: a branch named 'feature' already exists",

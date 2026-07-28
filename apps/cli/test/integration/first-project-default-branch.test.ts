@@ -45,6 +45,12 @@ describe("first-project default branch", () => {
             return result(input, "false\n");
           }
           calls.push(input);
+          if (input.args?.[0] === "list") {
+            return result(
+              input,
+              JSON.stringify([{ path: repo, branch: defaultBranch, is_main: true }]),
+            );
+          }
           await mkdir(dirname(worktreePath), { recursive: true });
           await git(repo, "worktree", "add", "-b", "feature", worktreePath, defaultBranch);
           return result(input, JSON.stringify([{ path: worktreePath, branch: "feature" }]));
@@ -59,8 +65,11 @@ describe("first-project default branch", () => {
           path: worktreePath,
           registrationIdentity: `git-registration:${worktreePath}`,
         });
-        expect(calls).toHaveLength(1);
-        expect(calls[0]?.args).toEqual([
+        expect(calls).toHaveLength(2);
+        expect(calls[0]?.args).toEqual(["list", "--format=json"]);
+        expect(calls[1]?.args).toEqual([
+          "--config-set",
+          `projects.${JSON.stringify(repo)}.worktree-path=${JSON.stringify(worktreePath)}`,
           "switch",
           "--no-hooks",
           "--create",
