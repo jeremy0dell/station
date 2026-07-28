@@ -26,7 +26,10 @@ type Digits =
 
 /**
  * Rewrites only Codex's exact row-1 region scroll into an equivalent full-screen
- * scroll, preserving xterm history (https://github.com/openai/codex/issues/27644).
+ * scroll, preserving xterm history.
+ * Remove this compatibility layer once Codex fixes
+ * https://github.com/openai/codex/issues/27644, Station requires that release,
+ * and raw-capture plus manual scrollback verification pass without the policy.
  * Incomplete candidates retain at most one fixed prefix plus two six-digit params.
  */
 export function createPtyOutputCompatibility(
