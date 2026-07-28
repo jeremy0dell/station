@@ -2,6 +2,10 @@ import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
 import { reportTerminalCorruption, writePaneEvidenceDump } from "../diagnostics.js";
 import { createLocalPtyTerminal } from "../pty/localPtyTerminal.js";
+import {
+  createPtyOutputCompatibility,
+  type PtyOutputCompatibility,
+} from "../ptyOutputCompatibility.js";
 import type {
   StationTerminalExit,
   StationTerminalProcess,
@@ -120,6 +124,8 @@ type InternalEntry = {
   cwd: string | undefined;
   appliedSize: StationTerminalSize | null;
   resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  // Serializes local resizes after queued old-width output has finished parsing.
+  resizeTask: Promise<void> | undefined;
   geometryCheckTimer: ReturnType<typeof setTimeout> | undefined;
   // True while a recorded snapshot is being parsed at its own size; the screen
   // is intentionally off pane size then, so the geometry check must not fire.
@@ -127,6 +133,7 @@ type InternalEntry = {
   lastResizeAt: number;
   pendingSize: StationTerminalSize | null;
   spawnOptions: StationTerminalSpawnOptions | undefined;
+  outputCompatibility: PtyOutputCompatibility;
   createTerminal: ((options: StationTerminalSpawnOptions) => StationTerminalProcess) | undefined;
   subscriptions: Array<{ dispose(): void }>;
 };
@@ -169,11 +176,13 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       status: "starting shell",
       appliedSize: null,
       resizeTimer: undefined,
+      resizeTask: undefined,
       geometryCheckTimer: undefined,
       replayingSnapshot: false,
       lastResizeAt: 0,
       pendingSize: null,
       spawnOptions,
+      outputCompatibility: createPtyOutputCompatibility(spawnOptions?.outputCompatibility),
       cwd: spawnOptions?.cwd,
       createTerminal: createTerminalOverride,
       subscriptions: [],
@@ -234,28 +243,49 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     scheduleGeometryCheck(entry);
     if (terminal.onReplay !== undefined) {
       entry.subscriptions.push(
-        terminal.onReplay(async ({ size: recordedSize, chunks }) => {
+        terminal.onReplay(async ({ initialSize, events }) => {
           const current = entry.screen;
           if (current === null) {
             return;
           }
-          // Parse the snapshot at the size it was painted for — erase/cursor
-          // sequences recorded at another width land on the wrong rows
-          // otherwise — then return to the pane size so xterm reflows the
-          // replayed rows. The terminal holds live frames until this resolves.
+          // Parse each retained segment at its production geometry; erase,
+          // cursor, and wrapping semantics cannot be reconstructed at one width.
+          // The terminal holds live frames until this resolves.
           entry.replayingSnapshot = true;
           try {
-            current.resize(recordedSize);
-            for (const chunk of chunks) {
-              current.feed(chunk);
+            current.resize(initialSize);
+            for (const event of events) {
+              if (event.type === "data") {
+                current.feed(event.data);
+                continue;
+              }
+              await current.whenIdle();
+              current.resize({ cols: event.cols, rows: event.rows });
             }
             await current.whenIdle();
           } finally {
             entry.replayingSnapshot = false;
           }
-          current.resize(entry.appliedSize ?? size);
-          // Re-check now that the screen is back at pane size; a check that fired
-          // during the replay was suppressed.
+          if (terminal.onGeometry === undefined) {
+            current.resize(entry.appliedSize ?? size);
+          }
+          // Local replay returns to pane size above; ordered Host replay stays at
+          // its final geometry until the queued live barrier is consumed.
+          scheduleGeometryCheck(entry);
+        }),
+      );
+    }
+    if (terminal.onGeometry !== undefined) {
+      entry.subscriptions.push(
+        terminal.onGeometry(async (nextSize) => {
+          const current = entry.screen;
+          if (current === null) {
+            return;
+          }
+          // Complete older writes before applying the ordered barrier; the Host
+          // awaits this callback before it emits data for the new geometry.
+          await current.whenIdle();
+          current.resize(nextSize);
           scheduleGeometryCheck(entry);
         }),
       );
@@ -271,9 +301,16 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         });
       }),
       terminal.onData((data) => {
-        entry.screen?.feed(data);
+        const current = entry.screen;
+        if (current === null) {
+          return;
+        }
+        current.feed(
+          entry.outputCompatibility.transform(data, current.bufferStats().rows).data,
+        );
       }),
       terminal.onExit((event) => {
+        entry.screen?.feed(entry.outputCompatibility.flush());
         entry.exited = true;
         entry.status = formatExit(event);
         notify();
@@ -284,15 +321,43 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   };
 
   const applyResize = (entry: InternalEntry, size: StationTerminalSize): void => {
-    entry.lastResizeAt = Date.now();
-    entry.appliedSize = size;
-    // Screen first: the app's SIGWINCH-triggered repaint then always meets an
-    // already-resized emulator.
-    entry.screen?.resize(size);
-    if (!entry.exited) {
+    const apply = (resizeScreen: boolean): void => {
+      if (entries.get(entry.paneId) !== entry || entry.exited) {
+        return;
+      }
+      entry.lastResizeAt = Date.now();
+      entry.appliedSize = size;
+      if (resizeScreen) {
+        entry.screen?.resize(size);
+      }
       entry.terminal?.resize(size);
+      scheduleGeometryCheck(entry);
+    };
+
+    if (entry.terminal?.onGeometry !== undefined) {
+      apply(false);
+      return;
     }
-    scheduleGeometryCheck(entry);
+
+    const previous = entry.resizeTask ?? Promise.resolve();
+    const task = previous.then(async () => {
+      const current = entry.screen;
+      if (entries.get(entry.paneId) !== entry || entry.exited || current === null) {
+        return;
+      }
+      // Finish old-width output, including any compatibility carry, before the
+      // emulator resizes and the local PTY receives SIGWINCH.
+      current.feed(entry.outputCompatibility.flush());
+      await current.whenIdle();
+      apply(true);
+    });
+    entry.resizeTask = task;
+    const clearTask = (): void => {
+      if (entry.resizeTask === task) {
+        entry.resizeTask = undefined;
+      }
+    };
+    void task.then(clearTask, clearTask);
   };
 
   // Divergence detector: after a resize settles, the pane's asserted size, the
@@ -399,7 +464,11 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         startSession(entry, size);
         return;
       }
-      if (size.cols === entry.appliedSize?.cols && size.rows === entry.appliedSize?.rows) {
+      if (
+        entry.resizeTask === undefined &&
+        size.cols === entry.appliedSize?.cols &&
+        size.rows === entry.appliedSize?.rows
+      ) {
         // Bounce-back to applied size must cancel pending resize—else stale intermediate lands on timer fire.
         entry.pendingSize = null;
         return;

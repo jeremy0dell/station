@@ -191,7 +191,7 @@ describe("startStationHost", () => {
 
       scripted.helpers.emitData("scroll-"); // captured into the ring before attach
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.scrollback).toEqual(["scroll-"]);
+      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: "scroll-" }]);
 
       const iterator = attachment.frames[Symbol.asyncIterator]();
       scripted.helpers.emitData("live");
@@ -218,12 +218,12 @@ describe("startStationHost", () => {
         rows: 51,
         outputCompatibility: "top-region-scrollback",
       });
-      const input = "\x1b[1;50r\x1b[3S\x1b[r";
-      const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H";
+      const input = "\x1b[1;50r\x1b[3S\x1b[r\x1b[48;1H\x1b[J";
+      const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
 
       scripted.helpers.emitData(input);
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.scrollback).toEqual([expected]);
+      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: expected }]);
 
       const iterator = attachment.frames[Symbol.asyncIterator]();
       scripted.helpers.emitData(input);
@@ -311,7 +311,7 @@ describe("startStationHost", () => {
 
       agent.helpers.emitData("scrollback");
       const attachment = await client.attach(ptyId);
-      expect(attachment.ack.scrollback).toEqual(["scrollback"]);
+      expect(attachment.ack.replay.events).toEqual([{ type: "data", data: "scrollback" }]);
       const frames = attachment.frames[Symbol.asyncIterator]();
 
       await expect(client.stopIfIdle("next-build")).rejects.toMatchObject({

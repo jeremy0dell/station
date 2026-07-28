@@ -89,8 +89,35 @@ describe("StationTerminalProvider", () => {
         mode: "interactive",
       },
     });
-    expect(result.started).toBe(false);
+    expect(result).toEqual({
+      terminalTargetId: stationTargetId(worktree.id),
+      agentEndpointId: "native:web-feature",
+      started: false,
+    });
     await expect(provider.attachmentForTarget("native:web-feature")).resolves.toBeUndefined();
+  });
+
+  it("carries generic output compatibility when a Codex PTY falls back to the UI", async () => {
+    const provider = new StationTerminalProvider({ clock });
+    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
+
+    const result = await provider.launchProcess({
+      project,
+      worktree,
+      terminalTarget: opened.target,
+      agentEndpointId: opened.agentEndpointId,
+      launchPlan: {
+        provider: "codex",
+        command: "codex",
+        args: [],
+        mode: "interactive",
+      },
+    });
+
+    expect(result).toMatchObject({
+      started: false,
+      outputCompatibility: "top-region-scrollback",
+    });
   });
 
   it("reports healthy", async () => {
@@ -315,7 +342,7 @@ describe("StationTerminalProvider (host-backed)", () => {
     const provider = hostBackedProvider(fakeHostClient({ spawn }));
     const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
 
-    await provider.launchProcess({
+    const result = await provider.launchProcess({
       project,
       worktree,
       terminalTarget: opened.target,
@@ -327,6 +354,7 @@ describe("StationTerminalProvider (host-backed)", () => {
       harnessProvider: "codex",
       outputCompatibility: "top-region-scrollback",
     });
+    expect(result).not.toHaveProperty("outputCompatibility");
   });
 
   it("gives the harness binding precedence over a Codex launch plan", async () => {
@@ -354,7 +382,7 @@ describe("StationTerminalProvider (host-backed)", () => {
       fakeHostClient(),
       stationHostSafeError("HOST_UNREACHABLE", "Station host is unavailable."),
     );
-    const opened = await provider.openWorkspace(openRequest());
+    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
 
     await expect(
       provider.launchProcess({
@@ -362,9 +390,12 @@ describe("StationTerminalProvider (host-backed)", () => {
         worktree,
         terminalTarget: opened.target,
         agentEndpointId: opened.agentEndpointId,
-        launchPlan,
+        launchPlan: { ...launchPlan, provider: "codex", command: "codex" },
       }),
-    ).resolves.toMatchObject({ started: false });
+    ).resolves.toMatchObject({
+      started: false,
+      outputCompatibility: "top-region-scrollback",
+    });
   });
 
   it("propagates a live-PTY upgrade block instead of falling back to a local spawn", async () => {

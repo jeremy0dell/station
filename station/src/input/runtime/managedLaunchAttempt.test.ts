@@ -36,7 +36,7 @@ function preparedPlan(
     STATION_SESSION_ID: "ses_managed",
     STATION_TERMINAL_TARGET_ID: TERMINAL_TARGET_ID,
   },
-): AgentPrepareExternalLaunchResult {
+) {
   const launchPlan: Extract<AgentPrepareExternalLaunchResult, { kind: "prepared" }>["launchPlan"] = {
     provider: "codex",
     command: "codex-custom",
@@ -52,7 +52,14 @@ function preparedPlan(
     sessionId: "ses_managed",
     terminalTargetId: TERMINAL_TARGET_ID,
     launchPlan,
-  };
+  } satisfies AgentPrepareExternalLaunchResult;
+}
+
+function compatiblePreparedPlan() {
+  return {
+    ...preparedPlan(),
+    outputCompatibility: "top-region-scrollback",
+  } satisfies AgentPrepareExternalLaunchResult;
 }
 
 function stationHostedSnapshot(): StationSnapshot {
@@ -422,6 +429,25 @@ describe("createManagedLaunchAttempt", () => {
     });
     await withoutEnvironment.runManagedLaunchAttempt(PANE_ID, TARGET);
     expect("env" in (withoutEnvironment.ensured[0] ?? {})).toBe(false);
+  });
+
+  it("passes generic output compatibility to a local PTY spawn", async () => {
+    const harness = attemptHarness({ prepared: compatiblePreparedPlan() });
+
+    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(harness.ensured).toEqual([
+      {
+        cwd: CWD,
+        command: "codex-custom",
+        args: ["--exec", "task"],
+        env: {
+          STATION_SESSION_ID: "ses_managed",
+          STATION_TERMINAL_TARGET_ID: TERMINAL_TARGET_ID,
+        },
+        outputCompatibility: "top-region-scrollback",
+      },
+    ]);
   });
 
   it("keeps external and non-attachable Station existing sessions as informational notices", async () => {

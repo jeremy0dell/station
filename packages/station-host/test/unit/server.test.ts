@@ -167,17 +167,29 @@ describe("serveHostConnection", () => {
           subscribed: true,
           ptyId: "p1",
           pid: 7,
-          cols: 80,
-          rows: 24,
+          cols: 100,
+          rows: 30,
           exited: false,
-          scrollback: ["snap"],
-          truncated: false,
+          replay: {
+            initialCols: 80,
+            initialRows: 24,
+            events: [
+              { type: "data", data: "snap" },
+              { type: "resize", cols: 100, rows: 30 },
+              { type: "data", data: "after-resize" },
+            ],
+            truncated: false,
+          },
         },
         frames: stream.frames,
       }),
     });
     const attachment = await client.attach("p1");
-    expect(attachment.ack.scrollback).toEqual(["snap"]);
+    expect(attachment.ack.replay.events).toEqual([
+      { type: "data", data: "snap" },
+      { type: "resize", cols: 100, rows: 30 },
+      { type: "data", data: "after-resize" },
+    ]);
 
     const iterator = attachment.frames[Symbol.asyncIterator]();
     stream.push({ type: "data", ptyId: "p1", data: "live" });
@@ -205,8 +217,12 @@ describe("serveHostConnection", () => {
             cols: 80,
             rows: 24,
             exited: false,
-            scrollback: [`snap-${params.ptyId}`],
-            truncated: false,
+            replay: {
+              initialCols: 80,
+              initialRows: 24,
+              events: [{ type: "data", data: `snap-${params.ptyId}` }],
+              truncated: false,
+            },
           },
           frames: stream.frames,
         };
@@ -215,8 +231,8 @@ describe("serveHostConnection", () => {
 
     const first = await client.attach("p1");
     const second = await client.attach("p2");
-    expect(first.ack.scrollback).toEqual(["snap-p1"]);
-    expect(second.ack.scrollback).toEqual(["snap-p2"]);
+    expect(first.ack.replay.events).toEqual([{ type: "data", data: "snap-p1" }]);
+    expect(second.ack.replay.events).toEqual([{ type: "data", data: "snap-p2" }]);
 
     const firstIterator = first.frames[Symbol.asyncIterator]();
     const secondIterator = second.frames[Symbol.asyncIterator]();

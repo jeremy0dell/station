@@ -21,7 +21,20 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<HostFrame>>(() => {}) }),
   };
   const attachment: HostAttachment = {
-    ack: { subscribed: true, ptyId: "pty-1", pid: 1, cols: 80, rows: 24, exited: false, scrollback: [], truncated: false },
+    ack: {
+      subscribed: true,
+      ptyId: "pty-1",
+      pid: 1,
+      cols: 80,
+      rows: 24,
+      exited: false,
+      replay: {
+        initialCols: 80,
+        initialRows: 24,
+        events: [],
+        truncated: false,
+      },
+    },
     frames: pendingFrames,
     write: async () => undefined,
     resize: async () => undefined,

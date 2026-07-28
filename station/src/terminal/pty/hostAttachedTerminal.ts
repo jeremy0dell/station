@@ -3,6 +3,7 @@ import {
   isStationHostCompatibilityError,
   STATION_HOST_PROVIDER_ID,
   type HostAttachment,
+  type HostFrame,
   type HostSpawnParamsInput,
   type StationHostClient,
 } from "@station/host";
@@ -102,9 +103,10 @@ export type HostAttachedTerminalOptions = {
 };
 
 /**
- * Host-attached `StationTerminalProcess`: attach, replay scrollback, then stream
- * live frames. `dispose()` only detaches, so the host keeps the PTY alive for the
- * next reattach and PtyRegistry needs no persistent-agent special case.
+ * Host-attached `StationTerminalProcess`: attach, replay scrollback, then consume
+ * ordered data and geometry frames. `dispose()` only detaches, so the host keeps
+ * the PTY alive for the next reattach and PtyRegistry needs no persistent-agent
+ * special case.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -129,6 +131,9 @@ export function createHostAttachedTerminal(
   const exitListeners = new Set<(event: StationTerminalExit) => void>();
   const diagnosticListeners = new Set<(message: string) => void>();
   const replayListeners = new Set<(replay: StationTerminalReplay) => void | Promise<void>>();
+  const geometryListeners = new Set<
+    (size: StationTerminalSize) => void | Promise<void>
+  >();
   const pendingData: string[] = [];
   const pendingWrites: string[] = [];
   let attachment: HostAttachment | undefined;
@@ -136,9 +141,6 @@ export function createHostAttachedTerminal(
   // The size the host PTY last CONFIRMED applying (not the size we asked for);
   // a persistent gap between this and `size` is geometry divergence.
   let ackedSize: StationTerminalSize | undefined;
-  // Monotonic so only the newest resize's ack stamps `ackedSize` — out-of-order
-  // resolutions from concurrent resizes cannot pin it to a stale geometry.
-  let resizeSeq = 0;
   let pid = 0;
   let exited = false;
   let disposed = false;
@@ -199,20 +201,17 @@ export function createHostAttachedTerminal(
       listener(message);
     }
   };
-  // Snapshot bytes were painted for the host PTY's recorded size, not this
-  // pane's. A wired replay listener gets them with that size and is awaited so
-  // live frames never interleave with the replay parse; with no listener the
-  // chunks fall back to the plain data path (recorded size unknown to it).
-  const emitReplay = async (
-    chunks: readonly string[],
-    recordedSize: StationTerminalSize,
-  ): Promise<void> => {
+  // A wired replay listener gets the ordered production geometry and is awaited
+  // so live frames never interleave with replay; legacy consumers receive data.
+  const emitReplay = async (replay: StationTerminalReplay): Promise<void> => {
     if (disposed) {
       return;
     }
     if (replayListeners.size === 0) {
-      for (const chunk of chunks) {
-        emitData(chunk);
+      for (const event of replay.events) {
+        if (event.type === "data") {
+          emitData(event.data);
+        }
       }
       return;
     }
@@ -223,7 +222,7 @@ export function createHostAttachedTerminal(
     await Promise.all(
       [...replayListeners].map(async (listener) => {
         try {
-          return await listener({ size: recordedSize, chunks });
+          return await listener(replay);
         } catch (error) {
           emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
           return;
@@ -232,23 +231,32 @@ export function createHostAttachedTerminal(
     );
   };
 
-  // Send a resize to the attached host PTY and stamp `ackedSize` to the size
-  // that was actually sent — but only if this remains the newest resize, so a
-  // slow ack cannot revert `ackedSize` to a superseded geometry. No-ops while
-  // detached; the size is (re)sent by the attach loop once `attachment` is set.
+  const emitGeometry = async (next: StationTerminalSize): Promise<void> => {
+    if (disposed) {
+      return;
+    }
+    ackedSize = next;
+    await Promise.all(
+      [...geometryListeners].map(async (listener) => {
+        try {
+          return await listener(next);
+        } catch (error) {
+          emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
+          return;
+        }
+      }),
+    );
+  };
+
+  // Request a Host resize; the ordered stream barrier, not this RPC response,
+  // confirms when subsequent data belongs to the new geometry.
   const applyHostResize = (target: StationTerminalSize): void => {
     const opened = attachment;
     if (opened === undefined) {
       return;
     }
-    const seq = (resizeSeq += 1);
     opened
       .resize(target.cols, target.rows)
-      .then(() => {
-        if (seq === resizeSeq) {
-          ackedSize = target;
-        }
-      })
       .catch((error) => {
         emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
       });
@@ -260,13 +268,22 @@ export function createHostAttachedTerminal(
     opened: HostAttachment,
     isReconnect: boolean,
   ): Promise<void> => {
-    const recordedSize = { cols: opened.ack.cols, rows: opened.ack.rows };
+    const replay: StationTerminalReplay = {
+      initialSize: {
+        cols: opened.ack.replay.initialCols,
+        rows: opened.ack.replay.initialRows,
+      },
+      events: opened.ack.replay.events,
+    };
     if (!isReconnect) {
-      await emitReplay(opened.ack.scrollback, recordedSize);
+      await emitReplay(replay);
       return;
     }
-    if (opened.ack.scrollback.length > 0) {
-      await emitReplay([RECONNECT_REPAINT, ...opened.ack.scrollback], recordedSize);
+    if (replay.events.some((event) => event.type === "data")) {
+      await emitReplay({
+        ...replay,
+        events: [{ type: "data", data: RECONNECT_REPAINT }, ...replay.events],
+      });
     }
     // An empty reconnect ring must not clear the pane with nothing to replace it;
     // the geometry nudge below asks the child to repaint instead.
@@ -288,7 +305,7 @@ export function createHostAttachedTerminal(
     const sizeUnchanged = size.cols === attachTarget.cols && size.rows === attachTarget.rows;
     if (
       sizeUnchanged &&
-      (isReconnect || opened.ack.scrollback.length > 0) &&
+      (isReconnect || opened.ack.replay.events.some((event) => event.type === "data")) &&
       opened.ack.cols === attachTarget.cols &&
       opened.ack.rows === attachTarget.rows
     ) {
@@ -333,17 +350,24 @@ export function createHostAttachedTerminal(
       applyHostResize(size);
       return;
     }
-    // Host is at the size we just drove it to; record it as confirmed.
-    ackedSize = attachSentSize;
   };
 
   const consumeAttachmentFrames = async (
-    opened: HostAttachment,
+    iterator: AsyncIterator<HostFrame>,
   ): Promise<AttachmentStreamOutcome> => {
-    for await (const frame of opened.frames) {
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) {
+        // No exit frame means the transport vanished while the host PTY may live.
+        return { kind: "disconnected" };
+      }
+      const frame = next.value;
       switch (frame.type) {
         case "data":
           emitData(frame.data);
+          break;
+        case "resize":
+          await emitGeometry({ cols: frame.cols, rows: frame.rows });
           break;
         case "exit":
           return {
@@ -362,8 +386,6 @@ export function createHostAttachedTerminal(
           return unreachableAttachmentState(frame);
       }
     }
-    // No exit frame means the transport vanished while the host PTY may live.
-    return { kind: "disconnected" };
   };
 
   const classifyAttachmentFailure = (error: unknown): AttachmentFailure => {
@@ -448,7 +470,8 @@ export function createHostAttachedTerminal(
         return { kind: "complete" };
       }
       connectedAt = now();
-      const stream = await consumeAttachmentFrames(opened);
+      const iterator = opened.frames[Symbol.asyncIterator]();
+      const stream = await consumeAttachmentFrames(iterator);
       if (stream.kind === "exited") {
         emitExit(stream.exit);
         return { kind: "complete" };
@@ -463,9 +486,7 @@ export function createHostAttachedTerminal(
     attempt: number,
     connectedAt: number | undefined,
   ): Promise<ReconnectPreparationOutcome> => {
-    // Invalidate pending resize acknowledgements from the detached generation
-    // before clearing its published write path and confirmed geometry.
-    resizeSeq += 1;
+    // Clear the published write path and confirmed geometry before reconnecting.
     attachment = undefined;
     ackedSize = undefined;
     if (disposed || closeRequested) {
@@ -597,6 +618,10 @@ export function createHostAttachedTerminal(
       replayListeners.add(listener);
       return disposableFor(replayListeners, listener);
     },
+    onGeometry(listener) {
+      geometryListeners.add(listener);
+      return disposableFor(geometryListeners, listener);
+    },
     write(data) {
       if (disposed || exited) {
         return;
@@ -612,8 +637,8 @@ export function createHostAttachedTerminal(
     },
     resize(next) {
       size = next;
-      // Applied (and acked) via applyHostResize; a no-op while detached, then
-      // (re)sent by the attach loop once attachment is set.
+      // Requested via applyHostResize and confirmed by the ordered stream frame;
+      // a no-op while detached, then re-sent once attachment is published.
       applyHostResize(next);
     },
     get ackedSize() {
@@ -641,6 +666,7 @@ export function createHostAttachedTerminal(
       exitListeners.clear();
       diagnosticListeners.clear();
       replayListeners.clear();
+      geometryListeners.clear();
       // DETACH, never kill: closing this pane's connection makes the host release
       // the stream (its socket-close handler) while keeping the PTY alive for the
       // next reattach. (Each pane owns its own client/connection, so closing it

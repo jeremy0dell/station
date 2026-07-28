@@ -281,6 +281,9 @@ async function resolvePreparedLaunch(
   if (prepared.launchPlan.env !== undefined) {
     spawnOptions.env = prepared.launchPlan.env;
   }
+  if (prepared.outputCompatibility !== undefined) {
+    spawnOptions.outputCompatibility = prepared.outputCompatibility;
+  }
   return {
     kind: "open-pane",
     spawnOptions,
@@ -385,8 +388,9 @@ async function runManagedLaunchAttempt(
 }
 
 /**
- * Creates one managed-launch runner whose phases preserve registry-before-pane publication and
- * treat every advertised attachment as a no-local-fallback commitment.
+ * Creates one managed-launch runner whose phases preserve registry-before-pane publication,
+ * apply output compatibility only to local spawns, and treat every advertised attachment as a
+ * no-local-fallback commitment.
  */
 export function createManagedLaunchAttempt(
   deps: ManagedLaunchAttemptDeps,

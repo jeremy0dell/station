@@ -1,5 +1,5 @@
-import type { HostOutputCompatibility } from "@station/host";
-import { ControlByte } from "../terminal/protocol/controlBytes.js";
+import type { TerminalOutputCompatibility } from "@station/contracts";
+import { ControlByte } from "./protocol/controlBytes.js";
 
 const START = `${ControlByte.Csi}1;`;
 const MAX_PARAMETER_DIGITS = 6;
@@ -15,7 +15,13 @@ export type PtyOutputCompatibility = {
 };
 
 type Candidate =
-  | { kind: "complete"; end: number; bottom: number; count: number }
+  | {
+      kind: "complete";
+      end: number;
+      repaintStart: number;
+      bottom: number;
+      count: number;
+    }
   | { kind: "incomplete" }
   | { kind: "invalid" };
 
@@ -25,15 +31,15 @@ type Digits =
   | { kind: "invalid" };
 
 /**
- * Rewrites only Codex's exact row-1 region scroll into an equivalent full-screen
- * scroll, preserving xterm history.
+ * Rewrites only Codex's exact row-1 region-scroll-and-repaint idiom into an
+ * equivalent full-screen scroll, preserving xterm history.
  * Remove this compatibility layer once Codex fixes
  * https://github.com/openai/codex/issues/27644, Station requires that release,
  * and raw-capture plus manual scrollback verification pass without the policy.
- * Incomplete candidates retain at most one fixed prefix plus two six-digit params.
+ * Incomplete candidates retain only the fixed literals and three bounded parameters.
  */
 export function createPtyOutputCompatibility(
-  compatibility?: HostOutputCompatibility,
+  compatibility?: TerminalOutputCompatibility,
 ): PtyOutputCompatibility {
   if (compatibility === undefined) {
     return {
@@ -79,7 +85,7 @@ export function createPtyOutputCompatibility(
           candidate.bottom < rows &&
           candidate.count <= candidate.bottom
         ) {
-          output += replacement(candidate.count);
+          output += replacement(candidate.count) + data.slice(candidate.repaintStart, candidate.end);
           rewriteCount += 1;
         } else {
           output += original;
@@ -137,11 +143,35 @@ function parseCandidate(data: string, start: number): Candidate {
   }
   cursor += reset.length;
 
+  const repaintStart = cursor;
+  const positionCsi = requireLiteral(data, cursor, ControlByte.Csi);
+  if (positionCsi !== "complete") {
+    return { kind: positionCsi };
+  }
+  cursor += ControlByte.Csi.length;
+
+  const row = readDigits(data, cursor, true);
+  if (row.kind !== "complete") {
+    return row;
+  }
+  cursor = row.end;
+  const repaintTail = `;1H${ControlByte.Csi}J`;
+  const repaintStatus = requireLiteral(data, cursor, repaintTail);
+  if (repaintStatus !== "complete") {
+    return { kind: repaintStatus };
+  }
+  cursor += repaintTail.length;
+
   const parsedCount = count.value.length === 0 || count.value === "0" ? 1 : Number(count.value);
+  const parsedBottom = Number(bottom.value);
+  if (Number(row.value) !== parsedBottom - parsedCount + 1) {
+    return { kind: "invalid" };
+  }
   return {
     kind: "complete",
     end: cursor,
-    bottom: Number(bottom.value),
+    repaintStart,
+    bottom: parsedBottom,
     count: parsedCount,
   };
 }

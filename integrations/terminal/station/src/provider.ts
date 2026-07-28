@@ -12,6 +12,7 @@ import type {
   TerminalCapabilities,
   TerminalIdentityBinding,
   TerminalLaunchProcessRequest,
+  TerminalOutputCompatibility,
   TerminalTargetId,
   TerminalTargetObservation,
   WorktreeId,
@@ -212,7 +213,8 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   /**
    * Host-backed spawn ownership: spawn the agent into the host so it outlives the
    * UI. Returns `started: false` when not host-backed or the host is unavailable,
-   * so the observer permits the UI to spawn from the launch plan.
+   * so the observer permits the UI to spawn from the launch plan and apply any
+   * harness compatibility selected at this adapter boundary.
    */
   async launchProcess(
     request: TerminalLaunchProcessRequest,
@@ -222,7 +224,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       agentEndpointId: request.agentEndpointId,
     };
     if (this.#host === undefined) {
-      return { ...base, started: false };
+      return localLaunchResult(request);
     }
     const handle = await this.#host.ensure();
     if (handle.status !== "running") {
@@ -230,7 +232,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
         await this.releaseTarget(request.terminalTarget.targetId);
         throw handle.error;
       }
-      return { ...base, started: false };
+      return localLaunchResult(request);
     }
     try {
       await handle.client.spawn(buildSpawnParams(request));
@@ -379,8 +381,8 @@ function buildSpawnParams(request: TerminalLaunchProcessRequest): HostSpawnParam
       "Cannot host-spawn a station agent without a session id.",
     );
   }
-  const harnessProvider = binding.harnessBinding?.harnessProvider ?? request.launchPlan.provider;
-  return {
+  const harnessProvider = harnessProviderForLaunch(request);
+  const params: HostSpawnParamsInput = {
     terminalTargetId: binding.targetId,
     worktreeId: binding.worktreeId ?? request.worktree.id,
     projectId: binding.projectId ?? request.project.id,
@@ -389,12 +391,41 @@ function buildSpawnParams(request: TerminalLaunchProcessRequest): HostSpawnParam
     harnessProvider,
     command: request.launchPlan.command,
     args: request.launchPlan.args,
-    ...(request.launchPlan.env === undefined ? {} : { env: request.launchPlan.env }),
     cwd: request.launchPlan.cwd ?? request.worktree.path,
     cols: DEFAULT_COLS,
     rows: DEFAULT_ROWS,
-    ...(harnessProvider === "codex"
-      ? { outputCompatibility: "top-region-scrollback" as const }
-      : {}),
   };
+  if (request.launchPlan.env !== undefined) {
+    params.env = request.launchPlan.env;
+  }
+  const outputCompatibility = outputCompatibilityForLaunch(request);
+  if (outputCompatibility !== undefined) {
+    params.outputCompatibility = outputCompatibility;
+  }
+  return params;
+}
+
+function harnessProviderForLaunch(request: TerminalLaunchProcessRequest): ProviderId {
+  return request.terminalTarget.harnessBinding?.harnessProvider ?? request.launchPlan.provider;
+}
+
+function outputCompatibilityForLaunch(
+  request: TerminalLaunchProcessRequest,
+): TerminalOutputCompatibility | undefined {
+  return harnessProviderForLaunch(request) === "codex" ? "top-region-scrollback" : undefined;
+}
+
+function localLaunchResult(
+  request: TerminalLaunchProcessRequest,
+): Extract<ManagedTerminalLaunchProcessResult, { started: false }> {
+  const result: Extract<ManagedTerminalLaunchProcessResult, { started: false }> = {
+    terminalTargetId: request.terminalTarget.targetId,
+    agentEndpointId: request.agentEndpointId,
+    started: false,
+  };
+  const outputCompatibility = outputCompatibilityForLaunch(request);
+  if (outputCompatibility !== undefined) {
+    result.outputCompatibility = outputCompatibility;
+  }
+  return result;
 }
