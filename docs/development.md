@@ -150,8 +150,9 @@ atomically refreshes
 same graph and byte-compares the committed artifact. If check mode reports only
 a stale artifact, run the generation command and review the generated diff; fix
 any earlier architecture diagnostics before regenerating. Visualization runs
-check mode first, then serves a local D3 module graph at `http://localhost:3000`;
-it does not write another generated artifact.
+check mode first, then serves a local D3 hexagonal-role overview at
+`http://localhost:3000`, with the raw module-import graph available as a
+secondary view; it does not write another generated artifact.
 
 `pnpm lint` invokes the check once. `pnpm test:all`, the lint-only pre-push hook,
 pull-request static validation, documentation-only validation, and the `main`

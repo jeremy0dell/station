@@ -14,40 +14,57 @@
         <p class="eyebrow">Station · source-derived graph</p>
         <h1>Observer Architecture</h1>
       </div>
-      <div id="summary" class="summary" aria-live="polite">Loading manifest…</div>
+      <div id="summary" class="summary" aria-live="polite">
+        Loading manifest…
+      </div>
     </header>
 
     <section class="controls" aria-label="Graph controls">
       <label>
-        Find module
-        <input id="search" type="search" placeholder="reconcile, commands, sqlite…" />
+        View
+        <select id="view">
+          <option value="roles">Hexagonal roles</option>
+          <option value="modules">Module imports</option>
+        </select>
       </label>
       <label>
-        Edge type
+        Find
+        <input
+          id="search"
+          type="search"
+          placeholder="use case, reconcile, sqlite…"
+        />
+      </label>
+      <label>
+        Dependency type
         <select id="edge-kind">
-          <option value="all">All imports</option>
+          <option value="all">All dependencies</option>
           <option value="runtime">Runtime</option>
           <option value="type-only">Type only</option>
         </select>
       </label>
-      <label class="checkbox">
+      <label id="external-control" class="checkbox" hidden>
         <input id="external" type="checkbox" />
         Show external targets
       </label>
       <button id="reset" type="button">Reset view</button>
-      <span class="hint">Scroll to zoom · drag nodes · click for details</span>
+      <span id="hint" class="hint">Scroll to zoom · click a role for details</span>
     </section>
 
     <main>
-      <section id="graph-shell" class="graph-shell" aria-label="Observer module dependency graph">
-        <svg id="graph" role="img" aria-label="Force-directed Observer module dependency graph"></svg>
+      <section
+        id="graph-shell"
+        class="graph-shell"
+        aria-label="Observer architecture dependency graph"
+      >
+        <svg id="graph" role="img" aria-label="Observer architecture graph"></svg>
         <div id="graph-error" class="graph-error" hidden></div>
       </section>
 
-      <aside aria-label="Selected module details">
+      <aside aria-label="Selected architecture details">
         <div id="details-empty" class="details-empty">
-          <strong>Select a module</strong>
-          <span>Inspect its exports, architecture roles, and direct imports.</span>
+          <strong>Select a node</strong>
+          <span>Inspect its declarations and dependency relationships.</span>
         </div>
         <div id="details" hidden></div>
       </aside>

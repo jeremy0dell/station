@@ -127,6 +127,10 @@ button:hover {
   font-size: 11px;
 }
 
+.controls [hidden] {
+  display: none;
+}
+
 main {
   height: calc(100vh - 149px);
   display: grid;
@@ -160,6 +164,105 @@ main {
 
 .link.is-muted {
   stroke-opacity: 0.025;
+}
+
+.architecture-ring {
+  fill: rgba(18, 24, 36, 0.2);
+  stroke: #2d3749;
+  stroke-width: 1px;
+}
+
+.architecture-ring.ports {
+  fill: rgba(31, 42, 62, 0.2);
+  stroke: #3b4961;
+}
+
+.architecture-ring.core {
+  fill: rgba(48, 64, 92, 0.22);
+  stroke: #52647f;
+}
+
+.ring-label {
+  fill: #637189;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-anchor: middle;
+}
+
+.role-relation {
+  opacity: 0.52;
+  transition: opacity 120ms ease;
+}
+
+.role-relation path {
+  fill: none;
+  stroke: #748198;
+  stroke-width: var(--relation-width, 1.5px);
+  marker-end: url("#role-arrow");
+}
+
+.role-relation.type-only path {
+  stroke-dasharray: 4 4;
+}
+
+.role-relation text {
+  fill: #9aa6b9;
+  font-size: 10px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: #111722;
+  stroke-width: 4px;
+  text-anchor: middle;
+}
+
+.role-relation.is-active {
+  opacity: 1;
+}
+
+.role-relation.is-active path {
+  stroke: #d8e1f0;
+}
+
+.role-relation.is-muted {
+  opacity: 0.06;
+}
+
+.role-node {
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.role-node rect {
+  fill: #151d2a;
+  stroke: var(--role-color);
+  stroke-width: 2px;
+  transition: stroke-width 120ms ease;
+}
+
+.role-node .role-name {
+  fill: #edf2fa;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-anchor: middle;
+}
+
+.role-node .role-count {
+  fill: #8d9ab0;
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+.role-node:hover rect,
+.role-node.is-selected rect,
+.role-node.is-match rect {
+  stroke: #ffffff;
+  stroke-width: 3px;
+}
+
+.role-node.is-muted {
+  opacity: 0.14;
 }
 
 .node circle {
