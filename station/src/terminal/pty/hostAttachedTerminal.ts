@@ -8,6 +8,7 @@ import {
 } from "@station/host";
 import { type SafeErrorFallback, toSafeError } from "@station/observability";
 import { stationBuildInfo } from "@station/runtime";
+import { reportTerminalCorruption } from "../diagnostics.js";
 import { ControlByte } from "../protocol/controlBytes.js";
 import type {
   StationTerminalDisposable,
@@ -155,7 +156,20 @@ export function createHostAttachedTerminal(
     const closer = makeClient(options.hostSocketPath);
     closer
       .close(id)
-      .catch(() => {})
+      .catch((error) => {
+        const safeError = toSafeError(error, HOST_DATA_PLANE_FALLBACK);
+        // Pane disposal clears listeners before this settles, so process-level telemetry
+        // retains the close failure without widening the synchronous terminal contract.
+        reportTerminalCorruption({
+          kind: "terminal_diagnostic",
+          key: "host_close_failed",
+          detail: {
+            code: safeError.code,
+            message: safeError.message,
+            ptyId: id,
+          },
+        });
+      })
       .finally(() => closer.dispose());
   };
 

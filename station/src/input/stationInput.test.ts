@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { createTuiStore, selectDashboardViewport, type TuiStore } from "@station/dashboard-core";
+import {
+  createTuiStore,
+  FAILED_CREATE_ROW_TTL_MS,
+  selectDashboardViewport,
+  type TuiStore,
+} from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
 import { selectActivePaneId, selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore } from "../state/store.js";
@@ -2079,6 +2084,68 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     ).toBe(false);
   });
 
+  it("shows then expires a failed optimistic row when New preparation rejects", async () => {
+    const harness = newSessionHarness();
+    const worktreeId = "wt_failed_new_session";
+    harness.observerService.prepareExternalLaunch = async (params) => {
+      harness.observerService.preparedLaunches.push(params);
+      throw {
+        tag: "CommandValidationError",
+        code: "HARNESS_HOOKS_NOT_INSTALLED",
+        message: "Claude hooks are not installed.",
+        hint: "Run 'stn hooks install claude'.",
+      };
+    };
+    const { branch } = openWizardAndCaptureSubmit(harness, "Failed New Session");
+    const localId = `station-create:${PROJECT_ID}:${branch}`;
+
+    expect(harness.pressKey("\r")).toBe(true);
+    await harness.settle();
+
+    const realSetTimeout = globalThis.setTimeout;
+    let expireFailedRow: (() => void) | undefined;
+    globalThis.setTimeout = ((
+      callback: (...callbackArgs: unknown[]) => void,
+      ms?: number,
+      ...rest: unknown[]
+    ) => {
+      if (ms === FAILED_CREATE_ROW_TTL_MS) {
+        expireFailedRow = () => callback(...rest);
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      }
+      return realSetTimeout(callback, ms, ...rest);
+    }) as typeof globalThis.setTimeout;
+    try {
+      harness.source.setSnapshot(snapshotWithWorktree(harness.snapshot, worktreeId, branch));
+      await harness.settle();
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+
+    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
+    const failedRow = harness.stationViewStore.getState().localRows.failedCreate[0];
+    expect(harness.stationViewStore.getState().localRows.failedCreate).toHaveLength(1);
+    expect(failedRow).toMatchObject({ localId, title: "Failed New Session", branch });
+    expect(failedRow?.error).toMatchObject({
+      code: "HARNESS_HOOKS_NOT_INSTALLED",
+      message: "Claude hooks are not installed.",
+    });
+    expect(
+      harness.store
+        .getState()
+        .workspace.panes.some((pane) => pane.id === agentWorktreePaneId(worktreeId)),
+    ).toBe(false);
+    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "Claude hooks are not installed.",
+      hint: "Run 'stn hooks install claude'.",
+    });
+
+    expect(expireFailedRow).toBeDefined();
+    expireFailedRow?.();
+    expect(harness.stationViewStore.getState().localRows.failedCreate).toEqual([]);
+  });
+
   it("removes the optimistic row and toasts when the worktree create is rejected", async () => {
     const harness = newSessionHarness();
     harness.observerService.nextReceipt = {
@@ -2354,6 +2421,44 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     );
     // Background launch: the dashboard overlay stays up.
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
+  it("shows a failed optimistic row without deleting the retained fork when preparation rejects", async () => {
+    const harness = forkHarness();
+    const worktreeId = "wt_failed_fork";
+    harness.observerService.prepareExternalLaunch = async (params) => {
+      harness.observerService.preparedLaunches.push(params);
+      throw {
+        tag: "ClientObserverError",
+        code: "HARNESS_UNAVAILABLE",
+        message: "The selected harness is unavailable.",
+      };
+    };
+    const submit = openForkAndCaptureSubmit(harness, "Failed Fork");
+    const localId = `station-fork:${submit.sourceWorktreeId}:${submit.branch}`;
+
+    expect(harness.pressKey("\r")).toBe(true);
+    await harness.settle();
+    harness.source.setSnapshot(
+      snapshotWithWorktree(harness.snapshot, submit.projectId, worktreeId, submit.branch),
+    );
+    await harness.settle();
+
+    expect(
+      harness.stationViewStore.getState().snapshot?.rows.some(
+        (row) => row.id === worktreeId && row.branch === submit.branch,
+      ),
+    ).toBe(true);
+    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
+    const failedRow = harness.stationViewStore.getState().localRows.failedCreate[0];
+    expect(harness.stationViewStore.getState().localRows.failedCreate).toHaveLength(1);
+    expect(failedRow).toMatchObject({ localId, title: "Failed Fork", branch: submit.branch });
+    expect(failedRow?.error).toMatchObject({ code: "HARNESS_UNAVAILABLE" });
+    expect(
+      harness.store
+        .getState()
+        .workspace.panes.some((pane) => pane.id === agentWorktreePaneId(worktreeId)),
+    ).toBe(false);
   });
 
   it("removes the optimistic row and toasts when the worktree fork is rejected", async () => {
