@@ -1652,6 +1652,44 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
   });
 
+  it("retries a failed advertised attachment without taking the local-spawn fallback", async () => {
+    const attachment = {
+      kind: "managed-terminal",
+      terminalTargetId: `${TERMINAL_TARGET_ID}-gone`,
+    } as const;
+    const base = preparedPlan();
+    if (base.kind !== "prepared") {
+      throw new Error("preparedPlan must be a prepared launch");
+    }
+    let resolutions = 0;
+    const { store, calls, dispatch, settle, observerService } = agentHarness(
+      { ...base, attachment },
+      manyProjectsSnapshot(),
+      {
+        resolve: async () => {
+          resolutions += 1;
+          throw {
+            tag: "TerminalProviderError",
+            code: "HOST_ATTACH_GONE",
+            message: "The managed terminal is no longer available.",
+            provider: "native",
+          };
+        },
+      },
+    );
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    expect(observerService.preparedLaunches).toHaveLength(2);
+    expect(resolutions).toBe(2);
+    expect(calls).toEqual([]);
+    expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
+  });
+
   it("toasts the observer's error when prepareExternalLaunch rejects", async () => {
     const { store, calls, dispatch, settle, observerService, stationViewStore } = agentHarness();
     observerService.prepareExternalLaunch = async () => {
@@ -1675,6 +1713,36 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       message: "Claude hooks are not installed.",
       hint: "Run 'stn hooks install claude'.",
     });
+  });
+
+  it("accepts a retry after prepareExternalLaunch fails", async () => {
+    const { store, calls, dispatch, settle, observerService } = agentHarness();
+    let attempts = 0;
+    observerService.prepareExternalLaunch = async (params) => {
+      observerService.preparedLaunches.push(params);
+      attempts += 1;
+      if (attempts === 1) {
+        throw {
+          tag: "ClientObserverError",
+          code: "PREPARE_FAILED",
+          message: "Prepare failed once.",
+        };
+      }
+      return preparedPlan();
+    };
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    expect(observerService.preparedLaunches).toHaveLength(2);
+    expect(calls).toEqual([
+      `ensure:${AGENT_PANE_ID}:${CWD}:codex:--exec`,
+      `createPane:${AGENT_PANE_ID}:primary-agent`,
+      `setPrimaryAgent:${AGENT_PANE_ID}:ses_managed:${TERMINAL_TARGET_ID}`,
+    ]);
   });
 
   it("toasts when launched with no observer service (no spawn)", async () => {
@@ -1975,6 +2043,40 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     // into the new pane.
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
     expect(harness.store.getState().input.focus).not.toEqual({ kind: "pane", paneId: agentPaneId });
+  });
+
+  it("keeps a background existing-session preparation on the overlay without focusing", async () => {
+    const harness = newSessionHarness();
+    const worktreeId = "wt_existing_session";
+    harness.observerService.nextPreparedLaunch = {
+      kind: "existing-session",
+      sessionId: "ses_existing_session",
+      harnessProvider: "codex",
+    };
+    const { branch } = openWizardAndCaptureSubmit(harness, "Existing Session");
+
+    expect(harness.pressKey("\r")).toBe(true);
+    await harness.settle();
+    harness.source.setSnapshot(snapshotWithWorktree(harness.snapshot, worktreeId, branch));
+    await harness.settle();
+
+    expect(harness.observerService.preparedLaunches).toEqual([
+      {
+        projectId: PROJECT_ID,
+        worktreeId,
+        harness: "codex",
+        title: "Existing Session",
+      },
+    ]);
+    expect(
+      harness.observerService.dispatched.some((command) => command.type === "terminal.focus"),
+    ).toBe(false);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+    expect(
+      harness.store
+        .getState()
+        .workspace.panes.some((pane) => pane.id === agentWorktreePaneId(worktreeId)),
+    ).toBe(false);
   });
 
   it("removes the optimistic row and toasts when the worktree create is rejected", async () => {
