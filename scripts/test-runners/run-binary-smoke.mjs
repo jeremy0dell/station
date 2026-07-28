@@ -2236,7 +2236,10 @@ async function waitForHost(client, diagnostics) {
 }
 
 async function collectTerminalResult(attachment, timeoutMs) {
-  let output = attachment.ack.scrollback.join("");
+  let output = "";
+  for (const event of attachment.ack.replay.events) {
+    if (event.type === "data") output += event.data;
+  }
   if (attachment.ack.exited) {
     fail("compiled PTY exited before its exit frame could be observed");
   }
