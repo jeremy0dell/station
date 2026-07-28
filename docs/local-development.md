@@ -11,6 +11,46 @@ tmux popup — and the headless CLI).
 > [architecture.md](architecture.md); for the Station OpenTUI/React UI in
 > `station/` see [tui.md](tui.md).
 
+## Fast path: test another worktree and keep current sessions
+
+Open a second terminal, enter the worktree whose code you want to test, and run
+its checkout-local devbox:
+
+```bash
+cd /path/to/the-worktree
+git branch --show-current
+
+test -d node_modules || pnpm install --frozen-lockfile
+test -d station/node_modules || (cd station && bun install)
+pnpm station:devbox dev
+```
+
+That command builds and runs **that worktree's code** against that worktree's
+`.dev-state`, checkout-keyed socket, Observer, provider homes, and Station Host.
+A devbox running from another checkout—and every session hosted by it—keeps
+running. Quitting this Station UI also leaves this checkout's hosted sessions
+running so the same command can reattach later.
+
+If that worktree already has a devbox and you then change code outside
+`station/src/**`, run `pnpm station:devbox restart` there before reopening
+`pnpm station:devbox dev`; the restart is scoped to that worktree and preserves
+its persistent Host and agents. Do not use
+`pnpm station:link`, `pnpm station:reset`, or the global Observer while comparing
+branches.
+
+For example, to validate native OSC 8 rendering, open a shell pane in the
+isolated Station UI and run:
+
+```sh
+printf '\033]8;;https://github.com/jeremy0dell/station/issues/196\033\\#196\033]8;;\033\\ plain\n'
+```
+
+The `#196` label should expose that exact URI through the outer terminal's usual
+hyperlink gesture, while `plain` must not. OSC 8 carries the URI rather than a
+color or underline, so the terminal decides how to style the link. Repeat after
+scrolling, resizing, quitting, and reopening the isolated Station UI to cover
+viewport and Host replay behavior.
+
 ---
 
 ## 1. The one thing to understand: isolate the observer
