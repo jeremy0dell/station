@@ -183,9 +183,9 @@ describe("pane-management chords", () => {
     }
   });
 
-  it("pierces the overlay swallow", () => {
-    for (const [byte, commandId] of CHORDS) {
-      expect(routeKey(byte, overlayOpenState(), keymap)).toEqual({ kind: "command", commandId });
+  it("is swallowed while the dashboard is open", () => {
+    for (const [byte] of CHORDS) {
+      expect(routeKey(byte, overlayOpenState(), keymap)).toEqual({ kind: "swallowed" });
     }
   });
 });

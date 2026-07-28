@@ -24,7 +24,8 @@ STATION_SOURCE=mock STATION_SCENARIO=disconnected bun run station
 ```
 
 Ctrl-O or header click toggles STATION mode; the shell pane survives underneath.
-Ctrl-Q always exits Station (reserved chords pierce the overlay).
+Ctrl-Q always exits Station. Pane split, focus, and close chords are ignored while
+the dashboard is open so the hidden native layout cannot change.
 
 ## Input
 

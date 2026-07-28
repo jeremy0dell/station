@@ -200,7 +200,7 @@ describe("createStationInputRuntime", () => {
     expect(scripted.helpers.writes.join("")).toBe("\x1b[B");
   });
 
-  it("swallows typing while the overlay is open but keeps reserved chords live", () => {
+  it("swallows typing while the overlay is open but keeps exit and toggle live", () => {
     const { runtime, scripted, store, shutdowns } = harness();
     store.actions.openOverlay(STATION_OVERLAY_ID);
     expect(runtime.handleSequence("a")).toBe(true);
@@ -2307,6 +2307,26 @@ describe("createStationInputRuntime pane split/focus/close", () => {
     result.store.actions.focusPane(agentPaneId);
     return { ...result, row, agentPaneId };
   }
+
+  it("keeps native pane commands inert while the dashboard is open", () => {
+    for (const sequence of ["\x1c", "\x1e", "\x1d", "\x1f"]) {
+      const { runtime, store } = harness();
+      store.actions.createPane("pane-b");
+      store.actions.focusPane(MAIN_PANE_ID);
+      store.actions.openOverlay(STATION_OVERLAY_ID);
+
+      expect(runtime.handleSequence(sequence)).toBe(true);
+      expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([
+        MAIN_PANE_ID,
+        "pane-b",
+      ]);
+      expect(store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
+      expect(store.getState().input.overlayReturnFocus).toEqual({
+        kind: "pane",
+        paneId: MAIN_PANE_ID,
+      });
+    }
+  });
 
   it("Ctrl-\\ splits the active pane right and focuses the new pane", () => {
     const { runtime, store } = harness();
