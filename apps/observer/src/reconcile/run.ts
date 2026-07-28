@@ -44,7 +44,6 @@ import type {
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { StationLogger } from "../stationLogger.js";
-import type { ReconcileTiming } from "./core.js";
 import { buildStationSnapshot, safeErrorToProviderHealth } from "./graph.js";
 import {
   applyHarnessEventStatusOverlays,
@@ -52,6 +51,19 @@ import {
   type ObserverHarnessRun,
   synthesizeExternalHarnessRuns,
 } from "./harnessEventStatus.js";
+
+export type ReconcileTiming = {
+  reason: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  projectsScanned: number;
+  worktreesObserved: number;
+  terminalTargetsObserved: number;
+  harnessRunsObserved: number;
+  eventsEmitted: number;
+  errors: SafeError[];
+};
 
 export type ProviderReadOptions = {
   clock: RuntimeClock;

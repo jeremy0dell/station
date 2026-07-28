@@ -420,6 +420,11 @@ export interface WorktreeProvider {
   getWorktree?(request: GetWorktreeRequest): Promise<WorktreeObservation | null>;
 }
 
+/**
+ * DRIVEN PORT
+ *
+ * Supplies terminal topology and lifecycle through provider-owned target identities without exposing provider mechanics.
+ */
 export interface TerminalProvider {
   id: ProviderId;
   capabilities(): TerminalCapabilities;

@@ -212,23 +212,52 @@ nearest-sounding word. Split mixed ownership when the change permits it, or
 record the deviation and exit condition in
 [Observer Architecture](observer-architecture.md).
 
+## Generated Manifest And Dependency Gate
+
+Run the source-derived Observer architecture tooling from the repository root:
+
+```bash
+pnpm architecture:observer:generate
+pnpm architecture:observer:check
+```
+
+Generation validates first and then atomically writes
+`docs/generated/observer-architecture-manifest.json`. Check mode rebuilds the
+same bytes in memory and fails when the committed artifact is stale. The
+manifest inventories every Observer production module and named export. An
+ordinary or not-yet-adopted export appears with `role: null`; that is review
+information, not a failure and not permission to guess a role.
+
+The checker validates the exact marker grammar, attachment, purpose paragraph,
+source inventory, module resolution, source cycles, package boundaries, and
+declaration-level role direction. Diagnostics identify the source declaration,
+role, runtime or type-only edge, resolved target declaration and role, violated
+rule, and corrective action. Runtime and type-only imports, re-exports, barrels,
+workspace aliases, import-equals, and literal dynamic edges all participate.
+
+Dependencies between controlled declarations follow this table:
+
+| Importing role | Allowed controlled targets |
+| --- | --- |
+| `DRIVING PORT` | `DRIVING PORT` |
+| `DRIVEN PORT` | `DRIVEN PORT` |
+| `POLICY` | `POLICY` |
+| `USE CASE` | `USE CASE`, `POLICY`, `DRIVEN PORT` |
+| `ADAPTER` | `ADAPTER`, `DRIVING PORT`, `DRIVEN PORT`, `POLICY` |
+| `COMPOSITION ROOT` | all six controlled roles |
+
+No non-composition declaration may depend on a composition root. A composition
+marker is not a file-wide exemption: the checker follows only same-file private
+helpers reachable from the marked root and attributes that wiring to the root.
+An unrelated export in the same file remains subject to its own role.
+
 ## Enforcement Limits
 
-Architecture diagnostics may mechanically enforce:
-
-- the closed marker vocabulary and exact first-line form;
-- attachment to named, exported production declarations;
-- generation of the seam manifest from controlled markers and the source/import
-  graph; and
-- absence of orphan markers, forbidden dependencies, or stale migration
-  exemptions.
-
-The source-derived manifest defines marked coverage; it must not claim that
-every legacy seam is already marked. A temporary migration exemption may name
-an unmarked legacy declaration and its removal condition, but it must not repeat
-roles, purpose prose, or declarations already discoverable from source. Tests
-derive each declaration's role from its JSDoc instead of maintaining a second
-authoritative list.
+The source-derived manifest defines marked coverage; it does not claim that
+every legacy seam is already marked. Marker absence remains adoption-on-touch
+and review territory, while malformed or orphan markers fail. Do not force an
+ordinary export into a role to eliminate `role: null`, and do not maintain a
+parallel role registry or editable exception map.
 
 Automation cannot prove that a role is truthful, a purpose paragraph is
 accurate, a policy is free of hidden IO, an adapter is substitutable, or

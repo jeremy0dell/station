@@ -1,4 +1,8 @@
-import type { RepositoryProvider, RepositoryRemote, SafeError } from "@station/contracts";
+import type { RepositoryRemote, SafeError } from "@station/contracts";
+
+type RepositoryProviderSelectionCandidate = {
+  supportsRemote(remote: RepositoryRemote): boolean;
+};
 
 /**
  * POLICY
@@ -6,10 +10,10 @@ import type { RepositoryProvider, RepositoryRemote, SafeError } from "@station/c
  * Selects the sole repository adapter that supports a remote and rejects
  * overlapping support rules.
  */
-export function selectRepositoryProvider(
+export function selectRepositoryProvider<Provider extends RepositoryProviderSelectionCandidate>(
   remote: RepositoryRemote,
-  providers: Iterable<RepositoryProvider>,
-): RepositoryProvider | undefined {
+  providers: Iterable<Provider>,
+): Provider | undefined {
   const matches = Array.from(providers).filter((provider) => provider.supportsRemote(remote));
   if (matches.length > 1) {
     throw {
