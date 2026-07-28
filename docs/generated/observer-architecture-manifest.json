@@ -1186,7 +1186,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Create a session worktree on its generated branch, persist its independent user-facing title, and launch its primary agent workspace."
+          "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1221,14 +1221,14 @@
           "bindings": [
             "buildEnsureAgentWorkspaceIntent",
             "defaultSessionCommandIdFactory",
-            "deleteSessionTitleSeedBestEffort",
+            "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "publishSessionCreated",
             "removeWorktreeBestEffort",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
             "runProviderMutation",
-            "seedSessionTitle",
+            "seedSession",
             "throwIfAborted"
           ]
         },
@@ -1295,7 +1295,7 @@
           "name": "createSessionForkHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Fork an existing worktree onto an internal branch, persist an independent user-facing title, optionally copy dirty state, and launch a fresh agent. The source agent remains live and its remembered harness is inherited."
+          "purpose": "Forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionForkHandlerOptions",
@@ -1331,7 +1331,7 @@
             "buildEnsureAgentWorkspaceIntent",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
-            "deleteSessionTitleSeedBestEffort",
+            "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
@@ -1339,7 +1339,7 @@
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
             "runProviderMutation",
-            "seedSessionTitle",
+            "seedSession",
             "throwIfAborted",
             "validateSnapshotRow"
           ]
@@ -1449,7 +1449,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Create a session worktree on its generated branch, persist its independent user-facing title, and launch its primary agent workspace."
+          "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -1460,8 +1460,8 @@
         {
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1472,8 +1472,8 @@
         {
           "name": "createSessionStartAgentHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -1488,7 +1488,7 @@
           "purpose": null
         },
         {
-          "name": "deleteSessionTitleSeedBestEffort",
+          "name": "discardSessionSeedBestEffort",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -1548,7 +1548,7 @@
           "purpose": null
         },
         {
-          "name": "seedSessionTitle",
+          "name": "seedSession",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -1635,8 +1635,8 @@
         {
           "name": "createSessionRenameHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Renames the canonical worktree title and its session projections before publishing convergence."
         },
         {
           "name": "CreateSessionRenameHandlerOptions",
@@ -1708,8 +1708,8 @@
         {
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1745,12 +1745,13 @@
             "buildEnsureAgentWorkspaceIntent",
             "commandValidationError",
             "defaultSessionCommandIdFactory",
+            "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
             "publishSessionCreated",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
-            "seedSessionTitle",
+            "seedSession",
             "throwIfAborted",
             "validateSnapshotRow",
             "worktreeObservationFromRow"
@@ -1797,6 +1798,12 @@
           "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "../../stationLogger.js",
+          "resolvedPath": "apps/observer/src/stationLogger.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationLogger"]
         },
         {
           "specifier": "../../utils/time.js",
@@ -1866,7 +1873,7 @@
           "purpose": null
         },
         {
-          "name": "deleteSessionTitleSeedBestEffort",
+          "name": "discardSessionSeedBestEffort",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -1926,7 +1933,7 @@
           "purpose": null
         },
         {
-          "name": "seedSessionTitle",
+          "name": "seedSession",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -2069,8 +2076,8 @@
         {
           "name": "createSessionStartAgentHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -2106,14 +2113,14 @@
             "assertNoCurrentAgent",
             "buildEnsureAgentWorkspaceIntent",
             "defaultSessionCommandIdFactory",
-            "deleteSessionTitleSeedBestEffort",
+            "discardSessionSeedBestEffort",
             "findProjectOrThrow",
             "lookupWorktree",
             "publishSessionCreated",
             "rememberedHarnessProviderForWorktree",
             "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
-            "seedSessionTitle",
+            "seedSession",
             "throwIfAborted",
             "validateSnapshotRow",
             "worktreeObservationFromRow"
@@ -2678,7 +2685,7 @@
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-side race refusals retain command-correlated evidence for diagnostics."
+          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
@@ -2703,7 +2710,7 @@
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-side race refusals retain command-correlated evidence for diagnostics."
+          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
@@ -3940,7 +3947,7 @@
           "name": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Correlates provider observations and durable session records into canonical snapshot truth."
+          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable."
         },
         {
           "name": "canUseTerminalCloseFallbackForWorktree",
@@ -4246,7 +4253,7 @@
           "name": "createSessionCreateHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Create a session worktree on its generated branch, persist its independent user-facing title, and launch its primary agent workspace."
+          "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
@@ -4257,8 +4264,8 @@
         {
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -4269,8 +4276,8 @@
         {
           "name": "createSessionStartAgentHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
         },
         {
           "name": "CreateSessionStartAgentHandlerOptions",
@@ -4336,7 +4343,7 @@
           "name": "createWorktreeRemoveHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-side race refusals retain command-correlated evidence for diagnostics."
+          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
         },
         {
           "name": "CreateWorktreeRemoveHandlerOptions",
@@ -4363,12 +4370,6 @@
           "purpose": null
         },
         {
-          "name": "deleteSessionTitleSeedBestEffort",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "DiagnosticEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
@@ -4389,6 +4390,12 @@
         {
           "name": "DiagnosticRecentLogEvidence",
           "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "discardSessionSeedBestEffort",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4759,6 +4766,12 @@
           "purpose": null
         },
         {
+          "name": "ObserverWorktreeDisplayTitle",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "openObserverSqlite",
           "kind": "function",
           "role": null,
@@ -4838,6 +4851,12 @@
         },
         {
           "name": "PersistedSessionTurnReadiness",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "PersistedWorktreeDisplayTitle",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5068,10 +5087,16 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability."
+          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
         },
         {
           "name": "ReconcileTiming",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ReconcileWorktreeDisplayTitleInput",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5203,7 +5228,7 @@
           "purpose": null
         },
         {
-          "name": "seedSessionTitle",
+          "name": "seedSession",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5242,7 +5267,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, titles, remembered harness selection, recovery handles, and turn readiness."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -6545,6 +6570,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/016_worktree_display_titles.ts",
+      "exports": [
+        {
+          "name": "worktreeDisplayTitlesMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -6656,6 +6700,12 @@
           "resolvedPath": "apps/observer/src/migrations/015_drop_recovery_breadcrumbs.ts",
           "edgeKind": "runtime",
           "bindings": ["dropRecoveryBreadcrumbsMigration"]
+        },
+        {
+          "specifier": "./016_worktree_display_titles.js",
+          "resolvedPath": "apps/observer/src/migrations/016_worktree_display_titles.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeDisplayTitlesMigration"]
         },
         {
           "specifier": "./migration.js",
@@ -6778,7 +6828,7 @@
       "path": "apps/observer/src/persistence/correlations.ts",
       "exports": [
         {
-          "name": "deleteSessionTitleSeed",
+          "name": "discardSessionSeed",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -6820,7 +6870,13 @@
           "purpose": null
         },
         {
-          "name": "seedSessionTitle",
+          "name": "retireRemovedWorktreeSessionState",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "seedSession",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -6867,7 +6923,26 @@
           "specifier": "./types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
-          "bindings": ["ObserverIdFactory", "PersistReconcileResultInput", "PersistedSession"]
+          "bindings": [
+            "ObserverIdFactory",
+            "PersistReconcileResultInput",
+            "PersistedSession",
+            "PersistedWorktreeDisplayTitle",
+            "ReconcileWorktreeDisplayTitleInput"
+          ]
+        },
+        {
+          "specifier": "./worktreeDisplayTitles.js",
+          "resolvedPath": "apps/observer/src/persistence/worktreeDisplayTitles.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "deleteWorktreeDisplayTitle",
+            "insertMissingWorktreeDisplayTitles",
+            "listWorktreeDisplayTitles",
+            "readWorktreeDisplayTitle",
+            "synchronizeSessionTitleProjections",
+            "upsertWorktreeDisplayTitle"
+          ]
         },
         {
           "specifier": "../sessionActivation.js",
@@ -6880,6 +6955,12 @@
           "resolvedPath": "apps/observer/src/sqlite/driver.ts",
           "edgeKind": "type-only",
           "bindings": ["SqlDatabase"]
+        },
+        {
+          "specifier": "../worktreeDisplayTitle.js",
+          "resolvedPath": "apps/observer/src/worktreeDisplayTitle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveWorktreeDisplayTitle"]
         },
         {
           "specifier": "@station/contracts",
@@ -7158,6 +7239,12 @@
           "purpose": null
         },
         {
+          "name": "PersistedWorktreeDisplayTitle",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "PersistedWorktreeMetadataCurrent",
           "kind": "type",
           "role": null,
@@ -7209,7 +7296,13 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability."
+          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
+        },
+        {
+          "name": "ReconcileWorktreeDisplayTitleInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "RecordProviderObservationInput",
@@ -7233,7 +7326,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, titles, remembered harness selection, recovery handles, and turn readiness."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7531,13 +7624,13 @@
           "name": "ReconcileStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability."
+          "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
         },
         {
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, titles, remembered harness selection, recovery handles, and turn readiness."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -7567,6 +7660,7 @@
             "PersistedSession",
             "PersistedSessionHarnessExecution",
             "PersistedSessionTurnReadiness",
+            "PersistedWorktreeDisplayTitle",
             "PersistedWorktreeMetadataCurrent",
             "ProviderObservationKind",
             "ProviderObservationsIngressDedupeResult",
@@ -7693,6 +7787,18 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "SqliteWorktreeDisplayTitleRow",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "worktreeDisplayTitleFromRow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         }
       ],
       "imports": [
@@ -7719,6 +7825,7 @@
             "PersistedEvent",
             "PersistedProviderObservation",
             "PersistedSession",
+            "PersistedWorktreeDisplayTitle",
             "ProviderObservationType"
           ]
         },
@@ -8034,6 +8141,12 @@
           ]
         },
         {
+          "specifier": "./worktreeDisplayTitles.js",
+          "resolvedPath": "apps/observer/src/persistence/worktreeDisplayTitles.ts",
+          "edgeKind": "runtime",
+          "bindings": ["* as worktreeDisplayTitleStore"]
+        },
+        {
           "specifier": "./worktreeMetadataCurrent.js",
           "resolvedPath": "apps/observer/src/persistence/worktreeMetadataCurrent.ts",
           "edgeKind": "runtime",
@@ -8208,6 +8321,12 @@
           "purpose": null
         },
         {
+          "name": "PersistedWorktreeDisplayTitle",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "PersistedWorktreeMetadataCurrent",
           "kind": "type",
           "role": null,
@@ -8245,6 +8364,12 @@
         },
         {
           "name": "ProviderObservationType",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ReconcileWorktreeDisplayTitleInput",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -8312,6 +8437,73 @@
             "WorktreeObservation",
             "WorktreePullRequest"
           ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/persistence/worktreeDisplayTitles.ts",
+      "exports": [
+        {
+          "name": "deleteWorktreeDisplayTitle",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "insertMissingWorktreeDisplayTitles",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "listWorktreeDisplayTitles",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "readWorktreeDisplayTitle",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "synchronizeSessionTitleProjections",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "upsertWorktreeDisplayTitle",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./rows.js",
+          "resolvedPath": "apps/observer/src/persistence/rows.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeDisplayTitleFromRow"]
+        },
+        {
+          "specifier": "./rows.js",
+          "resolvedPath": "apps/observer/src/persistence/rows.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SqliteWorktreeDisplayTitleRow"]
+        },
+        {
+          "specifier": "./types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["PersistedWorktreeDisplayTitle", "ReconcileWorktreeDisplayTitleInput"]
+        },
+        {
+          "specifier": "../sqlite/driver.js",
+          "resolvedPath": "apps/observer/src/sqlite/driver.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SqlDatabase"]
         }
       ]
     },
@@ -8652,7 +8844,7 @@
           "name": "buildStationSnapshot",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Correlates provider observations and durable session records into canonical snapshot truth."
+          "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable."
         },
         {
           "name": "ObserverGraphInput",
@@ -8668,6 +8860,12 @@
         },
         {
           "name": "ObserverTurnReadiness",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverWorktreeDisplayTitle",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -8841,7 +9039,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Rebuilds the Observer graph from provider reads and accepted durable evidence."
+          "purpose": "Rebuilds the Observer graph after overlaying durable worktree titles on provider observations. The same resolved title records feed snapshot composition and atomic reconcile persistence."
         }
       ],
       "imports": [
@@ -8878,6 +9076,7 @@
             "PersistedSessionHarnessExecution",
             "PersistedSessionTurnReadiness",
             "ReconcileStore",
+            "ReconcileWorktreeDisplayTitleInput",
             "SessionHarnessDerivedStateRepair",
             "SessionStore",
             "WorktreeMetadataStore"
@@ -8922,6 +9121,12 @@
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
           "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "../worktreeDisplayTitle.js",
+          "resolvedPath": "apps/observer/src/worktreeDisplayTitle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveWorktreeDisplayTitle"]
         },
         {
           "specifier": "@station/contracts",
@@ -9412,7 +9617,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Prepare Station-hosted agent identity, persist an optional title before reconcile can expose it, and return a launch plan plus opaque managed attachment. Failed terminal preparation or process launch releases the managed target before removing its title seed, retaining the title whenever target cleanup cannot be confirmed."
+          "purpose": "Prepares Station-hosted identity by durably seeding its canonical title before target registration. Failed launch cleanup independently releases its target and discards only the fresh session projection."
         },
         {
           "name": "reportExternalExit",
@@ -9442,7 +9647,6 @@
             "defaultSessionCommandIdFactory",
             "findProjectOrThrow",
             "rememberedHarnessProviderForWorktree",
-            "seedSessionTitle",
             "worktreeObservationFromRow"
           ]
         },
@@ -10936,6 +11140,31 @@
           "bindings": ["RuntimeClock"]
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/worktreeDisplayTitle.ts",
+      "exports": [
+        {
+          "name": "resolveWorktreeDisplayTitle",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Resolves one durable display title from worktree authority and deterministic legacy session evidence."
+        },
+        {
+          "name": "ResolveWorktreeDisplayTitleInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./persistence/types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["PersistedSession", "PersistedWorktreeDisplayTitle"]
+        }
+      ]
     }
   ],
   "controlledDeclarations": [
@@ -11537,6 +11766,27 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/session/rename.ts",
+          "declaration": "createSessionRenameHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/commands/session/resumeAgent.ts",
+          "declaration": "createSessionResumeAgentHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/commands/session/startAgent.ts",
+          "declaration": "createSessionStartAgentHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/worktree/remove.ts",
           "declaration": "createWorktreeRemoveHandler",
           "kind": "function",
@@ -11550,7 +11800,7 @@
       "declaration": "createSessionCreateHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Create a session worktree on its generated branch, persist its independent user-facing title, and launch its primary agent workspace.",
+      "purpose": "Creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback.",
       "dependencies": []
     },
     {
@@ -11558,7 +11808,46 @@
       "declaration": "createSessionForkHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Fork an existing worktree onto an internal branch, persist an independent user-facing title, optionally copy dirty state, and launch a fresh agent. The source agent remains live and its remembered harness is inherited.",
+      "purpose": "Forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/session/rename.ts",
+      "declaration": "createSessionRenameHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Renames the canonical worktree title and its session projections before publishing convergence.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/session/resumeAgent.ts",
+      "declaration": "createSessionResumeAgentHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Resumes provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/session/startAgent.ts",
+      "declaration": "createSessionStartAgentHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Starts a fresh agent lifecycle while inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection.",
       "dependencies": []
     },
     {
@@ -11574,7 +11863,7 @@
       "declaration": "createWorktreeRemoveHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-side race refusals retain command-correlated evidence for diagnostics.",
+      "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority.",
       "dependencies": []
     },
     {
@@ -11867,7 +12156,7 @@
       "declaration": "ReconcileStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability.",
+      "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize.",
       "dependencies": []
     },
     {
@@ -11875,7 +12164,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, titles, remembered harness selection, recovery handles, and turn readiness.",
+      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness.",
       "dependencies": []
     },
     {
@@ -11907,7 +12196,7 @@
       "declaration": "buildStationSnapshot",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Correlates provider observations and durable session records into canonical snapshot truth.",
+      "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable.",
       "dependencies": [
         {
           "path": "apps/observer/src/reconcile/statusPolicy.ts",
@@ -11923,7 +12212,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Rebuilds the Observer graph from provider reads and accepted durable evidence.",
+      "purpose": "Rebuilds the Observer graph after overlaying durable worktree titles on provider observations. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
       "dependencies": [
         {
           "path": "apps/observer/src/harnessExecutionIdentity.ts",
@@ -11994,6 +12283,13 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/worktreeDisplayTitle.ts",
+          "declaration": "resolveWorktreeDisplayTitle",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         },
         {
           "path": "packages/contracts/src/providers.ts",
@@ -12155,7 +12451,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Prepare Station-hosted agent identity, persist an optional title before reconcile can expose it, and return a launch plan plus opaque managed attachment. Failed terminal preparation or process launch releases the managed target before removing its title seed, retaining the title whenever target cleanup cannot be confirmed.",
+      "purpose": "Prepares Station-hosted identity by durably seeding its canonical title before target registration. Failed launch cleanup independently releases its target and discards only the fresh session projection.",
       "dependencies": []
     },
     {
@@ -12484,6 +12780,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Records Observer operational events without exposing their storage representation or destination.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/worktreeDisplayTitle.ts",
+      "declaration": "resolveWorktreeDisplayTitle",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Resolves one durable display title from worktree authority and deterministic legacy session evidence.",
       "dependencies": []
     },
     {
