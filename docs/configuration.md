@@ -549,8 +549,10 @@ hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the
 renderer requires its lifecycle-control IPC channel; it is not a standalone
 launch mode. Native Station child PTYs also receive standard terminal values
 `TERM=xterm-256color`, `COLORTERM=truecolor`, and `TERM_PROGRAM=Station` after
-inherited and per-launch environment merging. Outer-renderer identity and
-feature hints are removed at that boundary, while ordinary locale,
+inherited and per-launch environment merging. Outer-renderer identity and feature
+hints, including inherited hyperlink overrides, are removed at that boundary.
+Station does not advertise OSC 8 until both a coordinated child detector and an
+outer-terminal capability gate are available, while ordinary locale,
 authentication, provider, project, worktree, and user environment passes
 through. This includes functional values such as Git askpass configuration.
 Local PTYs preserve inherited `NO_COLOR` / `FORCE_COLOR` preferences, while

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { getLinkId } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
@@ -30,6 +31,25 @@ async function teardown(setup: { renderer: { destroy(): void } }, screen: Statio
 }
 
 describe("TerminalScreenRenderable selection", () => {
+  it("retains native hyperlink attributes while highlighting a selection", async () => {
+    const uri = "https://example.com/selected";
+    const { setup, screen } = await renderPane(
+      `\x1b]8;;${uri}\x1b\\hello\x1b]8;;\x1b\\`,
+    );
+    try {
+      expect(getLinkId(setup.renderer.currentRenderBuffer.buffers.attributes[0] ?? 0)).toBeGreaterThan(
+        0,
+      );
+      await setup.mockMouse.drag(0, 0, 4, 0);
+      await setup.renderOnce();
+      expect(getLinkId(setup.renderer.currentRenderBuffer.buffers.attributes[0] ?? 0)).toBeGreaterThan(
+        0,
+      );
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
   it("copies the dragged range on release", async () => {
     const { setup, screen, copied } = await renderPane("hello world");
     try {
