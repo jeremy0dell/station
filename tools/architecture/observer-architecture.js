@@ -28,6 +28,8 @@ const externalCheckbox = requiredElement("external");
 const resetButton = requiredElement("reset");
 const hintElement = requiredElement("hint");
 const detailsEmpty = requiredElement("details-empty");
+const detailsEmptyTitle = requiredElement("details-empty-title");
+const detailsEmptyCopy = requiredElement("details-empty-copy");
 const detailsElement = requiredElement("details");
 const graphError = requiredElement("graph-error");
 
@@ -162,18 +164,20 @@ function createVisualization(manifest) {
       .attr("class", "role-name")
       .attr("y", -4)
       .text((node) => node.label);
-    nodeSelection
-      .append("text")
-      .attr("class", "role-count")
-      .attr("y", 16)
-      .text((node) => `${node.declarations.length} declarations`);
+    nodeSelection.append("text").attr("class", "role-count").attr("y", 16).text(roleNodeCount);
     nodeSelection
       .append("title")
-      .text((node) => `${node.label}: ${node.declarations.length} controlled declarations`);
+      .text(
+        (node) =>
+          `${node.label}: ${node.ownedDeclarations.length} Observer declarations and ${node.externalDeclarations.length} referenced external seams`,
+      );
 
-    summaryElement.textContent = `${manifest.controlledDeclarations.length} controlled declarations · ${graph.dependencyCount} role dependencies`;
+    summaryElement.textContent = `${graph.observerDeclarationCount} Observer declarations · ${graph.dependencyCount} controlled dependencies · ${graph.externalSeamCount} external seams`;
     hintElement.textContent =
-      "Nested boundaries show core, ports, and outer adapters · click a role";
+      "A → B means an Observer-owned A declaration statically depends on controlled B";
+    detailsEmptyTitle.textContent = "Select a role";
+    detailsEmptyCopy.textContent =
+      "Counts aggregate static declaration references, not runtime calls or universal role relationships.";
     externalControl.hidden = true;
   };
 
@@ -295,6 +299,8 @@ function createVisualization(manifest) {
     summaryElement.textContent = `${nodes.length} modules · ${links.length} import edges`;
     hintElement.textContent =
       "Raw source graph · scroll to zoom · drag modules · click for details";
+    detailsEmptyTitle.textContent = "Select a module";
+    detailsEmptyCopy.textContent = "Inspect its exports, controlled roles, and direct imports.";
     externalControl.hidden = false;
   };
 
@@ -333,14 +339,37 @@ function createVisualization(manifest) {
 }
 
 function buildRoleGraph(manifest, edgeKind) {
-  const declarationsByRole = d3.group(manifest.controlledDeclarations, (entry) => entry.role);
+  const observerPrefix = `${manifest.sourceRoot}/`;
+  const observerDeclarations = manifest.controlledDeclarations.filter((entry) =>
+    entry.path.startsWith(observerPrefix),
+  );
+  const observerDeclarationsByRole = d3.group(observerDeclarations, (entry) => entry.role);
+  const declarationsByKey = new Map(
+    manifest.controlledDeclarations.map((entry) => [declarationKey(entry), entry]),
+  );
+  const externalTargetsByRole = new Map();
+  for (const declaration of observerDeclarations) {
+    for (const dependency of declaration.dependencies) {
+      if (dependency.path.startsWith(observerPrefix)) continue;
+      const target = declarationsByKey.get(declarationKey(dependency));
+      if (target === undefined) continue;
+      const targets = externalTargetsByRole.get(target.role) ?? new Map();
+      targets.set(declarationKey(target), target);
+      externalTargetsByRole.set(target.role, targets);
+    }
+  }
+
   const nodes = roleOrder.map((role) => {
-    const declarations = declarationsByRole.get(role) ?? [];
+    const ownedDeclarations = observerDeclarationsByRole.get(role) ?? [];
+    const externalDeclarations = [...(externalTargetsByRole.get(role)?.values() ?? [])];
+    const declarations = [...ownedDeclarations, ...externalDeclarations];
     return {
       id: role,
       label: role,
       kind: "role",
       declarations,
+      ownedDeclarations,
+      externalDeclarations,
       searchText: `${role} ${declarations
         .map((entry) => `${entry.declaration} ${entry.path} ${entry.purpose}`)
         .join(" ")}`.toLocaleLowerCase(),
@@ -350,7 +379,7 @@ function buildRoleGraph(manifest, edgeKind) {
   const relations = new Map();
   let dependencyCount = 0;
 
-  for (const declaration of manifest.controlledDeclarations) {
+  for (const declaration of observerDeclarations) {
     for (const dependency of declaration.dependencies) {
       if (edgeKind !== "all" && dependency.edgeKind !== edgeKind) continue;
       dependencyCount += 1;
@@ -372,7 +401,16 @@ function buildRoleGraph(manifest, edgeKind) {
     ...relation,
     edgeKind: relation.edgeKinds.size === 1 ? [...relation.edgeKinds][0] : "mixed",
   }));
-  return { nodes, links, dependencyCount };
+  return {
+    nodes,
+    links,
+    dependencyCount,
+    observerDeclarationCount: observerDeclarations.length,
+    externalSeamCount: [...externalTargetsByRole.values()].reduce(
+      (total, targets) => total + targets.size,
+      0,
+    ),
+  };
 }
 
 function positionRoleNodes(nodes, width, height) {
@@ -458,26 +496,33 @@ function renderRoleDetails(node, manifest) {
   );
   const pills = document.createElement("div");
   pills.className = "pills";
-  pills.append(textElement("span", `${node.declarations.length} declarations`, "pill"));
+  pills.append(
+    textElement("span", `${node.ownedDeclarations.length} Observer-owned`, "pill"),
+    textElement("span", `${node.externalDeclarations.length} external seams`, "pill"),
+  );
   detailsElement.append(pills);
 
   const outgoing = new Map();
   const incoming = new Map();
+  const observerPrefix = `${manifest.sourceRoot}/`;
   for (const declaration of manifest.controlledDeclarations) {
+    if (!declaration.path.startsWith(observerPrefix)) continue;
     for (const dependency of declaration.dependencies) {
       if (declaration.role === node.id) increment(outgoing, dependency.role);
       if (dependency.role === node.id) increment(incoming, declaration.role);
     }
   }
   appendDetailSection(detailsElement, "Depends on", roleCountRows(outgoing));
-  appendDetailSection(detailsElement, "Used by", roleCountRows(incoming));
+  appendDetailSection(detailsElement, "Used by Observer declarations", roleCountRows(incoming));
   appendDetailSection(
     detailsElement,
-    `Declarations (${node.declarations.length})`,
-    node.declarations.map((entry) => ({
-      primary: entry.declaration,
-      secondary: `${entry.path} · ${entry.purpose}`,
-    })),
+    `Observer-owned declarations (${node.ownedDeclarations.length})`,
+    declarationRows(node.ownedDeclarations),
+  );
+  appendDetailSection(
+    detailsElement,
+    `Referenced external seams (${node.externalDeclarations.length})`,
+    declarationRows(node.externalDeclarations),
   );
 }
 
@@ -552,10 +597,29 @@ function showPopulatedDetails() {
   detailsEmpty.hidden = true;
 }
 
+function roleNodeCount(node) {
+  const owned = node.ownedDeclarations.length;
+  const external = node.externalDeclarations.length;
+  if (owned === 0) return `${external} referenced external`;
+  if (external === 0) return `${owned} Observer-owned`;
+  return `${owned} owned · ${external} external`;
+}
+
 function roleCountRows(counts) {
   return [...counts.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([role, count]) => ({ primary: role, secondary: `${count} declaration dependencies` }));
+}
+
+function declarationRows(declarations) {
+  return declarations.map((entry) => ({
+    primary: entry.declaration,
+    secondary: `${entry.path} · ${entry.purpose}`,
+  }));
+}
+
+function declarationKey(declaration) {
+  return `${declaration.path}#${declaration.declaration}:${declaration.kind}`;
 }
 
 function increment(counts, key) {

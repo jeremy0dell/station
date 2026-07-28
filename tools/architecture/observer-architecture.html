@@ -48,7 +48,9 @@
         Show external targets
       </label>
       <button id="reset" type="button">Reset view</button>
-      <span id="hint" class="hint">Scroll to zoom · click a role for details</span>
+      <span id="hint" class="hint"
+        >Scroll to zoom · click a role for details</span
+      >
     </section>
 
     <main>
@@ -57,14 +59,20 @@
         class="graph-shell"
         aria-label="Observer architecture dependency graph"
       >
-        <svg id="graph" role="img" aria-label="Observer architecture graph"></svg>
+        <svg
+          id="graph"
+          role="img"
+          aria-label="Observer architecture graph"
+        ></svg>
         <div id="graph-error" class="graph-error" hidden></div>
       </section>
 
       <aside aria-label="Selected architecture details">
         <div id="details-empty" class="details-empty">
-          <strong>Select a node</strong>
-          <span>Inspect its declarations and dependency relationships.</span>
+          <strong id="details-empty-title">Select a role</strong>
+          <span id="details-empty-copy"
+            >Arrows aggregate static declaration references, not runtime calls.</span
+          >
         </div>
         <div id="details" hidden></div>
       </aside>
