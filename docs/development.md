@@ -357,6 +357,16 @@ must show B's build and protocol versions. Legacy or different-protocol hosts
 refuse automatic replacement and must be stopped explicitly only after their
 sessions are accounted for.
 
+## Hosted Workflow Security
+
+External GitHub Actions must use reviewed full commit SHAs with human-readable version comments. Repository-local actions and reusable workflows are tied to the checked-out commit and are exempt from external pinning. Every checkout disables persisted credentials.
+
+Dependabot proposes individual action-pin updates each week. Reviewers must verify official repository ownership, release notes, changed runtime and permissions, and the tag-to-SHA correspondence before merging; Dependabot is an update mechanism, not an approval mechanism.
+
+The nightly Claude compatibility lane intentionally resolves npm's current `latest` release once, validates and installs that exact version, and records the resolved version, installed version, and registry-reported integrity in the run summary. That integrity value is run evidence, not an independent trust root. Authentication uses a dedicated, limited, environment-scoped credential available only to the real-Claude execution step.
+
+Release write access is limited to jobs that create, inspect, or publish draft releases. Public-install verification is tokenless. `tests/diagnostics/ci-workflow-policy.test.ts` enforces action pins, checkout credential handling, release permissions, and nightly secret scope.
+
 ## Experimental Pre-Alpha Release
 
 Before tagging, an administrator must enable GitHub immutable releases; the

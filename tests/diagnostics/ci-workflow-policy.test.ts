@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -22,6 +22,63 @@ function between(document: string, start: string, end?: string): string {
   const endIndex = end === undefined ? document.length : document.indexOf(end, startIndex + 1);
   expect(endIndex, `missing section end: ${end}`).toBeGreaterThan(startIndex);
   return document.slice(startIndex, endIndex);
+}
+
+interface WorkflowFile {
+  readonly path: string;
+  readonly document: string;
+  readonly lines: readonly string[];
+}
+
+interface WorkflowStep {
+  readonly line: number;
+  readonly text: string;
+}
+
+function workflowFiles(): readonly WorkflowFile[] {
+  return [".github/workflows", ".github/actions"].flatMap((directory) =>
+    readdirSync(new URL(directory, root), { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
+      .map((entry) => {
+        const path = `${directory}/${entry.parentPath.slice(
+          fileURLToPath(new URL(directory, root)).length + 1,
+        )}/${entry.name}`.replace("//", "/");
+        const document = read(path);
+        return { path, document, lines: document.split("\n") };
+      }),
+  );
+}
+
+function workflowSteps(file: WorkflowFile): readonly WorkflowStep[] {
+  const stepStarts = file.lines.flatMap((line, index) =>
+    /^\s*- (?:name|uses|run):/.test(line) ? [{ index, indent: line.search(/\S/) }] : [],
+  );
+
+  return stepStarts.map(({ index, indent }, stepIndex) => {
+    const next = stepStarts
+      .slice(stepIndex + 1)
+      .find((candidate) => candidate.indent === indent && candidate.index > index);
+    return {
+      line: index + 1,
+      text: file.lines.slice(index, next?.index ?? file.lines.length).join("\n"),
+    };
+  });
+}
+
+function workflowJobNames(document: string): readonly string[] {
+  const lines = document.slice(document.indexOf("jobs:")).split("\n");
+  return lines.flatMap((line) => {
+    const name = line.match(/^ {2}([\w-]+):$/)?.[1];
+    return name === undefined ? [] : [name];
+  });
+}
+
+function workflowJob(document: string, name: string): string {
+  const lines = document.split("\n");
+  const start = lines.indexOf(`  ${name}:`);
+  expect(start, `missing workflow job: ${name}`).toBeGreaterThanOrEqual(0);
+  const end = lines.findIndex((line, index) => index > start && /^ {2}[\w-]+:/.test(line));
+  return lines.slice(start, end === -1 ? undefined : end).join("\n");
 }
 
 const successfulCiEnvironment = {
@@ -65,6 +122,99 @@ function runAggregatePolicy(environment: Readonly<Record<string, string>>) {
     env: { ...environment },
   });
 }
+
+describe("workflow security policy", () => {
+  it("pins every external action to a full commit SHA", () => {
+    const externalAction = /^[^/\s]+\/[^@\s]+@([0-9a-f]{40})$/;
+
+    for (const file of workflowFiles()) {
+      file.lines.forEach((line, index) => {
+        const reference = line.match(/^\s*(?:-\s*)?uses:\s*([^\s#]+)/)?.[1];
+        if (
+          reference === undefined ||
+          reference.startsWith("./") ||
+          reference.startsWith("docker://")
+        ) {
+          return;
+        }
+        expect.soft(reference, `${file.path}:${index + 1}: ${line.trim()}`).toMatch(externalAction);
+      });
+    }
+  });
+
+  it("disables credential persistence in every checkout step", () => {
+    for (const file of workflowFiles()) {
+      for (const step of workflowSteps(file)) {
+        if (!/uses:\s*actions\/checkout@[0-9a-f]{40}/.test(step.text)) {
+          continue;
+        }
+        expect
+          .soft(step.text, `${file.path}:${step.line}: checkout must not persist credentials`)
+          .toMatch(/\n\s+with:\s*(?:\n\s+[^\n]+)*\n\s+persist-credentials:\s*false(?:\s|$)/);
+      }
+    }
+  });
+
+  it("limits release and promotion permissions to the jobs that need them", () => {
+    const promotion = read(".github/workflows/promote-release.yml");
+    const promotionHeader = promotion.slice(0, promotion.indexOf("jobs:"));
+    expect(promotionHeader).toMatch(/^permissions: \{\}$/m);
+    expect(promotionHeader).not.toContain("contents: write");
+
+    const promote = workflowJob(promotion, "promote");
+    expect(promote).toMatch(/\n {4}permissions:\n {6}actions: read\n {6}contents: write\n/);
+    expect(workflowJob(promotion, "verify-public-install")).toMatch(/\n {4}permissions: \{\}\n/);
+
+    const release = read(".github/workflows/release.yml");
+    const writeJobs = workflowJobNames(release).filter((job) =>
+      workflowJob(release, job).includes("contents: write"),
+    );
+    expect(writeJobs).toEqual(["create-draft", "install-draft", "record-accepted-candidate"]);
+  });
+
+  it("scopes dedicated Claude authentication to the real-agent execution step", () => {
+    const file = workflowFiles().find(
+      (candidate) => candidate.path === ".github/workflows/nightly-agent-smoke.yaml",
+    );
+    expect(file).toBeDefined();
+    if (file === undefined) {
+      return;
+    }
+
+    expect(file.document).toContain("environment: nightly-agent-smoke");
+    expect(file.document).toContain("npm view @anthropic-ai/claude-code@latest version");
+    expect(file.document).toContain(
+      'npm view "@anthropic-ai/claude-code@$claude_version" dist.integrity',
+    );
+    expect(file.document).toContain('npm install -g "@anthropic-ai/claude-code@$claude_version"');
+    expect(file.document).toContain("Resolved latest version:");
+    expect(file.document).toContain("Registry-reported integrity:");
+    expect(file.document).toContain("Installed version:");
+
+    const authentication = /ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN/;
+    const authenticatedSteps = workflowSteps(file).filter((step) => authentication.test(step.text));
+    expect(authenticatedSteps).toHaveLength(1);
+    expect(file.document.match(/ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN/g)).toHaveLength(
+      authenticatedSteps[0]?.text.match(/ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN/g)?.length ?? 0,
+    );
+    expect(authenticatedSteps[0]?.text).toContain("name: Real Claude launch + hook-capture smoke");
+    expect(authenticatedSteps[0]?.text).toContain(
+      `ANTHROPIC_API_KEY: ${actionsExpression("secrets.ANTHROPIC_API_KEY")}`,
+    );
+    expect(authenticatedSteps[0]?.text).not.toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(authenticatedSteps[0]?.text).toContain('echo "::error::');
+    expect(authenticatedSteps[0]?.text).toContain("exit 1");
+    expect(authenticatedSteps[0]?.text).not.toContain("exit 0");
+
+    for (const stepName of ["Install workspace", "Install tmux and the Claude Code CLI"]) {
+      const step = workflowSteps(file).find((candidate) =>
+        candidate.text.startsWith(`      - name: ${stepName}`),
+      );
+      expect(step, `missing nightly step: ${stepName}`).toBeDefined();
+      expect(step?.text).not.toMatch(/ANTHROPIC_API_KEY|CLAUDE_CODE_OAUTH_TOKEN/);
+    }
+  });
+});
 
 describe("hosted CI policy", () => {
   it("fans ready pull requests and release calls into independently reported validation lanes", () => {
