@@ -319,6 +319,19 @@ describe("OpenCodeHarnessProvider", () => {
       artifactOwner: requesterOwner,
     });
 
+    const matchingProvider = createOpenCodeHarnessProvider({
+      installHooks: true,
+      observerSocketPath: requesterObserverSocketPath,
+      stateDir: requesterStateDir,
+      hookSpoolDir: requesterHookSpoolDir,
+      artifactOwner: requesterOwner,
+      env: { OPENCODE_CONFIG_DIR: opencodeConfigDir },
+    });
+    await expect(matchingProvider.hooksStatus?.()).resolves.toMatchObject({
+      installed: true,
+      ownership: { status: "same-owner", requested: requesterOwner },
+    });
+
     const provider = createOpenCodeHarnessProvider({
       command: "opencode-test",
       installHooks: true,

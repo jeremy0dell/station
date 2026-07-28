@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex, TextAttributes } from "@opentui/core";
+import { getLinkId, rgbToHex, TextAttributes } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { MAIN_PANE_ID } from "../state/types.js";
 import { PaneRegistryProvider } from "./registry/paneTerminalContext.js";
@@ -129,6 +129,20 @@ describe("TerminalPane frame rendering", () => {
     expect((errSpan?.attributes ?? 0) & TextAttributes.BOLD).toBe(TextAttributes.BOLD);
     const okSpan = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 4);
     expect(rgbToHex(okSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe("#010203");
+  });
+
+  it("projects an OSC 8 URI through the production registry, screen, and pane", async () => {
+    const pane = await renderPane();
+    const uri = "https://example.com/registry-projection";
+    await feedAndFlush(pane, `\x1b]8;;${uri}\x1b\\label\x1b]8;;\x1b\\`);
+    await waitForPaneFrame(pane, (frame) => frame.includes("label"));
+
+    const screen = pane.registry.get(MAIN_PANE_ID)?.screen;
+    expect(screen?.buildRows({ cursorVisible: false })[0]?.spans[0]?.link).toBe(uri);
+    const frameIndex = ORIGIN.y * SURFACE.width + ORIGIN.x;
+    expect(
+      getLinkId(pane.setup.renderer.currentRenderBuffer.buffers.attributes[frameIndex] ?? 0),
+    ).toBeGreaterThan(0);
   });
 
   it("shows the cursor as an inverse cell and hides it on dectcem", async () => {

@@ -3,6 +3,8 @@ import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
+export const searchScreenBehavior = {};
+
 export function handleSearchKey(state: TuiState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "search") {
     return { state };

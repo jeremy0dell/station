@@ -211,7 +211,7 @@ areas contain the following responsibilities:
 
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
-| `commands/` | command queue, routing, scopes, cancellation, terminal-intent execution, and command use cases | Driving application behavior; terminal-intent execution coordinates terminal and harness ports as a use case. |
+| `commands/` | command queue, routing, scopes, cancellation, launch preflight, terminal-intent execution, and command use cases | Driving application behavior; launch preflight and terminal-intent execution coordinate provider ports as use cases. |
 | `reconcile/` | provider reads, correlation, graph construction, projection, and core state | Reconcile use case plus deterministic policies; provider I/O remains at its driven edges. `run.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
@@ -545,21 +545,47 @@ replay guarantee requires sequence identity, retention semantics, bounded
 subscriber behavior, and a protocol contract rather than an adapter-local
 patch.
 
+### Managed Launch Preflight
+
+`assertHarnessLaunchPreconditionsOrThrow` is the ephemeral policy shared by
+classic session commands, launch-bound worktree commands, terminal-intent
+execution, and external launch. It resolves only the selected active harness,
+rejects providers that cannot launch, awaits a fresh single-flight health probe,
+and rejects only proven `unavailable` health while preserving the provider's
+exact error. `healthy`, `degraded`, and `unknown` remain launchable. It then uses
+the provider-neutral optional `hooksStatus()` capability and fails closed when
+requested Station tracking artifacts are absent, disabled, or cannot be
+inspected. Providers without that capability, including Pi, intentionally pass.
+Command cancellation is checked around shared health and hook work without
+cancelling a health flight shared by another caller.
+
+The facts remain independently authoritative: capability, provider health,
+hook installation, setup checks, and runtime signals do not collapse into a
+readiness record, catalog, persistence model, or background worker. Optional
+`launchHarness` on `worktree.create` and `worktree.fork` marks only mutations
+immediately followed by a managed launch; worktree-only callers omit it. Classic
+create, fork, start, and resume run the gate after read-only validation and
+before owned title, worktree, session, terminal, or process mutation. Terminal
+intent execution repeats it immediately before opening the workspace to close
+the final race.
+
+A late classic failure uses the command's identity-bound cleanup for resources
+that command owns. A native Station create or fork never creates a replacement:
+the already-created worktree remains, no title, target, or process is added, and
+Station presents the attempt as a bounded failed optimistic row. Existing-live
+focus returns before any health or hook probe.
+
 ### External Launch
 
 `prepareExternalLaunch` and `reportExternalExit` are latency-sensitive
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
-opaquely, and request reconcile after relevant lifecycle changes. Before a new
-managed harness session is launched, the use case calls the provider-neutral
-optional `hooksStatus()` capability and fails closed when requested Station
-tracking artifacts are absent or drifted. After validation and identity minting, it durably seeds
-the session from canonical worktree title authority before target registration and process launch;
-failed launch cleanup releases any opened target and discards only the fresh session projection. Claude, Codex, Cursor, and OpenCode —
-the four providers whose external artifacts setup installs — implement this
-capability. Providers without an equivalent managed external artifact retain
-the deliberate fail-open behavior; Pi is not forced through this gate. Focusing
-an existing session precedes the gate.
+opaquely, and request reconcile after relevant lifecycle changes. Returning an
+existing live session precedes launch preflight. A new managed session repeats
+the full selected-harness preflight immediately before title, target, or process
+mutation, then durably seeds the session from canonical worktree title authority
+before target registration and process launch. Failed launch cleanup releases
+any opened target and discards only the fresh session projection.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new

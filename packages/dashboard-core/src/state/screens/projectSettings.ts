@@ -49,6 +49,8 @@ export function isRemoveProjectArmed(
 
 type ProjectSettingsScreen = Extract<TuiState["screen"], { name: "projectSettings" }>;
 
+export const projectSettingsScreenBehavior = { clickAway: toDashboard };
+
 export function openProjectSettings(state: TuiState, projectId: string): TuiState {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === projectId);
   if (project === undefined) {

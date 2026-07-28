@@ -5,6 +5,7 @@ import type {
   BuildHarnessLaunchRequest,
   HarnessEventObservation,
   HarnessRunObservation,
+  ProviderHookArtifactOwner,
   RawHarnessEvent,
 } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
@@ -195,6 +196,13 @@ describe("CodexHarnessProvider", () => {
     const observerSocketPath = join(root, "run", "observer.sock");
     const stateDir = join(root, "state");
     const hookSpoolDir = join(stateDir, "spool", "hooks");
+    const artifactOwner: ProviderHookArtifactOwner = {
+      schemaVersion: 1,
+      launcher: "/checkout/bin/stn-ingress",
+      runtimeKind: "source",
+      version: "0.0.0-test",
+      buildIdentity: "a".repeat(64),
+    };
 
     await installCodexHooks({
       hookScriptPath,
@@ -203,6 +211,7 @@ describe("CodexHarnessProvider", () => {
       stateDir,
       hookSpoolDir,
       autoStartFromHooks: false,
+      artifactOwner,
       env: { CODEX_HOME: codexHome },
     });
 
@@ -216,6 +225,7 @@ describe("CodexHarnessProvider", () => {
         stateDir,
         hookSpoolDir,
         autoStartFromHooks: false,
+        artifactOwner,
         runner: async (input) => result(input, "Logged in with ChatGPT\n"),
       });
 
@@ -225,6 +235,10 @@ describe("CodexHarnessProvider", () => {
           status: "ok",
         }),
       );
+      await expect(provider.hooksStatus({ stationConfigPath })).resolves.toMatchObject({
+        installed: true,
+        requested: true,
+      });
     } finally {
       if (previousCodexHome === undefined) {
         delete process.env.CODEX_HOME;

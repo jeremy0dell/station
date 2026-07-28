@@ -94,11 +94,12 @@ continues to pass through, including functional Git askpass and provider context
 Local PTYs preserve inherited `NO_COLOR` / `FORCE_COLOR` preferences. A
 persistent Host may inherit those values from a headless provider hook rather
 than a user terminal, so Host PTYs discard daemon-inherited copies and preserve
-only values carried by the explicit launch request. Until Station supports a
-feature end to end, children must not infer it from Ghostty, Kitty, WezTerm,
-iTerm2, Windows Terminal, Warp, or another outer renderer; native Station
-currently advertises true color but neither an image protocol nor OSC 8
-hyperlinks.
+only values carried by the explicit launch request. Until Station can establish a
+feature end to end for the current outer renderer, children must not infer it from
+Ghostty, Kitty, WezTerm, iTerm2, Windows Terminal, Warp, or another outer renderer;
+native Station currently advertises true color but neither an image protocol nor
+OSC 8 hyperlinks. `TERM_PROGRAM=Station` preserves the renderer identity without
+impersonating an outer emulator.
 
 Outer-renderer variables are application conventions, not an exhaustive standard
 registry. Station therefore maintains a curated set of known identity and capability
@@ -121,6 +122,48 @@ do not pass through this native PTY policy.
 The policy applies only when a local bridge, Bun, or Station Host PTY is created.
 Existing live PTYs keep the environment captured at spawn and are never torn down to
 adopt a capability-policy update.
+
+The pinned Pi 0.80.10 detector fixture does not yet recognize Station or
+`FORCE_HYPERLINK`; it intentionally remains `hyperlinks: false`. Inherited
+hyperlink overrides are scrubbed and Station does not replace them. Capability
+advertisement remains disabled until a coordinated Pi release and an
+outer-terminal capability gate can land atomically; do not impersonate another
+emulator or patch the fixture to claim behavior the published Pi executable does
+not have.
+
+## Native OSC 8 Hyperlinks
+
+Native panes preserve hyperlink identity through the Station-owned terminal
+pipeline: xterm resolves each active buffer cell's OSC 8 link to its URI,
+link-aware VT spans preserve that URI across viewport and scrollback projection,
+and OpenTUI attaches a native link ID to only the cells actually drawn inside
+the pane. Adjacent same-style links remain distinct, and xterm owns overwrite,
+erase, reset, reflow, scrollback eviction, and alternate-buffer lifetime.
+
+Before handing a URI to OpenTUI, Station requires parseable absolute-URI syntax,
+rejects invalid percent escapes, disallowed URI characters, terminal controls,
+and malformed surrogate data, and enforces OpenTUI 0.4.1's 512-byte UTF-8 limit
+without normalizing accepted values. A constant-time code-unit length gate bounds
+all parsing and encoding work. Invalid links remain ordinary visible text.
+OpenTUI emits OSC 8 only when its outer-terminal capability is enabled; the
+outer terminal owns activation and URI policy. Station does not open or
+shell-execute child-provided URIs, and terminal drag selection,
+right-click, multi-click, wheel, and child mouse reporting remain unchanged.
+
+Station Host records and replays raw PTY data events, so a complete replay feeds
+the original OSC 8 open/close bytes back through xterm and restores link
+metadata without a Host protocol change. A replay whose required bytes were
+already truncated cannot reconstruct that state and remains owned by #216.
+
+Manual validation in a hyperlink-capable outer terminal:
+
+```sh
+printf '\033[4m\033]8;;https://github.com/jeremy0dell/station/issues/196\033\\#196\033]8;;\033\\\033[24m\n'
+```
+
+The `#196` label should expose the exact issue URI. Repeat with adjacent links,
+`file:` and `mailto:` targets, selection, scrollback, resize, and complete Host
+reattach; pane borders and neighboring panes must remain unlinked.
 
 ## Boundaries
 
@@ -171,6 +214,18 @@ observer-backed focus, start, resume, and picker behavior stays on the existing 
 Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header clicks
 toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
 modal surfaces intercept background clicks and scrolling.
+
+Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
+`TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
+cancellation. Shared composition uses the presence of that capability for both the viewport
+backdrop and background-hover suppression without knowing whether cancellation closes the screen,
+backs up one step, or clears nested state. Active-screen controls retain hover, and individual
+sheets continue swallowing inside input;
+non-primary buttons, mouse-up, and wheel input remain consumed without dismissing or reaching the
+dashboard. Remove, rename, and fork choose-row modes expose no click-away behavior so row clicks
+and hover keep selecting; search and the dashboard likewise remain unchanged. In native Station,
+the inner screen receives the click before the outer popup backdrop, so one click closes only the
+topmost safe surface.
 
 Native and standalone rendering expose the same project actions. Quick-session
 intent resolves the same project and default harness before terminal-specific

@@ -271,6 +271,8 @@ const fakePersistence = trackingPersistence().store;
 
 /** A harness that reports hook installation status (the gate input). */
 class HookableHarness extends FakeHarnessProvider {
+  healthCalls = 0;
+  hooksCalls = 0;
   readonly #installed: boolean;
   readonly #requested: boolean;
   constructor(installed: boolean, requested = true) {
@@ -278,7 +280,12 @@ class HookableHarness extends FakeHarnessProvider {
     this.#installed = installed;
     this.#requested = requested;
   }
+  override async health(): Promise<ProviderHealth> {
+    this.healthCalls += 1;
+    return super.health();
+  }
   async hooksStatus(): Promise<HarnessHooksStatus> {
+    this.hooksCalls += 1;
     return {
       provider: this.id,
       installed: this.#installed,
@@ -412,6 +419,30 @@ describe("prepareExternalLaunch", () => {
     expect(persistence.discarded).toEqual([]);
   });
 
+  it("preserves unavailable health and creates no title or managed target", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const persistence = trackingPersistence();
+    const healthError: SafeError = {
+      tag: "ProviderUnavailableError",
+      code: "FAKE_CLI_MISSING",
+      message: "The selected harness CLI is unavailable.",
+      provider: "fake-harness",
+    };
+    const harness = new FakeHarnessProvider({
+      id: "fake-harness",
+      now: () => new Date(now),
+      health: { status: "unavailable", lastError: healthError },
+    });
+
+    await expect(
+      prepareExternalLaunch(deps([row()], station, [harness], persistence.store), prepareParams),
+    ).rejects.toEqual(healthError);
+    expect(await station.listTargets()).toEqual([]);
+    expect(persistence.seeded).toEqual([]);
+    expect(persistence.renamed).toEqual([]);
+    expect(persistence.discarded).toEqual([]);
+  });
+
   it("rejects when the harness's status hooks are not installed", async () => {
     const station = new FakeManagedTerminalLifecycle();
     await expect(
@@ -487,8 +518,9 @@ describe("prepareExternalLaunch", () => {
   it("returns the existing session id without applying a requested title", async () => {
     const station = new FakeManagedTerminalLifecycle();
     const persistence = trackingPersistence();
+    const harness = new HookableHarness(false);
     const result = await prepareExternalLaunch(
-      deps([row({ agentSessionId: "ses_existing" })], station, undefined, persistence.store),
+      deps([row({ agentSessionId: "ses_existing" })], station, [harness], persistence.store),
       { ...prepareParams, title: "Do not rename me" },
     );
     expect(result).toEqual({
@@ -504,6 +536,8 @@ describe("prepareExternalLaunch", () => {
     expect(persistence.renamed).toEqual([]);
     expect(persistence.discarded).toEqual([]);
     expect(await station.listTargets()).toEqual([]);
+    expect(harness.healthCalls).toBe(0);
+    expect(harness.hooksCalls).toBe(0);
   });
 
   it("relaunches an exited agent instead of returning its dead session", async () => {

@@ -113,8 +113,10 @@ export type StationVtScreen = {
   resize(size: StationTerminalSize): void;
   /**
    * Style-merged spans for the rows currently in view (the live viewport, or
-   * scrolled-back history when `getScrollOffset() > 0`). The cursor is only
-   * composited at the live bottom.
+   * scrolled-back history when `getScrollOffset() > 0`). OSC 8 URIs follow the
+   * active xterm buffer and selected viewport lines, including xterm-owned
+   * overwrite, erase, reflow, scrollback eviction, reset, and alternate-buffer
+   * lifecycles. The cursor is only composited at the live bottom.
    */
   buildRows(options?: { cursorVisible?: boolean }): VtRow[];
   /**
