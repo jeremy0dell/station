@@ -6,7 +6,10 @@ import type {
 } from "../terminal/types.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createPtyTable } from "./ptyTable.js";
-import type { SemanticTerminalModel } from "./semanticTerminalSnapshot.js";
+import {
+  type SemanticTerminalModel,
+  TerminalSnapshotPendingError,
+} from "./semanticTerminalSnapshot.js";
 
 const baseParams: HostSpawnParams = {
   kind: "agent",
@@ -338,6 +341,29 @@ describe("createPtyTable", () => {
       initialRows: 24,
       events: [{ type: "data", data: "recovered" }],
     });
+  });
+
+  it("classifies an unfinished parser sequence as retryable snapshot state", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const semantic: SemanticTerminalModel = {
+      write() {},
+      resize() {},
+      capture: async () => {
+        throw new TerminalSnapshotPendingError("parser sequence is unfinished");
+      },
+      dispose() {},
+    };
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      createSemanticTerminal: () => semantic,
+      maxScrollbackBytes: 5,
+    });
+    const { ptyId } = table.spawn(baseParams);
+    scripted.helpers.emitData("first");
+    scripted.helpers.emitData("second");
+
+    await expect(table.attach(ptyId)).rejects.toMatchObject({ code: "HOST_SNAPSHOT_PENDING" });
+    expect(table.has(ptyId)).toBe(true);
   });
 
   it("reuses the live PTY for the same worktree (idempotent spawn)", () => {

@@ -19,6 +19,7 @@ import { ScrollbackRing } from "./scrollbackRing.js";
 import {
   createSemanticTerminalSnapshot,
   type SemanticTerminalModel,
+  TerminalSnapshotPendingError,
 } from "./semanticTerminalSnapshot.js";
 import {
   createPtyOutputCompatibility,
@@ -385,9 +386,12 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
               { cause: error },
             );
           }
+          const pending = error instanceof TerminalSnapshotPendingError;
           throw new StationHostProviderError(
-            "HOST_SNAPSHOT_FAILED",
-            `Could not capture terminal state for host PTY "${ptyId}".`,
+            pending ? "HOST_SNAPSHOT_PENDING" : "HOST_SNAPSHOT_FAILED",
+            pending
+              ? `Host PTY "${ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`
+              : `Could not capture terminal state for host PTY "${ptyId}".`,
             { cause: error },
           );
         }

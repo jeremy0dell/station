@@ -14,6 +14,8 @@ export const ControlByte = {
 export const CsiFinal = {
   /** ED — Erase in Display (CSI Ps J). */
   EraseInDisplay: "J",
+  /** ECH — Erase Character (CSI Ps X). */
+  EraseCharacter: "X",
 } as const;
 
 export const EraseInDisplayMode = {

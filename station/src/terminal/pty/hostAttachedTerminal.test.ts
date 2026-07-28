@@ -1070,6 +1070,60 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.dispose();
   });
 
+  it("retries HOST_SNAPSHOT_PENDING before declaring attachment unavailable", async () => {
+    let attachCalls = 0;
+    const opened = controllableAttachment(ack());
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-pending",
+      size: { cols: 80, rows: 24 },
+      sleep: async () => undefined,
+      clientFactory: () =>
+        clientForAttach(async () => {
+          attachCalls += 1;
+          if (attachCalls === 1) {
+            throw new StationHostProviderError(
+              "HOST_SNAPSHOT_PENDING",
+              "terminal parser sequence is unfinished",
+            );
+          }
+          return opened.attachment;
+        }),
+    });
+    const unavailable: string[] = [];
+    terminal.onUnavailable?.((event) => unavailable.push(event.code));
+
+    await flush();
+    await flush();
+    expect(attachCalls).toBe(2);
+    expect(unavailable).toEqual([]);
+    terminal.dispose();
+  });
+
+  it("reports HOST_SNAPSHOT_PENDING when parser-boundary retries are exhausted", async () => {
+    let attachCalls = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyId: "pty-pending",
+      size: { cols: 80, rows: 24 },
+      sleep: async () => undefined,
+      clientFactory: () =>
+        clientForAttach(async () => {
+          attachCalls += 1;
+          throw new StationHostProviderError(
+            "HOST_SNAPSHOT_PENDING",
+            "terminal parser sequence is unfinished",
+          );
+        }),
+    });
+    const unavailable: string[] = [];
+    terminal.onUnavailable?.((event) => unavailable.push(event.code));
+
+    await flush();
+    expect(attachCalls).toBe(6);
+    expect(unavailable).toEqual(["HOST_SNAPSHOT_PENDING"]);
+  });
+
   for (const code of [
     "HOST_ATTACH_GONE",
     "HOST_SNAPSHOT_FAILED",

@@ -71,6 +71,7 @@ type AttachAttemptOutcome =
       kind: "reconnect";
       replayed: boolean;
       connectedAt: number | undefined;
+      error?: StationTerminalUnavailable;
     };
 
 type AttachmentPreparationState = { replayed: boolean };
@@ -82,8 +83,8 @@ type ReconnectPreparationOutcome =
 
 type AttachLoopStep =
   | { kind: "complete" }
-  | { kind: "exhausted" }
-  | { kind: "retry"; attempt: number; replayed: boolean };
+  | { kind: "exhausted"; error?: StationTerminalUnavailable }
+  | { kind: "retry"; attempt: number; replayed: boolean; error?: StationTerminalUnavailable };
 
 export type HostAttachedTerminalOptions = {
   hostSocketPath: string;
@@ -486,7 +487,7 @@ export function createHostAttachedTerminal(
       emitUnavailable(failure.error);
       return { kind: "complete" };
     }
-    return { kind: "reconnect", replayed: state.replayed, connectedAt };
+    return { kind: "reconnect", replayed: state.replayed, connectedAt, error: failure.error };
   };
 
   const runAttachAttempt = async (
@@ -560,9 +561,14 @@ export function createHostAttachedTerminal(
       case "stop":
         return { kind: "complete" };
       case "exhausted":
-        return reconnect;
+        return { ...reconnect, ...(outcome.error === undefined ? {} : { error: outcome.error }) };
       case "retry":
-        return { kind: "retry", attempt: reconnect.attempt, replayed: outcome.replayed };
+        return {
+          kind: "retry",
+          attempt: reconnect.attempt,
+          replayed: outcome.replayed,
+          ...(outcome.error === undefined ? {} : { error: outcome.error }),
+        };
       default:
         return unreachableAttachmentState(reconnect);
     }
@@ -572,22 +578,29 @@ export function createHostAttachedTerminal(
   // ends the pane, while a healthy connection earns a fresh consecutive budget.
   const runAttachLoop = async (ptyId: string): Promise<void> => {
     let replayed = false;
+    let lastError: StationTerminalUnavailable | undefined;
     for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS; attempt += 1) {
       const step = await advanceAttachLoop(ptyId, replayed, attempt);
       if (step.kind === "complete") {
         return;
       }
       if (step.kind === "exhausted") {
+        lastError = step.error;
         break;
       }
       replayed = step.replayed;
+      lastError = step.error;
       attempt = step.attempt;
     }
+    const unavailable =
+      lastError?.code === "HOST_SNAPSHOT_PENDING"
+        ? lastError
+        : {
+            code: "HOST_UNREACHABLE",
+            message: "Station host reconnect failed; PTY liveness is unknown.",
+          };
     emitDiagnostic("Station host reconnect failed.");
-    emitUnavailable({
-      code: "HOST_UNREACHABLE",
-      message: "Station host reconnect failed; PTY liveness is unknown.",
-    });
+    emitUnavailable(unavailable);
   };
 
   void (async () => {

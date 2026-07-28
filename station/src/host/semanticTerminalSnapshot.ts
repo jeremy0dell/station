@@ -2,13 +2,26 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
 import { MAX_SCROLLBACK_LINES } from "../config/stationConfig.js";
-import { ControlByte } from "../terminal/protocol/controlBytes.js";
-import { TerminalSequenceContinuation } from "./terminalSequenceContinuation.js";
-import { TerminalRestoreState } from "./terminalRestoreState.js";
+import {
+  ControlByte,
+  CsiFinal,
+  EraseInDisplayMode,
+} from "../terminal/protocol/controlBytes.js";
+import { TerminalSupplementalState } from "./terminalSupplementalState.js";
 
 const RIS = `${ControlByte.Esc}c`;
 const OSC_TITLE = `${ControlByte.Esc}]2;`;
 const STRING_TERMINATOR = ControlByte.Bel;
+const XTERM_GROUND_STATE = 0;
+
+type PinnedXtermParserState = {
+  _core: {
+    _inputHandler: {
+      _parser: { currentState: number };
+      _stringDecoder: { _interim: number };
+    };
+  };
+};
 
 export type SemanticTerminalModel = {
   write(data: string): void;
@@ -16,6 +29,9 @@ export type SemanticTerminalModel = {
   capture(): Promise<string[]>;
   dispose(): void;
 };
+
+/** Capture can be retried after later PTY output finishes the current parser sequence. */
+export class TerminalSnapshotPendingError extends Error {}
 
 /**
  * A bounded headless terminal whose write, resize, and capture operations share
@@ -25,10 +41,8 @@ export type SemanticTerminalModel = {
 export class SemanticTerminalSnapshot implements SemanticTerminalModel {
   readonly #terminal: Terminal;
   readonly #serializer: SerializeAddon;
-  readonly #restoreState: TerminalRestoreState;
-  readonly #continuation = new TerminalSequenceContinuation();
-  readonly #titleSubscription: { dispose(): void };
-  readonly #risSubscription: { dispose(): void };
+  readonly #supplementalState: TerminalSupplementalState;
+  readonly #subscriptions: Array<{ dispose(): void }>;
   #tail = Promise.resolve();
   #failure: unknown;
   #disposed = false;
@@ -46,20 +60,44 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     this.#terminal.unicode.activeVersion = "11";
     this.#serializer = new SerializeAddon();
     this.#terminal.loadAddon(this.#serializer as never);
-    this.#restoreState = new TerminalRestoreState(this.#terminal, this.#serializer);
-    this.#titleSubscription = this.#terminal.onTitleChange((title) => {
-      this.#title = title;
-    });
-    this.#risSubscription = this.#terminal.parser.registerEscHandler({ final: "c" }, () => {
-      this.#title = "";
-      return false;
-    });
+    this.#supplementalState = new TerminalSupplementalState(this.#terminal);
+    let normalBufferIsSynchronizedFrame = false;
+    this.#subscriptions = [
+      this.#terminal.onTitleChange((title) => {
+        this.#title = title;
+      }),
+      this.#terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) => {
+        const isNormalBufferFullErase =
+          params[0] === EraseInDisplayMode.EntireDisplay &&
+          this.#terminal.buffer.active.type === "normal";
+        const isSynchronizedFullErase =
+          isNormalBufferFullErase && this.#terminal.modes.synchronizedOutputMode;
+        // Match StationVtScreen's one-time archive of the screen replaced by a sync frame.
+        this.#terminal.options.scrollOnEraseInDisplay =
+          isSynchronizedFullErase && !normalBufferIsSynchronizedFrame;
+        if (isNormalBufferFullErase) {
+          normalBufferIsSynchronizedFrame = isSynchronizedFullErase;
+        }
+        return false;
+      }),
+      this.#terminal.parser.registerEscHandler({ final: "c" }, () => {
+        this.#title = "";
+        normalBufferIsSynchronizedFrame = false;
+        return false;
+      }),
+      this.#terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+        normalBufferIsSynchronizedFrame = false;
+        return false;
+      }),
+      this.#terminal.onWriteParsed(() => {
+        this.#terminal.options.scrollOnEraseInDisplay = false;
+      }),
+    ];
   }
 
   write(data: string): void {
     void this.#schedule(async () => {
-      this.#continuation.feed(data);
-      await this.#restoreState.write(data);
+      await new Promise<void>((resolve) => this.#terminal.write(data, resolve));
     }).catch(() => undefined);
   }
 
@@ -71,12 +109,11 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
 
   capture(): Promise<string[]> {
     return this.#schedule(() => {
-      const continuation = this.#continuation.captureSequence();
+      assertXtermParserBoundary(this.#terminal);
       const title = OSC_TITLE + this.#title + STRING_TERMINATOR;
       const restore =
         RIS +
-        this.#restoreState.restoreSerialization(this.#serializer.serialize(), title) +
-        continuation;
+        this.#supplementalState.restoreSerialization(this.#serializer.serialize(), title);
       return [restore];
     }, false);
   }
@@ -87,9 +124,10 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     }
     this.#disposed = true;
     void this.#tail.finally(() => {
-      this.#titleSubscription.dispose();
-      this.#risSubscription.dispose();
-      this.#restoreState.dispose();
+      for (const subscription of this.#subscriptions) {
+        subscription.dispose();
+      }
+      this.#supplementalState.dispose();
       this.#terminal.dispose();
     });
   }
@@ -113,6 +151,17 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
       },
     );
     return scheduled;
+  }
+}
+
+function assertXtermParserBoundary(terminal: Terminal): void {
+  // Semantic capture may retry after later PTY output completes the sequence; replaying a
+  // guessed prefix would duplicate parser work already applied by xterm.
+  const input = (terminal as unknown as PinnedXtermParserState)._core._inputHandler;
+  if (input._parser.currentState !== XTERM_GROUND_STATE || input._stringDecoder._interim !== 0) {
+    throw new TerminalSnapshotPendingError(
+      "Cannot capture terminal state in the middle of an input sequence.",
+    );
   }
 }
 
