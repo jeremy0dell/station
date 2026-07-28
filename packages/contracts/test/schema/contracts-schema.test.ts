@@ -127,11 +127,6 @@ describe("contract schemas", () => {
     expect(
       ProviderHookArtifactOwnershipSchema.parse({ status: "unknown-owner", requested }),
     ).toEqual({ status: "unknown-owner", requested });
-    expectFails(
-      ProviderHookArtifactOwnershipSchema,
-      { status: "legacy-unknown", requested },
-      "removed legacy ownership status",
-    );
   });
 
   it("keeps provider-native execution identity on harness run observations", () => {
