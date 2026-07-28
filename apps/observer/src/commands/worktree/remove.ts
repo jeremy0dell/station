@@ -43,7 +43,7 @@ export type CreateWorktreeRemoveHandlerOptions = {
  * USE CASE
  *
  * Revalidates selected checkout and Git registration identity before coordinating removal.
- * Provider-side race refusals retain command-correlated evidence for diagnostics.
+ * Provider-confirmed removal atomically ends sessions and retires canonical title authority.
  */
 export function createWorktreeRemoveHandler(
   options: CreateWorktreeRemoveHandlerOptions,
@@ -146,8 +146,9 @@ export function createWorktreeRemoveHandler(
       throw error;
     }
     throwIfAborted(context.signal);
-    await options.persistence.markSessionsEnded({
-      subject: { kind: "worktree", projectId: row.projectId, worktreeId: row.id },
+    await options.persistence.retireRemovedWorktreeSessionState({
+      projectId: row.projectId,
+      worktreeId: row.id,
       endedAt: nowIso(options.clock),
     });
 

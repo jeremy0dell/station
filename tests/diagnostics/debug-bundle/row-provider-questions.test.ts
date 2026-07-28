@@ -25,6 +25,7 @@ describe("row-level provider diagnostics from debug bundles", () => {
               id: "wt_web_debug",
               projectId: "web",
               projectLabel: "web",
+              title: "feature/debug",
               branch: "feature/debug",
               path: "/tmp/station/web/debug",
               worktree: { state: "exists", source: "worktrunk", dirty: true },

@@ -112,9 +112,24 @@ importers:
         specifier: ^4.1.12
         version: 4.4.3
     devDependencies:
+      '@station/cursor':
+        specifier: workspace:*
+        version: link:../../integrations/harness/cursor
+      '@station/pi':
+        specifier: workspace:*
+        version: link:../../integrations/harness/pi
+      '@station/terminal':
+        specifier: workspace:*
+        version: link:../../integrations/terminal/station
       '@station/testing':
         specifier: workspace:*
         version: link:../../packages/testing
+      '@station/worktrunk':
+        specifier: workspace:*
+        version: link:../../integrations/worktree/worktrunk
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.12.4)(jiti@2.7.0)(yaml@2.9.0)
 
   integrations/harness/claude:
     dependencies:

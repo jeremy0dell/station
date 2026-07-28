@@ -192,8 +192,8 @@ describe("dashboard viewport selector", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_stuck" ? { ...session, title: "aaa stable task" } : session,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_stuck" ? { ...row, title: "aaa stable task" } : row,
       ),
     };
     const viewport = selectDashboardViewport(
@@ -369,8 +369,8 @@ describe("dashboard viewport selector", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
-      sessions: snapshot.sessions.map((session) =>
-        session.id === "ses_wt_web_idle" ? { ...session, title: "Readable feature task" } : session,
+      rows: snapshot.rows.map((row) =>
+        row.id === "wt_web_idle" ? { ...row, title: "Readable feature task" } : row,
       ),
     };
     const viewport = selectDashboardViewport(titled, createInitialTuiState());

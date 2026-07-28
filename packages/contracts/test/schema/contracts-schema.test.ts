@@ -63,6 +63,7 @@ import {
   WorktreeChecksStateSchema,
   type WorktreeId,
   WorktreeObservationSchema,
+  WorktreeRowSchema,
 } from "@station/contracts";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { ZodType } from "zod";
@@ -153,7 +154,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.8.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.9.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -687,6 +688,7 @@ describe("contract schemas", () => {
       id: "wt_web_feature_auth",
       projectId: "web",
       projectLabel: "web",
+      title: "Readable feature task",
       branch: "feature/auth",
       path: "/tmp/station-fixtures/web/worktrees/feature-auth",
       worktree: {
@@ -730,6 +732,11 @@ describe("contract schemas", () => {
     };
 
     expectParses(StationSnapshotSchema, snapshot, "snapshot with normalized branch metadata");
+    expectFails(
+      WorktreeRowSchema,
+      { ...row, title: undefined },
+      "worktree row without canonical title",
+    );
     expectFails(
       StationSnapshotSchema,
       {

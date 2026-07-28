@@ -13,7 +13,7 @@ import {
   buildEnsureAgentWorkspaceIntent,
   commandValidationError,
   defaultSessionCommandIdFactory,
-  deleteSessionTitleSeedBestEffort,
+  discardSessionSeedBestEffort,
   findProjectOrThrow,
   publishSessionCreated,
   rememberedHarnessProviderForWorktree,
@@ -22,7 +22,7 @@ import {
   resolveTerminalProviderOrThrow,
   runProviderMutation,
   type SessionCommandIdFactory,
-  seedSessionTitle,
+  seedSession,
   throwIfAborted,
   validateSnapshotRow,
 } from "./shared.js";
@@ -43,9 +43,8 @@ export type CreateSessionForkHandlerOptions = {
 /**
  * USE CASE
  *
- * Fork an existing worktree onto an internal branch, persist an independent
- * user-facing title, optionally copy dirty state, and launch a fresh agent.
- * The source agent remains live and its remembered harness is inherited.
+ * Forks an existing worktree onto an internal branch, durably seeds its independent title,
+ * and launches a fresh agent; cleanup retires title authority only after verified rollback.
  */
 export function createSessionForkHandler(options: CreateSessionForkHandlerOptions): CommandHandler {
   const idFactory = {
@@ -98,7 +97,7 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
     const base = payload.base ?? sourceRow.branch;
 
     let createdWorktree: WorktreeObservation | undefined;
-    let seededSessionTitle = false;
+    let sessionSeeded = false;
 
     try {
       const worktree = await runProviderMutation(
@@ -123,15 +122,15 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       createdWorktree = worktree;
       throwIfAborted(context.signal);
 
-      await seedSessionTitle({
+      await seedSession({
         persistence: options.persistence,
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
-        title: payload.title ?? payload.branch,
+        initialTitle: payload.title ?? payload.branch,
         clock: options.clock,
       });
-      seededSessionTitle = true;
+      sessionSeeded = true;
       throwIfAborted(context.signal);
 
       const receipt = await options.terminalIntentRunner.submitIntent(
@@ -159,26 +158,30 @@ export function createSessionForkHandler(options: CreateSessionForkHandlerOption
       }
       throwIfAborted(context.signal);
     } catch (error) {
-      if (seededSessionTitle) {
-        await deleteSessionTitleSeedBestEffort({
+      const worktreeRemoved =
+        createdWorktree === undefined
+          ? false
+          : await removeWorktreeBestEffort({
+              providers: options.providers,
+              projectId: project.id,
+              worktreeId: createdWorktree.id,
+              expectedPath: createdWorktree.path,
+              expectedBranch: createdWorktree.branch,
+              expectedRegistrationIdentity: createdWorktree.registrationIdentity,
+              context,
+              logger: options.logger,
+              clock: options.clock,
+              commandTimeoutMs: options.commandTimeoutMs,
+            });
+      if (sessionSeeded) {
+        await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
+          ...(worktreeRemoved && createdWorktree !== undefined
+            ? { removedWorktree: { projectId: project.id, worktreeId: createdWorktree.id } }
+            : {}),
           context,
           logger: options.logger,
-        });
-      }
-      if (createdWorktree !== undefined) {
-        await removeWorktreeBestEffort({
-          providers: options.providers,
-          projectId: project.id,
-          worktreeId: createdWorktree.id,
-          expectedPath: createdWorktree.path,
-          expectedBranch: createdWorktree.branch,
-          expectedRegistrationIdentity: createdWorktree.registrationIdentity,
-          context,
-          logger: options.logger,
-          clock: options.clock,
-          commandTimeoutMs: options.commandTimeoutMs,
         });
       }
       throw error;

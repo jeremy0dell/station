@@ -292,18 +292,11 @@ function projectAgent(agent: WorktreeAgent, status: ObservedStatus): WorktreeAge
 }
 
 function projectRow(row: WorktreeRow, agent: WorktreeAgent, status: ObservedStatus): WorktreeRow {
-  const nextRow: WorktreeRow = {
-    id: row.id,
-    projectId: row.projectId,
-    projectLabel: row.projectLabel,
-    branch: row.branch,
-    path: row.path,
-    worktree: row.worktree,
+  return {
+    ...row,
     display: displayForStatus(status),
     agent,
   };
-  if (row.terminal !== undefined) nextRow.terminal = row.terminal;
-  return nextRow;
 }
 
 function displayForStatus(status: ObservedStatus): WorktreeRow["display"] {

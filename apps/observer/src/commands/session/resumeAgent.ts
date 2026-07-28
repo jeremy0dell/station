@@ -15,6 +15,7 @@ import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
+import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
@@ -24,13 +25,14 @@ import {
   buildEnsureAgentWorkspaceIntent,
   commandValidationError,
   defaultSessionCommandIdFactory,
+  discardSessionSeedBestEffort,
   findProjectOrThrow,
   lookupWorktree,
   publishSessionCreated,
   resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
-  seedSessionTitle,
+  seedSession,
   throwIfAborted,
   validateSnapshotRow,
   worktreeObservationFromRow,
@@ -46,9 +48,16 @@ export type CreateSessionResumeAgentHandlerOptions = {
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   idFactory?: Partial<SessionCommandIdFactory> | undefined;
+  logger?: StationLogger | undefined;
   commandTimeoutMs?: number | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Resumes provider-native recovery into an existing Station identity or a fresh titled session.
+ * Failed launch cleanup discards only a newly minted session projection.
+ */
 export function createSessionResumeAgentHandler(
   options: CreateSessionResumeAgentHandlerOptions,
 ): CommandHandler {
@@ -112,55 +121,67 @@ export function createSessionResumeAgentHandler(
     const harnessProvider = resolveHarnessProviderOrThrow(options.providers, handle.provider);
     assertHarnessCanResume(harnessProvider, handle);
 
+    const sessionIdIsFresh = handle.sessionId === undefined;
     const sessionId = handle.sessionId ?? idFactory.sessionId();
-    // Resume may reuse an existing session row, so failed launch cleanup must
-    // not delete metadata. A stray new seed is cheaper than deleting the user's
-    // known title/session record after a provider launch failure.
-    await seedSessionTitle({
-      persistence: options.persistence,
-      sessionId,
-      projectId: project.id,
-      worktreeId: worktree.id,
-      title: worktree.branch,
-      clock: options.clock,
-    });
-    throwIfAborted(context.signal);
-
-    // The terminal runner stays provider-neutral: it opens/focuses the pane, and
-    // the harness adapter alone translates this resume target into CLI args.
-    const resume: HarnessResumeOptions = {
-      target: handle.target,
-      recoveryHandleId: handle.id,
-    };
-    if (handle.sessionId !== undefined) {
-      resume.previousSessionId = handle.sessionId;
-    }
-    const receipt = await options.terminalIntentRunner.submitIntent(
-      buildEnsureAgentWorkspaceIntent({
-        commandId: context.commandId,
-        project,
-        worktree,
+    let sessionSeeded = false;
+    try {
+      await seedSession({
+        persistence: options.persistence,
         sessionId,
-        terminalProvider: terminalProviderId,
-        harnessProvider: handle.provider,
-        harness: { mode: "interactive" },
-        layout: payload.terminal?.layout ?? project.defaults.layout,
-        focus: payload.terminal?.focus,
-        origin: payload.terminal?.origin,
-        initialPrompt: payload.initialPrompt,
-        resume,
-      }),
-      {
-        trace: context.trace,
-        signal: context.signal,
-        commandTimeoutMs: options.commandTimeoutMs,
-      },
-    );
-    if (receipt.status === "rejected") {
-      throw receipt.error;
+        projectId: project.id,
+        worktreeId: worktree.id,
+        initialTitle: row?.title ?? worktree.branch,
+        clock: options.clock,
+      });
+      sessionSeeded = true;
+      throwIfAborted(context.signal);
+
+      // The terminal runner stays provider-neutral: it opens/focuses the pane, and
+      // the harness adapter alone translates this resume target into CLI args.
+      const resume: HarnessResumeOptions = {
+        target: handle.target,
+        recoveryHandleId: handle.id,
+      };
+      if (handle.sessionId !== undefined) {
+        resume.previousSessionId = handle.sessionId;
+      }
+      const receipt = await options.terminalIntentRunner.submitIntent(
+        buildEnsureAgentWorkspaceIntent({
+          commandId: context.commandId,
+          project,
+          worktree,
+          sessionId,
+          terminalProvider: terminalProviderId,
+          harnessProvider: handle.provider,
+          harness: { mode: "interactive" },
+          layout: payload.terminal?.layout ?? project.defaults.layout,
+          focus: payload.terminal?.focus,
+          origin: payload.terminal?.origin,
+          initialPrompt: payload.initialPrompt,
+          resume,
+        }),
+        {
+          trace: context.trace,
+          signal: context.signal,
+          commandTimeoutMs: options.commandTimeoutMs,
+        },
+      );
+      if (receipt.status === "rejected") {
+        throw receipt.error;
+      }
+      throwIfAborted(context.signal);
+      await options.persistence.reopenSession(sessionId);
+    } catch (error) {
+      if (sessionIdIsFresh && sessionSeeded) {
+        await discardSessionSeedBestEffort({
+          persistence: options.persistence,
+          sessionId,
+          context,
+          logger: options.logger,
+        });
+      }
+      throw error;
     }
-    throwIfAborted(context.signal);
-    await options.persistence.reopenSession(sessionId);
 
     const nextSnapshot = await reconcileAndPublish({
       core: options.core,

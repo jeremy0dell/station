@@ -12,7 +12,7 @@ import type { TerminalIntentRunner } from "../terminalIntentRunner.js";
 import {
   buildEnsureAgentWorkspaceIntent,
   defaultSessionCommandIdFactory,
-  deleteSessionTitleSeedBestEffort,
+  discardSessionSeedBestEffort,
   findProjectOrThrow,
   publishSessionCreated,
   removeWorktreeBestEffort,
@@ -20,7 +20,7 @@ import {
   resolveTerminalProviderOrThrow,
   runProviderMutation,
   type SessionCommandIdFactory,
-  seedSessionTitle,
+  seedSession,
   throwIfAborted,
 } from "./shared.js";
 
@@ -40,8 +40,8 @@ export type CreateSessionCreateHandlerOptions = {
 /**
  * USE CASE
  *
- * Create a session worktree on its generated branch, persist its independent
- * user-facing title, and launch its primary agent workspace.
+ * Creates a session worktree on its generated branch, durably seeds its independent title,
+ * and launches its primary agent; cleanup retires title authority only after verified rollback.
  */
 export function createSessionCreateHandler(
   options: CreateSessionCreateHandlerOptions,
@@ -67,7 +67,7 @@ export function createSessionCreateHandler(
       trace: context.trace,
     };
     let createdWorktree: WorktreeObservation | undefined;
-    let seededSessionTitle = false;
+    let sessionSeeded = false;
 
     try {
       const worktree = await runProviderMutation(
@@ -91,15 +91,15 @@ export function createSessionCreateHandler(
       createdWorktree = worktree;
       throwIfAborted(context.signal);
 
-      await seedSessionTitle({
+      await seedSession({
         persistence: options.persistence,
         sessionId,
         projectId: project.id,
         worktreeId: worktree.id,
-        title: payload.title ?? payload.branch,
+        initialTitle: payload.title ?? payload.branch,
         clock: options.clock,
       });
-      seededSessionTitle = true;
+      sessionSeeded = true;
       throwIfAborted(context.signal);
 
       const receipt = await options.terminalIntentRunner.submitIntent(
@@ -127,26 +127,30 @@ export function createSessionCreateHandler(
       }
       throwIfAborted(context.signal);
     } catch (error) {
-      if (seededSessionTitle) {
-        await deleteSessionTitleSeedBestEffort({
+      const worktreeRemoved =
+        createdWorktree === undefined
+          ? false
+          : await removeWorktreeBestEffort({
+              providers: options.providers,
+              projectId: project.id,
+              worktreeId: createdWorktree.id,
+              expectedPath: createdWorktree.path,
+              expectedBranch: createdWorktree.branch,
+              expectedRegistrationIdentity: createdWorktree.registrationIdentity,
+              context,
+              logger: options.logger,
+              clock: options.clock,
+              commandTimeoutMs: options.commandTimeoutMs,
+            });
+      if (sessionSeeded) {
+        await discardSessionSeedBestEffort({
           persistence: options.persistence,
           sessionId,
+          ...(worktreeRemoved && createdWorktree !== undefined
+            ? { removedWorktree: { projectId: project.id, worktreeId: createdWorktree.id } }
+            : {}),
           context,
           logger: options.logger,
-        });
-      }
-      if (createdWorktree !== undefined) {
-        await removeWorktreeBestEffort({
-          providers: options.providers,
-          projectId: project.id,
-          worktreeId: createdWorktree.id,
-          expectedPath: createdWorktree.path,
-          expectedBranch: createdWorktree.branch,
-          expectedRegistrationIdentity: createdWorktree.registrationIdentity,
-          context,
-          logger: options.logger,
-          clock: options.clock,
-          commandTimeoutMs: options.commandTimeoutMs,
         });
       }
       throw error;

@@ -642,6 +642,8 @@ describe("session command vertical slice", () => {
       },
     ]);
     expect(worktree.snapshot().worktrees).toEqual([]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
     fixture.sqlite.close();
   });
 
@@ -859,8 +861,17 @@ describe("session command vertical slice", () => {
     });
     expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
       id: "wt_web_feature",
+      title: "Readable feature task",
       branch: "feature",
+      path: "/tmp/station/web/feature",
     });
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+      expect.objectContaining({
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        title: "Readable feature task",
+      }),
+    ]);
     expect(
       (await fixture.persistence.listEvents({ commandId: receipt.commandId })).map(
         (event) => event.type,
@@ -917,6 +928,24 @@ describe("session command vertical slice", () => {
       sessionIds: ["ses_existing"],
     });
     await fixture.core.reconcile("pre-start-agent");
+    await fixture.persistence.seedSession({
+      sessionId: "ses_previous_title",
+      projectId: "web",
+      worktreeId: "wt_web_existing",
+      initialTitle: "existing",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.persistence.renameSession({
+      sessionId: "ses_previous_title",
+      title: "Durable existing workspace",
+      renamedAt: now,
+    });
+    await fixture.persistence.markSessionsEnded({
+      subject: { kind: "session", sessionId: "ses_previous_title" },
+      endedAt: now,
+    });
+    await fixture.core.reconcile("pre-start-agent-renamed");
 
     await fixture.queue.dispatch({
       type: "session.startAgent",
@@ -941,10 +970,20 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot().focusContexts).toEqual([
       { origin: { provider: "tmux", clientId: "client_1" } },
     ]);
-    expect(fixture.core.getSnapshot().rows[0]?.agent).toMatchObject({
-      sessionId: "ses_existing",
-      state: "working",
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      title: "Durable existing workspace",
+      branch: "existing",
+      agent: {
+        sessionId: "ses_existing",
+        state: "working",
+      },
     });
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_existing",
+        title: "Durable existing workspace",
+      }),
+    ]);
     fixture.sqlite.close();
   });
 
@@ -1236,6 +1275,98 @@ describe("session command vertical slice", () => {
     ).not.toHaveProperty("endedAt");
     expect(fixture.core.getSnapshot().sessions).toEqual([
       expect.objectContaining({ id: "ses_previous", origin: "station" }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("mints a fresh resume identity while preserving the canonical worktree title", async () => {
+    const harness = new FakeHarnessProvider({ now });
+    const terminal = new FakeTerminalProvider({
+      now,
+      onLaunch: async ({ launchPlan }) => {
+        harness.addRun(
+          createFakeHarnessRun({
+            id: "run_resume_fresh",
+            projectId: "web",
+            worktreeId: "wt_web_resume_fresh",
+            sessionId: launchPlan.env?.STATION_SESSION_ID,
+            state: "working",
+            now,
+          }),
+        );
+      },
+    });
+    const fixture = createFixture({
+      terminal,
+      harness,
+      featureFlags: { sessionResumeAgent: true },
+      sessionIds: ["ses_resume_fresh"],
+      worktree: new FakeWorktreeProvider({
+        now,
+        worktrees: [
+          createFakeWorktree({
+            id: "wt_web_resume_fresh",
+            projectId: "web",
+            branch: "resume-fresh",
+            now,
+          }),
+        ],
+      }),
+    });
+    await fixture.core.reconcile("pre-resume-fresh");
+    await fixture.persistence.seedSession({
+      sessionId: "ses_resume_history",
+      projectId: "web",
+      worktreeId: "wt_web_resume_fresh",
+      initialTitle: "resume-fresh",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.persistence.renameSession({
+      sessionId: "ses_resume_history",
+      title: "Durable resumed workspace",
+      renamedAt: now,
+    });
+    await fixture.persistence.markSessionsEnded({
+      subject: { kind: "session", sessionId: "ses_resume_history" },
+      endedAt: now,
+    });
+    const handle = await fixture.persistence.upsertSessionRecoveryHandle({
+      id: "report_resume_fresh",
+      provider: "fake-harness",
+      projectId: "web",
+      worktreeId: "wt_web_resume_fresh",
+      target: { kind: "native-session", id: "native_resume_fresh" },
+      cwd: "/tmp/station/web/resume-fresh",
+      observedAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.core.reconcile("pre-resume-fresh-command");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.resumeAgent",
+      payload: {
+        projectId: "web",
+        worktreeId: "wt_web_resume_fresh",
+        recoveryHandleId: handle.id,
+        terminal: { provider: "fake-terminal", focus: false },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      title: "Durable resumed workspace",
+      branch: "resume-fresh",
+      agent: { sessionId: "ses_resume_fresh", state: "working" },
+    });
+    expect(fixture.core.getSnapshot().sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_resume_fresh",
+        title: "Durable resumed workspace",
+      }),
     ]);
     fixture.sqlite.close();
   });
@@ -1592,6 +1723,13 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot().closed).toEqual(["term_fake"]);
     expect(worktree.snapshot().removed).toEqual([]);
     expect(await fixture.persistence.listSessions()).toEqual([]);
+    await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+      expect.objectContaining({
+        projectId: "web",
+        worktreeId: "wt_web_cleanup_start",
+        title: "cleanup-start",
+      }),
+    ]);
     fixture.sqlite.close();
   });
 

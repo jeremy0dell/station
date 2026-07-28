@@ -13,12 +13,27 @@ import {
 } from "@station/contracts";
 import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import type { SqlDatabase } from "../sqlite/driver.js";
+import { resolveWorktreeDisplayTitle } from "../worktreeDisplayTitle.js";
 import { maxIso, optionalJson } from "./json.js";
 import { insertProviderObservation } from "./observations.js";
 import { providerObservationExpiresAt } from "./retention.js";
 import { type SqliteSessionRow, sessionFromRow } from "./rows.js";
 import { stripTerminalProviderData } from "./terminalObservations.js";
-import type { ObserverIdFactory, PersistedSession, PersistReconcileResultInput } from "./types.js";
+import type {
+  ObserverIdFactory,
+  PersistedSession,
+  PersistedWorktreeDisplayTitle,
+  PersistReconcileResultInput,
+  ReconcileWorktreeDisplayTitleInput,
+} from "./types.js";
+import {
+  deleteWorktreeDisplayTitle,
+  insertMissingWorktreeDisplayTitles,
+  listWorktreeDisplayTitles,
+  readWorktreeDisplayTitle,
+  synchronizeSessionTitleProjections,
+  upsertWorktreeDisplayTitle,
+} from "./worktreeDisplayTitles.js";
 
 type ProjectPersistenceInput = {
   id: string;
@@ -94,7 +109,17 @@ export function persistReconcileResult(
       });
     }
   }
-  upsertSessions(database, input.terminalTargets, input.harnessRuns, input.worktrees);
+  const resolvedTitles = resolveReconcileWorktreeDisplayTitles(database, input, options.observedAt);
+  insertMissingWorktreeDisplayTitles(database, resolvedTitles);
+  const persistedTitles = resolvedTitles.map((title) => {
+    const persisted = readWorktreeDisplayTitle(database, title);
+    if (persisted === undefined) {
+      throw new Error(`Failed to initialize worktree display title for ${title.worktreeId}.`);
+    }
+    synchronizeSessionTitleProjections(database, persisted);
+    return persisted;
+  });
+  upsertSessions(database, input.terminalTargets, input.harnessRuns, persistedTitles);
 }
 
 function expiresAtFor(input: PersistReconcileResultInput, observedAt: string): string | undefined {
@@ -155,9 +180,21 @@ export function findRememberedHarnessProviderForWorktree(
 
 export function renameSession(
   database: SqlDatabase,
-  input: { sessionId: string; title: string },
+  input: { sessionId: string; title: string; renamedAt: string },
 ): PersistedSession | undefined {
-  database.prepare("UPDATE sessions SET title = ? WHERE id = ?").run(input.title, input.sessionId);
+  const existing = database.prepare("SELECT * FROM sessions WHERE id = ?").get(input.sessionId) as
+    | SqliteSessionRow
+    | undefined;
+  if (existing === undefined) return undefined;
+
+  const canonical = upsertWorktreeDisplayTitle(database, {
+    projectId: existing.project_id,
+    worktreeId: existing.worktree_id,
+    title: input.title,
+    createdAt: input.renamedAt,
+    updatedAt: input.renamedAt,
+  });
+  synchronizeSessionTitleProjections(database, canonical);
   const row = database.prepare("SELECT * FROM sessions WHERE id = ?").get(input.sessionId) as
     | SqliteSessionRow
     | undefined;
@@ -210,17 +247,39 @@ export function reopenSession(
   return row === undefined ? undefined : sessionFromRow(row);
 }
 
-export function seedSessionTitle(
+export function seedSession(
   database: SqlDatabase,
   input: {
     sessionId: string;
     projectId: string;
     worktreeId: string;
-    title: string;
+    initialTitle: string;
     createdAt: string;
     lastSeenAt: string;
   },
 ): PersistedSession {
+  const title = resolveWorktreeDisplayTitle({
+    projectId: input.projectId,
+    worktreeId: input.worktreeId,
+    branch: input.initialTitle,
+    canonicalTitles: listCanonicalTitle(database, input),
+    sessions: listSessions(database),
+  });
+  insertMissingWorktreeDisplayTitles(database, [
+    {
+      projectId: input.projectId,
+      worktreeId: input.worktreeId,
+      title,
+      createdAt: input.createdAt,
+      updatedAt: input.createdAt,
+    },
+  ]);
+  const canonical = readWorktreeDisplayTitle(database, input);
+  if (canonical === undefined) {
+    throw new Error(`Failed to seed worktree display title for ${input.worktreeId}.`);
+  }
+  synchronizeSessionTitleProjections(database, canonical);
+
   database
     .prepare(
       `
@@ -230,7 +289,7 @@ export function seedSessionTitle(
         ON CONFLICT(id) DO UPDATE SET
           project_id = excluded.project_id,
           worktree_id = excluded.worktree_id,
-          title = COALESCE(sessions.title, excluded.title),
+          title = excluded.title,
           last_seen_at = excluded.last_seen_at,
           lifecycle = CASE
             WHEN sessions.lifecycle = 'ended' THEN 'ended'
@@ -242,7 +301,7 @@ export function seedSessionTitle(
       input.sessionId,
       input.projectId,
       input.worktreeId,
-      input.title,
+      canonical.title,
       input.createdAt,
       input.lastSeenAt,
     );
@@ -251,14 +310,79 @@ export function seedSessionTitle(
     | SqliteSessionRow
     | undefined;
   if (row === undefined) {
-    throw new Error(`Failed to seed session title for ${input.sessionId}.`);
+    throw new Error(`Failed to seed session for ${input.sessionId}.`);
   }
   return sessionFromRow(row);
 }
 
-export function deleteSessionTitleSeed(database: SqlDatabase, sessionId: string): number {
-  const result = database.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
-  return Number(result.changes);
+export function discardSessionSeed(
+  database: SqlDatabase,
+  input: {
+    sessionId: string;
+    removedWorktree?: { projectId: string; worktreeId: string };
+  },
+): { discardedSessions: number; discardedWorktreeTitles: number } {
+  const sessionResult = database.prepare("DELETE FROM sessions WHERE id = ?").run(input.sessionId);
+  const discardedWorktreeTitles =
+    input.removedWorktree === undefined
+      ? 0
+      : deleteWorktreeDisplayTitle(database, input.removedWorktree);
+  return {
+    discardedSessions: Number(sessionResult.changes),
+    discardedWorktreeTitles,
+  };
+}
+
+export function retireRemovedWorktreeSessionState(
+  database: SqlDatabase,
+  input: { projectId: string; worktreeId: string; endedAt: string },
+): { endedSessions: number; deletedWorktreeTitles: number } {
+  const endedSessions = markSessionsEnded(database, {
+    subject: { kind: "worktree", projectId: input.projectId, worktreeId: input.worktreeId },
+    endedAt: input.endedAt,
+  });
+  const deletedWorktreeTitles = deleteWorktreeDisplayTitle(database, input);
+  return { endedSessions, deletedWorktreeTitles };
+}
+
+function resolveReconcileWorktreeDisplayTitles(
+  database: SqlDatabase,
+  input: PersistReconcileResultInput,
+  observedAt: string,
+): ReconcileWorktreeDisplayTitleInput[] {
+  if (input.worktreeDisplayTitles !== undefined) return input.worktreeDisplayTitles;
+
+  const canonicalTitles = listWorktreeDisplayTitles(database);
+  const sessions = listSessions(database);
+  return input.worktrees
+    .filter((worktree) => worktree.state === "exists")
+    .map((worktree) => {
+      const existing = canonicalTitles.find(
+        (title) => title.projectId === worktree.projectId && title.worktreeId === worktree.id,
+      );
+      if (existing !== undefined) return existing;
+      return {
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        title: resolveWorktreeDisplayTitle({
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          branch: worktree.branch,
+          canonicalTitles,
+          sessions,
+        }),
+        createdAt: observedAt,
+        updatedAt: observedAt,
+      };
+    });
+}
+
+function listCanonicalTitle(
+  database: SqlDatabase,
+  input: { projectId: string; worktreeId: string },
+): PersistedWorktreeDisplayTitle[] {
+  const title = readWorktreeDisplayTitle(database, input);
+  return title === undefined ? [] : [title];
 }
 
 function upsertProject(
@@ -396,11 +520,16 @@ function upsertSessions(
   database: SqlDatabase,
   terminalTargets: TerminalTargetObservation[],
   harnessRuns: HarnessRunObservation[],
-  worktrees: WorktreeObservation[],
+  worktreeDisplayTitles: readonly PersistedWorktreeDisplayTitle[],
 ): void {
   // Sessions are reconstructed from two partial truths: terminal bindings identify
   // the workspace, while harness runs supply agent state.
-  const worktreesById = new Map(worktrees.map((worktree) => [worktree.id, worktree]));
+  const titlesByWorktree = new Map(
+    worktreeDisplayTitles.map((title) => [
+      worktreeTitleKey(title.projectId, title.worktreeId),
+      title,
+    ]),
+  );
   const sessions = new Map<string, PersistedSession>();
 
   for (const target of terminalTargets) {
@@ -423,9 +552,9 @@ function upsertSessions(
       createdAt: existing?.createdAt ?? target.observedAt,
       lastSeenAt: maxIso(existing?.lastSeenAt, target.observedAt),
     };
-    const title = sessionTitleForWorktree(worktreesById, target.worktreeId);
+    const title = titlesByWorktree.get(worktreeTitleKey(target.projectId, target.worktreeId));
     if (title !== undefined) {
-      session.title = title;
+      session.title = title.title;
     } else if (existing?.title !== undefined) {
       session.title = existing.title;
     }
@@ -459,9 +588,9 @@ function upsertSessions(
       createdAt: existing?.createdAt ?? run.observedAt,
       lastSeenAt: maxIso(existing?.lastSeenAt, run.observedAt),
     };
-    const title = sessionTitleForWorktree(worktreesById, run.worktreeId);
+    const title = titlesByWorktree.get(worktreeTitleKey(run.projectId, run.worktreeId));
     if (title !== undefined) {
-      session.title = title;
+      session.title = title.title;
     } else if (existing?.title !== undefined) {
       session.title = existing.title;
     }
@@ -481,7 +610,7 @@ function upsertSessions(
           ON CONFLICT(id) DO UPDATE SET
             project_id = excluded.project_id,
             worktree_id = excluded.worktree_id,
-            title = COALESCE(sessions.title, excluded.title),
+            title = COALESCE(excluded.title, sessions.title),
             harness = COALESCE(excluded.harness, sessions.harness),
             terminal_provider = COALESCE(excluded.terminal_provider, sessions.terminal_provider),
             state = excluded.state,
@@ -508,9 +637,6 @@ function upsertSessions(
   }
 }
 
-function sessionTitleForWorktree(
-  worktreesById: ReadonlyMap<string, WorktreeObservation>,
-  worktreeId: string,
-): string | undefined {
-  return worktreesById.get(worktreeId)?.branch;
+function worktreeTitleKey(projectId: string, worktreeId: string): string {
+  return `${projectId}\u0000${worktreeId}`;
 }

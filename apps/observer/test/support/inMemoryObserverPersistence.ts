@@ -64,6 +64,7 @@ import type {
   PersistedSession,
   PersistedSessionHarnessExecution,
   PersistedSessionTurnReadiness,
+  PersistedWorktreeDisplayTitle,
   PersistedWorktreeMetadataCurrent,
   PersistReconcileResultInput,
   ProviderObservationKind,
@@ -78,6 +79,7 @@ import {
   harnessRunCanActivateSession,
   terminalCanActivateSession,
 } from "../../src/sessionActivation.js";
+import { resolveWorktreeDisplayTitle } from "../../src/worktreeDisplayTitle.js";
 
 type CreateInMemoryObserverPersistenceOptions = {
   clock?: RuntimeClock;
@@ -102,6 +104,7 @@ type InMemoryObserverPersistenceState = {
   terminalTargets: Map<string, TerminalTargetObservation>;
   harnessRuns: Map<string, HarnessRunObservation>;
   sessions: Map<string, PersistedSession>;
+  worktreeDisplayTitles: Map<string, PersistedWorktreeDisplayTitle>;
   sessionHarnessExecutions: Map<string, PersistedSessionHarnessExecution>;
   recoveryHandles: Map<string, SessionRecoveryHandle>;
   turnReadiness: Map<string, PersistedSessionTurnReadiness>;
@@ -357,6 +360,15 @@ export function createInMemoryObserverPersistence(
         [...draft.sessions.values()].sort((left, right) => compareAsc(left.id, right.id)),
       ),
 
+    listWorktreeDisplayTitles: () =>
+      transaction((draft) =>
+        [...draft.worktreeDisplayTitles.values()].sort(
+          (left, right) =>
+            compareAsc(left.projectId, right.projectId) ||
+            compareAsc(left.worktreeId, right.worktreeId),
+        ),
+      ),
+
     getSessionHarnessExecution: (input) =>
       transaction((draft) => draft.sessionHarnessExecutions.get(sessionHarnessExecutionKey(input))),
 
@@ -399,8 +411,29 @@ export function createInMemoryObserverPersistence(
     findRememberedHarnessProviderForWorktree: (input) =>
       transaction((draft) => findRememberedHarnessProviderForWorktree(draft, input)),
 
-    seedSessionTitle: (input) =>
+    seedSession: (input) =>
       transaction((draft) => {
+        const key = worktreeDisplayTitleKey(input.projectId, input.worktreeId);
+        const title = resolveWorktreeDisplayTitle({
+          projectId: input.projectId,
+          worktreeId: input.worktreeId,
+          branch: input.initialTitle,
+          canonicalTitles: [...draft.worktreeDisplayTitles.values()],
+          sessions: [...draft.sessions.values()],
+        });
+        let canonical = draft.worktreeDisplayTitles.get(key);
+        if (canonical === undefined) {
+          canonical = {
+            projectId: input.projectId,
+            worktreeId: input.worktreeId,
+            title,
+            createdAt: input.createdAt,
+            updatedAt: input.createdAt,
+          };
+          draft.worktreeDisplayTitles.set(key, canonical);
+        }
+        synchronizeInMemorySessionTitleProjections(draft, canonical);
+
         const existing = draft.sessions.get(input.sessionId);
         if (existing === undefined) {
           const session: PersistedSession = {
@@ -408,7 +441,7 @@ export function createInMemoryObserverPersistence(
             projectId: input.projectId,
             worktreeId: input.worktreeId,
             lifecycle: "open",
-            title: input.title,
+            title: canonical.title,
             createdAt: input.createdAt,
             lastSeenAt: input.lastSeenAt,
           };
@@ -417,14 +450,28 @@ export function createInMemoryObserverPersistence(
         }
         existing.projectId = input.projectId;
         existing.worktreeId = input.worktreeId;
-        if (existing.title === undefined) existing.title = input.title;
+        existing.title = canonical.title;
         existing.lastSeenAt = input.lastSeenAt;
         if (existing.lifecycle !== "ended") existing.lifecycle = "open";
         return existing;
       }),
 
-    deleteSessionTitleSeed: (sessionId) =>
-      transaction((draft) => (draft.sessions.delete(sessionId) ? 1 : 0)),
+    discardSessionSeed: (input) =>
+      transaction((draft) => {
+        const discardedSessions = draft.sessions.delete(input.sessionId) ? 1 : 0;
+        const discardedWorktreeTitles =
+          input.removedWorktree === undefined
+            ? 0
+            : draft.worktreeDisplayTitles.delete(
+                  worktreeDisplayTitleKey(
+                    input.removedWorktree.projectId,
+                    input.removedWorktree.worktreeId,
+                  ),
+                )
+              ? 1
+              : 0;
+        return { discardedSessions, discardedWorktreeTitles };
+      }),
 
     markSessionsEnded: (input) =>
       transaction((draft) => {
@@ -456,8 +503,41 @@ export function createInMemoryObserverPersistence(
       transaction((draft) => {
         const session = draft.sessions.get(input.sessionId);
         if (session === undefined) return undefined;
-        session.title = input.title;
+        const key = worktreeDisplayTitleKey(session.projectId, session.worktreeId);
+        const current = draft.worktreeDisplayTitles.get(key);
+        const canonical: PersistedWorktreeDisplayTitle = {
+          projectId: session.projectId,
+          worktreeId: session.worktreeId,
+          title: input.title,
+          createdAt: current?.createdAt ?? input.renamedAt,
+          updatedAt: input.renamedAt,
+        };
+        draft.worktreeDisplayTitles.set(key, canonical);
+        synchronizeInMemorySessionTitleProjections(draft, canonical);
         return session;
+      }),
+
+    retireRemovedWorktreeSessionState: (input) =>
+      transaction((draft) => {
+        let endedSessions = 0;
+        for (const session of draft.sessions.values()) {
+          if (
+            session.projectId !== input.projectId ||
+            session.worktreeId !== input.worktreeId ||
+            session.lifecycle === "ended"
+          ) {
+            continue;
+          }
+          session.lifecycle = "ended";
+          session.endedAt = input.endedAt;
+          endedSessions += 1;
+        }
+        const deletedWorktreeTitles = draft.worktreeDisplayTitles.delete(
+          worktreeDisplayTitleKey(input.projectId, input.worktreeId),
+        )
+          ? 1
+          : 0;
+        return { endedSessions, deletedWorktreeTitles };
       }),
 
     upsertSessionRecoveryHandle: (input) =>
@@ -554,11 +634,27 @@ function emptyState(): InMemoryObserverPersistenceState {
     terminalTargets: new Map(),
     harnessRuns: new Map(),
     sessions: new Map(),
+    worktreeDisplayTitles: new Map(),
     sessionHarnessExecutions: new Map(),
     recoveryHandles: new Map(),
     turnReadiness: new Map(),
     worktreeMetadata: new Map(),
   };
+}
+
+function worktreeDisplayTitleKey(projectId: string, worktreeId: string): string {
+  return `${projectId}\u0000${worktreeId}`;
+}
+
+function synchronizeInMemorySessionTitleProjections(
+  state: InMemoryObserverPersistenceState,
+  title: PersistedWorktreeDisplayTitle,
+): void {
+  for (const session of state.sessions.values()) {
+    if (session.projectId === title.projectId && session.worktreeId === title.worktreeId) {
+      session.title = title.title;
+    }
+  }
 }
 
 function applySessionHarnessExecutionEvidence(
@@ -966,7 +1062,47 @@ function persistReconcileResult(
       });
     }
   }
-  upsertSessions(state, terminalTargets, harnessRuns, worktrees);
+  const canonicalTitles = [...state.worktreeDisplayTitles.values()];
+  const worktreeDisplayTitles =
+    input.worktreeDisplayTitles ??
+    worktrees
+      .filter((worktree) => worktree.state === "exists")
+      .map((worktree) => {
+        const existing = canonicalTitles.find(
+          (title) => title.projectId === worktree.projectId && title.worktreeId === worktree.id,
+        );
+        if (existing !== undefined) return existing;
+        return {
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          title: resolveWorktreeDisplayTitle({
+            projectId: worktree.projectId,
+            worktreeId: worktree.id,
+            branch: worktree.branch,
+            canonicalTitles,
+            sessions: [...state.sessions.values()],
+          }),
+          createdAt: options.observedAt,
+          updatedAt: options.observedAt,
+        };
+      });
+  for (const title of worktreeDisplayTitles) {
+    const key = worktreeDisplayTitleKey(title.projectId, title.worktreeId);
+    if (!state.worktreeDisplayTitles.has(key)) {
+      state.worktreeDisplayTitles.set(key, title);
+    }
+  }
+  const persistedTitles = worktreeDisplayTitles.map((title) => {
+    const persisted = state.worktreeDisplayTitles.get(
+      worktreeDisplayTitleKey(title.projectId, title.worktreeId),
+    );
+    if (persisted === undefined) {
+      throw new Error(`Failed to initialize worktree display title for ${title.worktreeId}.`);
+    }
+    synchronizeInMemorySessionTitleProjections(state, persisted);
+    return persisted;
+  });
+  upsertSessions(state, terminalTargets, harnessRuns, persistedTitles);
 }
 
 function reconcileObservationExpiresAt(
@@ -983,9 +1119,14 @@ function upsertSessions(
   state: InMemoryObserverPersistenceState,
   terminalTargets: readonly TerminalTargetObservation[],
   harnessRuns: readonly HarnessRunObservation[],
-  worktrees: readonly WorktreeObservation[],
+  worktreeDisplayTitles: readonly PersistedWorktreeDisplayTitle[],
 ): void {
-  const worktreesById = new Map(worktrees.map((worktree) => [worktree.id, worktree]));
+  const titlesByWorktree = new Map(
+    worktreeDisplayTitles.map((title) => [
+      worktreeDisplayTitleKey(title.projectId, title.worktreeId),
+      title,
+    ]),
+  );
   const sessions = new Map<string, PersistedSession>();
 
   for (const target of terminalTargets) {
@@ -1008,8 +1149,10 @@ function upsertSessions(
       createdAt: existing?.createdAt ?? target.observedAt,
       lastSeenAt: maxIso(existing?.lastSeenAt, target.observedAt),
     };
-    const title = worktreesById.get(target.worktreeId)?.branch;
-    if (title !== undefined) session.title = title;
+    const title = titlesByWorktree.get(
+      worktreeDisplayTitleKey(target.projectId, target.worktreeId),
+    );
+    if (title !== undefined) session.title = title.title;
     else if (existing?.title !== undefined) session.title = existing.title;
     if (existing?.harness !== undefined) session.harness = existing.harness;
     sessions.set(target.sessionId, session);
@@ -1039,8 +1182,8 @@ function upsertSessions(
       createdAt: existing?.createdAt ?? run.observedAt,
       lastSeenAt: maxIso(existing?.lastSeenAt, run.observedAt),
     };
-    const title = worktreesById.get(run.worktreeId)?.branch;
-    if (title !== undefined) session.title = title;
+    const title = titlesByWorktree.get(worktreeDisplayTitleKey(run.projectId, run.worktreeId));
+    if (title !== undefined) session.title = title.title;
     else if (existing?.title !== undefined) session.title = existing.title;
     if (existing?.terminalProvider !== undefined) {
       session.terminalProvider = existing.terminalProvider;
@@ -1056,7 +1199,7 @@ function upsertSessions(
     }
     existing.projectId = session.projectId;
     existing.worktreeId = session.worktreeId;
-    if (existing.title === undefined && session.title !== undefined) existing.title = session.title;
+    if (session.title !== undefined) existing.title = session.title;
     if (session.harness !== undefined) existing.harness = session.harness;
     if (session.terminalProvider !== undefined) {
       existing.terminalProvider = session.terminalProvider;

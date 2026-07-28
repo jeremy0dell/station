@@ -179,6 +179,82 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
+  it("backfills an earlier custom title ahead of a later branch-default seed", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-worktree-title-migration-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    try {
+      for (const migration of migrations.filter(({ version }) => version < 16)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      const insert = legacyDatabase.prepare(`
+        INSERT INTO sessions
+          (id, project_id, worktree_id, title, created_at, last_seen_at, lifecycle)
+        VALUES (?, 'web', 'wt_title_migration', ?, ?, ?, 'open')
+      `);
+      insert.run(
+        "ses_custom",
+        "Readable migration title",
+        "2026-05-20T11:58:00.000Z",
+        "2026-05-20T11:59:00.000Z",
+      );
+      insert.run("ses_branch", "feature/current", now, now);
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const sqlite = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      const persistence = createSqliteObserverPersistence({
+        sqlite,
+        clock: { now: () => new Date(now) },
+      });
+      await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([]);
+      await persistence.persistReconcileResult({
+        projects: [
+          {
+            id: "web",
+            label: "web",
+            root: "/tmp/station/web",
+            defaults: { harness: "codex", terminal: "tmux", layout: "agent-shell" },
+            worktrunk: { enabled: true },
+          },
+        ],
+        worktrees: [
+          createFakeWorktree({
+            id: "wt_title_migration",
+            projectId: "web",
+            branch: "feature/current",
+            now,
+          }),
+        ],
+        terminalTargets: [],
+        harnessRuns: [],
+        observedAt: now,
+      });
+
+      await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+        {
+          projectId: "web",
+          worktreeId: "wt_title_migration",
+          title: "Readable migration title",
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+      expect((await persistence.listSessions()).map((session) => session.title)).toEqual([
+        "Readable migration title",
+        "Readable migration title",
+      ]);
+    } finally {
+      sqlite.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("drops obsolete recovery breadcrumb storage from fresh and version-14 databases", async () => {
     const directory = await mkdtemp(join(tmpdir(), "station-recovery-breadcrumb-migration-"));
     const path = join(directory, "observer.sqlite");
@@ -295,6 +371,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [13, "session_harness_executions"],
         [14, "native_binding_ingress_claims"],
         [15, "drop_recovery_breadcrumbs"],
+        [16, "worktree_display_titles"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({

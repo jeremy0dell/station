@@ -26,6 +26,11 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@station/testing": "workspace:*"
+    "@station/cursor": "workspace:*",
+    "@station/pi": "workspace:*",
+    "@station/terminal": "workspace:*",
+    "@station/testing": "workspace:*",
+    "@station/worktrunk": "workspace:*",
+    "vitest": "^3.2.4"
   }
 }
