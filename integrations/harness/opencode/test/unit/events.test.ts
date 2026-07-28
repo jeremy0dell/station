@@ -350,11 +350,13 @@ describe("OpenCode event parsing", () => {
         env: {
           STATION_SESSION_ID: "ses_web_task",
           STATION_WORKTREE_ID: "wt_web_task",
+          STATION_WORKTREE_MANAGED_ROOT: "/tmp/station/web/task",
         },
       }),
     ).toMatchObject({
       station_session_id: "ses_web_task",
       station_worktree_id: "wt_web_task",
+      station_worktree_managed_root: "/tmp/station/web/task",
     });
     expect(
       openCodeHookAdapter.decideScope?.({
@@ -400,6 +402,7 @@ describe("OpenCode event parsing", () => {
         cwd: "/tmp/station/web/task",
         opencode_session_id: "opencode_session_123",
         station_worktree_id: "wt_web_task",
+        station_worktree_managed_root: "/tmp/station/web/task",
         station_session_id: "ses_web_task",
         station_terminal_target_id: "tmux:station:@1:%2",
       },
