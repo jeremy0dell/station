@@ -23,6 +23,12 @@ Status: current living doc for development, test, and documentation workflow.
 Do not use `station:dev` as a catch-all name until it truthfully owns the UI,
 CLI/package, observer, provider, protocol, and host restart boundaries.
 
+To test a different worktree without interrupting the devbox or hosted sessions
+from this checkout, open a second terminal, `cd` to the worktree under test, and
+run `pnpm station:devbox dev` there. Devbox state, sockets, Observer, Host, and
+provider homes are checkout-local. See the copy-paste recipe in
+[Local development](local-development.md#fast-path-test-another-worktree-and-keep-current-sessions).
+
 - `pnpm stn` opens the normal station popup from the current checkout's built CLI when run inside tmux.
 - `pnpm stn tui` opens the normal station TUI fullscreen from the current checkout's built CLI.
 - Source popup registrations are scoped to the canonical checkout root that
