@@ -6,6 +6,7 @@ import {
   headerStrip,
   observerHeaderStatusForConnection,
   selectFleetSummary,
+  tuiScreenBehavior,
   type TuiStore,
 } from "@station/dashboard-core";
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
@@ -43,9 +44,12 @@ export function DashboardFrameTitle({
   zIndex,
 }: DashboardFrameTitleProps) {
   const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
+  const [hovered, setHover] = useStationHoverState();
   const snapshot = useStore(store, (state) => state.snapshot);
   const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
+  const screen = useStore(store, (state) => state.screen);
+  const behavior = tuiScreenBehavior(screen);
+  const hover = hovered && behavior.clickAway === undefined;
 
   const needsYou = snapshot === undefined ? 0 : selectFleetSummary(snapshot).needsYou;
   const subtitle =
@@ -100,6 +104,17 @@ export function DashboardFrameTitle({
           {affordance}
         </text>
       </box>
+      {behavior.clickAway !== undefined ? (
+        <box
+          position="absolute"
+          left={frame.left}
+          top={frame.top}
+          width={frame.width}
+          height={1}
+          zIndex={zIndex + 1}
+          {...stationMouseProps(dispatch, { kind: "screenBackdrop" })}
+        />
+      ) : null}
     </>
   );
 }

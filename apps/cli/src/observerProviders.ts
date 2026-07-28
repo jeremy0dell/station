@@ -303,6 +303,9 @@ function buildClaudeHarnessProvider({
   if (registryOptions.providerHookIngressLauncher !== undefined) {
     options.hookBin = registryOptions.providerHookIngressLauncher;
   }
+  if (registryOptions.providerHookArtifactOwner !== undefined) {
+    options.artifactOwner = registryOptions.providerHookArtifactOwner;
+  }
   applyObserverPaths(options, config, true);
   return createClaudeHarnessProvider(options);
 }
@@ -338,6 +341,9 @@ function buildCodexHarnessProvider({
   if (registryOptions.providerHookIngressLauncher !== undefined) {
     options.hookBin = registryOptions.providerHookIngressLauncher;
   }
+  if (registryOptions.providerHookArtifactOwner !== undefined) {
+    options.artifactOwner = registryOptions.providerHookArtifactOwner;
+  }
   applyObserverPaths(options, config, true);
   return createCodexHarnessProvider(options);
 }
@@ -362,6 +368,9 @@ function buildCursorHarnessProvider({
   }
   if (registryOptions.providerHookIngressLauncher !== undefined) {
     options.hookBin = registryOptions.providerHookIngressLauncher;
+  }
+  if (registryOptions.providerHookArtifactOwner !== undefined) {
+    options.artifactOwner = registryOptions.providerHookArtifactOwner;
   }
   applyObserverPaths(options, config, true);
   return createCursorHarnessProvider(options);
@@ -397,6 +406,9 @@ function buildOpenCodeHarnessProvider({
   }
   if (registryOptions.configPath !== undefined) {
     options.configPath = registryOptions.configPath;
+  }
+  if (registryOptions.providerHookArtifactOwner !== undefined) {
+    options.artifactOwner = registryOptions.providerHookArtifactOwner;
   }
   applyObserverPaths(options, config, false);
   return createOpenCodeHarnessProvider(options);

@@ -64,7 +64,15 @@ integration's documentation of record; prose goes stale, fixtures fail loudly.
   check that `stn` and `stn-ingress` on PATH resolve to the same checkout.
 - Add the harness to setup checks if it needs system dependencies.
 
-## 6. Verify live
+## 6. Support launch preflight
+
+- Report `canLaunch: false` only when the adapter cannot construct or execute a launch.
+- Make `health()` freshly prove CLI/runtime availability without conflating unknown authentication or trust with unavailability. Preserve actionable provider errors in `lastError`.
+- Implement provider-local `hooksStatus()` when Station tracking artifacts are required for a managed launch. Report whether hooks were requested, whether they are installed, and the exact missing artifacts so shared policy can provide config-aware remediation.
+- Omit `hooksStatus()` when the provider has no equivalent requirement. The shared launch policy intentionally permits such providers; do not invent a hook gate for them.
+- Keep setup and doctor richer than launch policy. Launch preflight consumes capability, health, and hook facts transiently and must not introduce provider-specific readiness state into Observer/core.
+
+## 7. Verify live
 
 One end-to-end pass per attention scenario: trigger it in the real harness,
 confirm the row flips and holds until resolved, and confirm the census log

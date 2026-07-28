@@ -19,6 +19,7 @@ import {
   FakeTerminalProvider,
 } from "@station/testing";
 import { describe, expect, it } from "vitest";
+import type { HarnessLaunchPreflight } from "../../src/commands/harnessLaunchPreflight.js";
 import {
   createTerminalIntentRunner,
   type TerminalIntentProviderAccess,
@@ -380,6 +381,30 @@ describe("createTerminalIntentRunner", () => {
     expect(launchFailureTerminal.snapshot().closed).toEqual(["term_fake"]);
   });
 
+  it("repeats launch preflight immediately before opening the workspace", async () => {
+    const order: string[] = [];
+    const terminal = new RecordingTerminalProvider({ order });
+    const preflightError = {
+      tag: "HarnessProviderError",
+      code: "HARNESS_HOOKS_NOT_INSTALLED",
+      message: "Required hooks are not installed.",
+      provider: "fake-harness",
+    } as const;
+
+    await expect(
+      runnerFor(terminal, [new CapturingHarnessProvider({ order })], async () => {
+        throw preflightError;
+      }).submitIntent(ensureIntent()),
+    ).resolves.toMatchObject({
+      status: "rejected",
+      error: preflightError,
+    });
+
+    expect(order).toEqual([]);
+    expect(terminal.snapshot().targets).toEqual([]);
+    expect(terminal.snapshot().launches).toEqual([]);
+  });
+
   it("returns a rejected receipt for cancellation before launching", async () => {
     const terminal = new RecordingTerminalProvider();
     const controller = new AbortController();
@@ -421,6 +446,7 @@ describe("createTerminalIntentRunner", () => {
         terminals: new Map([["fake-terminal", new RecordingTerminalProvider()]]),
         harnesses: new Map([["fake-harness", new CapturingHarnessProvider()]]),
       },
+      launchPreflight: async () => undefined,
       clock,
       logger,
     });
@@ -472,6 +498,7 @@ describe("createTerminalIntentRunner", () => {
 function runnerFor(
   terminal: RecordingTerminalProvider,
   harnesses: CapturingHarnessProvider[],
+  launchPreflight: HarnessLaunchPreflight = async () => undefined,
 ): TerminalIntentRunner {
   const providers: TerminalIntentProviderAccess = {
     terminals: new Map([[terminal.id, terminal]]),
@@ -479,6 +506,7 @@ function runnerFor(
   };
   return createTerminalIntentRunner({
     providers,
+    launchPreflight,
     clock,
   });
 }

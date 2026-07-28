@@ -22,6 +22,10 @@ import {
   systemClock,
   toIsoTimestamp,
 } from "@station/runtime";
+import {
+  assertHarnessLaunchPreconditionsOrThrow,
+  type HarnessLaunchPreflight,
+} from "../commands/harnessLaunchPreflight.js";
 import { createCommandQueue } from "../commands/queue.js";
 import { registerObserverCommandHandlers } from "../commands/router.js";
 import { createLocalDiagnosticEvidenceSource } from "../diagnostics/localEvidenceSource.js";
@@ -255,6 +259,13 @@ async function runClaimedObserverRuntime(input: {
     featureFlags,
     version: observerVersion,
   });
+  const launchPreflight: HarnessLaunchPreflight = (providerId, signal) =>
+    assertHarnessLaunchPreconditionsOrThrow({
+      providers,
+      providerId,
+      ...(options.configPath === undefined ? {} : { stationConfigPath: loadedConfig.configPath }),
+      ...(signal === undefined ? {} : { signal }),
+    });
   registerObserverCommandHandlers({
     queue: commandQueue,
     core,
@@ -267,6 +278,7 @@ async function runClaimedObserverRuntime(input: {
     clock: systemClock,
     logger,
     projectConfigWriter,
+    launchPreflight,
   });
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
 
