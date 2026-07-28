@@ -148,6 +148,39 @@ describe("StationOverlay", () => {
     expect(store.getState().screen).toEqual({ name: "dashboard" });
     expect(calls).toEqual([{ kind: "station", target: { kind: "screenBackdrop" } }]);
   });
+
+  it("routes obscured title-row clicks through the inner screen backdrop", async () => {
+    const { store } = makeStationTestStore();
+    const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
+    const setup = await renderOverlay((target, event) => {
+      calls.push({ target, event });
+      if (target.kind === "station") {
+        routeStationMouse(target.target, event, store);
+      }
+      return true;
+    }, store);
+    const titleAction = cellFor(setup.captureCharFrame(), "[+]");
+    await act(async () => {
+      store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+
+    await setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.RIGHT);
+
+    expect(store.getState().screen).toEqual({ name: "help" });
+    expect(calls.at(-1)).toMatchObject({
+      target: { kind: "station", target: { kind: "screenBackdrop" } },
+      event: { type: "down", button: "right", rawButton: 2 },
+    });
+
+    await setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT);
+
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(calls.at(-1)).toMatchObject({
+      target: { kind: "station", target: { kind: "screenBackdrop" } },
+      event: { type: "down", button: "left", rawButton: 0 },
+    });
+  });
 });
 
 async function renderOverlay(

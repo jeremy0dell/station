@@ -92,6 +92,23 @@ describe("FullscreenDashboard mouse composition", () => {
     expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
   });
 
+  it("dismisses a bounded screen from the obscured title row", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    const titleAction = cellFor(setup.captureCharFrame(), "[+]");
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+
+    await actOn(() =>
+      setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT),
+    );
+
+    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+  });
+
   it("dismisses outside a bounded screen while its inner surface still consumes clicks", async () => {
     const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
     const setup = await render(fixture.store);
