@@ -337,6 +337,13 @@ describe("observer providers", () => {
     const observerSocketPath = "/tmp/station/provider-table-observer.sock";
     const configPath = "/tmp/station/provider-table-config.toml";
     const ingressLauncher = "/tmp/station/bin/stn-ingress";
+    const artifactOwner: contracts.ProviderHookArtifactOwner = {
+      schemaVersion: 1,
+      launcher: ingressLauncher,
+      runtimeKind: "source",
+      version: "0.0.0-test",
+      buildIdentity: "a".repeat(64),
+    };
     const piExtensionPath = "/tmp/station/assets/pi-extension.mjs";
     const providerConfig: StationConfig = {
       ...config,
@@ -394,6 +401,7 @@ describe("observer providers", () => {
       configPath,
       piExtensionPath,
       providerHookIngressLauncher: ingressLauncher,
+      providerHookArtifactOwner: artifactOwner,
     });
     const observerPaths = resolveObserverPaths(providerConfig);
     expect(vi.mocked(createClaudeHarnessProvider).mock.calls.at(-1)?.[0]).toEqual({
@@ -405,6 +413,7 @@ describe("observer providers", () => {
       installHooks: true,
       resume: true,
       hookBin: ingressLauncher,
+      artifactOwner,
       observerSocketPath: observerPaths.socketPath,
       stateDir: observerPaths.stateDir,
       hookSpoolDir: observerPaths.hookSpoolDir,
@@ -419,6 +428,7 @@ describe("observer providers", () => {
       installHooks: true,
       resume: true,
       hookBin: ingressLauncher,
+      artifactOwner,
       observerSocketPath: observerPaths.socketPath,
       stateDir: observerPaths.stateDir,
       hookSpoolDir: observerPaths.hookSpoolDir,
@@ -430,6 +440,7 @@ describe("observer providers", () => {
       resume: true,
       configPath,
       hookBin: ingressLauncher,
+      artifactOwner,
       observerSocketPath: observerPaths.socketPath,
       stateDir: observerPaths.stateDir,
       hookSpoolDir: observerPaths.hookSpoolDir,
@@ -444,6 +455,7 @@ describe("observer providers", () => {
       installHooks: true,
       resume: true,
       configPath,
+      artifactOwner,
       observerSocketPath: observerPaths.socketPath,
       stateDir: observerPaths.stateDir,
       hookSpoolDir: observerPaths.hookSpoolDir,

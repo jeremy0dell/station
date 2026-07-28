@@ -192,6 +192,9 @@ function openCodePluginDoctorOptions(
     if (options.hookSpoolDir !== undefined) {
       pluginOptions.hookSpoolDir = options.hookSpoolDir;
     }
+    if (options.artifactOwner !== undefined) {
+      pluginOptions.artifactOwner = options.artifactOwner;
+    }
   }
   return pluginOptions;
 }
