@@ -13,6 +13,15 @@ vi.mock("../../src/observerProviders.js", () => ({
 
 import { runCliObserverMain } from "../../src/observerMain.js";
 
+const ingressLauncher = "/source/bin/stn-ingress";
+const artifactOwner = {
+  schemaVersion: 1 as const,
+  launcher: ingressLauncher,
+  runtimeKind: "source" as const,
+  version: "0.0.0-test",
+  buildIdentity: "a".repeat(64),
+};
+
 describe("runCliObserverMain", () => {
   beforeEach(() => {
     mocks.runObserverMain.mockReset();
@@ -26,7 +35,11 @@ describe("runCliObserverMain", () => {
     );
 
     await expect(
-      runCliObserverMain(["--state-dir", "/custom/state"], { preparePiExtension }),
+      runCliObserverMain(["--state-dir", "/custom/state"], {
+        preparePiExtension,
+        providerHookIngressLauncher: ingressLauncher,
+        providerHookArtifactOwner: artifactOwner,
+      }),
     ).resolves.toBe(0);
 
     const deps = mocks.runObserverMain.mock.calls[0]?.[1] as {
@@ -45,12 +58,16 @@ describe("runCliObserverMain", () => {
     expect(mocks.createProviderRegistry).toHaveBeenCalledWith(config, {
       configPath: "/config/station.toml",
       piExtensionPath: "/canonical/state/assets/pi/station-pi-extension.mjs",
-      providerHookIngressLauncher: expect.stringMatching(/\/bin\/stn-ingress$/),
+      providerHookIngressLauncher: ingressLauncher,
+      providerHookArtifactOwner: artifactOwner,
     });
   });
 
   it("does not prepare or inject Pi assets in source composition", async () => {
-    await runCliObserverMain([]);
+    await runCliObserverMain([], {
+      providerHookIngressLauncher: ingressLauncher,
+      providerHookArtifactOwner: artifactOwner,
+    });
 
     const deps = mocks.runObserverMain.mock.calls[0]?.[1] as {
       providerRegistryFactory: (
@@ -62,7 +79,8 @@ describe("runCliObserverMain", () => {
     await deps.providerRegistryFactory(config, { stateDir: "/source/state" });
 
     expect(mocks.createProviderRegistry).toHaveBeenCalledWith(config, {
-      providerHookIngressLauncher: expect.stringMatching(/\/bin\/stn-ingress$/),
+      providerHookIngressLauncher: ingressLauncher,
+      providerHookArtifactOwner: artifactOwner,
     });
   });
 });

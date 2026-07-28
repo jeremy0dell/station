@@ -111,6 +111,55 @@ describe("setup planner", () => {
     expect(plan.actions.some((action) => action.id === "pi-hooks")).toBe(false);
   });
 
+  it("reports hook ownership provenance in tracking details", () => {
+    const requested = {
+      schemaVersion: 1 as const,
+      launcher: "/source/bin/stn-ingress",
+      runtimeKind: "source" as const,
+      version: "0.0.0-pre-alpha.4",
+      buildIdentity: "a".repeat(64),
+    };
+    const current = {
+      schemaVersion: 1 as const,
+      launcher: "/installed/stn-ingress",
+      runtimeKind: "compiled" as const,
+      version: "0.7.1",
+      buildIdentity: "b".repeat(64),
+    };
+    const plan = buildSetupPlan(
+      facts({
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: false,
+            ownership: {
+              status: "different-owner",
+              requested,
+              currentLauncher: current.launcher,
+              current,
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(plan.checks.find((check) => check.id === "harness-tracking:codex")?.details).toEqual(
+      expect.objectContaining({
+        ownership: "different-owner",
+        requestedLauncher: requested.launcher,
+        requestedRuntimeKind: requested.runtimeKind,
+        requestedRuntimeVersion: requested.version,
+        requestedBuildIdentity: requested.buildIdentity,
+        currentLauncher: current.launcher,
+        currentRuntimeKind: current.runtimeKind,
+        currentRuntimeVersion: current.version,
+        currentBuildIdentity: current.buildIdentity,
+      }),
+    );
+  });
+
   it("warns without socket evidence without blocking fresh setup", () => {
     const plan = buildSetupPlan(
       facts({

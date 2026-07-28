@@ -25,6 +25,7 @@ import type {
   HarnessProvider,
   HarnessRunObservation,
   ProviderHealth,
+  ProviderHookArtifactOwner,
   RepositoryProvider,
   SafeError,
   TerminalCapabilities,
@@ -64,6 +65,7 @@ export type CreateProviderRegistryOptions = {
   configPath?: string | undefined;
   piExtensionPath?: string | undefined;
   providerHookIngressLauncher?: string | undefined;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner | undefined;
 };
 
 type HarnessProviderBuilderContext = {
@@ -103,6 +105,7 @@ export async function probeHarnessHooksStatus(
     const provider = createHarnessProvider(harnessId, loaded.config, {
       configPath: loaded.configPath,
       providerHookIngressLauncher: providerHookRuntime.ingressLauncher,
+      providerHookArtifactOwner: providerHookRuntime.artifactOwner,
     });
     if (provider.hooksStatus === undefined) {
       return undefined;
@@ -131,8 +134,8 @@ export async function probeHarnessHooksStatus(
  * COMPOSITION ROOT
  *
  * Constructs concrete provider adapters, including the packaged Pi extension
- * path and canonical provider-hook launcher supplied by compiled CLI composition,
- * and assigns their Observer roles.
+ * path plus canonical provider-hook launcher and artifact owner supplied by CLI
+ * composition, and assigns their Observer roles.
  *
  * Observer application use cases are composed by the Observer runtime, not
  * stored in the provider registry.
@@ -210,6 +213,7 @@ function createWorktreeProvider(
     options.hookExpectation = createWorktrunkHookExpectation(config, {
       stationConfigPath: registryOptions.configPath,
       ingressLauncher: registryOptions.providerHookIngressLauncher,
+      artifactOwner: registryOptions.providerHookArtifactOwner,
     });
     return new WorktrunkProvider(options);
   }

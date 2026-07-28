@@ -1,6 +1,14 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { createHookSetupFileOps, providerHookCommandLine } from "@station/runtime";
+import {
+  classifyProviderHookArtifactOwnership,
+  createHookSetupFileOps,
+  PROVIDER_HOOK_OWNER_MARKER,
+  ProviderHookArtifactOwnershipError,
+  parseProviderHookOwnerMarker,
+  providerHookCommandLine,
+  providerHookOwnerMarker,
+} from "@station/runtime";
 import { parse, stringify } from "smol-toml";
 import {
   WORKTRUNK_HOOK_NAMES,
@@ -59,17 +67,16 @@ export async function planWorktrunkHooks(
   const configPath = resolveWorktrunkConfigPath(options);
   const before = await fileOps.readOptionalFile(configPath);
   const commands = expectedWorktrunkHookCommands(options.expectation);
-  const legacyCommands = legacyBareWorktrunkHookCommands(options.expectation);
   const document = parseTomlDocument(before);
+  const inspection = inspectWorktrunkHooks(document, options.expectation);
+  const ownership = worktrunkArtifactOwnership(inspection, options.expectation);
   const missing = WORKTRUNK_HOOK_NAMES.filter(
     (hookName) => !hookContainsCommand(document, hookName, commands[hookName]),
   );
-  // Bare commands from earlier builds are repair inputs, not healthy expectations.
-  const withoutLegacy = uninstallCommands(document, legacyCommands);
-  const afterDocument = installCommands(withoutLegacy, commands);
+  const afterDocument = installCommands(inspection.document, commands);
   const after = stringifyTomlDocument(afterDocument);
 
-  return {
+  const result: WorktrunkHookPlan = {
     provider: "worktrunk",
     configPath,
     commands,
@@ -78,12 +85,14 @@ export async function planWorktrunkHooks(
     before,
     after,
   };
+  if (ownership !== undefined) result.ownership = ownership;
+  return result;
 }
 
 export async function installWorktrunkHooks(
   options: WorktrunkHookPlanOptions,
 ): Promise<WorktrunkHookInstallResult> {
-  const plan = await planWorktrunkHooks(options);
+  let plan = await planWorktrunkHooks(options);
   if (!plan.changed) {
     return {
       ...plan,
@@ -91,13 +100,29 @@ export async function installWorktrunkHooks(
     };
   }
 
+  plan = await planWorktrunkHooks(options);
+  assertWorktrunkArtifactOwnership("install", plan.configPath, plan.ownership, options);
+  if (!plan.changed) {
+    return {
+      ...plan,
+      installed: true,
+    };
+  }
   const backupPath = await fileOps.backupIfPresent(plan.configPath);
   await fileOps.writeHookConfig(plan.configPath, plan.after);
-  return {
+  const result: WorktrunkHookInstallResult = {
     ...plan,
     installed: true,
     ...(backupPath === undefined ? {} : { backupPath }),
   };
+  if (options.expectation.artifactOwner !== undefined) {
+    result.ownership = {
+      status: "same-owner",
+      requested: options.expectation.artifactOwner,
+      currentLauncher: options.expectation.artifactOwner.launcher,
+    };
+  }
+  return result;
 }
 
 export async function uninstallWorktrunkHooks(
@@ -106,10 +131,11 @@ export async function uninstallWorktrunkHooks(
   const configPath = resolveWorktrunkConfigPath(options);
   const before = await fileOps.readOptionalFile(configPath);
   const commands = expectedWorktrunkHookCommands(options.expectation);
-  const legacyCommands = legacyBareWorktrunkHookCommands(options.expectation);
   const document = parseTomlDocument(before);
-  const withoutCanonical = uninstallCommands(document, commands);
-  const afterDocument = uninstallCommands(withoutCanonical, legacyCommands);
+  const inspection = inspectWorktrunkHooks(document, options.expectation);
+  const ownership = worktrunkArtifactOwnership(inspection, options.expectation);
+  assertWorktrunkArtifactOwnership("uninstall", configPath, ownership, options);
+  const afterDocument = inspection.document;
   const after = stringifyTomlDocument(afterDocument);
   const missing = WORKTRUNK_HOOK_NAMES.filter(
     (hookName) => !hookContainsCommand(afterDocument, hookName, commands[hookName]),
@@ -158,21 +184,28 @@ export async function doctorWorktrunkHooks(
       commands: plan.commands,
       message:
         "Worktrunk lifecycle hooks are disabled in station config; automated mutations skip hooks.",
+      ...(plan.ownership === undefined ? {} : { ownership: plan.ownership }),
     };
   }
 
   const installed = plan.missing.length === 0;
-  return {
+  const ownershipConflict =
+    plan.ownership?.status === "different-owner" || plan.ownership?.status === "unknown-owner";
+  const result: WorktrunkHookDoctorResult = {
     provider: "worktrunk",
     configPath: plan.configPath,
-    status: installed ? "ok" : "warn",
-    installed,
+    status: installed && !ownershipConflict ? "ok" : "warn",
+    installed: installed && !ownershipConflict,
     missing: plan.missing,
     commands: plan.commands,
-    message: installed
-      ? "Worktrunk lifecycle hooks are installed."
-      : `Worktrunk lifecycle hooks are missing: ${plan.missing.join(", ")}.`,
+    message: ownershipConflict
+      ? "Worktrunk lifecycle hook ownership conflicts with this Station runtime; run `stn hooks install worktrunk --yes --takeover` only to transfer it."
+      : installed
+        ? "Worktrunk lifecycle hooks are installed."
+        : `Worktrunk lifecycle hooks are missing: ${plan.missing.join(", ")}.`,
   };
+  if (plan.ownership !== undefined) result.ownership = plan.ownership;
+  return result;
 }
 
 export function resolveWorktrunkConfigPath(
@@ -193,18 +226,126 @@ export function expectedWorktrunkHookCommands(
   return Object.fromEntries(
     WORKTRUNK_HOOK_NAMES.map((hookName) => [
       hookName,
-      providerHookCommandLine("worktrunk", expectation, hookName),
+      `${providerHookCommandLine("worktrunk", expectation, hookName)}${
+        expectation.artifactOwner === undefined
+          ? ""
+          : ` # ${providerHookOwnerMarker(expectation.artifactOwner)}`
+      }`,
     ]),
   ) as Record<WorktrunkHookName, string>;
 }
 
-function legacyBareWorktrunkHookCommands(
+function worktrunkArtifactOwnership(
+  inspection: WorktrunkHookInspection,
   expectation: WorktrunkHookExpectation,
-): Record<WorktrunkHookName, string> {
-  if (expectation.hookBin === "stn-ingress") {
-    return expectedWorktrunkHookCommands(expectation);
+): WorktrunkHookPlan["ownership"] {
+  if (expectation.artifactOwner === undefined) return undefined;
+  if (inspection.commands.length === 0 && !inspection.unknownOwner) {
+    return { status: "absent", requested: expectation.artifactOwner };
   }
-  return expectedWorktrunkHookCommands({ ...expectation, hookBin: "stn-ingress" });
+  const owners = inspection.commands.map(parseProviderHookOwnerMarker);
+  const markedLaunchers = new Set(
+    owners.filter((owner) => owner !== undefined).map((owner) => owner.launcher),
+  );
+  if (
+    inspection.unknownOwner ||
+    markedLaunchers.size > 1 ||
+    owners.some((owner) => owner === undefined)
+  ) {
+    return { status: "unknown-owner", requested: expectation.artifactOwner };
+  }
+  return classifyProviderHookArtifactOwnership({
+    contents: inspection.commands.join("\n"),
+    requested: expectation.artifactOwner,
+  });
+}
+
+function assertWorktrunkArtifactOwnership(
+  action: "install" | "uninstall",
+  configPath: string,
+  ownership: WorktrunkHookPlan["ownership"],
+  options: WorktrunkHookPlanOptions,
+): void {
+  if (options.expectation.artifactOwner === undefined) return;
+  if (
+    options.takeover !== true &&
+    (ownership?.status === "different-owner" || ownership?.status === "unknown-owner")
+  ) {
+    throw new ProviderHookArtifactOwnershipError({
+      provider: "worktrunk",
+      action,
+      artifactPath: configPath,
+      ownership,
+    });
+  }
+}
+
+type WorktrunkHookInspection = {
+  document: Record<string, unknown>;
+  commands: string[];
+  unknownOwner: boolean;
+};
+
+function inspectWorktrunkHooks(
+  document: Record<string, unknown>,
+  expectation: WorktrunkHookExpectation,
+): WorktrunkHookInspection {
+  const next = { ...document };
+  const commands: string[] = [];
+  let unknownOwner = false;
+  for (const hookName of WORKTRUNK_HOOK_NAMES) {
+    const inspected = inspectWorktrunkHookValue(
+      next[hookName],
+      providerHookCommandLine("worktrunk", expectation, hookName),
+    );
+    commands.push(...inspected.commands);
+    unknownOwner ||= inspected.unknownOwner;
+    if (inspected.value === undefined) delete next[hookName];
+    else next[hookName] = inspected.value;
+  }
+  return { document: next, commands, unknownOwner };
+}
+
+function inspectWorktrunkHookValue(
+  value: unknown,
+  unmarkedCommand: string,
+): { value: unknown; commands: string[]; unknownOwner: boolean } {
+  if (typeof value === "string") {
+    const stationCommand = value === unmarkedCommand || value.includes(PROVIDER_HOOK_OWNER_MARKER);
+    return stationCommand
+      ? {
+          value: undefined,
+          commands: [value],
+          unknownOwner: !value.includes(PROVIDER_HOOK_OWNER_MARKER),
+        }
+      : { value, commands: [], unknownOwner: false };
+  }
+  if (Array.isArray(value)) {
+    const commands: string[] = [];
+    let unknownOwner = false;
+    const next = value.flatMap((entry) => {
+      const inspected = inspectWorktrunkHookValue(entry, unmarkedCommand);
+      commands.push(...inspected.commands);
+      unknownOwner ||= inspected.unknownOwner;
+      return inspected.value === undefined ? [] : [inspected.value];
+    });
+    return {
+      value: next.length === 0 ? undefined : next,
+      commands,
+      unknownOwner,
+    };
+  }
+  if (!isRecord(value) || !(generatedCommandKey in value)) {
+    return { value, commands: [], unknownOwner: false };
+  }
+  const command = value[generatedCommandKey];
+  const next = { ...value };
+  delete next[generatedCommandKey];
+  return {
+    value: Object.keys(next).length === 0 ? undefined : next,
+    commands: typeof command === "string" ? [command] : [],
+    unknownOwner: typeof command !== "string" || !command.includes(PROVIDER_HOOK_OWNER_MARKER),
+  };
 }
 
 export function normalizeWorktrunkLifecycleEvent(event: string): string {
@@ -228,24 +369,7 @@ function installCommands(
   return next;
 }
 
-function uninstallCommands(
-  document: Record<string, unknown>,
-  commands: Record<WorktrunkHookName, string>,
-): Record<string, unknown> {
-  const next = { ...document };
-  for (const hookName of WORKTRUNK_HOOK_NAMES) {
-    const value = withoutGeneratedCommand(next[hookName], commands[hookName]);
-    if (value === undefined) {
-      delete next[hookName];
-    } else {
-      next[hookName] = value;
-    }
-  }
-  return next;
-}
-
-// Worktrunk hook values may be strings, arrays, or tables. Preserve user hooks
-// and add/remove only our generated command under the stable "station" key.
+// Worktrunk hook values may be strings, arrays, or tables; "station" is our reserved table key.
 function withGeneratedCommand(value: unknown, command: string): unknown {
   if (value === undefined) {
     return { [generatedCommandKey]: command };
@@ -260,26 +384,6 @@ function withGeneratedCommand(value: unknown, command: string): unknown {
     return { ...value, [generatedCommandKey]: command };
   }
   return { existing: String(value), [generatedCommandKey]: command };
-}
-
-function withoutGeneratedCommand(value: unknown, command: string): unknown {
-  if (typeof value === "string") {
-    return value === command ? undefined : value;
-  }
-  if (Array.isArray(value)) {
-    const next = value
-      .map((entry) => withoutGeneratedCommand(entry, command))
-      .filter((entry) => entry !== undefined);
-    return next.length === 0 ? undefined : next;
-  }
-  if (isRecord(value)) {
-    const next = { ...value };
-    if (next[generatedCommandKey] === command) {
-      delete next[generatedCommandKey];
-    }
-    return Object.keys(next).length === 0 ? undefined : next;
-  }
-  return value;
 }
 
 function hookContainsCommand(

@@ -179,6 +179,9 @@ function openCodePluginDoctorOptions(
     pluginOptions.observerSocketPath = requesterRuntime.observerSocketPath;
     pluginOptions.stateDir = requesterRuntime.stateDir;
     pluginOptions.hookSpoolDir = requesterRuntime.hookSpoolDir;
+    if (requesterRuntime.artifactOwner !== undefined) {
+      pluginOptions.artifactOwner = requesterRuntime.artifactOwner;
+    }
   } else {
     if (options.observerSocketPath !== undefined) {
       pluginOptions.observerSocketPath = options.observerSocketPath;
@@ -200,13 +203,15 @@ async function hooksStatus(
   const pluginResult = await doctorOpenCodePlugin(openCodePluginDoctorOptions(options, context));
   const requested = options.installHooks === true;
   const installed = requested && pluginResult.installed && !pluginResult.changed;
-  return {
+  const status: HarnessHooksStatus = {
     provider: "opencode",
     requested,
     installed,
     missing: installed ? [] : [pluginResult.pluginPath],
     message: pluginResult.message,
   };
+  if (pluginResult.ownership !== undefined) status.ownership = pluginResult.ownership;
+  return status;
 }
 
 /**

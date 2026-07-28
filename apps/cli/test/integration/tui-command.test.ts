@@ -11,7 +11,7 @@ import {
 } from "@station/cli/internal";
 import { loadConfig, setTuiWidgetsInConfig, type TuiConfig } from "@station/config";
 import { TUI_RENDERER_CONTROL_PROTOCOL_VERSION } from "@station/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
 
@@ -23,6 +23,7 @@ const nestedTuiDisabledError = {
   message: "Nested Station is disabled.",
   hint: "Press Ctrl-O to open Station, or use `stn tui --allow-nested` for testing.",
 } as const;
+const inheritedStationPane = process.env.STATION_PANE;
 const tuiConfig: TuiConfig = {
   widgets: [
     {
@@ -114,6 +115,15 @@ function runningObserverDeps(
 }
 
 describe("CLI tui command", () => {
+  beforeEach(() => {
+    delete process.env.STATION_PANE;
+  });
+
+  afterEach(() => {
+    if (inheritedStationPane === undefined) delete process.env.STATION_PANE;
+    else process.env.STATION_PANE = inheritedStationPane;
+  });
+
   it("prefers the configured popup command over the environment and default", () => {
     expect(resolvePopupTmuxCommand("config-tmux", { STATION_TMUX_BIN: "env-tmux" })).toBe(
       "config-tmux",

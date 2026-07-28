@@ -1,4 +1,5 @@
 import type { TmuxConfig } from "@station/config";
+import { ProviderHookArtifactOwnershipSchema } from "@station/contracts";
 import { z } from "zod";
 
 export const setupTiers = ["required", "recommended", "optional"] as const;
@@ -34,6 +35,7 @@ export const SetupHarnessTrackingFactSchema = z
     capability: z.enum(["supported", "unsupported"]),
     requested: z.boolean().optional(),
     installed: z.boolean().optional(),
+    ownership: ProviderHookArtifactOwnershipSchema.optional(),
     detail: z.string().min(1).optional(),
     probeFailed: z.boolean().optional(),
   })
@@ -43,6 +45,7 @@ export const SetupHarnessTrackingFactSchema = z
       fact.capability === "unsupported" &&
       (fact.requested !== undefined ||
         fact.installed !== undefined ||
+        fact.ownership !== undefined ||
         fact.probeFailed !== undefined)
     ) {
       context.addIssue({

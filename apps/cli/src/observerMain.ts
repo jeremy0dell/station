@@ -1,11 +1,14 @@
 #!/usr/bin/env node
+import type { ProviderHookArtifactOwner } from "@station/contracts";
 import { runObserverMain } from "@station/observer";
+import { providerHookArtifactOwner, stationBuildInfo } from "@station/runtime";
 import { type CreateProviderRegistryOptions, createProviderRegistry } from "./observerProviders.js";
 import { resolveDefaultIngressLauncher } from "./worktrunkHookExpectation.js";
 
 export type RunCliObserverMainOptions = {
   preparePiExtension?: (stateDir: string) => string | Promise<string>;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
 };
 
 /**
@@ -19,6 +22,9 @@ export async function runCliObserverMain(
 ): Promise<number> {
   const providerHookIngressLauncher =
     options.providerHookIngressLauncher ?? resolveDefaultIngressLauncher();
+  const artifactOwner =
+    options.providerHookArtifactOwner ??
+    providerHookArtifactOwner(providerHookIngressLauncher, stationBuildInfo());
   return runObserverMain([...argv], {
     providerRegistryFactory: async (config, providerOptions) => {
       const registryOptions: CreateProviderRegistryOptions = {};
@@ -31,6 +37,7 @@ export async function runCliObserverMain(
         );
       }
       registryOptions.providerHookIngressLauncher = providerHookIngressLauncher;
+      registryOptions.providerHookArtifactOwner = artifactOwner;
       return createProviderRegistry(config, registryOptions);
     },
   });

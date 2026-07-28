@@ -146,6 +146,13 @@ describe("diagnostics schemas", () => {
       hookSpoolDir: "/state/spool/hooks",
       autoStartFromHooks: true,
       stationConfigPath: "/checkout/station/config.toml",
+      artifactOwner: {
+        schemaVersion: 1,
+        launcher: "/checkout/station/bin/stn-ingress",
+        runtimeKind: "source",
+        version: "0.0.0-pre-alpha.4",
+        buildIdentity: "a".repeat(64),
+      },
     };
 
     expect(DoctorOptionsSchema.parse({ providerHookRuntime })).toEqual({ providerHookRuntime });
@@ -175,6 +182,14 @@ describe("diagnostics schemas", () => {
     expect(
       DoctorOptionsSchema.safeParse({
         providerHookRuntime: { ...providerHookRuntime, providerPrivateOption: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      DoctorOptionsSchema.safeParse({
+        providerHookRuntime: {
+          ...providerHookRuntime,
+          artifactOwner: { ...providerHookRuntime.artifactOwner, launcher: "relative" },
+        },
       }).success,
     ).toBe(false);
   });
