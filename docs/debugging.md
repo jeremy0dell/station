@@ -258,7 +258,20 @@ Station (the OpenTUI terminal workspace under `station/`) adds a second runtime 
 
 When Station "does nothing" or panes read "exited", check the process topology before the code:
 
-- Exactly one Station UI should be running. Two `bun --hot src/main.tsx` instances on one TTY fight over the screen and mouse. `pgrep -f src/main.tsx` should return a single process.
+- Native Station coordinates one UI per input TTY with an active SQLite write
+  transaction and a cooperative Unix-socket endpoint under
+  `/tmp/station-tui-<uid>/<tty-hash>.{sqlite,sock}`. Database-file presence is
+  never evidence of ownership: process exit releases the transaction, and the
+  file should not be deleted as a stale lock. A second current UI asks the
+  incumbent to close and enters raw mode only after acquiring the transaction;
+  Station sends no process signal.
+- `TUI_TTY_LEGACY_OWNER_POSSIBLE` means same-TTY evidence may describe a
+  pre-protocol Station. `TUI_TTY_TAKEOVER_REFUSED` and
+  `TUI_TTY_TAKEOVER_TIMEOUT` mean a current endpoint did not cooperate or did
+  not release ownership within two seconds. Use `Ctrl-Q` in the incumbent. If
+  that is impossible, inspect candidates independently with
+  `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
+  `kill -TERM <independently-verified-station-pid>` yourself.
 - The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy or speaks another protocol. Both are deliberate preservation failures, not stale-socket evidence.
 - The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect live PTYs with `bun run host:list` in `station/`.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
@@ -277,6 +290,12 @@ run/station-host.sock
 logs/station-host.jsonl
 station/layout.json
 ```
+
+The per-TTY claim and endpoint live in the separate cross-config rendezvous
+directory `/tmp/station-tui-<uid>/`; they are intentionally not state-directory
+files. Inspect their owner, type, and mode when diagnosing
+`TUI_TTY_OWNERSHIP_UNAVAILABLE`, but do not infer a live owner from the SQLite
+file or remove it.
 
 ## Harness Event Census
 
