@@ -112,9 +112,9 @@ export type HostAttachedTerminalOptions = {
 
 /**
  * Host-attached `StationTerminalProcess`: attach, replay, then stream live
- * data and geometry frames. Proven PTY loss emits exit; reconstruction or
- * compatibility failures emit unavailable so Observer never mistakes an
- * attachment fault for process death. `dispose()` detaches without killing.
+ * data and geometry frames. Degraded reconstruction replays the Host's
+ * mode-restoring reset data and keeps I/O live; proven PTY loss emits exit,
+ * while compatibility failures emit unavailable. `dispose()` only detaches.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -289,14 +289,33 @@ export function createHostAttachedTerminal(
     opened: HostAttachment,
     isReconnect: boolean,
   ): Promise<void> => {
+    const hostReplay = opened.ack.replay;
     const replay: StationTerminalReplay = {
       initialSize: {
-        cols: opened.ack.replay.initialCols,
-        rows: opened.ack.replay.initialRows,
+        cols: hostReplay.initialCols,
+        rows: hostReplay.initialRows,
       },
-      events: opened.ack.replay.events,
-      kind: opened.ack.replay.kind,
+      events:
+        hostReplay.kind === "live-reset-recovery"
+          ? [{ type: "data", data: hostReplay.resetData }]
+          : hostReplay.events,
+      kind: hostReplay.kind,
     };
+    if (replay.kind === "live-reset-recovery") {
+      reportTerminalCorruption({
+        kind: "terminal_diagnostic",
+        key: "host_live_reset_recovery",
+        detail: {
+          code: "HOST_SNAPSHOT_DEGRADED",
+          ptyId: opened.ack.ptyId,
+        },
+      });
+      emitDiagnostic(
+        "Station reattached to the live terminal without historical output because exact replay was unavailable.",
+      );
+      await emitReplay(replay);
+      return;
+    }
     if (!isReconnect) {
       await emitReplay(replay);
       return;
@@ -333,9 +352,13 @@ export function createHostAttachedTerminal(
     // A same-size TIOCSWINSZ emits no SIGWINCH, so stale same-size frames need a
     // temporary row change whenever replay or reconnect requires a child repaint.
     const sizeUnchanged = size.cols === attachTarget.cols && size.rows === attachTarget.rows;
+    const requiresChildRepaint =
+      isReconnect ||
+      opened.ack.replay.kind === "live-reset-recovery" ||
+      opened.ack.replay.events.some((event) => event.type === "data");
     if (
       sizeUnchanged &&
-      (isReconnect || opened.ack.replay.events.some((event) => event.type === "data")) &&
+      requiresChildRepaint &&
       opened.ack.cols === attachTarget.cols &&
       opened.ack.rows === attachTarget.rows
     ) {

@@ -807,6 +807,72 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.dispose();
   });
 
+  it("replays Host reset data verbatim before geometry recovery and keeps I/O live", async () => {
+    resetTerminalDiagnosticsForTest();
+    const resetData = "\x1bc\x1b[?1h\x1b[?2004h\x1b[=5u";
+    const ctrl = controllableAttachment(
+      ack({
+        replay: {
+          kind: "live-reset-recovery",
+          initialCols: 80,
+          initialRows: 24,
+          events: [],
+          resetData,
+        },
+      }),
+    );
+    const { terminal } = terminalFor(ctrl.attachment);
+    const replayGate = deferred<void>();
+    const replays: StationTerminalReplay[] = [];
+    const diagnostics: string[] = [];
+    const unavailable: string[] = [];
+    const data: string[] = [];
+    terminal.onReplay?.(async (replay) => {
+      replays.push(replay);
+      await replayGate.promise;
+    });
+    terminal.onDiagnostic((message) => diagnostics.push(message));
+    terminal.onUnavailable?.((event) => unavailable.push(event.code));
+    terminal.onData((value) => data.push(value));
+
+    try {
+      await flush();
+      expect(replays).toEqual([
+        {
+          kind: "live-reset-recovery",
+          initialSize: { cols: 80, rows: 24 },
+          events: [{ type: "data", data: resetData }],
+        },
+      ]);
+      expect(ctrl.state.resizes).toEqual([]);
+
+      replayGate.resolve(undefined);
+      await flush();
+      expect(ctrl.state.resizes).toEqual([
+        { cols: 80, rows: 24 },
+        { cols: 80, rows: 23 },
+        { cols: 80, rows: 24 },
+      ]);
+      expect(diagnostics).toContain(
+        "Station reattached to the live terminal without historical output because exact replay was unavailable.",
+      );
+      expect(terminalCorruptionCounters()["terminal_diagnostic:host_live_reset_recovery"]).toBe(1);
+      expect(unavailable).toEqual([]);
+
+      terminal.write("input");
+      terminal.resize({ cols: 100, rows: 30 });
+      ctrl.push({ type: "data", ptyId: "pty-1", data: "live-after-reset" });
+      await flush();
+      expect(ctrl.state.writes).toEqual(["input"]);
+      expect(ctrl.state.resizes.at(-1)).toEqual({ cols: 100, rows: 30 });
+      expect(data).toEqual(["live-after-reset"]);
+    } finally {
+      replayGate.resolve(undefined);
+      terminal.dispose();
+      resetTerminalDiagnosticsForTest();
+    }
+  });
+
   it("becomes unavailable after exhausting the consecutive transient retry budget", async () => {
     let clientCreations = 0;
     let attachCalls = 0;

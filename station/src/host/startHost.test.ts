@@ -4,8 +4,12 @@ import { join } from "node:path";
 import { createStationHostClient, HOST_PROTOCOL_VERSION } from "@station/host";
 import { stationBuildInfo } from "@station/runtime";
 import { afterEach, describe, expect, it } from "bun:test";
-import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
+import { paneInputBytes } from "../input/runtime/sequenceNormalize.js";
+import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
 import { StationTerminalSpawnError } from "../terminal/pty/errors.js";
+import { createPtyRegistry } from "../terminal/registry/ptyRegistry.js";
+import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
+import { waitFor } from "../terminal/testing/waitFor.js";
 import { type StationHostInstance, startStationHost } from "./startHost.js";
 
 // startStationHost only calls logger.log; a no-op keeps the host test off the FS.
@@ -244,23 +248,17 @@ describe("startStationHost", () => {
     }
   });
 
-  it("returns HOST_SNAPSHOT_FAILED without dropping a truncated PTY", async () => {
+  it("restores interaction modes through a degraded Host reattach and registry path", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startOnTempSocket({
       createTerminal: () => scripted.terminal,
       maxScrollbackBytes: 5,
-      createSemanticTerminal: () => ({
-        write() {},
-        resize() {},
-        capture: async () => {
-          throw new Error("serializer failed");
-        },
-        dispose() {},
-      }),
     });
     const client = createStationHostClient({ socketPath });
+    const registry = createPtyRegistry({ resizeDebounceMs: 0 });
+    const paneId = "pane-degraded-host-reattach";
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "claude",
         args: [],
@@ -268,14 +266,68 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
-      scripted.helpers.emitData("first");
-      scripted.helpers.emitData("second");
+      const initial = await client.attach(spawned.ptyId);
+      await initial.detach();
 
-      await expect(client.attach(ptyId)).rejects.toMatchObject({
-        code: "HOST_SNAPSHOT_FAILED",
+      scripted.helpers.emitData("overflowing-history");
+      scripted.helpers.emitData(
+        "\x1b[?1h\x1b[?66h\x1b[?2004h" +
+          "\x1b[?1003h\x1b[?1006h\x1b[?1004h\x1b[=5u\x1b(0",
+      );
+
+      registry.ensure(paneId, undefined, () =>
+        createHostAttachedTerminal({
+          hostSocketPath: socketPath,
+          ptyId: spawned.ptyId,
+          size: { cols: 80, rows: 24 },
+        }),
+      );
+      registry.resize(paneId, { cols: 80, rows: 24 });
+
+      await waitFor(() => {
+        const entry = registry.get(paneId);
+        return (
+          entry?.terminal?.pid === spawned.pid &&
+          entry.screen?.isBracketedPasteEnabled() === true &&
+          entry.screen.isApplicationCursorKeys() &&
+          entry.screen.mouseProtocol()?.tracking === "any" &&
+          entry.screen.mouseProtocol()?.encoding === "sgr" &&
+          entry.screen.isKittyKeyboardEnabled() &&
+          scripted.helpers.resizes.length >= 3
+        );
       });
-      expect(await client.list()).toMatchObject([{ ptyId, alive: true }]);
+
+      const entry = registry.get(paneId);
+      expect(entry?.terminal?.pid).toBe(spawned.pid);
+      expect(entry?.exited).toBe(false);
+      expect(entry?.status).not.toBe("attachment unavailable");
+      expect(await client.list()).toMatchObject([
+        { ptyId: spawned.ptyId, pid: spawned.pid, alive: true },
+      ]);
+
+      expect(registry.write(paneId, paneInputBytes("\x1b[B", registry, paneId))).toBe(true);
+      expect(registry.paste(paneId, "pasted")).toBe(true);
+      await waitFor(
+        () =>
+          scripted.helpers.writes.includes("\x1bOB") &&
+          scripted.helpers.writes.includes("\x1b[200~pasted\x1b[201~"),
+      );
+
+      scripted.helpers.emitData("live-after-reset");
+      await waitFor(() => entry?.screen?.rowText(0).includes("live-after-reset") === true);
+
+      registry.resize(paneId, { cols: 100, rows: 30 });
+      await waitFor(
+        () =>
+          scripted.helpers.resizes.some(({ cols, rows }) => cols === 100 && rows === 30) &&
+          entry?.screen?.bufferStats().cols === 100 &&
+          entry.screen.bufferStats().rows === 30,
+      );
+
+      expect(entry?.exited).toBe(false);
+      expect(entry?.status).not.toBe("attachment unavailable");
     } finally {
+      registry.disposeAll();
       client.dispose();
     }
   });

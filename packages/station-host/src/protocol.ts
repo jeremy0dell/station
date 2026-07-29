@@ -5,9 +5,10 @@ import { z } from "zod";
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 4;
+export const HOST_PROTOCOL_VERSION = 5;
 
 const idSchema = z.string().min(1);
+const RIS = "\x1bc";
 
 export const HostRequestSchema = z
   .object({
@@ -169,7 +170,11 @@ export const HostReplayEventSchema = z.discriminatedUnion("type", [
 ]);
 export type HostReplayEvent = z.infer<typeof HostReplayEventSchema>;
 
-/** Verbatim complete history or self-contained VT restoring a truncated terminal model. */
+/**
+ * Verbatim history, exact semantic restoration, or a control-only degraded
+ * reset captured at the Host's semantic boundary. Live reset never carries
+ * historical events, and its reset data must begin with RIS.
+ */
 export const HostReplaySchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -187,13 +192,22 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
       events: z.array(HostReplayDataEventSchema).min(1),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal("live-reset-recovery"),
+      initialCols: z.number().int().positive(),
+      initialRows: z.number().int().positive(),
+      events: z.array(HostReplayEventSchema).length(0),
+      resetData: z.string().startsWith(RIS),
+    })
+    .strict(),
 ]);
 export type HostReplay = z.infer<typeof HostReplaySchema>;
 
 /**
  * Attach acknowledgement captured atomically with the live listener. Raw replay
- * preserves production geometry; semantic replay is a self-contained snapshot
- * painted at the Host's current geometry.
+ * preserves production geometry; exact semantic and control-only reset recovery
+ * both begin at the Host's current geometry before the client geometry nudge.
  */
 export const HostAttachAckSchema = z
   .object({

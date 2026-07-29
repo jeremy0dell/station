@@ -9,6 +9,7 @@ import { createPtyTable } from "./ptyTable.js";
 import {
   type SemanticTerminalModel,
   TerminalSnapshotPendingError,
+  TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
 
 const baseParams: HostSpawnParams = {
@@ -308,18 +309,19 @@ describe("createPtyTable", () => {
     await frames.return?.();
   });
 
-  it("keeps the PTY alive and releases the sink when semantic capture fails", async () => {
+  it("keeps the live sink and reports boundary reset data when exact capture is unavailable", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
-    let captureCalls = 0;
+    const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
+    const resetData = "\x1bc\x1b[?1h\x1b[?2004h";
     const semantic: SemanticTerminalModel = {
       write() {},
       resize() {},
       capture: async () => {
-        captureCalls += 1;
-        if (captureCalls === 1) {
-          throw new Error("serializer failed");
-        }
-        return ["recovered"];
+        throw new TerminalSnapshotUnavailableError(
+          "serialization-failed",
+          resetData,
+          "Could not serialize the semantic terminal model.",
+        );
       },
       dispose() {},
     };
@@ -327,20 +329,32 @@ describe("createPtyTable", () => {
       createTerminal: () => scripted.terminal,
       createSemanticTerminal: () => semantic,
       maxScrollbackBytes: 5,
+      onEvent: (event, attributes) => events.push({ event, attributes }),
     });
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("first");
     scripted.helpers.emitData("second");
 
-    await expect(table.attach(ptyId)).rejects.toMatchObject({ code: "HOST_SNAPSHOT_FAILED" });
-    expect(table.list()).toMatchObject([{ ptyId, alive: true }]);
-    expect(table.has(ptyId)).toBe(true);
-    expect((await table.attach(ptyId)).ack.replay).toMatchObject({
-      kind: "semantic-truncation-recovery",
+    const degraded = await table.attach(ptyId);
+    expect(degraded.ack.replay).toEqual({
+      kind: "live-reset-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [{ type: "data", data: "recovered" }],
+      events: [],
+      resetData,
     });
+    expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({
+      event: "pty.snapshot.degraded",
+      attributes: { ptyId, reason: "serialization-failed" },
+    });
+    expect(table.list()).toMatchObject([{ ptyId, alive: true }]);
+    expect(table.has(ptyId)).toBe(true);
+    const frames = degraded.frames[Symbol.asyncIterator]();
+    scripted.helpers.emitData("live-after-reset");
+    expect(await frames.next()).toMatchObject({
+      value: { type: "data", data: "live-after-reset" },
+    });
+    await frames.return?.();
   });
 
   it("classifies an unfinished parser sequence as retryable snapshot state", async () => {

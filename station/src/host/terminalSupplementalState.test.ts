@@ -1,5 +1,6 @@
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
+import { createStationVtScreen } from "../terminal/vt/screen.js";
 import { TerminalSupplementalState } from "./terminalSupplementalState.js";
 
 const CSI = "\x1b[";
@@ -62,6 +63,98 @@ describe("TerminalSupplementalState", () => {
     } finally {
       state.dispose();
       terminal.dispose();
+    }
+  });
+
+  it("builds content-free live reset VT with active modes and both Kitty stacks", async () => {
+    const terminal = new Terminal({ cols: 12, rows: 6, allowProposedApi: true });
+    const state = new TerminalSupplementalState(terminal);
+    const responses: string[] = [];
+    const target = createStationVtScreen({
+      size: { cols: 12, rows: 6 },
+      onResponse: (data) => responses.push(data),
+    });
+    try {
+      await write(
+        terminal,
+        "normal-secret\x1b]2;private-title\x07" +
+          `${CSI}=1u${CSI}>5u` +
+          `${CSI}?1049h` +
+          "alternate-secret" +
+          `${CSI}=2u${CSI}>7u` +
+          `${CSI}?1h${CSI}?66h${CSI}?2004h` +
+          `${CSI}?1003h${CSI}?1006h${CSI}?1016h${CSI}?1004h` +
+          `${CSI}?7l${CSI}?45h`,
+      );
+
+      const resetData = state.liveResetSequence();
+      expect(resetData.startsWith("\x1bc")).toBe(true);
+      expect(resetData).not.toContain("normal-secret");
+      expect(resetData).not.toContain("alternate-secret");
+      expect(resetData).not.toContain("private-title");
+
+      target.feed(`dirty\x1b]2;dirty-title\x07${resetData}`);
+      await target.whenIdle();
+
+      expect(target.isAltScreen()).toBe(true);
+      expect(target.isBracketedPasteEnabled()).toBe(true);
+      expect(target.isApplicationCursorKeys()).toBe(true);
+      expect(target.mouseProtocol()).toEqual({ tracking: "any", encoding: "sgr" });
+      expect(target.isKittyKeyboardEnabled()).toBe(true);
+      expect(target.getTitle()).toBeUndefined();
+      expect(Array.from({ length: 6 }, (_, row) => target.rowText(row))).toEqual([
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ]);
+
+      const modes = target.unsafeEngine.modes;
+      expect(modes.applicationKeypadMode).toBe(true);
+      expect(modes.sendFocusMode).toBe(true);
+      expect(modes.wraparoundMode).toBe(false);
+      expect(modes.reverseWraparoundMode).toBe(true);
+      const pinned = target.unsafeEngine as unknown as {
+        _core: { coreMouseService: { activeEncoding: string } };
+      };
+      expect(pinned._core.coreMouseService.activeEncoding).toBe("SGR_PIXELS");
+
+      target.feed(
+        `${CSI}?u${CSI}<u${CSI}?u` +
+          `${CSI}?1049l${CSI}?u${CSI}<u${CSI}?u`,
+      );
+      await target.whenIdle();
+      expect(responses).toEqual([`${CSI}?7u`, `${CSI}?2u`, `${CSI}?5u`, `${CSI}?1u`]);
+    } finally {
+      state.dispose();
+      terminal.dispose();
+      target.dispose();
+    }
+  });
+
+  it("restores hidden alternate Kitty state while ending in the normal buffer", async () => {
+    const terminal = new Terminal({ cols: 12, rows: 6, allowProposedApi: true });
+    const state = new TerminalSupplementalState(terminal);
+    const responses: string[] = [];
+    const target = createStationVtScreen({
+      size: { cols: 12, rows: 6 },
+      onResponse: (data) => responses.push(data),
+    });
+    try {
+      await write(terminal, `${CSI}=3u${CSI}?47h${CSI}=7u${CSI}?47l`);
+      target.feed(state.liveResetSequence());
+      await target.whenIdle();
+
+      expect(target.isAltScreen()).toBe(false);
+      target.feed(`${CSI}?u${CSI}?47h${CSI}?u`);
+      await target.whenIdle();
+      expect(responses).toEqual([`${CSI}?3u`, `${CSI}?7u`]);
+    } finally {
+      state.dispose();
+      terminal.dispose();
+      target.dispose();
     }
   });
 });

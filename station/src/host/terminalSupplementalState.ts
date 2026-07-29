@@ -15,6 +15,7 @@ import {
 
 const ALT_BUFFER_PREFIX =
   `${ControlByte.Csi}?${DecMode.SaveCursorAndAlternate}h${ControlByte.Csi}H`;
+const RIS = `${ControlByte.Esc}c`;
 
 type BufferType = "normal" | "alternate";
 type AlternateMode =
@@ -52,6 +53,9 @@ type PinnedXtermTerminal = {
     };
   };
 };
+
+/** Exact terminal state that Station's restoration VT cannot currently represent. */
+export class TerminalSnapshotUnsupportedStateError extends Error {}
 
 /**
  * Restores Station-visible state that xterm's official serializer omits.
@@ -110,11 +114,15 @@ export class TerminalSupplementalState {
       return serialized + this.#activeRestoreSequence(beforeSynchronizedOutput);
     }
     if (this.#alternateMode !== DecMode.SaveCursorAndAlternate) {
-      throw new Error("Cannot restore an alternate buffer entered without DECSET 1049.");
+      throw new TerminalSnapshotUnsupportedStateError(
+        "Cannot restore an alternate buffer entered without DECSET 1049.",
+      );
     }
     const seam = serialized.indexOf(ALT_BUFFER_PREFIX);
     if (seam < 0) {
-      throw new Error("Serialized alternate buffer is missing its activation sequence.");
+      throw new TerminalSnapshotUnsupportedStateError(
+        "Serialized alternate buffer is missing its activation sequence.",
+      );
     }
     // 1049 snapshots normal-buffer state, so hidden fixes must precede xterm's activation.
     const hiddenNormal =
@@ -129,6 +137,66 @@ export class TerminalSupplementalState {
       serialized.slice(seam) +
       this.#activeRestoreSequence(beforeSynchronizedOutput)
     );
+  }
+
+  /**
+   * Build RIS-prefixed control-only VT for degraded live attachment. It restores
+   * interaction modes and per-buffer Kitty stacks without cells, title, raw
+   * history, or provider data.
+   */
+  liveResetSequence(): string {
+    const parts = [RIS];
+    const normalKitty = this.#kittyKeyboardSequence("normal");
+    const alternateKitty = this.#kittyKeyboardSequence("alternate");
+    if (this.#bufferType === "alternate") {
+      parts.push(
+        normalKitty,
+        privateModeSequence(this.#alternateMode, true),
+        alternateKitty,
+      );
+    } else {
+      if (alternateKitty.length > 0) {
+        parts.push(
+          privateModeSequence(DecMode.Alternate, true),
+          alternateKitty,
+          privateModeSequence(DecMode.Alternate, false),
+        );
+      }
+      parts.push(normalKitty);
+    }
+
+    const modes = this.terminal.modes;
+    if (modes.applicationCursorKeysMode) {
+      parts.push(privateModeSequence(DecMode.ApplicationCursorKeys, true));
+    }
+    if (modes.applicationKeypadMode) {
+      parts.push(privateModeSequence(DecMode.ApplicationKeypad, true));
+    }
+    if (modes.bracketedPasteMode) {
+      parts.push(privateModeSequence(DecMode.BracketedPaste, true));
+    }
+    const mouseTrackingMode = mouseTrackingDecMode(modes.mouseTrackingMode);
+    if (mouseTrackingMode !== undefined) {
+      parts.push(privateModeSequence(mouseTrackingMode, true));
+    }
+    const mouseEncoding = (this.terminal as unknown as PinnedXtermTerminal)._core
+      .coreMouseService.activeEncoding;
+    if (mouseEncoding === "SGR" || mouseEncoding === "SGR_PIXELS") {
+      parts.push(privateModeSequence(DecMode.SgrMouse, true));
+    }
+    if (mouseEncoding === "SGR_PIXELS") {
+      parts.push(privateModeSequence(DecMode.SgrPixels, true));
+    }
+    if (modes.sendFocusMode) {
+      parts.push(privateModeSequence(DecMode.FocusReporting, true));
+    }
+    if (!modes.wraparoundMode) {
+      parts.push(privateModeSequence(DecMode.Wraparound, false));
+    }
+    if (modes.reverseWraparoundMode) {
+      parts.push(privateModeSequence(DecMode.ReverseWraparound, true));
+    }
+    return parts.join("");
   }
 
   dispose(): void {
@@ -185,7 +253,9 @@ export class TerminalSupplementalState {
     const movesCursor =
       customRegion || blankBackgrounds.length > 0 || restoreOriginMode || restoreSavedCursor;
     if (movesCursor && buffer.cursorX >= this.terminal.cols) {
-      throw new Error(`Cannot restore a wrap-pending ${bufferType} cursor.`);
+      throw new TerminalSnapshotUnsupportedStateError(
+        `Cannot restore a wrap-pending ${bufferType} cursor.`,
+      );
     }
 
     const parts: string[] = [];
@@ -200,7 +270,9 @@ export class TerminalSupplementalState {
     if (restoreOriginMode) {
       const row = buffer.cursorY - pinned.scrollTop + 1;
       if (row < 1 || row > pinned.scrollBottom - pinned.scrollTop + 1) {
-        throw new Error(`Cannot restore the ${bufferType} cursor outside its origin region.`);
+        throw new TerminalSnapshotUnsupportedStateError(
+          `Cannot restore the ${bufferType} cursor outside its origin region.`,
+        );
       }
       parts.push(
         `${ControlByte.Csi}?${DecMode.Origin}h`,
@@ -298,7 +370,9 @@ export class TerminalSupplementalState {
     const activeBufferType =
       this.terminal.buffer.active.type === "alternate" ? "alternate" : "normal";
     if (activeBufferType !== this.#bufferType) {
-      throw new Error("Cannot restore terminal state after an untracked buffer transition.");
+      throw new TerminalSnapshotUnsupportedStateError(
+        "Cannot restore terminal state after an untracked buffer transition.",
+      );
     }
     const charset = pinned._core._charsetService;
     const buffers =
@@ -317,13 +391,17 @@ export class TerminalSupplementalState {
         (bufferType) => this.#pinnedBuffer(bufferType).savedCharset !== undefined,
       )
     ) {
-      throw new Error("Cannot restore non-default terminal character sets.");
+      throw new TerminalSnapshotUnsupportedStateError(
+        "Cannot restore non-default terminal character sets.",
+      );
     }
     if (
       this.#bufferType === "alternate" &&
       !this.#pinnedBuffer("normal").savedCurAttrData.isAttributeDefault()
     ) {
-      throw new Error("Cannot restore non-default hidden normal-buffer attributes.");
+      throw new TerminalSnapshotUnsupportedStateError(
+        "Cannot restore non-default hidden normal-buffer attributes.",
+      );
     }
     for (const savedBuffer of this.#savedBuffers) {
       const recreatedByActiveAlternate =
@@ -337,10 +415,14 @@ export class TerminalSupplementalState {
         !restorableHiddenAlternate &&
         savedBuffer !== this.#bufferType
       ) {
-        throw new Error(`Cannot restore a saved ${savedBuffer} cursor.`);
+        throw new TerminalSnapshotUnsupportedStateError(
+          `Cannot restore a saved ${savedBuffer} cursor.`,
+        );
       }
       if (isUnsupportedXtermAttribute(this.#pinnedBuffer(savedBuffer).savedCurAttrData)) {
-        throw new Error(`Cannot restore unsupported saved ${savedBuffer} attributes.`);
+        throw new TerminalSnapshotUnsupportedStateError(
+          `Cannot restore unsupported saved ${savedBuffer} attributes.`,
+        );
       }
     }
     for (const bufferType of buffers) {
@@ -353,7 +435,7 @@ export class TerminalSupplementalState {
           line?.isWrapped &&
           !hasNaturallySerializableWrap(buffer.getLine(row - 1), line)
         ) {
-          throw new Error(
+          throw new TerminalSnapshotUnsupportedStateError(
             `Cannot restore a non-serializable wrapped ${bufferType} line at row ${row + 1}.`,
           );
         }
@@ -365,7 +447,7 @@ export class TerminalSupplementalState {
             cell !== undefined &&
             (isUnsupportedXtermCellAttribute(cell) || isUnsupportedBlankXtermAttribute(cell))
           ) {
-            throw new Error(
+            throw new TerminalSnapshotUnsupportedStateError(
               `Cannot restore unsupported ${bufferType} attributes at row ${row + 1}, column ${column + 1}.`,
             );
           }
@@ -373,7 +455,9 @@ export class TerminalSupplementalState {
       }
     }
     if (isUnsupportedXtermAttribute(pinned._core._inputHandler._curAttrData)) {
-      throw new Error("Cannot restore unsupported current terminal attributes.");
+      throw new TerminalSnapshotUnsupportedStateError(
+        "Cannot restore unsupported current terminal attributes.",
+      );
     }
   }
 
@@ -382,12 +466,16 @@ export class TerminalSupplementalState {
     const tabs = this.#pinnedBuffer(bufferType).tabs;
     for (let column = 0; column < this.terminal.cols; column += 1) {
       if (Boolean(tabs[column]) !== (column % width === 0)) {
-        throw new Error(`Cannot restore custom ${bufferType} tab stops.`);
+        throw new TerminalSnapshotUnsupportedStateError(
+          `Cannot restore custom ${bufferType} tab stops.`,
+        );
       }
     }
     for (const [column, enabled] of Object.entries(tabs)) {
       if (enabled && Number(column) >= this.terminal.cols && Number(column) % width !== 0) {
-        throw new Error(`Cannot restore custom ${bufferType} tab stops.`);
+        throw new TerminalSnapshotUnsupportedStateError(
+          `Cannot restore custom ${bufferType} tab stops.`,
+        );
       }
     }
   }
@@ -502,6 +590,27 @@ export class TerminalSupplementalState {
 
 function primaryParams(params: (number | number[])[]): number[] {
   return params.filter((param): param is number => !Array.isArray(param));
+}
+
+function privateModeSequence(mode: number, set: boolean): string {
+  return `${ControlByte.Csi}?${mode}${set ? "h" : "l"}`;
+}
+
+function mouseTrackingDecMode(
+  mode: Terminal["modes"]["mouseTrackingMode"],
+): number | undefined {
+  switch (mode) {
+    case "none":
+      return undefined;
+    case "x10":
+      return DecMode.MouseX10;
+    case "vt200":
+      return DecMode.MouseVt200;
+    case "drag":
+      return DecMode.MouseButtonEvent;
+    case "any":
+      return DecMode.MouseAnyEvent;
+  }
 }
 
 function cursorPosition(row: number, column: number): string {
