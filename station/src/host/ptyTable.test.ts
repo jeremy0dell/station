@@ -9,6 +9,7 @@ import { createPtyTable } from "./ptyTable.js";
 import {
   type SemanticTerminalModel,
   TerminalSnapshotPendingError,
+  TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
 
 const baseParams: HostSpawnParams = {
@@ -359,6 +360,47 @@ describe("createPtyTable", () => {
       events: [{ type: "data", data: "recovered" }],
     });
     await frames.return?.();
+  });
+
+  it("logs safe unsupported-state detail while preserving live-reset recovery", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
+    const semantic: SemanticTerminalModel = {
+      write() {},
+      resize() {},
+      capture: async () => {
+        throw new TerminalSnapshotUnavailableError(
+          { reason: "unsupported-state", detail: "wrap-pending-cell" },
+          "unsafe terminal context stays provider-private",
+        );
+      },
+      dispose() {},
+    };
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      createSemanticTerminal: () => semantic,
+      maxScrollbackBytes: 5,
+      onEvent: (event, attributes) => events.push({ event, attributes }),
+    });
+    const { ptyId } = table.spawn(baseParams);
+    scripted.helpers.emitData("first");
+    scripted.helpers.emitData("second");
+
+    const attachment = await table.attach(ptyId);
+    expect(attachment.ack.replay).toEqual({
+      kind: "live-reset-recovery",
+      initialCols: 80,
+      initialRows: 24,
+      events: [],
+    });
+    expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({
+      event: "pty.snapshot.degraded",
+      attributes: {
+        ptyId,
+        reason: "unsupported-state",
+        detail: "wrap-pending-cell",
+      },
+    });
   });
 
   it("classifies an unfinished parser sequence as retryable snapshot state", async () => {

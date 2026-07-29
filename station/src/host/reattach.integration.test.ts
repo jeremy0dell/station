@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
 import { createStationVtScreen } from "../terminal/vt/screen.js";
+import type { PtyTableOptions } from "./ptyTable.js";
 import { type StationHostInstance, startStationHost } from "./startHost.js";
 
 const noopLogger = { log: async () => undefined } as never;
@@ -25,14 +26,17 @@ afterEach(async () => {
   host = undefined;
 });
 
-async function startHostWith(scripted: ScriptedTerminal): Promise<string> {
+async function startHostWith(
+  scripted: ScriptedTerminal,
+  options: Pick<PtyTableOptions, "maxScrollbackBytes"> = {},
+): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "station-reattach-"));
   const socketPath = join(dir, "station-host.sock");
   host = await startStationHost({
     socketPath,
     stateDir: dir,
     logger: noopLogger,
-    ptyTableOptions: { createTerminal: () => scripted.terminal },
+    ptyTableOptions: { ...options, createTerminal: () => scripted.terminal },
   });
   return socketPath;
 }
@@ -173,6 +177,65 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
       terminal.dispose();
       reattached.dispose();
       unmodified.dispose();
+      control.dispose();
+    }
+  });
+
+  it("reattaches exactly through an OpenCode-like truncated wrap-pending frame", async () => {
+    const scripted = createScriptedTerminal({ cols: 12, rows: 6 });
+    const socketPath = await startHostWith(scripted, { maxScrollbackBytes: 5 });
+    const control = createStationHostClient({ socketPath });
+    const { ptyId } = await control.spawn({
+      ...identity,
+      harnessProvider: "opencode",
+      command: "opencode",
+      args: [],
+      cwd: "/repo/wt-1",
+      cols: 12,
+      rows: 6,
+    });
+    scripted.helpers.emitData("\x1b[?1049h\x1b[2;5r\x1b[3;1H");
+    scripted.helpers.emitData("abcdefghijkl");
+
+    const captured = await control.attach(ptyId);
+    expect(captured.ack.replay.kind).toBe("semantic-truncation-recovery");
+    const replay = captured.ack.replay.events
+      .flatMap((event) => (event.type === "data" ? [event.data] : []))
+      .join("");
+    const capturedScreen = createStationVtScreen({ size: { cols: 12, rows: 6 } });
+    capturedScreen.feed(replay);
+    await capturedScreen.whenIdle();
+    expect(capturedScreen.unsafeEngine.buffer.active.type).toBe("alternate");
+    expect(capturedScreen.rowText(2)).toBe("abcdefghijkl");
+    expect(capturedScreen.unsafeEngine.buffer.active.cursorX).toBe(12);
+    await captured.frames[Symbol.asyncIterator]().return?.();
+
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: socketPath,
+      ptyId,
+      size: { cols: 12, rows: 6 },
+    });
+    const reattached = createStationVtScreen({ size: { cols: 12, rows: 6 } });
+    terminal.onData((data) => reattached.feed(data));
+    try {
+      await waitFor(() => reattached.unsafeEngine.buffer.active.cursorX === 12);
+      expect(reattached.unsafeEngine.buffer.active.type).toBe("alternate");
+      expect(reattached.rowText(2)).toBe("abcdefghijkl");
+
+      scripted.helpers.emitData("Z");
+      await waitFor(() => reattached.rowText(3).startsWith("Z"));
+      expect(reattached.unsafeEngine.buffer.active.cursorX).toBe(1);
+      terminal.write("agent-input");
+      await waitFor(() => scripted.helpers.writes.includes("agent-input"));
+      terminal.resize({ cols: 13, rows: 6 });
+      await waitFor(() =>
+        scripted.helpers.resizes.some(({ cols, rows }) => cols === 13 && rows === 6),
+      );
+      expect((await control.list())[0]).toMatchObject({ ptyId, alive: true });
+    } finally {
+      terminal.dispose();
+      capturedScreen.dispose();
+      reattached.dispose();
       control.dispose();
     }
   });

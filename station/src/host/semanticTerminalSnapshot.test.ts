@@ -3,7 +3,10 @@ import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
 import { createStationVtScreen } from "../terminal/vt/screen.js";
 import { resolveXtermCellHyperlink } from "../terminal/vt/xtermHyperlinks.js";
-import { SemanticTerminalSnapshot } from "./semanticTerminalSnapshot.js";
+import {
+  SemanticTerminalSnapshot,
+  terminalSnapshotFailure,
+} from "./semanticTerminalSnapshot.js";
 
 const CSI = "\x1b[";
 
@@ -22,6 +25,23 @@ function lines(terminal: Terminal, buffer = terminal.buffer.active): string[] {
   return Array.from({ length: buffer.length }, (_, row) =>
     buffer.getLine(row)?.translateToString(true) ?? "",
   );
+}
+
+function visibleLines(terminal: Terminal): string[] {
+  const buffer = terminal.buffer.active;
+  return Array.from({ length: terminal.rows }, (_, row) =>
+    buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? "",
+  );
+}
+
+function margins(terminal: Terminal): [number, number] {
+  const pinned = terminal as unknown as {
+    _core: { _bufferService: { buffer: { scrollBottom: number; scrollTop: number } } };
+  };
+  return [
+    pinned._core._bufferService.buffer.scrollTop,
+    pinned._core._bufferService.buffer.scrollBottom,
+  ];
 }
 
 describe("SemanticTerminalSnapshot", () => {
@@ -242,6 +262,145 @@ describe("SemanticTerminalSnapshot", () => {
     }
   });
 
+  const wrapPendingCases = [
+    {
+      name: "a normal-buffer one-cell grapheme with default blanks",
+      input: `${CSI}2;5r${CSI}3;1Habcdefghijkl`,
+      activeType: "normal",
+      originMode: false,
+      text: "abcdefghijkl",
+      trailingColumn: 11,
+      trailing: { chars: "l", width: 1, foreground: -1, background: -1, bold: false },
+      current: { foreground: -1, background: -1, bold: false },
+      blankBackground: -1,
+    },
+    {
+      name: "an OpenCode-like incomplete alternate frame with default blanks",
+      input: `${CSI}?1049h${CSI}2;5r${CSI}3;1Habcdefghijkl`,
+      activeType: "alternate",
+      originMode: false,
+      text: "abcdefghijkl",
+      trailingColumn: 11,
+      trailing: { chars: "l", width: 1, foreground: -1, background: -1, bold: false },
+      current: { foreground: -1, background: -1, bold: false },
+      blankBackground: -1,
+    },
+    {
+      name: "non-default blank backgrounds requiring BCE repair",
+      input:
+        `${CSI}44m${CSI}2J${CSI}2;5r${CSI}3;1H` +
+        `${CSI}31;43;1mabcdefghijkl${CSI}0;32;45m`,
+      activeType: "normal",
+      originMode: false,
+      text: "abcdefghijkl",
+      trailingColumn: 11,
+      trailing: { chars: "l", width: 1, foreground: 1, background: 3, bold: true },
+      current: { foreground: 2, background: 5, bold: false },
+      blankBackground: 4,
+    },
+    {
+      name: "a two-cell trailing grapheme whose attributes differ from input",
+      input:
+        `${CSI}2;5r${CSI}3;1H` +
+        `${CSI}31;43;1mabcdefghij界${CSI}0;32;45m`,
+      activeType: "normal",
+      originMode: false,
+      text: "abcdefghij界",
+      trailingColumn: 10,
+      trailing: { chars: "界", width: 2, foreground: 1, background: 3, bold: true },
+      current: { foreground: 2, background: 5, bold: false },
+      blankBackground: -1,
+    },
+    {
+      name: "custom margins with origin mode",
+      input:
+        `${CSI}2;5r${CSI}?6h${CSI}2;1H` +
+        `${CSI}36;43mabcdefghijkl${CSI}0;35m`,
+      activeType: "normal",
+      originMode: true,
+      text: "abcdefghijkl",
+      trailingColumn: 11,
+      trailing: { chars: "l", width: 1, foreground: 6, background: 3, bold: false },
+      current: { foreground: 5, background: -1, bold: false },
+      blankBackground: -1,
+    },
+    {
+      name: "saved-cursor restoration",
+      input:
+        `${CSI}2;3H${CSI}31m\x1b7${CSI}2;5r${CSI}3;1H` +
+        `${CSI}34mabcdefghijkl${CSI}0;32m`,
+      activeType: "normal",
+      originMode: false,
+      text: "abcdefghijkl",
+      trailingColumn: 11,
+      trailing: { chars: "l", width: 1, foreground: 4, background: -1, bold: false },
+      current: { foreground: 2, background: -1, bold: false },
+      blankBackground: -1,
+      saved: { row: 1, column: 2, foreground: 1 },
+    },
+  ] as const;
+
+  for (const testCase of wrapPendingCases) {
+    it(`restores wrap-pending state after ${testCase.name}`, async () => {
+      const source = new SemanticTerminalSnapshot(12, 6);
+      const restored = target(12, 6);
+      try {
+        source.write(testCase.input);
+        const [snapshot] = await source.capture();
+        await write(restored, snapshot);
+
+        const expectedLines = ["", "", testCase.text, "", "", ""];
+        expect(visibleLines(restored)).toEqual(expectedLines);
+        expect(restored.buffer.active.type).toBe(testCase.activeType);
+        expect(margins(restored)).toEqual([1, 4]);
+        expect(restored.modes.originMode).toBe(testCase.originMode);
+        expect([restored.buffer.active.cursorX, restored.buffer.active.cursorY]).toEqual([12, 2]);
+
+        const line = restored.buffer.active.getLine(
+          restored.buffer.active.baseY + restored.buffer.active.cursorY,
+        );
+        const trailing = line?.getCell(testCase.trailingColumn);
+        expect({
+          chars: trailing?.getChars(),
+          width: trailing?.getWidth(),
+          foreground: trailing?.getFgColor(),
+          background: trailing?.getBgColor(),
+          bold: Boolean(trailing?.isBold()),
+        }).toEqual(testCase.trailing);
+        for (const row of [0, 1, 3, 4, 5]) {
+          const blankLine = restored.buffer.active.getLine(restored.buffer.active.baseY + row);
+          expect(
+            Array.from(
+              { length: restored.cols },
+              (_, column) => blankLine?.getCell(column)?.getBgColor(),
+            ),
+          ).toEqual(Array.from({ length: restored.cols }, () => testCase.blankBackground));
+        }
+
+        await write(restored, "Z");
+        expect([restored.buffer.active.cursorX, restored.buffer.active.cursorY]).toEqual([1, 3]);
+        const written = restored.buffer.active.getLine(restored.buffer.active.baseY + 3)?.getCell(0);
+        expect({
+          foreground: written?.getFgColor(),
+          background: written?.getBgColor(),
+          bold: Boolean(written?.isBold()),
+        }).toEqual(testCase.current);
+
+        if ("saved" in testCase) {
+          await write(restored, "\x1b8S");
+          const saved = restored.buffer.active
+            .getLine(restored.buffer.active.baseY + testCase.saved.row)
+            ?.getCell(testCase.saved.column);
+          expect(saved?.getChars()).toBe("S");
+          expect(saved?.getFgColor()).toBe(testCase.saved.foreground);
+        }
+      } finally {
+        source.dispose();
+        restored.dispose();
+      }
+    });
+  }
+
   it("restores Station cursor and mouse semantics after reset", async () => {
     const source = new SemanticTerminalSnapshot(12, 5);
     const screen = createStationVtScreen({ size: { cols: 12, rows: 5 } });
@@ -316,46 +475,68 @@ describe("SemanticTerminalSnapshot", () => {
 
   it("rejects terminal state the serializer cannot represent exactly", async () => {
     const cases = [
-      ["Cannot restore non-default terminal character sets.", "\x1b(0"],
-      ["Cannot restore custom normal tab stops.", `${CSI}3g${CSI}5G\x88`],
+      ["character-set", "Cannot restore non-default terminal character sets.", "\x1b(0"],
+      ["custom-tabs", "Cannot restore custom normal tab stops.", `${CSI}3g${CSI}5G\x88`],
       [
+        "cell-attributes",
         "Cannot restore unsupported normal attributes at row 1, column 1.",
         `${CSI}1\"qX${CSI}0\"q`,
       ],
       [
+        "cell-attributes",
         "Cannot restore unsupported normal attributes at row 1, column 1.",
         `${CSI}4:3;58:2::255:0:0mX${CSI}0m`,
       ],
       [
+        "current-attributes",
         "Cannot restore unsupported current terminal attributes.",
         "\x1b]8;;https://example.com\x1b\\open",
       ],
       [
+        "alternate-mode",
         "Cannot restore an alternate buffer entered without DECSET 1049.",
         `${CSI}?47h`,
       ],
       [
+        "nonserializable-wrap",
         "Cannot restore a non-serializable wrapped normal line at row 2.",
         `abcdefghijklX${CSI}1D${CSI}1X`,
       ],
       [
+        "nonserializable-wrap",
         "Cannot restore a non-serializable wrapped normal line at row 2.",
         `${CSI}1;12H界`,
       ],
       [
+        "hidden-attributes",
         "Cannot restore non-default hidden normal-buffer attributes.",
         `${CSI}31m${CSI}?1049h`,
       ],
-      ["Cannot restore a wrap-pending normal cursor.", `${CSI}2;4r${CSI}4;1Habcdefghijkl`],
+      [
+        "saved-cursor",
+        "Cannot restore a saved normal cursor.",
+        `\x1b7${CSI}?47h`,
+      ],
+      [
+        "saved-attributes",
+        "Cannot restore unsupported saved normal attributes.",
+        `${CSI}1\"q\x1b7${CSI}0\"q`,
+      ],
+      [
+        "wrap-pending-cell",
+        "Cannot restore the normal wrap-pending trailing cell.",
+        `abcdefghijkl${CSI}2K`,
+      ],
     ] as const;
 
-    for (const [message, input] of cases) {
+    for (const [detail, message, input] of cases) {
       const source = new SemanticTerminalSnapshot(12, 5);
       try {
         source.write(input);
         await expect(source.capture()).rejects.toMatchObject({
           message,
           reason: "unsupported-state",
+          diagnostic: { reason: "unsupported-state", detail },
         });
       } finally {
         source.dispose();
@@ -411,13 +592,21 @@ describe("SemanticTerminalSnapshot", () => {
     const source = new SemanticTerminalSnapshot(20, 4);
     try {
       source.resize(1.5, 2.5);
-      await expect(source.capture()).rejects.toMatchObject({
+      const failure = await source.capture().catch((error: unknown) => error);
+      expect(failure).toMatchObject({
         reason: "model-update-failed",
         message: "Could not update the semantic terminal model.",
       });
+      expect(terminalSnapshotFailure(failure)).toEqual({ reason: "model-update-failed" });
     } finally {
       source.dispose();
     }
+  });
+
+  it("normalizes unknown serializer failures without unsafe detail", () => {
+    expect(terminalSnapshotFailure(new Error("unsafe serializer context"))).toEqual({
+      reason: "serialization-failed",
+    });
   });
 
   it("fails closed while xterm retains an unfinished UTF-16 surrogate", async () => {

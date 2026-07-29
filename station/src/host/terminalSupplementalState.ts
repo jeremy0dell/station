@@ -53,8 +53,31 @@ type PinnedXtermTerminal = {
   };
 };
 
-/** Exact terminal state that Station's restoration VT cannot currently represent. */
-export class TerminalSnapshotUnsupportedStateError extends Error {}
+/** Stable, content-free classification for terminal state Station cannot restore exactly. */
+export type TerminalSnapshotUnsupportedStateDetail =
+  | "alternate-mode"
+  | "alternate-serialization"
+  | "origin-cursor"
+  | "buffer-transition"
+  | "character-set"
+  | "hidden-attributes"
+  | "saved-cursor"
+  | "saved-attributes"
+  | "nonserializable-wrap"
+  | "cell-attributes"
+  | "current-attributes"
+  | "custom-tabs"
+  | "wrap-pending-cell";
+
+/** Exactness failure carrying only a stable, content-free diagnostic detail. */
+export class TerminalSnapshotUnsupportedStateError extends Error {
+  constructor(
+    readonly detail: TerminalSnapshotUnsupportedStateDetail,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Restores Station-visible state that xterm's official serializer omits.
@@ -114,12 +137,14 @@ export class TerminalSupplementalState {
     }
     if (this.#alternateMode !== DecMode.SaveCursorAndAlternate) {
       throw new TerminalSnapshotUnsupportedStateError(
+        "alternate-mode",
         "Cannot restore an alternate buffer entered without DECSET 1049.",
       );
     }
     const seam = serialized.indexOf(ALT_BUFFER_PREFIX);
     if (seam < 0) {
       throw new TerminalSnapshotUnsupportedStateError(
+        "alternate-serialization",
         "Serialized alternate buffer is missing its activation sequence.",
       );
     }
@@ -191,11 +216,6 @@ export class TerminalSupplementalState {
     const restoreSavedCursor = this.#shouldRestoreSavedCursor(bufferType);
     const movesCursor =
       customRegion || blankBackgrounds.length > 0 || restoreOriginMode || restoreSavedCursor;
-    if (movesCursor && buffer.cursorX >= this.terminal.cols) {
-      throw new TerminalSnapshotUnsupportedStateError(
-        `Cannot restore a wrap-pending ${bufferType} cursor.`,
-      );
-    }
 
     const parts: string[] = [];
     if (restoreOriginMode) {
@@ -210,6 +230,7 @@ export class TerminalSupplementalState {
       const row = buffer.cursorY - pinned.scrollTop + 1;
       if (row < 1 || row > pinned.scrollBottom - pinned.scrollTop + 1) {
         throw new TerminalSnapshotUnsupportedStateError(
+          "origin-cursor",
           `Cannot restore the ${bufferType} cursor outside its origin region.`,
         );
       }
@@ -222,6 +243,9 @@ export class TerminalSupplementalState {
     }
     if (restoreSavedCursor) {
       parts.push(this.#savedCursorSequence(bufferType, currentSgr, restoreOriginMode));
+    }
+    if (movesCursor && buffer.cursorX >= this.terminal.cols) {
+      parts.push(this.#wrapPendingSequence(bufferType, currentSgr, restoreOriginMode));
     }
     return parts.join("");
   }
@@ -263,6 +287,45 @@ export class TerminalSupplementalState {
       parts.push(cursorPosition(buffer.cursorY + 1, buffer.cursorX));
     }
     return parts.join("");
+  }
+
+  #wrapPendingSequence(
+    bufferType: BufferType,
+    currentSgr: string,
+    restoreOriginMode: boolean,
+  ): string {
+    const buffer = this.#buffer(bufferType);
+    const line = buffer.getLine(buffer.baseY + buffer.cursorY);
+    const trailing = line?.getCell(this.terminal.cols - 1);
+    let cell = trailing;
+    let column = this.terminal.cols - 1;
+    if (trailing?.getWidth() === 0) {
+      cell = line?.getCell(this.terminal.cols - 2);
+      column -= 1;
+    }
+    if (
+      buffer.cursorX !== this.terminal.cols ||
+      cell === undefined ||
+      cell.getChars() === "" ||
+      cell.getWidth() !== this.terminal.cols - column
+    ) {
+      throw new TerminalSnapshotUnsupportedStateError(
+        "wrap-pending-cell",
+        `Cannot restore the ${bufferType} wrap-pending trailing cell.`,
+      );
+    }
+    const pinned = this.#pinnedBuffer(bufferType);
+    const row = restoreOriginMode
+      ? buffer.cursorY - pinned.scrollTop + 1
+      : buffer.cursorY + 1;
+    return [
+      cursorPosition(row, column),
+      `${ControlByte.Csi}0m`,
+      xtermAttributeSgr(cell),
+      cell.getChars(),
+      `${ControlByte.Csi}0m`,
+      currentSgr,
+    ].join("");
   }
 
   #blankBackgroundSequence(buffer: IBuffer): string {
@@ -310,6 +373,7 @@ export class TerminalSupplementalState {
       this.terminal.buffer.active.type === "alternate" ? "alternate" : "normal";
     if (activeBufferType !== this.#bufferType) {
       throw new TerminalSnapshotUnsupportedStateError(
+        "buffer-transition",
         "Cannot restore terminal state after an untracked buffer transition.",
       );
     }
@@ -331,6 +395,7 @@ export class TerminalSupplementalState {
       )
     ) {
       throw new TerminalSnapshotUnsupportedStateError(
+        "character-set",
         "Cannot restore non-default terminal character sets.",
       );
     }
@@ -339,6 +404,7 @@ export class TerminalSupplementalState {
       !this.#pinnedBuffer("normal").savedCurAttrData.isAttributeDefault()
     ) {
       throw new TerminalSnapshotUnsupportedStateError(
+        "hidden-attributes",
         "Cannot restore non-default hidden normal-buffer attributes.",
       );
     }
@@ -355,11 +421,13 @@ export class TerminalSupplementalState {
         savedBuffer !== this.#bufferType
       ) {
         throw new TerminalSnapshotUnsupportedStateError(
+          "saved-cursor",
           `Cannot restore a saved ${savedBuffer} cursor.`,
         );
       }
       if (isUnsupportedXtermAttribute(this.#pinnedBuffer(savedBuffer).savedCurAttrData)) {
         throw new TerminalSnapshotUnsupportedStateError(
+          "saved-attributes",
           `Cannot restore unsupported saved ${savedBuffer} attributes.`,
         );
       }
@@ -375,6 +443,7 @@ export class TerminalSupplementalState {
           !hasNaturallySerializableWrap(buffer.getLine(row - 1), line)
         ) {
           throw new TerminalSnapshotUnsupportedStateError(
+            "nonserializable-wrap",
             `Cannot restore a non-serializable wrapped ${bufferType} line at row ${row + 1}.`,
           );
         }
@@ -387,6 +456,7 @@ export class TerminalSupplementalState {
             (isUnsupportedXtermCellAttribute(cell) || isUnsupportedBlankXtermAttribute(cell))
           ) {
             throw new TerminalSnapshotUnsupportedStateError(
+              "cell-attributes",
               `Cannot restore unsupported ${bufferType} attributes at row ${row + 1}, column ${column + 1}.`,
             );
           }
@@ -395,6 +465,7 @@ export class TerminalSupplementalState {
     }
     if (isUnsupportedXtermAttribute(pinned._core._inputHandler._curAttrData)) {
       throw new TerminalSnapshotUnsupportedStateError(
+        "current-attributes",
         "Cannot restore unsupported current terminal attributes.",
       );
     }
@@ -406,6 +477,7 @@ export class TerminalSupplementalState {
     for (let column = 0; column < this.terminal.cols; column += 1) {
       if (Boolean(tabs[column]) !== (column % width === 0)) {
         throw new TerminalSnapshotUnsupportedStateError(
+          "custom-tabs",
           `Cannot restore custom ${bufferType} tab stops.`,
         );
       }
@@ -413,6 +485,7 @@ export class TerminalSupplementalState {
     for (const [column, enabled] of Object.entries(tabs)) {
       if (enabled && Number(column) >= this.terminal.cols && Number(column) % width !== 0) {
         throw new TerminalSnapshotUnsupportedStateError(
+          "custom-tabs",
           `Cannot restore custom ${bufferType} tab stops.`,
         );
       }
@@ -496,10 +569,18 @@ export class TerminalSupplementalState {
     if (kitty.length === 0 && !restoreSavedCursor) {
       return "";
     }
+    const savedCursor = restoreSavedCursor
+      ? this.#savedCursorSequence("alternate", currentSgr, false)
+      : "";
+    const wrapPending =
+      restoreSavedCursor && this.#buffer("alternate").cursorX >= this.terminal.cols
+        ? this.#wrapPendingSequence("alternate", currentSgr, false)
+        : "";
     return [
       `${ControlByte.Csi}?${DecMode.Alternate}h`,
       kitty,
-      restoreSavedCursor ? this.#savedCursorSequence("alternate", currentSgr, false) : "",
+      savedCursor,
+      wrapPending,
       `${ControlByte.Csi}?${DecMode.Alternate}l`,
     ].join("");
   }
