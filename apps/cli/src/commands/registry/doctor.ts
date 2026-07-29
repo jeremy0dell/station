@@ -5,7 +5,8 @@ import type {
   CliCommandRunContext,
 } from "../cliCommand/types.js";
 import { isConfigError, runInvalidConfigDoctor } from "../configDiagnostics.js";
-import { runDoctorCommand } from "../doctor.js";
+import { buildDoctorSummary } from "../diagnosticOutput.js";
+import { parseDoctorCommandArgs, runDoctorCommand } from "../doctor.js";
 
 export const doctorCliCommand: CliCommandNode = {
   name: "doctor",
@@ -13,12 +14,13 @@ export const doctorCliCommand: CliCommandNode = {
   requiresConfig: true,
   run: runDoctorCliCommand,
   handleConfigError: handleDoctorConfigError,
-  usage: ["stn doctor [--project <id>]"],
+  usage: ["stn doctor [--project <id>] [--full]"],
   options: [
     {
       name: "--project <id>",
       description: "Limit project-specific diagnostics to one project.",
     },
+    { name: "--full", description: "Return the complete diagnostic report." },
   ],
   examples: ["pnpm stn doctor", "pnpm stn --config ./config.toml doctor --help"],
   notes: [
@@ -44,5 +46,13 @@ async function handleDoctorConfigError(error: unknown, _context: CliCommandConfi
     error,
     configPath: error.configPath,
   });
-  return { code: 1, output: result };
+  const parsed = parseDoctorCommandArgs(_context.args);
+  return {
+    code: 1,
+    output: parsed.full
+      ? result
+      : buildDoctorSummary(result, {
+          ...(parsed.projectId === undefined ? {} : { projectId: parsed.projectId }),
+        }),
+  };
 }

@@ -148,7 +148,7 @@ describe("CLI manual-smoke commands", () => {
     ]);
 
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(textOutput(result)).toContain("Usage:\n  stn doctor [--project <id>]");
+    expect(textOutput(result)).toContain("Usage:\n  stn doctor [--project <id>] [--full]");
   });
 
   it("ignores command options and operands when resolving help topics", async () => {
@@ -169,7 +169,7 @@ describe("CLI manual-smoke commands", () => {
     expect(setupCheck).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(setupCheck)).toContain("Usage:\n  stn setup check [--json] [--no-brew]");
     expect(doctor).toMatchObject({ code: 0, outputFormat: "text" });
-    expect(textOutput(doctor)).toContain("Usage:\n  stn doctor [--project <id>]");
+    expect(textOutput(doctor)).toContain("Usage:\n  stn doctor [--project <id>] [--full]");
     expect(hookInstall).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(hookInstall)).toContain(
       "Usage:\n  stn hooks install <target> --yes [options]",
@@ -185,6 +185,20 @@ describe("CLI manual-smoke commands", () => {
     expect(projectAdd).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(projectAdd)).toContain("Usage:\n  stn project add <path>");
     expect(textOutput(projectAdd)).toContain("Behavior Notes:");
+  });
+
+  it("documents concise/full diagnostic grammar without promoting legacy --json", async () => {
+    const [trace, logs, status] = await Promise.all([
+      runCli(["debug", "trace", "--help"]),
+      runCli(["debug", "logs", "--help"]),
+      runCli(["observer", "status", "--help"]),
+    ]);
+
+    expect(textOutput(trace)).toContain("stn debug trace --latest-failure [--full]");
+    expect(textOutput(logs)).toContain("stn debug logs [query] [options]");
+    expect(textOutput(status)).toContain("stn observer status [--full]");
+    expect(textOutput(trace)).not.toContain("--json");
+    expect(textOutput(logs)).not.toContain("--json");
   });
 
   it("resolves hook action target help without running hook commands", async () => {

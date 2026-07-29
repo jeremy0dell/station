@@ -176,6 +176,37 @@ diagnostics tests, the scripted-agent lane, setup and Observer lifecycle E2E
 coverage, and a production Observer SQLite restart smoke. It intentionally
 excludes real provider lanes.
 
+### Agent debugging performance gate
+
+Run the explicit concise-diagnostics PR gate on the same machine used for the
+reported comparison:
+
+```bash
+pnpm gate:agent-debugging
+```
+
+The command builds once, enables `STATION_AGENT_DEBUG_PERF=1`, and runs the
+A1-A10 correctness, context, call-count, read-budget, and timing matrix. The
+fixture is isolated and exactly 96 MiB: 64 MiB of observer logs, 16 MiB of CLI
+logs, and 16 MiB of TUI logs. It places a recent failure in the final 64 KiB and
+an old query match more than 8 MiB from EOF.
+
+The gate runs one untimed warm-up followed by seven measured iterations. It
+alternates the legacy and reverse-reader order to reduce cache-order bias. The
+test-only legacy reference reproduces `readFile`, split, parse, filter, sort,
+and slice. Median is the middle sorted sample; p95 is the nearest-rank 95th
+percentile. Approximate tokens are always `ceil(output bytes / 4)`, not a
+tokenizer measurement. Every matrix item prints one JSON row with calls,
+correctness, median and p95 elapsed time, bytes, lines, approximate tokens, and
+bytes read.
+
+A diagnostics PR is a go only when every A1-A10 row passes, the command exits
+zero, recent logs and latest-failure medians are at most 400 ms, all context and
+call-count ceilings hold, the seven diagnosis fixtures remain correct, resolved
+traces recommend no extra command, and `pnpm test:all` is green. Any missing
+measurement, changed fixture/method, byte or line overage, automatic doctor or
+bundle suggestion, or deferred performance miss is a no-go.
+
 After root `pnpm install`, Lefthook runs lint before commits and pushes:
 
 ```bash

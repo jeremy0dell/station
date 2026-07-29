@@ -1,13 +1,15 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DiagnosticEvidenceIndex, DiagnosticSnapshot } from "@station/contracts";
+import { LogRecordSchema } from "@station/contracts";
 import {
   createErrorEnvelope,
   createJsonlLogger,
   DEFAULT_RETENTION_POLICY,
   mergeRetentionPolicy,
   readJsonlLog,
+  readJsonlReverse,
   redact,
   scanLocalStateUsage,
   toSafeError,
@@ -58,6 +60,100 @@ describe("observability helpers", () => {
         }),
       }),
     ]);
+  });
+
+  it("reads newest JSONL records in chronological order without reading the whole file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-jsonl-reverse-"));
+    const path = join(dir, "observer.jsonl");
+    const records = Array.from({ length: 2_000 }, (_, index) => logRecord(index));
+    await writeFile(path, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`);
+
+    const result = await readJsonlReverse(path, LogRecordSchema, { maxRecords: 3 });
+
+    expect(result.records.map((record) => record.message)).toEqual([
+      "record-1997",
+      "record-1998",
+      "record-1999",
+    ]);
+    expect(result.bytesRead).toBeLessThan((await readFile(path)).byteLength);
+    expect(result.complete).toBe(false);
+    expect(result.invalidLines).toBe(0);
+    await expect(readJsonlLog(path, 3)).resolves.toEqual(result.records);
+  });
+
+  it("preserves UTF-8 characters split across reverse chunks", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-jsonl-utf8-"));
+    const path = join(dir, "observer.jsonl");
+    const longMessage = `${"a".repeat(64 * 1024 - 120)}🧭tail`;
+    await writeFile(
+      path,
+      `${JSON.stringify(logRecord(1, longMessage))}\n${JSON.stringify(logRecord(2))}\n`,
+    );
+
+    const result = await readJsonlReverse(path, LogRecordSchema);
+
+    expect(result.records[0]?.message).toBe(longMessage);
+    expect(result.complete).toBe(true);
+  });
+
+  it("counts malformed complete lines and ignores an unterminated trailing write", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-jsonl-partial-"));
+    const path = join(dir, "observer.jsonl");
+    await writeFile(
+      path,
+      `${JSON.stringify(logRecord(1))}\nnot-json\n${JSON.stringify(logRecord(2))}\n{"partial":`,
+    );
+
+    const result = await readJsonlReverse(path, LogRecordSchema);
+
+    expect(result.records.map((record) => record.message)).toEqual(["record-1", "record-2"]);
+    expect(result.invalidLines).toBe(1);
+    expect(result.complete).toBe(true);
+    await expect(readJsonlLog(path)).rejects.toThrow("Invalid JSONL log record.");
+  });
+
+  it("enforces a byte ceiling and removes it in exhaustive mode", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-jsonl-cap-"));
+    const path = join(dir, "observer.jsonl");
+    const old = logRecord(1, `old-${"x".repeat(80 * 1024)}`);
+    const recent = logRecord(2, "recent");
+    await writeFile(path, `${JSON.stringify(old)}\n${JSON.stringify(recent)}\n`);
+
+    const bounded = await readJsonlReverse(path, LogRecordSchema, { maxBytes: 64 * 1024 });
+    const exhaustive = await readJsonlReverse(path, LogRecordSchema);
+
+    expect(bounded).toMatchObject({ bytesRead: 64 * 1024, complete: false });
+    expect(bounded.records.map((record) => record.message)).toEqual(["recent"]);
+    expect(exhaustive.records.map((record) => record.message)).toEqual([
+      expect.stringMatching(/^old-/u),
+      "recent",
+    ]);
+    expect(exhaustive.complete).toBe(true);
+  });
+
+  it("defers records appended after the opened file high-water mark", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-jsonl-high-water-"));
+    const path = join(dir, "observer.jsonl");
+    await writeFile(path, `${JSON.stringify(logRecord(1))}\n`);
+    let appended: Promise<void> | undefined;
+    const appendingSchema = {
+      safeParse(value: unknown) {
+        appended ??= appendFile(path, `${JSON.stringify(logRecord(2))}\n`);
+        return LogRecordSchema.safeParse(value);
+      },
+    };
+
+    const first = await readJsonlReverse(path, appendingSchema);
+    await appended;
+    const second = await readJsonlReverse(path, LogRecordSchema);
+
+    expect(first.records.map((record) => record.message)).toEqual(["record-1"]);
+    expect(second.records.map((record) => record.message)).toEqual(["record-1", "record-2"]);
+  });
+
+  it("returns an empty complete result for a missing JSONL file", async () => {
+    const result = await readJsonlReverse("/definitely/missing/station.jsonl", LogRecordSchema);
+    expect(result).toEqual({ records: [], bytesRead: 0, complete: true, invalidLines: 0 });
   });
 
   it("keeps SafeError output safe while storing redacted internal envelopes", () => {
@@ -209,6 +305,15 @@ describe("observability helpers", () => {
     expect(index.rootCauses.map((cause) => cause.code)).toContain("COMMAND_FAILED");
   });
 });
+
+function logRecord(index: number, message = `record-${index}`) {
+  return {
+    timestamp: new Date(Date.parse(now) + index).toISOString(),
+    level: "info" as const,
+    component: "observer" as const,
+    message,
+  };
+}
 
 function minimalSnapshot(): DiagnosticSnapshot {
   return {

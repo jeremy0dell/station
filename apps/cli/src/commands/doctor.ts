@@ -26,6 +26,7 @@ import {
   createProviderHookRuntime,
   type ProviderHookRuntimeOptions,
 } from "../worktrunkHookExpectation.js";
+import { buildDoctorSummary, type DoctorSummary } from "./diagnosticOutput.js";
 
 export type DoctorCommandOptions = {
   config?: StationConfig;
@@ -33,6 +34,14 @@ export type DoctorCommandOptions = {
   providerHookIngressLauncher?: string;
   providerHookArtifactOwner?: ProviderHookArtifactOwner;
   timeoutMs?: number;
+};
+
+export type DoctorCommandResult = DoctorReport | DoctorSummary;
+
+export type ParsedDoctorCommandArgs = {
+  doctorOptions: DoctorOptions;
+  full: boolean;
+  projectId?: string;
 };
 
 /**
@@ -44,8 +53,9 @@ export async function runDoctorCommand(
   args: string[],
   options: DoctorCommandOptions = {},
   deps: ObserverProcessDeps = {},
-): Promise<DoctorReport> {
-  const parsedDoctorOptions = parseDoctorOptions(args);
+): Promise<DoctorCommandResult> {
+  const parsed = parseDoctorCommandArgs(args);
+  const parsedDoctorOptions = parsed.doctorOptions;
   const hookRuntimeOptions: ProviderHookRuntimeOptions = {};
   if (options.providerHookIngressLauncher !== undefined) {
     hookRuntimeOptions.ingressLauncher = options.providerHookIngressLauncher;
@@ -123,7 +133,11 @@ export async function runDoctorCommand(
   for (const check of cliChecks) {
     report = reportWithCliCheck(report, check);
   }
-  return report;
+  return parsed.full
+    ? report
+    : buildDoctorSummary(report, {
+        ...(parsed.projectId === undefined ? {} : { projectId: parsed.projectId }),
+      });
 }
 
 /**
@@ -179,13 +193,18 @@ export async function rendererRuntimeCheck(
   return undefined;
 }
 
-function parseDoctorOptions(args: string[]): DoctorOptions {
+export function parseDoctorCommandArgs(args: string[]): ParsedDoctorCommandArgs {
   const result: {
     projectId?: string;
     deep?: true;
   } = {};
+  let full = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === "--full") {
+      full = true;
+      continue;
+    }
     if (arg === "--deep") {
       result.deep = true;
       continue;
@@ -204,7 +223,11 @@ function parseDoctorOptions(args: string[]): DoctorOptions {
   if (!parsed.success) {
     throw new Error(`Invalid doctor options: ${parsed.error.message}`);
   }
-  return parsed.data;
+  return {
+    doctorOptions: parsed.data,
+    full,
+    ...(result.projectId === undefined ? {} : { projectId: result.projectId }),
+  };
 }
 
 export async function observerRuntimeFreshnessCheck(

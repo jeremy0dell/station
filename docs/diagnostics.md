@@ -17,7 +17,7 @@ Live observer checks:
 
 ```bash
 stn observer status
-stn doctor [--project <projectId>] [--deep]
+stn doctor [--project <projectId>] [--deep] [--full]
 stn snapshot --json [--include-debug]
 stn observe --include-snapshot --duration 3s
 stn observe --json --include-snapshot --duration 3s
@@ -59,6 +59,13 @@ When a command error envelope includes external-command diagnostics, trace outpu
 can show the command, cwd, exit code, duration, and bounded stdout/stderr
 snippets after redaction.
 
+Latest-failure lookup is recent-first and reads at most 8 MiB per log component
+by default. Known trace, command, and diagnostic IDs remain exhaustive in one
+call. `--full` makes latest-failure coverage exhaustive and restores complete
+diagnostic details and evidence paths. A result with a root-cause code has no
+automatic follow-up; unresolved results suggest only an exact exhaustive retry
+or the narrowest existing-state log query.
+
 `stn debug logs` reads structured JSONL logs from the configured state
 directory without contacting the observer. By default it searches `observer`,
 `cli`, and `tui` logs, excludes noisy hook logs, returns recent `warn`/`error`
@@ -66,11 +73,34 @@ records when no query is supplied, and searches all levels when a query is
 supplied. Use `--component hook` or `--all-components` only when hook delivery
 or provider-ingress noise is relevant.
 
-`stn observer status` checks the configured observer process/socket state. It is
-non-mutating, but it is still a live status check rather than an existing-state
-log read.
+The default returns at most five records, reads at most 8 MiB per selected
+component, and caps record and nested error messages at 240 Unicode code points.
+`search.complete`, `search.bytesRead`, and `search.incompleteComponents` state
+the inspected coverage; `truncation` distinguishes collection and text bounds.
+If an incomplete search finds nothing, `retryCommand` is the exact `--full`
+command. `--full` removes the byte ceiling, defaults to 50 records, and retains
+complete text and evidence paths.
 
-`stn doctor` connects to the observer, asks the observer for runtime health, and reports config, SQLite, provider health, hook spool, snapshot, logs, local state usage, and retention status. If the config cannot be loaded, `doctor` does not start the observer; it returns a local SafeError report with diagnostic id `config-load`.
+`stn observer status` checks the configured observer process/socket state. Its
+default is the process status, socket, health, PID, start time, exact build
+version, and uptime. `--full` returns the complete health payload. The command
+is non-mutating, but it is still a live status check rather than an
+existing-state log read.
+
+`stn doctor` connects to the observer and performs one doctor RPC after its
+existing observer auto-start check. The concise default contains current status,
+at most five sorted current findings, compact counts, correlation-driven next
+commands, truncation metadata, and an exact scoped `detailsCommand`. It omits
+healthy checks, snapshots, recent logs, capabilities, migrations, retention
+internals, and filesystem paths. `--full` returns the complete existing report
+with config, SQLite, providers, hook spool, snapshot, logs, local state, and
+retention. If config cannot be loaded, doctor does not start the observer and
+uses the same concise/full projection with diagnostic id `config-load`.
+
+Concise findings are current check, config, or provider failures. Their messages
+and hints are capped at 240 Unicode code points, errors sort before warnings,
+and specific config/provider findings replace generic aggregates. Historical
+`recentErrors` contributes only a count and never becomes a current finding.
 
 ### Doctor health semantics
 

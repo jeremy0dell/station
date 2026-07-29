@@ -278,7 +278,7 @@ describe("setup guided feedback e2e", () => {
       expect(standalone.exitCode).toBe(0);
       expect(JSON.parse(standalone.stdout)).toMatchObject({ status: "ok", installed: true });
 
-      const fullDoctor = await runStation(["--config", fixture.configPath, "doctor"], {
+      const fullDoctor = await runStation(["--config", fixture.configPath, "doctor", "--full"], {
         cwd: fixture.repo,
         env: fixture.env,
         answers: [],

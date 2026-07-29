@@ -14,8 +14,8 @@ export const debugCliCommand: CliCommandNode = {
   description: "Inspect traces, logs, and shareable diagnostic bundles.",
   usage: [
     "stn debug bundle [options]",
-    "stn debug trace [query|--latest-failure] [--json]",
-    "stn debug logs [query] [options]",
+    "stn debug trace [query|--latest-failure] [--full]",
+    "stn debug logs [query] [options] [--full]",
   ],
   options: [
     { name: "--help", description: "Show debug command help." },
@@ -70,17 +70,13 @@ export const debugCliCommand: CliCommandNode = {
       description: "Resolve trace, command, diagnostic, or latest-failure evidence.",
       requiresConfig: true,
       run: runDebugTraceCliCommand,
-      usage: [
-        "stn debug trace [query]",
-        "stn debug trace --latest-failure",
-        "stn debug trace [query] --json",
-      ],
+      usage: ["stn debug trace [query]", "stn debug trace --latest-failure [--full]"],
       options: [
         {
           name: "--latest-failure",
           description: "Find the most recent failure when no query is provided.",
         },
-        { name: "--json", description: "Keep JSON output for agent-readable inspection." },
+        { name: "--full", description: "Search all history and return complete evidence." },
       ],
       examples: ["pnpm stn debug trace --latest-failure"],
     },
@@ -89,7 +85,7 @@ export const debugCliCommand: CliCommandNode = {
       description: "Search bounded STATION component logs.",
       requiresConfig: true,
       run: runDebugLogsCliCommand,
-      usage: ["stn debug logs [query] [options]"],
+      usage: ["stn debug logs [query] [options] [--full]"],
       options: [
         {
           name: "--component <name>",
@@ -105,7 +101,7 @@ export const debugCliCommand: CliCommandNode = {
           description: "Only include records at or after a timestamp.",
         },
         { name: "--limit <count>", description: "Limit returned records." },
-        { name: "--json", description: "Keep JSON output for agent-readable inspection." },
+        { name: "--full", description: "Search all history and preserve complete record text." },
       ],
       examples: [
         "pnpm stn debug logs protocol",

@@ -11,6 +11,28 @@ const requestedBuildIdentity = "a".repeat(64);
 const requestedBuildVersion = `1.2.3+station.${requestedBuildIdentity}`;
 
 describe("CLI observer commands", () => {
+  it("keeps non-running status concise unless full detail is requested", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+
+    const concise = await runCli(["--config", configPath, "observer", "status"]);
+    expect(concise).toMatchObject({
+      code: 0,
+      output: {
+        status: "stopped",
+        socketPath: fixture.socketPath,
+        error: { code: "PROTOCOL_CONNECT_FAILED" },
+      },
+    });
+    expect(concise.output).not.toHaveProperty("paths");
+    await expect(
+      runCli(["--config", configPath, "observer", "status", "--full"]),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: { status: "stopped", paths: { stateDir: fixture.stateDir } },
+    });
+  });
+
   it("starts, reports status, stops, and restarts through injected process/protocol boundaries", async () => {
     const fixture = await createTempState();
     let running = false;
@@ -33,6 +55,15 @@ describe("CLI observer commands", () => {
               startedAt: now,
               version: zeroBuildVersion,
               socketPath: fixture.socketPath,
+              uptimeMs: 42_000,
+              hookSpoolDepth: 3,
+              providerHealth: {},
+              lastReconcile: {
+                reason: "test",
+                startedAt: now,
+                finishedAt: now,
+                durationMs: 1,
+              },
             };
           },
           stop: async () => {
@@ -80,6 +111,15 @@ describe("CLI observer commands", () => {
               startedAt: now,
               version: zeroBuildVersion,
               socketPath: fixture.socketPath,
+              uptimeMs: 42_000,
+              hookSpoolDepth: 3,
+              providerHealth: {},
+              lastReconcile: {
+                reason: "test",
+                startedAt: now,
+                finishedAt: now,
+                durationMs: 1,
+              },
             };
           },
           stop: async () => {
@@ -102,11 +142,33 @@ describe("CLI observer commands", () => {
     });
     await expect(
       runCli(["--config", configPath, "observer", "status"], { observerDeps: deps }),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
       code: 0,
       output: {
         status: "running",
         socketPath: fixture.socketPath,
+        health: {
+          status: "healthy",
+          pid: 1234,
+          startedAt: now,
+          version: zeroBuildVersion,
+          uptimeMs: 42_000,
+        },
+      },
+    });
+    await expect(
+      runCli(["--config", configPath, "observer", "status", "--full"], {
+        observerDeps: deps,
+      }),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: {
+        health: {
+          schemaVersion: "0.9.0",
+          hookSpoolDepth: 3,
+          providerHealth: {},
+          lastReconcile: { reason: "test" },
+        },
       },
     });
     await expect(

@@ -83,6 +83,10 @@ Start with the narrowest matching tool:
 - provider hook setup: `stn hooks doctor worktrunk|claude|codex|cursor|opencode` or `stn event-hooks doctor`
 - setup/tool readiness: `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check`
 
+Use the concise default for `observer status`, `doctor`, `debug trace`, and
+`debug logs`. Add `--full` only when the default reports incomplete coverage or
+truncation, or when complete evidence was explicitly requested.
+
 If the user says "no action", treat debugging as read-only: inspect only existing logs, existing bundles, existing command/error records, and `stn debug trace` / `stn debug logs` output. Do not start/restart observer, run commands that call or auto-start the observer, retry commands, kill processes, mutate setup/hooks/config, or write a new bundle unless explicitly asked.
 
 Provider hooks are delivery hints, not runtime truth. Use hook logs and hook doctors to diagnose delivery/setup, then use observer health, reconcile output, and snapshots for current truth.

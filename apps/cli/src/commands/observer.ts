@@ -1,5 +1,5 @@
 import type { StationConfig } from "@station/config";
-import type { ObserverHealth, ObserverStopReceipt } from "@station/contracts";
+import type { ObserverHealth, ObserverStopReceipt, SafeError } from "@station/contracts";
 import { parsePositiveIntegerOption } from "../args.js";
 import {
   getObserverStatus,
@@ -88,13 +88,20 @@ export function parseObserverCommandAction(args: string[]): string {
   return parseObserverArgs(args, undefined).action;
 }
 
+export function observerCommandRequestsFull(args: string[]): boolean {
+  return parseObserverArgs(args, undefined).full;
+}
+
 function parseObserverArgs(
   args: string[],
   timeoutMs: number | undefined,
-): { action: string; timeoutMs?: number; force: boolean } {
+): { action: string; timeoutMs?: number; force: boolean; full: boolean } {
   const parsed = takeTimeoutOption(args, timeoutMs);
   const force = parsed.args.includes("--force") || parsed.args.includes("--yes");
-  const rest = parsed.args.filter((arg) => arg !== "--force" && arg !== "--yes");
+  const full = parsed.args.includes("--full");
+  const rest = parsed.args.filter(
+    (arg) => arg !== "--force" && arg !== "--yes" && arg !== "--full",
+  );
 
   const flag = rest.find((arg) => arg.startsWith("--"));
   if (flag !== undefined) {
@@ -104,9 +111,14 @@ function parseObserverArgs(
     throw new Error(`Unknown observer option: ${rest[1] ?? ""}`);
   }
 
-  const result: { action: string; timeoutMs?: number; force: boolean } = {
-    action: rest[0] ?? "status",
+  const action = rest[0] ?? "status";
+  if (full && action !== "status") {
+    throw new Error("--full is supported only for observer status.");
+  }
+  const result: { action: string; timeoutMs?: number; force: boolean; full: boolean } = {
+    action,
     force,
+    full,
   };
   if (parsed.timeoutMs !== undefined) result.timeoutMs = parsed.timeoutMs;
   return result;
@@ -130,7 +142,10 @@ function takeTimeoutOption(
   };
 }
 
-export function observerCommandSummary(result: ObserverCommandResult): unknown {
+export function observerCommandSummary(
+  result: ObserverCommandResult,
+  options: { fullStatus?: boolean } = {},
+): unknown {
   if ("plan" in result) {
     const { plan, applied } = result;
     return {
@@ -156,6 +171,20 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
     };
   }
   if ("health" in result) {
+    if (options.fullStatus !== true) {
+      const health = result.health;
+      return {
+        status: result.status,
+        socketPath: result.paths.socketPath,
+        health: {
+          status: health.status,
+          ...(health.pid === undefined ? {} : { pid: health.pid }),
+          ...(health.startedAt === undefined ? {} : { startedAt: health.startedAt }),
+          ...(health.version === undefined ? {} : { version: health.version }),
+          ...(health.uptimeMs === undefined ? {} : { uptimeMs: health.uptimeMs }),
+        },
+      };
+    }
     return {
       status: result.status,
       socketPath: result.paths.socketPath,
@@ -163,6 +192,14 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
     };
   }
   if ("paths" in result) {
+    if (options.fullStatus !== true) {
+      const summary: { status: string; socketPath: string; error?: SafeError } = {
+        status: result.status,
+        socketPath: result.paths.socketPath,
+      };
+      if ("error" in result && result.error !== undefined) summary.error = result.error;
+      return summary;
+    }
     return result;
   }
   return result satisfies ObserverStopReceipt;

@@ -1,6 +1,7 @@
 import { loadedCommandOptions } from "../cliCommand/helpers.js";
 import type { CliCommandNode, CliCommandRunContext } from "../cliCommand/types.js";
 import {
+  observerCommandRequestsFull,
   observerCommandSummary,
   parseObserverCommandAction,
   runObserverCommand,
@@ -13,7 +14,7 @@ export const observerCliCommand: CliCommandNode = {
   run: runObserverCliCommand,
   usage: [
     "stn observer start",
-    "stn observer status",
+    "stn observer status [--full]",
     "stn observer stop",
     "stn observer reap [--force]",
   ],
@@ -35,7 +36,8 @@ export const observerCliCommand: CliCommandNode = {
     {
       name: "status",
       description: "Report observer process availability.",
-      usage: ["stn observer status"],
+      usage: ["stn observer status [--full]"],
+      options: [{ name: "--full", description: "Return the complete observer health payload." }],
       examples: ["pnpm stn observer status"],
     },
     {
@@ -71,5 +73,10 @@ async function runObserverCliCommand(context: CliCommandRunContext) {
     (action === "start" || action === "restart") &&
     "status" in result &&
     result.status !== "running";
-  return { code: failedStart ? 1 : 0, output: observerCommandSummary(result) };
+  return {
+    code: failedStart ? 1 : 0,
+    output: observerCommandSummary(result, {
+      fullStatus: action !== "status" || observerCommandRequestsFull(context.args),
+    }),
+  };
 }

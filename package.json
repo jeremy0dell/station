@@ -73,6 +73,7 @@
     "test:e2e:pi:real": "vitest run --config config/vitest/vitest.pi-real.config.ts",
     "test:e2e:opencode:real": "vitest run --config config/vitest/vitest.opencode-real.config.ts",
     "test:agent:scripted": "vitest run --config config/vitest/vitest.agent-scripted.config.ts",
+    "gate:agent-debugging": "pnpm build && STATION_AGENT_DEBUG_PERF=1 vitest run --config config/vitest/vitest.agent-scripted.config.ts tests/agent/scenarios/diagnosis/cli-debug-efficiency.test.ts",
     "test:agent:real": "pnpm test:e2e:codex:real",
     "test:agent:nightly": "STATION_REAL_CLAUDE=1 pnpm test:e2e:claude:real",
     "smoke:release": "node scripts/test-runners/run-release-smoke.mjs",
