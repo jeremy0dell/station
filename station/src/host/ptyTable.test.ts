@@ -9,6 +9,7 @@ import { createPtyTable } from "./ptyTable.js";
 import {
   type SemanticTerminalModel,
   TerminalSnapshotPendingError,
+  TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
 
 const baseParams: HostSpawnParams = {
@@ -308,19 +309,19 @@ describe("createPtyTable", () => {
     await frames.return?.();
   });
 
-  it("keeps the live sink and reports a classified reset replay when semantic capture fails", async () => {
+  it("keeps the live sink and reports boundary reset data when exact capture is unavailable", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
-    let captureCalls = 0;
+    const resetData = "\x1bc\x1b[?1h\x1b[?2004h";
     const semantic: SemanticTerminalModel = {
       write() {},
       resize() {},
       capture: async () => {
-        captureCalls += 1;
-        if (captureCalls === 1) {
-          throw new Error("serializer failed");
-        }
-        return ["recovered"];
+        throw new TerminalSnapshotUnavailableError(
+          "serialization-failed",
+          resetData,
+          "Could not serialize the semantic terminal model.",
+        );
       },
       dispose() {},
     };
@@ -340,6 +341,7 @@ describe("createPtyTable", () => {
       initialCols: 80,
       initialRows: 24,
       events: [],
+      resetData,
     });
     expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({
       event: "pty.snapshot.degraded",
@@ -351,12 +353,6 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("live-after-reset");
     expect(await frames.next()).toMatchObject({
       value: { type: "data", data: "live-after-reset" },
-    });
-    expect((await table.attach(ptyId)).ack.replay).toMatchObject({
-      kind: "semantic-truncation-recovery",
-      initialCols: 80,
-      initialRows: 24,
-      events: [{ type: "data", data: "recovered" }],
     });
     await frames.return?.();
   });

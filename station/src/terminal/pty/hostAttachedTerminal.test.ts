@@ -16,11 +16,7 @@ import type {
   StationTerminalReplay,
   StationTerminalSize,
 } from "../types.js";
-import {
-  createHostAttachedTerminal,
-  LIVE_RESET_REPAINT,
-  RECONNECT_REPAINT,
-} from "./hostAttachedTerminal.js";
+import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -811,8 +807,9 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     terminal.dispose();
   });
 
-  it("resets and repaints a degraded live attachment without disabling I/O", async () => {
+  it("replays Host reset data verbatim before geometry recovery and keeps I/O live", async () => {
     resetTerminalDiagnosticsForTest();
+    const resetData = "\x1bc\x1b[?1h\x1b[?2004h\x1b[=5u";
     const ctrl = controllableAttachment(
       ack({
         replay: {
@@ -820,16 +817,19 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           initialCols: 80,
           initialRows: 24,
           events: [],
+          resetData,
         },
       }),
     );
     const { terminal } = terminalFor(ctrl.attachment);
+    const replayGate = deferred<void>();
     const replays: StationTerminalReplay[] = [];
     const diagnostics: string[] = [];
     const unavailable: string[] = [];
     const data: string[] = [];
-    terminal.onReplay?.((replay) => {
+    terminal.onReplay?.(async (replay) => {
       replays.push(replay);
+      await replayGate.promise;
     });
     terminal.onDiagnostic((message) => diagnostics.push(message));
     terminal.onUnavailable?.((event) => unavailable.push(event.code));
@@ -841,9 +841,13 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
         {
           kind: "live-reset-recovery",
           initialSize: { cols: 80, rows: 24 },
-          events: [{ type: "data", data: LIVE_RESET_REPAINT }],
+          events: [{ type: "data", data: resetData }],
         },
       ]);
+      expect(ctrl.state.resizes).toEqual([]);
+
+      replayGate.resolve(undefined);
+      await flush();
       expect(ctrl.state.resizes).toEqual([
         { cols: 80, rows: 24 },
         { cols: 80, rows: 23 },
@@ -863,6 +867,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
       expect(ctrl.state.resizes.at(-1)).toEqual({ cols: 100, rows: 30 });
       expect(data).toEqual(["live-after-reset"]);
     } finally {
+      replayGate.resolve(undefined);
       terminal.dispose();
       resetTerminalDiagnosticsForTest();
     }

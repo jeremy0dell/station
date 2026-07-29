@@ -129,9 +129,27 @@ describe("createStationHostClient", () => {
         initialCols: 5,
         initialRows: 4,
         events: [],
+        resetData: "\x1bc\x1b[?2004h",
       },
     };
     expect(HostAttachAckSchema.safeParse(liveReset).success).toBe(true);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...liveReset,
+        replay: {
+          kind: "live-reset-recovery",
+          initialCols: 5,
+          initialRows: 4,
+          events: [],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...liveReset,
+        replay: { ...liveReset.replay, resetData: "\x1b[?2004h" },
+      }).success,
+    ).toBe(false);
     expect(
       HostAttachAckSchema.safeParse({
         ...liveReset,

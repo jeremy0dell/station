@@ -30,7 +30,10 @@ export type StationTerminalReplayEvent =
   | { type: "data"; data: string }
   | { type: "resize"; cols: number; rows: number };
 
-/** Raw history, exact restoration, or a live reset handed over at its Host geometry. */
+/**
+ * Raw history, exact restoration, or Host mode-restoring degraded data handed
+ * over with its production geometry; Host reset data remains one local event.
+ */
 export type StationTerminalReplay = {
   initialSize: StationTerminalSize;
   events: readonly StationTerminalReplayEvent[];
