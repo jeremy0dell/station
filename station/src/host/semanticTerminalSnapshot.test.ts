@@ -1,3 +1,4 @@
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
@@ -6,6 +7,8 @@ import { resolveXtermCellHyperlink } from "../terminal/vt/xtermHyperlinks.js";
 import {
   SemanticTerminalSnapshot,
   terminalSnapshotFailure,
+  TerminalSnapshotPendingError,
+  TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
 
 const CSI = "\x1b[";
@@ -42,6 +45,18 @@ function margins(terminal: Terminal): [number, number] {
     pinned._core._bufferService.buffer.scrollTop,
     pinned._core._bufferService.buffer.scrollBottom,
   ];
+}
+
+async function captureError(source: SemanticTerminalSnapshot): Promise<Error> {
+  try {
+    await source.capture();
+  } catch (error) {
+    if (error instanceof Error) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error("Expected semantic capture to fail.");
 }
 
 describe("SemanticTerminalSnapshot", () => {
@@ -533,14 +548,61 @@ describe("SemanticTerminalSnapshot", () => {
       const source = new SemanticTerminalSnapshot(12, 5);
       try {
         source.write(input);
-        await expect(source.capture()).rejects.toMatchObject({
+        const error = await captureError(source);
+        expect(error instanceof TerminalSnapshotUnavailableError).toBe(true);
+        expect(error).toMatchObject({
           message,
           reason: "unsupported-state",
           diagnostic: { reason: "unsupported-state", detail },
         });
+        expect((error as TerminalSnapshotUnavailableError).resetData.startsWith("\x1bc")).toBe(
+          true,
+        );
       } finally {
         source.dispose();
       }
+    }
+  });
+
+  it("carries boundary-captured reset data when xterm serialization fails", async () => {
+    const serializer = new SerializeAddon();
+    serializer.serialize = () => {
+      throw new Error("serializer failed");
+    };
+    const source = new SemanticTerminalSnapshot(20, 4, serializer);
+    try {
+      source.write(`${CSI}?2004h`);
+      const failure = source.capture();
+      source.write(`${CSI}?2004l`);
+
+      const error = await failure.catch((cause: unknown) => cause);
+      expect(error instanceof TerminalSnapshotUnavailableError).toBe(true);
+      expect(error).toMatchObject({
+        reason: "serialization-failed",
+        message: "Could not serialize the semantic terminal model.",
+      });
+      expect((error as TerminalSnapshotUnavailableError).resetData).toContain(`${CSI}?2004h`);
+    } finally {
+      source.dispose();
+    }
+  });
+
+  it("carries reset data when an asynchronous model update poisons capture", async () => {
+    const source = new SemanticTerminalSnapshot(20, 4);
+    try {
+      source.write(`${CSI}?1h`);
+      source.resize(1.5, 2.5);
+
+      const error = await captureError(source);
+      expect(error instanceof TerminalSnapshotUnavailableError).toBe(true);
+      expect(error).toMatchObject({
+        reason: "model-update-failed",
+        message: "Could not update the semantic terminal model.",
+      });
+      expect((error as TerminalSnapshotUnavailableError).resetData).toContain(`${CSI}?1h`);
+      expect(terminalSnapshotFailure(error)).toEqual({ reason: "model-update-failed" });
+    } finally {
+      source.dispose();
     }
   });
 
@@ -573,9 +635,12 @@ describe("SemanticTerminalSnapshot", () => {
     const restored = target(20, 4);
     try {
       source.write(`${CSI}31`);
-      await expect(source.capture()).rejects.toMatchObject({
+      const pending = await captureError(source);
+      expect(pending instanceof TerminalSnapshotPendingError).toBe(true);
+      expect(pending).toMatchObject({
         message: "Cannot capture terminal state in the middle of an input sequence.",
       });
+      expect((pending as TerminalSnapshotPendingError & { resetData?: string }).resetData).toBeUndefined();
 
       source.write("mred");
       const [snapshot] = await source.capture();
@@ -585,21 +650,6 @@ describe("SemanticTerminalSnapshot", () => {
     } finally {
       source.dispose();
       restored.dispose();
-    }
-  });
-
-  it("retains a classified failure when an asynchronous model update is rejected", async () => {
-    const source = new SemanticTerminalSnapshot(20, 4);
-    try {
-      source.resize(1.5, 2.5);
-      const failure = await source.capture().catch((error: unknown) => error);
-      expect(failure).toMatchObject({
-        reason: "model-update-failed",
-        message: "Could not update the semantic terminal model.",
-      });
-      expect(terminalSnapshotFailure(failure)).toEqual({ reason: "model-update-failed" });
-    } finally {
-      source.dispose();
     }
   });
 

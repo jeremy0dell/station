@@ -30,12 +30,15 @@ type PinnedXtermParserState = {
 export type SemanticTerminalModel = {
   write(data: string): void;
   resize(cols: number, rows: number): void;
-  /** Capture exact restoration VT or reject with a classified, content-free reason/detail. */
+  /**
+   * Capture exact restoration VT, or reject with classified, content-free
+   * diagnostics and recovery data sampled at the same queue boundary.
+   */
   capture(): Promise<string[]>;
   dispose(): void;
 };
 
-/** Capture can be retried after later PTY output finishes the current parser sequence. */
+/** Retry-only capture state; later PTY output may finish the parser sequence. */
 export class TerminalSnapshotPendingError extends Error {}
 
 export type TerminalSnapshotFailureReason =
@@ -48,10 +51,14 @@ export type TerminalSnapshotFailure =
   | { reason: "serialization-failed" }
   | { reason: "unsupported-state"; detail: TerminalSnapshotUnsupportedStateDetail };
 
-/** Provider-private typed diagnostic whose cause never crosses the Host protocol. */
+/**
+ * Classified exact-capture failure with provider-private diagnostics and
+ * control-only recovery sampled at the capture boundary.
+ */
 export class TerminalSnapshotUnavailableError extends Error {
   constructor(
     readonly diagnostic: TerminalSnapshotFailure,
+    readonly resetData: string,
     message: string,
     cause?: unknown,
   ) {
@@ -81,11 +88,11 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
   readonly #supplementalState: TerminalSupplementalState;
   readonly #subscriptions: Array<{ dispose(): void }>;
   #tail = Promise.resolve();
-  #failure: TerminalSnapshotUnavailableError | undefined;
+  #failure: unknown;
   #disposed = false;
   #title = "";
 
-  constructor(cols: number, rows: number) {
+  constructor(cols: number, rows: number, serializer = new SerializeAddon()) {
     this.#terminal = new Terminal({
       cols,
       rows,
@@ -95,7 +102,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     });
     this.#terminal.loadAddon(new Unicode11Addon() as never);
     this.#terminal.unicode.activeVersion = "11";
-    this.#serializer = new SerializeAddon();
+    this.#serializer = serializer;
     this.#terminal.loadAddon(this.#serializer as never);
     this.#supplementalState = new TerminalSupplementalState(this.#terminal);
     let normalBufferIsSynchronizedFrame = false;
@@ -146,28 +153,47 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
 
   capture(): Promise<string[]> {
     return this.#schedule(() => {
+      if (this.#failure !== undefined) {
+        throw new TerminalSnapshotUnavailableError(
+          { reason: "model-update-failed" },
+          this.#supplementalState.liveResetSequence(),
+          "Could not update the semantic terminal model.",
+          this.#failure,
+        );
+      }
       assertXtermParserBoundary(this.#terminal);
+      const resetData = this.#supplementalState.liveResetSequence();
+      const title = OSC_TITLE + this.#title + STRING_TERMINATOR;
+      let serialized: string;
       try {
-        const title = OSC_TITLE + this.#title + STRING_TERMINATOR;
-        const restore =
-          RIS +
-          this.#supplementalState.restoreSerialization(this.#serializer.serialize(), title);
-        return [restore];
+        serialized = this.#serializer.serialize();
+      } catch (error) {
+        throw new TerminalSnapshotUnavailableError(
+          { reason: "serialization-failed" },
+          resetData,
+          "Could not serialize the semantic terminal model.",
+          error,
+        );
+      }
+      try {
+        return [RIS + this.#supplementalState.restoreSerialization(serialized, title)];
       } catch (error) {
         if (error instanceof TerminalSnapshotUnsupportedStateError) {
           throw new TerminalSnapshotUnavailableError(
             { reason: "unsupported-state", detail: error.detail },
+            resetData,
             error.message,
             error,
           );
         }
         throw new TerminalSnapshotUnavailableError(
           { reason: "serialization-failed" },
+          resetData,
           "Could not serialize the semantic terminal model.",
           error,
         );
       }
-    }, false);
+    }, { poisonOnFailure: false, allowPoisonedModel: true });
   }
 
   dispose(): void {
@@ -184,12 +210,15 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     });
   }
 
-  #schedule<T>(operation: () => T | Promise<T>, poisonOnFailure = true): Promise<T> {
+  #schedule<T>(
+    operation: () => T | Promise<T>,
+    options: { poisonOnFailure?: boolean; allowPoisonedModel?: boolean } = {},
+  ): Promise<T> {
     const scheduled = this.#tail.then(() => {
       if (this.#disposed) {
         throw new Error("Semantic terminal snapshot is disposed.");
       }
-      if (this.#failure !== undefined) {
+      if (this.#failure !== undefined && options.allowPoisonedModel !== true) {
         throw this.#failure;
       }
       return operation();
@@ -197,12 +226,8 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     this.#tail = scheduled.then(
       () => undefined,
       (error) => {
-        if (poisonOnFailure) {
-          this.#failure = new TerminalSnapshotUnavailableError(
-            { reason: "model-update-failed" },
-            "Could not update the semantic terminal model.",
-            error,
-          );
+        if (options.poisonOnFailure !== false && this.#failure === undefined) {
+          this.#failure = error;
         }
       },
     );

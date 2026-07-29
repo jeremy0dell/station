@@ -21,6 +21,7 @@ import {
   type SemanticTerminalModel,
   terminalSnapshotFailure,
   TerminalSnapshotPendingError,
+  TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
 import {
   createPtyOutputCompatibility,
@@ -60,8 +61,8 @@ export type PtyTable = {
   /**
    * Register the live sink before capturing raw history or semantic state, so
    * output after the capture boundary is queued exactly once as live frames.
-   * Ordered resize barriers preserve geometry; an unsupported exact capture
-   * returns an explicit live-reset replay without discarding the live sink.
+   * Ordered resize barriers preserve geometry; classified exact-capture failure
+   * retains the sink and returns mode-restoring control VT with no history.
    */
   attach(ptyId: string): Promise<HostAttachmentSource>;
   /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */
@@ -388,26 +389,30 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
               { cause: error },
             );
           }
-          const pending = error instanceof TerminalSnapshotPendingError;
-          if (pending) {
+          if (error instanceof TerminalSnapshotUnavailableError) {
+            const failure = terminalSnapshotFailure(error);
+            emit("pty.snapshot.degraded", { ptyId, ...failure });
+            replay = {
+              kind: "live-reset-recovery",
+              initialCols: recorded.cols,
+              initialRows: recorded.rows,
+              events: [],
+              resetData: error.resetData,
+            };
+          } else {
             if (sink !== undefined) {
               entry.sinks.delete(sink);
             }
             stream.end();
+            const pending = error instanceof TerminalSnapshotPendingError;
             throw new StationHostProviderError(
-              "HOST_SNAPSHOT_PENDING",
-              `Host PTY "${ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`,
+              pending ? "HOST_SNAPSHOT_PENDING" : "HOST_SNAPSHOT_FAILED",
+              pending
+                ? `Host PTY "${ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`
+                : `Could not capture terminal state for host PTY "${ptyId}".`,
               { cause: error },
             );
           }
-          const failure = terminalSnapshotFailure(error);
-          emit("pty.snapshot.degraded", { ptyId, ...failure });
-          replay = {
-            kind: "live-reset-recovery",
-            initialCols: recorded.cols,
-            initialRows: recorded.rows,
-            events: [],
-          };
         }
       }
       const ack: HostAttachAck = {

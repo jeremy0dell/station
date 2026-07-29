@@ -49,7 +49,6 @@ const PTY_UNAVAILABLE_CODES = new Set([
 // detached) without stacking it on top of the history the VT already shows.
 // Exported so the reconnect test can pin that it precedes the replayed snapshot.
 export const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${ControlByte.Csi}3J`;
-export const LIVE_RESET_REPAINT = `${ControlByte.Esc}c`;
 const reconnectDelayMs = (attempt: number): number =>
   Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -113,9 +112,9 @@ export type HostAttachedTerminalOptions = {
 
 /**
  * Host-attached `StationTerminalProcess`: attach, replay, then stream live
- * data and geometry frames. Unsupported exact reconstruction resets the local
- * VT and keeps the live attachment; proven PTY loss emits exit, while genuine
- * compatibility failures emit unavailable. `dispose()` detaches without killing.
+ * data and geometry frames. Degraded reconstruction replays the Host's
+ * mode-restoring reset data and keeps I/O live; proven PTY loss emits exit,
+ * while compatibility failures emit unavailable. `dispose()` only detaches.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -290,13 +289,17 @@ export function createHostAttachedTerminal(
     opened: HostAttachment,
     isReconnect: boolean,
   ): Promise<void> => {
+    const hostReplay = opened.ack.replay;
     const replay: StationTerminalReplay = {
       initialSize: {
-        cols: opened.ack.replay.initialCols,
-        rows: opened.ack.replay.initialRows,
+        cols: hostReplay.initialCols,
+        rows: hostReplay.initialRows,
       },
-      events: opened.ack.replay.events,
-      kind: opened.ack.replay.kind,
+      events:
+        hostReplay.kind === "live-reset-recovery"
+          ? [{ type: "data", data: hostReplay.resetData }]
+          : hostReplay.events,
+      kind: hostReplay.kind,
     };
     if (replay.kind === "live-reset-recovery") {
       reportTerminalCorruption({
@@ -310,10 +313,7 @@ export function createHostAttachedTerminal(
       emitDiagnostic(
         "Station reattached to the live terminal without historical output because exact replay was unavailable.",
       );
-      await emitReplay({
-        ...replay,
-        events: [{ type: "data", data: LIVE_RESET_REPAINT }],
-      });
+      await emitReplay(replay);
       return;
     }
     if (!isReconnect) {

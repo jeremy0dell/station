@@ -228,7 +228,7 @@ describe("serveHostConnection", () => {
     client.dispose();
   });
 
-  it("strictly distinguishes raw, semantic, and empty current-geometry reset replay", () => {
+  it("strictly distinguishes raw, semantic, and control-only live-reset replay", () => {
     const ack = {
       subscribed: true as const,
       ptyId: "p1",
@@ -279,6 +279,7 @@ describe("serveHostConnection", () => {
           initialCols: 100,
           initialRows: 30,
           events: [],
+          resetData: "\x1bc\x1b[?1h",
         },
       }).success,
     ).toBe(true);
@@ -289,7 +290,20 @@ describe("serveHostConnection", () => {
           kind: "live-reset-recovery",
           initialCols: 100,
           initialRows: 30,
+          events: [],
+          resetData: "not-ris",
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...ack,
+        replay: {
+          kind: "live-reset-recovery",
+          initialCols: 100,
+          initialRows: 30,
           events: [{ type: "data", data: "incomplete" }],
+          resetData: "\x1bc",
         },
       }).success,
     ).toBe(false);

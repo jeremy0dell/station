@@ -15,6 +15,7 @@ import {
 
 const ALT_BUFFER_PREFIX =
   `${ControlByte.Csi}?${DecMode.SaveCursorAndAlternate}h${ControlByte.Csi}H`;
+const RIS = `${ControlByte.Esc}c`;
 
 type BufferType = "normal" | "alternate";
 type AlternateMode =
@@ -161,6 +162,66 @@ export class TerminalSupplementalState {
       serialized.slice(seam) +
       this.#activeRestoreSequence(beforeSynchronizedOutput)
     );
+  }
+
+  /**
+   * Build RIS-prefixed control-only VT for degraded live attachment. It restores
+   * interaction modes and per-buffer Kitty stacks without cells, title, raw
+   * history, or provider data.
+   */
+  liveResetSequence(): string {
+    const parts = [RIS];
+    const normalKitty = this.#kittyKeyboardSequence("normal");
+    const alternateKitty = this.#kittyKeyboardSequence("alternate");
+    if (this.#bufferType === "alternate") {
+      parts.push(
+        normalKitty,
+        privateModeSequence(this.#alternateMode, true),
+        alternateKitty,
+      );
+    } else {
+      if (alternateKitty.length > 0) {
+        parts.push(
+          privateModeSequence(DecMode.Alternate, true),
+          alternateKitty,
+          privateModeSequence(DecMode.Alternate, false),
+        );
+      }
+      parts.push(normalKitty);
+    }
+
+    const modes = this.terminal.modes;
+    if (modes.applicationCursorKeysMode) {
+      parts.push(privateModeSequence(DecMode.ApplicationCursorKeys, true));
+    }
+    if (modes.applicationKeypadMode) {
+      parts.push(privateModeSequence(DecMode.ApplicationKeypad, true));
+    }
+    if (modes.bracketedPasteMode) {
+      parts.push(privateModeSequence(DecMode.BracketedPaste, true));
+    }
+    const mouseTrackingMode = mouseTrackingDecMode(modes.mouseTrackingMode);
+    if (mouseTrackingMode !== undefined) {
+      parts.push(privateModeSequence(mouseTrackingMode, true));
+    }
+    const mouseEncoding = (this.terminal as unknown as PinnedXtermTerminal)._core
+      .coreMouseService.activeEncoding;
+    if (mouseEncoding === "SGR" || mouseEncoding === "SGR_PIXELS") {
+      parts.push(privateModeSequence(DecMode.SgrMouse, true));
+    }
+    if (mouseEncoding === "SGR_PIXELS") {
+      parts.push(privateModeSequence(DecMode.SgrPixels, true));
+    }
+    if (modes.sendFocusMode) {
+      parts.push(privateModeSequence(DecMode.FocusReporting, true));
+    }
+    if (!modes.wraparoundMode) {
+      parts.push(privateModeSequence(DecMode.Wraparound, false));
+    }
+    if (modes.reverseWraparoundMode) {
+      parts.push(privateModeSequence(DecMode.ReverseWraparound, true));
+    }
+    return parts.join("");
   }
 
   dispose(): void {
@@ -610,6 +671,27 @@ export class TerminalSupplementalState {
 
 function primaryParams(params: (number | number[])[]): number[] {
   return params.filter((param): param is number => !Array.isArray(param));
+}
+
+function privateModeSequence(mode: number, set: boolean): string {
+  return `${ControlByte.Csi}?${mode}${set ? "h" : "l"}`;
+}
+
+function mouseTrackingDecMode(
+  mode: Terminal["modes"]["mouseTrackingMode"],
+): number | undefined {
+  switch (mode) {
+    case "none":
+      return undefined;
+    case "x10":
+      return DecMode.MouseX10;
+    case "vt200":
+      return DecMode.MouseVt200;
+    case "drag":
+      return DecMode.MouseButtonEvent;
+    case "any":
+      return DecMode.MouseAnyEvent;
+  }
 }
 
 function cursorPosition(row: number, column: number): string {
