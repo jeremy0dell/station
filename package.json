@@ -36,6 +36,7 @@
     "station:devbox:smoke": "node scripts/test-runners/run-station-devbox-smoke.mjs",
     "station:devbox:tmux:smoke": "node scripts/test-runners/run-station-tmux-devbox-smoke.mjs",
     "smoke:binary": "node scripts/test-runners/run-binary-smoke.mjs",
+    "stress:binary-handoff": "node scripts/test-runners/run-binary-smoke.mjs --mode handoff-stress",
     "smoke:install": "node scripts/test-runners/run-install-smoke.mjs",
     "typecheck": "turbo run typecheck",
     "architecture:observer:generate": "node tools/lint/check-observer-architecture.mjs --write",
@@ -91,6 +92,7 @@
     "lefthook": "^1.13.6",
     "turbo": "^2.9.15",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "zod": "^4.1.12"
   }
 }

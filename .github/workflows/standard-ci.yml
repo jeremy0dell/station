@@ -225,7 +225,20 @@ jobs:
         with:
           station-dependencies: "true"
           restore-turbo-cache: ${{ github.event_name == 'pull_request' }}
-      - run: pnpm test:ci:binary
+      - name: Run binary smoke
+        id: binary_smoke_run
+        env:
+          STATION_BINARY_SMOKE_EVIDENCE_DIR: ${{ runner.temp }}/station-binary-smoke-evidence
+        run: pnpm test:ci:binary
+      - name: Upload binary smoke failure evidence
+        if: ${{ failure() && steps.binary_smoke_run.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-smoke-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/station-binary-smoke-evidence
+          if-no-files-found: warn
+          retention-days: 3
+        continue-on-error: true
 
   standard-ci:
     name: standard-ci

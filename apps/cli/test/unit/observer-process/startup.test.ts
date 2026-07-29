@@ -8,6 +8,7 @@ import { createTempState } from "../../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
 const higherBuildVersion = `2.0.0+station.${"a".repeat(64)}`;
+const lowerBuildVersion = `1.0.0+station.${"b".repeat(64)}`;
 
 const healthyObserver = (pid = 1234, version = stationObserverBuildVersion()) =>
   ({
@@ -272,31 +273,153 @@ describe("CLI observer process startup", () => {
     expect(kills).toBe(0);
   });
 
-  it("maps a child exit with only lower-build health remaining to handoff refusal", async () => {
+  it.each([
+    {
+      label: "exit code",
+      exit: { type: "exit" as const, code: 17, signal: null },
+      expected: "Replacement child: exit code 17",
+    },
+    {
+      label: "signal",
+      exit: { type: "exit" as const, code: null, signal: "SIGTERM" as const },
+      expected: "Replacement child: signal SIGTERM",
+    },
+    {
+      label: "spawn error",
+      exit: {
+        type: "spawn_error" as const,
+        error: new Error("launch failed with API_TOKEN=super-secret-value"),
+      },
+      expected: "Replacement child: spawn error: launch failed with API_TOKEN=[REDACTED]",
+    },
+    {
+      label: "unknown status",
+      exit: { type: "exit" as const, code: null, signal: null },
+      expected: "Replacement child: unknown exit status",
+    },
+  ])("retains a replacement child's $label under handoff refusal", async ({ exit, expected }) => {
     const fixture = await createTempState();
     let healthCalls = 0;
 
     const result = await startObserver(
       { config: fixture.config, timeoutMs: 2_000 },
       {
-        buildVersion: "2.0.0",
+        buildVersion: higherBuildVersion,
         spawnObserver: async () =>
           fakeChild({
             pid: 5678,
-            exited: Promise.resolve({ type: "exit", code: 1, signal: null }),
+            exited: Promise.resolve(exit),
           }),
         clientFactory: fakeClientFactory(async () => {
           healthCalls += 1;
-          return healthyObserver(1234, "1.0.0");
+          return healthyObserver(1234, lowerBuildVersion);
         }),
       },
     );
 
     expect(result).toMatchObject({
       status: "unhealthy",
-      error: { code: "OBSERVER_HANDOFF_REFUSED" },
+      error: { code: "OBSERVER_HANDOFF_REFUSED", traceId: expect.any(String) },
     });
+    expect(result.error?.hint).toContain(expected);
+    expect(result.error?.hint).toContain(
+      "Health convergence: OBSERVER_INCUMBENT_HEALTH_TIMEOUT after 1000 ms",
+    );
+    expect(result.error?.hint).toContain("Boot-log tail unavailable");
+    expect(result.error?.hint).toContain("1.0.0 (build bbbbbbbbbbbb)");
+    expect(result.error?.hint).toContain("2.0.0 (build aaaaaaaaaaaa)");
+    expect(result.error?.hint).toContain(`station debug trace ${result.error?.traceId}`);
+    expect(result.error?.hint).not.toContain("super-secret-value");
     expect(healthCalls).toBeGreaterThan(1);
+  });
+
+  it.each([
+    { delayMs: 999, expectedStatus: "running", expectedCode: undefined },
+    {
+      delayMs: 1_001,
+      expectedStatus: "unhealthy",
+      expectedCode: "OBSERVER_HANDOFF_REFUSED",
+    },
+  ])("keeps the one-second convergence boundary at $delayMs ms", async ({
+    delayMs,
+    expectedStatus,
+    expectedCode,
+  }) => {
+    const fixture = await createTempState();
+    const replacementHealthObserved = deferred<void>();
+    const childExited = deferred<{ type: "exit"; code: number; signal: null }>();
+    const compatibleHealth = deferred<ReturnType<typeof healthyObserver>>();
+    let healthCalls = 0;
+
+    vi.useFakeTimers();
+    try {
+      const startup = startObserver(
+        { config: fixture.config, timeoutMs: 5_000 },
+        {
+          buildVersion: higherBuildVersion,
+          spawnObserver: async () =>
+            fakeChild({
+              pid: 5678,
+              exited: childExited.promise,
+            }),
+          clientFactory: fakeClientFactory(async () => {
+            healthCalls += 1;
+            if (healthCalls <= 2) {
+              if (healthCalls === 2) replacementHealthObserved.resolve(undefined);
+              return healthyObserver(1234, lowerBuildVersion);
+            }
+            return compatibleHealth.promise;
+          }),
+        },
+      );
+      await replacementHealthObserved.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      childExited.resolve({ type: "exit", code: 0, signal: null });
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(delayMs);
+      compatibleHealth.resolve(healthyObserver(9876, higherBuildVersion));
+      await vi.advanceTimersByTimeAsync(0);
+      const result = await startup;
+
+      expect(result.status).toBe(expectedStatus);
+      expect(result.error?.code).toBe(expectedCode);
+      if (delayMs === 1_001) {
+        expect(result.error?.hint).toContain(
+          "Health convergence: OBSERVER_INCUMBENT_HEALTH_TIMEOUT after 1000 ms",
+        );
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retains a normalized health rejection and the child-owned boot tail", async () => {
+    const fixture = await createTempState();
+    let healthCalls = 0;
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 5_000 },
+      {
+        buildVersion: higherBuildVersion,
+        spawnObserver: async () =>
+          fakeChild({
+            exited: Promise.resolve({ type: "exit", code: 1, signal: null }),
+            readBootLogTail: async () => "startup failed with API_TOKEN=super-secret-value",
+          }),
+        clientFactory: fakeClientFactory(async () => {
+          healthCalls += 1;
+          return healthCalls <= 2
+            ? healthyObserver(1234, lowerBuildVersion)
+            : healthyObserver(9876, `2.0.0+station.${"c".repeat(64)}`);
+        }),
+      },
+    );
+
+    expect(result.error?.code).toBe("OBSERVER_HANDOFF_REFUSED");
+    expect(result.error?.hint).toContain("Health convergence: OBSERVER_HANDOFF_REFUSED");
+    expect(result.error?.hint).toContain("This attempt's last 15 lines (redacted):");
+    expect(result.error?.hint).toContain("API_TOKEN=[REDACTED]");
+    expect(result.error?.hint).not.toContain("super-secret-value");
   });
 
   it("lets the outer startup timeout preempt incumbent convergence", async () => {
@@ -425,6 +548,7 @@ describe("CLI observer process startup", () => {
     );
 
     expect(result.error?.hint).toContain(`Observer boot log: ${bootLogPath}`);
+    expect(result.error?.hint).toContain("Boot-log tail unavailable");
     expect(result.error?.hint).not.toContain("Last 15 lines");
   });
 
