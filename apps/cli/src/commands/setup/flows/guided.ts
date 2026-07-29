@@ -214,16 +214,21 @@ async function selectGuidedHarnesses(
     if (right.id === configuredDefault) return 1;
     return 0;
   });
-  const selectedValues = await prompt.selectMany(
-    "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
-    orderedHarnesses.map((harness) => ({ value: harness.id, label: harness.label })),
-  );
-  const selectedHarnessIds = selectedValues.filter(isSupportedHarnessId);
-  if (selectedHarnessIds.length === 0) {
+  const choices = orderedHarnesses.map((harness) => ({
+    value: harness.id,
+    label: harness.label,
+  }));
+  while (true) {
+    const selectedValues = await prompt.selectMany(
+      "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
+      choices,
+    );
+    const selectedHarnessIds = selectedValues.filter(isSupportedHarnessId);
+    if (selectedHarnessIds.length > 0) {
+      return { status: "continue", selectedHarnessIds };
+    }
     await write(deps, "Select at least one available agent CLI.\n");
-    return { status: "halt" };
   }
-  return { status: "continue", selectedHarnessIds };
 }
 
 function shouldPromptHarnessSelection(facts: SetupFacts, availableCount: number): boolean {

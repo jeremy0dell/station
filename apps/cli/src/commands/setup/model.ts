@@ -1,6 +1,10 @@
 import type { TmuxConfig } from "@station/config";
 import { ProviderHookArtifactOwnershipSchema } from "@station/contracts";
+import { type SupportedHarnessId, supportedHarnessIds } from "@station/setup-core";
 import { z } from "zod";
+
+export type { SupportedHarnessId } from "@station/setup-core";
+export { supportedHarnessIds } from "@station/setup-core";
 
 export const setupTiers = ["required", "recommended", "optional"] as const;
 export const setupStatuses = ["ok", "missing", "warning", "skipped"] as const;
@@ -14,7 +18,6 @@ export const setupActionKinds = [
   "noop",
 ] as const;
 export const setupActionStatuses = ["pending", "completed", "failed", "skipped"] as const;
-export const supportedHarnessIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
 export const setupHarnessSelectionSources = [
   "configured",
   "explicit",
@@ -57,7 +60,6 @@ export const SetupHarnessTrackingFactSchema = z
 
 export type SetupTier = z.infer<typeof SetupTierSchema>;
 export type SetupMode = z.infer<typeof SetupModeSchema>;
-export type SupportedHarnessId = z.infer<typeof SupportedHarnessIdSchema>;
 export type SetupHarnessSelectionSource = z.infer<typeof SetupHarnessSelectionSourceSchema>;
 export type SetupHarnessTrackingFact = z.infer<typeof SetupHarnessTrackingFactSchema>;
 

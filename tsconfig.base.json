@@ -37,6 +37,7 @@
       "@station/protocol": ["packages/protocol/src/index.ts"],
       "@station/runtime": ["packages/runtime/src/index.ts"],
       "@station/scripted-harness": ["integrations/harness/scripted/src/index.ts"],
+      "@station/setup-core": ["packages/setup-core/src/index.ts"],
       "@station/host": ["packages/station-host/src/index.ts"],
       "@station/testing": ["packages/testing/src/index.ts"],
       "@station/tmux": ["integrations/terminal/tmux/src/index.ts"],

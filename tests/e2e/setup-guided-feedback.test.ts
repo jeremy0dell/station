@@ -221,6 +221,32 @@ describe("setup guided feedback e2e", () => {
     }
   });
 
+  it("reprompts after an out-of-range agent selection without choosing the first item", async () => {
+    const fixture = await createFixture({ harness: "codex-opencode" });
+    try {
+      const result = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: ["99", "2", "n", "n", "y", "y", "n", "n"],
+      });
+
+      expect(result.timedOut).toBe(false);
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(
+        result.stdout.match(
+          /Select agent CLIs to prepare \(comma-separated; the first is the default only for a new config\)\./g,
+        ),
+      ).toHaveLength(2);
+      expect(result.stdout).toContain("Select at least one available agent CLI.");
+      const config = await readFile(fixture.configPath, "utf8");
+      expect(config).toContain('harness = "opencode"');
+      expect(config).toContain("[harness.opencode]");
+      expect(config).not.toContain("[harness.codex]");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("keeps a clean Codex and Pi setup idempotent and visible in the Observer snapshot", async () => {
     const fixture = await createFixture({ harness: "codex-pi" });
     try {

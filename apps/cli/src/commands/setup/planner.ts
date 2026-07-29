@@ -1,5 +1,11 @@
 import { dirname } from "node:path";
 import type { ProviderHookArtifactOwnership } from "@station/contracts";
+import {
+  assessHarnessTracking,
+  deriveSetupReadiness,
+  type HarnessTrackingAssessment,
+  type HarnessTrackingFacts,
+} from "@station/setup-core";
 import { stationUiInstallHint } from "../../stationWorkspace.js";
 import { setupLauncherExecutable } from "./checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "./checks/tmuxBinding.js";
@@ -32,18 +38,25 @@ export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions
   const harnessSelection = options.harnessSelection ?? resolveSetupHarnessSelection(facts);
   const checks = setupChecks(facts, harnessSelection);
   const actions = setupActions(facts, harnessSelection, options.configWrite, options);
-  const requiredMissing = checks.filter(
-    (check) => check.tier === "required" && check.status !== "ok",
-  ).length;
   const warnings = checks.filter((check) => check.status === "warning").length;
-  const workflowReady = checks.every((check) => check.tier !== "required" || check.status === "ok");
+  const readiness = deriveSetupReadiness({
+    stateDirectoryWritable: facts.stateDir.status === "ok",
+    runtime: facts.compiled
+      ? { kind: "compiled" }
+      : {
+          kind: "source",
+          bunAvailable: facts.bun.status === "ok",
+          stationUiUsable: facts.stationUi.status !== "missing",
+        },
+    requirements: checks.flatMap((check) =>
+      check.tier === "required" ? [check.status === "ok" ? "satisfied" : "unsatisfied"] : [],
+    ),
+  });
   const summary = {
-    launchReady:
-      facts.stateDir.status === "ok" &&
-      (facts.compiled || (facts.bun.status === "ok" && facts.stationUi.status !== "missing")),
-    workflowReady,
-    requiredOk: workflowReady,
-    requiredMissing,
+    launchReady: readiness.launchReady,
+    workflowReady: readiness.workflowReady,
+    requiredOk: readiness.workflowReady,
+    requiredMissing: readiness.requiredMissing,
     warnings,
     selectedActions: actions.filter((action) => action.selected).length,
     selectionSource: harnessSelection.source,
@@ -58,7 +71,7 @@ export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions
     checks,
     actions,
     summary,
-    nextSteps: nextSteps(requiredMissing, facts),
+    nextSteps: nextSteps(readiness.requiredMissing, facts),
   };
   return SetupPlanSchema.parse(plan);
 }
@@ -375,26 +388,6 @@ function harnessTrackingChecks(
   );
 }
 
-type HarnessTrackingAssessmentResult = {
-  status: SetupCheck["status"];
-  message: string;
-};
-
-type NoExternalTrackingAssessment = HarnessTrackingAssessmentResult & {
-  capability: "unsupported";
-  state: "not-applicable";
-};
-
-type ExternalTrackingAssessment = HarnessTrackingAssessmentResult & {
-  capability: "supported";
-  state: "probe-failed" | "disabled" | "artifact-missing-or-drifted" | "prepared";
-  requested: boolean | undefined;
-  installed: boolean | undefined;
-};
-
-// The capability discriminant keeps no-artifact outcomes distinct from incomplete external evidence.
-type HarnessTrackingAssessment = NoExternalTrackingAssessment | ExternalTrackingAssessment;
-
 function harnessTrackingCheck(
   facts: SetupFacts,
   harnessId: SupportedHarnessId,
@@ -403,27 +396,107 @@ function harnessTrackingCheck(
 ): SetupCheck {
   const harnessLabel =
     facts.harnesses.find((candidate) => candidate.id === harnessId)?.label ?? harnessId;
-  const assessment = assessHarnessTracking(facts, harnessId, harnessLabel, required);
+  const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
+  const trackingFacts = coreHarnessTrackingFacts(facts, harnessId, fact);
+  const assessment = assessHarnessTracking(trackingFacts);
+  const presentation = harnessTrackingPresentation(
+    assessment,
+    fact,
+    harnessId,
+    harnessLabel,
+    required,
+  );
   const details: Record<string, string> = {
     harness: harnessId,
     selectionSource,
-    capability: assessment.capability,
+    capability: trackingFacts.capability,
     state: assessment.state,
   };
-  if (assessment.capability === "supported") {
+  if (assessment.state !== "not-applicable") {
     if (assessment.requested !== undefined) details.requested = String(assessment.requested);
     if (assessment.installed !== undefined) details.installed = String(assessment.installed);
   }
-  const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
   if (fact?.ownership !== undefined) addHookOwnershipDetails(details, fact.ownership);
   return {
     id: `harness-tracking:${harnessId}`,
     tier: required ? "required" : "recommended",
-    status: assessment.status,
+    status: presentation.status,
     label: `${harnessLabel} tracking`,
-    message: assessment.message,
+    message: presentation.message,
     details,
   };
+}
+
+function coreHarnessTrackingFacts(
+  facts: SetupFacts,
+  harnessId: SupportedHarnessId,
+  fact: SetupFacts["harnessTracking"][number] | undefined,
+): HarnessTrackingFacts {
+  if (!harnessSupportsSetupHooks(harnessId)) {
+    return {
+      capability: "unsupported",
+      configRequested: false,
+      evidence: { availability: "unavailable" },
+    };
+  }
+  const configRequested =
+    facts.config.status === "valid" && facts.config.configuredHookHarnesses.includes(harnessId);
+  if (fact === undefined || fact.capability !== "supported") {
+    return {
+      capability: "supported",
+      configRequested,
+      evidence: { availability: "unavailable" },
+    };
+  }
+  const evidence: {
+    availability: "available";
+    requested?: boolean;
+    installed?: boolean;
+    probeFailed: boolean;
+  } = {
+    availability: "available",
+    probeFailed: fact.probeFailed === true,
+  };
+  if (fact.requested !== undefined) evidence.requested = fact.requested;
+  if (fact.installed !== undefined) evidence.installed = fact.installed;
+  return { capability: "supported", configRequested, evidence };
+}
+
+function harnessTrackingPresentation(
+  assessment: HarnessTrackingAssessment,
+  fact: SetupFacts["harnessTracking"][number] | undefined,
+  harnessId: SupportedHarnessId,
+  harnessLabel: string,
+  required: boolean,
+): Pick<SetupCheck, "status" | "message"> {
+  const unavailableStatus = required ? "missing" : "warning";
+  switch (assessment.state) {
+    case "not-applicable":
+      return {
+        status: required ? "ok" : "skipped",
+        message: `${harnessLabel} has no Station-managed external tracking artifact.`,
+      };
+    case "probe-failed":
+      return {
+        status: unavailableStatus,
+        message: fact?.detail ?? `${harnessId} tracking status could not be inspected.`,
+      };
+    case "disabled":
+      return {
+        status: unavailableStatus,
+        message: `${harnessLabel} tracking is disabled in Station config.`,
+      };
+    case "artifact-missing-or-drifted":
+      return {
+        status: unavailableStatus,
+        message: fact?.detail ?? `${harnessId} tracking artifacts are absent or drifted.`,
+      };
+    case "prepared":
+      return {
+        status: "ok",
+        message: `${harnessLabel} Station tracking artifacts are prepared on disk.`,
+      };
+  }
 }
 
 function addHookOwnershipDetails(
@@ -443,83 +516,6 @@ function addHookOwnershipDetails(
     details.currentRuntimeVersion = ownership.current.version;
     details.currentBuildIdentity = ownership.current.buildIdentity;
   }
-}
-
-function assessHarnessTracking(
-  facts: SetupFacts,
-  harnessId: SupportedHarnessId,
-  harnessLabel: string,
-  required: boolean,
-): HarnessTrackingAssessment {
-  if (!harnessSupportsSetupHooks(harnessId)) {
-    return {
-      capability: "unsupported",
-      state: "not-applicable",
-      status: required ? "ok" : "skipped",
-      message: `${harnessLabel} has no Station-managed external tracking artifact.`,
-    };
-  }
-
-  const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
-  const configRequested =
-    facts.config.status === "valid" && facts.config.configuredHookHarnesses.includes(harnessId);
-  return assessSupportedHarnessTracking({
-    fact,
-    harnessId,
-    harnessLabel,
-    configRequested,
-    required,
-  });
-}
-
-function assessSupportedHarnessTracking(input: {
-  fact: SetupFacts["harnessTracking"][number] | undefined;
-  harnessId: SupportedHarnessId;
-  harnessLabel: string;
-  configRequested: boolean;
-  required: boolean;
-}): HarnessTrackingAssessment {
-  const { fact, harnessId, harnessLabel, configRequested, required } = input;
-  const unavailableStatus = required ? "missing" : "warning";
-  if (fact === undefined || fact.capability !== "supported" || fact.probeFailed === true) {
-    const supportedFact = fact?.capability === "supported" ? fact : undefined;
-    return {
-      capability: "supported",
-      state: "probe-failed",
-      status: unavailableStatus,
-      message: fact?.detail ?? `${harnessId} tracking status could not be inspected.`,
-      requested: supportedFact?.requested,
-      installed: supportedFact?.installed,
-    };
-  }
-  if (!configRequested || fact.requested !== true) {
-    return {
-      capability: "supported",
-      state: "disabled",
-      status: unavailableStatus,
-      message: `${harnessLabel} tracking is disabled in Station config.`,
-      requested: fact.requested,
-      installed: fact.installed,
-    };
-  }
-  if (fact.installed !== true) {
-    return {
-      capability: "supported",
-      state: "artifact-missing-or-drifted",
-      status: unavailableStatus,
-      message: fact.detail ?? `${harnessId} tracking artifacts are absent or drifted.`,
-      requested: fact.requested,
-      installed: fact.installed,
-    };
-  }
-  return {
-    capability: "supported",
-    state: "prepared",
-    status: "ok",
-    message: `${harnessLabel} Station tracking artifacts are prepared on disk.`,
-    requested: fact.requested,
-    installed: fact.installed,
-  };
 }
 
 function xcodeChecks(facts: SetupFacts): SetupCheck[] {
@@ -973,12 +969,6 @@ function hookSetupActions(
     });
   }
   for (const repairTarget of harnessTrackingRepairTargets(facts, harnessSelection)) {
-    if (
-      !harnessSupportsSetupHooks(repairTarget.id) ||
-      harnessTrackingPrepared(facts, repairTarget.id)
-    ) {
-      continue;
-    }
     actions.push({
       id: `${repairTarget.id}-hooks`,
       kind: "run-command",
@@ -993,11 +983,6 @@ function hookSetupActions(
     });
   }
   return actions;
-}
-
-function harnessTrackingPrepared(facts: SetupFacts, harnessId: SupportedHarnessId): boolean {
-  const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
-  return fact?.capability === "supported" && fact.requested === true && fact.installed === true;
 }
 
 function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessId): string[] {
