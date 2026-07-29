@@ -68,7 +68,7 @@ describe("station hot runtime", () => {
     expect(second.store.getState().workspace.activePaneId).toEqual("pane-second");
   });
 
-  it("reboots an incompatible v4 runtime and disposes its old PTYs", () => {
+  it("reboots a pre-launch-coordination v5 runtime and disposes its old PTYs", () => {
     const slots = createSlots();
     const oldStore = createStationStore();
     const paneId = agentWorktreePaneId("wt_station_idle");
@@ -77,7 +77,7 @@ describe("station hot runtime", () => {
     const oldRegistry = createPtyRegistry({ createTerminal: () => scripted.terminal });
     oldRegistry.resize(paneId, { cols: 80, rows: 24 });
     const oldRuntime: StationHotRuntime = {
-      version: 4,
+      version: 5,
       store: oldStore,
       registry: oldRegistry,
     };

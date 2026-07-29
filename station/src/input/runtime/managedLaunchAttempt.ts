@@ -7,6 +7,7 @@ import {
 import type { ProviderId, SafeError } from "@station/contracts";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { StationHostProviderError } from "@station/host";
+import { paneTreeIds } from "../../state/paneTree.js";
 import { selectPaneRecord } from "../../state/selectors.js";
 import type { StationStore } from "../../state/store.js";
 import type { AgentIdentity, PaneId } from "../../state/types.js";
@@ -14,8 +15,8 @@ import type {
   ManagedTerminalAttacher,
   ManagedTerminalFactory,
 } from "../../terminal/pty/managedTerminalAttacher.js";
-import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
-import type { StationTerminalSpawnOptions } from "../../terminal/types.js";
+import type { PtyRegistry, PtyRegistryEntry } from "../../terminal/registry/ptyRegistry.js";
+import type { StationTerminalSize, StationTerminalSpawnOptions } from "../../terminal/types.js";
 import {
   externalTerminalProviderForWorktree,
   nonFocusableStationTerminalForWorktree,
@@ -61,15 +62,17 @@ type ManagedLaunchAttemptDeps = {
   managedTerminalAttacher: ManagedTerminalAttacher | undefined;
 };
 
-type ManagedLaunchRuntime = ManagedLaunchAttemptDeps & {
-  launchesInFlight: Set<PaneId>;
-};
+type ManagedLaunchRuntime = ManagedLaunchAttemptDeps;
 
 type ManagedLaunchContext = {
   paneId: PaneId;
   target: ManagedLaunchTarget;
   landInPane: boolean;
   turnReadiness: { sessionId: string; token: string } | undefined;
+  exitedPane?: {
+    entry: PtyRegistryEntry;
+    identity: AgentIdentity;
+  };
 };
 
 type PreparedLaunch = Awaited<ReturnType<ObserverService["prepareExternalLaunch"]>>;
@@ -89,6 +92,20 @@ type ManagedLaunchAction =
     }
   | { kind: "focus-existing"; sessionId: string }
   | { kind: "notice"; message: string };
+
+type OpenPaneAction = Extract<ManagedLaunchAction, { kind: "open-pane" }>;
+
+type PreparedPanePlacement =
+  | { kind: "fresh" }
+  | {
+      kind: "recycled";
+      registry: PtyRegistry;
+      viewport: StationTerminalSize;
+      startAtStoredViewport: boolean;
+    }
+  | { kind: "refused" };
+
+type PreparedActionResult = "performed" | "refused";
 
 function pushToast(
   runtime: ManagedLaunchRuntime,
@@ -148,7 +165,19 @@ async function runPreflight(
   runtime: ManagedLaunchRuntime,
   context: ManagedLaunchContext,
 ): Promise<ObserverService | undefined> {
-  if (selectPaneRecord(runtime.store.getState(), context.paneId) !== null) {
+  const pane = selectPaneRecord(runtime.store.getState(), context.paneId);
+  const entry = runtime.registry?.get(context.paneId);
+  if (
+    pane?.role === "primary-agent" &&
+    pane.agentIdentity !== undefined &&
+    entry?.exited === true &&
+    context.landInPane
+  ) {
+    context.exitedPane = {
+      entry,
+      identity: pane.agentIdentity,
+    };
+  } else if (pane !== null) {
     if (context.landInPane) {
       runtime.store.actions.revealPane(context.paneId);
       await landOnPane(runtime, runtime.observerService, context.turnReadiness);
@@ -170,7 +199,7 @@ async function runPreflight(
   }
 
   // The synchronous guard prevents duplicate clicks from minting a second Observer session.
-  if (runtime.launchesInFlight.has(context.paneId)) {
+  if (runtime.store.transient.managedLaunchesInFlight.has(context.paneId)) {
     return undefined;
   }
   if (runtime.observerService === undefined) {
@@ -178,7 +207,7 @@ async function runPreflight(
     return undefined;
   }
 
-  runtime.launchesInFlight.add(context.paneId);
+  runtime.store.transient.managedLaunchesInFlight.add(context.paneId);
   return runtime.observerService;
 }
 
@@ -267,7 +296,10 @@ async function resolvePreparedLaunch(
       return undefined;
     }
     try {
-      const createTerminal = await runtime.managedTerminalAttacher.resolve(prepared.attachment);
+      const createTerminal = await runtime.managedTerminalAttacher.resolve(
+        prepared.attachment,
+        prepared.sessionId,
+      );
       return {
         kind: "open-pane",
         createTerminal,
@@ -349,21 +381,10 @@ async function performPreparedAction(
   context: ManagedLaunchContext,
   service: ObserverService,
   action: ManagedLaunchAction,
-): Promise<void> {
+): Promise<PreparedActionResult> {
   switch (action.kind) {
     case "open-pane":
-      // Registry seeding must precede pane publication so first render cannot spawn defaults.
-      if (action.createTerminal === undefined) {
-        runtime.registry?.ensure(context.paneId, action.spawnOptions);
-      } else {
-        runtime.registry?.ensure(context.paneId, action.spawnOptions, action.createTerminal);
-      }
-      runtime.store.actions.createPane(context.paneId, { role: "primary-agent" });
-      runtime.store.actions.setPrimaryAgent(context.paneId, action.identity);
-      if (context.landInPane) {
-        await landOnPane(runtime, service, context.turnReadiness);
-      }
-      return;
+      return await openPreparedPane(runtime, context, service, action);
     case "focus-existing":
       if (
         context.landInPane &&
@@ -371,10 +392,131 @@ async function performPreparedAction(
       ) {
         await landOnPane(runtime, service, context.turnReadiness);
       }
-      return;
+      return "performed";
     case "notice":
       pushToast(runtime, action.message, "info");
-      return;
+      return "performed";
+  }
+}
+
+async function openPreparedPane(
+  runtime: ManagedLaunchRuntime,
+  context: ManagedLaunchContext,
+  service: ObserverService,
+  action: OpenPaneAction,
+): Promise<PreparedActionResult> {
+  const placement = placePreparedTerminal(runtime, context, action);
+  if (placement.kind === "refused") {
+    return "refused";
+  }
+
+  runtime.store.actions.createPane(context.paneId, { role: "primary-agent" });
+  runtime.store.actions.setPrimaryAgent(context.paneId, action.identity);
+  if (placement.kind === "recycled") {
+    if (context.landInPane) {
+      runtime.store.actions.revealPane(context.paneId);
+    }
+    if (placement.startAtStoredViewport) {
+      placement.registry.resize(context.paneId, placement.viewport);
+    }
+  }
+  if (context.landInPane) {
+    await landOnPane(runtime, service, context.turnReadiness);
+  }
+  return "performed";
+}
+
+function placePreparedTerminal(
+  runtime: ManagedLaunchRuntime,
+  context: ManagedLaunchContext,
+  action: OpenPaneAction,
+): PreparedPanePlacement {
+  const exitedPane = context.exitedPane;
+  const registry = runtime.registry;
+  if (exitedPane === undefined || registry === undefined) {
+    ensurePreparedTerminal(registry, context.paneId, action);
+    return { kind: "fresh" };
+  }
+
+  const currentPane = selectPaneRecord(runtime.store.getState(), context.paneId);
+  if (
+    currentPane !== null &&
+    (currentPane.role !== "primary-agent" ||
+      !agentIdentityEquals(currentPane.agentIdentity, exitedPane.identity))
+  ) {
+    return refusePaneReplacement(runtime);
+  }
+  const workspace = runtime.store.getState().workspace;
+  const activePaneId = workspace.activePaneId;
+  const treeIsActive =
+    activePaneId !== null && paneTreeIds(workspace.panes, context.paneId).has(activePaneId);
+
+  const reset =
+    action.createTerminal === undefined
+      ? registry.resetExited(exitedPane.entry, action.spawnOptions)
+      : registry.resetExited(exitedPane.entry, action.spawnOptions, action.createTerminal);
+  if (reset.kind === "reset") {
+    return {
+      kind: "recycled",
+      registry,
+      viewport: reset.viewport,
+      // An inactive tree remounts after reveal and reports its current layout;
+      // spawning at its hidden historical size would force a startup correction.
+      startAtStoredViewport: treeIsActive,
+    };
+  }
+  if (reset.reason === "missing" && currentPane === null) {
+    ensurePreparedTerminal(registry, context.paneId, action);
+    return { kind: "fresh" };
+  }
+  return refusePaneReplacement(runtime);
+}
+
+function ensurePreparedTerminal(
+  registry: PtyRegistry | undefined,
+  paneId: PaneId,
+  action: OpenPaneAction,
+): void {
+  // Registry seeding must precede pane publication so first render cannot spawn defaults.
+  if (action.createTerminal === undefined) {
+    registry?.ensure(paneId, action.spawnOptions);
+  } else {
+    registry?.ensure(paneId, action.spawnOptions, action.createTerminal);
+  }
+}
+
+function refusePaneReplacement(runtime: ManagedLaunchRuntime): PreparedPanePlacement {
+  pushToast(runtime, "The agent pane changed while Station was preparing its relaunch.", "info");
+  return { kind: "refused" };
+}
+
+function agentIdentityEquals(
+  left: AgentIdentity | undefined,
+  right: AgentIdentity,
+): boolean {
+  return (
+    left?.sessionId === right.sessionId &&
+    left.terminalTargetId === right.terminalTargetId &&
+    left.harnessProvider === right.harnessProvider
+  );
+}
+
+async function releaseUnplacedLocalLaunch(
+  runtime: ManagedLaunchRuntime,
+  service: ObserverService,
+  prepared: PreparedLaunch,
+): Promise<void> {
+  if (prepared.kind !== "prepared" || prepared.attachment !== undefined) {
+    return;
+  }
+  try {
+    await service.reportExternalExit({
+      terminalTargetId: prepared.terminalTargetId,
+      expectedSessionId: prepared.sessionId,
+    });
+  } catch (error) {
+    // A rejected compare-and-release leaves target ownership uncertain; never hide that cleanup state.
+    pushError(runtime, error);
   }
 }
 
@@ -395,25 +537,26 @@ async function runManagedLaunchAttempt(
     }
     const action = await resolvePreparedLaunch(runtime, preparation.launch, target);
     if (action !== undefined) {
-      await performPreparedAction(runtime, context, service, action);
+      const result = await performPreparedAction(runtime, context, service, action);
+      if (result === "refused") {
+        await releaseUnplacedLocalLaunch(runtime, service, preparation.launch);
+      }
     }
     return SETTLED_RESULT;
   } finally {
-    runtime.launchesInFlight.delete(paneId);
+    runtime.store.transient.managedLaunchesInFlight.delete(paneId);
   }
 }
 
 /**
  * Creates one managed-launch runner whose phases preserve registry-before-pane publication,
  * apply output compatibility only to local spawns, and treat every advertised attachment as a
- * no-local-fallback commitment.
+ * no-local-fallback commitment. Foreground dashboard activation may recycle only the exact exited
+ * entry it observed, after preparation succeeds and before replacement identity can spawn.
  */
 export function createManagedLaunchAttempt(
   deps: ManagedLaunchAttemptDeps,
 ): (paneId: PaneId, target: ManagedLaunchTarget) => Promise<ManagedLaunchAttemptResult> {
-  const runtime: ManagedLaunchRuntime = {
-    ...deps,
-    launchesInFlight: new Set<PaneId>(),
-  };
+  const runtime: ManagedLaunchRuntime = { ...deps };
   return (paneId, target) => runManagedLaunchAttempt(runtime, paneId, target);
 }

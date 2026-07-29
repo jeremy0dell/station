@@ -191,6 +191,7 @@ export type AgentPrepareExternalLaunchResult = z.infer<
 export const AgentReportExternalExitParamsSchema = z
   .object({
     terminalTargetId: TerminalTargetIdSchema,
+    expectedSessionId: SessionIdSchema.optional(),
   })
   .strict();
 

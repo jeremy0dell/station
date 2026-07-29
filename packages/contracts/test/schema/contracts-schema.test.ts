@@ -358,8 +358,13 @@ describe("contract schemas", () => {
 
     expectParses(
       AgentReportExternalExitParamsSchema,
+      { terminalTargetId: "native:wt_api", expectedSessionId: "ses_api" },
+      "session-qualified external exit params",
+    );
+    expectParses(
+      AgentReportExternalExitParamsSchema,
       { terminalTargetId: "native:wt_api" },
-      "external exit params",
+      "legacy external exit params without release authority",
     );
     expectParses(
       AgentReportExternalExitResultSchema,

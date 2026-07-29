@@ -1218,8 +1218,16 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       onDismiss: async () => {},
       initialState: { terminalRows: 12 },
     });
-    const scripted = createScriptedTerminal();
-    const base = createPtyRegistry({ createTerminal: () => scripted.terminal });
+    const scripted = [createScriptedTerminal(), createScriptedTerminal()];
+    let spawnIndex = 0;
+    const base = createPtyRegistry({
+      createTerminal: () => {
+        const terminal = scripted[spawnIndex]?.terminal;
+        if (terminal === undefined) throw new Error("scripted terminal pool exhausted");
+        spawnIndex += 1;
+        return terminal;
+      },
+    });
     const calls: string[] = [];
     const ensured: StationTerminalSpawnOptions[] = [];
     const terminalFactories: ManagedTerminalFactory[] = [];
@@ -1273,6 +1281,9 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       settle,
       observerService,
       dashboardRuntime,
+      registry,
+      baseRegistry: base,
+      scripted,
     };
   }
 
@@ -1317,6 +1328,42 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
           return session;
         }
         const next = { ...session };
+        delete next.terminal;
+        return next;
+      }),
+    };
+  }
+
+  function retainedNoAgentSnapshot(): StationSnapshot {
+    const snapshot = manyProjectsSnapshot();
+    return {
+      ...snapshot,
+      rows: snapshot.rows.map((row): WorktreeRow => {
+        if (row.id !== WORKTREE_ID) {
+          return row;
+        }
+        const next: WorktreeRow = {
+          ...row,
+          display: { ...row.display, statusLabel: "no agent" },
+        };
+        delete next.agent;
+        delete next.terminal;
+        return next;
+      }),
+      sessions: snapshot.sessions.map((session) => {
+        if (session.id !== ROW_ID) {
+          return session;
+        }
+        const next = {
+          ...session,
+          status: {
+            value: "none" as const,
+            confidence: "high" as const,
+            reason: "No managed agent is running.",
+            source: "reconcile" as const,
+            updatedAt: snapshot.generatedAt,
+          },
+        };
         delete next.terminal;
         return next;
       }),
@@ -1452,6 +1499,37 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     await settle();
 
     expect(observerService.preparedLaunches).toHaveLength(1);
+    expect(selectStationOverlayVisible(store.getState())).toBe(false);
+  });
+
+  it("relaunches a retained No Agent session only when its dashboard row is activated", async () => {
+    const {
+      store,
+      dispatch,
+      settle,
+      observerService,
+      dashboardRuntime,
+      baseRegistry,
+      scripted,
+    } = agentHarness();
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+    baseRegistry.resize(AGENT_PANE_ID, { cols: 90, rows: 24 });
+    scripted[0].helpers.emitExit({ exitCode: 0 });
+    dashboardRuntime.clientState.setSnapshot(retainedNoAgentSnapshot());
+
+    // Exit and snapshot convergence alone retain the dead transcript.
+    expect(observerService.preparedLaunches).toHaveLength(1);
+    expect(baseRegistry.get(AGENT_PANE_ID)?.exited).toBe(true);
+
+    store.actions.openOverlay(STATION_OVERLAY_ID);
+    dispatch({ kind: "row", rowId: ROW_ID });
+    await settle();
+
+    expect(observerService.preparedLaunches).toHaveLength(2);
+    expect(baseRegistry.get(AGENT_PANE_ID)?.terminal).toBe(scripted[1].terminal);
+    expect(baseRegistry.get(AGENT_PANE_ID)?.exited).toBe(false);
     expect(selectStationOverlayVisible(store.getState())).toBe(false);
   });
 

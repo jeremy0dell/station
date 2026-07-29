@@ -434,6 +434,21 @@ describe("createPtyTable", () => {
     expect(table.list()).toHaveLength(1);
   });
 
+  it("refuses to reuse a deterministic target for another session", () => {
+    const { table, scripteds } = tableWithScripted();
+    const first = table.spawn(baseParams);
+
+    let conflict: unknown;
+    try {
+      table.spawn({ ...baseParams, sessionId: "ses-replacement" });
+    } catch (error) {
+      conflict = error;
+    }
+    expect(conflict).toMatchObject({ code: "HOST_TARGET_SESSION_CONFLICT" });
+    expect(scripteds).toHaveLength(1);
+    expect(table.list()).toMatchObject([{ ptyId: first.ptyId, sessionId: baseParams.sessionId }]);
+  });
+
   it("keeps distinct terminal targets as separate live PTYs", () => {
     const scripteds: ScriptedTerminal[] = [];
     let nextPid = 4200;

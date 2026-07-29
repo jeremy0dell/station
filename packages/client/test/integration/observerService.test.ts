@@ -127,7 +127,7 @@ describe("observer client service", () => {
   it("prepares external launches and reports external exits through the protocol", async () => {
     const { socketPath } = await createTempSocketPath();
     const prepared: Array<{ projectId: string; worktreeId: string; title?: string }> = [];
-    const exited: string[] = [];
+    const exited: Array<{ terminalTargetId: string; expectedSessionId?: string }> = [];
     const server = await startProtocolServer({
       socketPath,
       api: fakeApi({
@@ -152,7 +152,7 @@ describe("observer client service", () => {
           };
         },
         reportExternalExit: async (params) => {
-          exited.push(params.terminalTargetId);
+          exited.push(params);
           return { acknowledged: true, terminalTargetId: params.terminalTargetId };
         },
       }),
@@ -176,13 +176,21 @@ describe("observer client service", () => {
       },
     });
     await expect(
-      service.reportExternalExit({ terminalTargetId: "native:wt_web_feature" }),
+      service.reportExternalExit({
+        terminalTargetId: "native:wt_web_feature",
+        expectedSessionId: "ses_external_1",
+      }),
     ).resolves.toEqual({ acknowledged: true, terminalTargetId: "native:wt_web_feature" });
 
     expect(prepared).toEqual([
       { projectId: "web", worktreeId: "wt_web_feature", title: "Hexagonal PT 12" },
     ]);
-    expect(exited).toEqual(["native:wt_web_feature"]);
+    expect(exited).toEqual([
+      {
+        terminalTargetId: "native:wt_web_feature",
+        expectedSessionId: "ses_external_1",
+      },
+    ]);
 
     await server.close();
   });

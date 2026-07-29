@@ -317,6 +317,10 @@ reattach; pane borders and neighboring panes must remain unlinked.
   interaction. Native row activation resolves an advertised managed attachment
   and creates or reveals the local pane without dispatching `terminal.focus`;
   no attachment leaves the overlay open with an actionable notice.
+- Dashboard row click, focused Enter, and `1-9/a-z` row jump are the explicit
+  authorization to relaunch a proven-exited managed pane. Pane clicks, pane
+  cycling, overlay close, PTY exit, reconcile, restore, and HMR never relaunch;
+  they may continue to expose the retained exit transcript.
 
 ## Surface Rules
 
@@ -560,6 +564,7 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 - For managed Codex launches, the Station terminal provider selects a generic output-compatibility policy that both UI-owned fallback PTYs and Host-owned PTYs apply before replay storage and live delivery. It rewrites only the exact row-1 region scroll followed by its correlated cursor-and-erase repaint; both PTY boundaries remain provider-neutral, and manually starting Codex in an auxiliary shell remains outside this compatibility scope.
 - Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
 - Attachment-unavailable state is not process exit: version and exhausted-reconnect failures stop pane input and resize forwarding and show `attachment unavailable`, while only proven Host absence, an exited acknowledgement, or an exit frame reaches the pane-exit lifecycle. Lost historical replay fidelity keeps the pane attached and logs a typed degraded-snapshot diagnostic instead.
+- A dashboard-authorized relaunch resolves Observer preparation and any advertised attachment for the exact prepared session before atomically replacing the exact exited registry entry. Failed preparation leaves the dead screen and pane tree intact; successful replacement preserves child panes and split anchors, starts an already-visible pane at its latest requested viewport, and lets a newly revealed tree report its current layout before spawning.
 - In `@station/dashboard-core`: `selectors/` owns snapshot-to-view grouping/filtering, `state/commandBuilders.ts` owns typed observer command construction, `state/screens/*` owns pure screen transitions, `state/sourceBridge.ts` mirrors canonical client state into dashboard projection, `state/operations/*` owns command/operation flow, and `components/`/`widgets/` owns shared layout/content logic.
 - The dashboard surface under `station/src/station/` may import only its linked dashboard-facing `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`). Other Station subsystems use only the additional packages named by the link script at their owned composition boundaries. Production Station source must never import `apps/tui`, `ink`, providers, or integrations (enforced by `station/src/station/importBoundaries.test.ts`).
 

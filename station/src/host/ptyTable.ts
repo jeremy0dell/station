@@ -197,11 +197,18 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
   return {
     spawn(params) {
-      // Idempotent per worktree: a live PTY for the same target is reused so a
-      // racing second prepare/launch never forks two agents for one worktree.
+      // Idempotency is session-qualified: deterministic target ids are reused
+      // across generations, but a newer session must never attach to the old PTY.
       for (const existing of entries.values()) {
         if (!existing.exited && existing.identity.terminalTargetId === params.terminalTargetId) {
-          return { ptyId: existing.ptyId, pid: existing.terminal.pid, created: false };
+          if (existing.identity.sessionId === params.sessionId) {
+            return { ptyId: existing.ptyId, pid: existing.terminal.pid, created: false };
+          }
+          throw new StationHostProviderError(
+            "HOST_TARGET_SESSION_CONFLICT",
+            "A live host PTY already owns this terminal target for another session.",
+            { worktreeId: params.worktreeId, sessionId: params.sessionId },
+          );
         }
       }
 

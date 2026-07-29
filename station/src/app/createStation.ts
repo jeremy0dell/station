@@ -128,7 +128,10 @@ function setupRegistry(
       return;
     }
     void stationClient.service
-      .reportExternalExit({ terminalTargetId: identity.terminalTargetId })
+      .reportExternalExit({
+        terminalTargetId: identity.terminalTargetId,
+        expectedSessionId: identity.sessionId,
+      })
       .catch(() => {});
   };
   const registry =
@@ -170,6 +173,7 @@ function createReconcilers(
       const observer = stationClient.state.getState().snapshot?.observer;
       return observer === undefined ? undefined : `${observer.pid}:${observer.startedAt}`;
     },
+    hasProvenExit: (paneId) => registry.get(paneId)?.exited === true,
     killPane: (paneId) => registry.get(paneId)?.terminal?.kill(),
   });
   return { reconcile, reapRemovedSessions };
