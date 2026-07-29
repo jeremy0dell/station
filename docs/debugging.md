@@ -202,13 +202,16 @@ version (`0.7.0` in this example).
 
 `OBSERVER_HANDOFF_REFUSED` means automatic build or cross-version replacement
 could not proceed safely. Read the running/requested display versions and build
-IDs in the error. A same-version legacy or losing identified build with stable
-PID/start-time health can be stopped explicitly; missing process identity
-refuses rather than risking a successor. It must not attach to different code.
-Inspect `logs/observer-boot.log`, compare `lsof -t <socket>` with the
-strict pidfile and `ps -ww -p <pid> -o lstart=,command=`, then retry only after
-resolving missing or conflicting evidence. Automatic handoff never uses
-SIGKILL.
+IDs in the error. When a replacement child exits, the error also reports its
+exit code, signal, redacted spawn error, or unknown status; the health rejection
+code or unchanged one-second convergence expiry; and that child's bounded,
+redacted boot-log tail or an explicit unavailable marker. Use the included
+trace ID against the same state directory. A same-version legacy or losing
+identified build with stable PID/start-time health can be stopped explicitly;
+missing process identity refuses rather than risking a successor. It must not
+attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
+`ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
+or conflicting evidence. Automatic handoff never uses SIGKILL.
 
 After startup reconcile, the Observer performs one report-only duplicate
 inspection. `stn doctor` reports this as `observer-singleton`: an eligible
@@ -239,6 +242,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 ## Reading Evidence
 
 - `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.
+- A failed hosted binary smoke can upload `binary-smoke-evidence-<run-id>-<attempt>` for three days. Download it with `gh run download <run-id> --name binary-smoke-evidence-<run-id>-<attempt> --dir /tmp/station-binary-smoke-evidence-<run-id>`, then read `manifest.json` before the round's `failure.json`, bounded logs, and runtime summary. The bundle is redacted, allowlisted, and capped at 1 MiB, but collaborators with Actions access can download it. Do not run `stn debug trace` against unrelated live state and treat it as evidence for the downloaded CI run.
 - `observer.claim.sqlite` is boot-exclusion evidence only. Inspect it with
   read-only SQLite tooling after confirming no startup is in progress; never
   infer ownership from the file or sidecars being present.

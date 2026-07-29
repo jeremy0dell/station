@@ -194,6 +194,9 @@ smoke runs when production, binary, dependency, or CI infrastructure changes. Ob
 changes use the exhaustive claim-race counts, while setup- and Worktrunk-sensitive changes retain
 both bash and zsh process-level setup coverage. One aggregate job named `standard-ci` preserves the
 repository ruleset contract and fails if a mandatory or path-selected lane is unexpectedly skipped.
+A failed binary-smoke step best-effort uploads one redacted, allowlisted evidence directory capped at
+1 MiB with three-day retention; a successful step creates and uploads no evidence directory, and
+artifact upload failure cannot mask the smoke failure.
 
 Release tags select every lane, use the exhaustive claim-race counts and both setup shell paths, and
 call that parallel gate before adding the four native build and draft-install targets. Both `standard-ci` and
@@ -367,6 +370,48 @@ runs the lower identity as incumbent, replaces it with the higher identity, and
 verifies that a later mutating command from the loser is refused without
 changing the Observer, Station Host, or live PTY. It requires a committed clean
 checkout so the detached-worktree artifact has one controlled source delta.
+
+For a local failure bundle, name an absolute path that does not exist and is
+outside the smoke root:
+
+```bash
+STATION_BINARY_SMOKE_EVIDENCE_DIR=/absolute/new/path \
+  pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+The runner creates that private directory only for failure or cancellation,
+captures evidence before teardown, records cleanup afterward, and preserves the
+original failure. Inspect `manifest.json` first. In hosted CI, use:
+
+```bash
+gh run download <run-id> \
+  --name binary-smoke-evidence-<run-id>-<attempt> \
+  --dir /tmp/station-binary-smoke-evidence-<run-id>
+```
+
+The focused handoff stress reuses immutable current and alternate binaries for
+fresh isolated rounds and stops at the first failure without rebuilding or
+retrying a handoff:
+
+```bash
+STATION_BINARY_SMOKE_EVIDENCE_DIR=/absolute/new/path \
+  pnpm stress:binary-handoff -- \
+  --expected-version 0.0.0-local \
+  --rounds 50 \
+  --round-timeout-ms 30000
+```
+
+Each round proves the logical lower-to-higher replacement, exact PID/build and
+socket/pidfile ownership, one healthy Observer, live Host PTY continuity, and
+then the reverse physical call's deterministic reuse or refusal without winner
+mutation. With one fixed artifact pair, that reverse call is not a second valid
+replacement direction. The `Binary handoff stress` workflow exposes the same
+lane through manual dispatch on Ubuntu 24.04 with at most 100 rounds; it is not a
+required PR or nightly lane. If rounds were independent at the previously
+observed 13.8% failure rate, 50 rounds would have about a 99.94% chance of a
+failure and zero failures would imply only an approximate one-sided 95% upper
+bound of 5.8% (about 3% for 100 and 1% for 300). Hosted timing can be correlated,
+so these runs increase confidence but do not prove absence.
 
 To inspect the UX manually after the smoke:
 
