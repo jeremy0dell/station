@@ -34,6 +34,7 @@ The repo is organized around these boundaries:
 - `packages/contracts` owns shared application schemas and types, including `ObserverApi`, external-launch values, commands, events, snapshots, observations, provider ports, hooks, diagnostics, and safe errors.
 - `packages/protocol` owns the observer NDJSON transport: envelopes, method mapping, validation execution, client/server mechanics, and fail-closed Unix-socket probing and stale-owner evidence.
 - `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, typed error conversion, and atomic text replacement.
+- `packages/setup-core` owns dependency-free deterministic setup decisions over normalized harness selection, tracking, repair, and readiness facts.
 - `packages/client` owns the framework-neutral rich-client observer runtime: snapshot loading, the event subscription/reconnect loop, event-to-snapshot reduction, and command dispatch/completion-wait wrappers consumed by the Station UI.
 - `apps/cli/src/ingress` owns the tiny `stn-ingress` sender: raw provider hook delivery to the observer socket and offline spool writes. Events sent through this raw path normalize and compact observer-side via provider hook adapters; integrations that submit typed harness reports normalize in their own adapter.
 - `packages/station-host` owns the standalone `station-station-host` daemon contract and client: a process that owns PTYs and their bounded raw/semantic replay state beyond the Station UI lifetime, exposing attach/list/close over its own local socket so panes can warm-reattach. Station consumes it directly; Observer application code can reach host-backed terminal behavior only through an adapter supplied by CLI composition.
@@ -73,6 +74,7 @@ When these disagree, reconcile from config, providers, and current observer stat
   context and on daemon-inherited color controls; only color controls carried
   by the explicit launch request are authoritative.
 - The CLI is the command/debug entrypoint, but long-lived runtime correlation belongs in the observer.
+- Setup IO and orchestration remain in the CLI: it validates and normalizes external facts, projects setup-core outcomes into existing plan schemas and copy, and owns config, provider, process, and persistence effects. `@station/setup-core` imports none of those concerns.
 - `packages/contracts` defines shared language with strict schemas for untrusted input and shared payloads.
 - The protocol validates transport messages and keeps consumer APIs simple. It should not become a provider boundary.
 - Client processes may spawn after an absent or proven-stale socket, but only the process binding the replacement may unlink it. Inaccessible ownership is preserved; pidfiles never establish liveness or authorize reclaim.

@@ -1,3 +1,4 @@
+import { supportedHarnessIds as coreSupportedHarnessIds } from "@station/setup-core";
 import { describe, expect, it } from "vitest";
 import { harnessDefinitions } from "../../src/commands/setup/checks/harnesses.js";
 import {
@@ -9,6 +10,7 @@ import {
 
 describe("setup model", () => {
   it("keeps supported harness ids aligned with setup detection", () => {
+    expect(supportedHarnessIds).toBe(coreSupportedHarnessIds);
     expect([...supportedHarnessIds]).toEqual(harnessDefinitions.map((harness) => harness.id));
     expect([...supportedHarnessIds]).not.toContain("crush");
   });
