@@ -71,6 +71,7 @@ import {
 } from "./externalLaunch.js";
 import type { HarnessReportProcessorDeps } from "./harnessReportProcessor.js";
 import { processHarnessIngressReport } from "./harnessReportProcessor.js";
+import type { ObserverDuplicateCleanupOutcome } from "./observerDuplicateCleanup.js";
 import { type ReconcileExecutorDeps, runReconcile } from "./reconcileExecutor.js";
 import { logReconcileSchedulerProfile } from "./reconcileProfiling.js";
 import {
@@ -103,8 +104,10 @@ export type CreateObserverApiOptions = {
   metadataRefresh?: WorktreeMetadataRefreshService;
   worktreeChangeSource?: WorktreeChangeSource;
   worktreeMetadataInvalidationSource?: WorktreeMetadataInvalidationSource;
+  onShutdownStarted?: () => Promise<void> | void;
   onStop?: () => Promise<void> | void;
   hookReconcileDebounceMs?: number;
+  duplicateCleanupStatus?: () => ObserverDuplicateCleanupOutcome | undefined;
 };
 
 /**
@@ -112,7 +115,8 @@ export type CreateObserverApiOptions = {
  *
  * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
  * evidence roles, ingress workers, provider-health publication, scheduling, exact
- * build publication, and adapter shutdown behind the application API.
+ * build publication, read-only singleton diagnostics, and adapter shutdown behind
+ * the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -543,6 +547,7 @@ async function buildStop(
   stopProviderHealthPublication: () => Promise<void>,
   clock: RuntimeClock,
 ): Promise<ObserverStopReceipt> {
+  await options.onShutdownStarted?.();
   const providerHealthStopped = stopProviderHealthPublication();
   await harnessIngressQueue.shutdown();
   await metadataRefresh?.shutdown();
@@ -581,6 +586,9 @@ function buildDiagnosticDeps(
     deps.configDiagnostics = options.configDiagnostics;
   }
   if (options.providers !== undefined) deps.providers = options.providers;
+  if (options.duplicateCleanupStatus !== undefined) {
+    deps.duplicateCleanupStatus = options.duplicateCleanupStatus;
+  }
   return deps;
 }
 

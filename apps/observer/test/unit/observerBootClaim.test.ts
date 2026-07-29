@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createObserverStartupGate, runObserverMain } from "../../src/runtime/main.js";
 import {
   acquireObserverBootClaim,
+  createObserverBootClaimCleanupExclusion,
   observerBootClaimPath,
 } from "../../src/runtime/observerBootClaim.js";
 import type { SqlDatabase } from "../../src/sqlite/driver.js";
@@ -79,7 +80,7 @@ describe("observer boot claim", () => {
     expect(successor.release()).toEqual({ status: "released" });
   });
 
-  it("normalizes existing database and sidecar modes without treating them as ownership", async () => {
+  it("refuses insecure existing claim paths without changing their modes", async () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
     const path = observerBootClaimPath(socketPath);
@@ -87,21 +88,18 @@ describe("observer boot claim", () => {
     for (const suffix of ["", "-journal", "-wal", "-shm"]) {
       await writeFile(`${path}${suffix}`, "", { mode: 0o644 });
     }
-    const database = fakeDatabase();
     const originalUmask = process.umask();
 
-    const claim = await acquireObserverBootClaim(
-      { socketPath, timeoutMs: 100 },
-      { openDatabase: () => database },
-    );
-    expect(claim.status).toBe("acquired");
+    const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 100 });
+    expect(claim).toMatchObject({
+      status: "failed",
+      error: { code: "OBSERVER_BOOT_CLAIM_FAILED" },
+    });
     expect(process.umask()).toBe(originalUmask);
-    if (claim.status !== "acquired") return;
+    expect((await stat(dirname(path))).mode & 0o777).toBe(0o755);
     for (const suffix of ["", "-journal", "-wal", "-shm"]) {
-      expect((await stat(`${path}${suffix}`)).mode & 0o777).toBe(0o600);
+      expect((await stat(`${path}${suffix}`)).mode & 0o777).toBe(0o644);
     }
-    expect(claim.release()).toEqual({ status: "released" });
-    expect(process.umask()).toBe(originalUmask);
   });
 
   it.each([
@@ -114,11 +112,9 @@ describe("observer boot claim", () => {
     const socketPath = join(root, "run", "observer.sock");
     const path = observerBootClaimPath(socketPath);
     const target = join(root, `target${suffix || "-db"}`);
-    await mkdir(dirname(path), { recursive: true });
     await writeFile(target, "target", "utf8");
-    if (suffix !== "") {
-      await writeFile(path, "", { mode: 0o600 });
-    }
+    if (suffix === "") await mkdir(dirname(path), { recursive: true });
+    else await initializeClaimDatabase(socketPath);
     await symlink(target, `${path}${suffix}`);
 
     const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
@@ -139,10 +135,8 @@ describe("observer boot claim", () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
     const path = observerBootClaimPath(socketPath);
-    await mkdir(dirname(path), { recursive: true });
-    if (suffix !== "") {
-      await writeFile(path, "", { mode: 0o600 });
-    }
+    if (suffix === "") await mkdir(dirname(path), { recursive: true });
+    else await initializeClaimDatabase(socketPath);
     await mkdir(`${path}${suffix}`);
 
     const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
@@ -213,6 +207,22 @@ describe("observer boot claim", () => {
     }
   });
 
+  it("publishes an initialized database before entering the claim transaction", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const path = observerBootClaimPath(socketPath);
+    const database = fakeDatabase();
+
+    const claim = await acquireObserverBootClaim(
+      { socketPath, timeoutMs: 100 },
+      { openDatabase: () => database },
+    );
+
+    expect(claim.status).toBe("acquired");
+    expect((await stat(path)).size).toBeGreaterThan(0);
+    if (claim.status === "acquired") expect(claim.release()).toEqual({ status: "released" });
+  });
+
   it("attempts both rollback and close, then caches a release failure", async () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
@@ -268,6 +278,54 @@ describe("observer boot claim", () => {
     expect(health).toHaveBeenCalledOnce();
   });
 
+  it("runs cleanup under a non-waiting claim and releases after callback success", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+    const callback = vi.fn(async () => "done");
+
+    await expect(exclusion.runExclusive(callback)).resolves.toEqual({
+      status: "completed",
+      value: "done",
+      released: true,
+    });
+    expect(callback).toHaveBeenCalledOnce();
+    const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+    expect(claim.status).toBe("acquired");
+    if (claim.status === "acquired") claim.release();
+  });
+
+  it("refuses busy cleanup without invoking the callback", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const owner = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+    expect(owner.status).toBe("acquired");
+    if (owner.status !== "acquired") return;
+    const callback = vi.fn(async () => "must not run");
+    try {
+      const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+      await expect(exclusion.runExclusive(callback)).resolves.toEqual({ status: "busy" });
+      expect(callback).not.toHaveBeenCalled();
+    } finally {
+      owner.release();
+    }
+  });
+
+  it("releases cleanup exclusion after a callback failure", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const exclusion = createObserverBootClaimCleanupExclusion({ socketPath });
+
+    await expect(
+      exclusion.runExclusive(async () => {
+        throw new Error("callback failed");
+      }),
+    ).resolves.toMatchObject({ status: "failed" });
+    const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+    expect(claim.status).toBe("acquired");
+    if (claim.status === "acquired") claim.release();
+  });
+
   it("does not construct providers or mutate runtime ownership after claim failure", async () => {
     const root = await tempRoot();
     const stateDir = join(root, "state");
@@ -298,6 +356,12 @@ async function tempRoot(prefix = "station-observer-claim-"): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), prefix));
   roots.push(root);
   return root;
+}
+
+async function initializeClaimDatabase(socketPath: string): Promise<void> {
+  const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+  expect(claim.status).toBe("acquired");
+  if (claim.status === "acquired") expect(claim.release()).toEqual({ status: "released" });
 }
 
 function fakeDatabase(

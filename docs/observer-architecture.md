@@ -5,8 +5,10 @@ contracts, transports, integrations, and composition roots.
 
 Use [Architecture](architecture.md) for the repository-wide system map and
 [Architecture documentation](architecture-documentation.md) for the controlled
-JSDoc role language. Use [Naming](naming.md) for provider, hook, harness report,
-STATION event, and observer event hook terminology.
+JSDoc role language. [Observer singleton lifecycle](observer-singleton.md) is
+authoritative for process ownership, handoff, displacement, and duplicate
+cleanup. Use [Naming](naming.md) for provider, hook, harness report, STATION
+event, and observer event hook terminology.
 
 ## Scope And Authority
 
@@ -181,6 +183,7 @@ ownership even where current ownership is still a deviation.
 | Conversation | Direction | Application seam | Actor or adapter | Rule and current status |
 | --- | --- | --- | --- | --- |
 | Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. |
+| Observer reap | Driving | `ObserverReap` | CLI observer-reap adapter, direct tests | Observer-owned local-process operation; dry-run and explicit force share one selection and revalidation use case while CLI composition supplies boundary evidence. |
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
@@ -195,7 +198,9 @@ ownership even where current ownership is still a deviation.
 | Worktree metadata evidence | Driven | `WorktreeChangeSource` and `WorktreeMetadataInvalidationSource` | local Git reader and ref-watcher adapters | Conforming path-free roles: one reads typed checkout-local change evidence; the other owns full-set watcher replacement and terminal shutdown. |
 | Diagnostic evidence | Driven | `DiagnosticEvidenceSource` | `createLocalDiagnosticEvidenceSource` | Conforming read-only role: the adapter captures resolved local state, log, diagnostics, socket, and hook-spool locations while only typed measurements and bounded evidence cross the port; command/event journals, providers, core, and SQLite remain separate inputs. |
 | Observer incumbent lifecycle | Driven | `ObserverIncumbentLifecycle` | local protocol client adapter | Handoff may read health and request controlled stop without importing transport mechanics into policy or orchestration. |
-| Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, argv, and OS start token must corroborate before replacement or signaling. |
+| Observer process evidence | Driven | `ObserverProcessEvidenceSource` | local `lsof`/`ps`/`/proc`/pidfile/signal adapter | `lsof` is primary socket ownership; health, strict pidfile, executable provenance, exact argv, per-launch token, build selector, and second-resolution OS start token must corroborate before replacement or signaling. |
+| Duplicate-process evidence | Driven | `ObserverDuplicateProcessEvidenceSource` | local process-evidence adapter | Extends handoff evidence with bound-socket identity and strict per-process Unix-socket-FD counts; unavailable evidence always refuses. |
+| Duplicate-cleanup exclusion | Driven | `ObserverDuplicateCleanupExclusion` | boot-claim cleanup exclusion adapter | Automatic final revalidation and explicit force both run under a fail-fast boot claim and release it after every callback outcome. |
 
 `packages/contracts` owns shared Station schemas, application values, and
 provider port contracts. Observer-private ports remain in `apps/observer`.
@@ -246,7 +251,7 @@ No single layer owns all truth.
 | Observer SQLite | Durable observer memory for commands, events, ingress dedupe, observations, correlations, sessions, canonical worktree display titles, native-execution bindings, metadata caches, recovery handles, and readiness. Display-title authority is keyed by `(projectId, worktreeId)` and survives transient provider observation gaps; it is not branch or provider identity. |
 | Local Git metadata evidence | Local Git is authoritative only for checkout-local `HEAD`, refs, merge-base, and numstat at read time. Command failures retain cached evidence through the TTL and mark it stale, while a matching checkout reported unavailable clears its local-change row; superseded identities cannot mutate either row. Ref-watch notifications are hints that request reconcile, never metadata or UI mutations themselves. |
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
-| Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, version, socketPath}` identity published by the process that successfully bound the socket. Its `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. It corroborates process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
+| Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, processToken, version, socketPath}` identity published by the process that successfully bound the socket. The UUID v4 `processToken` identifies one launch and `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. They corroborate process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the seven persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
 | `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership. Reconcile replaces its base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
@@ -262,83 +267,48 @@ and reloads after later gaps or events that cannot be reduced safely.
 
 ### Startup
 
-Normal CLI and provider-hook startup is attach-or-spawn: clients may classify an
-absent or proven-stale socket, but only the spawned Observer child mutates ownership. The child
-serializes probe, stale reclaim, bind, pidfile publication, watcher setup, and
-ready-state commitment with an OS-backed SQLite transaction.
+Normal CLI and provider-hook startup is attach-or-spawn. Runtime composition
+owns the singleton lifecycle through the process-evidence and incumbent-lifecycle
+ports plus local socket, pidfile, boot-claim, and ownership-watcher adapters. The
+complete ownership, four-state probe, handoff, bind, readiness, displacement,
+and refusal mechanics are defined only in
+[Observer singleton lifecycle](observer-singleton.md).
 
-Current startup proceeds in this order:
+Application composition proceeds around that boundary in this order:
 
 1. CLI composition supplies the concrete, optionally asynchronous provider
-   registry factory. The normal and provider-hook spawners pass the caller's
-   positive startup budget as internal child argv; custom spawn callback
-   contracts remain unchanged.
-2. Observer runtime loads config, resolves the canonical state and socket paths,
-   and prepares private state and socket directories.
-3. Before provider construction or main-database access, the child opens the
-   low-level claim database beside the resolved socket and acquires `BEGIN
-   IMMEDIATE` with that startup budget. The shared transport probe distinguishes
-   `absent`, `listening`, `stale`, and `inaccessible`. Absent or proven-stale
-   keeps the claim for owned startup; bind performs a fresh zero-holder and path-
-   identity check before its only unlink attempt. Listening reads incumbent health and applies the
-   strict selector policy: exact builds or higher-version incumbents attach; a
-   deterministically elected same-version build or higher-version candidate may
-   replace an incumbent only after complete process attribution. The declared
-   public version-line reset orders `0.0.0-pre-alpha.*` after the internal
-   `0.7.1-rc.*` previews despite ordinary SemVer precedence.
-   A losing or legacy same-version candidate refuses rather than attaching.
-   Inaccessible paths, missing or malformed `lsof` evidence, path replacement,
-   and non-socket collisions fail before provider construction, main SQLite,
-   bind, pidfile publication, stop, or signal. Hard contention or claim I/O
-   failure is also fatal.
-4. CLI composition receives the resolved state directory and constructs the
+   registry factory, while the Observer child establishes singleton ownership
+   before provider construction or main-database access.
+2. CLI composition receives the resolved state directory and constructs the
    providers. Compiled composition materializes the Pi extension here; Observer
    code remains provider-neutral.
-5. The main Observer SQLite opens and applies pending migrations, then
+3. The main Observer SQLite opens and applies pending migrations, then
    `createSqliteObserverPersistence` binds the seven application persistence
-   ports and `PersistenceHealthSource` to that handle. Runtime composition
-   retains the concrete handle only for open/close lifecycle ownership and
-   distributes the composition bundle into narrow application views.
-6. The runtime creates the event bus, `StationLogger` JSONL adapter,
-   `ProjectConfigWriter` configuration adapter, command queue, feature evaluator,
-   Observer core, command handlers, and configured event hooks around the awaited
-   provider registry. Only the two application ports pass inward.
-7. Runtime composition captures the resolved state, socket, diagnostics, log,
+   ports and `PersistenceHealthSource` to that handle. Runtime composition owns
+   the concrete handle lifecycle and distributes narrow application views.
+4. Runtime composition creates the event bus, logging and project-config
+   adapters, command queue, feature evaluator, core, handlers, and configured
+   event hooks around the provider registry.
+5. Runtime composition captures the resolved state, socket, diagnostics, log,
    and hook-spool locations in the local diagnostic-evidence adapter before
-   supplying it to the API. The API constructs ingress queues, reconcile
+   supplying it to the API. API composition constructs ingress queues, reconcile
    scheduling, metadata refresh, diagnostics dependencies, spool draining, and
    the provider-health completion listener whose commits drain before persistence
    shutdown. Local Git readers and ref invalidation are selected here; watches
    arm lazily on the first metadata refresh, and each refresh replaces the
    complete watched identity set before cache or metadata reads so a later ref
    move cannot be missed.
-8. The runtime constructs a private startup-and-health gate, then the protocol
-   server binds the resolved socket before startup reconcile. Only the
-   successful socket binder may publish process identity.
-9. The runtime captures the bound-socket identity, atomically publishes and
-   fsyncs `<socketPath>.pid`, then arms the socket-ownership
-   watcher from the captured identity. Identity publication or OS-start-token
-   failure is fatal: health stays gated while the runtime logs the startup
-   failure, tears down its services, socket, and SQLite handle, and exits
-   nonzero.
-10. The startup gate marks the runtime ready, synchronously rolls back and closes
-    the boot claim, then unblocks health responses. Startup reconcile follows
-    outside the claim and establishes the first provider-backed snapshot;
-    provider-health probes commit into the current snapshot as they land, while
-    harness-version probes fill their cache in the background. A
-    stop requested before readiness is terminal: health remains gated, socket
-    and pidfile cleanup finish while the claim is held, and the outer lifecycle
-    `finally` releases it before exit.
+6. After singleton readiness commits, startup reconcile establishes the first
+   provider-backed snapshot. Provider-health probes commit into the current
+   snapshot as they land, while harness-version probes fill their cache in the
+   background.
+7. Runtime composition then starts one single-flight duplicate-cleanup use case,
+   records its cached result for logging and Doctor, and owns its cancellation
+   and join during shutdown. Production selects report-only mode; terminate mode
+   remains the same application use case and sends SIGTERM only.
 
-Version-and-build-aware replacement remains inside step 3 while the claim is held. The
-handoff use case revalidates `lsof`, pidfile, argv, and OS start token before
-controlled stop and before its single permitted SIGTERM. Controlled stop binds
-the revalidated health identity to a health-plus-stop exchange on one connection,
-so a replacement cannot be stopped through the earlier incumbent's authorization.
-A stop receipt is not exit proof: successor startup requires both socket closure
-and exact incumbent death. Missing, invalid, conflicting, or wedged evidence returns
-`OBSERVER_HANDOFF_REFUSED`; automatic handoff never sends SIGKILL. Station Host
-is outside this lifecycle and continues to own live PTYs independently.
+Station Host is outside the Observer singleton lifecycle and continues to own
+live PTYs independently.
 
 After startup accepts an Observer, command, ingress, and Station clients pin
 that exact selector. Each later operation checks health and sends the request
@@ -357,35 +327,25 @@ defined startup failure path and shutdown owner.
 
 ### Shutdown
 
-The current API stop path drains harness ingress, marks metadata refresh
+The API stop path first aborts and awaits duplicate inspection, then stops
+provider-health publication, drains harness ingress, marks metadata refresh
 terminal, aborts active local and repository reads, shuts down ref invalidation,
-and waits for the refresh flight before scheduling process shutdown. Ref-watcher
-shutdown invalidates callbacks first, clears debounce timers, attempts every
-close despite individual failures, and makes later replacement and callbacks
-no-ops. During normal operation, one missing or failed ref target does not tear
-down healthy sibling watches; later full-set replacements retry only unarmed
-targets. Process shutdown disables health responses first.
-The explicit CLI stop/restart path pins PID and start time, plus version and
-socket when reported, before sending stop on the same connection. Legacy health
-may omit version or socket, but missing PID/start time refuses. A stop receipt
-does not complete the CLI operation while the endpoint remains live; shutdown-
-gated or otherwise unhealthy responses keep polling until the socket closes or
-the bounded stop timeout fails.
-If the process still owns the socket, it conditionally removes only an exact
-matching process identity and syncs the socket directory before the protocol
-server releases the socket. A displaced process marks ownership lost before
-shutdown, leaves every pidfile untouched, destroys accepted clients, and abandons
-the native listener without calling close. After SQLite closes it exits explicitly;
-Node's natural handle cleanup can otherwise unlink the successor pathname.
-Pidfile cleanup failure is
-warned and shutdown continues because a stale corroborating file is safer than
-deleting another process's identity or hanging shutdown.
+and waits for the refresh flight before process shutdown. Ref-watcher shutdown
+invalidates callbacks first, clears debounce timers, attempts every close despite
+individual failures, and makes later replacement and callbacks no-ops. During
+normal operation, one missing or failed ref target does not tear down healthy
+sibling watches; later full-set replacements retry only unarmed targets.
 
-Command-queue shutdown rejects new commands, aborts running handlers
-cooperatively, and waits for their per-scope chains; configured event hooks and
-the protocol server then close before SQLite. A bounded process backstop
-prevents a handler that ignores cancellation from keeping a displaced or
-stopped observer alive indefinitely.
+Process shutdown disables health responses first. Command-queue shutdown rejects
+new commands, aborts running handlers cooperatively, and waits for their
+per-scope chains; configured event hooks and the protocol server then close
+before SQLite. A bounded process backstop prevents a handler that ignores
+cancellation from keeping a stopped Observer alive indefinitely.
+
+The exact socket, pidfile, listener-abandonment, displacement, and explicit CLI
+stop/restart ordering is part of the canonical
+[shutdown contract](observer-singleton.md#shutdown-ordering), not a second
+architecture-level ownership specification.
 
 ## Main Flows
 
@@ -603,7 +563,10 @@ not fall through to a second local spawn.
 
 Doctor and diagnostic collection are direct query operations over current core
 health, persistence health, durable Observer records, config diagnostics,
-provider checks, and local runtime evidence. CLI full-doctor requests carry one
+provider checks, local runtime evidence, and the cached read-only singleton
+cleanup outcome. The `observer-singleton` check is healthy when no duplicate
+requires action, and warns for eligible duplicates, survivors, or evidence
+refusal. CLI full-doctor requests carry one
 strict provider-neutral hook-runtime context containing the requester's ingress
 launcher, socket, state and spool paths, auto-start policy, and optional Station
 config path. It also carries the generated-artifact owner: canonical launcher,
@@ -640,7 +603,7 @@ expires.
 | Spool drain | One configured drain runs at a time and processes stable filename order through direct durable ingress. Stable spool IDs survive legacy records without hook IDs; completion is idempotent after primary dedupe, and failed records remain on disk with attempt/error evidence. |
 | Hook auto-start throttle | `hook-autostart.lock` limits provider-hook spawn attempts only. It is never Observer ownership; each child still enters the socket-relative SQLite boot claim. |
 | Event delivery | Each subscriber currently has an unbounded in-memory queue. There is no replay or publisher backpressure; slow-subscriber growth is therefore a known operating characteristic. |
-| Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. |
+| Background refresh | Each unique provider probe publishes its completed result through the serialized snapshot writer before its in-flight slot clears. Joined refresh callers do not duplicate publication; shutdown unsubscribes first and drains commits already in progress. Probe and metadata-refresh failures remain best-effort and do not block the primary reconcile result. Duplicate cleanup is one-shot after startup reconcile, single-flight, claim-authorized, and shutdown-cancellable rather than periodic. |
 
 Retry belongs at an adapter or runtime boundary whose owner can state why the
 operation is safe to repeat. Do not retry a mutation without an idempotency key,
@@ -934,8 +897,8 @@ active register.
 - [Harness signals](harness-signals.md): status, attention, and event semantics.
 - [Harness authoring](harness-authoring.md): provider integration requirements.
 - [Debugging](debugging.md): runtime evidence and diagnostic workflow.
-- [Observer singleton](observer-singleton.md): process ownership and takeover
-  history.
+- [Observer singleton lifecycle](observer-singleton.md): authoritative process
+  ownership, handoff, displacement, duplicate cleanup, and explicit reap rules.
 
 For ordinary work, current code, tests, runtime evidence, and these living docs
 supersede historical planning material. When they disagree, verify the live path

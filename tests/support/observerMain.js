@@ -1,7 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { unlink, writeFile } from "node:fs/promises";
-import { STATION_SCHEMA_VERSION } from "../../packages/contracts/dist/index.js";
-import { startProtocolServer } from "../../packages/protocol/dist/index.js";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const repoRoot = process.env.STATION_TEST_REPO_ROOT;
+if (repoRoot === undefined) throw new Error("STATION_TEST_REPO_ROOT is required.");
+const [{ STATION_SCHEMA_VERSION }, { startProtocolServer }] = await Promise.all([
+  import(pathToFileURL(join(repoRoot, "packages/contracts/dist/index.js")).href),
+  import(pathToFileURL(join(repoRoot, "packages/protocol/dist/index.js")).href),
+]);
 
 const options = parseArgs(process.argv.slice(2));
 const startedAt = new Date().toISOString();
@@ -42,6 +49,7 @@ await writeFile(
   `${JSON.stringify({
     pid: process.pid,
     osStartTime: readOsStartTime(process.pid),
+    processToken: options.processToken,
     version: options.pidfileVersion ?? options.version,
     socketPath: options.socketPath,
   })}\n`,
@@ -65,19 +73,21 @@ function parseArgs(argv) {
     socketPath: undefined,
     stateDir: undefined,
     version: undefined,
-    pidfileVersion: undefined,
-    mode: "graceful",
-    stopDelayMs: 100,
+    processToken: undefined,
+    startupTimeoutMs: undefined,
+    pidfileVersion: process.env.STATION_TEST_PIDFILE_VERSION,
+    mode: process.env.STATION_TEST_OBSERVER_MODE ?? "graceful",
+    stopDelayMs: Number(process.env.STATION_TEST_STOP_DELAY_MS ?? 100),
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
     if (arg === "--socket" && value !== undefined) result.socketPath = value;
     else if (arg === "--state-dir" && value !== undefined) result.stateDir = value;
-    else if (arg === "--version" && value !== undefined) result.version = value;
-    else if (arg === "--pidfile-version" && value !== undefined) result.pidfileVersion = value;
-    else if (arg === "--mode" && value !== undefined) result.mode = value;
-    else if (arg === "--stop-delay-ms" && value !== undefined) result.stopDelayMs = Number(value);
+    else if (arg === "--startup-timeout-ms" && value !== undefined) {
+      result.startupTimeoutMs = Number(value);
+    } else if (arg === "--build-version" && value !== undefined) result.version = value;
+    else if (arg === "--process-token" && value !== undefined) result.processToken = value;
     else continue;
     index += 1;
   }
@@ -85,6 +95,9 @@ function parseArgs(argv) {
     typeof result.socketPath !== "string" ||
     typeof result.stateDir !== "string" ||
     typeof result.version !== "string" ||
+    typeof result.processToken !== "string" ||
+    !Number.isSafeInteger(result.startupTimeoutMs) ||
+    result.startupTimeoutMs <= 0 ||
     (result.mode !== "graceful" && result.mode !== "wedged") ||
     !Number.isSafeInteger(result.stopDelayMs) ||
     result.stopDelayMs < 0

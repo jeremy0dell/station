@@ -32,10 +32,13 @@ Non-goals:
   installer described in A5. Homebrew is not currently supported.
 - **Windows targets.**
 - **Any observer replacement / eviction in this roadmap.** Coordinated
-  single-observer behavior is owned entirely by
-  [observer-singleton](observer-singleton.md). This plan uses shipped
-  3c/3d-a/3d-b/3e; it does not add a second,
-  uncoordinated eviction path (v1 did — removed, see F3).
+  single-observer behavior is owned entirely by the
+  [Observer singleton lifecycle](observer-singleton.md), including
+  [startup claims](observer-singleton.md#startup-claim-and-four-state-socket-probing),
+  [process identity](observer-singleton.md#process-and-immutable-build-identity), and
+  [coordinated handoff](observer-singleton.md#attach-versus-coordinated-handoff).
+  This roadmap does not add a second, uncoordinated eviction path (v1 did —
+  removed, see F3).
 - **Replacing the dev workflow.** Dev mode (tsc dist under Node +
   `bun --hot` TUI from source) stays byte-identical; compiled mode is new
   dispatch layered on build-time defines.
@@ -90,7 +93,7 @@ command — remote code execution on `stn` launch.
 
 Mandatory in every compile invocation (A4):
 
-```
+```sh
 bun build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig …
 ```
 
@@ -101,7 +104,7 @@ honor either file. This is a release-blocking gate, not a smoke check.
 
 ## Target architecture
 
-```
+```text
 stn (bun build --compile, per platform, no ambient env)
 │  raw-argv dispatch (BEFORE runCli — F5):
 ├── argv0 == "stn-ingress"  → ingress main (owns raw stdin)
@@ -248,9 +251,10 @@ already applies `PRAGMA journal_mode = WAL` and migrations, so the driver
 only needs to guarantee both `exec` and `prepare().run()` semantics match.
 
 Feed `stationBuildInfo().version` into snapshot and `stn --version` display.
-Source processes verify that build info at most once, while Observer health and
-pidfile ownership publish `stationObserverBuildVersion()` so handoff also proves
-immutable build identity.
+Source processes verify that build info at most once, while Observer spawn argv,
+health, and pidfile ownership publish `stationObserverBuildVersion()`. Spawn argv
+also carries a per-launch UUID v4 token, so singleton evidence corroborates the
+exact launch as well as immutable build identity.
 
 **Tests:** vitest driver-mapping units (node); a bun-lane test (`bun test`)
 for the bun driver asserting `run().changes`, `get()`-no-row `undefined`,
@@ -564,13 +568,14 @@ child stdout/stderr, and races health readiness against child exit. It reports
 redacted log tail unless a concurrent observer became healthy. The default
 health wait is 10 seconds; only TUI and popup launches show delayed progress.
 
-**Removed from v1:** client-side unhealthy-incumbent eviction. Singleton 3d-a
-([#135](https://github.com/jeremy0dell/station/issues/135)) serializes child-side
-ownership under `dirname(resolvedSocket)/observer.claim.sqlite`; 3d-b
-([#137](https://github.com/jeremy0dell/station/issues/137)) now performs the
-version-aware half of B3 inside that claim. CLI and provider-hook clients only
-attach or spawn. They never signal an incumbent or mutate socket ownership
-out-of-band.
+**Removed from v1:** client-side unhealthy-incumbent eviction. The canonical
+[startup claim](observer-singleton.md#startup-claim-and-four-state-socket-probing)
+serializes child-side ownership under
+`dirname(resolvedSocket)/observer.claim.sqlite`; the
+[attach and coordinated-handoff contract](observer-singleton.md#attach-versus-coordinated-handoff)
+performs version-aware replacement inside that claim. CLI and provider-hook
+clients only attach or spawn. They never signal an incumbent or mutate socket
+ownership out-of-band.
 
 ### B-config — config activation (F4 — v1 was wrong)
 
@@ -593,12 +598,13 @@ untouched.
 
 **Status: implemented.** Same-version config activation uses B-config. Renderer exit code 86 =
 "restart observer" on a `halted` + `PROTOCOL_SCHEMA_MISMATCH` state → the
-CLI parent restarts once and respawns the renderer. Singleton 3d-b supplies
-Observer ordering: exact immutable builds reuse; different builds at one
-display version elect one verified replacement winner and refuse the loser;
-same-version reuse refuses any missing legacy identity; and higher valid
-SemVer replaces lower only after verified graceful handoff while lower-version
-callers reuse the higher incumbent.
+CLI parent restarts once and respawns the renderer. The canonical
+[attach and coordinated-handoff contract](observer-singleton.md#attach-versus-coordinated-handoff)
+supplies Observer ordering: exact immutable builds reuse; different builds at
+one display version elect one verified replacement winner and refuse the loser;
+same-version reuse refuses any missing legacy identity; and higher valid SemVer
+replaces lower only after verified graceful handoff while lower-version callers
+reuse the higher incumbent.
 
 ### B-host — station-host upgrade behavior (F7 — was undefined)
 
@@ -639,12 +645,12 @@ assumption, determine the shipped refusal policy.
 
 One graph replaces v1's two prose landing-orders.
 
-```
+```text
 A1 ─────────────┬─► A2a ─► A3 ─► A4 + compiled A2b ─► A5 ─► A6
  (buildInfo,     │
   sqlite,        │
   real version)  │
-                 └─► B3 (schema/version UX) ◄── observer-singleton 3d-b
+                 └─► B3 (schema/version UX) ◄── observer singleton lifecycle
 B1 ─► B2 ─► B-config ─► B3
               (config activation — headline UX)
 B-host  (independent; needed before upgrade is advertised safe)
@@ -653,14 +659,15 @@ A2a: opt-in PTY + native helper gate    A3: raw dispatch
 A4: packaged assets + compiled default   A2b: folded into A4
 A5: release                              A6: cleanup
 
-Satisfied dependency: observer-singleton 3d-a
-  → required for serialized concurrent stale-socket startup.
-Satisfied dependency: observer-singleton 3d-b
-  → supplies verified older-version observer handoff.
+Satisfied dependency: observer singleton startup claim
+  → serializes concurrent stale-socket startup.
+Satisfied dependency: observer singleton coordinated handoff
+  → supplies verified older-version Observer replacement.
 ```
 
 Suggested merge order: A1 → B1 → B2 → B-config → A2a → A3 → A4/A2b →
-B-host → A5 → A6. B3's version half is supplied by the singleton roadmap.
+B-host → A5 → A6. B3's version half is supplied by the canonical
+[Observer singleton lifecycle](observer-singleton.md).
 
 ## Verification (F11 — prove the headline UX, not a proxy)
 

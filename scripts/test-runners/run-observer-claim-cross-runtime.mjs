@@ -320,7 +320,11 @@ async function runRace({ tempRoot, socketPath, name, runtimes }) {
   const outcomes = children.map(({ resultPath }) => readJson(resultPath));
   const acquired = outcomes.filter(({ status }) => status === "acquired");
   const contended = outcomes.filter(({ status }) => status === "contended");
-  assert.equal(entriesBeforeRelease.length, 1, `${name} had multiple transaction entrants.`);
+  assert.equal(
+    entriesBeforeRelease.length,
+    1,
+    `${name} had unexpected transaction entrants: ${JSON.stringify(entriesBeforeRelease)}; outcomes: ${JSON.stringify(outcomes)}`,
+  );
   assert.equal(entriesBeforeRelease[0].overlap, false, `${name} overlapped its critical section.`);
   assert.equal(acquired.length, 1, `${name} did not produce exactly one acquired result.`);
   assert.equal(acquired[0].releaseStatus, "released", `${name} did not release cleanly.`);

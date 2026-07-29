@@ -1,25 +1,74 @@
 import { type ObserverProcessEntry, parseObserverProcessList } from "@station/observer/internal";
 import { describe, expect, it } from "vitest";
-import { runObserverReap, selectReapPlan } from "../../src/observerReap.js";
+import { observerCommandSummary } from "../../src/commands/observer.js";
+import {
+  createLocalObserverReap,
+  type ObserverReapDeps,
+  runObserverReap as runObserverReapAdapter,
+  selectReapPlan,
+} from "../../src/observerReap.js";
 
 const SOCK = "/Users/u/.local/state/station/observer.sock";
 const OTHER = "/Users/u/.local/state/unrelated/observer.sock";
+const BUILD = `1.2.3+station.${"a".repeat(64)}`;
+const TOKEN = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
+const SOCKET_IDENTITY = { ino: 1n, birthtimeNs: 2n };
+
+function runObserverReap(
+  socketPath: string,
+  options: { force: boolean; graceMs?: number },
+  deps: ObserverReapDeps,
+) {
+  return runObserverReapAdapter(
+    socketPath,
+    options,
+    createLocalObserverReap({
+      ...deps,
+      exclusion: deps.exclusion ?? {
+        runExclusive: async (operation) => ({
+          status: "completed",
+          value: await operation(),
+          released: true,
+        }),
+      },
+      healthPid: deps.healthPid ?? (async () => 100),
+    }),
+  );
+}
 
 function proc(
   pid: number,
   socketPath: string | undefined,
   token = `t${pid}`,
 ): ObserverProcessEntry {
-  const argv = ["/bin/node", "/repo/apps/cli/dist/observerMain.js", "--state-dir", "/x"];
-  return socketPath === undefined
-    ? { pid, argv, startToken: token }
-    : { pid, argv, startToken: token, socketPath };
+  const executablePath = "/bin/node";
+  const argv = [executablePath, "/repo/apps/cli/dist/observerMain.js", "--state-dir", "/x"];
+  const entry = {
+    pid,
+    argv,
+    executablePath,
+    startToken: token,
+    processToken: pid === 100 ? TOKEN : "b47ac10b-58cc-4372-a567-0e02b2c3d479",
+    buildVersion: BUILD,
+  };
+  return socketPath === undefined ? entry : { ...entry, socketPath };
+}
+
+function keeperIdentity() {
+  const keeper = proc(100, SOCK);
+  return {
+    pid: keeper.pid,
+    osStartTime: keeper.startToken,
+    processToken: keeper.processToken,
+    version: keeper.buildVersion,
+    socketPath: SOCK,
+  };
 }
 
 describe("parseObserverProcessList", () => {
   it("keeps real node observerMain.js processes and resolves their socket", () => {
     const out = [
-      " 3740 Sat Jul  4 17:45:33 2026 /opt/node/bin/node /repo/apps/cli/dist/observerMain.js --socket /a/o.sock",
+      ` 3740 Sat Jul  4 17:45:33 2026 /opt/node/bin/node /repo/apps/cli/dist/observerMain.js --socket /a/o.sock --state-dir /a/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
       "19359 Sat Jul  4 17:47:24 2026 /bin/zsh -c grep observerMain.js in some command",
       "  501 Fri Jan  2 09:00:00 2026 /usr/bin/ssh -N host",
     ].join("\n");
@@ -38,7 +87,7 @@ describe("parseObserverProcessList", () => {
 
   it("keeps only the exact compiled stn observer command shape", () => {
     const out = [
-      " 4001 Sat Jul  4 17:45:33 2026 /opt/station/stn __observer --socket /compiled/o.sock",
+      ` 4001 Sat Jul  4 17:45:33 2026 /opt/station/stn __observer --socket /compiled/o.sock --state-dir /compiled/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
       " 4002 Sat Jul  4 17:45:34 2026 /opt/station/stn observer start --socket /wrong/o.sock",
       " 4003 Sat Jul  4 17:45:35 2026 /opt/station/stn-copy __observer --socket /wrong/o.sock",
       " 4004 Sat Jul  4 17:45:36 2026 /bin/zsh -c /opt/station/stn __observer --socket /wrong/o.sock",
@@ -95,7 +144,7 @@ describe("selectReapPlan", () => {
   it("refuses a candidate with no start-time token instead of killing blind", () => {
     const plan = selectReapPlan({
       socketPath: SOCK,
-      processes: [proc(100, SOCK), { pid: 200, argv: [], startToken: "", socketPath: SOCK }],
+      processes: [proc(100, SOCK), { ...proc(200, SOCK), startToken: "" }],
       holders: [100],
     });
     expect(plan.targets).toEqual([]);
@@ -123,6 +172,18 @@ describe("runObserverReap", () => {
     );
     expect(out.applied).toBe(false);
     expect(out.plan.targets.map((t) => t.pid)).toEqual([200]);
+    expect(out.plan.targets[0]?.automaticEligibility).toMatchObject({
+      eligible: false,
+      refusalReasons: [expect.stringContaining("evidence is unavailable")],
+    });
+    expect(observerCommandSummary(out)).toMatchObject({
+      automaticEligibility: [
+        expect.objectContaining({
+          pid: 200,
+          eligible: false,
+        }),
+      ],
+    });
     expect(signals).toEqual([]);
   });
 
@@ -133,13 +194,19 @@ describe("runObserverReap", () => {
       SOCK,
       { force: true, graceMs: 0 },
       {
-        listObserverProcesses: () => [proc(100, SOCK), proc(200, SOCK), proc(300, SOCK)],
+        listObserverProcesses: () =>
+          [proc(100, SOCK), proc(200, SOCK), proc(300, SOCK)].filter(
+            (entry) => !dead.has(entry.pid),
+          ),
         socketHolders: () => [100],
-        processStartToken: (pid) => `t${pid}`,
+        processStartToken: (pid) => (dead.has(pid) ? undefined : `t${pid}`),
+        readProcessIdentity: async () => keeperIdentity(),
+        socketIdentity: async () => SOCKET_IDENTITY,
+        unixSocketFdCount: () => 0,
         signal: (pid, sig) => {
           sent.push([pid, sig]);
           if (sig === "SIGTERM" || sig === "SIGKILL") dead.add(pid);
-          return !dead.has(pid); // signal 0 after death -> false
+          return sig === 0 ? !dead.has(pid) : true;
         },
         sleep: noop,
       },
@@ -165,6 +232,9 @@ describe("runObserverReap", () => {
         listObserverProcesses: () => [proc(100, SOCK), proc(200, SOCK, "old-token")],
         socketHolders: () => [100],
         processStartToken: (pid) => (pid === 200 ? "REUSED-different" : `t${pid}`),
+        readProcessIdentity: async () => keeperIdentity(),
+        socketIdentity: async () => SOCKET_IDENTITY,
+        unixSocketFdCount: () => 0,
         signal: (pid, sig) => {
           sent.push([pid, sig]);
           return true;
@@ -173,7 +243,14 @@ describe("runObserverReap", () => {
       },
     );
     expect(sent.some(([pid, sig]) => pid === 200 && sig === "SIGTERM")).toBe(false);
-    expect(out.applied).toBe(true);
+    expect(out).toMatchObject({ applied: false, aborted: "target-changed" });
+    expect(observerCommandSummary(out)).toMatchObject({
+      applied: false,
+      aborted: "target-changed",
+      killed: [],
+      exited: [],
+      survived: [],
+    });
   });
 
   it("aborts when the socket owner changes mid-reap", async () => {
@@ -184,8 +261,11 @@ describe("runObserverReap", () => {
       {
         listObserverProcesses: () => [proc(100, SOCK), proc(200, SOCK)],
         // First read (selection) = [100]; a later read shows a takeover to [999].
-        socketHolders: () => (calls++ === 0 ? [100] : [999]),
+        socketHolders: () => (calls++ < 3 ? [100] : [999]),
         processStartToken: (pid) => `t${pid}`,
+        readProcessIdentity: async () => keeperIdentity(),
+        socketIdentity: async () => SOCKET_IDENTITY,
+        unixSocketFdCount: () => 0,
         signal: () => true,
         sleep: noop,
       },

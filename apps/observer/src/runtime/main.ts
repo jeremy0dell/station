@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -8,11 +9,12 @@ import {
   loadConfig,
   type StationConfig,
 } from "@station/config";
-import type {
-  ObserverApi,
-  ObserverProcessIdentity,
-  ObserverStopReceipt,
-  SafeError,
+import {
+  type ObserverApi,
+  type ObserverProcessIdentity,
+  ObserverProcessTokenSchema,
+  type ObserverStopReceipt,
+  type SafeError,
 } from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import {
@@ -39,6 +41,7 @@ import { createSqliteObserverPersistence } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { createObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import { openObserverSqlite } from "../sqlite.js";
+import type { StationLogger } from "../stationLogger.js";
 import { createObserverApi } from "./api.js";
 import { createObserverEventBus } from "./eventBus.js";
 import { runShutdownWithBackstop } from "./gracefulExit.js";
@@ -46,8 +49,15 @@ import { createObserverLogger } from "./logging.js";
 import {
   type AcquiredObserverBootClaim,
   acquireObserverBootClaim,
+  createObserverBootClaimCleanupExclusion,
   type ObserverBootClaimReleaseResult,
 } from "./observerBootClaim.js";
+import {
+  createObserverDuplicateCleanup,
+  type ObserverDuplicateCleanup,
+  type ObserverDuplicateCleanupOutcome,
+  type ObserverDuplicateProcessEvidenceSource,
+} from "./observerDuplicateCleanup.js";
 import {
   negotiateObserverIncumbent,
   type ObserverIncumbentLifecycle,
@@ -98,6 +108,7 @@ export type RunObserverMainDeps = {
   buildVersion?: string;
   incumbentLifecycle?: ObserverIncumbentLifecycle;
   processEvidence?: ObserverProcessEvidenceSource;
+  duplicateProcessEvidence?: ObserverDuplicateProcessEvidenceSource;
   handoffNow?: () => number;
   handoffSleep?: (ms: number) => Promise<void>;
   exit?: (code: number) => void;
@@ -108,7 +119,8 @@ export type RunObserverMainDeps = {
  *
  * Claims boot ownership, branches on four-state socket evidence, selects
  * Observer-private infrastructure from resolved runtime identity, and owns bind,
- * pidfile, ownership-aware shutdown, and exact build health publication.
+ * pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build
+ * health publication.
  */
 export async function runObserverMain(
   argv = process.argv.slice(2),
@@ -132,6 +144,9 @@ export async function runObserverMain(
   );
   const socketPath = resolveObserverSocketPath(options.socketPath, config, stateDir, homeDir);
   const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
+  if (options.buildVersion !== undefined && options.buildVersion !== buildVersion) {
+    throw new Error("--build-version must match the running Observer build selector.");
+  }
   const handoffNow = deps.handoffNow ?? Date.now;
   const startupDeadline = handoffNow() + options.startupTimeoutMs;
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -281,12 +296,16 @@ async function runClaimedObserverRuntime(input: {
     launchPreflight,
   });
   const eventHooks = createConfiguredEventHooks(config, eventBus, logger);
+  const duplicateProcessEvidence =
+    deps.duplicateProcessEvidence ?? createLocalObserverProcessEvidence();
 
   let server: ObserverServer | undefined;
   let ownership: SocketOwnershipWatch | undefined;
   let ownsSocket = false;
   let boundSocketIdentity: SocketIdentity | undefined;
   let processIdentity: ObserverProcessIdentity | undefined;
+  let duplicateCleanup: ObserverDuplicateCleanup | undefined;
+  let duplicateCleanupFlight: Promise<ObserverDuplicateCleanupOutcome> | undefined;
   const startupGate = createObserverStartupGate();
   let stopResolve: () => void = () => undefined;
   const stopped = new Promise<void>((resolve) => {
@@ -400,6 +419,11 @@ async function runClaimedObserverRuntime(input: {
     configDiagnostics: loadedConfig.diagnostics,
     clock: systemClock,
     logger,
+    duplicateCleanupStatus: () => duplicateCleanup?.status(),
+    onShutdownStarted: async () => {
+      duplicateCleanup?.abort();
+      await duplicateCleanupFlight?.catch(() => undefined);
+    },
   });
   // Register health publication before boot probes so every completed result reaches the snapshot.
   void providers.healthCache.refreshAll();
@@ -436,10 +460,23 @@ async function runClaimedObserverRuntime(input: {
     boundSocketIdentity = boundIdentity;
     processIdentity = createObserverProcessIdentity({
       pid: process.pid,
+      processToken: options.processToken,
       version: buildVersion,
       socketPath,
     });
     await publishObserverProcessIdentity(processIdentity);
+    duplicateCleanup = createObserverDuplicateCleanup(
+      {
+        socketPath,
+        keeperIdentity: processIdentity,
+        boundSocketIdentity: boundIdentity,
+        mode: "report",
+      },
+      {
+        evidence: duplicateProcessEvidence,
+        exclusion: createObserverBootClaimCleanupExclusion({ socketPath }),
+      },
+    );
     // Seed the watcher with the just-bound socket identity so it never adopts a
     // rival's socket as its baseline (the failure that let displaced observers linger).
     ownership = watchSocketOwnership({
@@ -500,6 +537,14 @@ async function runClaimedObserverRuntime(input: {
 
     // Startup reconcile now that the ownership watch is live.
     await api.reconcile("observer.startup");
+    if (duplicateCleanup !== undefined) {
+      duplicateCleanupFlight = duplicateCleanup.run();
+      void duplicateCleanupFlight
+        .then((cleanupOutcome) => logDuplicateCleanupOutcome(logger, cleanupOutcome))
+        .catch((error) =>
+          logger.warn("Observer duplicate cleanup failed unexpectedly.", { socketPath, error }),
+        );
+    }
   }
 
   await stopped;
@@ -511,6 +556,34 @@ async function runClaimedObserverRuntime(input: {
   // Stray unref-less timers must not keep a stopped observer alive.
   setTimeout(() => process.exit(0), 2000).unref();
   return 0;
+}
+
+async function logDuplicateCleanupOutcome(
+  logger: StationLogger,
+  cleanup: ObserverDuplicateCleanupOutcome,
+): Promise<void> {
+  const attributes: Record<string, unknown> = {
+    socketPath: cleanup.socketPath,
+    outcome: cleanup.status,
+    eligiblePids: cleanup.eligiblePids,
+    terminatedPids: cleanup.terminatedPids,
+    exitedPids: cleanup.exitedPids,
+    survivedPids: cleanup.survivedPids,
+    refusalCodes: cleanup.refusalCodes,
+  };
+  if (cleanup.keeperPreservation !== undefined) {
+    attributes.keeperPreserved = cleanup.keeperPreservation.preserved;
+  }
+  if (cleanup.claimReleased !== undefined) attributes.claimReleased = cleanup.claimReleased;
+  if (
+    cleanup.status === "clear" ||
+    cleanup.status === "cancelled" ||
+    (cleanup.status === "terminated" && cleanup.claimReleased !== false)
+  ) {
+    await logger.info(`Observer duplicate cleanup ${cleanup.status}.`, attributes);
+    return;
+  }
+  await logger.warn(`Observer duplicate cleanup ${cleanup.status}.`, attributes);
 }
 
 function createConfiguredEventHooks(
@@ -537,23 +610,41 @@ function parseArgs(argv: string[]): {
   socketPath?: string;
   stateDir?: string;
   startupTimeoutMs: number;
+  buildVersion?: string;
+  processToken: string;
 } {
   const result: {
     configPath?: string;
     socketPath?: string;
     stateDir?: string;
     startupTimeoutMs: number;
-  } = { startupTimeoutMs: DEFAULT_STARTUP_TIMEOUT_MS };
+    buildVersion?: string;
+    processToken: string;
+  } = { startupTimeoutMs: DEFAULT_STARTUP_TIMEOUT_MS, processToken: randomUUID() };
+  const seen = new Set<string>();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if (arg === "--config" && value !== undefined) {
+    if (arg?.startsWith("--") === true) {
+      if (seen.has(arg)) throw new Error(`${arg} may be provided only once.`);
+      seen.add(arg);
+    }
+    if (arg === "--config") {
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error("--config requires a path.");
+      }
       result.configPath = value;
       index += 1;
-    } else if (arg === "--socket" && value !== undefined) {
+    } else if (arg === "--socket") {
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error("--socket requires a path.");
+      }
       result.socketPath = value;
       index += 1;
-    } else if (arg === "--state-dir" && value !== undefined) {
+    } else if (arg === "--state-dir") {
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error("--state-dir requires a path.");
+      }
       result.stateDir = value;
       index += 1;
     } else if (arg === "--startup-timeout-ms") {
@@ -566,6 +657,21 @@ function parseArgs(argv: string[]): {
       }
       result.startupTimeoutMs = timeoutMs;
       index += 1;
+    } else if (arg === "--build-version") {
+      if (value === undefined || value.length === 0) {
+        throw new Error("--build-version must be non-empty.");
+      }
+      result.buildVersion = value;
+      index += 1;
+    } else if (arg === "--process-token") {
+      const processToken = ObserverProcessTokenSchema.safeParse(value);
+      if (!processToken.success) {
+        throw new Error("--process-token must be a UUID v4.");
+      }
+      result.processToken = processToken.data.toLowerCase();
+      index += 1;
+    } else {
+      throw new Error(`Unknown Observer argument: ${arg ?? "<missing>"}`);
     }
   }
   return result;
@@ -667,6 +773,7 @@ export function createObserverStartupGate(): ObserverStartupGate {
     waitUntilSettled: () => startupSettled,
     runHealth: async <T>(operation: () => Promise<T>): Promise<T> => {
       for (;;) {
+        // pi-lens-ignore: await-in-loop
         await ready;
         if (state !== "ready") continue;
         const result = await operation();

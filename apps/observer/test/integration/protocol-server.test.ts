@@ -1,4 +1,4 @@
-import { access, chmod, mkdtemp } from "node:fs/promises";
+import { access, chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
@@ -28,6 +28,12 @@ import {
   runObserverMain,
   startObserverServer,
 } from "../../src/internal";
+import type { ObserverDuplicateProcessEvidenceSource } from "../../src/runtime/observerDuplicateCleanup.js";
+import {
+  createObserverProcessIdentity,
+  readObserverProcessIdentity,
+} from "../../src/runtime/observerPidfile.js";
+import { readSocketIdentity } from "../../src/runtime/socketOwnership.js";
 import { FakeDiagnosticEvidenceSource } from "../support/diagnosticEvidenceSources.js";
 import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter.js";
 
@@ -195,6 +201,101 @@ describe("observer protocol server", () => {
       await runtime.catch(() => undefined);
     }
   });
+
+  it("keeps production duplicate inspection report-only without blocking health", async () => {
+    const { dir, socketPath } = await createTempSocketPath();
+    const stateDir = join(dir, "report-only-state");
+    const processToken = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
+    const keeperIdentity = createObserverProcessIdentity({
+      pid: process.pid,
+      processToken,
+      version: observerBuildVersion,
+      socketPath,
+    });
+    const keeperProcess = {
+      pid: process.pid,
+      argv: [process.execPath, "__observer", "--socket", socketPath],
+      executablePath: process.execPath,
+      startToken: keeperIdentity.osStartTime,
+      processToken,
+      buildVersion: observerBuildVersion,
+      socketPath,
+      startupTimeoutMs: 1,
+    };
+    const candidateProcess = {
+      ...keeperProcess,
+      pid: process.pid + 10_000,
+      startToken: "candidate-start",
+      processToken: "b47ac10b-58cc-4372-a567-0e02b2c3d479",
+    };
+    const signals: Array<[number, NodeJS.Signals | 0]> = [];
+    const duplicateProcessEvidence: ObserverDuplicateProcessEvidenceSource = {
+      listObserverProcesses: () => [keeperProcess, candidateProcess],
+      socketHolders: () => [process.pid],
+      processStartToken: (pid) =>
+        pid === process.pid ? keeperIdentity.osStartTime : "candidate-start",
+      readProcessIdentity: readObserverProcessIdentity,
+      socketIdentity: readSocketIdentity,
+      unixSocketFdCount: () => 0,
+      signal: (pid, signal) => {
+        signals.push([pid, signal]);
+        return "sent";
+      },
+    };
+    const providerRegistryFactory = () =>
+      new ProviderRegistry({
+        worktree: new FakeWorktreeProvider({ now }),
+        terminal: new FakeTerminalProvider({ now }),
+        harnesses: [new FakeHarnessProvider({ now })],
+      });
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const runtime = runObserverMain(
+      [
+        "--socket",
+        socketPath,
+        "--state-dir",
+        stateDir,
+        "--startup-timeout-ms",
+        "2000",
+        "--build-version",
+        observerBuildVersion,
+        "--process-token",
+        processToken,
+      ],
+      { providerRegistryFactory, buildVersion: observerBuildVersion, duplicateProcessEvidence },
+    );
+    const client = createObserverClient({ socketPath, requestId: ids("report-only") });
+
+    try {
+      await vi.waitFor(
+        async () => {
+          await expect(client.health()).resolves.toMatchObject({ pid: process.pid, socketPath });
+        },
+        { timeout: 2000 },
+      );
+      expect(signals).toEqual([]);
+      await vi.waitFor(
+        async () => {
+          const report = await client.runDoctor();
+          expect(report.checks).toContainEqual(
+            expect.objectContaining({
+              name: "observer-singleton",
+              status: "warn",
+              message: expect.stringContaining("reported but not signaled"),
+            }),
+          );
+        },
+        { timeout: 12_000, interval: 100 },
+      );
+      expect(signals).toEqual([]);
+    } finally {
+      await client.stop().catch(() => undefined);
+      await runtime.catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 2100));
+      exit.mockRestore();
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 16_000);
 
   it("serves health, diagnostics, command dispatch, command get, and reconcile", async () => {
     const { socketPath } = await createTempSocketPath();

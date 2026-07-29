@@ -2,11 +2,15 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { type FileHandle, mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { environmentWithoutGitLocals } from "@station/runtime";
+import { environmentWithoutGitLocals, stationObserverBuildVersion } from "@station/runtime";
 import { selfExecArgv } from "../selfExec.js";
 import type { ChildExitResult, ChildProcessLike, SpawnObserverInput } from "./types.js";
 
-type DefaultSpawnObserverInput = SpawnObserverInput & { startupTimeoutMs: number };
+type DefaultSpawnObserverInput = SpawnObserverInput & {
+  startupTimeoutMs: number;
+  buildVersion?: string;
+  processToken?: string;
+};
 
 export async function defaultSpawnObserver(
   input: DefaultSpawnObserverInput,
@@ -64,6 +68,10 @@ export function observerSpawnArgv(input: DefaultSpawnObserverInput): [string, ..
     ...(input.configPath === undefined ? [] : ["--config", input.configPath]),
     "--startup-timeout-ms",
     String(input.startupTimeoutMs),
+    "--build-version",
+    input.buildVersion ?? stationObserverBuildVersion(),
+    "--process-token",
+    input.processToken ?? randomUUID(),
   ];
 }
 

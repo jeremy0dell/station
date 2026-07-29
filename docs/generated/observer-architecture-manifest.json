@@ -2950,7 +2950,7 @@
           "name": "runDoctor",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Aggregates current runtime, persistence, provider, and typed local evidence into the read-only health report. Top-level health comes from current checks; persisted command errors remain historical evidence."
+          "purpose": "Aggregates current runtime, persistence, provider, typed local, and singleton-cleanup evidence into the read-only health report. Top-level health comes from current checks; persisted command errors remain historical evidence."
         }
       ],
       "imports": [
@@ -3000,6 +3000,12 @@
           "resolvedPath": "apps/observer/src/reconcile/core.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../runtime/observerDuplicateCleanup.js",
+          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateCleanupOutcome"]
         },
         {
           "specifier": "@station/config",
@@ -3971,7 +3977,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -4002,7 +4008,7 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime socket boot mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
           "name": "agentStateChangedEventsFromReconcile",
@@ -4212,19 +4218,25 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates ps, strict socket-holder evidence, pidfiles, and process signals into conservative ownership evidence; holder failures throw instead of meaning zero owners."
+          "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
         },
         {
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "createObserverBootClaimCleanupExclusion",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
         },
         {
           "name": "createObserverCore",
@@ -4237,6 +4249,12 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "createObserverDuplicateCleanup",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation."
         },
         {
           "name": "createObserverEventBus",
@@ -4267,6 +4285,12 @@
           "kind": "function",
           "role": "ADAPTER",
           "purpose": "Writes Observer operational events as redacted JSONL while retaining path and record representations at the logging boundary."
+        },
+        {
+          "name": "createObserverReap",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
         },
         {
           "name": "createObserverReconcileHandler",
@@ -4683,6 +4707,12 @@
           "purpose": null
         },
         {
+          "name": "observerBuildSelectorIsValid",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ObserverCore",
           "kind": "type",
           "role": null,
@@ -4699,6 +4729,60 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanup",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim."
+        },
+        {
+          "name": "ObserverDuplicateCleanupExclusionResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupPlan",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupPlanInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupRefusal",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupTarget",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
         },
         {
           "name": "ObserverEventBus",
@@ -4767,6 +4851,12 @@
           "purpose": "Exposes validated incumbent lifecycle operations while keeping transport mechanics outside handoff; inaccessible sockets cannot count as process exit."
         },
         {
+          "name": "ObserverKeeperPreservation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "ObserverLifecycleRequest",
           "kind": "type",
           "role": null,
@@ -4775,6 +4865,12 @@
         {
           "name": "ObserverPersistenceBundle",
           "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "observerProcessEntriesMatch",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4804,6 +4900,36 @@
         },
         {
           "name": "ObserverProviderRegistryFactoryOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request."
+        },
+        {
+          "name": "ObserverReapAutomaticEligibility",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapPlan",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapTarget",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -4900,6 +5026,12 @@
         },
         {
           "name": "parseObserverProcessList",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "parseUnixSocketFdCount",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5298,16 +5430,22 @@
           "name": "runDoctor",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Aggregates current runtime, persistence, provider, and typed local evidence into the read-only health report. Top-level health comes from current checks; persisted command errors remain historical evidence."
+          "purpose": "Aggregates current runtime, persistence, provider, typed local, and singleton-cleanup evidence into the read-only health report. Top-level health comes from current checks; persisted command errors remain historical evidence."
         },
         {
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RunObserverReapDeps",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5332,6 +5470,18 @@
         },
         {
           "name": "seedSession",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "selectObserverDuplicateCleanupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors."
+        },
+        {
+          "name": "selectObserverReapPlan",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5725,6 +5875,12 @@
         {
           "specifier": "./runtime/observerBootClaim.js",
           "resolvedPath": "apps/observer/src/runtime/observerBootClaim.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./runtime/observerDuplicateCleanup.js",
+          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -9393,7 +9549,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -9558,6 +9714,12 @@
           "resolvedPath": "apps/observer/src/runtime/harnessReportProcessor.ts",
           "edgeKind": "type-only",
           "bindings": ["HarnessReportProcessorDeps"]
+        },
+        {
+          "specifier": "./observerDuplicateCleanup.js",
+          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateCleanupOutcome"]
         },
         {
           "specifier": "./reconcileExecutor.js",
@@ -9975,7 +10137,7 @@
           "name": "runObserverMain",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, ownership-aware shutdown, and exact build health publication."
+          "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication."
         },
         {
           "name": "RunObserverMainDeps",
@@ -10085,13 +10247,29 @@
           "specifier": "./observerBootClaim.js",
           "resolvedPath": "apps/observer/src/runtime/observerBootClaim.ts",
           "edgeKind": "runtime",
-          "bindings": ["acquireObserverBootClaim"]
+          "bindings": ["acquireObserverBootClaim", "createObserverBootClaimCleanupExclusion"]
         },
         {
           "specifier": "./observerBootClaim.js",
           "resolvedPath": "apps/observer/src/runtime/observerBootClaim.ts",
           "edgeKind": "type-only",
           "bindings": ["AcquiredObserverBootClaim", "ObserverBootClaimReleaseResult"]
+        },
+        {
+          "specifier": "./observerDuplicateCleanup.js",
+          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createObserverDuplicateCleanup"]
+        },
+        {
+          "specifier": "./observerDuplicateCleanup.js",
+          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ObserverDuplicateCleanup",
+            "ObserverDuplicateCleanupOutcome",
+            "ObserverDuplicateProcessEvidenceSource"
+          ]
         },
         {
           "specifier": "./observerHandoff.js",
@@ -10162,6 +10340,18 @@
           "bindings": ["openObserverSqlite"]
         },
         {
+          "specifier": "../stationLogger.js",
+          "resolvedPath": "apps/observer/src/stationLogger.ts",
+          "edgeKind": "type-only",
+          "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "node:crypto",
+          "resolvedPath": "node:crypto",
+          "edgeKind": "runtime",
+          "bindings": ["randomUUID"]
+        },
+        {
           "specifier": "node:fs/promises",
           "resolvedPath": "node:fs/promises",
           "edgeKind": "runtime",
@@ -10190,6 +10380,12 @@
           "resolvedPath": "packages/config/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["LoadedStationConfig", "StationConfig"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ObserverProcessTokenSchema"]
         },
         {
           "specifier": "@station/contracts",
@@ -10230,7 +10426,13 @@
           "name": "acquireObserverBootClaim",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Excludes cross-runtime socket boot mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+          "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
+        },
+        {
+          "name": "createObserverBootClaimCleanupExclusion",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures."
         },
         {
           "name": "ObserverBootClaimError",
@@ -10259,6 +10461,12 @@
       ],
       "imports": [
         {
+          "specifier": "./observerDuplicateCleanup.js",
+          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateCleanupExclusion"]
+        },
+        {
           "specifier": "../sqlite/driver.js",
           "resolvedPath": "apps/observer/src/sqlite/driver.ts",
           "edgeKind": "runtime",
@@ -10271,10 +10479,22 @@
           "bindings": ["SqlDatabase"]
         },
         {
+          "specifier": "node:crypto",
+          "resolvedPath": "node:crypto",
+          "edgeKind": "runtime",
+          "bindings": ["randomUUID"]
+        },
+        {
+          "specifier": "node:fs",
+          "resolvedPath": "node:fs",
+          "edgeKind": "runtime",
+          "bindings": ["constants"]
+        },
+        {
           "specifier": "node:fs/promises",
           "resolvedPath": "node:fs/promises",
           "edgeKind": "runtime",
-          "bindings": ["chmod", "lstat", "mkdir", "open"]
+          "bindings": ["link", "lstat", "mkdir", "open", "unlink"]
         },
         {
           "specifier": "node:path",
@@ -10297,6 +10517,163 @@
       ]
     },
     {
+      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+      "exports": [
+        {
+          "name": "createObserverDuplicateCleanup",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation."
+        },
+        {
+          "name": "createObserverReap",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL."
+        },
+        {
+          "name": "ObserverDuplicateCleanup",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim."
+        },
+        {
+          "name": "ObserverDuplicateCleanupExclusionResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupPlan",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupPlanInput",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupRefusal",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateCleanupTarget",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions."
+        },
+        {
+          "name": "ObserverKeeperPreservation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request."
+        },
+        {
+          "name": "ObserverReapAutomaticEligibility",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapOutcome",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapPlan",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ObserverReapTarget",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "RunObserverReapDeps",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "selectObserverDuplicateCleanupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors."
+        },
+        {
+          "name": "selectObserverReapPlan",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./observerHandoff.js",
+          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessEntriesMatch"]
+        },
+        {
+          "specifier": "./observerHandoff.js",
+          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessEntry", "ObserverProcessEvidenceSource"]
+        },
+        {
+          "specifier": "./observerPidfile.js",
+          "resolvedPath": "apps/observer/src/runtime/observerPidfile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerProcessIdentitiesMatch"]
+        },
+        {
+          "specifier": "./socketOwnership.js",
+          "resolvedPath": "apps/observer/src/runtime/socketOwnership.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SocketIdentity"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverProcessIdentity"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/runtime/observerHandoff.ts",
       "exports": [
         {
@@ -10310,6 +10687,12 @@
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Replaces an older incumbent only after corroborating its socket and process identity; probe or evidence failure refuses before any signal."
+        },
+        {
+          "name": "observerBuildSelectorIsValid",
+          "kind": "function",
+          "role": null,
+          "purpose": null
         },
         {
           "name": "ObserverExpectedProcessHealth",
@@ -10350,6 +10733,12 @@
         {
           "name": "ObserverLifecycleRequest",
           "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "observerProcessEntriesMatch",
+          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -10518,10 +10907,16 @@
           "name": "createLocalObserverProcessEvidence",
           "kind": "function",
           "role": "ADAPTER",
-          "purpose": "Translates ps, strict socket-holder evidence, pidfiles, and process signals into conservative ownership evidence; holder failures throw instead of meaning zero owners."
+          "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence."
         },
         {
           "name": "parseObserverProcessList",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "parseUnixSocketFdCount",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -10529,14 +10924,22 @@
       ],
       "imports": [
         {
+          "specifier": "./observerDuplicateCleanup.js",
+          "resolvedPath": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverDuplicateProcessEvidenceSource"]
+        },
+        {
+          "specifier": "./observerHandoff.js",
+          "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
+          "edgeKind": "runtime",
+          "bindings": ["observerBuildSelectorIsValid", "observerProcessEntriesMatch"]
+        },
+        {
           "specifier": "./observerHandoff.js",
           "resolvedPath": "apps/observer/src/runtime/observerHandoff.ts",
           "edgeKind": "type-only",
-          "bindings": [
-            "ObserverProcessEntry",
-            "ObserverProcessEvidenceSource",
-            "ObserverProcessSignalResult"
-          ]
+          "bindings": ["ObserverProcessEntry", "ObserverProcessSignalResult"]
         },
         {
           "specifier": "./observerPidfile.js",
@@ -10551,22 +10954,40 @@
           "bindings": ["readObserverSocketHolderPids"]
         },
         {
+          "specifier": "./socketOwnership.js",
+          "resolvedPath": "apps/observer/src/runtime/socketOwnership.ts",
+          "edgeKind": "runtime",
+          "bindings": ["readSocketIdentity"]
+        },
+        {
           "specifier": "node:child_process",
           "resolvedPath": "node:child_process",
           "edgeKind": "runtime",
-          "bindings": ["execFileSync"]
+          "bindings": ["execFileSync", "spawnSync"]
         },
         {
           "specifier": "node:fs",
           "resolvedPath": "node:fs",
           "edgeKind": "runtime",
-          "bindings": ["existsSync"]
+          "bindings": ["readFileSync", "readlinkSync", "realpathSync", "statSync"]
+        },
+        {
+          "specifier": "node:path",
+          "resolvedPath": "node:path",
+          "edgeKind": "runtime",
+          "bindings": ["basename", "isAbsolute"]
         },
         {
           "specifier": "@station/config",
           "resolvedPath": "packages/config/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["resolveObserverSocketForProcessArgs"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["ObserverProcessTokenSchema"]
         },
         {
           "specifier": "zod",
@@ -11814,6 +12235,73 @@
       ]
     },
     {
+      "path": "apps/cli/src/observerReap.ts",
+      "declaration": "createLocalObserverReap",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Selects local process evidence and protocol health for explicit Observer reap.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerBootClaim.ts",
+          "declaration": "createObserverBootClaimCleanupExclusion",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "createObserverReap",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerProcessEvidence.ts",
+          "declaration": "createLocalObserverProcessEvidence",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/observerReap.ts",
+      "declaration": "runObserverReap",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates a CLI reap request into the Observer-owned driving port.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverReap",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "declaration": "assertHarnessLaunchPreconditionsOrThrow",
       "kind": "function",
@@ -12046,7 +12534,7 @@
       "declaration": "runDoctor",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Aggregates current runtime, persistence, provider, and typed local evidence into the read-only health report. Top-level health comes from current checks; persisted command errors remain historical evidence.",
+      "purpose": "Aggregates current runtime, persistence, provider, typed local, and singleton-cleanup evidence into the read-only health report. Top-level health comes from current checks; persisted command errors remain historical evidence.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -12504,7 +12992,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -12674,7 +13162,7 @@
       "declaration": "runObserverMain",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, ownership-aware shutdown, and exact build health publication.",
+      "purpose": "Claims boot ownership, branches on four-state socket evidence, selects Observer-private infrastructure from resolved runtime identity, and owns bind, pidfile, one-shot duplicate cleanup, ownership-aware shutdown, and exact build health publication.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -12726,6 +13214,20 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/runtime/observerBootClaim.ts",
+          "declaration": "createObserverBootClaimCleanupExclusion",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "createObserverDuplicateCleanup",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/runtime/observerHandoff.ts",
           "declaration": "negotiateObserverIncumbent",
           "kind": "function",
@@ -12768,6 +13270,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/stationLogger.ts",
+          "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
           "path": "packages/contracts/src/observer.ts",
           "declaration": "ObserverApi",
           "kind": "type",
@@ -12781,7 +13290,123 @@
       "declaration": "acquireObserverBootClaim",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Excludes cross-runtime socket boot mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
+      "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerBootClaim.ts",
+      "declaration": "createObserverBootClaimCleanupExclusion",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Gives duplicate cleanup a fail-fast startup exclusion and releases the claim after every callback outcome, including failures.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerBootClaim.ts",
+          "declaration": "acquireObserverBootClaim",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverDuplicateCleanupExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+      "declaration": "createObserverDuplicateCleanup",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Performs one single-flight duplicate inspection, quarantine, claim-held final revalidation, and optional SIGTERM-only cleanup with shutdown cancellation.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverDuplicateCleanupExclusion",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "selectObserverDuplicateCleanupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+      "declaration": "createObserverReap",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Creates explicit operator reap with centralized selection and revalidation; only this manual force path may escalate from SIGTERM to SIGKILL.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "selectObserverDuplicateCleanupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+      "declaration": "ObserverDuplicateCleanupExclusion",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Authorizes final duplicate cleanup only while startup mutation is excluded, refusing immediately when another boot owns the claim.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+      "declaration": "ObserverDuplicateProcessEvidenceSource",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Supplies strict process, socket-identity, pidfile, signal, and per-process Unix-socket descriptor evidence for duplicate Observer decisions.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/runtime/observerHandoff.ts",
+          "declaration": "ObserverProcessEvidenceSource",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+      "declaration": "ObserverReap",
+      "kind": "type",
+      "role": "DRIVING PORT",
+      "purpose": "Accepts a local operator's dry-run or explicit-force duplicate reap request.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+      "declaration": "selectObserverDuplicateCleanupPlan",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Selects duplicate Observers only when the keeper's corroborated identity is exact and each candidate has no Unix-domain socket descriptors.",
       "dependencies": []
     },
     {
@@ -12843,11 +13468,11 @@
       "declaration": "createLocalObserverProcessEvidence",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates ps, strict socket-holder evidence, pidfiles, and process signals into conservative ownership evidence; holder failures throw instead of meaning zero owners.",
+      "purpose": "Translates exact argv, executable provenance, launch nonce, OS start time, strict socket-holder and complete file-descriptor evidence, pidfiles, socket identities, and signals into conservative ownership evidence.",
       "dependencies": [
         {
-          "path": "apps/observer/src/runtime/observerHandoff.ts",
-          "declaration": "ObserverProcessEvidenceSource",
+          "path": "apps/observer/src/runtime/observerDuplicateCleanup.ts",
+          "declaration": "ObserverDuplicateProcessEvidenceSource",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"

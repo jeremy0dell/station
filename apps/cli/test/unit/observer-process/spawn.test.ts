@@ -10,12 +10,16 @@ const paths = {
   stateDir: "/tmp/station",
   hookSpoolDir: "/tmp/station/spool/hooks",
 };
+const buildVersion = `1.2.3+station.${"a".repeat(64)}`;
+const processToken = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
 
 describe("observer spawn argv", () => {
   it("keeps the source entry prefix and observer flag order", () => {
     const observerEntry = fileURLToPath(new URL("../../../dist/observerMain.js", import.meta.url));
 
-    expect(observerSpawnArgv({ paths, startupTimeoutMs: 4321 })).toEqual([
+    expect(
+      observerSpawnArgv({ paths, startupTimeoutMs: 4321, buildVersion, processToken }),
+    ).toEqual([
       process.execPath,
       observerEntry,
       "--socket",
@@ -24,12 +28,18 @@ describe("observer spawn argv", () => {
       paths.stateDir,
       "--startup-timeout-ms",
       "4321",
+      "--build-version",
+      buildVersion,
+      "--process-token",
+      processToken,
     ]);
     expect(
       observerSpawnArgv({
         paths,
         configPath: "/tmp/station/config.toml",
         startupTimeoutMs: 9876,
+        buildVersion,
+        processToken,
       }),
     ).toEqual([
       process.execPath,
@@ -42,6 +52,10 @@ describe("observer spawn argv", () => {
       "/tmp/station/config.toml",
       "--startup-timeout-ms",
       "9876",
+      "--build-version",
+      buildVersion,
+      "--process-token",
+      processToken,
     ]);
   });
 

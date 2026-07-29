@@ -9,7 +9,13 @@ import {
   startObserver,
   stopObserver,
 } from "../observerProcess.js";
-import { type ObserverReapDeps, type ReapOutcome, runObserverReap } from "../observerReap.js";
+import {
+  createLocalObserverReap,
+  type ObserverReapDeps,
+  type ReapOutcome,
+  type ReapTarget,
+  runObserverReap,
+} from "../observerReap.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
 
 export type ObserverCommandResult =
@@ -45,7 +51,11 @@ export async function runObserverCommand(
 
   switch (action) {
     case "reap":
-      return runObserverReap(paths.socketPath, { force: parsed.force }, options.reapDeps ?? {});
+      return runObserverReap(
+        paths.socketPath,
+        { force: parsed.force },
+        createLocalObserverReap(options.reapDeps),
+      );
     case "status":
       return getObserverStatus(runtimeOptions, deps);
     case "start":
@@ -128,10 +138,20 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
       socketPath: plan.socketPath,
       keeper: plan.keeper ?? null,
       duplicates: plan.duplicates,
-      targets: plan.targets.map((t) => t.pid),
+      targets: plan.targets.map((target: ReapTarget) => target.pid),
+      automaticEligibility: plan.targets.map((target: ReapTarget) => ({
+        pid: target.pid,
+        ...target.automaticEligibility,
+      })),
       refusals: plan.refusals,
       applied,
-      ...(applied ? { killed: result.killed, survived: result.survived } : {}),
+      ...(applied || result.aborted !== undefined
+        ? { killed: result.killed, exited: result.exited, survived: result.survived }
+        : {}),
+      ...(result.keeperPreservation === undefined
+        ? {}
+        : { keeperPreservation: result.keeperPreservation }),
+      ...(result.claimReleased === undefined ? {} : { claimReleased: result.claimReleased }),
       ...(result.aborted === undefined ? {} : { aborted: result.aborted }),
     };
   }

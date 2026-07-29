@@ -34,6 +34,7 @@ import type {
 } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
+import type { ObserverDuplicateCleanupOutcome } from "../runtime/observerDuplicateCleanup.js";
 import { buildSessionEnvironmentCheck } from "./environmentCheck.js";
 import type {
   DiagnosticEvidenceSource,
@@ -53,6 +54,7 @@ export type ObserverDiagnosticsDeps = {
   providers?: ProviderRegistry;
   clock?: RuntimeClock;
   providerDoctorTimeoutMs?: number;
+  duplicateCleanupStatus?: () => ObserverDuplicateCleanupOutcome | undefined;
 };
 
 type DiagnosticCollectionResult = {
@@ -168,9 +170,9 @@ async function collectDiagnosticResult(
 /**
  * USE CASE
  *
- * Aggregates current runtime, persistence, provider, and typed local evidence into
- * the read-only health report. Top-level health comes from current checks; persisted
- * command errors remain historical evidence.
+ * Aggregates current runtime, persistence, provider, typed local, and
+ * singleton-cleanup evidence into the read-only health report. Top-level health
+ * comes from current checks; persisted command errors remain historical evidence.
  */
 export async function runDoctor(
   deps: ObserverDiagnosticsDeps,
@@ -210,6 +212,7 @@ export async function runDoctor(
       message: `${doctorSnapshot.configSummary.projectCount} project(s) configured.`,
     },
     sqliteCheck,
+    buildObserverSingletonCheck(deps.duplicateCleanupStatus?.()),
     {
       name: "providers",
       status: providerStatus(providers) === "healthy" ? "ok" : "warn",
@@ -259,6 +262,51 @@ export async function runDoctor(
   }
 
   return DoctorReportSchema.parse(report);
+}
+
+function buildObserverSingletonCheck(
+  cleanup: ObserverDuplicateCleanupOutcome | undefined,
+): DoctorCheck {
+  if (cleanup === undefined || cleanup.status === "clear") {
+    return {
+      name: "observer-singleton",
+      status: "ok",
+      message: "No duplicate Observer process requires operator action.",
+    };
+  }
+  if (
+    cleanup.status === "terminated" &&
+    cleanup.keeperPreservation?.preserved === true &&
+    cleanup.claimReleased !== false
+  ) {
+    return {
+      name: "observer-singleton",
+      status: "ok",
+      message: `Gracefully cleaned up ${cleanup.terminatedPids.length} verified duplicate Observer process(es).`,
+    };
+  }
+  if (cleanup.status === "survived") {
+    return {
+      name: "observer-singleton",
+      status: "warn",
+      message:
+        "A verified duplicate survived SIGTERM; inspect it with `stn observer reap`, then use `stn observer reap --force` only after confirmation.",
+    };
+  }
+  if (cleanup.status === "would-terminate") {
+    return {
+      name: "observer-singleton",
+      status: "warn",
+      message:
+        "A verified duplicate Observer was reported but not signaled; inspect it with `stn observer reap`.",
+    };
+  }
+  return {
+    name: "observer-singleton",
+    status: "warn",
+    message:
+      "Singleton cleanup could not prove a safe action; inspect refusal evidence with `stn observer reap`.",
+  };
 }
 
 function latestFailedCommand(commands: readonly PersistedCommand[]): PersistedCommand | undefined {

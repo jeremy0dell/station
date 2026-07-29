@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ObserverPaths } from "@station/config";
@@ -194,7 +195,7 @@ export async function startProviderHookObserver(
       if (childStartupTimeoutMs === undefined) throw providerHookStartupTimeoutError();
       child =
         deps.spawnObserver === undefined
-          ? defaultSpawnObserver(spawnInput, childStartupTimeoutMs)
+          ? defaultSpawnObserver(spawnInput, childStartupTimeoutMs, buildVersion)
           : await deps.spawnObserver(spawnInput);
       if (signal.aborted) {
         child.kill?.();
@@ -355,6 +356,7 @@ function startupTimedOutStatus(paths: ObserverPaths): ProviderHookObserverStatus
 function defaultSpawnObserver(
   input: SpawnProviderHookObserverInput,
   startupTimeoutMs: number,
+  buildVersion: string,
 ): ChildProcessLike {
   if (input.observerCommand === undefined) {
     throw new Error("observerCommand is required to auto-start observer from provider hooks");
@@ -369,6 +371,10 @@ function defaultSpawnObserver(
     ...(input.configPath === undefined ? [] : ["--config", input.configPath]),
     "--startup-timeout-ms",
     String(startupTimeoutMs),
+    "--build-version",
+    buildVersion,
+    "--process-token",
+    randomUUID(),
   ];
   return spawn(command, args, {
     detached: true,

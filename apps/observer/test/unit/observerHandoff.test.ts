@@ -439,6 +439,7 @@ function handoffFixture() {
   const identity: ObserverProcessIdentity = {
     pid: 100,
     osStartTime: "Sat Jul 12 11:00:00 2026",
+    processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
     version: "1.0.0",
     socketPath,
   };
@@ -470,8 +471,11 @@ function handoffFixture() {
     listObserverProcesses: () => [
       {
         pid: identity.pid,
-        argv: ["stn", "__observer", "--socket", socketPath],
+        argv: ["/opt/station/stn", "__observer", "--socket", socketPath],
+        executablePath: "/opt/station/stn",
         startToken: identity.osStartTime,
+        processToken: identity.processToken,
+        buildVersion: identity.version,
         socketPath,
       },
     ],

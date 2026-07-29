@@ -32,6 +32,7 @@ export * from "./runtime/eventBus.js";
 export * from "./runtime/logging.js";
 export * from "./runtime/main.js";
 export * from "./runtime/observerBootClaim.js";
+export * from "./runtime/observerDuplicateCleanup.js";
 export * from "./runtime/observerHandoff.js";
 export * from "./runtime/observerProcessEvidence.js";
 export * from "./runtime/reconcileScheduler.js";

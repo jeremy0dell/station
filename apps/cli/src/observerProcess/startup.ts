@@ -70,7 +70,11 @@ export async function startObserverProcess(
       }
       child =
         deps.spawnObserver === undefined
-          ? await defaultSpawnObserver({ ...spawnInput, startupTimeoutMs: input.timeoutMs })
+          ? await defaultSpawnObserver({
+              ...spawnInput,
+              startupTimeoutMs: input.timeoutMs,
+              buildVersion: input.buildVersion,
+            })
           : await deps.spawnObserver(spawnInput);
       if (signal.aborted) {
         child.kill?.();

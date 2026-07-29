@@ -47,9 +47,14 @@ export const observerCliCommand: CliCommandNode = {
     {
       name: "reap",
       description:
-        "List duplicate observers for the configured socket; --force terminates all but the live owner.",
+        "Dry-run duplicate cleanup and automatic-eligibility checks; --force explicitly permits SIGTERM then SIGKILL.",
       usage: ["stn observer reap [--force]"],
-      options: [{ name: "--force", description: "Terminate the duplicates (default lists only)." }],
+      options: [
+        {
+          name: "--force",
+          description: "Revalidate and terminate duplicates, escalating to SIGKILL if needed.",
+        },
+      ],
       examples: ["pnpm stn observer reap", "pnpm stn observer reap --force"],
     },
   ],

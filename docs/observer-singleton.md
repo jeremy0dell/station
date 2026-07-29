@@ -1,189 +1,245 @@
-# Observer singleton & step-down
+# Observer singleton lifecycle
 
-Status: shipped-history and remaining singleton roadmap. For the current Observer runtime
-ownership and lifecycle contract, see [Observer Architecture](observer-architecture.md).
+This document is authoritative for Observer process ownership, startup exclusion,
+build-aware handoff, socket displacement, duplicate discovery, and duplicate cleanup.
+[Observer Architecture](observer-architecture.md) remains authoritative for dependency
+direction, application roles, and composition ownership.
 
-How STATION keeps exactly one observer per resolved socket, why the old design let
-duplicates accumulate, what has shipped, and the remaining work. Pick up the
-unfinished phases from the "Remaining work" section — each is independently
-landable.
+## Singleton invariant and resolved-socket identity
 
-## Problem
+Station permits one healthy Observer for each resolved Unix socket. The resolved socket,
+not the state directory, claim path, config path, checkout, or build, is the singleton
+identity.
 
-An observer is auto-spawned by any `stn` invocation for its resolved socket. With
-the default state directory and `XDG_RUNTIME_DIR` unset, that socket is
-`~/.local/state/station/run/observer.sock`; worktrees using those defaults share
-it. The intended model is one observer per resolved socket; losers of the race
-were meant to notice and exit. They didn't: displaced observers baselined
-ownership from their own first probe and never detected a takeover, so they
-lingered at 0% CPU forever — 30 processes sharing one socket, 29 of them zombies,
-each still draining spool events and firing hooks with stale logic.
+Socket resolution follows the effective Observer process arguments and config:
 
-The fix is herdr's lesson (see `github.com/ogulcancelik/herdr`,
-`src/server/autodetect.rs` + `handoff.rs`): don't rely on passive detection —
-make liveness a kernel connect, never run a second live observer, and make the
-rare replacement an *explicit* coordinated hand-off where the loser exits by
-protocol. STATION already separates PTYs into `station-host`, so unlike herdr it
-needs **no fd-passing** — a displaced observer's state is a disposable sqlite
-snapshot.
+1. explicit `--socket`;
+2. configured `observer.socket_path`;
+3. `$XDG_RUNTIME_DIR/station/observer.sock` when XDG runtime state is available;
+4. `<state_dir>/run/observer.sock`.
 
-## Empirical facts (spike-confirmed)
+Different sockets may run different Observers, even when they share a state directory.
+Different sockets in one directory share the boot-claim database and therefore serialize
+startup, but each retains its own listener and `<socketPath>.pid` process identity.
 
-Measured against a real observer in an isolated `/private/tmp` state dir:
+A connect succeeds only against a listener. `lsof` holder evidence is the primary local
+process attribution. A pidfile corroborates identity but never proves liveness or authorizes
+unlink, stop, or signal by itself.
 
-- `observer.stop` exits the process in ~194ms; SIGTERM ~257ms (non-wedged);
-  SIGKILL ~42ms. A **wedged drain** (a command handler that ignores its abort)
-  hangs both `observer.stop` and SIGTERM — only SIGKILL is terminal.
-- `journal_mode` was `delete` (a SIGKILL was not corruption-safe). Now WAL.
-- `lsof -t <socket>` returns the single bound owner (kernel truth, no health
-  timeout). `ps -o lstart` gives an OS start-time token (**1s** resolution on
-  macOS → pair argv-match AND lstart-match AND refuse-on-ambiguity).
-- Socket derivation (`resolveObserverSocketForProcessArgs`): `--socket` >
-  config `socket_path` > `XDG_RUNTIME_DIR/station/observer.sock` >
-  `<state_dir>/run/observer.sock`. Candidacy must key on the **resolved socket**,
-  never `--state-dir` (they diverge under XDG / explicit `socket_path`).
-- The proposed `mkdir` + unique-tombstone rename lock is **unsafe**. Two
-  contenders can cache the same stale-owner decision; after A renames and
-  recreates the lock, delayed B can rename A's new live lock and both enter.
-  The embedded `owner.json` also makes the proposed tombstone `rmdir` fail with
-  `ENOTEMPTY` until the metadata is removed.
-- Reusing the AF_UNIX bind/stale-reclaim primitive for the claim is also
-  **unsafe**. Two reclaimers can both probe the old socket as stale; after A
-  unlinks and binds, delayed B can unlink A's live pathname and bind a second
-  server. A barrier-forced process spike produced two live claim servers.
-- A separate SQLite claim database passed 50 Node-vs-Bun process races with
-  exactly one `BEGIN IMMEDIATE` transaction owner each time. Killing a Bun
-  owner released the OS lock for a Node successor without stale-path deletion,
-  and the database reopened with `integrity_check=ok`.
-- Graceful replacement returned its stop receipt before exit, then observed
-  both socket closure and exact process death before the successor bound. A
-  deliberately wedged command survived the receipt and SIGTERM, required
-  SIGKILL, left a stale socket that the successor reclaimed, and reopened the
-  database with WAL plus `integrity_check=ok`.
-- CLI and provider-hook starts resolved byte-identical proposed claim paths from
-  the effective socket with XDG unset, XDG set, and an explicit config socket
-  containing a space. `hook-autostart.lock` still keys off `<stateDir>/run`, but
-  it throttles hook spawns only; socket ownership remains exclusively governed
-  by the child-held claim beside the resolved socket.
+## Startup claim and four-state socket probing
 
-## Shipped
+The Observer child, never an attaching client, owns startup mutation. Before provider
+construction or the main Observer database opens, it acquires `BEGIN IMMEDIATE` on
+`dirname(resolvedSocket)/observer.claim.sqlite` with the caller's bounded startup budget.
+The active SQLite transaction is the exclusion authority; the persistent database and its
+sidecars are never stale locks and must not be deleted or replaced.
+On first use, Station initializes a private temporary database and publishes it with a
+no-replace hard link, so contenders never open a shared empty SQLite file. File checks use
+non-opening metadata reads before and after `BEGIN IMMEDIATE`; reopening and closing that inode
+would release a process-scoped POSIX lock.
 
-| Change | What |
-| -------- | ------ |
-| #81 | WAL + `synchronous=NORMAL` sqlite; `stn observer reap` (socket-keyed candidacy, `lsof` keeper + health tiebreak, refuse-on-ambiguity, re-verify argv+start-token before every signal, SIGTERM→SIGKILL). `resolveObserverSocketForProcessArgs` in `@station/config`. |
-| #82 | Seeded socket-ownership watcher (`readSocketIdentity` + `expectedIdentity`); boot reorder — bind → arm seeded watcher → `observer.startup` reconcile, so a takeover during the scan is caught. |
-| #83 | `runShutdownWithBackstop`: `stopObserver` force-exits at a 5s ceiling so a wedged drain can't hang shutdown. Self-stop is now terminal (prerequisite for eviction). |
-| #84 | `bindWithStaleReclaim`: bind-first and reprobe protect an owner that was already live at the first bind. The 3d spike found a concurrent stale-reclaimer ABA; 3d-a now supplies the serialization required before this helper may reclaim. |
-| 3c | Durable process identity: the successful socket binder atomically publishes and fsyncs `<socketPath>.pid` with the strict `{pid, osStartTime, version, socketPath}` payload before health is enabled. The full socket filename keeps identities distinct within a shared runtime directory. Publication failure is fatal. Clean shutdown removes only its exact matching identity; `lsof` remains primary ownership evidence. |
-| 3d-a / #135 | The Observer child holds `BEGIN IMMEDIATE` on `dirname(resolvedSocket)/observer.claim.sqlite` across probe, stale reclaim, bind, pidfile publication, seeded watcher setup, and ready commitment. CLI and provider-hook clients only attach or spawn; health opens after synchronous claim release. |
-| 3d-b prerequisite | Hook spool replay uses stable ingress identity, completes derived observations and report recovery state idempotently after primary dedupe, and unlinks records only after direct durable processing. Automatic handoff may now request graceful shutdown without turning process-memory queue acceptance into data loss. |
-| 3d-b / #137 | Startup compares a strict SemVer Observer selector under the child-held claim. The display version is extended with reserved terminal `station.<sha256>` build metadata, so an exact identified selector reuses the incumbent while materially different builds of the same display version cannot silently attach. A deterministic identity ordering elects one replacement candidate; the loser refuses. Cross-version ordering is unchanged. A winning candidate replaces an incumbent only after `lsof`, health, pidfile, argv, and OS-start-token evidence agree, graceful stop plus at most one revalidated SIGTERM completes, and both socket closure and exact process death are observed. Missing legacy identity at the same display version, invalid, conflicting, or wedged ownership refuses without SIGKILL. |
-| 3e | `hook-autostart.lock` remains a state-directory rate limiter for provider-hook spawn attempts only. Every spawned child still enters the socket-relative 3d-a claim, so lock-path divergence under XDG or explicit socket configuration cannot create a second ownership authority. |
+While holding the claim, startup classifies the socket as exactly one of:
 
-Together these **stop the bleeding**: `reap` clears duplicates on demand, the
-seeded watcher self-heals future displacements, and stop is terminal. Phase 3c
-also gives later handoff and reaping work a durable, socket-relative
-corroborating identity without changing current attach-or-spawn or
-duplicate-reaping behavior. Phase 3d-a now serializes stale-socket reclamation
-before either the socket path or pidfile can be mutated.
+- `absent`: no socket path exists;
+- `listening`: a connection reaches a listener;
+- `stale`: connection refusal, or Bun's existing-path `ENOENT`, plus strict zero-holder
+  evidence;
+- `inaccessible`: permissions, timeout, live or unavailable holder evidence, path
+  replacement, or a non-socket collision prevents a safe conclusion.
 
-### 3d-a/3d-b boot contract
+Only `absent` and proven `stale` permit bind or stale reclaim. `listening` enters attach or
+coordinated handoff. `inaccessible`, claim contention, and claim I/O failure stop startup
+before providers, main SQLite, bind, pidfile publication, stop, unlink, or signal.
 
-Spike result: **NO-GO for both stale-path deletion designs (directory rename and
-AF_UNIX unlink/rebind); GO for a dedicated SQLite transaction claim backed by a
-permanent cross-runtime adversarial test.** #135 shipped that narrow result;
-PR #137 extends its claimed listening-socket branch with version-aware replacement.
+## Process and immutable-build identity
 
-Startup ownership mutation lives in observer boot (`main.ts`) under the
-OS-lock-backed claim database
-`C = dirname(resolvedSocket)/observer.claim.sqlite`. It holds one `BEGIN
-IMMEDIATE` transaction from the socket probe through ready-state commitment.
-Clients attach or spawn and never delete the socket path themselves.
+The successful binder publishes `<resolved socketPath>.pid` atomically at mode `0600` with
+strict `{pid, osStartTime, processToken, version, socketPath}` content. `processToken` is a
+per-launch UUID v4, while `version` is the Observer selector: display SemVer plus reserved
+`station.<sha256>` build metadata.
 
-The singleton identity remains the **resolved socket**, not the state directory
-or claim path. Two different sockets in one directory intentionally share `C`
-and serialize startup, but retain distinct listeners and `<socketPath>.pid`
-files.
+Process attribution requires agreement among:
 
-Boot sequence while holding `C`:
+- the sole `lsof` socket holder;
+- health PID, OS start token, selector, and socket when health is part of the operation;
+- the strict pidfile;
+- the exact source or compiled Observer argv shape, launch token, build selector, and resolved
+  socket;
+- the OS-reported executable image (Linux `/proc`; macOS `lsof` text-image device/inode);
+- a fresh OS process-start token.
 
-1. **Acquire `C`** by opening the dedicated database with private permissions
-   and starting `BEGIN IMMEDIATE` with a bounded busy timeout. `SQLITE_BUSY`
-   means another boot is in progress, so do not enter. Process death releases
-   the OS transaction lock; the database file persists and needs no stale-owner
-   deletion. Do not revive either rejected stale-path deletion scheme.
-2. **Probe and negotiate** the resolved socket as `absent`, `stale`, `listening`,
-   or `inaccessible`. Only `ECONNREFUSED`, or Bun's ambiguous existing-path
-   `ENOENT`, with strict zero-holder `lsof` evidence is stale. Permission errors,
-   timeouts, live holders, unavailable evidence, path replacement, and non-socket
-   collisions are inaccessible and refuse before provider construction, main
-   SQLite, bind, pidfile, stop, or signal. For a listening socket, compare strict SemVer health while still
-   holding `C`: an exact identified selector or a higher-version incumbent attaches and
-   the child exits 0; an elected same-version candidate or higher-version
-   candidate replaces an incumbent only through verified graceful handoff;
-   same-version legacy, losing, incomplete, conflicting, or wedged evidence refuses. The
-   original 3d-a contract stopped at attach, while 3d-b extends this branch
-   without adding client-side ownership mutation. The controlled stop request
-   pins the revalidated process health and performs its final health check plus
-   stop on one connection, so a socket replacement fails closed.
-3. For `absent` or proven `stale`, **bind or reclaim** through the existing claimed
-   bind path. The binder probes again, rechecks inode and birth time immediately
-   before its one unlink attempt, captures the bound identity, publishes and fsyncs the socket-specific
-   pidfile, arm the seeded ownership watcher, and commit readiness.
-4. **Release `C` synchronously before health waiters are unblocked.** Startup
-   reconcile follows outside the claim. A pre-ready stop or startup failure
-   retains the claim through socket and pidfile cleanup, then releases it from
-   the outer lifecycle cleanup path.
+`ps lstart` has only one-second resolution on the supported macOS and Linux paths, so it is
+corroborating evidence and never authorizes a signal alone. Exact argv plus the per-launch token
+prevents an ordinary same-second PID replacement from inheriting authority. Missing, malformed,
+stale, or conflicting evidence refuses ownership mutation. Clean shutdown removes a pidfile only
+when all fields still match the process's published identity.
 
-After stop begins, lifecycle admission rejects new command, ingress, snapshot,
-diagnostic, and subscription operations before API routing. Health and repeated
-stop remain lifecycle-only; health stays gated while shutdown converges.
-Explicit CLI stop/restart pins PID and start time before sending stop on the same
-connection; legacy health may omit build version or socket path, but missing
-process identity refuses. The stop receipt is only acceptance: CLI success waits
-until the endpoint is no longer listening, including through an unhealthy
-shutdown transition.
+## Attach versus coordinated handoff
 
-Supporting:
+A listening exact-selector Observer is reused. A higher valid SemVer incumbent is also
+reused by a lower candidate. The declared public version-line reset orders
+`0.0.0-pre-alpha.*` after the internal `0.7.1-rc.*` previews despite ordinary SemVer
+precedence. At one display version, immutable build identity provides a deterministic
+winner; a losing or legacy same-version candidate refuses rather than silently delegating
+to different code.
 
-- Normal CLI and provider-hook children receive the caller's bounded startup
-  budget so SQLite contention cannot outlive the parent's health wait.
-- Claim acquisition uses the low-level cross-runtime SQLite driver, not the
-  Observer persistence database, migrations, or WAL configuration.
-- File existence is never ownership. The claim database and SQLite sidecars are
-  persistent private files and are never stale-reclaimed, renamed, or replaced.
+A winning replacement candidate may coordinate handoff only while holding the boot claim.
+It revalidates holder, health, pidfile, argv, socket, and OS start token before controlled
+stop and before the one permitted SIGTERM. The controlled health-plus-stop exchange uses one
+connection, binding authorization to the revalidated incumbent. A stop receipt is acceptance,
+not exit proof: successor bind requires both socket closure and exact incumbent death.
 
-Permanent coverage includes the 50-round Node-vs-Bun transaction race,
-three-contender rounds, killed-owner recovery, production cold and stale-socket
-races, inaccessible live ownership, displaced-listener abandonment, XDG/state
-divergence, explicit paths with spaces, and CLI/hook timeout and non-mutation
-cases. It proves mutual exclusion, not fairness.
+Automatic handoff never sends SIGKILL. A missing identity, changed owner, inaccessible
+socket, wedged process, or exhausted deadline returns `OBSERVER_HANDOFF_REFUSED` and preserves
+the incumbent evidence.
 
-## Remaining work
+## Bind, readiness, and claim release
 
-### Phase 4 — guarded self-heal (deferrable)
+For an absent or proven-stale socket, the claim-holding child binds through the claimed
+stale-reclaim path. Immediately before its only unlink attempt, it repeats zero-holder and
+path-identity checks. After bind it:
 
-- Guarded self-heal: only after own-pid is the confirmed keeper AND it owns zero
-  socket fds; stays OFF until `reap --force` is field-proven.
+1. captures socket inode and birth identity;
+2. publishes and fsyncs the strict pidfile;
+3. seeds the ownership watcher with the captured socket identity;
+4. commits the startup gate;
+5. synchronously rolls back and closes the boot claim;
+6. enables health waiters;
+7. runs startup reconcile outside the claim.
+
+Publication, OS-start-token, bind, or pre-ready lifecycle failure keeps health closed and
+retains the claim through socket and pidfile cleanup. A stop requested before readiness is
+terminal.
+
+## Ownership-loss shutdown
+
+The ownership watcher compares the bound socket's inode and birth time with the identity
+captured immediately after bind. It never adopts a later pathname as its baseline.
+
+When ownership changes, the displaced Observer marks ownership lost and starts shutdown. It
+does not remove any pidfile, does not close the native listener through the unlinking server
+path, destroys accepted clients, abandons the listener, closes durable state, and exits
+explicitly. The shutdown backstop prevents a handler that ignores cancellation from leaving
+the displaced process active.
+
+Future displacement is handled by this watcher; duplicate inspection is not periodic.
+
+## Duplicate discovery and cleanup
+
+After successful startup reconcile, the healthy Observer runs one single-flight background
+inspection. Shutdown aborts and awaits its quarantine. The result is cached in memory for
+Doctor and recorded in structured Observer logs.
+
+Automatic eligibility requires all of the following:
+
+1. the running Observer still owns the exact socket inode and birth identity captured at
+   bind;
+2. its PID is the sole socket holder;
+3. its strict pidfile, PID, OS start token, build selector, resolved socket, and exact process
+   entry agree;
+4. each candidate is an exact source or compiled Observer process resolving to the same
+   socket;
+5. each candidate remains byte-for-byte stable across a quarantine at least as long as its
+   advertised startup budget, with a conservative ten-second fallback for legacy argv;
+6. a complete per-process `lsof -F0pft` inventory reports zero Unix-domain socket descriptors
+   for the candidate before and after exact process revalidation;
+7. the boot claim is acquired without waiting;
+8. keeper and candidate evidence agrees again while the claim is held, immediately before
+   any proposed signal.
+
+The current production mode is **report-only**. An eligible duplicate produces the structured
+`would-terminate` outcome and an `observer-singleton` Doctor warning but receives no signal.
+Evidence refusal, ambiguity, or change also warns and never signals. The job does not retry
+or become periodic.
+
+Promotion to automatic cleanup is an operational release decision outside this canonical
+runtime contract. When production composition is deliberately changed to terminate mode,
+the same use case sends one SIGTERM, waits a bounded grace period, verifies keeper ownership,
+and reports survivors. It never sends automatic SIGKILL.
+
+## Explicit operator reap
+
+`stn observer reap` is a dry run. It reports the keeper, same-socket duplicates, automatic
+eligibility at the current inspection, quarantine requirements, and refusal reasons. A dry
+run sends no signal.
+
+`stn observer reap --force` is the explicit operator escalation path. It acquires the boot
+claim without waiting, then revalidates health, owner, target, executable/argv identity, and
+zero-Unix-socket evidence before SIGTERM. After the bounded grace period it refreshes the same
+evidence and sends SIGKILL only to an unchanged surviving duplicate. Claim contention, owner
+change, PID reuse, a new socket holder, or unavailable evidence aborts further signaling.
+
+Forced output distinguishes targets already exited, targets confirmed absent after a signal,
+unchanged survivors, signal refusal, and unavailable evidence. It also records whether the
+keeper process/holder identity, socket inode/birth identity, and strict pidfile survived.
+`--force` is for a process the operator has independently confirmed; it is not a generic
+response to inaccessible ownership or a wedged live binder.
+
+## Shutdown ordering
+
+Once stop begins, health is gated and application operations are rejected before API routing.
+Shutdown proceeds in this order:
+
+1. abort and await duplicate quarantine or cleanup;
+2. drain harness ingress and stop metadata watchers;
+3. stop command admission and cooperatively abort handlers;
+4. stop configured event hooks;
+5. revalidate socket and pidfile ownership;
+6. remove only the exact owned pidfile;
+7. close the server only while the captured socket identity still matches, otherwise abandon
+   it;
+8. close Observer SQLite;
+9. exit explicitly when displacement requires it.
+
+Pidfile cleanup failure is warned but does not hang shutdown. Leaving stale corroborating
+evidence is safer than deleting another process's identity.
+
+## Failure/refusal rules
+
+Station fails closed for singleton mutation:
+
+- pidfile presence is never liveness;
+- claim-file presence is never ownership;
+- missing, denied, empty, malformed, truncated, or nonzero `lsof` evidence never means zero
+  descriptors;
+- missing `ps`, executable, exact argv, launch-token, build, pidfile, socket-identity, or
+  OS-start-token evidence never means safe;
+- multiple socket holders are never automatic cleanup targets;
+- any candidate Unix-domain socket descriptor refuses automatic cleanup, including a
+  descriptor for an unrelated socket;
+- process, socket, holder, pidfile, or argv change during quarantine refuses signaling;
+- startup claim contention refuses duplicate cleanup without waiting;
+- automatic handoff and duplicate cleanup never send SIGKILL;
+- an inaccessible socket is preserved for operator diagnosis.
+
+The actionable operator surfaces are `stn doctor`, `stn observer status`,
+`stn observer reap`, existing structured logs, and redacted debug bundles.
 
 ## Non-goals
 
-- No fd-passing / SCM_RIGHTS — PTYs live in `station-host`; observer state is a
-  disposable sqlite snapshot.
-- No launchd/systemd supervisor — negotiation is in-process at start time.
-- No Windows named-pipe path — observer is AF_UNIX only.
-- No thin-client/proxy for older CLIs — version policy is attach, verified
-  replacement, or refusal.
+- No fd passing or `SCM_RIGHTS`; Station Host owns persistent PTYs separately.
+- No launchd or systemd supervisor requirement.
+- No Windows named-pipe singleton path; Observer transport is AF_UNIX.
+- No thin proxy that lets an older or different build execute through incompatible code.
+- No periodic duplicate killer.
+- No automatic SIGKILL.
+- No telemetry requirement for singleton cleanup evidence.
 
-## Key files
+## Verification
 
-- `apps/observer/src/runtime/main.ts` — boot negotiation, pidfile, stop.
-- `apps/observer/src/runtime/observerHandoff.ts` — SemVer policy and coordinated handoff.
-- `apps/observer/src/runtime/observerProcessEvidence.ts` — local process attribution and signaling adapter.
-- `apps/observer/src/runtime/socketOwnership.ts` — seeded watcher (#82).
-- `apps/observer/src/runtime/gracefulExit.ts` — force-exit backstop (#83).
-- `packages/protocol/src/transport.ts` — `bindWithStaleReclaim` (#84).
-- `apps/cli/src/observerProcess.ts` — normal CLI attach-or-spawn.
-- `apps/cli/src/observerReap.ts` — reaper (#81).
-- `apps/cli/src/ingress/observerStartup.ts`, `deliveryPolicy.ts` — hook attach-or-spawn and rate limiting (3d-a/3e).
-- `packages/config/src/observerProcessArgs.ts` — socket resolution from argv (#81).
+The permanent verification surface includes:
+
+- pure duplicate-selection decision tests for keeper, candidate, FD, and ambiguity rules;
+- process-evidence tests for strict `ps` and `lsof` parsing and unavailable evidence;
+- boot-claim tests for immediate contention, callback release, and failure cleanup;
+- use-case tests for quarantine, final revalidation, report mode, SIGTERM-only mode,
+  cancellation, and survivors;
+- CLI tests preserving dry-run and manual force semantics;
+- Doctor tests proving `observer-singleton` `ok` and `warn` results without product-state
+  mutation;
+- Observer lifecycle E2E coverage for startup races, stale reclaim, inaccessible ownership,
+  handoff, displacement, and keeper preservation;
+- Node/Bun cross-runtime boot-claim races and compiled-binary lifecycle smoke.
+
+Run the focused and repository gates named in [Development](development.md) after singleton,
+claim, process-evidence, diagnostics, or binary-composition changes.
