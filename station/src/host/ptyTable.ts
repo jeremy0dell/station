@@ -19,6 +19,7 @@ import { ScrollbackRing } from "./scrollbackRing.js";
 import {
   createSemanticTerminalSnapshot,
   type SemanticTerminalModel,
+  terminalSnapshotFailure,
   TerminalSnapshotPendingError,
   TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
@@ -37,7 +38,7 @@ export type PtyTableOptions = {
   maxScrollbackBytes?: number;
   /** Test seam for deterministic capture barriers and serializer failures. */
   createSemanticTerminal?: (cols: number, rows: number) => SemanticTerminalModel;
-  /** Lifecycle observability — redaction-safe ids/counts only, never PTY data/env. */
+  /** Lifecycle observability — safe identifiers, classifications, and counts; never PTY data/env. */
   onEvent?: (event: string, attributes: Record<string, unknown>) => void;
 };
 
@@ -389,7 +390,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
             );
           }
           if (error instanceof TerminalSnapshotUnavailableError) {
-            emit("pty.snapshot.degraded", { ptyId, reason: error.reason });
+            const failure = terminalSnapshotFailure(error);
+            emit("pty.snapshot.degraded", { ptyId, ...failure });
             replay = {
               kind: "live-reset-recovery",
               initialCols: recorded.cols,

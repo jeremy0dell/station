@@ -318,7 +318,7 @@ describe("createPtyTable", () => {
       resize() {},
       capture: async () => {
         throw new TerminalSnapshotUnavailableError(
-          "serialization-failed",
+          { reason: "serialization-failed" },
           resetData,
           "Could not serialize the semantic terminal model.",
         );
@@ -355,6 +355,50 @@ describe("createPtyTable", () => {
       value: { type: "data", data: "live-after-reset" },
     });
     await frames.return?.();
+  });
+
+  it("logs safe unsupported-state detail while preserving live-reset recovery", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
+    const resetData = "\x1bc\x1b[?2004h";
+    const semantic: SemanticTerminalModel = {
+      write() {},
+      resize() {},
+      capture: async () => {
+        throw new TerminalSnapshotUnavailableError(
+          { reason: "unsupported-state", detail: "wrap-pending-cell" },
+          resetData,
+          "unsafe terminal context stays provider-private",
+        );
+      },
+      dispose() {},
+    };
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      createSemanticTerminal: () => semantic,
+      maxScrollbackBytes: 5,
+      onEvent: (event, attributes) => events.push({ event, attributes }),
+    });
+    const { ptyId } = table.spawn(baseParams);
+    scripted.helpers.emitData("first");
+    scripted.helpers.emitData("second");
+
+    const attachment = await table.attach(ptyId);
+    expect(attachment.ack.replay).toEqual({
+      kind: "live-reset-recovery",
+      initialCols: 80,
+      initialRows: 24,
+      events: [],
+      resetData,
+    });
+    expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({
+      event: "pty.snapshot.degraded",
+      attributes: {
+        ptyId,
+        reason: "unsupported-state",
+        detail: "wrap-pending-cell",
+      },
+    });
   });
 
   it("classifies an unfinished parser sequence as retryable snapshot state", async () => {

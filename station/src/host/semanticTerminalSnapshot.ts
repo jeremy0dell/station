@@ -10,6 +10,7 @@ import {
 import {
   TerminalSnapshotUnsupportedStateError,
   TerminalSupplementalState,
+  type TerminalSnapshotUnsupportedStateDetail,
 } from "./terminalSupplementalState.js";
 
 const RIS = `${ControlByte.Esc}c`;
@@ -30,8 +31,8 @@ export type SemanticTerminalModel = {
   write(data: string): void;
   resize(cols: number, rows: number): void;
   /**
-   * Capture exact restoration VT, or reject with recovery data sampled at the
-   * same queue boundary when the model cannot be reconstructed exactly.
+   * Capture exact restoration VT, or reject with classified, content-free
+   * diagnostics and recovery data sampled at the same queue boundary.
    */
   capture(): Promise<string[]>;
   dispose(): void;
@@ -45,19 +46,35 @@ export type TerminalSnapshotFailureReason =
   | "serialization-failed"
   | "unsupported-state";
 
+export type TerminalSnapshotFailure =
+  | { reason: "model-update-failed" }
+  | { reason: "serialization-failed" }
+  | { reason: "unsupported-state"; detail: TerminalSnapshotUnsupportedStateDetail };
+
 /**
- * Classified exact-capture failure with control-only recovery sampled at the
- * capture boundary; its cause remains private to the Host.
+ * Classified exact-capture failure with provider-private diagnostics and
+ * control-only recovery sampled at the capture boundary.
  */
 export class TerminalSnapshotUnavailableError extends Error {
   constructor(
-    readonly reason: TerminalSnapshotFailureReason,
+    readonly diagnostic: TerminalSnapshotFailure,
     readonly resetData: string,
     message: string,
     cause?: unknown,
   ) {
     super(message, { cause });
   }
+
+  get reason(): TerminalSnapshotFailureReason {
+    return this.diagnostic.reason;
+  }
+}
+
+/** Normalizes unknown capture failures to a safe, content-free diagnostic. */
+export function terminalSnapshotFailure(error: unknown): TerminalSnapshotFailure {
+  return error instanceof TerminalSnapshotUnavailableError
+    ? error.diagnostic
+    : { reason: "serialization-failed" };
 }
 
 /**
@@ -138,7 +155,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     return this.#schedule(() => {
       if (this.#failure !== undefined) {
         throw new TerminalSnapshotUnavailableError(
-          "model-update-failed",
+          { reason: "model-update-failed" },
           this.#supplementalState.liveResetSequence(),
           "Could not update the semantic terminal model.",
           this.#failure,
@@ -152,7 +169,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
         serialized = this.#serializer.serialize();
       } catch (error) {
         throw new TerminalSnapshotUnavailableError(
-          "serialization-failed",
+          { reason: "serialization-failed" },
           resetData,
           "Could not serialize the semantic terminal model.",
           error,
@@ -163,14 +180,14 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
       } catch (error) {
         if (error instanceof TerminalSnapshotUnsupportedStateError) {
           throw new TerminalSnapshotUnavailableError(
-            "unsupported-state",
+            { reason: "unsupported-state", detail: error.detail },
             resetData,
             error.message,
             error,
           );
         }
         throw new TerminalSnapshotUnavailableError(
-          "serialization-failed",
+          { reason: "serialization-failed" },
           resetData,
           "Could not serialize the semantic terminal model.",
           error,
