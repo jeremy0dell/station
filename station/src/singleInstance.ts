@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import {
   chmodSync,
   closeSync,
@@ -9,11 +10,13 @@ import {
   openSync,
   unlinkSync,
   type BigIntStats,
+  type Stats,
 } from "node:fs";
-import { createConnection, createServer, type Server, type Socket } from "node:net";
+import { createConnection, createServer, type Socket } from "node:net";
 import { createRequire } from "node:module";
 import { basename, join } from "node:path";
 import type { SafeError } from "@station/contracts";
+import { probeUnixSocket } from "@station/protocol";
 import { z } from "zod";
 
 type SqliteDatabase = {
@@ -70,7 +73,7 @@ export type StationTtyOwnershipResult =
  */
 export type StationTtyOwnership = {
   identity: StationTtyIdentity;
-  setTakeoverHandler(handler: () => void): void;
+  setTakeoverHandler(handler?: () => void): void;
   release(): void;
 };
 
@@ -91,10 +94,7 @@ const defaults: StationTtyOwnershipDeps = {
   isStdinTty: () => process.stdin.isTTY === true,
   platform: process.platform,
   readStdinStat: () => fstatSync(0, { bigint: true }),
-  effectiveUid: () => {
-    if (process.geteuid === undefined) throw new Error("Effective UID is unavailable.");
-    return process.geteuid();
-  },
+  effectiveUid: () => process.geteuid!(),
   rendezvousDirectory: (uid) => `/tmp/station-tui-${uid}`,
   runPs: (args) => execFileSync("ps", [...args], { encoding: "utf8", maxBuffer: 1024 * 1024 }),
   selfPid: process.pid,
@@ -112,15 +112,9 @@ const PsRowSchema = z
 const ErrorCodeSchema = z.object({ code: z.string() }).passthrough();
 
 type Paths = { database: string; socket: string };
-type Claim = { kind: "owned"; database: SqliteDatabase } | { kind: "busy" };
 type Takeover = "accepted" | "refused" | "unavailable";
-type OwnerState = {
-  version: number;
-  identity: StationTtyIdentity;
-  ownership: StationTtyOwnership;
-  clearTakeoverHandler(): void;
-};
-type GlobalSlots = typeof globalThis & { __stationTtyOwnership?: OwnerState };
+type OwnedState = StationTtyOwnership & { version: number };
+type GlobalSlots = typeof globalThis & { __stationTtyOwnership?: OwnedState };
 
 /**
  * Fails closed while acquiring a per-device claim, requests one cooperative
@@ -148,54 +142,51 @@ export async function acquireStationTtyOwnership(
       return refusal("claim-unavailable");
     }
     // A reloaded module must not dispatch takeover into the disposed composition.
-    existing.clearTakeoverHandler();
-    return { kind: "owned", ownership: existing.ownership };
+    existing.setTakeoverHandler();
+    return { kind: "owned", ownership: existing };
   }
 
   let paths: Paths;
-  let claim: Claim;
+  let database: SqliteDatabase | undefined;
   try {
     paths = preparePaths(deps.rendezvousDirectory(uid), identity, uid);
-    claim = tryClaim(paths.database);
+    database = tryClaimDatabase(paths.database);
   } catch {
     return refusal("claim-unavailable");
   }
 
-  let tookOver = false;
-  if (claim.kind === "busy") {
+  const takeoverNeeded = database === undefined;
+  if (takeoverNeeded) {
     const deadline = Date.now() + deps.takeoverTimeoutMs;
     const result = await requestTakeover(paths.socket);
     if (result !== "accepted") {
       return refusal(result === "refused" ? "takeover-refused" : "takeover-unavailable");
     }
-    tookOver = true;
-    while (claim.kind === "busy" && Date.now() < deadline) {
+    while (database === undefined && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       try {
-        claim = tryClaim(paths.database);
+        database = tryClaimDatabase(paths.database);
       } catch {
         return refusal("claim-unavailable");
       }
     }
-    if (claim.kind === "busy") return refusal("takeover-timeout");
   }
+  if (database === undefined) return refusal("takeover-timeout");
 
-  if (!tookOver) {
+  if (!takeoverNeeded) {
     const legacyOwner = legacyOwnerPossible(deps);
     if (legacyOwner !== false) {
-      releaseDatabase(claim.database);
-      return legacyOwner === true
-        ? refusal("legacy-owner-possible")
-        : refusal("claim-unavailable");
+      releaseDatabase(database);
+      return refusal(legacyOwner ? "legacy-owner-possible" : "claim-unavailable");
     }
   }
 
   try {
-    const state = await createOwner(identity, paths, claim.database, uid, slots);
-    slots.__stationTtyOwnership = state;
-    return { kind: "owned", ownership: state.ownership };
+    const ownership = await createOwner(identity, paths, database, uid, slots);
+    slots.__stationTtyOwnership = ownership;
+    return { kind: "owned", ownership };
   } catch {
-    releaseDatabase(claim.database);
+    releaseDatabase(database);
     return refusal("claim-unavailable");
   }
 }
@@ -236,46 +227,45 @@ function sameIdentity(left: StationTtyIdentity, right: StationTtyIdentity): bool
 
 function preparePaths(directory: string, identity: StationTtyIdentity, uid: number): Paths {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  assertPrivate(directory, uid, "directory", 0o700);
+  privatePathStat(directory, uid, "directory", 0o700);
   const stem = createHash("sha256").update(JSON.stringify(identity)).digest("hex").slice(0, 32);
   const database = join(directory, `${stem}.sqlite`);
   const socket = join(directory, `${stem}.sock`);
-  let descriptor: number | undefined;
   try {
-    descriptor = openSync(database, "wx", 0o600);
+    closeSync(openSync(database, "wx", 0o600));
   } catch (error) {
     if (errorCode(error) !== "EEXIST") throw error;
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
   }
-  assertPrivate(database, uid, "file", 0o600);
+  privatePathStat(database, uid, "file", 0o600);
   return { database, socket };
 }
 
-function assertPrivate(
+function privatePathStat(
   path: string,
   uid: number,
-  type: "directory" | "file",
+  type: "directory" | "file" | "socket",
   mode: number,
-): void {
+): Stats {
   const stat = lstatSync(path);
-  const correctType = type === "directory" ? stat.isDirectory() : stat.isFile();
+  const correctType =
+    type === "directory" ? stat.isDirectory() : type === "file" ? stat.isFile() : stat.isSocket();
   if (stat.isSymbolicLink() || !correctType || stat.uid !== uid || (stat.mode & 0o777) !== mode) {
     throw new Error(`Unsafe Station TTY ${type}.`);
   }
+  return stat;
 }
 
-function tryClaim(path: string): Claim {
+function tryClaimDatabase(path: string): SqliteDatabase | undefined {
   let database: SqliteDatabase | undefined;
   const oldUmask = process.umask(0o077);
   try {
     database = new Database(path, { create: true, strict: true });
     database.exec("PRAGMA busy_timeout = 0");
     database.exec("BEGIN IMMEDIATE");
-    return { kind: "owned", database };
+    return database;
   } catch (error) {
     database?.close(false);
-    if (errorCode(error) === "SQLITE_BUSY") return { kind: "busy" };
+    if (errorCode(error) === "SQLITE_BUSY") return undefined;
     throw error;
   } finally {
     process.umask(oldUmask);
@@ -326,38 +316,35 @@ async function createOwner(
   database: SqliteDatabase,
   uid: number,
   slots: GlobalSlots,
-): Promise<OwnerState> {
+): Promise<OwnedState> {
   await removeStaleSocket(paths.socket, uid);
   const sockets = new Set<Socket>();
   let takeoverHandler: (() => void) | undefined;
   let accepted = false;
   let released = false;
-  let state: OwnerState;
   const server = createServer({ allowHalfOpen: true }, (socket) => {
     sockets.add(socket);
     socket.once("close", () => sockets.delete(socket));
-    receiveTakeoverRequest(socket, () => {
-      if (released) return socket.destroy();
+    void readFrame(socket, true).then((request) => {
+      if (request !== TAKEOVER_REQUEST || released) return socket.destroy();
       if (accepted || takeoverHandler === undefined) return socket.end(TAKEOVER_REFUSED);
       accepted = true;
       const acceptedHandler = takeoverHandler;
       socket.end(TAKEOVER_ACCEPTED, () => acceptedHandler?.());
     });
   });
-  let socketStat: ReturnType<typeof lstatSync>;
+  let socketStat: Stats;
   try {
-    await listen(server, paths.socket);
+    await once(server.listen(paths.socket), "listening");
     chmodSync(paths.socket, 0o600);
-    socketStat = lstatSync(paths.socket);
-    if (socketStat.isSymbolicLink() || !socketStat.isSocket() || socketStat.uid !== uid) {
-      throw new Error("Unsafe Station TTY socket.");
-    }
+    socketStat = privatePathStat(paths.socket, uid, "socket", 0o600);
   } catch (error) {
     server.close();
     throw error;
   }
 
-  const ownership: StationTtyOwnership = {
+  const ownership: OwnedState = {
+    version: OWNER_VERSION,
     identity,
     setTakeoverHandler: (handler) => {
       if (!released) takeoverHandler = handler;
@@ -377,36 +364,11 @@ async function createOwner(
       } catch {
         // The claim still releases; a successor validates the endpoint before removal.
       }
-      if (slots.__stationTtyOwnership === state) slots.__stationTtyOwnership = undefined;
+      if (slots.__stationTtyOwnership === ownership) slots.__stationTtyOwnership = undefined;
       releaseDatabase(database);
     },
   };
-  state = {
-    version: OWNER_VERSION,
-    identity,
-    ownership,
-    clearTakeoverHandler: () => {
-      takeoverHandler = undefined;
-    },
-  };
-  return state;
-}
-
-function receiveTakeoverRequest(socket: Socket, accept: () => void): void {
-  let buffer = Buffer.alloc(0);
-  let scheduled = false;
-  socket.setTimeout(REQUEST_TIMEOUT_MS, () => socket.destroy());
-  socket.on("data", (chunk: Buffer) => {
-    buffer = Buffer.concat([buffer, chunk]);
-    if (buffer.byteLength > MAX_FRAME_BYTES) return socket.destroy();
-    if (!scheduled && buffer.includes(0x0a)) {
-      scheduled = true;
-      setTimeout(() => {
-        if (parseFrame(buffer) === TAKEOVER_REQUEST) accept();
-        else socket.destroy();
-      }, 0);
-    }
-  });
+  return ownership;
 }
 
 async function requestTakeover(path: string): Promise<Takeover> {
@@ -419,10 +381,11 @@ async function requestTakeover(path: string): Promise<Takeover> {
   return "unavailable";
 }
 
-function readFrame(socket: Socket): Promise<string | undefined> {
+function readFrame(socket: Socket, settleOnNewline = false): Promise<string | undefined> {
   return new Promise((resolve) => {
     let buffer = Buffer.alloc(0);
     let settled = false;
+    let newlineScheduled = false;
     const finish = (value?: string) => {
       if (settled) return;
       settled = true;
@@ -437,7 +400,11 @@ function readFrame(socket: Socket): Promise<string | undefined> {
       buffer = Buffer.concat([buffer, chunk]);
       if (buffer.byteLength > MAX_FRAME_BYTES) {
         socket.destroy();
-        finish();
+        return finish();
+      }
+      if (settleOnNewline && !newlineScheduled && buffer.includes(0x0a)) {
+        newlineScheduled = true;
+        setTimeout(() => finish(parseFrame(buffer)), 0);
       }
     });
     socket.once("end", () => finish(parseFrame(buffer)));
@@ -447,36 +414,20 @@ function readFrame(socket: Socket): Promise<string | undefined> {
 
 function parseFrame(buffer: Buffer): string | undefined {
   const text = buffer.toString("utf8");
-  if (text.indexOf("\n") !== text.length - 1) return undefined;
-  return text;
+  return text.indexOf("\n") === text.length - 1 ? text : undefined;
 }
 
 async function removeStaleSocket(path: string, uid: number): Promise<void> {
-  let before: ReturnType<typeof lstatSync>;
+  let before: Stats;
   try {
-    before = lstatSync(path);
+    before = privatePathStat(path, uid, "socket", 0o600);
   } catch (error) {
     if (errorCode(error) === "ENOENT") return;
     throw error;
   }
-  if (before.isSymbolicLink() || !before.isSocket() || before.uid !== uid) {
-    throw new Error("Unsafe Station TTY socket path.");
-  }
-  const stale = await new Promise<boolean>((resolve) => {
-    const socket = createConnection(path);
-    socket.setTimeout(REQUEST_TIMEOUT_MS, () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once("error", (error) =>
-      resolve(errorCode(error) === "ECONNREFUSED" || errorCode(error) === "ENOENT"),
-    );
-  });
-  if (!stale) throw new Error("Station TTY endpoint may be live.");
+  const probe = await probeUnixSocket(path, { timeoutMs: REQUEST_TIMEOUT_MS });
+  if (probe.status === "absent") return;
+  if (probe.status !== "stale") throw new Error("Station TTY endpoint may be live.");
   const after = lstatSync(path);
   if (!after.isSocket() || after.dev !== before.dev || after.ino !== before.ino) {
     throw new Error("Station TTY endpoint changed during validation.");
@@ -484,48 +435,39 @@ async function removeStaleSocket(path: string, uid: number): Promise<void> {
   unlinkSync(path);
 }
 
-function listen(server: Server, path: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(path, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-}
-
-const unavailable = {
-  code: "TUI_TTY_OWNERSHIP_UNAVAILABLE",
-  message: "Station could not establish trusted ownership of this terminal.",
-};
+const unavailable = [
+  "TUI_TTY_OWNERSHIP_UNAVAILABLE",
+  "Station could not establish trusted ownership of this terminal.",
+] as const;
 const refusalDetails = {
   "identity-unavailable": unavailable,
   "claim-unavailable": unavailable,
   "takeover-unavailable": unavailable,
-  "legacy-owner-possible": {
-    code: "TUI_TTY_LEGACY_OWNER_POSSIBLE",
-    message: "A pre-upgrade Station-like process may already own this terminal.",
-  },
-  "takeover-refused": {
-    code: "TUI_TTY_TAKEOVER_REFUSED",
-    message: "The running Station refused cooperative terminal takeover.",
-  },
-  "takeover-timeout": {
-    code: "TUI_TTY_TAKEOVER_TIMEOUT",
-    message: "The running Station accepted shutdown but did not release this terminal in time.",
-  },
-} satisfies Record<StationTtyOwnershipRefusalReason, { code: string; message: string }>;
+  "legacy-owner-possible": [
+    "TUI_TTY_LEGACY_OWNER_POSSIBLE",
+    "A pre-upgrade Station-like process may already own this terminal.",
+  ],
+  "takeover-refused": [
+    "TUI_TTY_TAKEOVER_REFUSED",
+    "The running Station refused cooperative terminal takeover.",
+  ],
+  "takeover-timeout": [
+    "TUI_TTY_TAKEOVER_TIMEOUT",
+    "The running Station accepted shutdown but did not release this terminal in time.",
+  ],
+} as const satisfies Record<StationTtyOwnershipRefusalReason, readonly [string, string]>;
 
 function refusal(
   reason: StationTtyOwnershipRefusalReason,
 ): Extract<StationTtyOwnershipResult, { kind: "refused" }> {
-  const details = refusalDetails[reason];
+  const [code, message] = refusalDetails[reason];
   return {
     kind: "refused",
     reason,
     error: {
       tag: "TuiRuntimeError",
-      ...details,
+      code,
+      message,
       hint:
         "Station sent no signal. Close the incumbent with Ctrl-Q. If necessary, inspect `ps -t \"$(tty | sed 's#^/dev/##')\" -o pid=,command=` and send `kill -TERM <independently-verified-station-pid>` yourself. Never delete the SQLite claim file.",
     },
