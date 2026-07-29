@@ -213,6 +213,34 @@ attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
 `ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
 or conflicting evidence. Automatic handoff never uses SIGKILL.
 
+## Preserve Sessions Before Runtime Surgery
+
+When an Observer or Host handoff is blocked and live agent work must survive,
+make a private preservation archive before stopping, unlinking, resuming, or
+replacing anything:
+
+```bash
+pnpm station:sessions:save -- --devbox
+pnpm station:sessions:save -- --config ~/.config/station/config.toml
+pnpm station:sessions:verify -- ~/.local/state/station-session-rescues/<timestamp>
+```
+
+The save command is read-only with respect to Station, provider sessions, and
+worktrees. It captures pinned Observer health and snapshot evidence, an online
+SQLite backup, recovery handles, current-build Host inventory and replay,
+provider-native recovery data, and dirty or unpublished Git worktree state. It
+never stops, closes, resumes, writes to, resizes, or unlinks a live runtime.
+Archives contain terminal output, provider state, configuration, and untracked
+files, so they are created with owner-only permissions and must be handled as
+sensitive data.
+
+A `partial` result is preservation evidence, not permission to proceed. In
+particular, a build mismatch means the script deliberately skipped the
+incompatible Observer snapshot or Host replay. Reopen the checkout/build named
+by the health or handoff evidence and run the same command there; do not spoof
+the build selector. Only consider runtime surgery after `verify` returns
+`"ok": true` and every active session has provider-native recovery data.
+
 After startup reconcile, the Observer performs one report-only duplicate
 inspection. `stn doctor` reports this as `observer-singleton`: an eligible
 candidate or evidence refusal is a warning, while a clear result is healthy.

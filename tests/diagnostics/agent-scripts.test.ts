@@ -1,7 +1,16 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseCleanupArgs } from "../../scripts/maintenance/agent-cleanup.mjs";
@@ -10,6 +19,14 @@ import {
   normalizeConfig,
   parseResetArgs,
 } from "../../scripts/maintenance/agent-reset.mjs";
+import {
+  assertSqliteTables,
+  buildRecoveryCoverage,
+  findCodexSessionAssets,
+  parseSessionRescueArgs,
+  verifySessionRescueArchive,
+  writeSessionRescueManifest,
+} from "../../scripts/maintenance/session-rescue.mjs";
 import {
   commandFromArgs,
   defaultDevSessionNameForRoot,
@@ -108,6 +125,187 @@ managed_root = "~/.worktrees"`);
   it("checks managed roots without prefix false positives", () => {
     expect(isUnder("/tmp/station/.worktrees/branch", "/tmp/station/.worktrees")).toBe(true);
     expect(isUnder("/tmp/station/.worktrees-other/branch", "/tmp/station/.worktrees")).toBe(false);
+  });
+});
+
+describe("session rescue script", () => {
+  it("resolves devbox inputs while keeping the archive outside disposable state", () => {
+    const options = parseSessionRescueArgs(["save", "--devbox"], {
+      cwd: "/repo/station",
+      homeDir: "/Users/example",
+      now: new Date("2026-07-29T16:00:00.000Z"),
+    });
+
+    expect(options).toMatchObject({
+      command: "save",
+      configPath: "/repo/station/.dev-state/config.toml",
+      codexHome: "/repo/station/.dev-state/codex-home",
+      outputPath: "/Users/example/.local/state/station-session-rescues/2026-07-29T16-00-00-000Z",
+    });
+    expect(() =>
+      parseSessionRescueArgs(["save", "--devbox", "--config", "/tmp/config.toml"]),
+    ).toThrow("--devbox cannot be combined with --config or --codex-home");
+  });
+
+  it("selects only exact Codex session and shell snapshot ids", async () => {
+    const root = mkdtempSync(join(tmpdir(), "station-session-assets-"));
+    const id = "019faf49-9be1-7123-80a4-6c62539a907b";
+    const exactSession = join(root, "sessions", "2026", "07", "29", `rollout-now-${id}.jsonl`);
+    const nearSession = join(root, "sessions", "2026", "07", "29", `rollout-now-${id}-copy.jsonl`);
+    const exactSnapshot = join(root, "shell_snapshots", `${id}.123.sh`);
+    const nearSnapshot = join(root, "shell_snapshots", `${id}-copy.123.sh`);
+
+    try {
+      mkdirSync(join(root, "sessions", "2026", "07", "29"), { recursive: true });
+      mkdirSync(join(root, "shell_snapshots"), { recursive: true });
+      for (const path of [exactSession, nearSession, exactSnapshot, nearSnapshot]) {
+        writeFileSync(path, "saved\n");
+      }
+
+      await expect(findCodexSessionAssets(root, id)).resolves.toEqual(
+        new Set([exactSession, exactSnapshot]),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports candidate handles without treating them as exact recovery coverage", () => {
+    const coverage = buildRecoveryCoverage(
+      [
+        {
+          kind: "agent",
+          alive: true,
+          ptyId: "pty-1",
+          sessionId: "ses_new",
+          harnessProvider: "codex",
+          projectId: "station",
+          worktreeId: "wt_station_a",
+          terminalTargetId: "native:wt_station_a",
+        },
+      ],
+      undefined,
+      [
+        {
+          id: "rec_old",
+          provider: "codex",
+          projectId: "station",
+          worktreeId: "wt_station_a",
+          sessionId: "ses_old",
+          terminalTargetId: "native:wt_station_a",
+        },
+      ],
+    );
+
+    expect(coverage).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_new",
+        exactHandleIds: [],
+        candidateHandleIds: ["rec_old"],
+      }),
+    ]);
+  });
+
+  it("rejects a SQLite file from the wrong provider", () => {
+    const root = mkdtempSync(join(tmpdir(), "station-session-provider-db-"));
+    const path = join(root, "provider.sqlite");
+    const database = new DatabaseSync(path);
+    database.exec("CREATE TABLE session (id TEXT PRIMARY KEY)");
+    database.close();
+
+    try {
+      expect(() => assertSqliteTables(path, ["session"])).not.toThrow();
+      expect(() => assertSqliteTables(path, ["threads"])).toThrow(
+        "SQLite backup is missing required table: threads",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("detects archive payload tampering", async () => {
+    const root = mkdtempSync(join(tmpdir(), "station-session-archive-"));
+
+    try {
+      writeFileSync(join(root, "snapshot.json"), "{}\n");
+      await writeSessionRescueManifest(root, { status: "complete", warnings: [] });
+      await expect(verifySessionRescueArchive(root)).resolves.toMatchObject({ ok: true });
+
+      writeFileSync(join(root, "snapshot.json"), '{"changed":true}\n');
+      const verification = await verifySessionRescueArchive(root);
+      expect(verification.ok).toBe(false);
+      expect(verification.errors).toContain("Hash mismatch: snapshot.json");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects traversal paths and incomplete archives without reading outside them", async () => {
+    const root = mkdtempSync(join(tmpdir(), "station-session-archive-boundary-"));
+
+    try {
+      writeFileSync(
+        join(root, "manifest.json"),
+        `${JSON.stringify({
+          archiveVersion: 1,
+          status: "partial",
+          files: [
+            {
+              path: "../outside",
+              type: "file",
+              size: 1,
+              sha256: "a".repeat(64),
+            },
+          ],
+        })}\n`,
+      );
+      writeFileSync(join(root, "INCOMPLETE"), "unfinished\n");
+
+      const verification = await verifySessionRescueArchive(root);
+      expect(verification.ok).toBe(false);
+      expect(verification.errors).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("Unsafe archive path"),
+          "Archive is marked INCOMPLETE",
+        ]),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not follow archive symlink ancestors during verification", async () => {
+    const root = mkdtempSync(join(tmpdir(), "station-session-archive-symlink-"));
+    const outside = mkdtempSync(join(tmpdir(), "station-session-archive-outside-"));
+
+    try {
+      writeFileSync(join(outside, "secret"), "outside\n");
+      symlinkSync(outside, join(root, "escape"));
+      writeFileSync(
+        join(root, "manifest.json"),
+        `${JSON.stringify({
+          archiveVersion: 1,
+          status: "partial",
+          files: [
+            {
+              path: "escape/secret",
+              type: "file",
+              size: 8,
+              sha256: "a".repeat(64),
+            },
+          ],
+        })}\n`,
+      );
+
+      const verification = await verifySessionRescueArchive(root);
+      expect(verification.ok).toBe(false);
+      expect(verification.errors).toEqual(
+        expect.arrayContaining([expect.stringContaining("symlink ancestor")]),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 
