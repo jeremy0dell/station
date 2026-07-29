@@ -1,7 +1,9 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   access,
   chmod,
+  copyFile,
   mkdir,
   mkdtemp,
   readdir,
@@ -17,7 +19,7 @@ import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { getObserverStatus, restartObserver, runCli, startObserver } from "@station/cli";
 import { emptyConfig } from "@station/config";
-import { ObserverProcessIdentitySchema } from "@station/contracts";
+import { ObserverProcessIdentitySchema, ObserverProcessTokenSchema } from "@station/contracts";
 import { acquireObserverBootClaim, observerBootClaimPath } from "@station/observer/internal";
 import { createObserverClient, listenUnixSocket, probeUnixSocket } from "@station/protocol";
 import { stationBuildInfo, stationObserverBuildVersion } from "@station/runtime";
@@ -66,7 +68,13 @@ describe("observer lifecycle e2e", () => {
       const identity = ObserverProcessIdentitySchema.parse(
         JSON.parse(await readFile(pidfilePath, "utf8")),
       );
-      expect(Object.keys(identity).sort()).toEqual(["osStartTime", "pid", "socketPath", "version"]);
+      expect(Object.keys(identity).sort()).toEqual([
+        "osStartTime",
+        "pid",
+        "processToken",
+        "socketPath",
+        "version",
+      ]);
       expect(identity).toMatchObject({
         pid: status.health.pid,
         version: status.health.version,
@@ -89,18 +97,25 @@ describe("observer lifecycle e2e", () => {
       const bootLog = await readFile(bootLogPath, "utf8");
       expect(bootLog).not.toContain("stale observer boot output");
       const header = bootLog.split(/\r?\n/, 1)[0];
-      expect(JSON.parse(header ?? "")).toEqual({
-        command: [
-          process.execPath,
-          expect.stringMatching(/observerMain\.js$/),
-          "--socket",
-          fixture.socketPath,
-          "--state-dir",
-          fixture.stateDir,
-          "--startup-timeout-ms",
-          "30000",
-        ],
-      });
+      const headerCommand = JSON.parse(header ?? "") as { command: string[] };
+      expect(headerCommand.command.slice(0, -4)).toEqual([
+        process.execPath,
+        expect.stringMatching(/observerMain\.js$/),
+        "--socket",
+        fixture.socketPath,
+        "--state-dir",
+        fixture.stateDir,
+        "--startup-timeout-ms",
+        "30000",
+      ]);
+      expect(headerCommand.command.slice(-4, -2)).toEqual([
+        "--build-version",
+        status.health.version,
+      ]);
+      expect(headerCommand.command.at(-2)).toBe("--process-token");
+      expect(ObserverProcessTokenSchema.parse(headerCommand.command.at(-1))).toBe(
+        identity.processToken,
+      );
       expect((await stat(bootLogPath)).mode & 0o777).toBe(0o600);
     } finally {
       if (started) {
@@ -253,7 +268,7 @@ describe("observer lifecycle e2e", () => {
       const startedAt = Date.now();
       const buildVersion = stationObserverBuildVersion();
       const status = await startObserver({ config, timeoutMs: 10_000 }, { buildVersion });
-      expect(status).toMatchObject({
+      expect(status, JSON.stringify(status)).toMatchObject({
         status: "running",
         health: { version: buildVersion, socketPath: fixture.socketPath },
       });
@@ -890,24 +905,35 @@ async function startIncumbentFixture(input: {
   child: ChildProcess;
   client: ReturnType<typeof createObserverClient>;
 }> {
+  const sourceRoot = join(dirname(input.stateDir), "incumbent-runtime");
+  const observerEntry = join(sourceRoot, "apps", "cli", "dist", "observerMain.js");
+  await mkdir(dirname(observerEntry), { recursive: true });
+  await copyFile(join(process.cwd(), "tests", "support", "observerMain.js"), observerEntry);
+  await writeFile(join(sourceRoot, "package.json"), `${JSON.stringify({ type: "module" })}\n`);
   const args = [
-    join(process.cwd(), "tests", "support", "observerMain.js"),
+    observerEntry,
     "--socket",
     input.socketPath,
     "--state-dir",
     input.stateDir,
-    "--version",
+    "--startup-timeout-ms",
+    "10000",
+    "--build-version",
     input.version,
-    "--mode",
-    input.mode ?? "graceful",
-    "--stop-delay-ms",
-    String(input.stopDelayMs ?? 100),
+    "--process-token",
+    randomUUID(),
   ];
-  if (input.pidfileVersion !== undefined) {
-    args.push("--pidfile-version", input.pidfileVersion);
-  }
   const child = spawn(process.execPath, args, {
     cwd: process.cwd(),
+    env: {
+      ...process.env,
+      STATION_TEST_REPO_ROOT: process.cwd(),
+      STATION_TEST_OBSERVER_MODE: input.mode ?? "graceful",
+      STATION_TEST_STOP_DELAY_MS: String(input.stopDelayMs ?? 100),
+      ...(input.pidfileVersion === undefined
+        ? {}
+        : { STATION_TEST_PIDFILE_VERSION: input.pidfileVersion }),
+    },
     stdio: ["ignore", "ignore", "pipe"],
   });
   let stderr = "";
@@ -974,7 +1000,10 @@ async function expectSingleObserver(
   statuses: readonly Awaited<ReturnType<typeof startObserver>>[],
   socketPath: string,
 ): Promise<void> {
-  expect(statuses.every((status) => status.status === "running")).toBe(true);
+  expect(
+    statuses.every((status) => status.status === "running"),
+    JSON.stringify(statuses),
+  ).toBe(true);
   const pids = statuses.flatMap((status) =>
     status.status === "running" && status.health.pid !== undefined ? [status.health.pid] : [],
   );

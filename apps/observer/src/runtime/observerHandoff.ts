@@ -48,6 +48,15 @@ const HandoffCandidateSchema = z
   })
   .strict();
 
+/** Returns whether an Observer argv selector is valid legacy SemVer or an exact Station build. */
+export function observerBuildSelectorIsValid(selector: string): boolean {
+  const build = parseStationObserverBuildVersion(selector);
+  return (
+    !(build.buildIdentity === undefined && hasStationObserverBuildIdentityMarker(selector)) &&
+    SemVerSchema.safeParse(build.version).success
+  );
+}
+
 export type ObserverHandoffCandidate = z.infer<typeof HandoffCandidateSchema>;
 
 export type ObserverIncumbentDecision =
@@ -58,8 +67,14 @@ export type ObserverIncumbentDecision =
 export type ObserverProcessEntry = {
   pid: number;
   argv: string[];
-  /** Verbatim OS start-time token used to detect PID reuse. */
+  /** Executable path corroborated against the OS process image. */
+  executablePath: string;
+  /** Verbatim OS start time; second-resolution output is never sufficient alone. */
   startToken: string;
+  /** Per-launch nonce that prevents same-second PID reuse from inheriting authority. */
+  processToken: string;
+  /** Immutable Observer build selector advertised by the child and checked at startup. */
+  buildVersion: string;
   /** Resolved bound socket; absent when argv cannot prove one. */
   socketPath?: string;
   /** Positive startup exclusion budget advertised by current Observer argv. */
@@ -96,6 +111,24 @@ export interface ObserverProcessEvidenceSource {
   processStartToken(pid: number): string | undefined;
   readProcessIdentity(socketPath: string): Promise<ObserverProcessIdentity | undefined>;
   signal(pid: number, signal: NodeJS.Signals | 0): ObserverProcessSignalResult;
+}
+
+/** Compares the complete evidence for one exact Observer process generation. */
+export function observerProcessEntriesMatch(
+  left: ObserverProcessEntry,
+  right: ObserverProcessEntry,
+): boolean {
+  return (
+    left.pid === right.pid &&
+    left.executablePath === right.executablePath &&
+    left.startToken === right.startToken &&
+    left.processToken === right.processToken &&
+    left.buildVersion === right.buildVersion &&
+    left.socketPath === right.socketPath &&
+    left.startupTimeoutMs === right.startupTimeoutMs &&
+    left.argv.length === right.argv.length &&
+    left.argv.every((value, index) => value === right.argv[index])
+  );
 }
 
 /**
@@ -369,6 +402,8 @@ async function requireVerifiedProcessEvidence(
     processEntry === undefined ||
     processEntry.socketPath !== socketPath ||
     processEntry.startToken !== identity.osStartTime ||
+    processEntry.processToken !== identity.processToken ||
+    processEntry.buildVersion !== identity.version ||
     deps.evidence.processStartToken(identity.pid) !== identity.osStartTime
   ) {
     throw handoffRefused("The incumbent Observer process identity could not be corroborated.");
@@ -408,12 +443,22 @@ async function exactProcessAndSocketExited(
     timeoutMs: remainingHandoffMs(deadline, now),
   });
   const currentStartToken = deps.evidence.processStartToken(identity.pid);
-  // A missing ps token is ambiguous; only an ESRCH-backed signal probe proves
-  // absence, while a different token proves the exact PID generation exited.
+  const exactEntry = deps.evidence
+    .listObserverProcesses()
+    .find(
+      (entry) =>
+        entry.pid === identity.pid &&
+        entry.startToken === identity.osStartTime &&
+        entry.processToken === identity.processToken &&
+        entry.buildVersion === identity.version &&
+        entry.socketPath === socketPath,
+    );
+  // A missing ps token is ambiguous; only ESRCH proves absence. A different
+  // start time or launch nonce proves the exact PID generation exited.
   const exactProcessExited =
     currentStartToken === undefined
       ? deps.evidence.signal(identity.pid, 0) === "absent"
-      : currentStartToken !== identity.osStartTime;
+      : currentStartToken !== identity.osStartTime || exactEntry === undefined;
   return !listening && exactProcessExited;
 }
 

@@ -1,4 +1,6 @@
-import { chmod, lstat, mkdir, open } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { link, lstat, mkdir, open, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { SafeError } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
@@ -170,37 +172,88 @@ function isReservedClaimSocketPath(socketPath: string): boolean {
 
 async function prepareClaimFiles(path: string): Promise<void> {
   const directory = dirname(path);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await chmod(directory, 0o700);
-
-  // The database persists across boots; existence only prepares the SQLite
-  // representation and never proves transaction ownership.
-  let created: Awaited<ReturnType<typeof open>> | undefined;
+  const createdDirectory = await mkdir(directory, { recursive: true, mode: 0o700 });
+  const directoryHandle = await open(
+    directory,
+    constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
   try {
-    created = await open(path, "wx", 0o600);
-    await created.chmod(0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
+    const metadata = await directoryHandle.stat();
+    if (!metadata.isDirectory()) throw new Error("Observer socket directory is not a directory.");
+    if (createdDirectory !== undefined) await directoryHandle.chmod(0o700);
+    if ((metadata.mode & 0o777) !== 0o700) {
+      throw new Error("Observer socket directory must have mode 0700.");
     }
   } finally {
-    await created?.close();
+    await directoryHandle.close();
   }
 
+  let missing = false;
+  try {
+    await requirePrivateRegularFile(path, true, true);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    missing = true;
+  }
+  if (missing) await createInitializedClaimDatabase(path);
+
   await requirePrivateClaimFiles(path);
+}
+
+async function createInitializedClaimDatabase(path: string): Promise<void> {
+  const temporaryPath = join(dirname(path), `.${claimFileName}.${randomUUID()}.tmp`);
+  let temporary: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    temporary = await open(
+      temporaryPath,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+    await temporary.chmod(0o600);
+    await temporary.close();
+    temporary = undefined;
+
+    let database: SqlDatabase | undefined;
+    try {
+      database = withPrivateSqliteUmask(() => openSqlDatabase(temporaryPath));
+      database.exec("PRAGMA user_version = 1");
+    } finally {
+      const openedDatabase = database;
+      if (openedDatabase !== undefined) withPrivateSqliteUmask(() => openedDatabase.close());
+    }
+    await requirePrivateRegularFile(temporaryPath, true, true);
+
+    try {
+      await link(temporaryPath, path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+  } finally {
+    await temporary?.close();
+    for (const suffix of claimSidecarSuffixes) {
+      await unlink(`${temporaryPath}${suffix}`).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+  }
 }
 
 async function requirePrivateClaimFiles(path: string): Promise<void> {
   await Promise.all(
     claimSidecarSuffixes.map((suffix) =>
-      requirePrivateRegularFile(`${path}${suffix}`, suffix === ""),
+      requirePrivateRegularFile(`${path}${suffix}`, suffix === "", suffix === ""),
     ),
   );
 }
 
-async function requirePrivateRegularFile(path: string, required: boolean): Promise<void> {
+async function requirePrivateRegularFile(
+  path: string,
+  required: boolean,
+  nonEmpty = false,
+): Promise<void> {
   let metadata: Awaited<ReturnType<typeof lstat>>;
   try {
+    // lstat avoids reopening the claim inode, which would release this process's POSIX lock.
     metadata = await lstat(path);
   } catch (error) {
     if (!required && (error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -208,10 +261,15 @@ async function requirePrivateRegularFile(path: string, required: boolean): Promi
     }
     throw error;
   }
-  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+  if (!metadata.isFile()) {
     throw new Error(`Observer boot claim path must be a regular non-symlink file: ${path}`);
   }
-  await chmod(path, 0o600);
+  if ((metadata.mode & 0o777) !== 0o600) {
+    throw new Error(`Observer boot claim file must have mode 0600: ${path}`);
+  }
+  if (nonEmpty && metadata.size === 0) {
+    throw new Error(`Observer boot claim database must be initialized: ${path}`);
+  }
 }
 
 function createRelease(database: SqlDatabase): () => ObserverBootClaimReleaseResult {

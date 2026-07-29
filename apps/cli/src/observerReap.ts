@@ -1,10 +1,13 @@
 import {
   createLocalObserverProcessEvidence,
+  createObserverBootClaimCleanupExclusion,
+  createObserverReap,
+  type ObserverDuplicateCleanupExclusion,
   type ObserverDuplicateProcessEvidenceSource,
+  type ObserverReap,
   type ObserverReapOutcome as ReapOutcome,
   type ObserverReapPlan as ReapPlan,
   type ObserverReapTarget as ReapTarget,
-  runObserverReap as runCentralObserverReap,
   type ObserverProcessEntry as SharedObserverProcessEntry,
   selectObserverReapPlan,
 } from "@station/observer/internal";
@@ -21,6 +24,7 @@ export type ObserverReapDeps = {
   socketIdentity?: ObserverDuplicateProcessEvidenceSource["socketIdentity"];
   unixSocketFdCount?: ObserverDuplicateProcessEvidenceSource["unixSocketFdCount"];
   healthPid?: (socketPath: string) => Promise<number | undefined>;
+  exclusion?: ObserverDuplicateCleanupExclusion;
   signal?: (pid: number, sig: NodeJS.Signals | 0) => boolean;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -28,16 +32,11 @@ export type ObserverReapDeps = {
 export const selectReapPlan = selectObserverReapPlan;
 
 /**
- * ADAPTER
+ * COMPOSITION ROOT
  *
- * Supplies protocol health and local operating-system evidence to the
- * Observer-owned explicit reap use case.
+ * Selects local process evidence and protocol health for explicit Observer reap.
  */
-export async function runObserverReap(
-  socketPath: string,
-  options: { force: boolean; graceMs?: number } = { force: false },
-  deps: ObserverReapDeps = {},
-): Promise<ReapOutcome> {
+export function createLocalObserverReap(deps: ObserverReapDeps = {}): ObserverReap {
   const localEvidence = createLocalObserverProcessEvidence();
   const evidence: ObserverDuplicateProcessEvidenceSource = {
     listObserverProcesses: deps.listObserverProcesses ?? localEvidence.listObserverProcesses,
@@ -48,13 +47,26 @@ export async function runObserverReap(
     unixSocketFdCount: deps.unixSocketFdCount ?? localEvidence.unixSocketFdCount,
     signal: observerSignal(deps.signal, localEvidence),
   };
-  const centralOptions: { force: boolean; graceMs?: number } = { force: options.force };
-  if (options.graceMs !== undefined) centralOptions.graceMs = options.graceMs;
-  return runCentralObserverReap(socketPath, centralOptions, {
-    evidence,
-    healthPid: deps.healthPid ?? defaultHealthPid,
-    ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
-  });
+  return (socketPath, options) =>
+    createObserverReap({
+      evidence,
+      exclusion: deps.exclusion ?? createObserverBootClaimCleanupExclusion({ socketPath }),
+      healthPid: deps.healthPid ?? defaultHealthPid,
+      ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
+    })(socketPath, options);
+}
+
+/**
+ * ADAPTER
+ *
+ * Translates a CLI reap request into the Observer-owned driving port.
+ */
+export function runObserverReap(
+  socketPath: string,
+  options: { force: boolean; graceMs?: number },
+  reap: ObserverReap,
+): Promise<ReapOutcome> {
+  return reap(socketPath, options);
 }
 
 function observerSignal(

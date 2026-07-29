@@ -8,12 +8,15 @@ import {
   parseUnixSocketFdCount,
 } from "../../src/runtime/observerProcessEvidence.js";
 
+const BUILD = `1.2.3+station.${"a".repeat(64)}`;
+const TOKEN = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
+
 describe("local Observer process evidence", () => {
   it("parses only source and compiled Observer argv with resolved sockets", () => {
     const output = [
-      " 3740 Sat Jul  4 17:45:33 2026 /opt/node/bin/node /repo/apps/cli/dist/observerMain.js --socket /a/o.sock",
-      " 4001 Sat Jul  4 17:45:34 2026 /opt/station/stn __observer --socket /b/o.sock",
-      " 4005 Sat Jul  4 17:45:36 2026 /opt/station/stn __observer --socket /tmp/socket with spaces/observer.sock --startup-timeout-ms 10000",
+      ` 3740 Sat Jul  4 17:45:33 2026 /opt/node/bin/node /repo/apps/cli/dist/observerMain.js --socket /a/o.sock --state-dir /a/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
+      ` 4001 Sat Jul  4 17:45:34 2026 /opt/station/stn __observer --socket /b/o.sock --state-dir /b/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
+      ` 4005 Sat Jul  4 17:45:36 2026 /opt/station/stn __observer --socket /tmp/socket with spaces/observer.sock --state-dir /tmp/state with spaces --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
       " 4002 Sat Jul  4 17:45:35 2026 /opt/station/stn observer start --socket /wrong.sock",
       "19359 Sat Jul  4 17:47:24 2026 /bin/zsh -c grep observerMain.js",
     ].join("\n");
@@ -36,8 +39,8 @@ describe("local Observer process evidence", () => {
     await writeFile(executable, "");
     try {
       const output = [
-        ` 4006 Sat Jul  4 17:45:37 2026 ${executable} __observer --socket /tmp/observer.sock`,
-        ` 4007 Sat Jul  4 17:45:38 2026 /bin/sh -c ${executable} __observer --socket /tmp/observer.sock`,
+        ` 4006 Sat Jul  4 17:45:37 2026 ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
+        ` 4007 Sat Jul  4 17:45:38 2026 /bin/sh -c ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
       ].join("\n");
 
       expect(parseObserverProcessList(output)).toEqual([
@@ -45,38 +48,140 @@ describe("local Observer process evidence", () => {
           pid: 4006,
           socketPath: "/tmp/observer.sock",
         }),
+        expect.objectContaining({ pid: 4007 }),
       ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("strictly counts all Unix-domain socket descriptors for one process", () => {
-    expect(parseUnixSocketFdCount("", 42)).toBe(0);
-    expect(parseUnixSocketFdCount("p42\nf7u\nnsocket-a\nf9\nnsocket-b\n", 42)).toBe(2);
-    expect(() => parseUnixSocketFdCount("p43\nf7\nnsocket-a\n", 42)).toThrow("unexpected process");
-    expect(() => parseUnixSocketFdCount("p42\nmalformed\n", 42)).toThrow("malformed");
-    expect(() => parseUnixSocketFdCount("p42\nnsocket-without-fd\n", 42)).toThrow("malformed");
+  it("fails closed when flattened argv points at a shell wrapper or repeated flag", async () => {
+    const wrapper = ` 4007 Sat Jul  4 17:45:38 2026 /bin/sh -c /opt/station/stn __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}\n`;
+    const evidence = createLocalObserverProcessEvidence({
+      execFile: () => wrapper,
+      readProcessArgv: () => undefined,
+      processExecutableMatches: () => false,
+    });
+
+    expect(() => evidence.listObserverProcesses()).toThrow("exact executable and argv");
+    expect(() =>
+      parseObserverProcessList(
+        wrapper.replace(" --state-dir /tmp/state", " --socket /spoof --state-dir /tmp/state"),
+      ),
+    ).toThrow("ambiguous");
   });
 
-  it("distinguishes zero descriptors from unavailable lsof evidence", () => {
+  it("does not let a same-second PID replacement inherit a launch nonce", () => {
+    const replacementToken = "b47ac10b-58cc-4372-a567-0e02b2c3d479";
+    const output = [
+      ` 42 Sat Jul  4 17:45:33 2026 /opt/station/stn __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
+      ` 43 Sat Jul  4 17:45:33 2026 /opt/station/stn __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${replacementToken}`,
+    ].join("\n");
+
+    const entries = parseObserverProcessList(output);
+    expect(entries.map((entry) => entry.startToken)).toEqual([
+      "Sat Jul  4 17:45:33 2026",
+      "Sat Jul  4 17:45:33 2026",
+    ]);
+    expect(entries.map((entry) => entry.processToken)).toEqual([TOKEN, replacementToken]);
+  });
+
+  it("strictly counts all Unix-domain socket descriptors for one process", () => {
+    expect(parseUnixSocketFdCount("p42\0\nfcwd\0tDIR\0\nf1\0tPIPE\0\n", 42)).toBe(0);
+    expect(parseUnixSocketFdCount("p42\0\nfcwd\0tDIR\0\nf7u\0tunix\0\nf9\0tunix\0\n", 42)).toBe(2);
+    expect(() => parseUnixSocketFdCount("", 42)).toThrow("truncated");
+    expect(() => parseUnixSocketFdCount("p43\0\nf7\0tunix\0\n", 42)).toThrow("unexpected process");
+    expect(() => parseUnixSocketFdCount("p42\0\nmalformed\0\n", 42)).toThrow("malformed");
+  });
+
+  it("distinguishes complete zero-descriptor evidence from unavailable lsof evidence", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "stn");
+    await writeFile(executable, "");
+    const listing = ` 42 Sat Jul  4 17:45:33 2026 ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}\n`;
+    const base = {
+      execFile: () => listing,
+      readProcessArgv: () => undefined,
+      processExecutableMatches: () => true,
+    };
     const zero = createLocalObserverProcessEvidence({
-      execFileStatus: () => ({ status: 1, stdout: "", stderr: "" }),
+      ...base,
+      execFileStatus: () => ({
+        status: 0,
+        stdout: "p42\0\nfcwd\0tDIR\0\nf1\0tPIPE\0\n",
+        stderr: "",
+      }),
     });
     const one = createLocalObserverProcessEvidence({
-      execFileStatus: () => ({ status: 0, stdout: "p42\nf7\nnsocket-a\n", stderr: "" }),
+      ...base,
+      execFileStatus: () => ({
+        status: 0,
+        stdout: "p42\0\nfcwd\0tDIR\0\nf7\0tunix\0\n",
+        stderr: "",
+      }),
     });
     const unavailable = createLocalObserverProcessEvidence({
+      ...base,
       execFileStatus: () => ({ status: 2, stdout: "", stderr: "lsof failed" }),
     });
-    const ambiguousEmpty = createLocalObserverProcessEvidence({
+    const statusOne = createLocalObserverProcessEvidence({
+      ...base,
+      execFileStatus: () => ({ status: 1, stdout: "", stderr: "" }),
+    });
+    const emptySuccess = createLocalObserverProcessEvidence({
+      ...base,
+      execFileStatus: () => ({ status: 0, stdout: "", stderr: "" }),
+    });
+    const denied = createLocalObserverProcessEvidence({
+      ...base,
       execFileStatus: () => ({ status: 1, stdout: "", stderr: "permission denied" }),
     });
+    const missing = createLocalObserverProcessEvidence({
+      ...base,
+      execFileStatus: () => {
+        throw Object.assign(new Error("spawn lsof ENOENT"), { code: "ENOENT" });
+      },
+    });
 
-    expect(zero.unixSocketFdCount(42)).toBe(0);
-    expect(one.unixSocketFdCount(42)).toBe(1);
-    expect(() => unavailable.unixSocketFdCount(42)).toThrow("evidence failed");
-    expect(() => ambiguousEmpty.unixSocketFdCount(42)).toThrow("evidence failed");
+    try {
+      const entry = zero.listObserverProcesses()[0];
+      if (entry === undefined) throw new Error("Expected one Observer process entry.");
+      expect(zero.unixSocketFdCount(entry)).toBe(0);
+      expect(one.unixSocketFdCount(entry)).toBe(1);
+      expect(() => unavailable.unixSocketFdCount(entry)).toThrow("evidence failed");
+      expect(() => statusOne.unixSocketFdCount(entry)).toThrow("evidence failed");
+      expect(() => emptySuccess.unixSocketFdCount(entry)).toThrow("truncated");
+      expect(() => denied.unixSocketFdCount(entry)).toThrow("evidence failed");
+      expect(() => missing.unixSocketFdCount(entry)).toThrow("ENOENT");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a process that exits or changes while descriptors are collected", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stn-process-evidence-"));
+    const executable = join(dir, "stn");
+    await writeFile(executable, "");
+    const listing = ` 42 Sat Jul  4 17:45:33 2026 ${executable} __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}\n`;
+    let reads = 0;
+    const evidence = createLocalObserverProcessEvidence({
+      execFile: () => (reads++ < 2 ? listing : ""),
+      readProcessArgv: () => undefined,
+      processExecutableMatches: () => true,
+      execFileStatus: () => ({
+        status: 0,
+        stdout: "p42\0\nfcwd\0tDIR\0\n",
+        stderr: "",
+      }),
+    });
+
+    try {
+      const entry = evidence.listObserverProcesses()[0];
+      if (entry === undefined) throw new Error("Expected one Observer process entry.");
+      expect(() => evidence.unixSocketFdCount(entry)).toThrow("changed");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("normalizes strict holders, start-token, absence, and refusal results", () => {

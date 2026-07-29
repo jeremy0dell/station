@@ -137,16 +137,21 @@ describe("provider hook ingress command", () => {
 
     expect(receipt.status).toBe("ingested");
     const childArgv = JSON.parse(await readFile(argvPath, "utf8")) as string[];
-    expect(childArgv.slice(0, -1)).toEqual([
+    expect(childArgv.slice(0, 5)).toEqual([
       "--socket",
       fixture.socketPath,
       "--state-dir",
       fixture.stateDir,
       "--startup-timeout-ms",
     ]);
-    const childTimeoutMs = Number(childArgv.at(-1));
+    const childTimeoutMs = Number(childArgv[5]);
     expect(childTimeoutMs).toBeGreaterThan(0);
     expect(childTimeoutMs).toBeLessThanOrEqual(2000);
+    expect(childArgv.slice(6, 8)).toEqual(["--build-version", stationObserverBuildVersion()]);
+    expect(childArgv[8]).toBe("--process-token");
+    expect(childArgv[9]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
   });
 
   it("delivers Worktrunk lifecycle hooks through observer.ingestProviderHookEvent", async () => {

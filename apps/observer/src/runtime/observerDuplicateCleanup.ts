@@ -1,5 +1,9 @@
 import type { ObserverProcessIdentity } from "@station/contracts";
-import type { ObserverProcessEntry, ObserverProcessEvidenceSource } from "./observerHandoff.js";
+import {
+  type ObserverProcessEntry,
+  type ObserverProcessEvidenceSource,
+  observerProcessEntriesMatch,
+} from "./observerHandoff.js";
 import { observerProcessIdentitiesMatch } from "./observerPidfile.js";
 import type { SocketIdentity } from "./socketOwnership.js";
 
@@ -16,6 +20,7 @@ export type ObserverDuplicateCleanupRefusal = {
 export type ObserverDuplicateCleanupTarget = {
   pid: number;
   startToken: string;
+  process: ObserverProcessEntry;
   startupTimeoutMs?: number;
   quarantineMs: number;
 };
@@ -48,7 +53,7 @@ export type ObserverDuplicateCleanupPlanInput = {
  */
 export interface ObserverDuplicateProcessEvidenceSource extends ObserverProcessEvidenceSource {
   socketIdentity(socketPath: string): Promise<SocketIdentity | undefined>;
-  unixSocketFdCount(pid: number): number;
+  unixSocketFdCount(process: ObserverProcessEntry): number;
 }
 
 export type ObserverDuplicateCleanupExclusionResult<T> =
@@ -88,6 +93,7 @@ export type ObserverDuplicateCleanupOutcome = {
   refusalCodes: string[];
   refusals: ObserverDuplicateCleanupRefusal[];
   terminatedPids: number[];
+  exitedPids: number[];
   survivedPids: number[];
   keeperPreservation?: ObserverKeeperPreservation;
   claimReleased?: boolean;
@@ -122,7 +128,7 @@ type AutomaticInspection = {
 /**
  * POLICY
  *
- * Selects duplicate Observers only when the keeper's immutable identity is
+ * Selects duplicate Observers only when the keeper's corroborated identity is
  * exact and each candidate has no Unix-domain socket descriptors.
  */
 export function selectObserverDuplicateCleanupPlan(
@@ -178,6 +184,8 @@ function keeperEvidenceRefusals(
     keeperProcess === undefined ||
     keeperProcess.socketPath !== input.socketPath ||
     keeperProcess.startToken !== input.keeperIdentity.osStartTime ||
+    keeperProcess.processToken !== input.keeperIdentity.processToken ||
+    keeperProcess.buildVersion !== input.keeperIdentity.version ||
     input.keeperStartToken !== input.keeperIdentity.osStartTime
   ) {
     refusals.push(
@@ -195,7 +203,7 @@ function selectAutomaticCandidate(
     return {
       refusal: refusal(
         "candidate-start-token-unavailable",
-        "The candidate has no immutable OS start token.",
+        "The candidate has no corroborating OS start token.",
         candidate.pid,
       ),
     };
@@ -222,6 +230,7 @@ function selectAutomaticCandidate(
   const target: ObserverDuplicateCleanupTarget = {
     pid: candidate.pid,
     startToken: candidate.startToken,
+    process: candidate,
     quarantineMs: Math.max(
       input.legacyQuarantineMs,
       candidate.startupTimeoutMs ?? input.legacyQuarantineMs,
@@ -287,6 +296,9 @@ async function runObserverDuplicateCleanup(
   publish(outcome(options.socketPath, "running"));
 
   const initial = await inspectAutomaticCandidates(options, deps.evidence);
+  if (signal.aborted) {
+    return finish(outcome(options.socketPath, "cancelled"));
+  }
   if (initial instanceof Error) {
     return finish(refusedOutcome(options.socketPath, "evidence-unavailable", initial.message));
   }
@@ -331,8 +343,10 @@ async function runClaimHeldDuplicateCleanup(
   context: AutomaticCleanupContext,
   initial: AutomaticInspection,
 ): Promise<ObserverDuplicateCleanupOutcome> {
-  const { options, deps } = context;
+  const { options, deps, signal } = context;
+  if (signal.aborted) return outcome(options.socketPath, "cancelled");
   const finalInspection = await inspectAutomaticCandidates(options, deps.evidence);
+  if (signal.aborted) return outcome(options.socketPath, "cancelled");
   if (finalInspection instanceof Error) {
     return refusedOutcome(options.socketPath, "evidence-unavailable", finalInspection.message);
   }
@@ -351,6 +365,7 @@ async function runClaimHeldDuplicateCleanup(
     return terminateAutomaticTargets(context, finalInspection, unchangedTargets);
   }
   const keeperPreservation = await inspectKeeperPreservation(options, deps.evidence);
+  if (signal.aborted) return outcome(options.socketPath, "cancelled");
   return {
     ...outcomeFromPlan(options.socketPath, "would-terminate", finalInspection.plan),
     eligiblePids: unchangedTargets.map((target) => target.pid),
@@ -367,9 +382,11 @@ async function terminateAutomaticTargets(
   const sentTargets: ObserverDuplicateCleanupTarget[] = [];
   const signalRefusals: ObserverDuplicateCleanupRefusal[] = [];
   const terminatedPids: number[] = [];
+  const exitedPids: number[] = [];
   for (const target of targets) {
     if (signal.aborted) return outcome(options.socketPath, "cancelled");
     const immediate = await inspectAutomaticCandidates(options, deps.evidence);
+    if (signal.aborted) return outcome(options.socketPath, "cancelled");
     if (immediate instanceof Error || !targetRemainsEligible(target, immediate)) {
       signalRefusals.push(
         refusal(
@@ -384,6 +401,7 @@ async function terminateAutomaticTargets(
       sentTargets,
       signalRefusals,
       terminatedPids,
+      exitedPids,
     });
   }
 
@@ -392,18 +410,18 @@ async function terminateAutomaticTargets(
   }
   if (signal.aborted) return outcome(options.socketPath, "cancelled");
 
-  const survivedPids = classifyTerminatedTargets(
-    sentTargets,
-    terminatedPids,
-    options.socketPath,
-    deps.evidence,
-  );
+  const classified = classifyAutomaticTargets(sentTargets, options.socketPath, deps.evidence);
+  terminatedPids.push(...classified.terminatedPids);
+  const survivedPids = classified.survivedPids;
   const keeperPreservation = await inspectKeeperPreservation(options, deps.evidence);
-  const allRefusals = [...finalInspection.plan.refusals, ...signalRefusals];
+  if (signal.aborted) return outcome(options.socketPath, "cancelled");
+  const allRefusals = [...finalInspection.plan.refusals, ...signalRefusals, ...classified.refusals];
   const status =
-    survivedPids.length > 0 || allRefusals.length > 0 || !keeperPreservation.preserved
+    survivedPids.length > 0
       ? "survived"
-      : "terminated";
+      : allRefusals.length > 0 || !keeperPreservation.preserved
+        ? "refused"
+        : "terminated";
   return {
     ...outcomeFromPlan(options.socketPath, status, {
       ...finalInspection.plan,
@@ -411,6 +429,7 @@ async function terminateAutomaticTargets(
     }),
     eligiblePids: targets.map((target) => target.pid),
     terminatedPids,
+    exitedPids,
     survivedPids,
     keeperPreservation,
   };
@@ -423,12 +442,20 @@ function recordSigtermResult(
     sentTargets: ObserverDuplicateCleanupTarget[];
     signalRefusals: ObserverDuplicateCleanupRefusal[];
     terminatedPids: number[];
+    exitedPids: number[];
   },
 ): void {
   if (result === "sent") {
     output.sentTargets.push(target);
   } else if (result === "absent") {
-    output.terminatedPids.push(target.pid);
+    output.exitedPids.push(target.pid);
+    output.signalRefusals.push(
+      refusal(
+        "candidate-exited-before-signal",
+        "The candidate exited before SIGTERM could be sent.",
+        target.pid,
+      ),
+    );
   } else {
     output.signalRefusals.push(
       refusal("sigterm-refused", "The operating system refused SIGTERM.", target.pid),
@@ -436,18 +463,35 @@ function recordSigtermResult(
   }
 }
 
-function classifyTerminatedTargets(
+function classifyAutomaticTargets(
   sentTargets: ObserverDuplicateCleanupTarget[],
-  terminatedPids: number[],
   socketPath: string,
   evidence: ObserverDuplicateProcessEvidenceSource,
-): number[] {
+): {
+  terminatedPids: number[];
+  survivedPids: number[];
+  refusals: ObserverDuplicateCleanupRefusal[];
+} {
+  const terminatedPids: number[] = [];
   const survivedPids: number[] = [];
+  const refusals: ObserverDuplicateCleanupRefusal[] = [];
   for (const target of sentTargets) {
-    if (exactProcessRemains(target, socketPath, evidence)) survivedPids.push(target.pid);
-    else terminatedPids.push(target.pid);
+    const state = inspectExactProcess(target, socketPath, evidence);
+    if (state === "absent") terminatedPids.push(target.pid);
+    else if (state === "same") survivedPids.push(target.pid);
+    else {
+      refusals.push(
+        refusal(
+          state === "changed" ? "candidate-changed-after-signal" : "evidence-unavailable",
+          state === "changed"
+            ? "The target PID named a different process after SIGTERM."
+            : "The target could not be classified after SIGTERM.",
+          target.pid,
+        ),
+      );
+    }
   }
-  return survivedPids;
+  return { terminatedPids, survivedPids, refusals };
 }
 
 async function inspectAutomaticCandidates(
@@ -468,7 +512,7 @@ async function inspectAutomaticCandidates(
         continue;
       }
       try {
-        candidateUnixSocketFdCounts.set(candidate.pid, evidence.unixSocketFdCount(candidate.pid));
+        candidateUnixSocketFdCounts.set(candidate.pid, evidence.unixSocketFdCount(candidate));
       } catch {
         // A missing map entry is the policy's explicit unavailable-evidence refusal.
       }
@@ -510,7 +554,7 @@ function unchangedEligibleTargets(
     return (
       initialEntry !== undefined &&
       finalEntry !== undefined &&
-      processEntriesMatch(initialEntry, finalEntry)
+      observerProcessEntriesMatch(initialEntry, finalEntry)
     );
   });
 }
@@ -523,40 +567,31 @@ function targetRemainsEligible(
     (candidate) =>
       candidate.pid === target.pid &&
       candidate.startToken === target.startToken &&
-      candidate.startupTimeoutMs === target.startupTimeoutMs,
+      candidate.startupTimeoutMs === target.startupTimeoutMs &&
+      observerProcessEntriesMatch(candidate.process, target.process),
   );
 }
 
-function processEntriesMatch(left: ObserverProcessEntry, right: ObserverProcessEntry): boolean {
-  return (
-    left.pid === right.pid &&
-    left.startToken === right.startToken &&
-    left.socketPath === right.socketPath &&
-    left.startupTimeoutMs === right.startupTimeoutMs &&
-    left.argv.length === right.argv.length &&
-    left.argv.every((value, index) => value === right.argv[index])
-  );
-}
-
-function exactProcessRemains(
-  target: Pick<ObserverDuplicateCleanupTarget, "pid" | "startToken">,
+function inspectExactProcess(
+  target: Pick<ObserverDuplicateCleanupTarget, "pid" | "startToken" | "process">,
   socketPath: string,
   evidence: ObserverDuplicateProcessEvidenceSource,
-): boolean {
-  if (
-    evidence.signal(target.pid, 0) === "absent" ||
-    evidence.processStartToken(target.pid) !== target.startToken
-  ) {
-    return false;
+): "same" | "absent" | "changed" | "unavailable" {
+  try {
+    const exists = evidence.signal(target.pid, 0);
+    if (exists === "absent") return "absent";
+    if (exists === "refused") return "unavailable";
+    const startToken = evidence.processStartToken(target.pid);
+    if (startToken === undefined) return "unavailable";
+    if (startToken !== target.startToken) return "changed";
+    const process = evidence.listObserverProcesses().find((entry) => entry.pid === target.pid);
+    if (process === undefined) return "unavailable";
+    return observerProcessEntriesMatch(process, target.process) && process.socketPath === socketPath
+      ? "same"
+      : "changed";
+  } catch {
+    return "unavailable";
   }
-  return evidence
-    .listObserverProcesses()
-    .some(
-      (entry) =>
-        entry.pid === target.pid &&
-        entry.startToken === target.startToken &&
-        entry.socketPath === socketPath,
-    );
 }
 
 async function inspectKeeperPreservation(
@@ -571,8 +606,22 @@ async function inspectKeeperPreservation(
       evidence.readProcessIdentity(options.socketPath),
       evidence.socketIdentity(options.socketPath),
     ]);
+    const holders = evidence.socketHolders(options.socketPath);
     const pid =
-      evidence.processStartToken(options.keeperIdentity.pid) === options.keeperIdentity.osStartTime;
+      holders.length === 1 &&
+      holders[0] === options.keeperIdentity.pid &&
+      evidence.processStartToken(options.keeperIdentity.pid) ===
+        options.keeperIdentity.osStartTime &&
+      evidence
+        .listObserverProcesses()
+        .some(
+          (entry) =>
+            entry.pid === options.keeperIdentity.pid &&
+            entry.startToken === options.keeperIdentity.osStartTime &&
+            entry.processToken === options.keeperIdentity.processToken &&
+            entry.buildVersion === options.keeperIdentity.version &&
+            entry.socketPath === options.socketPath,
+        );
     const socketIdentity = socketIdentitiesMatch(
       currentSocketIdentity,
       options.boundSocketIdentity,
@@ -595,6 +644,7 @@ export type ObserverReapAutomaticEligibility = {
 export type ObserverReapTarget = {
   pid: number;
   startToken: string;
+  process: ObserverProcessEntry;
   automaticEligibility: ObserverReapAutomaticEligibility;
 };
 
@@ -611,15 +661,28 @@ export type ObserverReapOutcome = {
   applied: boolean;
   aborted?: string;
   killed: number[];
+  exited: number[];
   survived: number[];
   keeperPreservation?: ObserverKeeperPreservation;
+  claimReleased?: boolean;
 };
 
 export type RunObserverReapDeps = {
   evidence: ObserverDuplicateProcessEvidenceSource;
-  healthPid?: (socketPath: string) => Promise<number | undefined>;
+  exclusion: ObserverDuplicateCleanupExclusion;
+  healthPid: (socketPath: string) => Promise<number | undefined>;
   sleep?: (ms: number) => Promise<void>;
 };
+
+/**
+ * DRIVING PORT
+ *
+ * Accepts a local operator's dry-run or explicit-force duplicate reap request.
+ */
+export type ObserverReap = (
+  socketPath: string,
+  options?: { force: boolean; graceMs?: number },
+) => Promise<ObserverReapOutcome>;
 
 export function selectObserverReapPlan(input: {
   socketPath: string;
@@ -659,6 +722,7 @@ export function selectObserverReapPlan(input: {
     targets.push({
       pid: candidate.pid,
       startToken: candidate.startToken,
+      process: candidate,
       automaticEligibility: {
         eligible: false,
         quarantineMs: Math.max(
@@ -682,26 +746,42 @@ export function selectObserverReapPlan(input: {
 /**
  * USE CASE
  *
- * Runs the explicit operator reap with centralized selection and revalidation;
+ * Creates explicit operator reap with centralized selection and revalidation;
  * only this manual force path may escalate from SIGTERM to SIGKILL.
  */
-export async function runObserverReap(
+export function createObserverReap(deps: RunObserverReapDeps) {
+  return (socketPath: string, options: { force: boolean; graceMs?: number } = { force: false }) =>
+    runObserverReap(socketPath, options, deps);
+}
+
+async function runObserverReap(
   socketPath: string,
   options: { force: boolean; graceMs?: number } = { force: false },
   deps: RunObserverReapDeps,
 ): Promise<ObserverReapOutcome> {
-  const { plan, holders } = await buildObserverReapPlan(socketPath, deps);
+  const { plan } = await buildObserverReapPlan(socketPath, deps);
   if (!options.force || plan.keeper === undefined || plan.targets.length === 0) {
-    return { plan, applied: false, killed: [], survived: [] };
+    return { plan, applied: false, killed: [], exited: [], survived: [] };
   }
-  return applyObserverReap({
-    socketPath,
-    options,
-    plan,
-    keeper: plan.keeper,
-    holders,
-    deps,
-  });
+  const keeper = plan.keeper;
+  const excluded = await deps.exclusion.runExclusive(() =>
+    applyObserverReap({ socketPath, options, plan, keeper, deps }),
+  );
+  if (excluded.status === "busy") {
+    return abortedReapOutcome(plan, false, "boot-claim-busy");
+  }
+  if (excluded.status === "failed") {
+    return abortedReapOutcome(plan, false, "boot-claim-failed");
+  }
+  return {
+    ...excluded.value,
+    ...(excluded.released
+      ? { claimReleased: true }
+      : {
+          claimReleased: false,
+          aborted: excluded.value.aborted ?? "boot-claim-release-failed",
+        }),
+  };
 }
 
 async function buildObserverReapPlan(
@@ -710,10 +790,7 @@ async function buildObserverReapPlan(
 ): Promise<{ plan: ObserverReapPlan; holders: number[] }> {
   const processes = deps.evidence.listObserverProcesses();
   const holders = deps.evidence.socketHolders(socketPath);
-  const healthPid =
-    holders.length > 1 && deps.healthPid !== undefined
-      ? await deps.healthPid(socketPath)
-      : undefined;
+  const healthPid = holders.length > 1 ? await deps.healthPid(socketPath) : undefined;
   const selectionInput: {
     socketPath: string;
     processes: ObserverProcessEntry[];
@@ -731,66 +808,136 @@ type ApplyObserverReapInput = {
   options: { force: boolean; graceMs?: number };
   plan: ObserverReapPlan;
   keeper: number;
-  holders: number[];
   deps: RunObserverReapDeps;
 };
 
 async function applyObserverReap(input: ApplyObserverReapInput): Promise<ObserverReapOutcome> {
-  const { socketPath, options, plan, keeper, holders, deps } = input;
+  const { socketPath, options, plan, keeper, deps } = input;
   const sleep = deps.sleep ?? defaultSleep;
-  const baseline = await captureManualKeeperBaseline(socketPath, keeper, deps.evidence);
-  const ownerBaseline = sortedPidKey(holders);
-  const ownerChanged = (): boolean =>
-    sortedPidKey(deps.evidence.socketHolders(socketPath)) !== ownerBaseline;
-  const aborted = (): ObserverReapOutcome => ({
-    plan,
-    applied: true,
-    aborted: "owner-changed",
-    killed: [],
-    survived: [],
-  });
+  let baseline: ManualKeeperBaseline | undefined;
+  try {
+    baseline = await captureManualKeeperBaseline(socketPath, keeper, deps.evidence, deps.healthPid);
+  } catch {
+    // The structured refusal avoids converting missing evidence into signal authority.
+  }
+  if (baseline === undefined) {
+    return abortedReapOutcome(plan, false, "keeper-evidence-unavailable");
+  }
+  const signaled = new Set<number>();
+  const killed: number[] = [];
+  const exited: number[] = [];
 
   for (const target of plan.targets) {
-    if (ownerChanged()) return aborted();
-    if (manualTargetRemains(target, socketPath, deps.evidence)) {
-      deps.evidence.signal(target.pid, "SIGTERM");
+    try {
+      if (!(await manualKeeperMatches(socketPath, baseline, deps.evidence, deps.healthPid))) {
+        return abortedReapOutcome(plan, signaled.size > 0, "owner-changed", killed, exited);
+      }
+      if (!manualTargetRemains(target, socketPath, keeper, deps.evidence)) {
+        return abortedReapOutcome(plan, signaled.size > 0, "target-changed", killed, exited);
+      }
+      const result = deps.evidence.signal(target.pid, "SIGTERM");
+      if (result === "refused") {
+        return abortedReapOutcome(plan, signaled.size > 0, "signal-refused", killed, exited);
+      }
+      if (result === "absent") {
+        exited.push(target.pid);
+        return abortedReapOutcome(plan, signaled.size > 0, "target-exited", killed, exited);
+      }
+      signaled.add(target.pid);
+    } catch {
+      return abortedReapOutcome(plan, signaled.size > 0, "evidence-unavailable", killed, exited);
     }
   }
   await sleep(options.graceMs ?? DEFAULT_SIGTERM_GRACE_MS);
   for (const target of plan.targets) {
-    if (!exactProcessRemains(target, socketPath, deps.evidence)) continue;
-    if (ownerChanged()) return aborted();
-    if (manualTargetRemains(target, socketPath, deps.evidence)) {
-      deps.evidence.signal(target.pid, "SIGKILL");
+    if (!signaled.has(target.pid)) continue;
+    try {
+      const state = inspectExactProcess(target, socketPath, deps.evidence);
+      if (state === "absent") {
+        killed.push(target.pid);
+        continue;
+      }
+      if (state !== "same") {
+        return abortedReapOutcome(
+          plan,
+          true,
+          state === "changed" ? "target-changed" : "evidence-unavailable",
+          killed,
+          exited,
+        );
+      }
+      if (!(await manualKeeperMatches(socketPath, baseline, deps.evidence, deps.healthPid))) {
+        return abortedReapOutcome(plan, true, "owner-changed", killed, exited);
+      }
+      if (!manualTargetRemains(target, socketPath, keeper, deps.evidence)) {
+        return abortedReapOutcome(plan, true, "target-changed", killed, exited);
+      }
+      const result = deps.evidence.signal(target.pid, "SIGKILL");
+      if (result === "refused") {
+        return abortedReapOutcome(plan, true, "signal-refused", killed, exited);
+      }
+      if (result === "absent") exited.push(target.pid);
+    } catch {
+      return abortedReapOutcome(plan, true, "evidence-unavailable", killed, exited);
     }
   }
   await sleep(SIGKILL_CONFIRM_MS);
 
-  const { killed, survived } = classifyManualReapTargets(plan.targets, socketPath, deps.evidence);
-  const keeperPreservation = await inspectManualKeeperPreservation(
-    socketPath,
-    keeper,
-    baseline,
-    deps.evidence,
+  const remainingTargets = plan.targets.filter(
+    (target) =>
+      signaled.has(target.pid) && !killed.includes(target.pid) && !exited.includes(target.pid),
   );
-  return { plan, applied: true, killed, survived, keeperPreservation };
+  let classified: { killed: number[]; survived: number[] };
+  let keeperPreservation: ObserverKeeperPreservation;
+  try {
+    classified = classifyManualReapTargets(remainingTargets, socketPath, deps.evidence);
+    keeperPreservation = await inspectManualKeeperPreservation(
+      socketPath,
+      baseline,
+      deps.evidence,
+      deps.healthPid,
+    );
+  } catch {
+    return abortedReapOutcome(plan, true, "evidence-unavailable", killed, exited);
+  }
+  killed.push(...classified.killed);
+  return {
+    plan,
+    applied: true,
+    killed,
+    exited,
+    survived: classified.survived,
+    keeperPreservation,
+  };
+}
+
+function abortedReapOutcome(
+  plan: ObserverReapPlan,
+  applied: boolean,
+  aborted: string,
+  killed: number[] = [],
+  exited: number[] = [],
+): ObserverReapOutcome {
+  return { plan, applied, aborted, killed, exited, survived: [] };
 }
 
 function manualTargetRemains(
   target: ObserverReapTarget,
   socketPath: string,
+  keeper: number,
   evidence: ObserverDuplicateProcessEvidenceSource,
 ): boolean {
+  const holders = evidence.socketHolders(socketPath);
   return (
-    !evidence.socketHolders(socketPath).includes(target.pid) &&
+    holders.length === 1 &&
+    holders[0] === keeper &&
     evidence.processStartToken(target.pid) === target.startToken &&
+    evidence.unixSocketFdCount(target.process) === 0 &&
     evidence
       .listObserverProcesses()
       .some(
         (entry) =>
-          entry.pid === target.pid &&
-          entry.startToken === target.startToken &&
-          entry.socketPath === socketPath,
+          observerProcessEntriesMatch(entry, target.process) && entry.socketPath === socketPath,
       )
   );
 }
@@ -803,14 +950,12 @@ function classifyManualReapTargets(
   const killed: number[] = [];
   const survived: number[] = [];
   for (const target of targets) {
-    if (exactProcessRemains(target, socketPath, evidence)) survived.push(target.pid);
-    else killed.push(target.pid);
+    const state = inspectExactProcess(target, socketPath, evidence);
+    if (state === "absent") killed.push(target.pid);
+    else if (state === "same") survived.push(target.pid);
+    else throw new Error(`Target ${target.pid} could not be classified after SIGKILL.`);
   }
   return { killed, survived };
-}
-
-function sortedPidKey(pids: number[]): string {
-  return [...pids].sort((left, right) => left - right).join(",");
 }
 
 async function addAutomaticEligibility(
@@ -839,7 +984,7 @@ async function addAutomaticEligibility(
   const candidateUnixSocketFdCounts = new Map<number, number>();
   for (const target of plan.targets) {
     try {
-      candidateUnixSocketFdCounts.set(target.pid, evidence.unixSocketFdCount(target.pid));
+      candidateUnixSocketFdCounts.set(target.pid, evidence.unixSocketFdCount(target.process));
     } catch {
       // The policy reports unavailable evidence from the absent map entry.
     }
@@ -889,47 +1034,97 @@ function automaticRefusalReasons(
 }
 
 type ManualKeeperBaseline = {
-  startToken?: string;
-  socketIdentity?: SocketIdentity;
-  pidfile?: ObserverProcessIdentity;
+  keeper: number;
+  startToken: string;
+  socketIdentity: SocketIdentity;
+  pidfile: ObserverProcessIdentity;
+  process: ObserverProcessEntry;
 };
 
 async function captureManualKeeperBaseline(
   socketPath: string,
   keeper: number,
   evidence: ObserverDuplicateProcessEvidenceSource,
-): Promise<ManualKeeperBaseline> {
-  const [pidfile, socketIdentity] = await Promise.all([
+  healthPid: (socketPath: string) => Promise<number | undefined>,
+): Promise<ManualKeeperBaseline | undefined> {
+  const [pidfile, socketIdentity, healthyPid] = await Promise.all([
     evidence.readProcessIdentity(socketPath),
     evidence.socketIdentity(socketPath),
+    healthPid(socketPath),
   ]);
-  const baseline: ManualKeeperBaseline = {};
   const startToken = evidence.processStartToken(keeper);
-  if (startToken !== undefined) baseline.startToken = startToken;
-  if (socketIdentity !== undefined) baseline.socketIdentity = socketIdentity;
-  if (pidfile !== undefined) baseline.pidfile = pidfile;
-  return baseline;
+  const holders = evidence.socketHolders(socketPath);
+  const process = evidence.listObserverProcesses().find((entry) => entry.pid === keeper);
+  if (
+    pidfile === undefined ||
+    socketIdentity === undefined ||
+    startToken === undefined ||
+    process === undefined ||
+    healthyPid !== keeper ||
+    holders.length !== 1 ||
+    holders[0] !== keeper ||
+    pidfile.pid !== keeper ||
+    pidfile.socketPath !== socketPath ||
+    pidfile.osStartTime !== startToken ||
+    process.startToken !== startToken ||
+    process.processToken !== pidfile.processToken ||
+    process.buildVersion !== pidfile.version ||
+    process.socketPath !== socketPath
+  ) {
+    return undefined;
+  }
+  return { keeper, startToken, socketIdentity, pidfile, process };
+}
+
+async function manualKeeperMatches(
+  socketPath: string,
+  baseline: ManualKeeperBaseline,
+  evidence: ObserverDuplicateProcessEvidenceSource,
+  healthPid: (socketPath: string) => Promise<number | undefined>,
+): Promise<boolean> {
+  const [pidfile, socketIdentity, healthyPid] = await Promise.all([
+    evidence.readProcessIdentity(socketPath),
+    evidence.socketIdentity(socketPath),
+    healthPid(socketPath),
+  ]);
+  const holders = evidence.socketHolders(socketPath);
+  const process = evidence.listObserverProcesses().find((entry) => entry.pid === baseline.keeper);
+  return (
+    holders.length === 1 &&
+    holders[0] === baseline.keeper &&
+    healthyPid === baseline.keeper &&
+    evidence.processStartToken(baseline.keeper) === baseline.startToken &&
+    process !== undefined &&
+    observerProcessEntriesMatch(process, baseline.process) &&
+    socketIdentitiesMatch(socketIdentity, baseline.socketIdentity) &&
+    pidfile !== undefined &&
+    observerProcessIdentitiesMatch(pidfile, baseline.pidfile)
+  );
 }
 
 async function inspectManualKeeperPreservation(
   socketPath: string,
-  keeper: number,
   baseline: ManualKeeperBaseline,
   evidence: ObserverDuplicateProcessEvidenceSource,
+  healthPid: (socketPath: string) => Promise<number | undefined>,
 ): Promise<ObserverKeeperPreservation> {
-  const [pidfile, socketIdentity] = await Promise.all([
+  const [pidfile, socketIdentity, healthyPid] = await Promise.all([
     evidence.readProcessIdentity(socketPath),
     evidence.socketIdentity(socketPath),
+    healthPid(socketPath),
   ]);
+  const holders = evidence.socketHolders(socketPath);
+  const process = evidence.listObserverProcesses().find((entry) => entry.pid === baseline.keeper);
   const pid =
-    baseline.startToken !== undefined && evidence.processStartToken(keeper) === baseline.startToken;
-  const preservedSocket =
-    baseline.socketIdentity !== undefined &&
-    socketIdentitiesMatch(socketIdentity, baseline.socketIdentity);
+    holders.length === 1 &&
+    holders[0] === baseline.keeper &&
+    healthyPid === baseline.keeper &&
+    evidence.processStartToken(baseline.keeper) === baseline.startToken &&
+    process !== undefined &&
+    observerProcessEntriesMatch(process, baseline.process);
+  const preservedSocket = socketIdentitiesMatch(socketIdentity, baseline.socketIdentity);
   const preservedPidfile =
-    baseline.pidfile !== undefined &&
-    pidfile !== undefined &&
-    observerProcessIdentitiesMatch(pidfile, baseline.pidfile);
+    pidfile !== undefined && observerProcessIdentitiesMatch(pidfile, baseline.pidfile);
   return {
     pid,
     socketIdentity: preservedSocket,
@@ -966,6 +1161,7 @@ function outcome(
     refusalCodes: [],
     refusals: [],
     terminatedPids: [],
+    exitedPids: [],
     survivedPids: [],
   };
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -8,11 +9,12 @@ import {
   loadConfig,
   type StationConfig,
 } from "@station/config";
-import type {
-  ObserverApi,
-  ObserverProcessIdentity,
-  ObserverStopReceipt,
-  SafeError,
+import {
+  type ObserverApi,
+  type ObserverProcessIdentity,
+  ObserverProcessTokenSchema,
+  type ObserverStopReceipt,
+  type SafeError,
 } from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import {
@@ -142,6 +144,9 @@ export async function runObserverMain(
   );
   const socketPath = resolveObserverSocketPath(options.socketPath, config, stateDir, homeDir);
   const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
+  if (options.buildVersion !== undefined && options.buildVersion !== buildVersion) {
+    throw new Error("--build-version must match the running Observer build selector.");
+  }
   const handoffNow = deps.handoffNow ?? Date.now;
   const startupDeadline = handoffNow() + options.startupTimeoutMs;
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
@@ -455,6 +460,7 @@ async function runClaimedObserverRuntime(input: {
     boundSocketIdentity = boundIdentity;
     processIdentity = createObserverProcessIdentity({
       pid: process.pid,
+      processToken: options.processToken,
       version: buildVersion,
       socketPath,
     });
@@ -561,6 +567,7 @@ async function logDuplicateCleanupOutcome(
     outcome: cleanup.status,
     eligiblePids: cleanup.eligiblePids,
     terminatedPids: cleanup.terminatedPids,
+    exitedPids: cleanup.exitedPids,
     survivedPids: cleanup.survivedPids,
     refusalCodes: cleanup.refusalCodes,
   };
@@ -571,7 +578,7 @@ async function logDuplicateCleanupOutcome(
   if (
     cleanup.status === "clear" ||
     cleanup.status === "cancelled" ||
-    cleanup.status === "terminated"
+    (cleanup.status === "terminated" && cleanup.claimReleased !== false)
   ) {
     await logger.info(`Observer duplicate cleanup ${cleanup.status}.`, attributes);
     return;
@@ -603,23 +610,41 @@ function parseArgs(argv: string[]): {
   socketPath?: string;
   stateDir?: string;
   startupTimeoutMs: number;
+  buildVersion?: string;
+  processToken: string;
 } {
   const result: {
     configPath?: string;
     socketPath?: string;
     stateDir?: string;
     startupTimeoutMs: number;
-  } = { startupTimeoutMs: DEFAULT_STARTUP_TIMEOUT_MS };
+    buildVersion?: string;
+    processToken: string;
+  } = { startupTimeoutMs: DEFAULT_STARTUP_TIMEOUT_MS, processToken: randomUUID() };
+  const seen = new Set<string>();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if (arg === "--config" && value !== undefined) {
+    if (arg?.startsWith("--") === true) {
+      if (seen.has(arg)) throw new Error(`${arg} may be provided only once.`);
+      seen.add(arg);
+    }
+    if (arg === "--config") {
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error("--config requires a path.");
+      }
       result.configPath = value;
       index += 1;
-    } else if (arg === "--socket" && value !== undefined) {
+    } else if (arg === "--socket") {
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error("--socket requires a path.");
+      }
       result.socketPath = value;
       index += 1;
-    } else if (arg === "--state-dir" && value !== undefined) {
+    } else if (arg === "--state-dir") {
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error("--state-dir requires a path.");
+      }
       result.stateDir = value;
       index += 1;
     } else if (arg === "--startup-timeout-ms") {
@@ -632,6 +657,21 @@ function parseArgs(argv: string[]): {
       }
       result.startupTimeoutMs = timeoutMs;
       index += 1;
+    } else if (arg === "--build-version") {
+      if (value === undefined || value.length === 0) {
+        throw new Error("--build-version must be non-empty.");
+      }
+      result.buildVersion = value;
+      index += 1;
+    } else if (arg === "--process-token") {
+      const processToken = ObserverProcessTokenSchema.safeParse(value);
+      if (!processToken.success) {
+        throw new Error("--process-token must be a UUID v4.");
+      }
+      result.processToken = processToken.data.toLowerCase();
+      index += 1;
+    } else {
+      throw new Error(`Unknown Observer argument: ${arg ?? "<missing>"}`);
     }
   }
   return result;

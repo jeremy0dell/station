@@ -10,6 +10,7 @@ import {
   stopObserver,
 } from "../observerProcess.js";
 import {
+  createLocalObserverReap,
   type ObserverReapDeps,
   type ReapOutcome,
   type ReapTarget,
@@ -50,7 +51,11 @@ export async function runObserverCommand(
 
   switch (action) {
     case "reap":
-      return runObserverReap(paths.socketPath, { force: parsed.force }, options.reapDeps ?? {});
+      return runObserverReap(
+        paths.socketPath,
+        { force: parsed.force },
+        createLocalObserverReap(options.reapDeps),
+      );
     case "status":
       return getObserverStatus(runtimeOptions, deps);
     case "start":
@@ -140,10 +145,13 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
       })),
       refusals: plan.refusals,
       applied,
-      ...(applied ? { killed: result.killed, survived: result.survived } : {}),
+      ...(applied || result.aborted !== undefined
+        ? { killed: result.killed, exited: result.exited, survived: result.survived }
+        : {}),
       ...(result.keeperPreservation === undefined
         ? {}
         : { keeperPreservation: result.keeperPreservation }),
+      ...(result.claimReleased === undefined ? {} : { claimReleased: result.claimReleased }),
       ...(result.aborted === undefined ? {} : { aborted: result.aborted }),
     };
   }

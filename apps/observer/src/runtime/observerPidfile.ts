@@ -6,6 +6,7 @@ import { type ObserverProcessIdentity, ObserverProcessIdentitySchema } from "@st
 
 export type CreateObserverProcessIdentityOptions = {
   pid: number;
+  processToken: string;
   version: string;
   socketPath: string;
 };
@@ -38,6 +39,7 @@ export function observerProcessIdentitiesMatch(
   return (
     actual.pid === expected.pid &&
     actual.osStartTime === expected.osStartTime &&
+    actual.processToken === expected.processToken &&
     actual.version === expected.version &&
     actual.socketPath === expected.socketPath
   );
@@ -73,6 +75,7 @@ export function createObserverProcessIdentity(
   return ObserverProcessIdentitySchema.parse({
     pid: options.pid,
     osStartTime: readOsStartTime(options.pid),
+    processToken: options.processToken,
     version: options.version,
     socketPath: options.socketPath,
   });

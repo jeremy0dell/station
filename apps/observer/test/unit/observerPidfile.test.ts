@@ -72,12 +72,14 @@ describe("observer pidfile", () => {
     expect(
       createObserverProcessIdentity({
         pid: process.pid,
+        processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
         version: "1.2.3",
         socketPath,
       }),
     ).toEqual({
       pid: process.pid,
       osStartTime: expectedStartTime,
+      processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
       version: "1.2.3",
       socketPath,
     });
@@ -90,6 +92,7 @@ describe("observer pidfile", () => {
       expect(
         createObserverProcessIdentity({
           pid: process.pid,
+          processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
           version: "1.2.3",
           socketPath: "/tmp/station/observer.sock",
         }).osStartTime,
@@ -178,6 +181,7 @@ describe("observer pidfile", () => {
   it.each([
     ["pid", { pid: process.pid + 1 }],
     ["osStartTime", { osStartTime: "Mon Jan  1 00:00:00 2001" }],
+    ["processToken", { processToken: "b47ac10b-58cc-4372-a567-0e02b2c3d479" }],
     ["version", { version: "9.9.9" }],
     ["socketPath", { socketPath: "/tmp/other/observer.sock" }],
   ] as const)("leaves the pidfile when %s does not match", async (_field, replacement) => {
@@ -248,6 +252,7 @@ function processIdentity(socketPath: string): ObserverProcessIdentity {
   return {
     pid: process.pid,
     osStartTime: "Sat Jul 11 12:34:56 2026",
+    processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
     version: "1.2.3",
     socketPath,
   };

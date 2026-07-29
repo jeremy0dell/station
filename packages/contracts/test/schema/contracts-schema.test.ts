@@ -170,13 +170,14 @@ describe("contract schemas", () => {
     const identity: ObserverProcessIdentity = {
       pid: 1234,
       osStartTime: "Sat Jul 11 12:34:56 2026",
+      processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
       version: "0.1.1-dev",
       socketPath: "/tmp/station/observer.sock",
     };
 
     expect(ObserverProcessIdentitySchema.parse(identity)).toEqual(identity);
 
-    for (const field of ["pid", "osStartTime", "version", "socketPath"] as const) {
+    for (const field of ["pid", "osStartTime", "processToken", "version", "socketPath"] as const) {
       const incompleteIdentity: Partial<ObserverProcessIdentity> = { ...identity };
       delete incompleteIdentity[field];
       expectFails(
@@ -190,6 +191,11 @@ describe("contract schemas", () => {
       ObserverProcessIdentitySchema,
       { ...identity, stateDir: "/tmp/station/state" },
       "observer process identity with unknown field",
+    );
+    expectFails(
+      ObserverProcessIdentitySchema,
+      { ...identity, processToken: "a47ac10b-58cc-1372-a567-0e02b2c3d479" },
+      "observer process identity with a non-v4 token",
     );
   });
 

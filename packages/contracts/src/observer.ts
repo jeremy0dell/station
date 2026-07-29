@@ -35,10 +35,16 @@ import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
 export const ObserverHealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
 
+/** Opaque UUID v4 minted for one Observer launch and published in argv and its pidfile. */
+export const ObserverProcessTokenSchema = z
+  .uuid()
+  .refine((value) => value[14]?.toLowerCase() === "4", "Expected an Observer UUID v4 token.");
+
 export const ObserverProcessIdentitySchema = z
   .object({
     pid: z.number().int().positive(),
     osStartTime: nonEmptyStringSchema,
+    processToken: ObserverProcessTokenSchema,
     version: nonEmptyStringSchema,
     socketPath: nonEmptyStringSchema,
   })

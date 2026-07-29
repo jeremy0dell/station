@@ -33,6 +33,10 @@ construction or the main Observer database opens, it acquires `BEGIN IMMEDIATE` 
 `dirname(resolvedSocket)/observer.claim.sqlite` with the caller's bounded startup budget.
 The active SQLite transaction is the exclusion authority; the persistent database and its
 sidecars are never stale locks and must not be deleted or replaced.
+On first use, Station initializes a private temporary database and publishes it with a
+no-replace hard link, so contenders never open a shared empty SQLite file. File checks use
+non-opening metadata reads before and after `BEGIN IMMEDIATE`; reopening and closing that inode
+would release a process-scoped POSIX lock.
 
 While holding the claim, startup classifies the socket as exactly one of:
 
@@ -50,19 +54,24 @@ before providers, main SQLite, bind, pidfile publication, stop, unlink, or signa
 ## Process and immutable-build identity
 
 The successful binder publishes `<resolved socketPath>.pid` atomically at mode `0600` with
-strict `{pid, osStartTime, version, socketPath}` content. `version` is the Observer selector:
-display SemVer plus reserved `station.<sha256>` build metadata.
+strict `{pid, osStartTime, processToken, version, socketPath}` content. `processToken` is a
+per-launch UUID v4, while `version` is the Observer selector: display SemVer plus reserved
+`station.<sha256>` build metadata.
 
 Process attribution requires agreement among:
 
 - the sole `lsof` socket holder;
 - health PID, OS start token, selector, and socket when health is part of the operation;
 - the strict pidfile;
-- the exact Observer argv shape and resolved socket;
+- the exact source or compiled Observer argv shape, launch token, build selector, and resolved
+  socket;
+- the OS-reported executable image (Linux `/proc`; macOS `lsof` text-image device/inode);
 - a fresh OS process-start token.
 
-The OS start token prevents PID reuse from inheriting authority. Missing, malformed, stale,
-or conflicting evidence refuses ownership mutation. Clean shutdown removes a pidfile only
+`ps lstart` has only one-second resolution on the supported macOS and Linux paths, so it is
+corroborating evidence and never authorizes a signal alone. Exact argv plus the per-launch token
+prevents an ordinary same-second PID replacement from inheriting authority. Missing, malformed,
+stale, or conflicting evidence refuses ownership mutation. Clean shutdown removes a pidfile only
 when all fields still match the process's published identity.
 
 ## Attach versus coordinated handoff
@@ -132,8 +141,8 @@ Automatic eligibility requires all of the following:
    socket;
 5. each candidate remains byte-for-byte stable across a quarantine at least as long as its
    advertised startup budget, with a conservative ten-second fallback for legacy argv;
-6. strict per-process `lsof` evidence reports zero Unix-domain socket descriptors for the
-   candidate;
+6. a complete per-process `lsof -F0pft` inventory reports zero Unix-domain socket descriptors
+   for the candidate before and after exact process revalidation;
 7. the boot claim is acquired without waiting;
 8. keeper and candidate evidence agrees again while the claim is held, immediately before
    any proposed signal.
@@ -154,14 +163,17 @@ and reports survivors. It never sends automatic SIGKILL.
 eligibility at the current inspection, quarantine requirements, and refusal reasons. A dry
 run sends no signal.
 
-`stn observer reap --force` is the explicit operator escalation path. It preserves the
-existing manual semantics: revalidate the owner and target, send SIGTERM, wait the bounded
-grace period, then send SIGKILL only to an unchanged surviving duplicate. Owner change,
-PID reuse, a new socket holder, or unavailable evidence aborts further signaling.
+`stn observer reap --force` is the explicit operator escalation path. It acquires the boot
+claim without waiting, then revalidates health, owner, target, executable/argv identity, and
+zero-Unix-socket evidence before SIGTERM. After the bounded grace period it refreshes the same
+evidence and sends SIGKILL only to an unchanged surviving duplicate. Claim contention, owner
+change, PID reuse, a new socket holder, or unavailable evidence aborts further signaling.
 
-Forced output records whether the keeper PID/start token, socket inode/birth identity, and
-strict pidfile survived. `--force` is for a process the operator has independently confirmed;
-it is not a generic response to inaccessible ownership or a wedged live binder.
+Forced output distinguishes targets already exited, targets confirmed absent after a signal,
+unchanged survivors, signal refusal, and unavailable evidence. It also records whether the
+keeper process/holder identity, socket inode/birth identity, and strict pidfile survived.
+`--force` is for a process the operator has independently confirmed; it is not a generic
+response to inaccessible ownership or a wedged live binder.
 
 ## Shutdown ordering
 
@@ -188,7 +200,10 @@ Station fails closed for singleton mutation:
 
 - pidfile presence is never liveness;
 - claim-file presence is never ownership;
-- missing `lsof`, `ps`, pidfile, socket-identity, or OS-start-token evidence never means safe;
+- missing, denied, empty, malformed, truncated, or nonzero `lsof` evidence never means zero
+  descriptors;
+- missing `ps`, executable, exact argv, launch-token, build, pidfile, socket-identity, or
+  OS-start-token evidence never means safe;
 - multiple socket holders are never automatic cleanup targets;
 - any candidate Unix-domain socket descriptor refuses automatic cleanup, including a
   descriptor for an unrelated socket;

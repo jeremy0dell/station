@@ -65,6 +65,7 @@ describe("observer singleton Doctor check", () => {
           refusalCodes: [],
           refusals: [],
           terminatedPids: [],
+          exitedPids: [],
           survivedPids: [],
         }),
       });
@@ -111,6 +112,7 @@ describe("observer singleton Doctor check", () => {
       eligiblePids: [200],
       refusalCodes: [],
       refusals: [],
+      exitedPids: [],
       keeperPreservation: {
         pid: true,
         socketIdentity: true,

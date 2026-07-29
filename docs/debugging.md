@@ -140,7 +140,8 @@ its existence, identifies a boot owner. Do not delete, rename, replace, or
 reuses the same inode. The socket directory is mode `0700`; the claim and any
 `-journal`, `-wal`, or `-shm` sidecars are regular non-symlink files at mode
 `0600`. When XDG or an explicit socket moves this file outside `state_dir`, use
-the resolved health `socketPath` to locate it.
+the resolved health `socketPath` to locate it. Station refuses insecure existing claim
+directories or files rather than changing their modes during claim acquisition.
 
 Important files and directories:
 
@@ -165,6 +166,7 @@ spool/hooks/
 {
   "pid": 12345,
   "osStartTime": "Sat Jul 11 10:42:03 2026",
+  "processToken": "a47ac10b-58cc-4372-a567-0e02b2c3d479",
   "version": "0.7.0+station.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "socketPath": "/resolved/socket/directory/observer.sock"
 }
@@ -186,6 +188,14 @@ state directory. Do not unlink the socket or treat its pidfile as liveness proof
 `status`, `start`, `restart`, `doctor`, and provider ingress intentionally perform
 no takeover while this diagnosis remains.
 
+`ps lstart` is one-second-resolution corroboration, not an immutable process handle. Signal
+authority additionally requires the exact Observer executable and canonical argv, including
+the per-launch `--process-token` and exact `--build-version`, to remain unchanged. On macOS,
+Station corroborates the executable path and device/inode through `lsof` text-image records;
+on Linux it also reads NUL-delimited `/proc/<pid>/cmdline` and `/proc/<pid>/exe`. A missing,
+denied, empty, malformed,
+or nonzero `lsof` result is unavailable evidence, never proof of zero descriptors.
+
 The pidfile and health response use the exact Observer selector shown above;
 `stn --version` and `StationSnapshot.observer.version` remain the display
 version (`0.7.0` in this example).
@@ -206,11 +216,13 @@ candidate or evidence refusal is a warning, while a clear result is healthy.
 The structured Observer log records `would-terminate`, candidate PIDs, refusal
 codes, keeper preservation, and claim release. Report-only mode sends no signal.
 Use `stn observer reap` to compare the current process, holder, pidfile,
-socket-identity, start-token, and Unix-socket-FD evidence.
+socket-identity, start-token, launch-token, build, executable, argv, and complete
+Unix-socket-FD evidence.
 
 `stn observer reap --force` remains the explicit operator path for a confirmed
-duplicate. It revalidates, sends SIGTERM, and may send SIGKILL after the manual
-grace period. Automatic cleanup has no SIGKILL path: terminate mode, when
+duplicate. It holds the boot claim, refreshes health and strict process/FD evidence,
+sends SIGTERM, and may send SIGKILL after the manual grace period only after another
+fresh revalidation. Automatic cleanup has no SIGKILL path: terminate mode, when
 promoted separately after field evidence, sends one SIGTERM and reports a
 survivor for manual inspection. Do not use forced reap as a generic response to
 an inaccessible socket or a live wedged owner.

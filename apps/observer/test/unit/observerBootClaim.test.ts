@@ -80,7 +80,7 @@ describe("observer boot claim", () => {
     expect(successor.release()).toEqual({ status: "released" });
   });
 
-  it("normalizes existing database and sidecar modes without treating them as ownership", async () => {
+  it("refuses insecure existing claim paths without changing their modes", async () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
     const path = observerBootClaimPath(socketPath);
@@ -88,21 +88,18 @@ describe("observer boot claim", () => {
     for (const suffix of ["", "-journal", "-wal", "-shm"]) {
       await writeFile(`${path}${suffix}`, "", { mode: 0o644 });
     }
-    const database = fakeDatabase();
     const originalUmask = process.umask();
 
-    const claim = await acquireObserverBootClaim(
-      { socketPath, timeoutMs: 100 },
-      { openDatabase: () => database },
-    );
-    expect(claim.status).toBe("acquired");
+    const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 100 });
+    expect(claim).toMatchObject({
+      status: "failed",
+      error: { code: "OBSERVER_BOOT_CLAIM_FAILED" },
+    });
     expect(process.umask()).toBe(originalUmask);
-    if (claim.status !== "acquired") return;
+    expect((await stat(dirname(path))).mode & 0o777).toBe(0o755);
     for (const suffix of ["", "-journal", "-wal", "-shm"]) {
-      expect((await stat(`${path}${suffix}`)).mode & 0o777).toBe(0o600);
+      expect((await stat(`${path}${suffix}`)).mode & 0o777).toBe(0o644);
     }
-    expect(claim.release()).toEqual({ status: "released" });
-    expect(process.umask()).toBe(originalUmask);
   });
 
   it.each([
@@ -115,11 +112,9 @@ describe("observer boot claim", () => {
     const socketPath = join(root, "run", "observer.sock");
     const path = observerBootClaimPath(socketPath);
     const target = join(root, `target${suffix || "-db"}`);
-    await mkdir(dirname(path), { recursive: true });
     await writeFile(target, "target", "utf8");
-    if (suffix !== "") {
-      await writeFile(path, "", { mode: 0o600 });
-    }
+    if (suffix === "") await mkdir(dirname(path), { recursive: true });
+    else await initializeClaimDatabase(socketPath);
     await symlink(target, `${path}${suffix}`);
 
     const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
@@ -140,10 +135,8 @@ describe("observer boot claim", () => {
     const root = await tempRoot();
     const socketPath = join(root, "run", "observer.sock");
     const path = observerBootClaimPath(socketPath);
-    await mkdir(dirname(path), { recursive: true });
-    if (suffix !== "") {
-      await writeFile(path, "", { mode: 0o600 });
-    }
+    if (suffix === "") await mkdir(dirname(path), { recursive: true });
+    else await initializeClaimDatabase(socketPath);
     await mkdir(`${path}${suffix}`);
 
     const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
@@ -212,6 +205,22 @@ describe("observer boot claim", () => {
       }
       expect(database.close).toHaveBeenCalledOnce();
     }
+  });
+
+  it("publishes an initialized database before entering the claim transaction", async () => {
+    const root = await tempRoot();
+    const socketPath = join(root, "run", "observer.sock");
+    const path = observerBootClaimPath(socketPath);
+    const database = fakeDatabase();
+
+    const claim = await acquireObserverBootClaim(
+      { socketPath, timeoutMs: 100 },
+      { openDatabase: () => database },
+    );
+
+    expect(claim.status).toBe("acquired");
+    expect((await stat(path)).size).toBeGreaterThan(0);
+    if (claim.status === "acquired") expect(claim.release()).toEqual({ status: "released" });
   });
 
   it("attempts both rollback and close, then caches a release failure", async () => {
@@ -347,6 +356,12 @@ async function tempRoot(prefix = "station-observer-claim-"): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), prefix));
   roots.push(root);
   return root;
+}
+
+async function initializeClaimDatabase(socketPath: string): Promise<void> {
+  const claim = await acquireObserverBootClaim({ socketPath, timeoutMs: 50 });
+  expect(claim.status).toBe("acquired");
+  if (claim.status === "acquired") expect(claim.release()).toEqual({ status: "released" });
 }
 
 function fakeDatabase(
