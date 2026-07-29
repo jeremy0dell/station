@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { createStationHostClient, HOST_PROTOCOL_VERSION } from "@station/host";
 import { stationBuildInfo } from "@station/runtime";
 import { afterEach, describe, expect, it } from "bun:test";
+import type { StationTerminalProcess, StationTerminalReplay } from "../terminal/types.js";
+import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
+import { waitFor } from "../terminal/testing/waitFor.js";
 import { StationTerminalSpawnError } from "../terminal/pty/errors.js";
 import { type StationHostInstance, startStationHost } from "./startHost.js";
 
@@ -244,7 +247,7 @@ describe("startStationHost", () => {
     }
   });
 
-  it("returns HOST_SNAPSHOT_FAILED without dropping a truncated PTY", async () => {
+  it("keeps a truncated PTY live through degraded reset, output, input, and resize", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startOnTempSocket({
       createTerminal: () => scripted.terminal,
@@ -259,8 +262,9 @@ describe("startStationHost", () => {
       }),
     });
     const client = createStationHostClient({ socketPath });
+    let terminal: StationTerminalProcess | undefined;
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "claude",
         args: [],
@@ -271,11 +275,42 @@ describe("startStationHost", () => {
       scripted.helpers.emitData("first");
       scripted.helpers.emitData("second");
 
-      await expect(client.attach(ptyId)).rejects.toMatchObject({
-        code: "HOST_SNAPSHOT_FAILED",
+      terminal = createHostAttachedTerminal({
+        hostSocketPath: socketPath,
+        ptyId: spawned.ptyId,
+        size: { cols: 80, rows: 24 },
       });
-      expect(await client.list()).toMatchObject([{ ptyId, alive: true }]);
+      const replays: StationTerminalReplay[] = [];
+      const data: string[] = [];
+      const exits: number[] = [];
+      const unavailable: string[] = [];
+      terminal.onReplay?.((replay) => {
+        replays.push(replay);
+      });
+      terminal.onData((value) => data.push(value));
+      terminal.onExit((event) => exits.push(event.exitCode));
+      terminal.onUnavailable?.((event) => unavailable.push(event.code));
+
+      await waitFor(() => replays.length === 1 && scripted.helpers.resizes.length >= 3);
+      expect(replays[0]).toMatchObject({ kind: "live-reset-recovery" });
+      expect(terminal.pid).toBe(spawned.pid);
+      expect(await client.list()).toMatchObject([
+        { ptyId: spawned.ptyId, pid: spawned.pid, alive: true },
+      ]);
+      expect(exits).toEqual([]);
+      expect(unavailable).toEqual([]);
+
+      terminal.write("input-after-reset");
+      terminal.resize({ cols: 100, rows: 30 });
+      scripted.helpers.emitData("live-after-reset");
+      await waitFor(
+        () =>
+          scripted.helpers.writes.includes("input-after-reset") &&
+          scripted.helpers.resizes.some((size) => size.cols === 100 && size.rows === 30) &&
+          data.includes("live-after-reset"),
+      );
     } finally {
+      terminal?.dispose();
       client.dispose();
     }
   });

@@ -355,6 +355,7 @@ describe("SemanticTerminalSnapshot", () => {
         source.write(input);
         await expect(source.capture()).rejects.toMatchObject({
           message,
+          reason: "unsupported-state",
         });
       } finally {
         source.dispose();
@@ -403,6 +404,19 @@ describe("SemanticTerminalSnapshot", () => {
     } finally {
       source.dispose();
       restored.dispose();
+    }
+  });
+
+  it("retains a classified failure when an asynchronous model update is rejected", async () => {
+    const source = new SemanticTerminalSnapshot(20, 4);
+    try {
+      source.resize(1.5, 2.5);
+      await expect(source.capture()).rejects.toMatchObject({
+        reason: "model-update-failed",
+        message: "Could not update the semantic terminal model.",
+      });
+    } finally {
+      source.dispose();
     }
   });
 

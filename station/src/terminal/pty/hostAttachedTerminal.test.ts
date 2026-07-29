@@ -16,7 +16,11 @@ import type {
   StationTerminalReplay,
   StationTerminalSize,
 } from "../types.js";
-import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
+import {
+  createHostAttachedTerminal,
+  LIVE_RESET_REPAINT,
+  RECONNECT_REPAINT,
+} from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -805,6 +809,63 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     expect(received).toEqual(["history-", semanticData]);
     expect(received).not.toContain(RECONNECT_REPAINT);
     terminal.dispose();
+  });
+
+  it("resets and repaints a degraded live attachment without disabling I/O", async () => {
+    resetTerminalDiagnosticsForTest();
+    const ctrl = controllableAttachment(
+      ack({
+        replay: {
+          kind: "live-reset-recovery",
+          initialCols: 80,
+          initialRows: 24,
+          events: [],
+        },
+      }),
+    );
+    const { terminal } = terminalFor(ctrl.attachment);
+    const replays: StationTerminalReplay[] = [];
+    const diagnostics: string[] = [];
+    const unavailable: string[] = [];
+    const data: string[] = [];
+    terminal.onReplay?.((replay) => {
+      replays.push(replay);
+    });
+    terminal.onDiagnostic((message) => diagnostics.push(message));
+    terminal.onUnavailable?.((event) => unavailable.push(event.code));
+    terminal.onData((value) => data.push(value));
+
+    try {
+      await flush();
+      expect(replays).toEqual([
+        {
+          kind: "live-reset-recovery",
+          initialSize: { cols: 80, rows: 24 },
+          events: [{ type: "data", data: LIVE_RESET_REPAINT }],
+        },
+      ]);
+      expect(ctrl.state.resizes).toEqual([
+        { cols: 80, rows: 24 },
+        { cols: 80, rows: 23 },
+        { cols: 80, rows: 24 },
+      ]);
+      expect(diagnostics).toContain(
+        "Station reattached to the live terminal without historical output because exact replay was unavailable.",
+      );
+      expect(terminalCorruptionCounters()["terminal_diagnostic:host_live_reset_recovery"]).toBe(1);
+      expect(unavailable).toEqual([]);
+
+      terminal.write("input");
+      terminal.resize({ cols: 100, rows: 30 });
+      ctrl.push({ type: "data", ptyId: "pty-1", data: "live-after-reset" });
+      await flush();
+      expect(ctrl.state.writes).toEqual(["input"]);
+      expect(ctrl.state.resizes.at(-1)).toEqual({ cols: 100, rows: 30 });
+      expect(data).toEqual(["live-after-reset"]);
+    } finally {
+      terminal.dispose();
+      resetTerminalDiagnosticsForTest();
+    }
   });
 
   it("becomes unavailable after exhausting the consecutive transient retry budget", async () => {

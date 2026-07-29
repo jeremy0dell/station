@@ -49,6 +49,7 @@ const PTY_UNAVAILABLE_CODES = new Set([
 // detached) without stacking it on top of the history the VT already shows.
 // Exported so the reconnect test can pin that it precedes the replayed snapshot.
 export const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${ControlByte.Csi}3J`;
+export const LIVE_RESET_REPAINT = `${ControlByte.Esc}c`;
 const reconnectDelayMs = (attempt: number): number =>
   Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -112,9 +113,9 @@ export type HostAttachedTerminalOptions = {
 
 /**
  * Host-attached `StationTerminalProcess`: attach, replay, then stream live
- * data and geometry frames. Proven PTY loss emits exit; reconstruction or
- * compatibility failures emit unavailable so Observer never mistakes an
- * attachment fault for process death. `dispose()` detaches without killing.
+ * data and geometry frames. Unsupported exact reconstruction resets the local
+ * VT and keeps the live attachment; proven PTY loss emits exit, while genuine
+ * compatibility failures emit unavailable. `dispose()` detaches without killing.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -297,6 +298,24 @@ export function createHostAttachedTerminal(
       events: opened.ack.replay.events,
       kind: opened.ack.replay.kind,
     };
+    if (replay.kind === "live-reset-recovery") {
+      reportTerminalCorruption({
+        kind: "terminal_diagnostic",
+        key: "host_live_reset_recovery",
+        detail: {
+          code: "HOST_SNAPSHOT_DEGRADED",
+          ptyId: opened.ack.ptyId,
+        },
+      });
+      emitDiagnostic(
+        "Station reattached to the live terminal without historical output because exact replay was unavailable.",
+      );
+      await emitReplay({
+        ...replay,
+        events: [{ type: "data", data: LIVE_RESET_REPAINT }],
+      });
+      return;
+    }
     if (!isReconnect) {
       await emitReplay(replay);
       return;
@@ -333,9 +352,13 @@ export function createHostAttachedTerminal(
     // A same-size TIOCSWINSZ emits no SIGWINCH, so stale same-size frames need a
     // temporary row change whenever replay or reconnect requires a child repaint.
     const sizeUnchanged = size.cols === attachTarget.cols && size.rows === attachTarget.rows;
+    const requiresChildRepaint =
+      isReconnect ||
+      opened.ack.replay.kind === "live-reset-recovery" ||
+      opened.ack.replay.events.some((event) => event.type === "data");
     if (
       sizeUnchanged &&
-      (isReconnect || opened.ack.replay.events.some((event) => event.type === "data")) &&
+      requiresChildRepaint &&
       opened.ack.cols === attachTarget.cols &&
       opened.ack.rows === attachTarget.rows
     ) {

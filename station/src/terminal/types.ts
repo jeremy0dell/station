@@ -30,11 +30,11 @@ export type StationTerminalReplayEvent =
   | { type: "data"; data: string }
   | { type: "resize"; cols: number; rows: number };
 
-/** Raw history or semantic restoration handed over with its production geometry. */
+/** Raw history, exact restoration, or a live reset handed over at its Host geometry. */
 export type StationTerminalReplay = {
   initialSize: StationTerminalSize;
   events: readonly StationTerminalReplayEvent[];
-  kind: "raw-complete" | "semantic-truncation-recovery";
+  kind: "raw-complete" | "semantic-truncation-recovery" | "live-reset-recovery";
 };
 
 /** Attachment failure that does not prove the backing process exited. */

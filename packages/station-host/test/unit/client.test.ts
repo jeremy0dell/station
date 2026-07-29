@@ -121,6 +121,29 @@ describe("createStationHostClient", () => {
       }).success,
     ).toBe(false);
     expect(HostAttachAckSchema.safeParse({ ...ack, cols: 6 }).success).toBe(false);
+
+    const liveReset = {
+      ...ack,
+      replay: {
+        kind: "live-reset-recovery",
+        initialCols: 5,
+        initialRows: 4,
+        events: [],
+      },
+    };
+    expect(HostAttachAckSchema.safeParse(liveReset).success).toBe(true);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...liveReset,
+        replay: { ...liveReset.replay, events: [{ type: "data", data: "partial" }] },
+      }).success,
+    ).toBe(false);
+    expect(
+      HostAttachAckSchema.safeParse({
+        ...liveReset,
+        replay: { ...liveReset.replay, initialCols: 10 },
+      }).success,
+    ).toBe(false);
   });
 
   it("round-trips unary requests over one multiplexed connection", async () => {

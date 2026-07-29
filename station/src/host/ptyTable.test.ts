@@ -308,8 +308,9 @@ describe("createPtyTable", () => {
     await frames.return?.();
   });
 
-  it("keeps the PTY alive and releases the sink when semantic capture fails", async () => {
+  it("keeps the live sink and reports a classified reset replay when semantic capture fails", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
     let captureCalls = 0;
     const semantic: SemanticTerminalModel = {
       write() {},
@@ -327,20 +328,37 @@ describe("createPtyTable", () => {
       createTerminal: () => scripted.terminal,
       createSemanticTerminal: () => semantic,
       maxScrollbackBytes: 5,
+      onEvent: (event, attributes) => events.push({ event, attributes }),
     });
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("first");
     scripted.helpers.emitData("second");
 
-    await expect(table.attach(ptyId)).rejects.toMatchObject({ code: "HOST_SNAPSHOT_FAILED" });
+    const degraded = await table.attach(ptyId);
+    expect(degraded.ack.replay).toEqual({
+      kind: "live-reset-recovery",
+      initialCols: 80,
+      initialRows: 24,
+      events: [],
+    });
+    expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({
+      event: "pty.snapshot.degraded",
+      attributes: { ptyId, reason: "serialization-failed" },
+    });
     expect(table.list()).toMatchObject([{ ptyId, alive: true }]);
     expect(table.has(ptyId)).toBe(true);
+    const frames = degraded.frames[Symbol.asyncIterator]();
+    scripted.helpers.emitData("live-after-reset");
+    expect(await frames.next()).toMatchObject({
+      value: { type: "data", data: "live-after-reset" },
+    });
     expect((await table.attach(ptyId)).ack.replay).toMatchObject({
       kind: "semantic-truncation-recovery",
       initialCols: 80,
       initialRows: 24,
       events: [{ type: "data", data: "recovered" }],
     });
+    await frames.return?.();
   });
 
   it("classifies an unfinished parser sequence as retryable snapshot state", async () => {
