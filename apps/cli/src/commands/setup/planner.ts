@@ -135,12 +135,15 @@ function normalizeHarnessTracking(
   selection: SetupHarnessSelection,
 ): SetupPlanningFacts["harnessTracking"] {
   const requiredHarnessIds = new Set(selection.requiredHarnessIds);
+  const persistedHarnessIds =
+    facts.config.status === "valid" ? new Set(facts.config.configuredHookHarnesses) : new Set();
   return relevantHarnessTrackingIds(facts, selection).map((harnessId) => {
     const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
     return {
       harnessId,
       assessment: assessHarnessTracking(coreHarnessTrackingFacts(facts, harnessId, fact)),
       required: requiredHarnessIds.has(harnessId),
+      persistedIntent: persistedHarnessIds.has(harnessId),
     };
   });
 }

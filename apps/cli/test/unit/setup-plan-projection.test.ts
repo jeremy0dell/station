@@ -483,8 +483,7 @@ describe("setup plan projection", () => {
           {
             harnessId: "opencode",
             capability: "supported",
-            requested: true,
-            installed: false,
+            requested: false,
           },
         ],
         config: validConfigFact({
@@ -515,7 +514,7 @@ describe("setup plan projection", () => {
           {
             harnessId: "opencode",
             capability: "supported",
-            requested: false,
+            probeFailed: true,
           },
         ],
         config: validConfigFact({

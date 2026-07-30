@@ -241,11 +241,13 @@ describe("planSetup", () => {
               installed: false,
             },
             required: true,
+            persistedIntent: false,
           },
           {
             harnessId: "opencode",
             assessment: { state: "probe-failed" },
             required: false,
+            persistedIntent: true,
           },
         ],
       }),
@@ -287,6 +289,39 @@ describe("planSetup", () => {
     });
   });
 
+  it("does not repair optional tracking without persisted intent", () => {
+    const plan = planSetup(
+      facts({
+        harnessSelection: {
+          config: { status: "valid", defaultHarness: "codex" },
+          harnesses: [
+            { id: "codex", availability: "available" },
+            { id: "opencode", availability: "available" },
+          ],
+        },
+        harnessTracking: [
+          {
+            harnessId: "opencode",
+            assessment: { state: "probe-failed" },
+            required: false,
+            persistedIntent: false,
+          },
+        ],
+      }),
+      intent(),
+    );
+
+    expect(plan.issues).toContainEqual({
+      code: "harness-tracking-unprepared",
+      tier: "recommended",
+      harnessId: "opencode",
+      state: "probe-failed",
+    });
+    expect(plan.operations.some((operation) => operation.kind === "prepare-harness-tracking")).toBe(
+      false,
+    );
+  });
+
   it("contains no presentation, command, config content, or serialized provider artifacts", () => {
     const semanticPlan = planSetup(
       facts({
@@ -300,6 +335,7 @@ describe("planSetup", () => {
             harnessId: "codex",
             assessment: { state: "probe-failed" },
             required: true,
+            persistedIntent: false,
           },
         ],
       }),
@@ -362,6 +398,7 @@ function facts(overrides: Partial<SetupPlanningFacts> = {}): SetupPlanningFacts 
         harnessId: "codex",
         assessment: { state: "prepared", requested: true, installed: true },
         required: true,
+        persistedIntent: true,
       },
     ],
     ...overrides,

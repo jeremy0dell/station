@@ -278,7 +278,7 @@ function trackingNeedsRepair(tracking: SetupPlanningFacts["harnessTracking"][num
   const assessment = tracking.assessment;
   if (assessment.state === "prepared" || assessment.state === "not-applicable") return false;
   if (assessment.requested === true && assessment.installed === true) return false;
-  return tracking.required || assessment.state !== "disabled";
+  return tracking.required || tracking.persistedIntent;
 }
 
 function toolApplies(toolId: SetupToolId, compiled: boolean): boolean {

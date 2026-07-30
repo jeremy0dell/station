@@ -134,5 +134,6 @@ export type SetupPlanningFacts = {
     readonly harnessId: SupportedHarnessId;
     readonly assessment: HarnessTrackingAssessment;
     readonly required: boolean;
+    readonly persistedIntent: boolean;
   }[];
 };
