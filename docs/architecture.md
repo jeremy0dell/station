@@ -2,6 +2,9 @@
 
 Status: current living repository-wide system and boundary map.
 
+Use [Philosophy](philosophy.md) for the product principles that guide Station.
+This document remains authoritative for implementation boundaries and ownership.
+
 Use [Naming](naming.md) for provider hook, provider hook ingress, harness event report, STATION event, and observer event hook terminology.
 
 Use [Observer Architecture](observer-architecture.md) for the Observer's application model,
