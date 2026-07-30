@@ -172,12 +172,12 @@ function activityCellForRow(row: WorktreeRowModel): {
   if (isReadyToRead(row)) {
     return {
       text: "idle · ready",
-      importance: "optional",
+      importance: "meaningful",
     };
   }
   return {
     text: row.display.statusLabel,
-    importance: "optional",
+    importance: "meaningful",
   };
 }
 

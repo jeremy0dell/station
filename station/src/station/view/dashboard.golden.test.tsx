@@ -354,6 +354,56 @@ describe("dashboard golden frames", () => {
     expect(pointerCalls.at(-1)).toBe("default");
   });
 
+  it("renders wide and compact session-shell labels and isolates their click target", async () => {
+    for (const width of [120, 80] as const) {
+      const targets: StationMouseTarget[] = [];
+      const setup = await renderDashboard({
+        width,
+        height: width === 120 ? 40 : 24,
+        snapshot: manyProjectsSnapshot(),
+        dispatchMouse: (target) => targets.push(target),
+      });
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes("docs-cleanup"));
+      const label = width === 120 ? "[shell]" : "[sh]";
+      const col = lines[row]?.lastIndexOf(label) ?? -1;
+      expect(row).toBeGreaterThan(0);
+      expect(col).toBeGreaterThan(0);
+
+      await setup.mockMouse.click(col + 1, row, MouseButtons.LEFT);
+      expect(targets).toEqual([
+        { kind: "openShellForRow", rowId: "ses_wt_station_none" },
+      ]);
+    }
+  });
+
+  it("renders and routes the first-project CTA with readable hover contrast", async () => {
+    const targets: StationMouseTarget[] = [];
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: noProjectsSnapshot(),
+      dispatchMouse: (target) => targets.push(target),
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("Add your first project"));
+    const col = lines[row]?.indexOf("[") ?? -1;
+    expect(row).toBeGreaterThan(0);
+    expect(col).toBeGreaterThanOrEqual(0);
+
+    await act(async () => {
+      await setup.mockMouse.moveTo(col + 2, row);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+    const hovered = spanAtFrameCell(setup.captureSpans(), row, col + 2);
+    expect(spanHex(hovered)).toBe(STATION_COLORS.background);
+    expect(spanBgHex(hovered)).toBe(STATION_COLORS.cyan);
+
+    await setup.mockMouse.click(col + 2, row, MouseButtons.LEFT);
+    expect(targets.at(-1)).toEqual({ kind: "firstProjectAdd" });
+  });
+
   it("assigns slots only to visible actionable rows", async () => {
     const setup = await renderDashboard({ width: 80, height: 40, snapshot: manyProjectsSnapshot() });
     const frame = setup.captureCharFrame();

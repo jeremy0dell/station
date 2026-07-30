@@ -7,6 +7,7 @@ import type {
   AddProjectFailedState,
   AddProjectFlowAction,
   AddProjectFlowState,
+  AddProjectReviewState,
   CreateAddProjectFlowInput,
 } from "../../flows/addProject/types.js";
 import { toSafeError } from "../../services/errors/errors.js";
@@ -27,6 +28,25 @@ import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { applyAddProjectAction } from "./addProjectTransition.js";
 
+export type AddProjectActionId =
+  | "start.open"
+  | "start.cancel"
+  | "choose.choose"
+  | "choose.open"
+  | "choose.parent"
+  | "choose.search"
+  | "choose.cancel"
+  | "review.submit"
+  | "review.editId"
+  | "review.chooseFolder"
+  | "review.cancel"
+  | "editId.save"
+  | "editId.back"
+  | "success.dashboard"
+  | "failed.retry"
+  | "failed.chooseFolder"
+  | "failed.cancel";
+
 type AddProjectInputIntent =
   | { type: "none" }
   | { type: "close" }
@@ -34,6 +54,56 @@ type AddProjectInputIntent =
   | { type: "transition"; action: AddProjectFlowAction };
 
 export const addProjectScreenBehavior = { clickAway: cancelAddProject };
+
+const ADD_PROJECT_ACTION_KEYS: Readonly<Record<AddProjectActionId, TuiKey>> = {
+  "start.open": { input: "", rightArrow: true },
+  "start.cancel": { input: "", escape: true },
+  "choose.choose": { input: "\r", return: true },
+  "choose.open": { input: "", rightArrow: true },
+  "choose.parent": { input: "", leftArrow: true },
+  "choose.search": { input: "/" },
+  "choose.cancel": { input: "", escape: true },
+  "review.submit": { input: "A" },
+  "review.editId": { input: "N" },
+  "review.chooseFolder": { input: "B" },
+  "review.cancel": { input: "", escape: true },
+  "editId.save": { input: "s", ctrl: true },
+  "editId.back": { input: "", escape: true },
+  "success.dashboard": { input: "D" },
+  "failed.retry": { input: "R" },
+  "failed.chooseFolder": { input: "B" },
+  "failed.cancel": { input: "", escape: true },
+};
+
+/** Resolves only actions enabled by the flow's current discriminated state. */
+export function addProjectActionKey(
+  flow: AddProjectFlowState,
+  actionId: AddProjectActionId,
+): TuiKey | undefined {
+  if (flow.mode === "start") {
+    return actionId === "start.open" || actionId === "start.cancel"
+      ? ADD_PROJECT_ACTION_KEYS[actionId]
+      : undefined;
+  }
+  if (flow.mode === "choose") {
+    if (actionId === "choose.search" && flow.filterMode) return undefined;
+    return actionId.startsWith("choose.") ? ADD_PROJECT_ACTION_KEYS[actionId] : undefined;
+  }
+  if (flow.mode === "review") {
+    if (flow.submitting) return undefined;
+    if (flow.editingId !== undefined) {
+      return actionId === "editId.save" || actionId === "editId.back"
+        ? ADD_PROJECT_ACTION_KEYS[actionId]
+        : undefined;
+    }
+    if (actionId === "review.submit" && flow.gitRoot === undefined) return undefined;
+    return actionId.startsWith("review.") ? ADD_PROJECT_ACTION_KEYS[actionId] : undefined;
+  }
+  if (flow.mode === "success") {
+    return actionId === "success.dashboard" ? ADD_PROJECT_ACTION_KEYS[actionId] : undefined;
+  }
+  return actionId.startsWith("failed.") ? ADD_PROJECT_ACTION_KEYS[actionId] : undefined;
+}
 
 export function openAddProject(state: TuiState, input: CreateAddProjectFlowInput): TuiState {
   return reconcileAddProjectSelection(
@@ -75,6 +145,9 @@ function cancelAddProject(state: TuiState): TuiState {
     return state;
   }
   const flow = state.screen.flow;
+  if (flow.mode === "review" && flow.submitting) {
+    return state;
+  }
   if (flow.mode === "review" && flow.editingId !== undefined) {
     return applyAddProjectAction(state, { type: "editIdCancel" }).state;
   }
@@ -93,8 +166,11 @@ function addProjectIntentForInput(state: TuiState, key: TuiKey): AddProjectInput
     return { type: "none" };
   }
   const flow = state.screen.flow;
+  if (flow.mode === "review" && flow.submitting) {
+    return { type: "none" };
+  }
   if (flow.mode === "review" && flow.editingId !== undefined) {
-    return editProjectIdIntent(key);
+    return editProjectIdIntent(flow, key);
   }
   if (key.escape === true) {
     return escapeIntent(flow);
@@ -105,20 +181,31 @@ function addProjectIntentForInput(state: TuiState, key: TuiKey): AddProjectInput
     case "choose":
       return chooseIntent(state, flow, key);
     case "review":
-      return reviewIntent(key);
+      return reviewIntent(flow, key);
     case "success":
-      return isReturnKey(key) ? { type: "close" } : { type: "none" };
+      return isReturnKey(key) || key.input === "D" ? { type: "close" } : { type: "none" };
     case "failed":
       return failedIntent(flow, key);
   }
 }
 
-function editProjectIdIntent(key: TuiKey): AddProjectInputIntent {
+function editProjectIdIntent(flow: AddProjectReviewState, key: TuiKey): AddProjectInputIntent {
+  if (key.upArrow === true) {
+    return transitionIntent({ type: "actionFocus", dir: -1 });
+  }
+  if (key.downArrow === true) {
+    return transitionIntent({ type: "actionFocus", dir: 1 });
+  }
   if (key.escape === true) {
     return transitionIntent({ type: "editIdCancel" });
   }
-  if (isReturnKey(key)) {
+  if (key.ctrl === true && key.input === "s") {
     return transitionIntent({ type: "editIdCommit" });
+  }
+  if (isReturnKey(key)) {
+    return flow.editIdActionFocus === "back"
+      ? transitionIntent({ type: "editIdCancel" })
+      : transitionIntent({ type: "editIdCommit" });
   }
   const intent = editableTextInputIntentForInput({ input: key.input, key });
   return intent.type === "edit"
@@ -185,21 +272,63 @@ function filterInputIntent(key: TuiKey): AddProjectInputIntent {
   return { type: "none" };
 }
 
-function reviewIntent(key: TuiKey): AddProjectInputIntent {
+function reviewIntent(flow: AddProjectReviewState, key: TuiKey): AddProjectInputIntent {
+  if (key.upArrow === true) {
+    return transitionIntent({ type: "actionFocus", dir: -1 });
+  }
+  if (key.downArrow === true) {
+    return transitionIntent({ type: "actionFocus", dir: 1 });
+  }
+  if (key.input === "A") {
+    return flow.gitRoot === undefined ? { type: "none" } : transitionIntent({ type: "submit" });
+  }
   if (key.input === "N") {
     return transitionIntent({ type: "editIdStart" });
   }
   if (key.input === "B") {
     return transitionIntent({ type: "backToChoose" });
   }
-  return isReturnKey(key) ? transitionIntent({ type: "submit" }) : { type: "none" };
+  if (!isReturnKey(key)) {
+    return { type: "none" };
+  }
+  switch (flow.actionFocus) {
+    case "submit":
+      return flow.gitRoot === undefined
+        ? transitionIntent({ type: "backToChoose" })
+        : transitionIntent({ type: "submit" });
+    case "editId":
+      return transitionIntent({ type: "editIdStart" });
+    case "chooseFolder":
+      return transitionIntent({ type: "backToChoose" });
+    case "cancel":
+      return { type: "close" };
+  }
 }
 
 function failedIntent(flow: AddProjectFailedState, key: TuiKey): AddProjectInputIntent {
+  if (key.upArrow === true) {
+    return transitionIntent({ type: "actionFocus", dir: -1 });
+  }
+  if (key.downArrow === true) {
+    return transitionIntent({ type: "actionFocus", dir: 1 });
+  }
   if (key.input === "R") {
     return { type: "retry", path: flow.selectedPath };
   }
-  return key.input === "B" ? transitionIntent({ type: "backToChoose" }) : { type: "none" };
+  if (key.input === "B") {
+    return transitionIntent({ type: "backToChoose" });
+  }
+  if (!isReturnKey(key)) {
+    return { type: "none" };
+  }
+  switch (flow.actionFocus) {
+    case "retry":
+      return { type: "retry", path: flow.selectedPath };
+    case "chooseFolder":
+      return transitionIntent({ type: "backToChoose" });
+    case "cancel":
+      return { type: "close" };
+  }
 }
 
 function transitionIntent(action: AddProjectFlowAction): AddProjectInputIntent {

@@ -12,7 +12,10 @@ import {
 import type { StoreApi } from "zustand/vanilla";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
-import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
+import {
+  manyProjectsSnapshot,
+  noProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 import {
   type DashboardMouseEffects,
@@ -35,9 +38,12 @@ const TEST_EFFECTS: DashboardMouseEffects = {
   openUrl: () => {},
 };
 const DASHBOARD_MOUSE_TARGET_KINDS = {
+  addProjectAction: true,
   addProjectRow: true,
   body: true,
+  firstProjectAdd: true,
   link: true,
+  newSessionAction: true,
   openShellForProject: true,
   openShellForRow: true,
   projectHeader: true,
@@ -195,6 +201,19 @@ describe("routeDashboardMouse", () => {
     expect(store.getState().scrollOffset).toBe(0);
   });
 
+  it("opens first-project onboarding from the empty-dashboard CTA", () => {
+    const empty = makeStore(noProjectsSnapshot());
+    routeDashboardMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, empty);
+    expect(empty.getState().screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "start", firstProject: true },
+    });
+
+    const populated = makeStore();
+    routeDashboardMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, populated);
+    expect(populated.getState().screen).toEqual({ name: "dashboard" });
+  });
+
   it("maps row pickers, sheet choices, confirmations, and fork submit to keyboard transitions", async () => {
     const store = makeStore();
     const rowId = "ses_wt_station_working";
@@ -245,7 +264,12 @@ describe("routeDashboardMouse", () => {
     const addProject = store.getState().screen;
     expect(addProject.name === "addProject" && addProject.flow.mode === "start").toBe(true);
     expect(addProjectSelectedIndex(store.getState())).toBe(1);
-    store.getState().handleKey({ input: "", escape: true });
+    routeDashboardMouse(
+      { kind: "addProjectAction", actionId: "start.cancel" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
 
     store.setState({ widgets: [{ type: "time" }, { type: "moon" }] });
     store.setState({ screen: { name: "dashboard" } });
@@ -263,6 +287,53 @@ describe("routeDashboardMouse", () => {
     store.setState(addTuiToast(store.getState(), { kind: "info", message: "hello" }));
     routeDashboardMouse({ kind: "toast" }, LEFT_DOWN, store);
     expect(store.getState().toasts).toEqual([]);
+  });
+
+  it("routes Create Session fields, editor controls, and standalone Create", async () => {
+    const fixture = makeStationTestStore({ terminalRows: 14 });
+    const store = fixture.store;
+    store.getState().handleKey({ input: "N" });
+
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "review.agent" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "pickAgent" },
+    });
+    store.getState().handleKey({ input: "", escape: true });
+
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "review.name" },
+      LEFT_DOWN,
+      store,
+    );
+    store.getState().handleKey({ input: "Standalone mouse" });
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "editName.save" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", title: "Standalone mouse" },
+    });
+
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "review.create" },
+      LEFT_DOWN,
+      store,
+    );
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    expect(
+      fixture.service.dispatched.find((command) => command.type === "session.create"),
+    ).toMatchObject({
+      payload: { title: "Standalone mouse", harness: { provider: "codex" } },
+    });
   });
 
   it("routes project shell, quick-session, and agent-picker actions", async () => {

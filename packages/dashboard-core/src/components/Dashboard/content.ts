@@ -113,7 +113,7 @@ function plural(count: number, noun: string): string {
   return count === 1 ? noun : `${noun}s`;
 }
 
-export const FIRST_RUN_BODY_LABEL = "Add your first project.";
+export const FIRST_RUN_BODY_LABEL = "Add your first project";
 
 export function scrollIndicatorLabel(
   direction: "above" | "below",

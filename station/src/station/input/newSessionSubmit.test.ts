@@ -7,8 +7,8 @@ import { resolveKeyNewSessionSubmit, resolveNewSessionSubmit } from "./stationAc
 
 // Station hosts new agents in a pane (worktree.create + managed launch) rather
 // than the shared machine's tmux session.create, which it can't render. These
-// resolvers are the interception point: Enter on the review screen becomes a
-// hosted-launch submit; everything else falls through to the machine.
+// resolvers are the interception point: focused Enter or direct C on review
+// becomes a hosted launch; field/editor keys fall through to the machine.
 function newStore() {
   const snapshot = manyProjectsSnapshot();
   return createTuiStore({
@@ -77,10 +77,15 @@ describe("resolveNewSessionSubmit", () => {
 });
 
 describe("resolveKeyNewSessionSubmit", () => {
-  it("submits only on Enter", () => {
+  it("submits on focused Enter and direct C", () => {
     const store = storeOnNewSessionReview();
     expect(resolveKeyNewSessionSubmit(store, "\r").kind).toBe("submit");
-    // A navigation/edit key on the review screen stays with the shared machine.
+
+    store.getState().handleKey({ input: "", downArrow: true });
+    expect(resolveKeyNewSessionSubmit(store, "\r").kind).toBe("none");
+    expect(resolveKeyNewSessionSubmit(store, "C").kind).toBe("submit");
+
+    // A field/edit key stays with the shared machine.
     expect(resolveKeyNewSessionSubmit(store, "x").kind).toBe("none");
   });
 });

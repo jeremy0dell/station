@@ -1,5 +1,8 @@
-import { createAddProjectFlow, transitionAddProjectFlow } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import {
+  createAddProjectFlow,
+  transitionAddProjectFlow,
+} from "../../../../src/flows/addProject/flow.js";
 
 describe("add project flow", () => {
   it("starts only from the current directory and home", () => {
@@ -111,6 +114,105 @@ describe("add project flow", () => {
     expect(Object.hasOwn(failed ?? {}, "entries")).toBe(false);
     expect(Object.hasOwn(failed ?? {}, "filter")).toBe(false);
     expect(Object.hasOwn(failed ?? {}, "searchEntries")).toBe(false);
+  });
+
+  it("seeds action focus for review, success, and failure states", () => {
+    const started = createAddProjectFlow({
+      cwd: "/Users/example/Developer/station",
+      homeDir: "/Users/example",
+    });
+    const validReview = transitionAddProjectFlow(started, {
+      type: "folderReviewed",
+      review: {
+        selectedPath: "/Users/example/Developer/station",
+        gitRoot: "/Users/example/Developer/station",
+        id: "station",
+        label: "station",
+      },
+    }).state;
+    const invalidReview = transitionAddProjectFlow(started, {
+      type: "folderReviewed",
+      review: {
+        selectedPath: "/Users/example/Desktop/notes",
+        id: "notes",
+        label: "notes",
+      },
+    }).state;
+
+    expect(validReview).toMatchObject({ mode: "review", actionFocus: "submit" });
+    expect(invalidReview).toMatchObject({ mode: "review", actionFocus: "chooseFolder" });
+
+    const failed = transitionAddProjectFlow(validReview ?? started, {
+      type: "submitFailed",
+      error: { tag: "ConfigError", code: "CONFIG_WRITE_FAILED", message: "failed" },
+    }).state;
+    expect(failed).toMatchObject({ mode: "failed", actionFocus: "retry" });
+
+    const succeeded = transitionAddProjectFlow(validReview ?? started, {
+      type: "submitted",
+      label: "Station",
+      root: "/Users/example/Developer/station",
+    }).state;
+    expect(succeeded).toMatchObject({ mode: "success", actionFocus: "dashboard" });
+  });
+
+  it("cycles enabled actions and keeps duplicate submits inert", () => {
+    const started = createAddProjectFlow({
+      cwd: "/Users/example/Developer/station",
+      homeDir: "/Users/example",
+    });
+    const reviewed = transitionAddProjectFlow(started, {
+      type: "folderReviewed",
+      review: {
+        selectedPath: "/Users/example/Developer/station",
+        gitRoot: "/Users/example/Developer/station",
+        id: "station",
+        label: "station",
+      },
+    }).state;
+    if (reviewed?.mode !== "review") throw new Error("expected review mode");
+
+    const focused = transitionAddProjectFlow(reviewed, { type: "actionFocus", dir: 1 }).state;
+    expect(focused).toMatchObject({ mode: "review", actionFocus: "editId" });
+
+    const submitting = transitionAddProjectFlow(reviewed, { type: "submit" });
+    if (submitting.state?.mode !== "review") throw new Error("expected submitting review");
+    expect(submitting.state.submitting).toBe(true);
+    expect(transitionAddProjectFlow(submitting.state, { type: "submit" })).toEqual({
+      state: submitting.state,
+    });
+  });
+
+  it("seeds and preserves edit-id action focus", () => {
+    const started = createAddProjectFlow({
+      cwd: "/Users/example/Developer/station",
+      homeDir: "/Users/example",
+    });
+    const reviewed = transitionAddProjectFlow(started, {
+      type: "folderReviewed",
+      review: {
+        selectedPath: "/Users/example/Developer/station",
+        gitRoot: "/Users/example/Developer/station",
+        id: "station",
+        label: "station",
+      },
+    }).state;
+    if (reviewed?.mode !== "review") throw new Error("expected review mode");
+
+    const editing = transitionAddProjectFlow(reviewed, { type: "editIdStart" }).state;
+    expect(editing).toMatchObject({
+      mode: "review",
+      actionFocus: "editId",
+      editIdActionFocus: "save",
+    });
+    if (editing?.mode !== "review") throw new Error("expected review mode");
+    const backFocused = transitionAddProjectFlow(editing, { type: "actionFocus", dir: 1 }).state;
+    expect(backFocused).toMatchObject({ editIdActionFocus: "back" });
+    if (backFocused?.mode !== "review") throw new Error("expected review mode");
+    expect(transitionAddProjectFlow(backFocused, { type: "editIdCancel" }).state).toMatchObject({
+      mode: "review",
+      actionFocus: "submit",
+    });
   });
 
   it("does not submit a folder until a git repository is detected", () => {

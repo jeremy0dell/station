@@ -32,7 +32,11 @@ the dashboard is open so the hidden native layout cannot change.
 Runtime keyboard dispatch goes through the shared dashboard-core transition
 machine. Station keeps only sequence translation and the managed-pane overrides
 needed for row activation, new sessions, and forks; help copy and semantic mouse
-targets do not mirror every screen's key handling in a second table.
+targets do not mirror every screen's key handling in a second table. Session
+shell, first-project, Add Project, and Create Session pointer targets dispatch
+the same shared key/transition semantics as their direct-command and focused
+Enter paths. Native direct `C` and focused Create Enter converge in the single
+managed-launch resolver before the standalone create operation can run.
 
 ## Acceptance suite
 
@@ -45,8 +49,11 @@ targets do not mirror every screen's key handling in a second table.
   overlay-close): `../input/stationIntegration.test.ts`.
 - Live command dispatch through the shared client (focus, jump-to-session,
   Z-through-runtime, convergence, recovery): `store/stationCommandDispatch.test.ts`.
+- Source-adjacent action rendering:
+  `view/sheets/AddProjectSheetView.test.tsx` and
+  `view/sheets/NewSessionSheetView.test.tsx`.
 - Golden frames: `view/dashboard.golden.test.tsx` (scenario × size matrix +
-  span color probes), `view/modals.golden.test.tsx` (all ten modal views).
+  span color probes), `view/modals.golden.test.tsx` (all modal and focused-action views).
 - Isolation: `importBoundaries.test.ts` (no apps/tui imports, only linked
   @station packages, no local ported fork, no `focusable`).
 

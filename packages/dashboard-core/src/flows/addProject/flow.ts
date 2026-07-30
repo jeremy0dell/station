@@ -14,11 +14,23 @@ import {
   withoutSearchError,
 } from "./state.js";
 import type {
+  AddProjectEditIdActionFocus,
+  AddProjectFailedActionFocus,
   AddProjectFlowAction,
   AddProjectFlowState,
+  AddProjectReviewActionFocus,
   AddProjectTransition,
   CreateAddProjectFlowInput,
 } from "./types.js";
+
+const REVIEW_ACTIONS: readonly AddProjectReviewActionFocus[] = [
+  "submit",
+  "editId",
+  "chooseFolder",
+  "cancel",
+];
+const EDIT_ID_ACTIONS: readonly AddProjectEditIdActionFocus[] = ["save", "back"];
+const FAILED_ACTIONS: readonly AddProjectFailedActionFocus[] = ["retry", "chooseFolder", "cancel"];
 
 export function createAddProjectFlow(input: CreateAddProjectFlowInput) {
   return createAddProjectStartState(input);
@@ -114,8 +126,15 @@ export function transitionAddProjectFlow(
         ? { state: failedStateForError(state, state.selectedPath, action.error) }
         : { state };
     case "editIdStart":
-      return state.mode === "review"
-        ? { state: { ...state, editingId: createEditableTextInputState(state.id) } }
+      return state.mode === "review" && !state.submitting
+        ? {
+            state: {
+              ...state,
+              actionFocus: "editId",
+              editingId: createEditableTextInputState(state.id),
+              editIdActionFocus: "save",
+            },
+          }
         : { state };
     case "editIdInput":
       return state.mode === "review" && state.editingId !== undefined
@@ -134,6 +153,8 @@ export function transitionAddProjectFlow(
       return state.mode === "review" && state.editingId !== undefined
         ? { state: reviewWithoutEditingId(state) }
         : { state };
+    case "actionFocus":
+      return { state: moveActionFocus(state, action.dir) };
     case "backToChoose":
       return state.mode === "review" || state.mode === "failed"
         ? { state, effects: [{ type: "loadDirectory", path: state.selectedPath }] }
@@ -142,7 +163,12 @@ export function transitionAddProjectFlow(
 }
 
 function submitReview(state: AddProjectFlowState): AddProjectTransition {
-  if (state.mode !== "review" || state.editingId !== undefined || state.gitRoot === undefined) {
+  if (
+    state.mode !== "review" ||
+    state.editingId !== undefined ||
+    state.gitRoot === undefined ||
+    state.submitting
+  ) {
     return { state };
   }
   return {
@@ -161,6 +187,35 @@ function submitReview(state: AddProjectFlowState): AddProjectTransition {
       },
     ],
   };
+}
+
+function moveActionFocus(state: AddProjectFlowState, dir: -1 | 1): AddProjectFlowState {
+  if (state.mode === "review") {
+    if (state.submitting) {
+      return state;
+    }
+    if (state.editingId !== undefined) {
+      return {
+        ...state,
+        editIdActionFocus: cycleAction(EDIT_ID_ACTIONS, state.editIdActionFocus ?? "save", dir),
+      };
+    }
+    const enabled = REVIEW_ACTIONS.filter(
+      (action) => action !== "submit" || state.gitRoot !== undefined,
+    );
+    return { ...state, actionFocus: cycleAction(enabled, state.actionFocus, dir) };
+  }
+  if (state.mode === "failed") {
+    return { ...state, actionFocus: cycleAction(FAILED_ACTIONS, state.actionFocus, dir) };
+  }
+  return state;
+}
+
+function cycleAction<T extends string>(actions: readonly T[], current: T, dir: -1 | 1): T {
+  const currentIndex = actions.indexOf(current);
+  const start = currentIndex < 0 ? (dir === 1 ? -1 : 0) : currentIndex;
+  const next = (start + dir + actions.length) % actions.length;
+  return actions[next] ?? current;
 }
 
 function updateFilter(state: AddProjectFlowState, filter: string): AddProjectTransition {

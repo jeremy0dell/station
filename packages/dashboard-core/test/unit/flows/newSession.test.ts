@@ -4,6 +4,7 @@ import {
   createNewSessionFlow,
   createNewSessionNameToken,
   harnessOptions,
+  newSessionActionInputPath,
   newSessionIntentForInput,
   transitionNewSessionFlow,
   validateNewSessionCreate,
@@ -68,11 +69,12 @@ describe("new session flow", () => {
       action: { type: "editName" },
     });
 
-    // Letter accelerators still work regardless of focus.
+    // Letter accelerators still work regardless of focus, including direct create.
     expect(newSessionIntentForInput(onName, input("A"))).toEqual({
       type: "transition",
       action: { type: "pickAgent" },
     });
+    expect(newSessionIntentForInput(onName, input("C"))).toEqual({ type: "submit" });
   });
 
   it("trims custom titles without changing the generated branch", () => {
@@ -242,6 +244,88 @@ describe("new session flow", () => {
     if (picker?.mode !== "pickAgent") throw new Error("expected agent picker");
 
     expect(chooseNewSessionAgentById(picker, snapshot, "ghost")).toBe(picker);
+  });
+
+  it("moves edit-name focus among Name, Save, and Back", () => {
+    const snapshot = createHarnessSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
+    if (editing?.mode !== "editName") throw new Error("expected edit mode");
+    expect(editing.editNameFocus).toBe("name");
+
+    const saveIntent = newSessionIntentForInput(editing, input("", { downArrow: true }));
+    expect(saveIntent).toEqual({
+      type: "transition",
+      action: { type: "editNameFocus", dir: 1 },
+    });
+    if (saveIntent.type !== "transition") throw new Error("expected transition");
+    const saveFocused = transitionNewSessionFlow(editing, saveIntent.action);
+    expect(saveFocused).toMatchObject({ mode: "editName", editNameFocus: "save" });
+    if (saveFocused?.mode !== "editName") throw new Error("expected edit mode");
+
+    expect(newSessionIntentForInput(saveFocused, input("x"))).toEqual({ type: "none" });
+    expect(newSessionIntentForInput(saveFocused, input("", { leftArrow: true }))).toEqual({
+      type: "none",
+    });
+    expect(newSessionIntentForInput(saveFocused, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
+
+    const backFocused = transitionNewSessionFlow(saveFocused, {
+      type: "editNameFocus",
+      dir: 1,
+    });
+    if (backFocused?.mode !== "editName") throw new Error("expected edit mode");
+    expect(backFocused.editNameFocus).toBe("back");
+    expect(newSessionIntentForInput(backFocused, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "cancel" },
+    });
+    expect(newSessionIntentForInput(backFocused, input("", { escape: true }))).toEqual({
+      type: "transition",
+      action: { type: "cancel" },
+    });
+  });
+
+  it("maps visible controls onto shared keyboard paths", () => {
+    const snapshot = createHarnessSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    expect(newSessionActionInputPath(opened, "review.project")).toEqual([{ input: "P", key: {} }]);
+    expect(newSessionActionInputPath(opened, "review.create")).toEqual([{ input: "C", key: {} }]);
+
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
+    if (editing?.mode !== "editName") throw new Error("expected edit mode");
+    const saveFocused = transitionNewSessionFlow(editing, { type: "editNameFocus", dir: 1 });
+    if (saveFocused?.mode !== "editName") throw new Error("expected edit mode");
+    expect(newSessionActionInputPath(saveFocused, "editName.name")).toEqual([
+      { input: "", key: { upArrow: true } },
+    ]);
+    expect(newSessionActionInputPath(saveFocused, "editName.save")).toEqual([
+      { input: "s", key: { ctrl: true } },
+    ]);
+    expect(newSessionActionInputPath(saveFocused, "editName.back")).toEqual([
+      { input: "", key: { escape: true } },
+    ]);
+  });
+
+  it("keeps Enter and Ctrl-S as predictable name-save paths", () => {
+    const snapshot = createHarnessSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
+    if (editing?.mode !== "editName") throw new Error("expected edit mode");
+
+    expect(newSessionIntentForInput(editing, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
+    expect(newSessionIntentForInput(editing, input("s", { ctrl: true }))).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
   });
 
   it("moves the edit-name cursor and edits at the insertion point", () => {

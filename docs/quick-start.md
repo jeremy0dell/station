@@ -28,20 +28,20 @@ On a cold boot, press `Enter` or `Space` to open project view.
 
 ## 3. Add a Project
 
-On an empty dashboard:
+On an empty dashboard, **Add your first project** is a real action. Click it, press `A`, or focus it and press `Enter`.
 
-1. Press `Enter` or `A` on **Add your first project**.
-2. Choose a folder inside an existing Git repository.
-3. Review the detected Git root and confirm it.
+In the folder flow, a single click selects a row. Use the visible **Open**, **Choose**, **Parent**, **Search**, and **Cancel** controls to continue with the pointer, or use their displayed keys. Review the detected Git root, then use **Add project**; if no Git root is detected, **Choose folder** remains the focused recovery action.
 
-Station resolves a nested folder to its repository root. It does not add an ordinary non-Git directory.
+Station resolves a nested folder to its repository root. It does not add an ordinary non-Git directory. Pointer-only, direct-command, and arrow-plus-`Enter` paths all use the same admission rules.
 
 ## 4. Create an Agent Session
 
 1. Press `N` to open **Create Session**.
-2. Review the project, generated session name, and agent harness.
-3. Change a field if needed.
-4. Press `Enter` on **Create session**.
+2. Review the interactive **Project (P)**, **Name (N)**, and **Agent (A)** rows.
+3. Click a row, use its direct command, or move focus with arrows and press `Enter`.
+4. Activate **Create session (C)** with the pointer, `C`, or focused `Enter`.
+
+The name editor exposes **Name**, **Save**, and **Back** controls. `Up`/`Down` moves focus, `Left`/`Right` edits the text cursor while Name is focused, and the visible pointer controls can save or return without a keyboard action key.
 
 Station creates an isolated worktree, launches the selected agent, and opens its terminal pane. The dashboard tracks the session as it works, becomes ready, or needs attention.
 
@@ -50,6 +50,7 @@ Station creates an isolated worktree, launches the selected agent, and opens its
 | Action | Key |
 | --- | --- |
 | Open the focused session | `Enter` |
+| Open a session shell | click its `[shell]` / `[sh]` action |
 | Move between dashboard rows | `Up` / `Down` |
 | Jump to the next session needing you | `Tab` |
 | Create another session | `N` |

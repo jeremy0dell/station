@@ -62,6 +62,7 @@ export function reviewStateForFolder(
     id: review.id,
     label: review.label,
     submitting: false,
+    actionFocus: review.gitRoot === undefined ? "chooseFolder" : "submit",
   };
   if (review.gitRoot !== undefined) {
     nextState.gitRoot = review.gitRoot;
@@ -78,6 +79,7 @@ export function failedStateForError(
     ...wizardFieldsFor(state, "failed"),
     selectedPath,
     error,
+    actionFocus: "retry",
   };
 }
 
@@ -90,6 +92,7 @@ export function successStateForProject(
     ...wizardFieldsFor(state, "success"),
     label,
     root,
+    actionFocus: "dashboard",
   };
 }
 
@@ -102,8 +105,11 @@ export function commitEditedProjectId(state: AddProjectReviewState): AddProjectR
 }
 
 export function reviewWithoutEditingId(state: AddProjectReviewState): AddProjectReviewState {
-  const { editingId: _editingId, ...review } = state;
-  return review;
+  const { editingId: _editingId, editIdActionFocus: _editIdActionFocus, ...review } = state;
+  return {
+    ...review,
+    actionFocus: review.gitRoot === undefined ? "chooseFolder" : "submit",
+  };
 }
 
 export function withoutSearchError(state: AddProjectChooseState): AddProjectChooseState {

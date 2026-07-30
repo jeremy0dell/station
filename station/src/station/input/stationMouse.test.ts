@@ -5,7 +5,13 @@
 import { describe, expect, it } from "bun:test";
 import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
-import { addProjectSelectedIndex, selectDashboardViewport } from "@station/dashboard-core";
+import {
+  addProjectSelectedIndex,
+  applyAddProjectFolderReviewed,
+  applyAddProjectFolderReviewFailed,
+  applyAddProjectSubmitted,
+  selectDashboardViewport,
+} from "@station/dashboard-core";
 import { addTuiToast } from "@station/dashboard-core";
 import {
   createEditableTextInputState,
@@ -15,7 +21,7 @@ import {
 import type { TuiStore } from "@station/dashboard-core";
 import { agentWorktreePaneId } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
-import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
+import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import { resolveKeyRowAgentTarget, resolveRowAgentTarget } from "./stationActions.js";
 import { routeStationMouse } from "./stationMouse.js";
@@ -408,6 +414,21 @@ describe("routeStationMouse", () => {
     expect([...store.getState().collapsedProjectIds]).toEqual([]);
   });
 
+  it("opens first-project onboarding from the dashboard CTA only while empty", () => {
+    const empty = makeStore(noProjectsSnapshot());
+    expect(routeStationMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, empty)).toEqual({
+      kind: "handled",
+    });
+    expect(empty.getState().screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "start", firstProject: true },
+    });
+
+    const populated = makeStore();
+    routeStationMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, populated);
+    expect(populated.getState().screen).toEqual({ name: "dashboard" });
+  });
+
   it("opens PR links on plain left click in dashboard mode", () => {
     const store = makeStore();
     const url = "https://github.com/example/station/pull/12";
@@ -454,12 +475,12 @@ describe("routeStationMouse", () => {
     });
   });
 
-  it("keeps [+sh] live on a worktree that has a pending agent start", () => {
+  it("keeps the session shell action live during a pending agent start", () => {
     const store = makeStore();
     const worktreeId = "wt_station_none";
     const rowId = `ses_${worktreeId}`;
     // Put the row into a pending-start (transient) state via the start-or-focus
-    // slot key: it drops out of rowChoices but still renders a clickable [+sh].
+    // slot key: it drops out of rowChoices but still renders a clickable shell action.
     // Opening a shell is orthogonal to agent activation, so the affordance must
     // still resolve the session's backing checkout. (The dashboard *mouse*
     // row-click opens the primary agent, so keyboard drives the pending start.)
@@ -816,6 +837,167 @@ describe("routeStationMouse widget settings", () => {
       throw new Error("expected addProject start");
     }
     expect(addProjectSelectedIndex(store.getState())).toBe(1);
+  });
+
+  it("routes Add Project controls through enabled shared actions", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "A" });
+    routeStationMouse(
+      { kind: "addProjectAction", actionId: "start.cancel" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+
+    store.getState().handleKey({ input: "A" });
+    store.setState(
+      applyAddProjectFolderReviewed(store.getState(), {
+        selectedPath: "/workspace/station",
+        gitRoot: "/workspace/station",
+        id: "station",
+        label: "Station",
+      }),
+    );
+    routeStationMouse(
+      { kind: "addProjectAction", actionId: "review.editId" },
+      LEFT_DOWN,
+      store,
+    );
+    store.getState().handleKey({ input: "-mouse" });
+    routeStationMouse(
+      { kind: "addProjectAction", actionId: "editId.save" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "review", id: "station-mouse", actionFocus: "submit" },
+    });
+
+    const success = applyAddProjectSubmitted(store.getState(), {
+      label: "Station",
+      root: "/workspace/station",
+    });
+    store.setState(success);
+    routeStationMouse(
+      { kind: "addProjectAction", actionId: "success.dashboard" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+
+    store.getState().handleKey({ input: "A" });
+    store.setState(
+      applyAddProjectFolderReviewFailed(
+        store.getState(),
+        "/workspace/station",
+        new Error("review failed"),
+      ),
+    );
+    routeStationMouse(
+      { kind: "addProjectAction", actionId: "failed.cancel" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+  });
+
+  it("keeps disabled and stale Add Project controls inert", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "A" });
+    store.setState(
+      applyAddProjectFolderReviewed(store.getState(), {
+        selectedPath: "/workspace/notes",
+        id: "notes",
+        label: "Notes",
+      }),
+    );
+    routeStationMouse(
+      { kind: "addProjectAction", actionId: "review.submit" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "review", submitting: false, actionFocus: "chooseFolder" },
+    });
+
+    routeStationMouse(
+      { kind: "addProjectAction", actionId: "failed.retry" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({ name: "addProject", flow: { mode: "review" } });
+  });
+
+  it("routes Create Session review and name-editor controls", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "N" });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "review.project" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "pickProject" },
+    });
+
+    store.getState().handleKey({ input: "", escape: true });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "review.name" },
+      LEFT_DOWN,
+      store,
+    );
+    store.getState().handleKey({ input: "Mouse session" });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "editName.save" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", title: "Mouse session" },
+    });
+
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "review.name" },
+      LEFT_DOWN,
+      store,
+    );
+    store.getState().handleKey({ input: "", downArrow: true });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "editName.name" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "editName", editNameFocus: "name" },
+    });
+    routeStationMouse(
+      { kind: "newSessionAction", actionId: "editName.back" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({ name: "newSession", flow: { mode: "review" } });
+  });
+
+  it("returns the native managed-launch outcome for direct Create", () => {
+    const store = makeStore();
+    store.getState().handleKey({ input: "N" });
+    store.getState().handleKey({ input: "", downArrow: true });
+
+    const outcome = routeStationMouse(
+      { kind: "newSessionAction", actionId: "review.create" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(outcome).toMatchObject({
+      kind: "launch-new-session",
+      projectId: "station",
+      harness: "codex",
+    });
   });
 
   it("ignores an add-project row click outside addProject mode", () => {

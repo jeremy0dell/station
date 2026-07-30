@@ -245,7 +245,28 @@ describeReal("real native Station mouse input", () => {
         "The native project did not re-expand before row activation.",
       );
 
-      await writeSgrClick(ptyClient, cellForText(reexpanded, branch));
+      const sessionShellCell = cellForTextOnLine(reexpanded, branch, "[shell]");
+      await writeSgrClick(ptyClient, sessionShellCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => !frame.includes("[quick session]"),
+        "Clicking the session shell action did not leave the overlay.",
+      );
+      const shellMarker = `__STATION_SESSION_SHELL_${Date.now()}__`;
+      await ptyClient.write(new TextEncoder().encode(`printf '${shellMarker}:%s\\n' "$PWD"\n`));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`${shellMarker}:${dormantRow.path}`),
+        "The session shell pane did not open at the exact worktree cwd.",
+      );
+      await ptyClient.write(new TextEncoder().encode("\x0f"));
+      const reopened = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("[shell]") && frame.includes(branch),
+        "Ctrl-O did not return from the session shell to the dashboard.",
+      );
+
+      await writeSgrClick(ptyClient, cellForText(reopened, branch));
       await waitForNativeFrame(
         runtime,
         (frame) => !frame.includes("[shell]") && !frame.includes("[quick session]"),
@@ -436,6 +457,18 @@ function cellForText(frame: string, needle: string): Cell {
     column: column + Math.floor(needle.length / 2) + 1,
     row: row + 1,
   };
+}
+
+function cellForTextOnLine(frame: string, lineNeedle: string, targetNeedle: string): Cell {
+  const lines = frame.split("\n");
+  const row = lines.findIndex((line) => line.includes(lineNeedle));
+  const col = row < 0 ? -1 : (lines[row]?.indexOf(targetNeedle) ?? -1);
+  if (row < 0 || col < 0) {
+    throw new Error(
+      `Could not find ${JSON.stringify(targetNeedle)} on line ${JSON.stringify(lineNeedle)}.`,
+    );
+  }
+  return { column: col + Math.floor(targetNeedle.length / 2), row };
 }
 
 function styledLineForText(frame: string, needle: string): string {

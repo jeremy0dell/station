@@ -11,9 +11,11 @@
 import type { StoreApi } from "zustand/vanilla";
 import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
+  addProjectActionKey,
   addTuiToast,
   choiceValueByKey,
   deriveTuiInputMode,
+  newSessionActionInputPath,
   newSessionIntentForInput,
   focusProjectSettingsItem as focusProjectSettingsItemState,
   openProjectDefaultAgentPicker,
@@ -28,6 +30,8 @@ import {
   widgetSettingsOpenPicker,
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
+  type AddProjectActionId,
+  type NewSessionActionId,
   type ProjectSettingsItemId,
 } from "@station/dashboard-core";
 import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
@@ -219,7 +223,10 @@ export type NewSessionSubmitTarget =
  * step or when validation fails — both fall through to the shared machine
  * (navigation keys act normally; an invalid create surfaces its error toast).
  */
-export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSubmitTarget {
+export function resolveNewSessionSubmit(
+  store: StoreApi<TuiStore>,
+  key: TuiKey = { input: "\r", return: true },
+): NewSessionSubmitTarget {
   const state = store.getState();
   if (state.screen.name !== "newSession") {
     return { kind: "none" };
@@ -227,8 +234,8 @@ export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSu
   // The machine owns what ↵ means (reviewFocusIntents): submit only when it
   // would submit, so a focused field's ↵ reaches the machine and opens its step.
   const intent = newSessionIntentForInput(state.screen.flow, {
-    input: "\r",
-    key: { return: true },
+    input: key.input,
+    key,
     token: "",
   });
   if (intent.type !== "submit") {
@@ -251,19 +258,19 @@ export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSu
 }
 
 /**
- * Submit only on Enter; every other key (wizard navigation, name editing) is the
- * shared machine's. Takes the raw sequence like resolveKeyRowAgentTarget (the
- * overlay catchAll hands strings, not TuiKeys) so the keyboard submit and a
- * create-hint click reach the same managed launch.
+ * Submit on focused Enter or direct C; field/editor keys remain the shared
+ * machine's. The raw sequence keeps native managed-launch resolution aligned
+ * with the overlay keyboard boundary.
  */
 export function resolveKeyNewSessionSubmit(
   store: StoreApi<TuiStore>,
   sequence: string,
 ): NewSessionSubmitTarget {
-  if (sequenceToTuiKey(sequence)?.return !== true) {
+  const key = sequenceToTuiKey(sequence);
+  if (key === undefined || (key.return !== true && key.input !== "C")) {
     return { kind: "none" };
   }
-  return resolveNewSessionSubmit(store);
+  return resolveNewSessionSubmit(store, key);
 }
 
 export type ForkSessionSubmitTarget =
@@ -379,6 +386,39 @@ export function toggleWidgetSettingsRow(store: StoreApi<TuiStore>, index: number
 
 export function selectAddProjectRow(store: StoreApi<TuiStore>, index: number): void {
   store.setState(selectAddProjectRowState(store.getState(), index));
+}
+
+/** Dispatches an enabled Add Project control through its shared key transition. */
+export function dispatchAddProjectAction(
+  store: StoreApi<TuiStore>,
+  actionId: AddProjectActionId,
+): StationKeyOutcome {
+  const screen = store.getState().screen;
+  if (screen.name !== "addProject") {
+    return { kind: "handled" };
+  }
+  const key = addProjectActionKey(screen.flow, actionId);
+  return key === undefined ? { kind: "handled" } : dispatchStationKey(store, key);
+}
+
+/** Dispatches a New Session control through the flow's shared keyboard path. */
+export function dispatchNewSessionAction(
+  store: StoreApi<TuiStore>,
+  actionId: NewSessionActionId,
+): StationKeyOutcome {
+  const screen = store.getState().screen;
+  if (screen.name !== "newSession") {
+    return { kind: "handled" };
+  }
+  const path = newSessionActionInputPath(screen.flow, actionId);
+  if (path === undefined) {
+    return { kind: "handled" };
+  }
+  let outcome: StationKeyOutcome = { kind: "handled" };
+  for (const input of path) {
+    outcome = dispatchStationKey(store, { input: input.input, ...input.key });
+  }
+  return outcome;
 }
 
 export function removeWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {

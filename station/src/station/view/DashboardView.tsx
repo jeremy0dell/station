@@ -38,11 +38,9 @@ import {
 
 const HOVER_BG = STATION_COLORS.hoverBackground;
 
-// The per-row/header "open a shell here" click target. Rendered as its own
-// trailing <text> so stationMouseProps' stopPropagation fires only this action,
-// never the row-activate / collapse-toggle on the line it sits beside. The
-// reserved width (label + a leading space) is subtracted from the row grid and
-// header truncation so the affordance is never clipped at small viewports.
+// Session and project rows render "open a shell here" as a separate trailing
+// target so stopPropagation can never also activate the row or toggle its header.
+// Its reserved width is removed before shared-grid and header truncation run.
 const SHELL_AFFORDANCE_LABEL = "[shell]";
 const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
 const SHELL_AFFORDANCE_WIDTH = SHELL_AFFORDANCE_LABEL.length + 1;
@@ -73,9 +71,18 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
   const keyByRow = new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]));
+  const compactAffordances = contentColumns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
+  const sessionShellWidth = compactAffordances
+    ? SHELL_AFFORDANCE_WIDTH_COMPACT
+    : SHELL_AFFORDANCE_WIDTH;
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
-    : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.focusedRowId);
+    : dashboardRowLayouts(
+        viewport.visibleItems,
+        keyByRow,
+        Math.max(1, contentColumns - sessionShellWidth),
+        viewState.focusedRowId,
+      );
   return (
     <box
       width="100%"
@@ -97,7 +104,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
       )}
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
-          <text fg={STATION_COLORS.foreground}>{truncateCells(FIRST_RUN_BODY_LABEL, contentColumns)}</text>
+          <FirstProjectButton columns={contentColumns} />
         </box>
       ) : (
         <DashboardBody
@@ -105,6 +112,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
           items={viewport.visibleItems}
           layoutByItem={layoutByItem}
           focusedRowId={viewState.focusedRowId}
+          compactAffordances={compactAffordances}
         />
       )}
       <ScrollIndicatorRow direction="below" overflow={viewport.sessionOverflow} />
@@ -255,11 +263,13 @@ function DashboardBody({
   items,
   layoutByItem,
   focusedRowId,
+  compactAffordances,
 }: {
   columns: number;
   items: readonly DashboardViewportItem[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
   focusedRowId?: SessionId | undefined;
+  compactAffordances: boolean;
 }) {
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -270,6 +280,7 @@ function DashboardBody({
           item={item}
           layout={layoutByItem.get(item.id)}
           focusedRowId={focusedRowId}
+          compactAffordances={compactAffordances}
         />
       ))}
     </box>
@@ -281,11 +292,13 @@ function DashboardViewportRow({
   item,
   layout,
   focusedRowId,
+  compactAffordances,
 }: {
   columns: number;
   item: DashboardViewportItem;
   layout: RowGridLayout | undefined;
   focusedRowId?: SessionId | undefined;
+  compactAffordances: boolean;
 }) {
   switch (item.type) {
     case "projectGap":
@@ -301,7 +314,12 @@ function DashboardViewportRow({
       );
     case "session":
       return layout === undefined ? null : (
-        <SessionRowLine rowId={item.row.id} layout={layout} focused={item.row.id === focusedRowId} />
+        <SessionRowLine
+          rowId={item.row.id}
+          layout={layout}
+          focused={item.row.id === focusedRowId}
+          compact={compactAffordances}
+        />
       );
     case "createLocalRow":
       // Local create rows have no slot and no activation target.
@@ -317,10 +335,12 @@ function SessionRowLine({
   rowId,
   layout,
   focused,
+  compact,
 }: {
   rowId: string;
   layout: RowGridLayout;
   focused?: boolean;
+  compact: boolean;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
@@ -342,12 +362,36 @@ function SessionRowLine({
         </text>
         <SegmentLinkTargets segments={layout.segments} />
       </box>
+      <ShellAffordance
+        target={{ kind: "openShellForRow", rowId }}
+        onHoverChange={setHover}
+        compact={compact}
+      />
     </box>
   );
 }
 
+function FirstProjectButton({ columns }: { columns: number }) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useStationHoverState();
+  const label = `[ + ${FIRST_RUN_BODY_LABEL} (A) ]`;
+  return (
+    <text
+      flexShrink={0}
+      fg={hover ? STATION_COLORS.background : STATION_COLORS.cyan}
+      attributes={TextAttributes.BOLD}
+      {...(hover ? { bg: STATION_COLORS.cyan } : {})}
+      {...stationMouseProps(dispatch, { kind: "firstProjectAdd" })}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      {truncateCells(label, columns)}
+    </text>
+  );
+}
+
 /**
- * The trailing `[+sh]` click target. Its own <text> (not a span) so it carries
+ * The trailing shell click target. Its own <text> (not a span) so it carries
  * its own mouse target and stopPropagation; the leading space keeps it off the
  * line content. Color-only hover, so golden frames stay layout-stable.
  */

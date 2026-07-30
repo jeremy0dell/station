@@ -233,11 +233,32 @@ execution: native Station hosts the session in a Station pane, while the
 standalone dashboard dispatches the configured terminal default. The
 empty-project button uses that same quick-session intent, and the agent-picker
 uses the shared project-default screen transition. Link cells use the same
-validated platform opener. Shell actions delegate only their terminal effect:
-native Station opens or focuses a Station pane, while a tmux popup sends a
-strict renderer-control request to its CLI parent. The tmux adapter opens or
-focuses one cwd-bound shell window in the exact invoking client session, then
-dismisses that popup claim.
+validated platform opener. Session-row and project-header shell controls share
+the same validated product intent and remain available on pending-start rows;
+stale targets stay inert. They delegate only their terminal effect: native
+Station opens or focuses a Station pane, while a tmux popup sends a strict
+renderer-control request to its CLI parent. The tmux adapter opens or focuses
+one cwd-bound shell window in the exact invoking client session, then dismisses
+that popup claim. Shell controls own separate propagation-stopping cells so they
+never also activate a session or collapse a project.
+
+The zero-project dashboard renders **Add your first project** as a pointer
+target that dispatches the same Add Project transition as `A` and focused
+`Enter`. Folder rows remain single-click selection targets; explicit Open,
+Choose, Parent, Search, and Cancel controls complete navigation without relying
+on terminal double-click behavior. Review, id editing, success, and failure use
+a visible action focus cursor, direct commands, and pointer controls. Missing
+Git-root review keeps submit disabled and focuses folder recovery; these
+interaction paths do not weaken project admission policy.
+
+Create Session review renders Project, Name, Agent, and Create as full-width
+interactive rows with visible `P`, `N`, `A`, and `C` commands. Arrow focus has a
+non-color marker and contextual Enter helper; agent identity and its glyph plus
+health text are separate spans. The name editor gives Name, Save, and Back
+independent focus and pointer targets, hides the text cursor while an action
+owns focus, and reserves Left/Right for text-cursor movement while Name owns
+focus. Native focused Enter and direct `C` both pass through the one managed
+launch resolver; standalone creation remains on its existing operation path.
 
 Real native mouse acceptance lives in
 `tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`

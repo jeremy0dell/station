@@ -156,9 +156,11 @@ export function SheetProgressFooter({ width, children }: { width: number; childr
   );
 }
 
-export type SheetButtonTone = "success" | "danger";
+export type SheetButtonTone = "neutral" | "primary" | "success" | "danger";
 
 const BUTTON_TONE_COLORS: Record<SheetButtonTone, string> = {
+  neutral: STATION_COLORS.foreground,
+  primary: STATION_COLORS.cyan,
   success: STATION_COLORS.green,
   danger: STATION_COLORS.red,
 };
@@ -169,29 +171,146 @@ export function SheetButton({
   tone,
   fixedWidth,
   mouseTarget,
+  focused = false,
+  disabled = false,
 }: {
   label: string;
   shortcut: string;
   tone: SheetButtonTone;
   fixedWidth: number;
   mouseTarget: StationMouseTarget;
+  focused?: boolean;
+  disabled?: boolean;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
-  const color = BUTTON_TONE_COLORS[tone];
+  const color = disabled ? STATION_COLORS.gray : BUTTON_TONE_COLORS[tone];
+  const active = !disabled && hover;
+  const attributes = interactiveAttributes({
+    active,
+    disabled,
+    emphasized: focused,
+  });
+  const background = interactiveBackground(active, focused, color);
   return (
     <text
       width={fixedWidth}
-      fg={hover ? STATION_COLORS.background : color}
-      attributes={hover ? TextAttributes.BOLD : TextAttributes.NONE}
-      {...(hover ? { bg: color } : {})}
-      {...stationMouseProps(dispatch, mouseTarget)}
-      onMouseOver={() => setHover(true)}
+      fg={active ? STATION_COLORS.background : color}
+      attributes={attributes}
+      {...background}
+      {...(disabled ? {} : stationMouseProps(dispatch, mouseTarget))}
+      onMouseOver={() => {
+        if (!disabled) setHover(true);
+      }}
       onMouseOut={() => setHover(false)}
     >
-      {fit(` ${label} (${shortcut})`, fixedWidth)}
+      {fit(`${focused ? "▸" : " "}${label} (${shortcut})`, fixedWidth)}
     </text>
   );
+}
+
+export type SheetActionTone = "neutral" | "primary" | "secondary" | "danger";
+
+export function SheetActionRow({
+  width,
+  label,
+  shortcut,
+  detail,
+  detailCells,
+  status,
+  tone = "secondary",
+  focused = false,
+  disabled = false,
+  mouseTarget,
+}: {
+  width: number;
+  label: string;
+  shortcut?: string;
+  detail?: string | ReactNode;
+  detailCells?: number;
+  status?: { glyph: string; text: string; color?: string };
+  tone?: SheetActionTone;
+  focused?: boolean;
+  disabled?: boolean;
+  mouseTarget: StationMouseTarget;
+}) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useStationHoverState();
+  const active = !disabled && hover;
+  const foreground = sheetActionForeground(tone, disabled);
+  const attributes = interactiveAttributes({
+    active,
+    disabled,
+    emphasized: focused || tone === "primary",
+  });
+  const background = interactiveBackground(active, focused, foreground);
+  const shortcutLabel = shortcut === undefined ? "" : ` (${shortcut})`;
+  const actionLabel = `${label}${shortcutLabel}`;
+  const visibleLabel = tone === "primary" ? `[ ${actionLabel} ]` : actionLabel;
+  const prefix = `${focused ? "▸" : " "} ${visibleLabel}`;
+  const statusText = status === undefined ? "" : ` ${status.glyph} ${status.text}`;
+  const detailBudget = Math.max(0, width - prefix.length - statusText.length - 1);
+  const detailElement = isValidElement(detail) ? detail : undefined;
+  const visibleDetail = typeof detail === "string" ? fit(detail, detailBudget) : "";
+  const renderedDetailCells =
+    detailElement === undefined ? visibleDetail.length : Math.min(detailBudget, detailCells ?? 0);
+  const trailing = Math.max(0, width - prefix.length - renderedDetailCells - statusText.length);
+  return (
+    <text
+      width={width}
+      fg={active ? STATION_COLORS.background : foreground}
+      attributes={attributes}
+      {...background}
+      {...(disabled ? {} : stationMouseProps(dispatch, mouseTarget))}
+      onMouseOver={() => {
+        if (!disabled) setHover(true);
+      }}
+      onMouseOut={() => setHover(false)}
+    >
+      {prefix}
+      {visibleDetail.length > 0 ? ` ${visibleDetail}` : null}
+      {detailElement === undefined ? null : (
+        <>
+          {" "}
+          {detailElement}
+        </>
+      )}
+      {spaces(Math.max(0, trailing - Number(detail !== undefined)))}
+      {status === undefined ? null : (
+        <span fg={status.color ?? foreground}>{statusText}</span>
+      )}
+    </text>
+  );
+}
+
+function sheetActionForeground(tone: SheetActionTone, disabled: boolean): string {
+  if (disabled) return STATION_COLORS.gray;
+  if (tone === "primary") return STATION_COLORS.cyan;
+  if (tone === "danger") return STATION_COLORS.red;
+  return STATION_COLORS.foreground;
+}
+
+function interactiveAttributes({
+  active,
+  disabled,
+  emphasized,
+}: {
+  active: boolean;
+  disabled: boolean;
+  emphasized: boolean;
+}) {
+  if (disabled) return TextAttributes.DIM;
+  return active || emphasized ? TextAttributes.BOLD : TextAttributes.NONE;
+}
+
+function interactiveBackground(
+  active: boolean,
+  focused: boolean,
+  activeColor: string,
+): { bg?: string } {
+  if (active) return { bg: activeColor };
+  if (focused) return { bg: STATION_COLORS.focusBackground };
+  return {};
 }
 
 export type SheetMessageTone = "normal" | "muted" | "accent" | "success" | "danger" | "warning";

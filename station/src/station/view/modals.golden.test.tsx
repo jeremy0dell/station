@@ -15,6 +15,10 @@ import type { TuiKey } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
 import {
   addPendingProjectDefaultHarness,
+  applyAddProjectFolderLoaded,
+  applyAddProjectFolderReviewFailed,
+  applyAddProjectFolderReviewed,
+  applyAddProjectSubmitted,
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openProjectSettings,
@@ -31,10 +35,41 @@ type ModalCase = {
   keys: TuiKey[];
   snapshot?: () => ReturnType<typeof manyProjectsSnapshot>;
   prepare?: (store: StoreApi<TuiStore>) => void;
+  size?: { width: number; height: number };
   trimSnapshotTrailingWhitespace?: true;
   expect: string[];
   reject?: string[];
 };
+
+function snapshotWithCodexHealth(
+  status: "healthy" | "degraded" | "unavailable",
+): ReturnType<typeof manyProjectsSnapshot> {
+  const snapshot = manyProjectsSnapshot();
+  return {
+    ...snapshot,
+    providerHealth: {
+      ...snapshot.providerHealth,
+      codex: {
+        providerId: "codex",
+        providerType: "harness",
+        status,
+        lastCheckedAt: snapshot.generatedAt,
+      },
+    },
+  };
+}
+
+function openAddProjectReview(store: StoreApi<TuiStore>, gitRoot: boolean): void {
+  store.getState().handleKey({ input: "A" });
+  store.setState(
+    applyAddProjectFolderReviewed(store.getState(), {
+      selectedPath: "/Users/example/Developer/station",
+      ...(gitRoot ? { gitRoot: "/Users/example/Developer/station" } : {}),
+      id: "station",
+      label: "Station",
+    }),
+  );
+}
 
 const CASES: ModalCase[] = [
   {
@@ -175,12 +210,80 @@ const CASES: ModalCase[] = [
   {
     name: "new session review",
     keys: [{ input: "N" }],
-    expect: ["Create Session", "Project", "Agent", "Create session", "↑↓ field  ↵ choose  N/P/A  Esc:cancel"],
+    expect: [
+      "Create Session",
+      "Project (P)",
+      "Name (N)",
+      "Agent (A)",
+      "Create session (C)",
+      "Enter create session",
+    ],
+  },
+  {
+    name: "new session review project focus",
+    keys: [{ input: "N" }, { input: "", downArrow: true }],
+    expect: ["▸ Project (P)", "Enter choose project"],
+  },
+  {
+    name: "new session review name focus",
+    keys: [
+      { input: "N" },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+    ],
+    expect: ["▸ Name (N)", "Enter edit name"],
+  },
+  {
+    name: "new session review agent focus",
+    keys: [{ input: "N" }, { input: "", upArrow: true }],
+    expect: ["▸ Agent (A)", "Enter choose agent"],
+  },
+  {
+    name: "new session healthy agent",
+    keys: [{ input: "N" }],
+    snapshot: () => snapshotWithCodexHealth("healthy"),
+    expect: ["codex", "● healthy", "[ Create session (C) ]"],
+  },
+  {
+    name: "new session degraded agent",
+    keys: [{ input: "N" }],
+    snapshot: () => snapshotWithCodexHealth("degraded"),
+    expect: ["codex", "● degraded", "[ Create session (C) ]"],
+  },
+  {
+    name: "new session unavailable agent",
+    keys: [{ input: "N" }],
+    snapshot: () => snapshotWithCodexHealth("unavailable"),
+    expect: ["codex", "● unavailable", "[ Create session (C) ]"],
   },
   {
     name: "new session edit name",
     keys: [{ input: "N" }, { input: "N" }],
-    expect: ["Set Session Name", "Enter:save   Esc:back"],
+    expect: ["Set Session Name", "Name", "Save (Ctrl-S)", "Back (Esc)", "Enter save"],
+  },
+  {
+    name: "new session edit name save focus",
+    keys: [{ input: "N" }, { input: "N" }, { input: "", downArrow: true }],
+    expect: ["▸ [ Save (Ctrl-S) ]", "Enter save name"],
+    reject: ["|station-"],
+  },
+  {
+    name: "new session edit name back focus",
+    keys: [
+      { input: "N" },
+      { input: "N" },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+    ],
+    expect: ["▸ Back (Esc)", "Enter back without saving"],
+    reject: ["|station-"],
+  },
+  {
+    name: "new session narrow review",
+    keys: [{ input: "N" }],
+    snapshot: () => snapshotWithCodexHealth("degraded"),
+    size: { width: 40, height: 16 },
+    expect: ["Project (P)", "Name (N)", "Agent (A)", "● degraded", "Create session (C)"],
   },
   {
     name: "new session pick project",
@@ -208,13 +311,88 @@ const CASES: ModalCase[] = [
   {
     name: "add project sheet",
     keys: [{ input: "A" }],
-    expect: ["Add Project", "Start location", "Enter:open Right:open Esc:cancel"],
+    expect: ["Add Project", "Start location", "Open (→/↵)", "Cancel (Esc)"],
   },
   {
     name: "first project sheet",
     keys: [{ input: "\r", return: true }],
     snapshot: noProjectsSnapshot,
-    expect: ["Add Your First Project", "Start location", "Enter:open Right:open Esc:cancel"],
+    expect: ["Add Your First Project", "Start location", "Open (→/↵)", "Cancel (Esc)"],
+  },
+  {
+    name: "add project folder actions",
+    keys: [{ input: "A" }],
+    prepare: (store) => {
+      store.setState(
+        applyAddProjectFolderLoaded(store.getState(), {
+          path: "/Users/example/Developer",
+          entries: [
+            {
+              name: "station",
+              path: "/Users/example/Developer/station",
+              kind: "directory",
+            },
+          ],
+        }),
+      );
+    },
+    expect: ["Choose Project Folder", "Choose (↵)", "Open (→)", "Parent (←)", "Search (/)"],
+  },
+  {
+    name: "add project review actions",
+    keys: [],
+    prepare: (store) => openAddProjectReview(store, true),
+    expect: ["Add Project: Review", "[ Add project (A) ]", "Edit id (N)", "Choose folder (B)"],
+  },
+  {
+    name: "add project Git recovery",
+    keys: [],
+    prepare: (store) => openAddProjectReview(store, false),
+    expect: ["Git root", "not detected", "Choose a folder inside an existing Git repository", "▸ Choose folder (B)"],
+  },
+  {
+    name: "add project id editor actions",
+    keys: [],
+    prepare: (store) => {
+      openAddProjectReview(store, true);
+      store.getState().handleKey({ input: "N" });
+    },
+    expect: ["Project id", "[ Save id (Ctrl-S) ]", "Back (Esc)"],
+  },
+  {
+    name: "add project success action",
+    keys: [],
+    prepare: (store) => {
+      openAddProjectReview(store, true);
+      store.setState(
+        applyAddProjectSubmitted(store.getState(), {
+          label: "Station",
+          root: "/Users/example/Developer/station",
+        }),
+      );
+    },
+    expect: ["Project Added", "Reconciled successfully", "[ Dashboard (D) ]"],
+  },
+  {
+    name: "add project failure actions",
+    keys: [],
+    prepare: (store) => {
+      openAddProjectReview(store, true);
+      store.setState(
+        applyAddProjectFolderReviewFailed(
+          store.getState(),
+          "/Users/example/Developer/station",
+          new Error("Git review failed"),
+        ),
+      );
+    },
+    expect: ["Add Project Failed", "Could not add this project", "[ Retry (R) ]", "Choose folder (B)"],
+  },
+  {
+    name: "add project narrow actions",
+    keys: [{ input: "A" }],
+    size: { width: 40, height: 16 },
+    expect: ["Add Project", "Open (→/↵)", "Cancel (Esc)"],
   },
   {
     name: "widget settings panel",
@@ -276,14 +454,15 @@ describe("modal flow golden frames", () => {
         store.getState().handleKey(key);
       }
       modal.prepare?.(store);
+      const size = modal.size ?? SIZE;
       const setup = await testRender(
         <DashboardRoot
           store={store}
-          columns={SIZE.width}
-          rows={SIZE.height}
+          columns={size.width}
+          rows={size.height}
           onCopyNotice={() => {}}
         />,
-        SIZE,
+        size,
       );
       teardowns.push(() => {
         setup.renderer.destroy();

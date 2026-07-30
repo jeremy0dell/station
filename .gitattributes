@@ -1,0 +1,2 @@
+# Terminal golden frames intentionally preserve trailing cells.
+station/src/station/view/__snapshots__/*.snap whitespace=-trailing-space

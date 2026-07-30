@@ -20,6 +20,8 @@ import type { StationMouseEvent } from "../../input/mouse.js";
 import {
   addWidgetSettingsPickerChoice,
   dismissStationToasts,
+  dispatchAddProjectAction,
+  dispatchNewSessionAction,
   dispatchRowSlot,
   dispatchStationKey,
   focusProjectSettingsItem,
@@ -29,6 +31,7 @@ import {
   removeWidgetSettingsRow,
   toggleWidgetSettingsRow,
   resolveForkSessionSubmit,
+  resolveNewSessionSubmit,
   resolveProjectPaneTarget,
   resolveQuickSessionSubmit,
   resolveRowAgentTarget,
@@ -40,19 +43,22 @@ import {
   type RowAgentTarget,
   type StationKeyOutcome,
 } from "./stationActions.js";
+import type { AddProjectActionId, NewSessionActionId } from "@station/dashboard-core";
 
 export type StationMouseTarget =
   | { kind: "row"; rowId: string }
   | { kind: "projectHeader"; projectId: string }
   | { kind: "link"; url: string }
-  /** The `[+sh]` affordance on a session row: open a shell in its checkout. */
+  /** The trailing shell affordance on a session row. */
   | { kind: "openShellForRow"; rowId: string }
-  /** The `[+sh]` affordance on a project header: open a shell in its root. */
+  /** The trailing shell affordance on a project header. */
   | { kind: "openShellForProject"; projectId: string }
   /** The `[+]` quick-session affordance on a project header. */
   | { kind: "quickSessionForProject"; projectId: string }
   /** The `[▾]` default-agent affordance on a project header. */
   | { kind: "showDefaultAgentPickerForProject"; projectId: string }
+  /** The zero-project dashboard CTA; guarded against stale non-empty snapshots. */
+  | { kind: "firstProjectAdd" }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
@@ -76,6 +82,10 @@ export type StationMouseTarget =
   | { kind: "widgetSettingsPickerChoice"; index: number }
   /** A folder/start row in the add-project browser; clicking moves the cursor there. */
   | { kind: "addProjectRow"; index: number }
+  /** An explicit Add Project control resolved against its current mode and enabled state. */
+  | { kind: "addProjectAction"; actionId: AddProjectActionId }
+  /** A Create Session field or editor control routed through its shared key path. */
+  | { kind: "newSessionAction"; actionId: NewSessionActionId }
   /** A sheet's primary submit button (the fork details "Fork" action). */
   | { kind: "sheetSubmit" }
   /** The viewport outside a bounded screen; primary-down safely cancels that screen. */
@@ -94,7 +104,7 @@ export type StationMouseOutcome =
    * Consumed; the router should open-or-focus a pane rooted at `cwd`. Pane
    * lifecycle is the Station coordination store's job, not the view store's,
    * so this surfaces as a router outcome the same way close-overlay does. Used
-   * for the `[+sh]` shell affordances (command/args/worktreeId stay absent).
+   * for the session/project shell affordances (command/args/worktreeId stay absent).
    */
   | {
       kind: "open-pane";
@@ -123,8 +133,7 @@ export type StationMouseOutcome =
   | { kind: "open-url"; url: string }
   /**
    * Consumed; the router should create a new worktree and host its agent in a
-   * Station pane. The create-hint click counterpart of the keyboard Enter on the
-   * New Session review screen.
+   * Station pane. Pointer Create, direct C, and focused Enter all converge here.
    */
   | {
       kind: "launch-new-session";
@@ -222,6 +231,11 @@ export function routeStationMouse(
       }
       openDefaultAgentPickerForProject(store, target.projectId);
       return { kind: "handled" };
+    case "firstProjectAdd":
+      if (mode === "dashboard" && store.getState().snapshot?.projects.length === 0) {
+        return fromKeyOutcome(dispatchStationKey(store, { input: "A" }));
+      }
+      return { kind: "handled" };
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
@@ -283,6 +297,23 @@ export function routeStationMouse(
       }
       selectAddProjectRow(store, target.index);
       return { kind: "handled" };
+    case "addProjectAction":
+      return fromKeyOutcome(dispatchAddProjectAction(store, target.actionId));
+    case "newSessionAction": {
+      if (target.actionId === "review.create") {
+        const submit = resolveNewSessionSubmit(store, { input: "C" });
+        if (submit.kind === "submit") {
+          return {
+            kind: "launch-new-session",
+            projectId: submit.projectId,
+            title: submit.title,
+            branch: submit.branch,
+            harness: submit.harness,
+          };
+        }
+      }
+      return fromKeyOutcome(dispatchNewSessionAction(store, target.actionId));
+    }
     case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {
         return { kind: "handled" };

@@ -3,6 +3,7 @@ export * from "./components/Dashboard/content.js";
 export * from "./components/Dashboard/layout.js";
 export * from "./components/EditableTextInput/editing.js";
 export * from "./components/HelpOverlay/helpPanel.js";
+export * from "./components/NewSessionBottomSheet/content.js";
 export * from "./components/NewSessionBottomSheet/layout.js";
 export * from "./components/ProjectSettingsPanel/layout.js";
 export * from "./components/ToastOverlay/content.js";
