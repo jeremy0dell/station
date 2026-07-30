@@ -50,7 +50,6 @@ Station creates an isolated worktree, launches the selected agent, and opens its
 | Action | Key |
 | --- | --- |
 | Open the focused session | `Enter` |
-| Open a session shell | click its `[shell]` / `[sh]` action |
 | Move between dashboard rows | `Up` / `Down` |
 | Jump to the next session needing you | `Tab` |
 | Create another session | `N` |

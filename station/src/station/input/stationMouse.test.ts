@@ -475,12 +475,12 @@ describe("routeStationMouse", () => {
     });
   });
 
-  it("keeps the session shell action live during a pending agent start", () => {
+  it("keeps [+sh] live on a worktree that has a pending agent start", () => {
     const store = makeStore();
     const worktreeId = "wt_station_none";
     const rowId = `ses_${worktreeId}`;
     // Put the row into a pending-start (transient) state via the start-or-focus
-    // slot key: it drops out of rowChoices but still renders a clickable shell action.
+    // slot key: it drops out of rowChoices but still renders a clickable [+sh].
     // Opening a shell is orthogonal to agent activation, so the affordance must
     // still resolve the session's backing checkout. (The dashboard *mouse*
     // row-click opens the primary agent, so keyboard drives the pending start.)

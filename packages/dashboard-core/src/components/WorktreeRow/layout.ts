@@ -204,11 +204,7 @@ export function layoutWorktreeRowGrid(input: {
 
     // While any metadata remains, hold every left column; only once metadata is
     // gone do we start dropping agent, then the status word.
-    const protectedKeys = meaningfulSoftColumnKeys(config, input.rows);
-    const activeSets =
-      metadataMode === "none"
-        ? allLeftColumns.filter((keys) => protectedKeys.every((key) => keys.includes(key)))
-        : [fullLeftSet];
+    const activeSets = metadataMode === "none" ? allLeftColumns : [fullLeftSet];
     const layouts = layoutActiveSets({
       activeSets,
       columns,

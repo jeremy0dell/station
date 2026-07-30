@@ -584,7 +584,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     await waitForNestedClientGone(fixture);
   }, 120_000);
 
-  it("opens and reuses project and session shells from a spaced tmux session", async () => {
+  it("opens and reuses the project shell from a spaced tmux session", async () => {
     const fixture = await createDashboardFixture(tmux, {
       height: "40",
       position: "C",
@@ -597,8 +597,6 @@ describeRealTmux("real tmux dev popup routing", () => {
     });
     delete fixture.env.STATION_SOURCE;
 
-    const sessionWorktree = join(fixture.projectRoot, "popup-01");
-    await mkdir(sessionWorktree, { recursive: true });
     const sessionName = "base shell session";
     await tmuxExec(
       fixture.wrapper,
@@ -613,47 +611,45 @@ describeRealTmux("real tmux dev popup routing", () => {
       initialDimensions: { rows: 50, columns: 140 },
     });
 
-    const shellCases = [
-      { lineNeedle: "POPUP ACCEPTANCE", cwd: fixture.projectRoot },
-      { lineNeedle: "01 Private tmux destination", cwd: sessionWorktree },
-    ] as const;
-    for (const shellCase of shellCases) {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const popup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
-        const dashboard = await waitForPaneContent(
-          fixture,
-          popup,
-          isAcceptanceDashboardContent,
-          `dashboard did not render for ${shellCase.lineNeedle} shell activation`,
-        );
-        const nestedClient = await waitForNestedClient(fixture);
-        const outerDimensions = await readOuterClientDimensions(
-          fixture,
-          fixture.ptyClient.clientName,
-        );
-        const shellCell = paneCellOnLine(dashboard, shellCase.lineNeedle, "[shell]");
-        const shellOuter = centeredPopupOuterCell(outerDimensions, nestedClient, shellCell);
-        await writeSgrClick(fixture.ptyClient, shellOuter);
-        await waitForNestedClientGone(fixture).catch(async (error) => {
-          throw new Error(`${errorMessage(error)}${await fixtureDiagnostics(fixture)}`, {
-            cause: error,
-          });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const popup = spawnPopupCli(fixture, fixture.ptyClient.clientName);
+      const dashboard = await waitForPaneContent(
+        fixture,
+        popup,
+        isAcceptanceDashboardContent,
+        "dashboard did not render for project shell activation",
+      );
+      const nestedClient = await waitForNestedClient(fixture);
+      const outerDimensions = await readOuterClientDimensions(
+        fixture,
+        fixture.ptyClient.clientName,
+      );
+      const shellCell = paneCell(dashboard, "[shell]");
+      const shellOuter = centeredPopupOuterCell(outerDimensions, nestedClient, {
+        col: shellCell.col + Math.floor("[shell]".length / 2),
+        row: shellCell.row,
+      });
+      await writeSgrClick(fixture.ptyClient, shellOuter);
+      await waitForNestedClientGone(fixture).catch(async (error) => {
+        throw new Error(`${errorMessage(error)}${await fixtureDiagnostics(fixture)}`, {
+          cause: error,
         });
-        await expectSuccessfulExit(popup, 10_000);
+      });
+      await expectSuccessfulExit(popup, 10_000);
 
-        const windows = await tmuxExec(
-          fixture.wrapper,
-          ["list-windows", "-a", "-F", "#{session_name}\t#{window_id}\t#{@station_shell_cwd}"],
-          fixture.env,
+      const windows = await tmuxExec(
+        fixture.wrapper,
+        ["list-windows", "-a", "-F", "#{session_name}\t#{window_id}\t#{@station_shell_cwd}"],
+        fixture.env,
+      );
+      const projectShellWindows = windows
+        .trim()
+        .split("\n")
+        .filter(
+          (line) =>
+            line.startsWith(`${sessionName}\t`) && line.endsWith(`\t${fixture.projectRoot}`),
         );
-        const matchingShellWindows = windows
-          .trim()
-          .split("\n")
-          .filter(
-            (line) => line.startsWith(`${sessionName}\t`) && line.endsWith(`\t${shellCase.cwd}`),
-          );
-        expect(matchingShellWindows, `tmux windows:\n${windows}`).toHaveLength(1);
-      }
+      expect(projectShellWindows, `tmux windows:\n${windows}`).toHaveLength(1);
     }
   }, 120_000);
 
@@ -1852,22 +1848,6 @@ function paneCell(content: string, needle: string): { col: number; row: number }
     throw new Error(`pane does not contain ${JSON.stringify(needle)}`);
   }
   return { col, row };
-}
-
-function paneCellOnLine(
-  content: string,
-  lineNeedle: string,
-  targetNeedle: string,
-): { col: number; row: number } {
-  const lines = content.split("\n");
-  const row = lines.findIndex((line) => line.includes(lineNeedle));
-  const col = row < 0 ? -1 : (lines[row]?.indexOf(targetNeedle) ?? -1);
-  if (row < 0 || col < 0) {
-    throw new Error(
-      `Could not find ${JSON.stringify(targetNeedle)} on ${JSON.stringify(lineNeedle)}.`,
-    );
-  }
-  return { col: col + Math.floor(targetNeedle.length / 2), row };
 }
 
 function centeredPopupOuterCell(

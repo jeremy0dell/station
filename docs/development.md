@@ -864,16 +864,16 @@ TUI work has additional OpenTUI/React and terminal-layout expectations. The term
 For dashboard interaction changes, manually verify native Station and the tmux
 popup with three independent passes:
 
-1. Pointer: open a session-row shell, complete first-project onboarding, and
-   create a named session using only visible controls (typing text is allowed).
+1. Pointer: complete first-project onboarding and create a named session using
+   only visible controls (typing text is allowed).
 2. Direct commands: use `A`, the displayed Add Project commands, then `N` and
    `P/N/A/C` for Create Session.
 3. Focus: use arrows plus `Enter` for folder lists, review actions, and name
    editor actions at both wide and minimum supported widths.
 
-Shell clicks must not activate agents, Git-invalid Add Project submit must stay
-disabled, native Create Session must open a Station-managed pane, and the popup
-must continue through its configured terminal adapter.
+Git-invalid Add Project submit must stay disabled, native Create Session must
+open a Station-managed pane, and the popup must continue through its configured
+terminal adapter.
 
 ## TypeScript And Data Rules
 
