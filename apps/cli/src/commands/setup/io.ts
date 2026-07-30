@@ -58,7 +58,5 @@ export function parseMultiSelectAnswer(
     const value = Number.isInteger(index) ? choices[index]?.value : undefined;
     if (value !== undefined && !selected.includes(value)) selected.push(value);
   }
-  if (selected.length > 0) return selected;
-  const fallback = choices[0]?.value;
-  return fallback === undefined ? [] : [fallback];
+  return selected;
 }

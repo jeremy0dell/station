@@ -8,7 +8,7 @@ import type {
 } from "../../src/commands/setup/model.js";
 import { buildSetupPlan } from "../../src/commands/setup/planner.js";
 
-describe("setup planner", () => {
+describe("setup plan projection", () => {
   it("reports all core checks ready and no selected actions", () => {
     const plan = buildSetupPlan(facts());
 
@@ -107,6 +107,9 @@ describe("setup planner", () => {
       status: "ok",
       details: { state: "not-applicable" },
     });
+    expect(
+      plan.checks.find((check) => check.id === "harness-tracking:pi")?.details,
+    ).not.toHaveProperty("requested");
     expect(plan.summary.requiredOk).toBe(true);
     expect(plan.actions.some((action) => action.id === "pi-hooks")).toBe(false);
   });
@@ -340,6 +343,7 @@ describe("setup planner", () => {
 
     expect(plan.summary).toMatchObject({ selectionSource: "unresolved", requiredOk: false });
     expect(plan.summary.selectedHarness).toBeUndefined();
+    expect("selectedHarness" in plan.summary).toBe(false);
   });
 
   it("respects an explicit selected harness when multiple are available", () => {
@@ -479,8 +483,7 @@ describe("setup planner", () => {
           {
             harnessId: "opencode",
             capability: "supported",
-            requested: true,
-            installed: false,
+            requested: false,
           },
         ],
         config: validConfigFact({
@@ -511,7 +514,7 @@ describe("setup planner", () => {
           {
             harnessId: "opencode",
             capability: "supported",
-            requested: false,
+            probeFailed: true,
           },
         ],
         config: validConfigFact({
@@ -961,13 +964,15 @@ describe("setup planner", () => {
       },
     });
 
-    expect(plan.actions.find((action) => action.id === "update-config")).toMatchObject({
+    const updateAction = plan.actions.find((action) => action.id === "update-config");
+    expect(updateAction).toMatchObject({
       kind: "write-config",
       selected: true,
       data: {
         operation: "update",
       },
     });
+    expect(updateAction?.data).not.toHaveProperty("backupPath");
   });
 
   it("uses a noop action for invalid existing config", () => {

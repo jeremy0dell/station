@@ -32,6 +32,9 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.12.4)(jiti@2.7.0)(yaml@2.9.0)
+      zod:
+        specifier: ^4.1.12
+        version: 4.4.3
 
   apps/cli:
     dependencies:
@@ -74,6 +77,9 @@ importers:
       '@station/scripted-harness':
         specifier: workspace:*
         version: link:../../integrations/harness/scripted
+      '@station/setup-core':
+        specifier: workspace:*
+        version: link:../../packages/setup-core
       '@station/terminal':
         specifier: workspace:*
         version: link:../../integrations/terminal/station
@@ -378,6 +384,8 @@ importers:
       effect:
         specifier: ^3.21.2
         version: 3.21.2
+
+  packages/setup-core: {}
 
   packages/station-host:
     dependencies:

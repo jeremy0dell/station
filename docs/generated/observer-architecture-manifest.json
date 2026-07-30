@@ -14010,6 +14010,69 @@
       "role": "POLICY",
       "purpose": "Uses the canonical launcher path as the durable owner key so upgrades at one installed location remain automatic. Only a valid marker establishes ownership; unmarked or malformed artifacts require explicit takeover.",
       "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/assessHarnessTracking.ts",
+      "declaration": "assessHarnessTracking",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Classifies normalized tracking evidence without provider or presentation concerns.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/deriveReadiness.ts",
+      "declaration": "deriveSetupReadiness",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives launch and workflow readiness from normalized runtime and requirement facts.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/deriveSetupResult.ts",
+      "declaration": "deriveSetupResult",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives readiness and compatibility counts from current semantic evidence without trusting attempted mutations.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/planSetup.ts",
+      "declaration": "planSetup",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives semantic setup issues and operations from normalized evidence and intent without rendering or performing effects.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/deriveSetupResult.ts",
+          "declaration": "deriveSetupResult",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
+          "declaration": "resolveHarnessSelection",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
+      "declaration": "resolveHarnessSelection",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Resolves configured, explicit, or discovered harness intent without choosing an ambiguous candidate.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/selectRepairTargets.ts",
+      "declaration": "selectHarnessTrackingRepairTargets",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Selects available, supported, unprepared harnesses whose selected or persisted intent requires repair.",
+      "dependencies": []
     }
   ]
 }

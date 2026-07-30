@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,6 +126,129 @@ describe("binary smoke script", () => {
       stdio: "pipe",
     });
     expect(interrupted.status).toBe(130);
+  });
+
+  it("preserves the primary failure and cancellation while retaining external evidence", () => {
+    const scriptPath = fileURLToPath(
+      new URL("../../scripts/test-runners/run-binary-smoke.mjs", import.meta.url),
+    );
+    const parent = mkdtempSync(join(tmpdir(), "station-binary-evidence-process-"));
+    try {
+      const failedEvidence = join(parent, "failed-evidence");
+      const failed = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_EVIDENCE_DIR: failedEvidence,
+          STATION_BINARY_SMOKE_EVIDENCE_FAILURE_SELF_CHECK: "1",
+        },
+        encoding: "utf8",
+      });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain("synthetic binary smoke evidence failure");
+      const failedManifest = JSON.parse(
+        readFileSync(join(failedEvidence, "manifest.json"), "utf8"),
+      );
+      expect(failedManifest.status).toBe("failed");
+      expect(failedManifest.rounds[0].cleanup.status).toBe("complete");
+      expect(failedManifest.rounds[0].failure.message).toBe(
+        "synthetic binary smoke evidence failure",
+      );
+
+      const captureFailed = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_EVIDENCE_DIR: "relative-evidence",
+          STATION_BINARY_SMOKE_EVIDENCE_FAILURE_SELF_CHECK: "1",
+        },
+        encoding: "utf8",
+      });
+      expect(captureFailed.status).toBe(1);
+      expect(captureFailed.stderr).toContain("synthetic binary smoke evidence failure");
+      expect(captureFailed.stderr).toContain(
+        "Evidence capture failed: STATION_BINARY_SMOKE_EVIDENCE_DIR must be absolute",
+      );
+
+      const cleanupFailedEvidence = join(parent, "cleanup-failed-evidence");
+      const cleanupFailed = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_CLEANUP_FAILURE_SELF_CHECK: "1",
+          STATION_BINARY_SMOKE_EVIDENCE_DIR: cleanupFailedEvidence,
+          STATION_BINARY_SMOKE_EVIDENCE_FAILURE_SELF_CHECK: "1",
+        },
+        encoding: "utf8",
+      });
+      expect(cleanupFailed.status).toBe(1);
+      expect(cleanupFailed.stderr).toContain("synthetic binary smoke evidence failure");
+      expect(cleanupFailed.stderr).toContain(
+        "Binary smoke warning: cleanup self-check: synthetic binary smoke cleanup failure",
+      );
+      const cleanupFailedManifest = JSON.parse(
+        readFileSync(join(cleanupFailedEvidence, "manifest.json"), "utf8"),
+      );
+      expect(cleanupFailedManifest.rounds[0].cleanup.status).toBe("incomplete");
+      expect(cleanupFailedManifest.warnings).toContain(
+        "cleanup self-check: synthetic binary smoke cleanup failure",
+      );
+
+      const cancelledEvidence = join(parent, "cancelled-evidence");
+      const cancelled = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_CANCELLATION_EXIT_SELF_CHECK: "1",
+          STATION_BINARY_SMOKE_EVIDENCE_DIR: cancelledEvidence,
+        },
+        encoding: "utf8",
+      });
+      expect(cancelled.status).toBe(130);
+      const cancelledManifest = JSON.parse(
+        readFileSync(join(cancelledEvidence, "manifest.json"), "utf8"),
+      );
+      expect(cancelledManifest.status).toBe("cancelled");
+      expect(cancelledManifest.rounds[0].cleanup.status).toBe("complete");
+      expect(existsSync(cancelledEvidence)).toBe(true);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("validates the focused handoff-stress flags before building artifacts", () => {
+    const scriptPath = fileURLToPath(
+      new URL("../../scripts/test-runners/run-binary-smoke.mjs", import.meta.url),
+    );
+    const invalidVersion = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--mode",
+        "handoff-stress",
+        "--expected-version",
+        "not-semver",
+        "--rounds",
+        "50",
+        "--round-timeout-ms",
+        "30000",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(invalidVersion.status).toBe(1);
+    expect(invalidVersion.stderr).toContain("--expected-version must be a SemVer value");
+
+    const excessiveRounds = spawnSync(
+      process.execPath,
+      [
+        scriptPath,
+        "--mode",
+        "handoff-stress",
+        "--expected-version",
+        "0.0.0-local",
+        "--rounds",
+        "1001",
+      ],
+      { encoding: "utf8" },
+    );
+    expect(excessiveRounds.status).toBe(1);
+    expect(excessiveRounds.stderr).toContain("--rounds must be between 1 and 1000");
   });
 });
 

@@ -1,0 +1,57 @@
+name: binary-handoff-stress
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: Immutable lower-to-higher handoff rounds (1-100)
+        required: true
+        type: number
+        default: 50
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+        with:
+          station-dependencies: "true"
+      - name: Validate requested rounds
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+        run: |
+          case "$ROUNDS" in
+            ''|*[!0-9]*) echo "rounds must be an integer from 1 through 100" >&2; exit 2 ;;
+          esac
+          if [ "$ROUNDS" -lt 1 ] || [ "$ROUNDS" -gt 100 ]; then
+            echo "rounds must be an integer from 1 through 100" >&2
+            exit 2
+          fi
+      - name: Build immutable current artifact
+        run: pnpm build:binary -- --version 0.0.0-local
+      - name: Run binary handoff stress
+        id: binary_handoff_stress_run
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+          STATION_BINARY_SMOKE_EVIDENCE_DIR: ${{ runner.temp }}/station-binary-smoke-evidence
+        run: >-
+          pnpm stress:binary-handoff --
+          --expected-version 0.0.0-local
+          --rounds "$ROUNDS"
+          --round-timeout-ms 30000
+      - name: Upload binary handoff failure evidence
+        if: ${{ failure() && steps.binary_handoff_stress_run.outcome == 'failure' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-smoke-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/station-binary-smoke-evidence
+          if-no-files-found: warn
+          retention-days: 3
+        continue-on-error: true
