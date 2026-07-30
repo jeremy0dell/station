@@ -1,10 +1,28 @@
 <p align="center">
-  <img src="./station/assets/station-icon.svg" alt="Station logo" width="64" height="64">
+  <img src="./station/assets/station-icon.svg" alt="Station logo" width="80" height="80">
 </p>
 
-# station
+<h1 align="center">Station</h1>
 
-**Run multiple AI coding agents from one terminal, without them fighting over your code.**
+<p align="center">
+  <strong>Run multiple AI coding agents from one terminal, without them fighting over your code.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jeremy0dell/station/releases"><img src="https://img.shields.io/github/v/release/jeremy0dell/station?include_prereleases&amp;sort=date&amp;display_name=tag&amp;style=flat-square&amp;label=release" alt="Latest Station release"></a>
+  <a href="https://github.com/jeremy0dell/station/actions/workflows/standard-ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jeremy0dell/station/standard-ci.yml?branch=main&amp;style=flat-square&amp;logo=github&amp;label=build" alt="Standard CI build status"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0"></a>
+  <a href="./docs/install.md#binary-requirements"><img src="https://img.shields.io/badge/platforms-macOS%2013%2B%20%7C%20glibc%202.39%2B%20Linux-lightgrey?style=flat-square" alt="Supported platforms: macOS 13 or newer and glibc 2.39 or newer Linux"></a>
+  <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen?style=flat-square" alt="Contributions are welcome"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="./docs/quick-start.md">Quick start</a> ·
+  <a href="./docs/README.md">Documentation</a> ·
+  <a href="./docs/philosophy.md">Philosophy</a> ·
+  <a href="./docs/harnesses.md">Agent support</a>
+</p>
 
 Station gives every agent an isolated Git worktree, keeps its terminal session alive, and shows all active projects and sessions in one terminal workspace. Bring Claude Code, Codex, Cursor, OpenCode, or Pi; Station coordinates the surrounding work without replacing the harness.
 
@@ -158,6 +176,7 @@ Read [Overview](docs/overview.md) for the mental model and
 Start at the [documentation home](docs/README.md), or go directly to:
 
 - [Quick start](docs/quick-start.md) — add a project and run the first agent
+- [Philosophy](docs/philosophy.md) — the principles guiding Station's product decisions
 - [Install](docs/install.md) — installation, verification, updates, and recovery
 - [Configuration](docs/configuration.md) — runtime, project, harness, and
   workspace settings
@@ -165,6 +184,7 @@ Start at the [documentation home](docs/README.md), or go directly to:
 - [Diagnostics](docs/diagnostics.md) — health checks and support evidence
 - [Limitations and workarounds](docs/limitations.md) — current user-visible
   constraints
+- [Contributing](CONTRIBUTING.md) — bug reports, development workflow, and pull requests
 - [Development](docs/development.md) — contributor environment and test gates
 - [Architecture](docs/architecture.md) — repository boundaries and sources of
   truth

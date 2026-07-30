@@ -53,6 +53,9 @@ The full directional model: a provider hook callback enters as ingress, becomes 
 
 ## Design principles
 
+The broader product decision lens lives in [Philosophy](philosophy.md). Three
+principles have direct architectural consequences:
+
 - **Terminal-native.** station is a TUI/CLI tool first. The interface is the terminal, not a browser.
 - **Provider boundaries.** External tools stay in their own lane. station checks and reports their availability rather than bundling or wrapping them, so the core stays provider-neutral.
 - **Diagnostics from day one.** Trace IDs, command lifecycle records, debug bundles, and bounded log retention are built in, so when something goes wrong you can ask the system what happened instead of guessing.
@@ -60,6 +63,7 @@ The full directional model: a provider hook callback enters as ingress, becomes 
 ## Where to go next
 
 - [README](../README.md) — install, setup, and first run
+- [Philosophy](philosophy.md) — the product principles behind Station
 - [Architecture](architecture.md) — the authoritative boundary and ownership map
 - [Naming](naming.md) — provider hooks, harness reports, STATION events, and observer event hooks
 - [Development](development.md) — environment, test gates, and conventions
