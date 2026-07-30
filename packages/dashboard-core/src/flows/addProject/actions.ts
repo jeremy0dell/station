@@ -1,3 +1,4 @@
+import { pastedPathCandidate } from "./input.js";
 import { addProjectRows } from "./rows.js";
 import type {
   AddProjectEditIdActionFocus,
@@ -185,30 +186,49 @@ const ACTIONS_BY_MODE = {
   failed: ["failed.retry", "failed.chooseFolder", "failed.cancel"],
 } as const satisfies Readonly<Record<string, readonly AddProjectActionId[]>>;
 
-/** Returns the ordered, renderer-neutral controls visible for the current Add Project state. */
+/**
+ * Returns the ordered, renderer-neutral controls visible for the current Add Project state.
+ * Choose-mode availability follows the canonical selected row when its index is supplied.
+ */
 export function addProjectActions(
   state: AddProjectFlowState,
+  selectedIndex?: number,
 ): readonly AddProjectActionDescriptor[] {
   const ids =
     state.mode === "review" && state.editingId !== undefined
       ? ACTIONS_BY_MODE.editId
       : ACTIONS_BY_MODE[state.mode];
-  return ids.map((id) => ({ ...DEFINITIONS[id], enabled: isActionEnabled(state, id) }));
+  return ids.map((id) => ({
+    ...DEFINITIONS[id],
+    enabled: isActionEnabled(state, id, selectedIndex),
+  }));
 }
 
 export function addProjectAction(
   state: AddProjectFlowState,
   actionId: AddProjectActionId,
+  selectedIndex?: number,
 ): AddProjectActionDescriptor | undefined {
-  return addProjectActions(state).find((action) => action.id === actionId);
+  return addProjectActions(state, selectedIndex).find((action) => action.id === actionId);
 }
 
-function isActionEnabled(state: AddProjectFlowState, actionId: AddProjectActionId): boolean {
+function isActionEnabled(
+  state: AddProjectFlowState,
+  actionId: AddProjectActionId,
+  selectedIndex: number | undefined,
+): boolean {
   if (state.mode === "start") {
     return actionId !== "start.open" || state.choices.length > 0;
   }
   if (state.mode === "choose") {
-    if (actionId === "choose.choose") return addProjectRows(state).length > 0;
+    const selectedRow =
+      selectedIndex === undefined ? undefined : addProjectRows(state)[selectedIndex];
+    if (actionId === "choose.choose") {
+      return pastedPathCandidate(state.filter) !== undefined || selectedRow !== undefined;
+    }
+    if (actionId === "choose.open") {
+      return selectedRow !== undefined && selectedRow.kind !== "current";
+    }
     if (actionId === "choose.search") return !state.filterMode;
     return true;
   }

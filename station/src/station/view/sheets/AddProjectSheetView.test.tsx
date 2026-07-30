@@ -3,9 +3,11 @@ import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import {
+  ADD_PROJECT_CHOOSE_LIST_ID,
   createAddProjectFlow,
   transitionAddProjectFlow,
   type AddProjectFlowState,
+  type TuiSelectionState,
 } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
@@ -34,17 +36,16 @@ function reviewFlow(gitRoot: boolean): AddProjectFlowState {
   return reviewed;
 }
 
-async function render(flow: AddProjectFlowState, width = 80) {
+async function render(
+  flow: AddProjectFlowState,
+  width = 80,
+  selection: TuiSelectionState = new Map(),
+) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
     <StationHoverProvider value>
       <StationMouseProvider value={(target) => targets.push(target)}>
-        <AddProjectSheetView
-          state={flow}
-          selection={new Map()}
-          columns={width}
-          rows={24}
-        />
+        <AddProjectSheetView state={flow} selection={selection} columns={width} rows={24} />
       </StationMouseProvider>
     </StationHoverProvider>,
     { width, height: 24 },
@@ -93,6 +94,64 @@ describe("AddProjectSheetView", () => {
           target.kind === "addProjectAction" && target.actionId === "review.submit",
       ),
     ).toBe(false);
+  });
+
+  it("enables folder actions only when their semantic target exists", async () => {
+    const started = createAddProjectFlow({ cwd: "/workspace", homeDir: "/home/example" });
+    const choosing = transitionAddProjectFlow(started, {
+      type: "folderLoaded",
+      result: {
+        path: "/workspace",
+        entries: [{ name: "station", path: "/workspace/station", kind: "directory" }],
+      },
+    }).state;
+    if (choosing?.mode !== "choose") throw new Error("expected chooser");
+
+    const current = await render(
+      choosing,
+      80,
+      new Map([[ADD_PROJECT_CHOOSE_LIST_ID, "/workspace"]]),
+    );
+    const currentLines = current.setup.captureCharFrame().split("\n");
+    const currentRow = currentLines.findIndex((line) => line.includes("Open (→)"));
+    const currentCol = currentLines[currentRow]?.indexOf("Open") ?? -1;
+    await current.setup.mockMouse.click(currentCol, currentRow, MouseButtons.LEFT);
+    expect(
+      current.targets.some(
+        (target) => target.kind === "addProjectAction" && target.actionId === "choose.open",
+      ),
+    ).toBe(false);
+
+    const child = await render(
+      choosing,
+      80,
+      new Map([[ADD_PROJECT_CHOOSE_LIST_ID, "/workspace/station"]]),
+    );
+    const childLines = child.setup.captureCharFrame().split("\n");
+    const childRow = childLines.findIndex((line) => line.includes("Open (→)"));
+    const childCol = childLines[childRow]?.indexOf("Open") ?? -1;
+    await child.setup.mockMouse.click(childCol, childRow, MouseButtons.LEFT);
+    expect(
+      child.targets.some(
+        (target) => target.kind === "addProjectAction" && target.actionId === "choose.open",
+      ),
+    ).toBe(true);
+
+    const pasted = transitionAddProjectFlow(choosing, {
+      type: "filterInput",
+      value: "/missing/project",
+    }).state;
+    if (pasted?.mode !== "choose") throw new Error("expected chooser");
+    const fullPath = await render(pasted);
+    const pathLines = fullPath.setup.captureCharFrame().split("\n");
+    const chooseRow = pathLines.findIndex((line) => line.includes("Choose (↵)"));
+    const chooseCol = pathLines[chooseRow]?.indexOf("Choose") ?? -1;
+    await fullPath.setup.mockMouse.click(chooseCol, chooseRow, MouseButtons.LEFT);
+    expect(
+      fullPath.targets.some(
+        (target) => target.kind === "addProjectAction" && target.actionId === "choose.choose",
+      ),
+    ).toBe(true);
   });
 
   it("keeps compact start actions visible at narrow widths", async () => {

@@ -109,7 +109,7 @@ function StartChoices({
         />
       ))}
       <SheetFill count={Math.max(0, contentRows - visible.length - 4)} width={width} />
-      <AddProjectActionBar width={width} state={state} />
+      <AddProjectActionBar width={width} state={state} selectedIndex={selectedIndex} />
       <SheetFooter width={width}>Click selects · Open enters · ↑↓ + Enter supported</SheetFooter>
     </>
   );
@@ -147,7 +147,7 @@ function FolderPicker({
           Try another search or paste a full path.
         </SheetMessageLine>
         <SheetFill count={Math.max(0, contentRows - 7)} width={width} />
-        <AddProjectActionBar width={width} state={state} />
+        <AddProjectActionBar width={width} state={state} selectedIndex={selectedIndex} />
         <SheetFooter width={width}>Backspace edit · Ctrl-U clear · Esc clears search</SheetFooter>
       </>
     );
@@ -192,7 +192,7 @@ function FolderPicker({
         count={Math.max(0, contentRows - visible.length - 5 - errorRows)}
         width={width}
       />
-      <AddProjectActionBar width={width} state={state} />
+      <AddProjectActionBar width={width} state={state} selectedIndex={selectedIndex} />
       <SheetFooter width={width}>
         {state.filterMode ? "Type search/path · Esc clears" : "Single-click selects · actions complete navigation"}
       </SheetFooter>
@@ -386,8 +386,16 @@ function fixedSheetHeight(rows: number): number {
   return Math.min(Math.max(1, rows - 2), 18);
 }
 
-function AddProjectActionBar({ width, state }: { width: number; state: AddProjectFlowState }) {
-  const actions = addProjectActions(state);
+function AddProjectActionBar({
+  width,
+  state,
+  selectedIndex,
+}: {
+  width: number;
+  state: AddProjectFlowState;
+  selectedIndex: number | undefined;
+}) {
+  const actions = addProjectActions(state, selectedIndex);
   const gap = width >= actions.length * 10 ? 1 : 0;
   const buttonWidth = Math.max(1, Math.floor((width - gap * (actions.length - 1)) / actions.length));
   const compact = buttonWidth < 11;

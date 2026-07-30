@@ -19,6 +19,7 @@ import type {
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import {
+  addProjectSelectedIndexForFlow,
   reconcileAddProjectSelection,
   selectAddProjectRowByIndex,
   selectedAddProjectFolderRow,
@@ -114,20 +115,29 @@ function closeAddProject(state: TuiState): TuiState {
   return { ...state, screen: { name: "dashboard" } };
 }
 
-/** Resolves only actions that are visible and enabled in the current Add Project state. */
+/**
+ * Resolves only visible, enabled Add Project actions; a pasted path takes precedence over the
+ * chooser cursor so pointer and keyboard activation share one target.
+ */
 export function addProjectIntentForAction(
   state: TuiState,
   actionId: AddProjectActionId,
 ): AddProjectInputIntent {
   if (state.screen.name !== "addProject") return { type: "none" };
   const flow = state.screen.flow;
-  const descriptor = addProjectAction(flow, actionId);
+  const selectedIndex = addProjectSelectedIndexForFlow(flow, state.selection);
+  const descriptor = addProjectAction(flow, actionId, selectedIndex);
   if (descriptor?.enabled !== true) return { type: "none" };
 
   switch (actionId) {
     case "start.open":
-    case "choose.choose":
       return { type: "commitCurrentCursor" };
+    case "choose.choose": {
+      const path = flow.mode === "choose" ? pastedPathCandidate(flow.filter) : undefined;
+      return path === undefined
+        ? { type: "commitCurrentCursor" }
+        : transitionIntent({ type: "chooseSelected", path });
+    }
     case "start.cancel":
     case "review.cancel":
     case "success.dashboard":
@@ -230,12 +240,7 @@ function chooseIntent(
   if (key.rightArrow === true) return addProjectIntentForAction(state, "choose.open");
   if (key.leftArrow === true) return addProjectIntentForAction(state, "choose.parent");
   if (key.input === "/") return addProjectIntentForAction(state, "choose.search");
-  if (isReturnKey(key)) {
-    const path = pastedPathCandidate(flow.filter);
-    return path === undefined
-      ? addProjectIntentForAction(state, "choose.choose")
-      : transitionIntent({ type: "chooseSelected", path });
-  }
+  if (isReturnKey(key)) return addProjectIntentForAction(state, "choose.choose");
   return { type: "none" };
 }
 

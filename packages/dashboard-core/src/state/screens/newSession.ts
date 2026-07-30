@@ -3,17 +3,17 @@ import {
   type NewSessionActionId,
   type NewSessionFlowAction,
   type NewSessionInputIntent,
+  newSessionActionEnabled,
+  newSessionActionForInput,
   newSessionIntentForAction,
   newSessionIntentForInput,
   transitionNewSessionFlow,
   validateNewSessionCreate,
 } from "../../flows/newSession.js";
-import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildCreateSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { addPendingCreateSessionRow } from "../localRows.js";
 import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
-import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
@@ -33,6 +33,13 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
     };
   }
 
+  const actionId = newSessionActionForInput(state.screen.flow, {
+    input: key.input,
+    key,
+  });
+  if (actionId !== undefined) {
+    return handleNewSessionAction(state, actionId);
+  }
   const intent = newSessionIntentForInput(state.screen.flow, {
     input: key.input,
     key,
@@ -46,6 +53,7 @@ export function handleNewSessionAction(
   actionId: NewSessionActionId,
 ): TuiTransition {
   if (state.screen.name !== "newSession") return { state };
+  if (!newSessionActionEnabled(state.snapshot, state.screen.flow, actionId)) return { state };
   return executeNewSessionIntent(state, newSessionIntentForAction(state.screen.flow, actionId));
 }
 
@@ -91,17 +99,7 @@ function submitNewSession(state: TuiState): TuiTransition {
   }
 
   const validation = validateNewSessionCreate(state.snapshot, state.screen.flow);
-  if (!validation.ok) {
-    return {
-      state: addTuiToast(
-        {
-          ...state,
-          screen: { name: "dashboard" },
-        },
-        safeErrorToToast(validation.error),
-      ),
-    };
-  }
+  if (!validation.ok) return { state };
 
   const title = validation.title;
   const branch = validation.branch;

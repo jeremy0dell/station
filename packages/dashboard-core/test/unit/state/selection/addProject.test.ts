@@ -138,15 +138,21 @@ describe("add-project shared selection", () => {
     });
   });
 
-  it("falls through to pasted-path review when filtering has no rows", () => {
+  it("uses the same pasted-path review for Enter and semantic Choose", () => {
     let state = chooseState([]);
     state = handleTuiKey(state, { input: "/" }, KEY_CONTEXT).state;
     state = handleTuiKey(state, { input: "/missing/project" }, KEY_CONTEXT).state;
 
-    const submitted = handleTuiKey(state, { input: "\r", return: true }, KEY_CONTEXT);
-    expect(submitted.operations).toEqual([
+    const keyboard = handleTuiKey(state, { input: "\r", return: true }, KEY_CONTEXT);
+    const semantic = handleTuiAction(
+      state,
+      { type: "addProject.activate", actionId: "choose.choose" },
+      KEY_CONTEXT,
+    );
+    expect(keyboard.operations).toEqual([
       { type: "reviewProjectFolder", path: "/missing/project" },
     ]);
+    expect(semantic).toEqual(keyboard);
   });
 });
 

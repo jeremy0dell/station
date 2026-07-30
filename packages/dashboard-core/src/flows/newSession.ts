@@ -118,6 +118,30 @@ export type NewSessionInputIntent =
       type: "none";
     };
 
+/** Returns whether a New Session control is visible and currently actionable. */
+export function newSessionActionEnabled(
+  snapshot: StationSnapshot | undefined,
+  state: NewSessionFlowState,
+  actionId: NewSessionActionId,
+): boolean {
+  switch (actionId) {
+    case "review.project":
+    case "review.name":
+    case "review.agent":
+      return state.mode === "review";
+    case "review.create":
+      return (
+        state.mode === "review" &&
+        snapshot !== undefined &&
+        validateNewSessionCreate(snapshot, state).ok
+      );
+    case "editName.name":
+    case "editName.save":
+    case "editName.back":
+      return state.mode === "editName";
+  }
+}
+
 export type NewSessionCreateValidation =
   | {
       ok: true;

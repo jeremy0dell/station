@@ -29,6 +29,34 @@ describe("Add Project action descriptors", () => {
     ]);
   });
 
+  it("uses the canonical folder selection and pasted path for chooser availability", () => {
+    const started = createAddProjectFlow({ cwd: "/workspace", homeDir: "/home/example" });
+    const choosing = transitionAddProjectFlow(started, {
+      type: "folderLoaded",
+      result: {
+        path: "/workspace",
+        entries: [{ name: "station", path: "/workspace/station", kind: "directory" }],
+      },
+    }).state;
+    if (choosing?.mode !== "choose") throw new Error("expected chooser");
+
+    expect(
+      addProjectActions(choosing, 0).find((action) => action.id === "choose.open")?.enabled,
+    ).toBe(false);
+    expect(
+      addProjectActions(choosing, 1).find((action) => action.id === "choose.open")?.enabled,
+    ).toBe(true);
+
+    const pasted = transitionAddProjectFlow(choosing, {
+      type: "filterInput",
+      value: "/missing/project",
+    }).state;
+    if (pasted?.mode !== "choose") throw new Error("expected chooser");
+    expect(addProjectActions(pasted).find((action) => action.id === "choose.choose")?.enabled).toBe(
+      true,
+    );
+  });
+
   it("removes disabled submit from focus traversal without hiding its descriptor", () => {
     const start = createAddProjectFlow({ cwd: "/workspace", homeDir: "/home/example" });
     const review = transitionAddProjectFlow(start, {

@@ -90,6 +90,22 @@ function snapshotWithHarness(projectId: string, harness: string): StationSnapsho
   };
 }
 
+function snapshotWithUnavailableCodex(): StationSnapshot {
+  const snapshot = manyProjectsSnapshot();
+  return {
+    ...snapshot,
+    providerHealth: {
+      ...snapshot.providerHealth,
+      codex: {
+        providerId: "codex",
+        providerType: "harness",
+        status: "unavailable",
+        lastCheckedAt: snapshot.generatedAt,
+      },
+    },
+  };
+}
+
 function snapshotWithBareProject(projectId: string): StationSnapshot {
   const base = manyProjectsSnapshot();
   const project = base.projects.find((candidate) => candidate.id === projectId);
@@ -998,6 +1014,21 @@ describe("routeStationMouse widget settings", () => {
       projectId: "station",
       harness: "codex",
     });
+  });
+
+  it("keeps a stale unavailable Create target inert", () => {
+    const store = makeStore(snapshotWithUnavailableCodex());
+    store.getState().handleKey({ input: "N" });
+
+    expect(
+      routeStationMouse(
+        { kind: "newSessionAction", actionId: "review.create" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.getState().screen.name).toBe("newSession");
+    expect(store.getState().toasts).toEqual([]);
   });
 
   it("ignores an add-project row click outside addProject mode", () => {

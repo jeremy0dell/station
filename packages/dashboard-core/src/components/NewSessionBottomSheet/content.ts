@@ -5,7 +5,7 @@ import {
   type NewSessionEditNameState,
   type NewSessionReviewFocus,
   type NewSessionReviewState,
-  validateNewSessionCreate,
+  newSessionActionEnabled,
 } from "../../flows/newSession.js";
 import {
   selectNewSessionHarnessOptions,
@@ -139,7 +139,7 @@ export function newSessionReviewContent(
     fields,
     create: {
       ...REVIEW_CONTROLS.create,
-      enabled: validateNewSessionCreate(snapshot, state).ok,
+      enabled: newSessionActionEnabled(snapshot, state, "review.create"),
     },
     helper: REVIEW_CONTROLS[state.reviewFocus].helper,
   };

@@ -1,16 +1,18 @@
 import { describe, expect, it } from "bun:test";
+import type { StationSnapshot } from "@station/contracts";
 import { createTuiStore } from "@station/dashboard-core";
+import { resolveInitialState } from "../../state/initialState.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
 import { resolveKeyNewSessionSubmit, resolveNewSessionSubmit } from "./stationActions.js";
+import { createStationOverlayLayer } from "./stationOverlayLayer.js";
 
 // Station hosts new agents in a pane (worktree.create + managed launch) rather
 // than the shared machine's tmux session.create, which it can't render. These
 // resolvers are the interception point: focused Enter or direct C on review
 // becomes a hosted launch; field/editor keys fall through to the machine.
-function newStore() {
-  const snapshot = manyProjectsSnapshot();
+function newStore(snapshot = manyProjectsSnapshot()) {
   return createTuiStore({
     source: new FakeStationSource(snapshot),
     service: new FakeTuiObserverService(snapshot),
@@ -20,11 +22,27 @@ function newStore() {
   });
 }
 
-function storeOnNewSessionReview() {
-  const store = newStore();
+function storeOnNewSessionReview(snapshot?: StationSnapshot) {
+  const store = newStore(snapshot);
   // "N" opens the New Session wizard, which lands on the review step.
   store.getState().handleKey({ input: "N" });
   return store;
+}
+
+function snapshotWithUnavailableCodex(): StationSnapshot {
+  const snapshot = manyProjectsSnapshot();
+  return {
+    ...snapshot,
+    providerHealth: {
+      ...snapshot.providerHealth,
+      codex: {
+        providerId: "codex",
+        providerType: "harness",
+        status: "unavailable",
+        lastCheckedAt: snapshot.generatedAt,
+      },
+    },
+  };
 }
 
 describe("resolveNewSessionSubmit", () => {
@@ -71,6 +89,18 @@ describe("resolveNewSessionSubmit", () => {
         actionId: "review.project",
       }).kind,
     ).toBe("none");
+  });
+
+  it("keeps unavailable Create inert when native input falls through", () => {
+    for (const sequence of ["C", "\r"]) {
+      const store = storeOnNewSessionReview(snapshotWithUnavailableCodex());
+      expect(resolveKeyNewSessionSubmit(store, sequence).kind).toBe("none");
+      expect(
+        createStationOverlayLayer(store).catchAll?.(sequence, resolveInitialState()),
+      ).toEqual({ kind: "swallowed" });
+      expect(store.getState().screen.name).toBe("newSession");
+      expect(store.getState().toasts).toEqual([]);
+    }
   });
 });
 

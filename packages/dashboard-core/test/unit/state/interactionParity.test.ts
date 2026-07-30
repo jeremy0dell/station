@@ -5,6 +5,7 @@ import {
   createInitialTuiState,
   createNewSessionFlow,
   handleTuiAction,
+  handleTuiKey,
   newSessionIntentForAction,
   openAddProject,
   transitionNewSessionFlow,
@@ -64,6 +65,36 @@ describe("primary workflow interaction parity", () => {
         context,
       ).state,
     ).toBe(submitting);
+  });
+
+  it("keeps unavailable Create Session inert across semantic and keyboard activation", () => {
+    const snapshot = createDashboardSnapshot();
+    const unavailable = {
+      ...snapshot,
+      harnesses: [{ id: "codex", label: "Codex" }],
+      providerHealth: {
+        ...snapshot.providerHealth,
+        codex: {
+          providerId: "codex",
+          providerType: "harness" as const,
+          status: "unavailable" as const,
+          lastCheckedAt: snapshot.generatedAt,
+        },
+      },
+    };
+    const flow = createNewSessionFlow(unavailable, "aaaaaa");
+    if (flow === undefined) throw new Error("expected New Session");
+    const state = {
+      ...createInitialTuiState(),
+      snapshot: unavailable,
+      screen: { name: "newSession" as const, flow },
+    };
+
+    expect(
+      handleTuiAction(state, { type: "newSession.activate", actionId: "review.create" }, context),
+    ).toEqual({ state });
+    expect(handleTuiKey(state, { input: "C" }, context)).toEqual({ state });
+    expect(handleTuiKey(state, { input: "\r", return: true }, context)).toEqual({ state });
   });
 
   it("gives every visible Create Session control a semantic intent", () => {

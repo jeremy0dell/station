@@ -247,10 +247,11 @@ The zero-project dashboard renders **Add your first project** as a pointer
 target that dispatches `dashboard.addProject`, producing the same Add Project
 transition as `A` and focused `Enter`. Add Project controls dispatch stable
 action IDs; core resolves those IDs to the same intents used by direct commands
-and focused activation. Folder rows remain single-click selection targets, and
-Choose commits the registered-list cursor used by keyboard Enter. Review, id
-editing, success, and failure use a visible action focus cursor. Missing Git-root
-review keeps submit disabled and stale disabled targets inert; these interaction
+and focused activation. Folder rows remain single-click selection targets. Choose
+prefers a pasted absolute or home-relative path and otherwise commits the registered-list
+cursor used by keyboard Enter; Open is enabled only for a navigable child or search row.
+Review, id editing, success, and failure use a visible action focus cursor. Missing
+Git-root review keeps submit disabled and stale disabled targets inert; these interaction
 paths do not weaken project admission policy.
 
 Create Session review renders Project, Name, Agent, and Create as full-width
@@ -261,8 +262,9 @@ independent semantic controls, hides the text cursor while an action owns focus,
 and reserves Left/Right for text-cursor movement while Name owns focus. Selecting
 Name sets focus directly and never generates arrow input. Native pointer Create,
 focused Enter, and direct `C` pass through one semantic Create resolver and shared
-validation before producing the managed-pane effect; standalone creation applies
-the same action through its existing observer operation path.
+validation before producing the managed-pane effect; when validation disables Create,
+all three activation paths remain inert. Standalone creation applies the same action
+through its existing observer operation path.
 
 Real native mouse acceptance lives in
 `tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`

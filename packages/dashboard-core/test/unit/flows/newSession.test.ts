@@ -4,6 +4,7 @@ import {
   createNewSessionFlow,
   createNewSessionNameToken,
   harnessOptions,
+  newSessionActionEnabled,
   newSessionIntentForAction,
   newSessionIntentForInput,
   transitionNewSessionFlow,
@@ -450,12 +451,14 @@ describe("new session flow", () => {
         code: "HARNESS_PROVIDER_UNAVAILABLE",
       },
     });
+    expect(newSessionActionEnabled(snapshot, opened, "review.create")).toBe(false);
 
     const opencode = { ...opened, selectedHarness: "opencode" };
     expect(validateNewSessionCreate(snapshot, opencode)).toMatchObject({
       ok: true,
       harnessProvider: "opencode",
     });
+    expect(newSessionActionEnabled(snapshot, opencode, "review.create")).toBe(true);
 
     const unknown = { ...opened, selectedHarness: "scripted" };
     expect(validateNewSessionCreate(snapshot, unknown)).toMatchObject({
