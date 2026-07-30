@@ -1,4 +1,6 @@
 import { isCompiledBinary } from "@station/runtime";
+import type { SetupOperation, SetupToolId } from "@station/setup-core";
+import { createSetupOperationAdapter } from "./adapters/operations.js";
 import { applySetupPlan } from "./apply.js";
 import { checkBrewDependency } from "./checks/brew.js";
 import { checkSetupBun } from "./checks/bun.js";
@@ -20,25 +22,35 @@ export async function runSetupSystemCommand(
   const initial = await collectSystemFacts(args, options, deps);
   await write(deps, renderSystemStatus("stn setup system", initial));
 
+  let operationFailed = false;
   if (args.yes && initial.brew.status === "ok") {
-    const actions: SetupAction[] = [];
+    const operations: Array<Extract<SetupOperation, { kind: "install-tool" }>> = [];
     if (initial.worktrunk.status === "missing")
-      actions.push(systemInstallAction("worktrunk", "worktrunk"));
-    if (initial.tmux.status === "missing") actions.push(systemInstallAction("tmux", "tmux"));
+      operations.push(systemInstallOperation("worktrunk"));
+    if (initial.tmux.status === "missing") operations.push(systemInstallOperation("tmux"));
     if (!initial.compiled && initial.bun.status === "missing") {
-      actions.push(systemInstallAction("bun", "bun"));
+      operations.push(systemInstallOperation("bun"));
     }
-    if (initial.diffnav.status === "missing")
-      actions.push(systemInstallAction("diffnav", "diffnav"));
-    if (initial.gitDelta.status === "missing")
-      actions.push(systemInstallAction("git-delta", "git-delta"));
+    if (initial.diffnav.status === "missing") operations.push(systemInstallOperation("diffnav"));
+    if (initial.gitDelta.status === "missing") operations.push(systemInstallOperation("git-delta"));
+    const actions = operations.map((operation) => systemInstallAction(operation.tool));
     const result = await applySetupPlan(
       systemPlan(actions),
-      applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+      applyOptions(deps, {
+        announceActions: true,
+        showCommandOutput: true,
+        execution: {
+          operationBindings: operations.map((operation) => ({
+            actionId: `install-${operation.tool}`,
+            operation,
+          })),
+          executeOperation: createSetupOperationAdapter({ deps }),
+        },
+      }),
     );
-    if (result.failedAction !== undefined) {
+    operationFailed = result.failedAction !== undefined;
+    if (operationFailed) {
       await write(deps, "Install failed. Run: stn setup system --check\n");
-      return { code: 1 };
     }
   }
 
@@ -48,7 +60,7 @@ export async function runSetupSystemCommand(
 
   const refreshed = await collectSystemFacts(args, options, deps);
   await write(deps, renderSystemStatus("stn setup system final", refreshed));
-  return { code: systemReady(refreshed) ? 0 : 1 };
+  return { code: !operationFailed && systemReady(refreshed) ? 0 : 1 };
 }
 
 type SystemFacts = {
@@ -126,17 +138,34 @@ function systemReady(facts: SystemFacts): boolean {
   );
 }
 
-function systemInstallAction(label: string, formula: string): SetupAction {
+function systemInstallAction(tool: SetupToolId): SetupAction {
+  const formula = toolFormula(tool);
   return {
-    id: `install-${label}`,
+    id: `install-${tool}`,
     kind: "brew-install",
     tier: "required",
     selected: true,
-    label: `Install ${label}`,
-    message: `Install ${label} with Homebrew.`,
+    label: `Install ${tool}`,
+    message: `Install ${tool} with Homebrew.`,
     command: ["brew", "install", formula],
     data: { formula },
   };
+}
+
+function systemInstallOperation(
+  tool: SetupToolId,
+): Extract<SetupOperation, { kind: "install-tool" }> {
+  return {
+    id: `install:${tool}`,
+    kind: "install-tool",
+    tier: "required",
+    selected: true,
+    tool,
+  };
+}
+
+function toolFormula(tool: SetupToolId): string {
+  return tool === "worktrunk" ? "worktrunk" : tool;
 }
 
 function systemPlan(actions: SetupAction[]): SetupPlan {

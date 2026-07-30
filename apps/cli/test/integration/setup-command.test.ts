@@ -6,6 +6,7 @@ import { CliSetupPlanSchema } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 import { configBackedHarnessHooksProbe } from "../fixtures/setupTrackingSupport.js";
 
 async function runCli(...args: Parameters<typeof runCliBase>) {
@@ -230,7 +231,7 @@ describe("CLI setup command", () => {
       "opencode --version": "opencode 1.0.0\n",
     });
 
-    const setupDeps = {
+    const setupDeps: SetupCommandDeps = {
       cwd: repo,
       homeDir: join(root, "home"),
       env: { PATH: "/fake/bin" },
@@ -243,6 +244,18 @@ describe("CLI setup command", () => {
       },
       access: readySetupAccess(),
       fs: fakeFs({ [configPath]: source }),
+      async providerTrackingPort(operation) {
+        const provider =
+          operation.kind === "prepare-worktrunk-tracking"
+            ? "worktrunk"
+            : (operation.harnessId ?? "opencode");
+        installed.add(provider);
+        return {
+          status: "completed" as const,
+          operationId: operation.id,
+          commit: { kind: "provider-tracking" as const, provider, changed: true },
+        };
+      },
       async probeHarnessHooksStatus(harnessId: string) {
         const prepared = installed.has(harnessId);
         return {
@@ -266,12 +279,7 @@ describe("CLI setup command", () => {
       actions: expect.arrayContaining([expect.objectContaining({ id: "opencode-hooks" })]),
     });
     expect(result.code).toBe(0);
-    expect(calls).toContainEqual(
-      expect.objectContaining({
-        command: "/fake/bin/stn",
-        args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
-      }),
-    );
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
     expect(calls.flatMap((call) => call.args ?? [])).not.toContain("--takeover");
     expect(installed).toContain("opencode");
   });

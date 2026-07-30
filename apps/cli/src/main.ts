@@ -142,6 +142,9 @@ function withProviderHookSetupComposition(options: CliRunOptions): CliRunOptions
   if (options.providerHookIngressLauncher !== undefined) {
     setupDeps.providerHookIngressLauncher = options.providerHookIngressLauncher;
   }
+  if (options.providerHookArtifactOwner !== undefined) {
+    setupDeps.providerHookArtifactOwner = options.providerHookArtifactOwner;
+  }
   setupDeps.probeHarnessHooksStatus ??= (harnessId, configPath) =>
     probeHarnessHooksStatus(harnessId, configPath, {
       ...(options.providerHookIngressLauncher === undefined

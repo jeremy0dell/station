@@ -617,7 +617,10 @@ describe("setup config writer", () => {
     const otherRepo = join(root, "other");
     await mkdir(repo, { recursive: true });
     await mkdir(otherRepo, { recursive: true });
-    const source = existingConfigToml(root, { projectRoot: otherRepo });
+    const source = existingConfigToml(root, { projectRoot: otherRepo }).replace(
+      'worktree_provider = "worktrunk"',
+      'worktree_provider = "noop-worktree"',
+    );
     const facts = setupFacts(repo, {
       config: {
         status: "valid",

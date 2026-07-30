@@ -1,0 +1,409 @@
+import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { loadConfig, type PersistSetupConfigMutationOptions } from "@station/config";
+import {
+  type ExternalCommandInput,
+  publicSafeErrorFromUnknown,
+  runExternalCommand,
+} from "@station/runtime";
+import {
+  performSetupOperation,
+  type SetupOperation,
+  type SetupOperationCommit,
+  type SetupOperationExecutor,
+  type SetupOperationOutcome,
+  type SetupOperationPorts,
+  type SetupPackageInstallationPort,
+} from "@station/setup-core";
+import { runWorktrunkHooksCommand } from "../../providerHookAdapters.js";
+import type { SetupApplyFileSystem } from "../apply.js";
+import { commandEnv } from "../checks/env.js";
+import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "../checks/tmuxBinding.js";
+import { resolveHarnessInstallDefinition } from "../harnessInstall.js";
+import type { SetupFacts } from "../model.js";
+import type { SetupCommandDeps } from "../types.js";
+import { createSetupConfigAdapter } from "./config.js";
+import { createHarnessTrackingAdapter } from "./harnessTracking.js";
+import { createObserverActivationAdapter } from "./observerActivation.js";
+
+export type SetupOperationAdapterOptions = {
+  readonly facts?: SetupFacts;
+  readonly deps: SetupCommandDeps;
+};
+
+/**
+ * ADAPTER
+ *
+ * Assigns semantic setup operations to config, provider, process, filesystem, and Observer boundary implementations.
+ */
+export function createSetupOperationAdapter(
+  options: SetupOperationAdapterOptions,
+): SetupOperationExecutor {
+  const { deps, facts } = options;
+  let committedConfigPath: string | undefined;
+  const config: SetupOperationPorts["config"] = (operation) =>
+    createSetupConfigAdapter({
+      facts: requireFacts(facts),
+      ...(deps.now === undefined ? {} : { now: deps.now }),
+      ...(deps.fs === undefined ? {} : { fs: configPersistenceFileSystem(deps.fs) }),
+      onCommitted: (configPath) => {
+        committedConfigPath = configPath;
+      },
+    })(operation);
+  const observer = createObserverActivationAdapter({
+    configPath: () => committedConfigPath,
+    homeDir: facts?.homeDir ?? deps.homeDir ?? process.env.HOME ?? "",
+    ...(deps.activateObserverConfig === undefined
+      ? {}
+      : { activateObserverConfig: deps.activateObserverConfig }),
+  });
+  const defaultHarnessTracking = createHarnessTrackingAdapter({
+    configPath: () => committedConfigPath ?? facts?.configPath,
+    homeDir: facts?.homeDir ?? deps.homeDir ?? process.env.HOME ?? "",
+    ...(deps.env === undefined ? {} : { env: deps.env }),
+    ...(deps.providerHookIngressLauncher === undefined
+      ? {}
+      : { providerHookIngressLauncher: deps.providerHookIngressLauncher }),
+    ...(deps.providerHookArtifactOwner === undefined
+      ? {}
+      : { providerHookArtifactOwner: deps.providerHookArtifactOwner }),
+  });
+
+  const ports: SetupOperationPorts = {
+    config,
+    observer,
+    harnessTracking: (operation) =>
+      deps.providerTrackingPort?.(operation) ?? defaultHarnessTracking(operation),
+    worktrunk: (operation) => {
+      if (operation.kind === "configure-worktrunk-shell") {
+        const currentFacts = requireFacts(facts);
+        const base = [
+          currentFacts.worktrunk.resolvedPath ?? currentFacts.worktrunk.command,
+          "-y",
+          "config",
+          "shell",
+          "install",
+        ];
+        const shell = currentFacts.worktrunkShellIntegration.shell;
+        const command = shell === undefined ? base : [...base, shell];
+        return runExternalOperation(operation, command, { kind: "worktrunk-shell" }, deps);
+      }
+      const currentFacts = requireFacts(facts);
+      return (
+        deps.providerTrackingPort?.(operation) ??
+        prepareWorktrunkTracking(
+          operation,
+          currentFacts,
+          committedConfigPath ?? currentFacts.config.path,
+          deps,
+        )
+      );
+    },
+    tmux: (operation) => configureTmux(operation, requireFacts(facts), deps),
+    packages: createPackageInstallationAdapter(facts, deps),
+    launchers: (operation) => {
+      const currentFacts = requireFacts(facts);
+      return runExternalOperation(
+        operation,
+        ["pnpm", "--dir", currentFacts.launchers.packageRoot, "station:link"],
+        { kind: "launcher-link" },
+        deps,
+      );
+    },
+  };
+  return (operation) => performSetupOperation(operation, ports);
+}
+
+function createPackageInstallationAdapter(
+  facts: SetupFacts | undefined,
+  deps: SetupCommandDeps,
+): SetupPackageInstallationPort {
+  return (operation) => {
+    const command = packageInstallCommand(operation, facts);
+    const target = packageTarget(operation);
+    return runExternalOperation(operation, command, { kind: "package-installer", target }, deps);
+  };
+}
+
+function packageInstallCommand(
+  operation: Parameters<SetupPackageInstallationPort>[0],
+  facts: SetupFacts | undefined,
+): readonly string[] {
+  switch (operation.kind) {
+    case "install-tool":
+      return ["brew", "install", toolFormula(operation.tool)];
+    case "install-harness": {
+      const currentFacts = requireFacts(facts);
+      return resolveHarnessInstallDefinition(operation.harnessId, {
+        brewAvailable: currentFacts.brew.status === "ok",
+        homeDir: currentFacts.homeDir,
+        macos: currentFacts.xcode.applicable,
+      }).command;
+    }
+    case "install-homebrew":
+      return [
+        "/bin/bash",
+        "-c",
+        [
+          "set -eu",
+          'installer="$(mktemp)"',
+          "trap 'rm -f \"$installer\"' EXIT",
+          'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "$installer"',
+          '/bin/bash "$installer"',
+        ].join("; "),
+      ];
+    case "install-xcode-command-line-tools":
+      return ["xcode-select", "--install"];
+  }
+}
+
+function packageTarget(
+  operation: Parameters<SetupPackageInstallationPort>[0],
+): Extract<SetupOperationCommit, { kind: "package-installer" }>["target"] {
+  switch (operation.kind) {
+    case "install-tool":
+      return { kind: "tool", id: operation.tool };
+    case "install-harness":
+      return { kind: "harness", id: operation.harnessId };
+    case "install-homebrew":
+      return { kind: "bootstrap", id: "homebrew" };
+    case "install-xcode-command-line-tools":
+      return { kind: "bootstrap", id: "xcode-command-line-tools" };
+  }
+}
+
+async function prepareWorktrunkTracking(
+  operation: Extract<SetupOperation, { kind: "prepare-worktrunk-tracking" }>,
+  facts: SetupFacts,
+  configPath: string,
+  deps: SetupCommandDeps,
+): Promise<SetupOperationOutcome> {
+  try {
+    const loaded = await loadConfig({ configPath, homeDir: facts.homeDir });
+    const result = await runWorktrunkHooksCommand(["install", "--yes"], {
+      config: loaded.config,
+      configPath: loaded.configPath,
+      ...(deps.env === undefined ? {} : { env: deps.env }),
+      ...(deps.providerHookIngressLauncher === undefined
+        ? {}
+        : { providerHookIngressLauncher: deps.providerHookIngressLauncher }),
+      ...(deps.providerHookArtifactOwner === undefined
+        ? {}
+        : { providerHookArtifactOwner: deps.providerHookArtifactOwner }),
+    });
+    if (!result.installed) throw worktrunkTrackingFallback;
+    const commit =
+      result.backupPath === undefined
+        ? {
+            kind: "provider-tracking" as const,
+            provider: "worktrunk" as const,
+            changed: result.changed,
+          }
+        : {
+            kind: "provider-tracking" as const,
+            provider: "worktrunk" as const,
+            changed: result.changed,
+            backupPaths: [result.backupPath],
+          };
+    return { status: "completed", operationId: operation.id, commit };
+  } catch (error) {
+    return failedOutcome(operation, error, worktrunkTrackingFallback);
+  }
+}
+
+async function configureTmux(
+  operation: Extract<SetupOperation, { kind: "configure-tmux-popup" }>,
+  facts: SetupFacts,
+  deps: SetupCommandDeps,
+): Promise<SetupOperationOutcome> {
+  if (facts.tmuxBinding.status === "conflict") {
+    return failedOutcome(operation, tmuxConflictFallback, tmuxConflictFallback);
+  }
+  if (operation.scope === "live") {
+    return runExternalOperation(
+      operation,
+      [
+        facts.tmux.resolvedPath ?? facts.tmux.command,
+        "bind-key",
+        facts.tmuxBinding.bindingKey,
+        "run-shell",
+        "-b",
+        facts.tmuxBinding.runShellCommand,
+      ],
+      { kind: "tmux-popup", scope: "live", changed: true },
+      deps,
+    );
+  }
+
+  try {
+    const fs = deps.fs ?? nodeSetupFileSystem();
+    const existing = await readFileIfPresent(fs, facts.tmuxBinding.path);
+    const block = tmuxPopupBindingBlock(facts.tmuxBinding.launcherCommand, {
+      bindingKey: facts.tmuxBinding.bindingKey,
+      runShellCommand: facts.tmuxBinding.runShellCommand,
+    });
+    const content = replaceMarkedBlock(
+      existing ?? "",
+      facts.tmuxBinding.marker,
+      tmuxPopupBindingEndMarker,
+      block,
+    );
+    const changed = content !== existing;
+    if (changed) await replaceWithSetupFileSystem(fs, facts.tmuxBinding.path, content);
+    return {
+      status: "completed",
+      operationId: operation.id,
+      commit: { kind: "tmux-popup", scope: "persisted", changed },
+    };
+  } catch (error) {
+    return failedOutcome(operation, error, tmuxWriteFallback);
+  }
+}
+
+async function runExternalOperation(
+  operation: SetupOperation,
+  command: readonly string[],
+  commit: SetupOperationCommit,
+  deps: Pick<SetupCommandDeps, "runner" | "env">,
+): Promise<SetupOperationOutcome> {
+  try {
+    const [binary, ...args] = command;
+    if (binary === undefined) throw externalOperationFallback;
+    const input: ExternalCommandInput = {
+      command: binary,
+      args,
+      stdio: "inherit",
+      maxOutputChars: 4096,
+    };
+    const env = commandEnv(deps.env);
+    if (env !== undefined) input.env = env;
+    await runExternalCommand(input, deps.runner);
+    return { status: "completed", operationId: operation.id, commit };
+  } catch (error) {
+    return failedOutcome(operation, error, externalOperationFallback);
+  }
+}
+
+function failedOutcome(
+  operation: SetupOperation,
+  error: unknown,
+  fallback: { tag: string; code: string; message: string; provider?: string },
+): SetupOperationOutcome {
+  return {
+    status: "failed",
+    operationId: operation.id,
+    error: publicSafeErrorFromUnknown(error, fallback),
+  };
+}
+
+function configPersistenceFileSystem(
+  fs: SetupApplyFileSystem,
+): NonNullable<PersistSetupConfigMutationOptions["fs"]> {
+  return {
+    readTextFile: (path) => readFileIfPresent(fs, path),
+    writeBackup: (path, content) => fs.writeFile(path, content),
+    replaceText: (path, content) => replaceWithSetupFileSystem(fs, path, content),
+  };
+}
+
+async function readFileIfPresent(
+  fs: SetupApplyFileSystem,
+  path: string,
+): Promise<string | undefined> {
+  try {
+    await fs.access(path);
+    return await fs.readFile(path);
+  } catch {
+    return undefined;
+  }
+}
+
+async function replaceWithSetupFileSystem(
+  fs: SetupApplyFileSystem,
+  path: string,
+  content: string,
+): Promise<void> {
+  await fs.mkdir(dirname(path), { recursive: true });
+  const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    await fs.writeFile(tempPath, content);
+    await fs.rename(tempPath, path);
+  } catch (error) {
+    await fs.rm?.(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+function nodeSetupFileSystem(): SetupApplyFileSystem {
+  return {
+    mkdir: async (path, options) => {
+      await mkdir(path, options);
+    },
+    readFile: (path) => readFile(path, "utf8"),
+    writeFile: (path, content) => writeFile(path, content, "utf8"),
+    rename,
+    access,
+    rm,
+  };
+}
+
+function replaceMarkedBlock(
+  existing: string,
+  marker: string,
+  endMarker: string,
+  block: string,
+): string {
+  const start = existing.indexOf(marker);
+  if (start === -1) return `${ensureTrailingNewline(existing)}${block}`;
+  const end = existing.indexOf(endMarker, start + marker.length);
+  if (end === -1) throw new Error(`Existing marker ${marker} has no closing marker.`);
+  const after = existing.indexOf("\n", end + endMarker.length);
+  const suffix = after === -1 ? "" : existing.slice(after + 1);
+  return `${existing.slice(0, start)}${block}${suffix}`;
+}
+
+function ensureTrailingNewline(value: string): string {
+  return value.length === 0 || value.endsWith("\n") ? value : `${value}\n`;
+}
+
+function requireFacts(facts: SetupFacts | undefined): SetupFacts {
+  if (facts === undefined) throw new Error("This setup operation requires collected setup facts.");
+  return facts;
+}
+
+function toolFormula(tool: Extract<SetupOperation, { kind: "install-tool" }>["tool"]): string {
+  switch (tool) {
+    case "worktrunk":
+      return "worktrunk";
+    case "tmux":
+      return "tmux";
+    case "bun":
+      return "bun";
+    case "diffnav":
+      return "diffnav";
+    case "git-delta":
+      return "git-delta";
+  }
+}
+
+const externalOperationFallback = {
+  tag: "SetupOperationError",
+  code: "SETUP_OPERATION_FAILED",
+  message: "The setup operation failed.",
+};
+const worktrunkTrackingFallback = {
+  tag: "SetupProviderTrackingError",
+  code: "SETUP_PROVIDER_TRACKING_FAILED",
+  message: "Station Worktrunk tracking could not be prepared.",
+  provider: "worktrunk",
+};
+const tmuxConflictFallback = {
+  tag: "SetupTmuxError",
+  code: "SETUP_TMUX_CONFLICT",
+  message: "The tmux popup binding conflicts with an existing configuration.",
+};
+const tmuxWriteFallback = {
+  tag: "SetupTmuxError",
+  code: "SETUP_TMUX_WRITE_FAILED",
+  message: "The tmux popup binding could not be persisted.",
+};

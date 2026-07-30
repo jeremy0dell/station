@@ -1,0 +1,14 @@
+schema_version = 1
+projects = []
+
+# Keep this comment and the authored quoting.
+[defaults]
+worktree_provider = 'worktrunk'
+terminal = "tmux"
+harness = "codex"
+layout = "agent-shell"
+
+[harness.codex] # selected default
+enabled = true
+command = "codex"
+install_hooks = false # setup flips only this value

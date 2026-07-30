@@ -11,10 +11,12 @@ import {
 } from "../../src/commands/setup/checks/tmuxBinding.js";
 import {
   runSetupCommand as runSetupCommandBase,
+  type SetupCommandDeps,
   type SetupPromptAdapter,
 } from "../../src/commands/setup/index.js";
 import {
   configBackedHarnessHooksProbe,
+  successfulProviderTrackingPort,
   withRequiredTrackingConsent,
 } from "../fixtures/setupTrackingSupport.js";
 
@@ -29,6 +31,7 @@ async function runSetupCommand(...args: Parameters<typeof runSetupCommandBase>) 
       configBackedHarnessHooksProbe(
         async (configPath) => (await deps.fs?.readFile(configPath)) ?? "",
       ),
+    providerTrackingPort: deps.providerTrackingPort ?? successfulProviderTrackingPort,
   });
 }
 
@@ -90,7 +93,8 @@ describe("guided setup command", () => {
     const configPath = join(root, "home/.config/station/config.toml");
     expect(fs.files[configPath]).toContain("projects = []");
     expect(activations).toEqual([{ configPath, homeDir: join(root, "home") }]);
-    expect(chunks.join("")).toContain(`Applying: Write STATION config (${configPath})`);
+    expect(chunks.join("")).toContain("Applying: Write STATION config");
+    expect(chunks.join("")).not.toContain(`Applying: Write STATION config (${configPath})`);
     expect(chunks.join("")).toContain("Completed: Write STATION config");
     expect(chunks.join("")).toContain("Observer configuration active.");
     expect(chunks.join("")).toContain("Core setup complete.");
@@ -455,7 +459,7 @@ describe("guided setup command", () => {
       stdio: "inherit",
     });
     expect(fs.files[zshrc]).toBe("# existing zsh config\n");
-    expect(chunks.join("")).toContain("Running: /fake/bin/wt -y config shell install zsh");
+    expect(chunks.join("")).toContain("Applying: Install Worktrunk shell integration");
     expect(chunks.join("")).toContain("Completed: Install Worktrunk shell integration");
   });
 
@@ -717,21 +721,7 @@ describe("guided setup command", () => {
     expect(fs.files[configPath]).toContain(
       '[harness.codex]\ninstall_hooks = true\nenabled = true\ncommand = "codex"',
     );
-    expect(calls).toContainEqual(
-      expect.objectContaining({
-        command: "/fake/bin/stn",
-        args: [
-          "--config",
-          configPath,
-          "hooks",
-          "install",
-          "codex",
-          "--yes",
-          "--hook-bin",
-          "/fake/bin/stn-ingress",
-        ],
-      }),
-    );
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
   it("prepares explicit selections and the preserved configured default", async () => {
@@ -743,6 +733,7 @@ describe("guided setup command", () => {
     const fs = fakeFs({ [configPath]: configuredProjectToml(repo) });
     const calls: ExternalCommandInput[] = [];
     const prompts: string[] = [];
+    const preparedProviders: string[] = [];
 
     const result = await runSetupCommand(
       [],
@@ -760,6 +751,12 @@ describe("guided setup command", () => {
           "opencode --version": "opencode 1.0.0\n",
           [`stn --config ${configPath} hooks install opencode --yes`]: "",
         }),
+        providerTrackingPort: async (operation) => {
+          preparedProviders.push(
+            operation.kind === "prepare-worktrunk-tracking" ? "worktrunk" : operation.harnessId,
+          );
+          return successfulProviderTrackingPort(operation);
+        },
         access: fakeAccess([
           "/fake/bin/wt",
           "/fake/bin/tmux",
@@ -791,11 +788,8 @@ describe("guided setup command", () => {
     expect(result.code).toBe(0);
     expect(prompts).not.toContain("Install OpenCode agent hooks?");
     expect(prompts).not.toContain("Install Codex agent hooks?");
-    expect(
-      calls
-        .filter((call) => call.command === "/fake/bin/stn" && call.args?.[2] === "hooks")
-        .map((call) => call.args?.[4]),
-    ).toEqual(["opencode", "codex"]);
+    expect(preparedProviders).toEqual(["opencode", "codex"]);
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
     expect(fs.files[configPath].match(/^harness = "codex"$/gm)).toHaveLength(1);
     expect(fs.files[configPath].match(/^\[harness\.codex\]$/gm)).toHaveLength(1);
     expect(fs.files[configPath].match(/^\[harness\.opencode\]$/gm)).toHaveLength(1);
@@ -1173,6 +1167,14 @@ describe("guided setup command", () => {
         activateObserverConfig: async () => {
           order.push("activate");
         },
+        providerTrackingPort: async (operation) => {
+          order.push(
+            `hook:${
+              operation.kind === "prepare-worktrunk-tracking" ? "worktrunk" : operation.harnessId
+            }`,
+          );
+          return successfulProviderTrackingPort(operation);
+        },
         prompt: prompt({
           confirms: [true, true, true, true, false, false],
           multiSelects: [["codex", "opencode"]],
@@ -1185,34 +1187,7 @@ describe("guided setup command", () => {
     expect(order).toEqual(["activate", "hook:worktrunk", "hook:codex", "hook:opencode"]);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
-    expect(calls).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          command: "/fake/bin/stn",
-          args: ["--config", configPath, "hooks", "install", "worktrunk", "--yes"],
-          stdio: "inherit",
-        }),
-        expect.objectContaining({
-          command: "/fake/bin/stn",
-          args: [
-            "--config",
-            configPath,
-            "hooks",
-            "install",
-            "codex",
-            "--yes",
-            "--hook-bin",
-            "/fake/bin/stn-ingress",
-          ],
-          stdio: "inherit",
-        }),
-        expect.objectContaining({
-          command: "/fake/bin/stn",
-          args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
-          stdio: "inherit",
-        }),
-      ]),
-    );
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
   it("keeps the activated config when a later hook install fails", async () => {
@@ -1257,6 +1232,15 @@ describe("guided setup command", () => {
         activateObserverConfig: async () => {
           activations += 1;
         },
+        providerTrackingPort: async (operation) => ({
+          status: "failed",
+          operationId: operation.id,
+          error: {
+            tag: "SyntheticTrackingError",
+            code: "SYNTHETIC_TRACKING_FAILED",
+            message: "synthetic hook install failure",
+          },
+        }),
         prompt: prompt({ confirms: [true, true] }),
         writeStdout: (chunk) => {
           chunks.push(chunk);
@@ -1270,7 +1254,7 @@ describe("guided setup command", () => {
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(output).toContain("Hook install failed.");
     expect(output).toContain("Observer configuration active.");
-    expect(output).not.toContain("Core setup complete.");
+    expect(output).toContain("Core setup complete.");
   });
 
   it("continues after one agent hook fails and retries enabled hooks on the next run", async () => {
@@ -1292,17 +1276,7 @@ describe("guided setup command", () => {
       [`stn --config ${configPath} hooks install codex --yes --hook-bin /fake/bin/stn-ingress`]: "",
       [`stn --config ${configPath} hooks install opencode --yes`]: "",
     });
-    const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
-      if (input.command === "/fake/bin/stn" && input.args?.[4] === "codex") {
-        calls.push(input);
-        codexHookAttempts += 1;
-        if (codexHookAttempts === 1) {
-          throw new Error("synthetic Codex hook failure");
-        }
-        return commandResult(input, "");
-      }
-      return baseRunner(input);
-    };
+    let openCodeHookAttempts = 0;
     const promptAdapter: SetupPromptAdapter = {
       async confirm(message) {
         return (
@@ -1315,11 +1289,11 @@ describe("guided setup command", () => {
         return ["codex", "opencode"];
       },
     };
-    const deps = {
+    const deps: SetupCommandDeps = {
       cwd: repo,
       homeDir,
       env: { PATH: "/fake/bin" },
-      runner,
+      runner: baseRunner,
       access: fakeAccess([
         "/fake/bin/wt",
         "/fake/bin/tmux",
@@ -1332,14 +1306,32 @@ describe("guided setup command", () => {
       ]),
       fs,
       activateObserverConfig: noopActivateObserverConfig,
+      providerTrackingPort: async (operation) => {
+        if (operation.kind === "prepare-worktrunk-tracking") {
+          return successfulProviderTrackingPort(operation);
+        }
+        if (operation.harnessId === "codex") {
+          codexHookAttempts += 1;
+          if (codexHookAttempts === 1) {
+            return {
+              status: "failed",
+              operationId: operation.id,
+              error: {
+                tag: "SyntheticTrackingError",
+                code: "SYNTHETIC_CODEX_TRACKING_FAILED",
+                message: "synthetic Codex hook failure",
+              },
+            };
+          }
+        }
+        if (operation.harnessId === "opencode") openCodeHookAttempts += 1;
+        return successfulProviderTrackingPort(operation);
+      },
       probeHarnessHooksStatus: async (
         harnessId: "codex" | "opencode" | "pi" | "cursor" | "claude",
       ) => {
         if (harnessId === "pi") return undefined;
-        const attempts = calls.filter(
-          (call) => call.command === "/fake/bin/stn" && call.args?.[4] === harnessId,
-        ).length;
-        const installed = harnessId === "codex" ? codexHookAttempts > 1 : attempts > 0;
+        const installed = harnessId === "codex" ? codexHookAttempts > 1 : openCodeHookAttempts > 0;
         return {
           provider: harnessId,
           requested: fs.files[configPath]?.includes("install_hooks = true") === true,
@@ -1360,12 +1352,9 @@ describe("guided setup command", () => {
     expect(first.code).toBe(1);
     expect(second.code).toBe(0);
     expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
-    expect(
-      calls.filter((call) => call.command === "/fake/bin/stn" && call.args?.[4] === "codex"),
-    ).toHaveLength(2);
-    expect(
-      calls.filter((call) => call.command === "/fake/bin/stn" && call.args?.[4] === "opencode"),
-    ).toHaveLength(1);
+    expect(codexHookAttempts).toBe(2);
+    expect(openCodeHookAttempts).toBe(1);
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
   it("installs a selected agent CLI when no harness is available, then continues", async () => {

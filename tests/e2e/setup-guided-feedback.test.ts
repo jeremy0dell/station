@@ -49,11 +49,10 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Link STATION launchers globally?");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex tracking?");
-      expect(result.stdout).toContain(`Applying: Write STATION config (${fixture.configPath})`);
+      expect(result.stdout).toContain("Applying: Write STATION config");
+      expect(result.stdout).not.toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Completed: Write STATION config");
-      expect(result.stdout).toContain(
-        `Running: ${join(fixture.bin, "wt")} -y config shell install zsh`,
-      );
+      expect(result.stdout).toContain("Applying: Install Worktrunk shell integration");
       expect(result.stdout).toContain("fake shell integration installed");
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
@@ -194,6 +193,14 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Install OpenCode tracking?");
       expect(result.stdout).toContain("Completed: Install Codex tracking");
       expect(result.stdout).toContain("Completed: Install OpenCode tracking");
+      expect(result.stdout).not.toMatch(
+        /"(?:provider|commands|before|after|rawResult|serializedResult)"\s*:/,
+      );
+      expect(
+        result.stdout
+          .split("\n")
+          .some((line) => line.trimStart().startsWith("{") || line.trimStart().startsWith("[")),
+      ).toBe(false);
       const config = await readFile(fixture.configPath, "utf8");
       expect(config).toContain('harness = "codex"');
       expect(config).toContain("[harness.codex]");
@@ -369,13 +376,10 @@ describe("setup guided feedback e2e", () => {
 
         expect(first.exitCode).toBe(0);
         expect(second.exitCode).toBe(0);
-        expect(first.stdout).toContain(
-          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
-        );
+        expect(first.stdout).toContain("Applying: Install Worktrunk shell integration");
+        expect(first.stdout).toContain("fake shell integration installed");
         expect(second.stdout).not.toContain("Install Worktrunk shell integration?");
-        expect(second.stdout).not.toContain(
-          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
-        );
+        expect(second.stdout).not.toContain("Applying: Install Worktrunk shell integration");
         const check = await runStation(
           ["--config", fixture.configPath, "setup", "check", "--json"],
           {

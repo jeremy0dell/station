@@ -220,6 +220,14 @@ function bareLauncherConvenienceLines(
   return lines;
 }
 
+export function renderBoundActionStart(
+  action: SetupAction,
+  options: SetupRenderOptions = {},
+): string {
+  const theme = setupTheme(options);
+  return `${theme.bold("Applying:")} ${action.label}`;
+}
+
 export function renderActionStart(action: SetupAction, options: SetupRenderOptions = {}): string {
   const theme = setupTheme(options);
   if (action.command !== undefined) {

@@ -1,0 +1,31 @@
+schema_version = 1
+projects = []
+
+[observer]
+state_dir = "~/.local/state/station"
+
+[defaults]
+worktree_provider = "worktrunk"
+terminal = "tmux"
+harness = "codex"
+layout = "agent-shell"
+
+[worktree.worktrunk]
+command = "wt"
+managed_root = "~/.worktrees"
+include_main = false
+include_external = false
+use_lifecycle_hooks = true
+hook_mode = "required-for-mvp"
+
+[terminal.tmux]
+session_prefix = "station"
+topology = "workbench"
+workbench_session = "station"
+window_naming = "project-branch"
+primary_agent_pane = true
+
+[harness.codex]
+enabled = true
+command = "codex"
+install_hooks = true

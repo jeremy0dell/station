@@ -25,6 +25,18 @@ export function configBackedHarnessHooksProbe(
   };
 }
 
+export const successfulProviderTrackingPort: NonNullable<
+  SetupCommandDeps["providerTrackingPort"]
+> = async (operation) => ({
+  status: "completed",
+  operationId: operation.id,
+  commit: {
+    kind: "provider-tracking",
+    provider: operation.kind === "prepare-worktrunk-tracking" ? "worktrunk" : operation.harnessId,
+    changed: true,
+  },
+});
+
 export function withRequiredTrackingConsent(prompt: SetupPromptAdapter): SetupPromptAdapter {
   return {
     ...prompt,

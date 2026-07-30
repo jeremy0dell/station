@@ -6,9 +6,40 @@ import type {
   SetupHarnessFact,
   SupportedHarnessId,
 } from "../../src/commands/setup/model.js";
-import { buildSetupPlan } from "../../src/commands/setup/planner.js";
+import { buildSetupPlan, buildSetupPlans } from "../../src/commands/setup/planner.js";
 
 describe("setup plan projection", () => {
+  it("binds every projected production mutation to semantic execution authority", () => {
+    const currentFacts = facts({
+      config: {
+        status: "missing",
+        path: "/tmp/config.toml",
+        message: "missing",
+      },
+    });
+    const built = buildSetupPlans(currentFacts, {
+      configWrite: {
+        operation: "create",
+        path: "/tmp/config.toml",
+        content: "schema_version = 1\n",
+      },
+    });
+    const boundActionIds = new Set(built.operationBindings.map((binding) => binding.actionId));
+    const mutatingActions = built.compatibilityPlan.actions.filter(
+      (action) => action.kind !== "noop",
+    );
+
+    expect(mutatingActions.length).toBeGreaterThan(0);
+    for (const action of mutatingActions) expect(boundActionIds.has(action.id)).toBe(true);
+    expect(
+      built.compatibilityPlan.actions.some((action) => action.id === "activate-observer-config"),
+    ).toBe(false);
+    expect(
+      built.semanticPlan.operations.some(
+        (operation) => operation.kind === "activate-observer-config",
+      ),
+    ).toBe(true);
+  });
   it("reports all core checks ready and no selected actions", () => {
     const plan = buildSetupPlan(facts());
 

@@ -1,12 +1,15 @@
 import {
   assessHarnessTracking,
+  type SetupPlan as CoreSetupPlan,
   type HarnessSelectionFacts,
   type HarnessSelectionIntent,
   type HarnessTrackingFacts,
   planSetup,
+  type SetupOperation,
   type SetupPlanningFacts,
   type SetupPlanningIntent,
 } from "@station/setup-core";
+import type { SetupOperationBinding } from "./apply.js";
 import {
   harnessSupportsSetupHooks,
   isSupportedHarnessId,
@@ -24,7 +27,20 @@ export type BuildSetupPlanOptions = {
   installWorktrunkHooks?: boolean;
 };
 
+export type BuiltSetupPlans = {
+  readonly semanticPlan: CoreSetupPlan;
+  readonly compatibilityPlan: SetupPlan;
+  readonly operationBindings: readonly SetupOperationBinding[];
+};
+
 export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions = {}): SetupPlan {
+  return buildSetupPlans(facts, options).compatibilityPlan;
+}
+
+export function buildSetupPlans(
+  facts: SetupFacts,
+  options: BuildSetupPlanOptions = {},
+): BuiltSetupPlans {
   SetupHarnessTrackingFactSchema.array().parse(facts.harnessTracking);
   const harnessSelection = options.harnessSelection ?? resolveSetupHarnessSelection(facts);
   const evidence = normalizeSetupPlanningFacts(facts, harnessSelection, options.configWrite);
@@ -34,11 +50,63 @@ export function buildSetupPlan(facts: SetupFacts, options: BuildSetupPlanOptions
     installWorktrunkHooks: options.installWorktrunkHooks === true,
   };
   const semanticPlan = planSetup(evidence, intent);
-  return projectCliSetupPlan(
+  const compatibilityPlan = projectCliSetupPlan(
     options.configWrite === undefined
       ? { plan: semanticPlan, facts }
       : { plan: semanticPlan, facts, configWrite: options.configWrite },
   );
+  return {
+    semanticPlan,
+    compatibilityPlan,
+    operationBindings: bindSetupOperations(semanticPlan.operations),
+  };
+}
+
+function bindSetupOperations(
+  operations: readonly SetupOperation[],
+): readonly SetupOperationBinding[] {
+  const bindings: SetupOperationBinding[] = [];
+  for (const operation of operations) {
+    switch (operation.kind) {
+      case "install-tool":
+        bindings.push({ actionId: `install-${operation.tool}`, operation });
+        break;
+      case "link-launchers":
+        bindings.push({ actionId: "link-station-launchers", operation });
+        break;
+      case "configure-worktrunk-shell":
+        bindings.push({ actionId: "worktrunk-shell-integration", operation });
+        break;
+      case "configure-tmux-popup":
+        bindings.push({
+          actionId:
+            operation.scope === "persisted" ? "tmux-popup-binding" : "tmux-live-popup-binding",
+          operation,
+        });
+        break;
+      case "prepare-worktrunk-tracking":
+        bindings.push({ actionId: "worktrunk-hooks", operation });
+        break;
+      case "prepare-harness-tracking":
+        bindings.push({ actionId: `${operation.harnessId}-hooks`, operation });
+        break;
+      case "write-config":
+        bindings.push(
+          { actionId: "mkdir-config-dir", operation },
+          {
+            actionId: operation.change === "create" ? "write-config" : "update-config",
+            operation,
+          },
+        );
+        break;
+      case "activate-observer-config":
+      case "install-harness":
+      case "install-homebrew":
+      case "install-xcode-command-line-tools":
+        break;
+    }
+  }
+  return bindings;
 }
 
 function normalizeSetupPlanningFacts(

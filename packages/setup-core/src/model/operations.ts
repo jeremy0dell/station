@@ -9,6 +9,25 @@ export type SetupOperation =
       readonly tool: SetupToolId;
     }
   | {
+      readonly id: `install-harness:${SupportedHarnessId}`;
+      readonly kind: "install-harness";
+      readonly tier: "required";
+      readonly selected: boolean;
+      readonly harnessId: SupportedHarnessId;
+    }
+  | {
+      readonly id: "install:homebrew";
+      readonly kind: "install-homebrew";
+      readonly tier: "required";
+      readonly selected: boolean;
+    }
+  | {
+      readonly id: "install:xcode-command-line-tools";
+      readonly kind: "install-xcode-command-line-tools";
+      readonly tier: "required";
+      readonly selected: boolean;
+    }
+  | {
       readonly id: "link-station-launchers";
       readonly kind: "link-launchers";
       readonly tier: "recommended";
@@ -46,4 +65,14 @@ export type SetupOperation =
       readonly tier: "required";
       readonly selected: true;
       readonly change: "create" | "update";
+      readonly defaultHarnessId: SupportedHarnessId;
+      readonly harnessIds: readonly SupportedHarnessId[];
+      readonly trackingHarnessIds: readonly SupportedHarnessId[];
+      readonly installWorktrunkTracking: boolean;
+    }
+  | {
+      readonly id: "activate-observer-config";
+      readonly kind: "activate-observer-config";
+      readonly tier: "required";
+      readonly selected: true;
     };

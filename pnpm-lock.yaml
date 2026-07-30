@@ -385,7 +385,11 @@ importers:
         specifier: ^3.21.2
         version: 3.21.2
 
-  packages/setup-core: {}
+  packages/setup-core:
+    dependencies:
+      '@station/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/station-host:
     dependencies:

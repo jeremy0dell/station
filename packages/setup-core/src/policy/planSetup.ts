@@ -263,12 +263,28 @@ function deriveOperations(
     selection.requiredHarnessIds.some((harnessId) => harnessAvailable(facts, harnessId)) &&
     (facts.config.write === "create" || facts.config.write === "update")
   ) {
+    const trackingHarnessIds = selection.requiredHarnessIds.filter((harnessId) =>
+      facts.harnessTracking.some(
+        (tracking) =>
+          tracking.harnessId === harnessId && tracking.assessment.state !== "not-applicable",
+      ),
+    );
     operations.push({
       id: "write-config",
       kind: "write-config",
       tier: "required",
       selected: true,
       change: facts.config.write,
+      defaultHarnessId: selection.defaultHarness,
+      harnessIds: selection.requiredHarnessIds,
+      trackingHarnessIds,
+      installWorktrunkTracking: intent.installWorktrunkHooks,
+    });
+    operations.push({
+      id: "activate-observer-config",
+      kind: "activate-observer-config",
+      tier: "required",
+      selected: true,
     });
   }
   return operations;

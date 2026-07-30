@@ -1,10 +1,15 @@
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
   runExternalCommand,
 } from "@station/runtime";
+import type {
+  SetupOperation,
+  SetupOperationExecutor,
+  SetupOperationOutcome,
+} from "@station/setup-core";
 import type { SetupAction, SetupPlan } from "./model.js";
 
 export type SetupApplyFileSystem = {
@@ -13,6 +18,12 @@ export type SetupApplyFileSystem = {
   writeFile(path: string, content: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   access(path: string): Promise<void>;
+  rm?(path: string, options: { force: true }): Promise<void>;
+};
+
+export type SetupOperationBinding = {
+  readonly actionId: string;
+  readonly operation: SetupOperation;
 };
 
 export type ApplySetupPlanOptions = {
@@ -29,11 +40,15 @@ export type ApplySetupPlanOptions = {
   onActionStart?: (action: SetupAction) => void | Promise<void>;
   onActionComplete?: (action: SetupAction) => void | Promise<void>;
   onActionFailed?: (action: SetupAction) => void | Promise<void>;
+  operationBindings?: readonly SetupOperationBinding[];
+  executeOperation?: SetupOperationExecutor;
 };
 
 export type ApplySetupPlanResult = {
   plan: SetupPlan;
   failedAction?: SetupAction;
+  failedOperation?: Extract<SetupOperationOutcome, { status: "failed" }>;
+  operationOutcomes: readonly SetupOperationOutcome[];
 };
 
 export async function applySetupPlan(
@@ -41,7 +56,13 @@ export async function applySetupPlan(
   options: ApplySetupPlanOptions = {},
 ): Promise<ApplySetupPlanResult> {
   const actions: SetupAction[] = [];
+  const operationOutcomes: SetupOperationOutcome[] = [];
+  const bindings = new Map(
+    options.operationBindings?.map((binding) => [binding.actionId, binding] as const) ?? [],
+  );
   const fs = options.fs ?? nodeApplyFs();
+  let failedAction: SetupAction | undefined;
+  let failedOperation: Extract<SetupOperationOutcome, { status: "failed" }> | undefined;
   for (const action of plan.actions) {
     if (!action.selected || options.actionFilter?.(action) === false) {
       actions.push({ ...action, status: "skipped" });
@@ -51,37 +72,105 @@ export async function applySetupPlan(
       actions.push({ ...action, status: "skipped" });
       continue;
     }
-    try {
-      const context: {
-        fs: SetupApplyFileSystem;
-        runner?: ExternalCommandRunner;
-        env?: Record<string, string>;
-        now?: () => Date;
-        showCommandOutput?: boolean;
-      } = {
-        fs,
-      };
-      if (options.runner !== undefined) context.runner = options.runner;
-      if (options.env !== undefined) context.env = options.env;
-      if (options.now !== undefined) context.now = options.now;
-      if (options.showCommandOutput !== undefined) {
-        context.showCommandOutput = options.showCommandOutput;
+    const binding = bindings.get(action.id);
+    await options.onActionStart?.(action);
+    if (
+      binding !== undefined &&
+      options.executeOperation !== undefined &&
+      action.id !== "mkdir-config-dir"
+    ) {
+      const outcome = await options.executeOperation(binding.operation);
+      operationOutcomes.push(outcome);
+      if (outcome.status === "completed") {
+        const completed = completedAction(action, outcome);
+        await options.onActionComplete?.(completed);
+        actions.push(completed);
+        continue;
       }
-      await options.onActionStart?.(action);
-      await applyAction(action, context);
-      await options.onActionComplete?.(action);
-      actions.push({ ...action, status: "completed" });
-    } catch {
+
       const failed = { ...action, status: "failed" as const };
+      failedAction ??= failed;
+      failedOperation ??= outcome;
       await options.onActionFailed?.(failed);
       actions.push(failed);
-      return {
-        plan: { ...plan, actions: [...actions, ...remainingSkipped(plan.actions, actions.length)] },
-        failedAction: failed,
-      };
+      if (
+        binding.operation.kind === "prepare-harness-tracking" ||
+        binding.operation.kind === "prepare-worktrunk-tracking"
+      ) {
+        continue;
+      }
+      return applyResult(plan, actions, operationOutcomes, failedAction, failedOperation, true);
+    }
+
+    try {
+      if (binding === undefined || action.id !== "mkdir-config-dir") {
+        const context: {
+          fs: SetupApplyFileSystem;
+          runner?: ExternalCommandRunner;
+          env?: Record<string, string>;
+          now?: () => Date;
+          showCommandOutput?: boolean;
+        } = { fs };
+        if (options.runner !== undefined) context.runner = options.runner;
+        if (options.env !== undefined) context.env = options.env;
+        if (options.now !== undefined) context.now = options.now;
+        if (options.showCommandOutput !== undefined) {
+          context.showCommandOutput = options.showCommandOutput;
+        }
+        await applyAction(action, context);
+      }
+      const completed = { ...action, status: "completed" as const };
+      await options.onActionComplete?.(completed);
+      actions.push(completed);
+    } catch {
+      const failed = { ...action, status: "failed" as const };
+      failedAction ??= failed;
+      await options.onActionFailed?.(failed);
+      actions.push(failed);
+      return applyResult(plan, actions, operationOutcomes, failedAction, failedOperation, true);
     }
   }
-  return { plan: { ...plan, actions } };
+  return applyResult(plan, actions, operationOutcomes, failedAction, failedOperation, false);
+}
+
+function completedAction(action: SetupAction, outcome: SetupOperationOutcome): SetupAction {
+  if (
+    outcome.status === "completed" &&
+    outcome.commit.kind === "config" &&
+    outcome.commit.backupPath !== undefined
+  ) {
+    return {
+      ...action,
+      status: "completed",
+      data: { ...(action.data ?? {}), backupPath: outcome.commit.backupPath },
+    };
+  }
+  return { ...action, status: "completed" };
+}
+
+function applyResult(
+  plan: SetupPlan,
+  actions: readonly SetupAction[],
+  operationOutcomes: readonly SetupOperationOutcome[],
+  failedAction: SetupAction | undefined,
+  failedOperation: Extract<SetupOperationOutcome, { status: "failed" }> | undefined,
+  skipRemaining: boolean,
+): ApplySetupPlanResult {
+  const projectedActions = skipRemaining
+    ? [...actions, ...remainingSkipped(plan.actions, actions.length)]
+    : [...actions];
+  const result: {
+    plan: SetupPlan;
+    operationOutcomes: readonly SetupOperationOutcome[];
+    failedAction?: SetupAction;
+    failedOperation?: Extract<SetupOperationOutcome, { status: "failed" }>;
+  } = {
+    plan: { ...plan, actions: projectedActions },
+    operationOutcomes,
+  };
+  if (failedAction !== undefined) result.failedAction = failedAction;
+  if (failedOperation !== undefined) result.failedOperation = failedOperation;
+  return result;
 }
 
 async function applyAction(
@@ -268,5 +357,6 @@ function nodeApplyFs(): SetupApplyFileSystem {
     },
     rename,
     access,
+    rm,
   };
 }

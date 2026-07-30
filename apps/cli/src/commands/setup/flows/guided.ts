@@ -1,10 +1,12 @@
 import { access } from "node:fs/promises";
+import type { SetupOperation } from "@station/setup-core";
+import { createSetupOperationAdapter } from "../adapters/operations.js";
 import { applySetupPlan } from "../apply.js";
 import { checkSetupTmuxBinding } from "../checks/tmuxBinding.js";
-import { planSetupConfigWrite } from "../configWriter.js";
 import {
   activateCompletedConfigWrite,
   applyOptions,
+  type CollectedSetupPlan,
   collectForCommand,
   collectSetupPlanForCommand,
   collectSetupPlanFromFacts,
@@ -14,7 +16,6 @@ import {
   isHookSetupAction,
   isInstallAction,
   isTmuxPopupBindingAction,
-  markRequiredIncomplete,
 } from "../flowUtils.js";
 import {
   harnessInstallPlan,
@@ -105,16 +106,11 @@ async function runGuidedSetupWithPrompt(
     return { code: 1 };
   }
 
-  const configActivation = await writeAndActivateConfig(
-    preflight.plan,
-    preflight.facts,
-    prompt,
-    deps,
-  );
+  const configActivation = await writeAndActivateConfig(preflight, prompt, deps);
   if (configActivation.status === "halt") return { code: 1 };
 
   // Provider artifacts must target the config already activated by the Observer.
-  if (!(await installSelectedHooks(preflight.plan, deps))) return { code: 1 };
+  const trackingSucceeded = await installSelectedHooks(preflight, deps);
 
   const tmuxPopupState = await collectGuidedPopupState({
     configWritten: configActivation.writtenPlan !== undefined,
@@ -123,16 +119,10 @@ async function runGuidedSetupWithPrompt(
     reprobeDeps,
     selectedHarnessIds,
   });
-  await offerWorktrunkShellIntegration(preflight.plan, preflight.facts, prompt, deps);
-  await offerTmuxPopupBinding({
-    facts: tmuxPopupState.facts,
-    plan: tmuxPopupState.plan,
-    options,
-    deps,
-    prompt,
-  });
+  await offerWorktrunkShellIntegration(preflight, prompt, deps);
+  await offerTmuxPopupBinding({ ...tmuxPopupState, options, deps, prompt });
 
-  // Successful actions do not prove readiness; rebuild the plan from current config and artifacts.
+  // Operation outcomes do not prove readiness; rebuild the plan from current config and artifacts.
   const finalState = await collectSetupPlanForCommand(
     "apply",
     options,
@@ -140,7 +130,7 @@ async function runGuidedSetupWithPrompt(
     selectedHarnessPlanInput(selectedHarnessIds),
   );
   await write(deps, renderSetupApplyResult(finalState.plan, renderOptions(deps)));
-  return { code: finalState.plan.summary.requiredOk ? 0 : 1 };
+  return { code: trackingSucceeded && finalState.plan.summary.requiredOk ? 0 : 1 };
 }
 
 type GuidedFactsResult = { status: "continue"; facts: SetupFacts } | { status: "halt" };
@@ -159,7 +149,10 @@ async function ensureRequiredTools(
   deps: SetupCommandDeps,
   prompt: SetupPromptAdapter,
 ): Promise<GuidedFactsResult> {
-  const initialState = await collectSetupPlanFromFacts(facts, deps, { planConfigWrite: true });
+  const installDeps = depsWithBrewBinPath(deps);
+  const initialState = await collectSetupPlanFromFacts(facts, installDeps, {
+    planConfigWrite: true,
+  });
   const plan = initialState.plan;
   await write(deps, renderSetupPlan(plan, renderOptions(deps)));
   const installActions = plan.actions.filter(
@@ -175,18 +168,18 @@ async function ensureRequiredTools(
     applySetupPlan(
       plan,
       // A fresh Homebrew install usually has not updated the current process PATH yet.
-      applyOptions(depsWithBrewBinPath(deps), {
+      applyOptions(installDeps, {
         actionFilter: isInstallAction,
         announceActions: true,
         showCommandOutput: true,
+        execution: initialState,
       }),
     ),
   );
   if (installResult.failedAction !== undefined) {
-    await write(
-      deps,
-      renderSetupApplyResult(markRequiredIncomplete(installResult.plan), renderOptions(deps)),
-    );
+    const finalFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
+    const finalState = await collectSetupPlanFromFacts(finalFacts, deps, {});
+    await write(deps, renderSetupApplyResult(finalState.plan, renderOptions(deps)));
     return { status: "halt" };
   }
   const refreshedFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
@@ -250,11 +243,11 @@ function selectedHarnessPlanInput(selectedHarnessIds: readonly SupportedHarnessI
 }
 
 async function writeAndActivateConfig(
-  plan: SetupPlan,
-  facts: SetupFacts,
+  collected: CollectedSetupPlan,
   prompt: SetupPromptAdapter,
   deps: SetupCommandDeps,
 ): Promise<GuidedConfigActivation> {
+  const { plan } = collected;
   const configWriteSelected = plan.actions.some(
     (action) => isConfigAction(action) && action.selected,
   );
@@ -266,25 +259,38 @@ async function writeAndActivateConfig(
   }
   const writeResult = await applySetupPlan(
     plan,
-    applyOptions(deps, { actionFilter: isConfigAction, announceActions: true }),
+    applyOptions(deps, {
+      actionFilter: isConfigAction,
+      announceActions: true,
+      execution: collected,
+    }),
   );
   if (writeResult.failedAction !== undefined) {
     await write(deps, "Config write failed. Run: stn setup plan\n");
     return { status: "halt" };
   }
-  const activationError = await activateCompletedConfigWrite(writeResult.plan, facts.homeDir, deps);
+  const activationError = await activateCompletedConfigWrite(collected, deps);
   if (activationError !== undefined) return { status: "halt" };
   return { status: "continue", writtenPlan: writeResult.plan };
 }
 
-async function installSelectedHooks(plan: SetupPlan, deps: SetupCommandDeps): Promise<boolean> {
-  const hookActions = plan.actions.filter((action) => isHookSetupAction(action) && action.selected);
+async function installSelectedHooks(
+  collected: CollectedSetupPlan,
+  deps: SetupCommandDeps,
+): Promise<boolean> {
+  const hookActions = collected.plan.actions.filter(
+    (action) => isHookSetupAction(action) && action.selected,
+  );
   let failed = false;
   // Hook providers are independent; one failed installer must not suppress the rest.
   for (const action of hookActions) {
     const hookResult = await applySetupPlan(
-      { ...plan, actions: [action] },
-      applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+      { ...collected.plan, actions: [action] },
+      applyOptions(deps, {
+        announceActions: true,
+        showCommandOutput: true,
+        execution: collected,
+      }),
     );
     if (hookResult.failedAction !== undefined) failed = true;
   }
@@ -294,7 +300,7 @@ async function installSelectedHooks(plan: SetupPlan, deps: SetupCommandDeps): Pr
   return !failed;
 }
 
-type GuidedPopupState = { facts: SetupFacts; plan: SetupPlan };
+type GuidedPopupState = CollectedSetupPlan;
 
 type TmuxPopupInput = GuidedPopupState & {
   options: SetupCommandOptions;
@@ -319,15 +325,16 @@ function collectGuidedPopupState(input: {
 }
 
 async function offerWorktrunkShellIntegration(
-  plan: SetupPlan,
-  facts: SetupFacts,
+  collected: CollectedSetupPlan,
   prompt: SetupPromptAdapter,
   deps: SetupCommandDeps,
 ): Promise<void> {
-  const action = plan.actions.find((candidate) => candidate.id === "worktrunk-shell-integration");
+  const action = collected.plan.actions.find(
+    (candidate) => candidate.id === "worktrunk-shell-integration",
+  );
   if (action === undefined) return;
   if (await prompt.confirm("Install Worktrunk shell integration?")) {
-    await installWorktrunkShellIntegration(action, plan, facts, deps);
+    await installWorktrunkShellIntegration(action, collected, deps);
   }
 }
 
@@ -375,7 +382,11 @@ async function applyTmuxPopupBinding(
       ...plan,
       actions: bindingActions.map((action) => ({ ...action, selected: true })),
     },
-    applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+    applyOptions(deps, {
+      announceActions: true,
+      showCommandOutput: true,
+      execution: input,
+    }),
   );
   const completedIds = new Set(
     result.plan.actions.flatMap((action) => (action.status === "completed" ? [action.id] : [])),
@@ -414,10 +425,10 @@ async function recheckTmuxPopupBinding(
 
 async function installWorktrunkShellIntegration(
   action: SetupAction,
-  plan: SetupPlan,
-  facts: SetupFacts,
+  collected: CollectedSetupPlan,
   deps: SetupCommandDeps,
 ): Promise<void> {
+  const { facts, plan } = collected;
   const baseCommand = action.command;
   if (baseCommand === undefined) return;
 
@@ -438,7 +449,11 @@ async function installWorktrunkShellIntegration(
   }
 
   const shellApplyOptions =
-    applyOptions(deps, { announceActions: true, showCommandOutput: true }) ?? {};
+    applyOptions(deps, {
+      announceActions: true,
+      showCommandOutput: true,
+      execution: collected,
+    }) ?? {};
   shellApplyOptions.onActionFailed = () => undefined;
   const result = await applySetupPlan(
     { ...plan, actions: [{ ...action, command, selected: true }] },
@@ -507,7 +522,16 @@ async function ensureBootstrapTools(
       await withPromptPaused(prompt, () =>
         applySetupPlan(
           harnessInstallPlan(facts, [commandLineToolsInstallAction()]),
-          applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+          applyOptions(deps, {
+            announceActions: true,
+            showCommandOutput: true,
+            execution: standaloneOperationExecution(
+              facts,
+              deps,
+              "install-command-line-tools",
+              commandLineToolsOperation(),
+            ),
+          }),
         ),
       );
       // The CLT installer runs asynchronously in its own window; we cannot continue
@@ -541,7 +565,15 @@ async function ensureBootstrapTools(
     const result = await withPromptPaused(prompt, () =>
       applySetupPlan(
         harnessInstallPlan(facts, [homebrewInstallAction()]),
-        applyOptions(deps, { showCommandOutput: true }),
+        applyOptions(deps, {
+          showCommandOutput: true,
+          execution: standaloneOperationExecution(
+            facts,
+            deps,
+            "install-homebrew",
+            homebrewOperation(),
+          ),
+        }),
       ),
     );
     if (result.failedAction !== undefined) {
@@ -634,16 +666,22 @@ async function maybeLinkStationLaunchers(
   deps: SetupCommandDeps,
   prompt: SetupPromptAdapter,
 ): Promise<SetupFacts> {
-  const plan = buildSetupPlan(facts, { configWrite: await planSetupConfigWrite(facts) });
-  const action = plan.actions.find((candidate) => candidate.id === "link-station-launchers");
+  const planned = await collectSetupPlanFromFacts(facts, deps, { planConfigWrite: true });
+  const action = planned.plan.actions.find(
+    (candidate) => candidate.id === "link-station-launchers",
+  );
   if (action === undefined || !shouldPromptLauncherLink(facts)) return facts;
 
   const accepted = await prompt.confirm("Link STATION launchers globally?");
   if (!accepted) return facts;
 
   const result = await applySetupPlan(
-    { ...plan, actions: [{ ...action, selected: true }] },
-    applyOptions(deps, { announceActions: true, showCommandOutput: true }),
+    { ...planned.plan, actions: [{ ...action, selected: true }] },
+    applyOptions(deps, {
+      announceActions: true,
+      showCommandOutput: true,
+      execution: planned,
+    }),
   );
   if (result.failedAction !== undefined) {
     await write(deps, "STATION launcher link failed. Continuing with checkout launcher paths.\n");
@@ -760,6 +798,12 @@ async function ensureHarnessAvailable(
         applyOptions(installDeps, {
           actionFilter: isHarnessInstallAction,
           showCommandOutput: true,
+          execution: standaloneOperationExecution(
+            facts,
+            installDeps,
+            action.id,
+            harnessInstallOperation(harnessId),
+          ),
         }),
       ),
     );
@@ -826,6 +870,54 @@ function prependPath(path: string, existing: string | undefined): string {
     return path;
   }
   return existing.split(":").includes(path) ? existing : `${path}:${existing}`;
+}
+
+function standaloneOperationExecution(
+  facts: SetupFacts,
+  deps: SetupCommandDeps,
+  actionId: string,
+  operation: SetupOperation,
+): Pick<CollectedSetupPlan, "operationBindings" | "executeOperation"> {
+  return {
+    operationBindings: [{ actionId, operation }],
+    executeOperation: createSetupOperationAdapter({ facts, deps }),
+  };
+}
+
+function commandLineToolsOperation(): Extract<
+  SetupOperation,
+  { kind: "install-xcode-command-line-tools" }
+> {
+  return {
+    id: "install:xcode-command-line-tools",
+    kind: "install-xcode-command-line-tools",
+    tier: "required",
+    selected: true,
+  };
+}
+
+function homebrewOperation(): Extract<SetupOperation, { kind: "install-homebrew" }> {
+  return {
+    id: "install:homebrew",
+    kind: "install-homebrew",
+    tier: "required",
+    selected: true,
+  };
+}
+
+function harnessInstallOperation(
+  harnessId: string | undefined,
+): Extract<SetupOperation, { kind: "install-harness" }> {
+  if (harnessId === undefined || !isSupportedHarnessId(harnessId)) {
+    throw new Error("Harness install action requires a supported harness.");
+  }
+  return {
+    id: `install-harness:${harnessId}`,
+    kind: "install-harness",
+    tier: "required",
+    selected: true,
+    harnessId,
+  };
 }
 
 async function withPromptPaused<T>(prompt: SetupPromptAdapter, task: () => Promise<T>): Promise<T> {
