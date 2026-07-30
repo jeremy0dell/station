@@ -241,6 +241,36 @@ by the health or handoff evidence and run the same command there; do not spoof
 the build selector. Only consider runtime surgery after `verify` returns
 `"ok": true` and every active session has provider-native recovery data.
 
+A complete archive can drive a fail-closed migration into a separate Station
+runtime. Plan first; planning verifies the archive, requires one exact recovery
+handle per active session, matches the same project/worktree identities in the
+target, and refuses any target worktree that already owns a session:
+
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station
+```
+
+Repeat with `--yes` only after reviewing that plan. Apply stages provider-native
+state, stops the target Observer without stopping its Host, imports exact
+recovery handles into an online-backup-protected target database, resumes every
+agent through the existing `session.resumeAgent` command, restores session
+titles, and verifies a live target terminal for every session. Only then does it
+finalize the source, either through `station:devbox stop` or force-closing the
+archived source sessions. Source and target state/config paths must be distinct.
+An interrupted or failed migration writes an owner-only report under the target
+state directory and leaves source finalization incomplete; preserve both
+runtimes until that report is understood.
+
+OpenCode migration currently requires the rescued session IDs to already exist
+in the target OpenCode database, as they normally do when both runtimes share
+its default data home. The command refuses instead of merging two nonempty
+OpenCode databases. Override provider locations with
+`--target-codex-home`, `--target-opencode-db`, and
+`--target-claude-projects` when the target uses isolated homes.
+
 After startup reconcile, the Observer performs one report-only duplicate
 inspection. `stn doctor` reports this as `observer-singleton`: an eligible
 candidate or evidence refusal is a warning, while a clear result is healthy.

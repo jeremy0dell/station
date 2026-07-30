@@ -20,6 +20,12 @@ import {
   parseResetArgs,
 } from "../../scripts/maintenance/agent-reset.mjs";
 import {
+  buildSessionMigrationPlan,
+  enableSessionResumeFeature,
+  importRecoveryHandles,
+  parseSessionMigrationArgs,
+} from "../../scripts/maintenance/session-migrate.mjs";
+import {
   assertSqliteTables,
   buildRecoveryCoverage,
   findCodexSessionAssets,
@@ -125,6 +131,219 @@ managed_root = "~/.worktrees"`);
   it("checks managed roots without prefix false positives", () => {
     expect(isUnder("/tmp/station/.worktrees/branch", "/tmp/station/.worktrees")).toBe(true);
     expect(isUnder("/tmp/station/.worktrees-other/branch", "/tmp/station/.worktrees")).toBe(false);
+  });
+});
+
+describe("session migration script", () => {
+  it("defaults to a read-only plan and requires --yes for full migration", () => {
+    expect(
+      parseSessionMigrationArgs(["--archive", "rescue", "--target-config", "target.toml"], {
+        cwd: "/tmp",
+        homeDir: "/Users/example",
+      }),
+    ).toMatchObject({
+      command: "plan",
+      archivePath: "/tmp/rescue",
+      targetConfig: "/tmp/target.toml",
+      targetCodexHome: "/Users/example/.codex",
+    });
+    expect(
+      parseSessionMigrationArgs(
+        ["--archive", "rescue", "--target-config", "target.toml", "--yes"],
+        { cwd: "/tmp", homeDir: "/Users/example" },
+      ).command,
+    ).toBe("apply");
+    expect(() =>
+      parseSessionMigrationArgs([
+        "--archive",
+        "rescue",
+        "--target-config",
+        "target.toml",
+        "--source-config",
+        "source.toml",
+        "--source-devbox-root",
+        "/repo",
+      ]),
+    ).toThrow("Use --source-config or --source-devbox-root, not both");
+  });
+
+  it("enables resume without reserializing unrelated TOML", () => {
+    expect(enableSessionResumeFeature("schema_version = 1\n")).toBe(
+      "schema_version = 1\n\n[feature_flags]\nsession_resume_agent = true\n",
+    );
+    expect(
+      enableSessionResumeFeature(
+        "[feature_flags]\nsession_resume_agent = false\nstation_persistent_agents = true\n\n[tui]\n",
+      ),
+    ).toBe(
+      "[feature_flags]\nsession_resume_agent = true\nstation_persistent_agents = true\n\n[tui]\n",
+    );
+  });
+
+  it("maps one exact archived recovery handle onto the same empty target worktree", () => {
+    const handle = {
+      id: "rec_codex",
+      provider: "codex",
+      projectId: "station",
+      worktreeId: "wt_station_feature",
+      sessionId: "ses_feature",
+      target: { kind: "native-session" as const, id: "thread-1" },
+      cwd: "/worktrees/feature",
+      observedAt: "2026-07-29T12:00:00.000Z",
+      lastSeenAt: "2026-07-29T12:00:00.000Z",
+    };
+    const row = {
+      id: "wt_station_feature",
+      projectId: "station",
+      path: "/worktrees/feature",
+      title: "Feature",
+    };
+    const plan = buildSessionMigrationPlan(
+      [
+        {
+          sessionId: "ses_feature",
+          provider: "codex",
+          projectId: "station",
+          worktreeId: row.id,
+          exactHandleIds: [handle.id],
+          candidateHandleIds: [],
+        },
+      ],
+      [handle],
+      {
+        rows: [row],
+        sessions: [
+          {
+            id: "ses_feature",
+            title: "PR #365 · session rescue",
+            projectId: "station",
+            worktreeId: row.id,
+          },
+        ],
+      },
+      { rows: [row], sessions: [] },
+    );
+
+    expect(plan).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_feature",
+        title: "PR #365 · session rescue",
+        worktreePath: "/worktrees/feature",
+        handle,
+      }),
+    ]);
+  });
+
+  it("imports exact recovery handles into a stopped target database idempotently", () => {
+    const root = mkdtempSync(join(tmpdir(), "station-session-migration-db-"));
+    const databasePath = join(root, "observer.sqlite");
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE session_recovery_handles (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        worktree_id TEXT NOT NULL,
+        session_id TEXT,
+        target_kind TEXT NOT NULL,
+        target_value TEXT NOT NULL,
+        cwd TEXT,
+        terminal_target_id TEXT,
+        harness_run_id TEXT,
+        observed_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        UNIQUE(provider, target_kind, target_value)
+      )
+    `);
+    database.close();
+    const plan = [
+      {
+        sessionId: "ses_feature",
+        provider: "codex",
+        projectId: "station",
+        worktreeId: "wt_station_feature",
+        worktreePath: "/worktrees/feature",
+        handle: {
+          id: "rec_feature",
+          provider: "codex",
+          target: { kind: "native-session" as const, id: "thread-1" },
+          observedAt: "2026-07-29T12:00:00.000Z",
+          lastSeenAt: "2026-07-29T12:00:01.000Z",
+        },
+      },
+    ];
+
+    try {
+      expect(importRecoveryHandles(databasePath, plan, root)).toEqual(
+        new Map([["rec_feature", "rec_feature"]]),
+      );
+      expect(importRecoveryHandles(databasePath, plan, root)).toEqual(
+        new Map([["rec_feature", "rec_feature"]]),
+      );
+      const reopened = new DatabaseSync(databasePath, { readOnly: true });
+      expect(reopened.prepare("SELECT * FROM session_recovery_handles").all()).toEqual([
+        expect.objectContaining({
+          id: "rec_feature",
+          session_id: "ses_feature",
+          target_value: "thread-1",
+          cwd: "/worktrees/feature",
+        }),
+      ]);
+      reopened.close();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses migration when the target worktree already owns a session", () => {
+    const coverage = [
+      {
+        sessionId: "ses_source",
+        provider: "codex",
+        projectId: "station",
+        worktreeId: "wt_station_feature",
+        exactHandleIds: ["rec_source"],
+        candidateHandleIds: [],
+      },
+    ];
+    const handles = [
+      {
+        id: "rec_source",
+        provider: "codex",
+        projectId: "station",
+        worktreeId: "wt_station_feature",
+        sessionId: "ses_source",
+        target: { kind: "native-session" as const, id: "thread-1" },
+      },
+    ];
+    const row = {
+      id: "wt_station_feature",
+      projectId: "station",
+      path: "/worktrees/feature",
+    };
+    const source = {
+      rows: [row],
+      sessions: [
+        {
+          id: "ses_source",
+          title: "Source",
+          projectId: "station",
+          worktreeId: row.id,
+        },
+      ],
+    };
+    expect(() =>
+      buildSessionMigrationPlan(coverage, handles, source, {
+        rows: [row],
+        sessions: [
+          {
+            id: "ses_target",
+            projectId: "station",
+            worktreeId: row.id,
+          },
+        ],
+      }),
+    ).toThrow("Target worktree already has a session");
   });
 });
 
