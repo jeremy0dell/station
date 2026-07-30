@@ -1,6 +1,9 @@
 import {
   createNewSessionNameToken,
+  type NewSessionActionId,
   type NewSessionFlowAction,
+  type NewSessionInputIntent,
+  newSessionIntentForAction,
   newSessionIntentForInput,
   transitionNewSessionFlow,
   validateNewSessionCreate,
@@ -35,15 +38,21 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
     key,
     token: createNewSessionNameToken(),
   });
+  return executeNewSessionIntent(state, intent);
+}
 
-  if (intent.type === "none") {
-    return { state };
-  }
+export function handleNewSessionAction(
+  state: TuiState,
+  actionId: NewSessionActionId,
+): TuiTransition {
+  if (state.screen.name !== "newSession") return { state };
+  return executeNewSessionIntent(state, newSessionIntentForAction(state.screen.flow, actionId));
+}
 
-  if (intent.type === "submit") {
-    return submitNewSession(state);
-  }
-
+function executeNewSessionIntent(state: TuiState, intent: NewSessionInputIntent): TuiTransition {
+  if (intent.type === "none") return { state };
+  if (intent.type === "submit") return submitNewSession(state);
+  if (state.screen.name !== "newSession") return { state };
   const flow = transitionNewSessionFlow(state.screen.flow, intent.action);
   return { state: applyNewSessionFlow(state, flow) };
 }

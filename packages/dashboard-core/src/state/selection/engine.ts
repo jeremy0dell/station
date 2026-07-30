@@ -27,6 +27,15 @@ function withCursor(state: TuiState, listId: string, id: string): TuiState {
   return { ...state, selection };
 }
 
+/**
+ * Commits the canonical current cursor through the registered list's own behavior.
+ * Stale or absent cursors remain inert, so keyboard Enter and semantic controls share one commit.
+ */
+export function commitCurrentCursor(spec: RegisteredListSpec, state: TuiState): TuiTransition {
+  const id = cursorId(spec, state);
+  return id === undefined ? { state } : spec.commit(state, id, "cursor");
+}
+
 /** Move the cursor one selectable row; clamp (never wrap) and seed from the edge if unset. */
 export function moveCursor(spec: RegisteredListSpec, state: TuiState, delta: -1 | 1): TuiState {
   const ids = selectableIds(spec, state);
@@ -64,8 +73,7 @@ export function resolveListKey(
       return { state: moveCursor(spec, state, 1) };
     }
     if (isReturnKey(key)) {
-      const id = cursorId(spec, state);
-      return id === undefined ? { state } : spec.commit(state, id, "cursor");
+      return commitCurrentCursor(spec, state);
     }
   }
   return undefined;

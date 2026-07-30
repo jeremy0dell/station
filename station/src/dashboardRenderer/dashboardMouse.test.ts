@@ -329,9 +329,11 @@ describe("routeDashboardMouse", () => {
     await waitFor(() =>
       fixture.service.dispatched.some((command) => command.type === "session.create"),
     );
-    expect(
-      fixture.service.dispatched.find((command) => command.type === "session.create"),
-    ).toMatchObject({
+    const creates = fixture.service.dispatched.filter(
+      (command) => command.type === "session.create",
+    );
+    expect(creates).toHaveLength(1);
+    expect(creates[0]).toMatchObject({
       payload: { title: "Standalone mouse", harness: { provider: "codex" } },
     });
   });

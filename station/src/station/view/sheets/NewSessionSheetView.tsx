@@ -2,13 +2,12 @@ import type { ProjectView, ProviderId, StationSnapshot } from "@station/contract
 import {
   bottomSheetContentWidth,
   newSessionContentRowCount,
+  newSessionEditNameContent,
   newSessionReviewContent,
   selectedProject,
   selectNewSessionHarnessChoices,
   selectNewSessionProjectChoices,
-  type NewSessionActionId,
   type NewSessionFlowState,
-  type NewSessionReviewFieldId,
   type TuiSelectionState,
 } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
@@ -102,12 +101,6 @@ function titleForState(state: NewSessionFlowState): string {
   }
 }
 
-const REVIEW_ACTION_IDS: Readonly<Record<NewSessionReviewFieldId, NewSessionActionId>> = {
-  project: "review.project",
-  name: "review.name",
-  agent: "review.agent",
-};
-
 function Review({
   snapshot,
   state,
@@ -127,9 +120,11 @@ function Review({
             key={field.id}
             width={width}
             label={field.label}
+            shortcut={field.accelerator}
             detail={field.value}
-            focused={state.reviewFocus === field.id}
-            mouseTarget={{ kind: "newSessionAction", actionId: REVIEW_ACTION_IDS[field.id] }}
+            focused={state.reviewFocus === field.focusId}
+            disabled={!field.enabled}
+            mouseTarget={{ kind: "newSessionAction", actionId: field.actionId }}
             {...(status === undefined
               ? {}
               : {
@@ -145,11 +140,11 @@ function Review({
       <SheetActionRow
         width={width}
         label={content.create.label}
-        shortcut={content.create.shortcut}
+        shortcut={content.create.accelerator}
         tone="primary"
-        focused={state.reviewFocus === "create"}
-        disabled={content.create.disabled}
-        mouseTarget={{ kind: "newSessionAction", actionId: "review.create" }}
+        focused={state.reviewFocus === content.create.focusId}
+        disabled={!content.create.enabled}
+        mouseTarget={{ kind: "newSessionAction", actionId: content.create.actionId }}
       />
       <SheetFooter width={width}>{`↑↓ focus · ${content.helper} · Esc cancel`}</SheetFooter>
     </>
@@ -166,12 +161,13 @@ function EditName({
   width: number;
 }) {
   const nameValue = state.draftName.value.length === 0 ? state.title : state.draftName.value;
+  const content = newSessionEditNameContent(state);
   return (
     <>
       <SheetLabelValue width={width} label="Project" labelWidth={12} value={project?.label ?? "-"} />
       <SheetActionRow
         width={width}
-        label="Name"
+        label={content.controls.name.label}
         detail={
           <EditableTextInputView
             value={state.draftName.value}
@@ -181,33 +177,30 @@ function EditName({
           />
         }
         detailCells={nameValue.length + Number(state.editNameFocus === "name")}
-        focused={state.editNameFocus === "name"}
-        mouseTarget={{ kind: "newSessionAction", actionId: "editName.name" }}
+        focused={state.editNameFocus === content.controls.name.focusId}
+        disabled={!content.controls.name.enabled}
+        mouseTarget={{ kind: "newSessionAction", actionId: content.controls.name.actionId }}
       />
       <SheetActionRow
         width={width}
-        label="Save"
-        shortcut="Ctrl-S"
+        label={content.controls.save.label}
+        shortcut={content.controls.save.accelerator}
         tone="primary"
-        focused={state.editNameFocus === "save"}
-        mouseTarget={{ kind: "newSessionAction", actionId: "editName.save" }}
+        focused={state.editNameFocus === content.controls.save.focusId}
+        disabled={!content.controls.save.enabled}
+        mouseTarget={{ kind: "newSessionAction", actionId: content.controls.save.actionId }}
       />
       <SheetActionRow
         width={width}
-        label="Back"
-        shortcut="Esc"
-        focused={state.editNameFocus === "back"}
-        mouseTarget={{ kind: "newSessionAction", actionId: "editName.back" }}
+        label={content.controls.back.label}
+        shortcut={content.controls.back.accelerator}
+        focused={state.editNameFocus === content.controls.back.focusId}
+        disabled={!content.controls.back.enabled}
+        mouseTarget={{ kind: "newSessionAction", actionId: content.controls.back.actionId }}
       />
-      <SheetFooter width={width}>{editNameHelper(state.editNameFocus)}</SheetFooter>
+      <SheetFooter width={width}>{content.helper}</SheetFooter>
     </>
   );
-}
-
-function editNameHelper(focus: Extract<NewSessionFlowState, { mode: "editName" }>["editNameFocus"]): string {
-  if (focus === "name") return "Type name · Left/Right cursor · Enter save · ↑↓ focus";
-  if (focus === "save") return "Enter save name · ↑↓ focus · Esc back";
-  return "Enter back without saving · ↑↓ focus";
 }
 
 function ProjectPicker({

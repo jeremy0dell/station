@@ -76,6 +76,7 @@ export type NewSessionFlowAction =
   | { type: "pickAgent" }
   | { type: "reviewFocus"; dir: -1 | 1 }
   | { type: "editNameFocus"; dir: -1 | 1 }
+  | { type: "editNameFocusSet"; focus: NewSessionEditNameFocus }
   | { type: "cancel" };
 
 export type NewSessionInputKey = {
@@ -104,8 +105,6 @@ export type NewSessionActionId =
   | "editName.name"
   | "editName.save"
   | "editName.back";
-
-export type NewSessionActionInput = Pick<NewSessionInput, "input" | "key">;
 
 export type NewSessionInputIntent =
   | {
@@ -214,6 +213,8 @@ export function transitionNewSessionFlow(
             editNameFocus: cycleFocus(EDIT_NAME_CONTROLS, state.editNameFocus, action.dir),
           }
         : state;
+    case "editNameFocusSet":
+      return state.mode === "editName" ? { ...state, editNameFocus: action.focus } : state;
   }
 }
 
@@ -221,12 +222,16 @@ export function newSessionIntentForInput(
   state: NewSessionFlowState,
   input: NewSessionInput,
 ): NewSessionInputIntent {
+  const actionId = newSessionActionForInput(state, input);
+  if (actionId !== undefined) {
+    return newSessionIntentForAction(state, actionId);
+  }
   if (input.key.escape === true) {
     return transitionIntent({ type: "cancel" });
   }
   switch (state.mode) {
     case "review":
-      return reviewInputIntent(state, input);
+      return reviewInputIntent(input);
     case "editName":
       return editNameInputIntent(state, input);
     // Pick steps are registered lists: the shared selectionMiddleware resolves
@@ -237,41 +242,60 @@ export function newSessionIntentForInput(
   }
 }
 
-/** Maps pointer controls to the same key path owned by the flow's keyboard reducer. */
-export function newSessionActionInputPath(
+/** Resolves a visible New Session control into a renderer-neutral flow intent. */
+export function newSessionIntentForAction(
   state: NewSessionFlowState,
   actionId: NewSessionActionId,
-): readonly NewSessionActionInput[] | undefined {
+): NewSessionInputIntent {
   if (state.mode === "review") {
     switch (actionId) {
       case "review.project":
-        return [{ input: "P", key: {} }];
+        return transitionIntent({ type: "pickProject" });
       case "review.name":
-        return [{ input: "N", key: {} }];
+        return transitionIntent({ type: "editName" });
       case "review.agent":
-        return [{ input: "A", key: {} }];
+        return transitionIntent({ type: "pickAgent" });
       case "review.create":
-        return [{ input: "C", key: {} }];
+        return { type: "submit" };
       case "editName.name":
       case "editName.save":
       case "editName.back":
-        return undefined;
+        return { type: "none" };
     }
   }
-  if (state.mode !== "editName") return undefined;
+  if (state.mode !== "editName") return { type: "none" };
   switch (actionId) {
     case "editName.name":
-      return editNameFocusInputPath(state.editNameFocus, "name");
+      return transitionIntent({ type: "editNameFocusSet", focus: "name" });
     case "editName.save":
-      return [{ input: "s", key: { ctrl: true } }];
+      return transitionIntent({ type: "commitName" });
     case "editName.back":
-      return [{ input: "", key: { escape: true } }];
+      return transitionIntent({ type: "cancel" });
     case "review.project":
     case "review.name":
     case "review.agent":
     case "review.create":
-      return undefined;
+      return { type: "none" };
   }
+}
+
+/** Decodes only semantic control activation; text editing and focus movement stay as input intents. */
+export function newSessionActionForInput(
+  state: NewSessionFlowState,
+  input: Pick<NewSessionInput, "input" | "key">,
+): NewSessionActionId | undefined {
+  if (state.mode === "review") {
+    if (isReturn(input)) return `review.${state.reviewFocus}`;
+    if (input.input === "P") return "review.project";
+    if (input.input === "N") return "review.name";
+    if (input.input === "A") return "review.agent";
+    return input.input === "C" ? "review.create" : undefined;
+  }
+  if (state.mode !== "editName") return undefined;
+  if (input.key.escape === true) return "editName.back";
+  if (input.key.ctrl === true && input.input === "s") return "editName.save";
+  if (!isReturn(input)) return undefined;
+  return state.editNameFocus === "back" ? "editName.back" : "editName.save";
 }
 
 export function selectedProject(snapshot: StationSnapshot, state: NewSessionFlowState) {
@@ -380,36 +404,14 @@ export function createNewSessionNameToken(unique: string = randomUUID()): string
   return stableNameHash(["new-session", unique], 6);
 }
 
-function reviewInputIntent(
-  state: NewSessionReviewState,
-  input: NewSessionInput,
-): NewSessionInputIntent {
+function reviewInputIntent(input: NewSessionInput): NewSessionInputIntent {
   if (input.key.upArrow === true) {
     return transitionIntent({ type: "reviewFocus", dir: -1 });
   }
-  if (input.key.downArrow === true) {
-    return transitionIntent({ type: "reviewFocus", dir: 1 });
-  }
-  if (isReturn(input)) {
-    return reviewFocusIntents[state.reviewFocus];
-  }
-  return reviewKeyIntents[input.input] ?? { type: "none" };
+  return input.key.downArrow === true
+    ? transitionIntent({ type: "reviewFocus", dir: 1 })
+    : { type: "none" };
 }
-
-// ↵ activates the focused field; "create" submits, the rest open their step.
-const reviewFocusIntents: Record<NewSessionReviewFocus, NewSessionInputIntent> = {
-  create: { type: "submit" },
-  name: transitionIntent({ type: "editName" }),
-  project: transitionIntent({ type: "pickProject" }),
-  agent: transitionIntent({ type: "pickAgent" }),
-};
-
-const reviewKeyIntents: Record<string, NewSessionInputIntent> = {
-  N: transitionIntent({ type: "editName" }),
-  P: transitionIntent({ type: "pickProject" }),
-  A: transitionIntent({ type: "pickAgent" }),
-  C: { type: "submit" },
-};
 
 function editNameInputIntent(
   state: NewSessionEditNameState,
@@ -421,14 +423,6 @@ function editNameInputIntent(
   if (input.key.downArrow === true) {
     return transitionIntent({ type: "editNameFocus", dir: 1 });
   }
-  if (input.key.ctrl === true && input.input === "s") {
-    return transitionIntent({ type: "commitName" });
-  }
-  if (isReturn(input)) {
-    return state.editNameFocus === "back"
-      ? transitionIntent({ type: "cancel" })
-      : transitionIntent({ type: "commitName" });
-  }
   if (state.editNameFocus !== "name") {
     return { type: "none" };
   }
@@ -436,21 +430,6 @@ function editNameInputIntent(
   return intent.type === "edit"
     ? transitionIntent({ type: "editNameInput", action: intent.action })
     : { type: "none" };
-}
-
-function editNameFocusInputPath(
-  current: NewSessionEditNameFocus,
-  target: NewSessionEditNameFocus,
-): readonly NewSessionActionInput[] {
-  if (current === target) return [];
-  const currentIndex = EDIT_NAME_CONTROLS.indexOf(current);
-  const targetIndex = EDIT_NAME_CONTROLS.indexOf(target);
-  const downSteps =
-    (targetIndex - currentIndex + EDIT_NAME_CONTROLS.length) % EDIT_NAME_CONTROLS.length;
-  const upSteps =
-    (currentIndex - targetIndex + EDIT_NAME_CONTROLS.length) % EDIT_NAME_CONTROLS.length;
-  const key: NewSessionInputKey = downSteps <= upSteps ? { downArrow: true } : { upArrow: true };
-  return Array.from({ length: Math.min(downSteps, upSteps) }, () => ({ input: "", key }));
 }
 
 function cycleFocus<T extends string>(values: readonly T[], current: T, dir: -1 | 1): T {
@@ -466,7 +445,7 @@ function transitionIntent(action: NewSessionFlowAction): NewSessionInputIntent {
   };
 }
 
-function isReturn(input: NewSessionInput): boolean {
+function isReturn(input: Pick<NewSessionInput, "input" | "key">): boolean {
   return input.key.return === true || input.input === "\r" || input.input === "\n";
 }
 

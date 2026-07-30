@@ -1,8 +1,8 @@
 import {
+  addProjectActions,
   addProjectRows,
   addProjectSelectedIndexForFlow,
   bottomSheetContentWidth,
-  type AddProjectActionId,
   type AddProjectFlowState,
   type TuiSelectionState,
 } from "@station/dashboard-core";
@@ -21,7 +21,6 @@ import {
   SheetProgressFooter,
   SheetSectionLine,
   spaces,
-  type SheetButtonTone,
 } from "./parts.js";
 
 export type AddProjectSheetViewProps = {
@@ -110,13 +109,7 @@ function StartChoices({
         />
       ))}
       <SheetFill count={Math.max(0, contentRows - visible.length - 4)} width={width} />
-      <AddProjectActionBar
-        width={width}
-        actions={[
-          { id: "start.open", label: "Open", compactLabel: "Open", shortcut: "→/↵", tone: "primary" },
-          { id: "start.cancel", label: "Cancel", compactLabel: "Back", shortcut: "Esc", tone: "neutral" },
-        ]}
-      />
+      <AddProjectActionBar width={width} state={state} />
       <SheetFooter width={width}>Click selects · Open enters · ↑↓ + Enter supported</SheetFooter>
     </>
   );
@@ -139,20 +132,6 @@ function FolderPicker({
   const listHeight = Math.max(1, contentRows - (hasSearchPrompt ? 6 : 5) - errorRows);
   const start = Math.max(0, Math.min(selectedIndex ?? 0, rows.length - listHeight));
   const visible = rows.slice(start, start + listHeight);
-  const actions: InlineAddProjectAction[] = [
-    { id: "choose.choose", label: "Choose", compactLabel: "Use", shortcut: "↵", tone: "primary" },
-    { id: "choose.open", label: "Open", compactLabel: "Open", shortcut: "→", tone: "neutral" },
-    { id: "choose.parent", label: "Parent", compactLabel: "Up", shortcut: "←", tone: "neutral" },
-    {
-      id: "choose.search",
-      label: "Search",
-      compactLabel: "Find",
-      shortcut: "/",
-      tone: "neutral",
-      disabled: state.filterMode,
-    },
-    { id: "choose.cancel", label: "Cancel", compactLabel: "Exit", shortcut: "Esc", tone: "neutral" },
-  ];
   if (state.filter.length > 0 && rows.length === 0) {
     return (
       <>
@@ -168,7 +147,7 @@ function FolderPicker({
           Try another search or paste a full path.
         </SheetMessageLine>
         <SheetFill count={Math.max(0, contentRows - 7)} width={width} />
-        <AddProjectActionBar width={width} actions={actions} />
+        <AddProjectActionBar width={width} state={state} />
         <SheetFooter width={width}>Backspace edit · Ctrl-U clear · Esc clears search</SheetFooter>
       </>
     );
@@ -213,7 +192,7 @@ function FolderPicker({
         count={Math.max(0, contentRows - visible.length - 5 - errorRows)}
         width={width}
       />
-      <AddProjectActionBar width={width} actions={actions} />
+      <AddProjectActionBar width={width} state={state} />
       <SheetFooter width={width}>
         {state.filterMode ? "Type search/path · Esc clears" : "Single-click selects · actions complete navigation"}
       </SheetFooter>
@@ -268,61 +247,22 @@ function Review({
       ) : (
         <SheetLine width={width}> </SheetLine>
       )}
-      {editing ? (
-        <>
-          <SheetActionRow
-            width={width}
-            label="Save id"
-            shortcut="Ctrl-S"
-            tone="primary"
-            focused={state.editIdActionFocus === "save"}
-            mouseTarget={{ kind: "addProjectAction", actionId: "editId.save" }}
-          />
-          <SheetActionRow
-            width={width}
-            label="Back"
-            shortcut="Esc"
-            focused={state.editIdActionFocus === "back"}
-            mouseTarget={{ kind: "addProjectAction", actionId: "editId.back" }}
-          />
-        </>
-      ) : (
-        <>
-          <SheetActionRow
-            width={width}
-            label="Add project"
-            shortcut="A"
-            tone="primary"
-            focused={state.actionFocus === "submit"}
-            disabled={state.gitRoot === undefined || state.submitting}
-            mouseTarget={{ kind: "addProjectAction", actionId: "review.submit" }}
-          />
-          <SheetActionRow
-            width={width}
-            label="Edit id"
-            shortcut="N"
-            focused={state.actionFocus === "editId"}
-            disabled={state.submitting}
-            mouseTarget={{ kind: "addProjectAction", actionId: "review.editId" }}
-          />
-          <SheetActionRow
-            width={width}
-            label="Choose folder"
-            shortcut="B"
-            focused={state.actionFocus === "chooseFolder"}
-            disabled={state.submitting}
-            mouseTarget={{ kind: "addProjectAction", actionId: "review.chooseFolder" }}
-          />
-          <SheetActionRow
-            width={width}
-            label="Cancel"
-            shortcut="Esc"
-            focused={state.actionFocus === "cancel"}
-            disabled={state.submitting}
-            mouseTarget={{ kind: "addProjectAction", actionId: "review.cancel" }}
-          />
-        </>
-      )}
+      {addProjectActions(state).map((action) => (
+        <SheetActionRow
+          key={action.id}
+          width={width}
+          label={action.label}
+          shortcut={action.accelerator}
+          tone={action.intent}
+          focused={
+            editing
+              ? state.editIdActionFocus === action.focus
+              : state.actionFocus === action.focus
+          }
+          disabled={!action.enabled}
+          mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
+        />
+      ))}
       {state.submitting ? (
         <SheetProgressFooter width={width}>Adding project</SheetProgressFooter>
       ) : (
@@ -346,14 +286,18 @@ function Success({
       <SheetMessageLine width={width} tone="success">
         Config updated. Reconciled successfully.
       </SheetMessageLine>
-      <SheetActionRow
-        width={width}
-        label="Dashboard"
-        shortcut="D"
-        tone="primary"
-        focused={state.actionFocus === "dashboard"}
-        mouseTarget={{ kind: "addProjectAction", actionId: "success.dashboard" }}
-      />
+      {addProjectActions(state).map((action) => (
+        <SheetActionRow
+          key={action.id}
+          width={width}
+          label={action.label}
+          shortcut={action.accelerator}
+          tone={action.intent}
+          focused={state.actionFocus === action.focus}
+          disabled={!action.enabled}
+          mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
+        />
+      ))}
       <SheetFooter width={width}>Enter or D returns to dashboard</SheetFooter>
     </>
   );
@@ -387,28 +331,18 @@ function Failure({
       {metadataRows.map((row) => (
         <SheetMetaLine key={row.label} width={width} label={row.label} value={row.value} />
       ))}
-      <SheetActionRow
-        width={width}
-        label="Retry"
-        shortcut="R"
-        tone="primary"
-        focused={state.actionFocus === "retry"}
-        mouseTarget={{ kind: "addProjectAction", actionId: "failed.retry" }}
-      />
-      <SheetActionRow
-        width={width}
-        label="Choose folder"
-        shortcut="B"
-        focused={state.actionFocus === "chooseFolder"}
-        mouseTarget={{ kind: "addProjectAction", actionId: "failed.chooseFolder" }}
-      />
-      <SheetActionRow
-        width={width}
-        label="Cancel"
-        shortcut="Esc"
-        focused={state.actionFocus === "cancel"}
-        mouseTarget={{ kind: "addProjectAction", actionId: "failed.cancel" }}
-      />
+      {addProjectActions(state).map((action) => (
+        <SheetActionRow
+          key={action.id}
+          width={width}
+          label={action.label}
+          shortcut={action.accelerator}
+          tone={action.intent}
+          focused={state.actionFocus === action.focus}
+          disabled={!action.enabled}
+          mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
+        />
+      ))}
       <SheetFooter width={width}>↑↓ action · Enter activates focused action</SheetFooter>
     </>
   );
@@ -452,22 +386,8 @@ function fixedSheetHeight(rows: number): number {
   return Math.min(Math.max(1, rows - 2), 18);
 }
 
-type InlineAddProjectAction = {
-  id: AddProjectActionId;
-  label: string;
-  compactLabel: string;
-  shortcut: string;
-  tone: SheetButtonTone;
-  disabled?: boolean;
-};
-
-function AddProjectActionBar({
-  width,
-  actions,
-}: {
-  width: number;
-  actions: readonly InlineAddProjectAction[];
-}) {
+function AddProjectActionBar({ width, state }: { width: number; state: AddProjectFlowState }) {
+  const actions = addProjectActions(state);
   const gap = width >= actions.length * 10 ? 1 : 0;
   const buttonWidth = Math.max(1, Math.floor((width - gap * (actions.length - 1)) / actions.length));
   const compact = buttonWidth < 11;
@@ -478,10 +398,10 @@ function AddProjectActionBar({
           {index === 0 || gap === 0 ? null : <text>{spaces(gap)}</text>}
           <SheetButton
             label={compact ? action.compactLabel : action.label}
-            shortcut={action.shortcut}
-            tone={action.tone}
+            shortcut={action.accelerator}
+            tone={action.intent === "primary" ? "primary" : "neutral"}
             fixedWidth={buttonWidth}
-            disabled={action.disabled === true}
+            disabled={!action.enabled}
             mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
           />
         </box>

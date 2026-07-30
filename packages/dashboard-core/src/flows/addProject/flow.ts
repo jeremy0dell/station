@@ -2,6 +2,7 @@ import {
   createEditableTextInputState,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
+import { type AddProjectActionFocus, addProjectActions } from "./actions.js";
 import { normalizedFilter, searchQueryForFilter } from "./input.js";
 import {
   chooseStateForLoadedFolder,
@@ -22,15 +23,6 @@ import type {
   AddProjectTransition,
   CreateAddProjectFlowInput,
 } from "./types.js";
-
-const REVIEW_ACTIONS: readonly AddProjectReviewActionFocus[] = [
-  "submit",
-  "editId",
-  "chooseFolder",
-  "cancel",
-];
-const EDIT_ID_ACTIONS: readonly AddProjectEditIdActionFocus[] = ["save", "back"];
-const FAILED_ACTIONS: readonly AddProjectFailedActionFocus[] = ["retry", "chooseFolder", "cancel"];
 
 export function createAddProjectFlow(input: CreateAddProjectFlowInput) {
   return createAddProjectStartState(input);
@@ -197,18 +189,41 @@ function moveActionFocus(state: AddProjectFlowState, dir: -1 | 1): AddProjectFlo
     if (state.editingId !== undefined) {
       return {
         ...state,
-        editIdActionFocus: cycleAction(EDIT_ID_ACTIONS, state.editIdActionFocus ?? "save", dir),
+        editIdActionFocus: cycleAction(
+          enabledActionFocus<AddProjectEditIdActionFocus>(state),
+          state.editIdActionFocus ?? "save",
+          dir,
+        ),
       };
     }
-    const enabled = REVIEW_ACTIONS.filter(
-      (action) => action !== "submit" || state.gitRoot !== undefined,
-    );
-    return { ...state, actionFocus: cycleAction(enabled, state.actionFocus, dir) };
+    return {
+      ...state,
+      actionFocus: cycleAction(
+        enabledActionFocus<AddProjectReviewActionFocus>(state),
+        state.actionFocus,
+        dir,
+      ),
+    };
   }
   if (state.mode === "failed") {
-    return { ...state, actionFocus: cycleAction(FAILED_ACTIONS, state.actionFocus, dir) };
+    return {
+      ...state,
+      actionFocus: cycleAction(
+        enabledActionFocus<AddProjectFailedActionFocus>(state),
+        state.actionFocus,
+        dir,
+      ),
+    };
   }
   return state;
+}
+
+function enabledActionFocus<TFocus extends AddProjectActionFocus>(
+  state: AddProjectFlowState,
+): readonly TFocus[] {
+  return addProjectActions(state).flatMap((action) =>
+    action.enabled && action.focus !== undefined ? [action.focus as TFocus] : [],
+  );
 }
 
 function cycleAction<T extends string>(actions: readonly T[], current: T, dir: -1 | 1): T {

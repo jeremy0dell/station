@@ -30,13 +30,14 @@ the dashboard is open so the hidden native layout cannot change.
 ## Input
 
 Runtime keyboard dispatch goes through the shared dashboard-core transition
-machine. Station keeps only sequence translation and the managed-pane overrides
-needed for row activation, new sessions, and forks; help copy and semantic mouse
-targets do not mirror every screen's key handling in a second table. Session
-shell, first-project, Add Project, and Create Session pointer targets dispatch
-the same shared key/transition semantics as their direct-command and focused
-Enter paths. Native direct `C` and focused Create Enter converge in the single
-managed-launch resolver before the standalone create operation can run.
+machine. Workflow mouse targets call `TuiStore.handleAction(...)` with renderer-neutral
+semantic actions; direct commands and focused Enter decode to the same core intents,
+and the store applies every resulting transition and effect through one executor.
+Station keeps only sequence translation and managed-pane overrides needed for row
+activation, new sessions, and forks. Native pointer Create, direct `C`, and focused
+Create Enter converge after semantic resolution and shared validation in one native
+managed-launch resolver; standalone rendering applies the same action through the
+existing observer operation instead.
 
 ## Acceptance suite
 

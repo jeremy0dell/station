@@ -11,6 +11,7 @@ export * from "./components/ToastOverlay/layout.js";
 export * from "./components/WidgetSettingsPanel/content.js";
 export * from "./components/WorktreeRow/layout.js";
 export * from "./components/WorktreeRow/rowInput.js";
+export * from "./flows/addProject/actions.js";
 export * from "./flows/addProject/flow.js";
 export * from "./flows/addProject/input.js";
 export * from "./flows/addProject/rows.js";

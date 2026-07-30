@@ -20,9 +20,8 @@ import type { StationMouseEvent } from "../../input/mouse.js";
 import {
   addWidgetSettingsPickerChoice,
   dismissStationToasts,
-  dispatchAddProjectAction,
-  dispatchNewSessionAction,
   dispatchRowSlot,
+  dispatchStationAction,
   dispatchStationKey,
   focusProjectSettingsItem,
   openDefaultAgentPickerForProject,
@@ -84,7 +83,7 @@ export type StationMouseTarget =
   | { kind: "addProjectRow"; index: number }
   /** An explicit Add Project control resolved against its current mode and enabled state. */
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
-  /** A Create Session field or editor control routed through its shared key path. */
+  /** A Create Session field or editor control represented by its semantic action. */
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
   /** A sheet's primary submit button (the fork details "Fork" action). */
   | { kind: "sheetSubmit" }
@@ -232,10 +231,9 @@ export function routeStationMouse(
       openDefaultAgentPickerForProject(store, target.projectId);
       return { kind: "handled" };
     case "firstProjectAdd":
-      if (mode === "dashboard" && store.getState().snapshot?.projects.length === 0) {
-        return fromKeyOutcome(dispatchStationKey(store, { input: "A" }));
-      }
-      return { kind: "handled" };
+      return mode === "dashboard"
+        ? fromKeyOutcome(dispatchStationAction(store, { type: "dashboard.addProject" }))
+        : { kind: "handled" };
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
@@ -298,21 +296,25 @@ export function routeStationMouse(
       selectAddProjectRow(store, target.index);
       return { kind: "handled" };
     case "addProjectAction":
-      return fromKeyOutcome(dispatchAddProjectAction(store, target.actionId));
+      return fromKeyOutcome(
+        dispatchStationAction(store, {
+          type: "addProject.activate",
+          actionId: target.actionId,
+        }),
+      );
     case "newSessionAction": {
-      if (target.actionId === "review.create") {
-        const submit = resolveNewSessionSubmit(store, { input: "C" });
-        if (submit.kind === "submit") {
-          return {
-            kind: "launch-new-session",
-            projectId: submit.projectId,
-            title: submit.title,
-            branch: submit.branch,
-            harness: submit.harness,
-          };
-        }
+      const action = { type: "newSession.activate", actionId: target.actionId } as const;
+      const submit = resolveNewSessionSubmit(store, action);
+      if (submit.kind === "submit") {
+        return {
+          kind: "launch-new-session",
+          projectId: submit.projectId,
+          title: submit.title,
+          branch: submit.branch,
+          harness: submit.harness,
+        };
       }
-      return fromKeyOutcome(dispatchNewSessionAction(store, target.actionId));
+      return fromKeyOutcome(dispatchStationAction(store, action));
     }
     case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {

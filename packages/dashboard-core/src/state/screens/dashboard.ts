@@ -8,7 +8,7 @@ import {
   moveDashboardFocus,
 } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
-import { matchDashboardBinding, type TuiDashboardBinding } from "../keymap.js";
+import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
@@ -37,16 +37,16 @@ export function handleDashboardKey(
     return { state };
   }
 
-  return handleDashboardBinding(state, key, binding, context);
+  return handleDashboardAction(state, binding.action, context, key);
 }
 
-function handleDashboardBinding(
+export function handleDashboardAction(
   state: TuiState,
-  key: TuiKey,
-  binding: TuiDashboardBinding,
+  action: TuiDashboardAction,
   context: TuiKeyRuntimeContext,
+  key: TuiKey = { input: "" },
 ): TuiTransition {
-  switch (binding.action) {
+  switch (action) {
     case "tui.focus.up":
       return {
         state: moveDashboardFocus(state, -1),
@@ -57,7 +57,7 @@ function handleDashboardBinding(
       };
     case "tui.focus.activate":
       return hasNoProjects(state)
-        ? { state: openAddProject(state, { ...context, firstProject: true }) }
+        ? handleDashboardAddProjectAction(state, context)
         : activateFocusedDashboardRow(state);
     case "tui.focus.nextNeedsMe":
       return {
@@ -112,9 +112,7 @@ function handleDashboardBinding(
     case "tui.newSession.open":
       return openNewSession(state);
     case "tui.addProject.open":
-      return {
-        state: openAddProject(state, { ...context, firstProject: hasNoProjects(state) }),
-      };
+      return handleDashboardAddProjectAction(state, context);
     case "tui.collapse.open":
       return openProjectSlotPicker(state, "projectCollapse");
     case "tui.projectSettings.openPicker":
@@ -124,8 +122,27 @@ function handleDashboardBinding(
     case "tui.row.activateSlot":
       return activateDashboardSlot(state, key);
     default:
-      return assertNever(binding);
+      return assertNever(action);
   }
+}
+
+/** Executes dashboard Add Project intent independently of the input modality. */
+export function handleDashboardAddProjectAction(
+  state: TuiState,
+  context: TuiKeyRuntimeContext,
+): TuiTransition {
+  if (state.screen.name !== "dashboard") return { state };
+  return {
+    state: openAddProject(state, { ...context, firstProject: hasNoProjects(state) }),
+  };
+}
+
+/** Keeps stale first-project targets inert after the dashboard gains a project. */
+export function handleFirstProjectAddAction(
+  state: TuiState,
+  context: TuiKeyRuntimeContext,
+): TuiTransition {
+  return hasNoProjects(state) ? handleDashboardAddProjectAction(state, context) : { state };
 }
 
 function hasNoProjects(state: TuiState): boolean {

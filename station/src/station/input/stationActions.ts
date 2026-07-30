@@ -1,22 +1,17 @@
-// Execution layer for the STATION view's input. Most keyboard input flows through
-// the shared transition machine (single behavioral source); this module is the
-// semantic entry point mouse targets use to reach the same machine, plus the
-// few Station mouse extensions that have no keyboard
-// path in apps/tui (direct project-header collapse, wheel paging). Every
-// mutation here lands via store.handleKey or a shared pure state function — no
-// bespoke screen logic, except where a Station-only action diverges from the
-// shared machine: a session-row slot key (resolveKeyRowAgentTarget) and the New
-// Session submit (resolveKeyNewSessionSubmit) are resolved here so keyboard and
-// mouse reach the same Station managed-launch path.
+// Execution layer for the STATION view's input. Keyboard and semantic controls
+// share dashboard-core transitions; this module adds only Station-owned pane
+// effects and direct state helpers for controls outside the semantic action model.
+// Native New Session creation intentionally intercepts the resolved Create action
+// after shared validation so it can launch a managed pane instead of dispatching
+// the standalone observer operation.
 import type { StoreApi } from "zustand/vanilla";
 import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
-  addProjectActionKey,
   addTuiToast,
   choiceValueByKey,
   deriveTuiInputMode,
-  newSessionActionInputPath,
-  newSessionIntentForInput,
+  newSessionActionForInput,
+  newSessionIntentForAction,
   focusProjectSettingsItem as focusProjectSettingsItemState,
   openProjectDefaultAgentPicker,
   openWidgetSettings as openWidgetSettingsState,
@@ -30,9 +25,8 @@ import {
   widgetSettingsOpenPicker,
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
-  type AddProjectActionId,
-  type NewSessionActionId,
   type ProjectSettingsItemId,
+  type TuiSemanticAction,
 } from "@station/dashboard-core";
 import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
 import { validateForkSessionCreate, validateNewSessionCreate } from "@station/dashboard-core";
@@ -71,6 +65,13 @@ export function handleStationSequence(store: StoreApi<TuiStore>, sequence: strin
 
 export function dispatchStationKey(store: StoreApi<TuiStore>, key: TuiKey): StationKeyOutcome {
   return outcomeForResult(store.getState().handleKey(key));
+}
+
+export function dispatchStationAction(
+  store: StoreApi<TuiStore>,
+  action: TuiSemanticAction,
+): StationKeyOutcome {
+  return outcomeForResult(store.getState().handleAction(action));
 }
 
 function outcomeForResult(result: TuiHandleKeyResult): StationKeyOutcome {
@@ -219,28 +220,20 @@ export type NewSessionSubmitTarget =
   | { kind: "none" };
 
 /**
- * Resolve the New Session review screen to its create. `none` off the review
- * step or when validation fails — both fall through to the shared machine
- * (navigation keys act normally; an invalid create surfaces its error toast).
+ * Resolve native Create only after dashboard-core has resolved the semantic action.
+ * Validation stays shared; successful execution diverges here because native Station
+ * creates a worktree and managed pane instead of dispatching standalone session.create.
  */
 export function resolveNewSessionSubmit(
   store: StoreApi<TuiStore>,
-  key: TuiKey = { input: "\r", return: true },
+  action: TuiSemanticAction = { type: "newSession.activate", actionId: "review.create" },
 ): NewSessionSubmitTarget {
   const state = store.getState();
-  if (state.screen.name !== "newSession") {
+  if (state.screen.name !== "newSession" || action.type !== "newSession.activate") {
     return { kind: "none" };
   }
-  // The machine owns what ↵ means (reviewFocusIntents): submit only when it
-  // would submit, so a focused field's ↵ reaches the machine and opens its step.
-  const intent = newSessionIntentForInput(state.screen.flow, {
-    input: key.input,
-    key,
-    token: "",
-  });
-  if (intent.type !== "submit") {
-    return { kind: "none" };
-  }
+  const intent = newSessionIntentForAction(state.screen.flow, action.actionId);
+  if (intent.type !== "submit") return { kind: "none" };
   if (state.snapshot === undefined) {
     return { kind: "none" };
   }
@@ -267,10 +260,12 @@ export function resolveKeyNewSessionSubmit(
   sequence: string,
 ): NewSessionSubmitTarget {
   const key = sequenceToTuiKey(sequence);
-  if (key === undefined || (key.return !== true && key.input !== "C")) {
-    return { kind: "none" };
-  }
-  return resolveNewSessionSubmit(store, key);
+  const state = store.getState();
+  if (key === undefined || state.screen.name !== "newSession") return { kind: "none" };
+  const actionId = newSessionActionForInput(state.screen.flow, { input: key.input, key });
+  return actionId === undefined
+    ? { kind: "none" }
+    : resolveNewSessionSubmit(store, { type: "newSession.activate", actionId });
 }
 
 export type ForkSessionSubmitTarget =
@@ -386,39 +381,6 @@ export function toggleWidgetSettingsRow(store: StoreApi<TuiStore>, index: number
 
 export function selectAddProjectRow(store: StoreApi<TuiStore>, index: number): void {
   store.setState(selectAddProjectRowState(store.getState(), index));
-}
-
-/** Dispatches an enabled Add Project control through its shared key transition. */
-export function dispatchAddProjectAction(
-  store: StoreApi<TuiStore>,
-  actionId: AddProjectActionId,
-): StationKeyOutcome {
-  const screen = store.getState().screen;
-  if (screen.name !== "addProject") {
-    return { kind: "handled" };
-  }
-  const key = addProjectActionKey(screen.flow, actionId);
-  return key === undefined ? { kind: "handled" } : dispatchStationKey(store, key);
-}
-
-/** Dispatches a New Session control through the flow's shared keyboard path. */
-export function dispatchNewSessionAction(
-  store: StoreApi<TuiStore>,
-  actionId: NewSessionActionId,
-): StationKeyOutcome {
-  const screen = store.getState().screen;
-  if (screen.name !== "newSession") {
-    return { kind: "handled" };
-  }
-  const path = newSessionActionInputPath(screen.flow, actionId);
-  if (path === undefined) {
-    return { kind: "handled" };
-  }
-  let outcome: StationKeyOutcome = { kind: "handled" };
-  for (const input of path) {
-    outcome = dispatchStationKey(store, { input: input.input, ...input.key });
-  }
-  return outcome;
 }
 
 export function removeWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {

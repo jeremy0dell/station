@@ -1,12 +1,10 @@
 import type { TuiStore } from "@station/dashboard-core";
 import {
-  addProjectActionKey,
   clampDashboardStateScroll,
   deriveTuiInputMode,
   focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
-  newSessionActionInputPath,
   openProjectDefaultAgentPicker,
   openWidgetSettings,
   scrollDashboard,
@@ -109,8 +107,8 @@ function routeSurfaceClick(
       }
       return true;
     case "firstProjectAdd":
-      if (mode === "dashboard" && store.getState().snapshot?.projects.length === 0) {
-        store.getState().handleKey({ input: "A" });
+      if (mode === "dashboard") {
+        store.getState().handleAction({ type: "dashboard.addProject" });
       }
       return true;
     case "scrollIndicator":
@@ -231,24 +229,18 @@ function routeModalClick(
         store.setState(selectAddProjectRow(store.getState(), target.index));
       }
       return true;
-    case "addProjectAction": {
-      const screen = store.getState().screen;
-      if (screen.name === "addProject") {
-        const key = addProjectActionKey(screen.flow, target.actionId);
-        if (key !== undefined) store.getState().handleKey(key);
-      }
+    case "addProjectAction":
+      store.getState().handleAction({
+        type: "addProject.activate",
+        actionId: target.actionId,
+      });
       return true;
-    }
-    case "newSessionAction": {
-      const screen = store.getState().screen;
-      if (screen.name === "newSession") {
-        const path = newSessionActionInputPath(screen.flow, target.actionId);
-        for (const input of path ?? []) {
-          store.getState().handleKey({ input: input.input, ...input.key });
-        }
-      }
+    case "newSessionAction":
+      store.getState().handleAction({
+        type: "newSession.activate",
+        actionId: target.actionId,
+      });
       return true;
-    }
     case "sheetSubmit":
       if (mode === "forkDetails") {
         store.getState().handleKey({ input: "\r", return: true });

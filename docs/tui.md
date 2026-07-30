@@ -207,9 +207,12 @@ OpenTUI `mockMouse` tests cover renderer composition, semantic hit targets, hove
 interception, and equivalence with keyboard transitions. They do not prove terminal mouse-mode
 negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
-The fullscreen and tmux-popup dashboard routes primary-button clicks through its own thin adapter
-into the same dashboard-core and keyboard transitions used by standalone keyboard input. Session
-rows are resolved by their exact current row ID before their visible slot key is dispatched, so
+The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
+Workflow controls dispatch renderer-neutral semantic actions through `TuiStore.handleAction(...)`;
+direct hotkeys and focused Enter decode to the same pure intents before transitions or effects run.
+Dashboard-core owns action availability and resolution, while native Station and standalone/tmux
+retain their terminal-specific effects after shared resolution. Session rows are resolved by their
+exact current row ID before their visible slot key is dispatched, so
 observer-backed focus, start, resume, and picker behavior stays on the existing command path.
 Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header clicks
 toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
@@ -243,22 +246,25 @@ that popup claim. Shell controls own separate propagation-stopping cells so they
 never also activate a session or collapse a project.
 
 The zero-project dashboard renders **Add your first project** as a pointer
-target that dispatches the same Add Project transition as `A` and focused
-`Enter`. Folder rows remain single-click selection targets; explicit Open,
-Choose, Parent, Search, and Cancel controls complete navigation without relying
-on terminal double-click behavior. Review, id editing, success, and failure use
-a visible action focus cursor, direct commands, and pointer controls. Missing
-Git-root review keeps submit disabled and focuses folder recovery; these
-interaction paths do not weaken project admission policy.
+target that dispatches `dashboard.addProject`, producing the same Add Project
+transition as `A` and focused `Enter`. Add Project controls dispatch stable
+action IDs; core resolves those IDs to the same intents used by direct commands
+and focused activation. Folder rows remain single-click selection targets, and
+Choose commits the registered-list cursor used by keyboard Enter. Review, id
+editing, success, and failure use a visible action focus cursor. Missing Git-root
+review keeps submit disabled and stale disabled targets inert; these interaction
+paths do not weaken project admission policy.
 
 Create Session review renders Project, Name, Agent, and Create as full-width
 interactive rows with visible `P`, `N`, `A`, and `C` commands. Arrow focus has a
 non-color marker and contextual Enter helper; agent identity and its glyph plus
 health text are separate spans. The name editor gives Name, Save, and Back
-independent focus and pointer targets, hides the text cursor while an action
-owns focus, and reserves Left/Right for text-cursor movement while Name owns
-focus. Native focused Enter and direct `C` both pass through the one managed
-launch resolver; standalone creation remains on its existing operation path.
+independent semantic controls, hides the text cursor while an action owns focus,
+and reserves Left/Right for text-cursor movement while Name owns focus. Selecting
+Name sets focus directly and never generates arrow input. Native pointer Create,
+focused Enter, and direct `C` pass through one semantic Create resolver and shared
+validation before producing the managed-pane effect; standalone creation applies
+the same action through its existing observer operation path.
 
 Real native mouse acceptance lives in
 `tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`

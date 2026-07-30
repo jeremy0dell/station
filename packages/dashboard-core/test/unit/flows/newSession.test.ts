@@ -4,7 +4,7 @@ import {
   createNewSessionFlow,
   createNewSessionNameToken,
   harnessOptions,
-  newSessionActionInputPath,
+  newSessionIntentForAction,
   newSessionIntentForInput,
   transitionNewSessionFlow,
   validateNewSessionCreate,
@@ -289,26 +289,38 @@ describe("new session flow", () => {
     });
   });
 
-  it("maps visible controls onto shared keyboard paths", () => {
+  it("resolves visible controls directly without generated input paths", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
-    expect(newSessionActionInputPath(opened, "review.project")).toEqual([{ input: "P", key: {} }]);
-    expect(newSessionActionInputPath(opened, "review.create")).toEqual([{ input: "C", key: {} }]);
+    expect(newSessionIntentForAction(opened, "review.project")).toEqual({
+      type: "transition",
+      action: { type: "pickProject" },
+    });
+    expect(newSessionIntentForAction(opened, "review.create")).toEqual({ type: "submit" });
 
     const editing = transitionNewSessionFlow(opened, { type: "editName" });
     if (editing?.mode !== "editName") throw new Error("expected edit mode");
     const saveFocused = transitionNewSessionFlow(editing, { type: "editNameFocus", dir: 1 });
     if (saveFocused?.mode !== "editName") throw new Error("expected edit mode");
-    expect(newSessionActionInputPath(saveFocused, "editName.name")).toEqual([
-      { input: "", key: { upArrow: true } },
-    ]);
-    expect(newSessionActionInputPath(saveFocused, "editName.save")).toEqual([
-      { input: "s", key: { ctrl: true } },
-    ]);
-    expect(newSessionActionInputPath(saveFocused, "editName.back")).toEqual([
-      { input: "", key: { escape: true } },
-    ]);
+    const focusName = newSessionIntentForAction(saveFocused, "editName.name");
+    expect(focusName).toEqual({
+      type: "transition",
+      action: { type: "editNameFocusSet", focus: "name" },
+    });
+    if (focusName.type !== "transition") throw new Error("expected transition");
+    expect(transitionNewSessionFlow(saveFocused, focusName.action)).toMatchObject({
+      mode: "editName",
+      editNameFocus: "name",
+    });
+    expect(newSessionIntentForAction(saveFocused, "editName.save")).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
+    expect(newSessionIntentForAction(saveFocused, "editName.back")).toEqual({
+      type: "transition",
+      action: { type: "cancel" },
+    });
   });
 
   it("keeps Enter and Ctrl-S as predictable name-save paths", () => {

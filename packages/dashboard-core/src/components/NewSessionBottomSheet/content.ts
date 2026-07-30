@@ -1,5 +1,8 @@
 import type { ProviderHealth, StationSnapshot } from "@station/contracts";
 import {
+  type NewSessionActionId,
+  type NewSessionEditNameFocus,
+  type NewSessionEditNameState,
   type NewSessionReviewFocus,
   type NewSessionReviewState,
   validateNewSessionCreate,
@@ -17,25 +20,95 @@ export type NewSessionStatusContent = {
   tone: ProviderHealth["status"];
 };
 
-export type NewSessionReviewFieldContent = {
-  id: NewSessionReviewFieldId;
+export type NewSessionControlContent<TFocus extends string = string> = {
+  actionId: NewSessionActionId;
   label: string;
+  accelerator: string | undefined;
+  enabled: boolean;
+  focusId: TFocus;
+  helper: string;
+};
+
+export type NewSessionReviewFieldContent = NewSessionControlContent<NewSessionReviewFieldId> & {
+  id: NewSessionReviewFieldId;
   value: string;
   status?: NewSessionStatusContent;
 };
 
-/** Pure review copy whose labels, status text, and helper stay aligned with activation semantics. */
+/** Pure review copy whose controls carry the action, focus, availability, and helper metadata. */
 export type NewSessionReviewContent = {
   fields: readonly NewSessionReviewFieldContent[];
-  create: { label: string; shortcut: "C"; disabled: boolean };
+  create: NewSessionControlContent<"create">;
   helper: string;
 };
 
-const REVIEW_HELPERS: Readonly<Record<NewSessionReviewFocus, string>> = {
-  project: "Enter choose project",
-  name: "Enter edit name",
-  agent: "Enter choose agent",
-  create: "Enter create session",
+export type NewSessionEditNameContent = {
+  controls: Readonly<
+    Record<NewSessionEditNameFocus, NewSessionControlContent<NewSessionEditNameFocus>>
+  >;
+  helper: string;
+};
+
+const REVIEW_CONTROLS: {
+  readonly [TFocus in NewSessionReviewFocus]: Omit<NewSessionControlContent<TFocus>, "enabled">;
+} = {
+  project: {
+    actionId: "review.project",
+    label: "Project",
+    accelerator: "P",
+    focusId: "project",
+    helper: "Enter choose project",
+  },
+  name: {
+    actionId: "review.name",
+    label: "Name",
+    accelerator: "N",
+    focusId: "name",
+    helper: "Enter edit name",
+  },
+  agent: {
+    actionId: "review.agent",
+    label: "Agent",
+    accelerator: "A",
+    focusId: "agent",
+    helper: "Enter choose agent",
+  },
+  create: {
+    actionId: "review.create",
+    label: "Create session",
+    accelerator: "C",
+    focusId: "create",
+    helper: "Enter create session",
+  },
+};
+
+const EDIT_NAME_CONTROLS: {
+  readonly [TFocus in NewSessionEditNameFocus]: NewSessionControlContent<TFocus>;
+} = {
+  name: {
+    actionId: "editName.name",
+    label: "Name",
+    accelerator: undefined,
+    enabled: true,
+    focusId: "name",
+    helper: "Type name · Left/Right cursor · Enter save · ↑↓ focus",
+  },
+  save: {
+    actionId: "editName.save",
+    label: "Save",
+    accelerator: "Ctrl-S",
+    enabled: true,
+    focusId: "save",
+    helper: "Enter save name · ↑↓ focus · Esc back",
+  },
+  back: {
+    actionId: "editName.back",
+    label: "Back",
+    accelerator: "Esc",
+    enabled: true,
+    focusId: "back",
+    helper: "Enter back without saving · ↑↓ focus",
+  },
 };
 
 /** Builds the renderer-neutral Create Session review model from typed snapshot state. */
@@ -52,11 +125,12 @@ export function newSessionReviewContent(
         );
   const status = harness?.status ?? "unknown";
   const fields: NewSessionReviewFieldContent[] = [
-    { id: "project", label: "Project (P)", value: project?.label ?? "-" },
-    { id: "name", label: "Name (N)", value: state.title },
+    { ...REVIEW_CONTROLS.project, enabled: true, id: "project", value: project?.label ?? "-" },
+    { ...REVIEW_CONTROLS.name, enabled: true, id: "name", value: state.title },
     {
+      ...REVIEW_CONTROLS.agent,
+      enabled: true,
       id: "agent",
-      label: "Agent (A)",
       value: harness?.label ?? state.selectedHarness,
       status: { glyph: "●", text: status, tone: status },
     },
@@ -64,10 +138,18 @@ export function newSessionReviewContent(
   return {
     fields,
     create: {
-      label: "Create session",
-      shortcut: "C",
-      disabled: !validateNewSessionCreate(snapshot, state).ok,
+      ...REVIEW_CONTROLS.create,
+      enabled: validateNewSessionCreate(snapshot, state).ok,
     },
-    helper: REVIEW_HELPERS[state.reviewFocus],
+    helper: REVIEW_CONTROLS[state.reviewFocus].helper,
+  };
+}
+
+export function newSessionEditNameContent(
+  state: NewSessionEditNameState,
+): NewSessionEditNameContent {
+  return {
+    controls: EDIT_NAME_CONTROLS,
+    helper: EDIT_NAME_CONTROLS[state.editNameFocus].helper,
   };
 }

@@ -7,6 +7,7 @@ import {
   applyAddProjectSubmitted,
   createInitialTuiState,
   deriveTuiInputMode,
+  handleTuiAction,
   handleTuiKey,
   openAddProject,
   selectAddProjectRow,
@@ -78,9 +79,16 @@ describe("add-project shared selection", () => {
 
     const moved = handleTuiKey(choosing, { input: "", downArrow: true }, KEY_CONTEXT).state;
     expect(addProjectSelectedIndex(moved)).toBe(1);
-    expect(handleTuiKey(moved, { input: "\r", return: true }, KEY_CONTEXT).operations).toEqual([
+    const keyboardCommit = handleTuiKey(moved, { input: "\r", return: true }, KEY_CONTEXT);
+    const semanticCommit = handleTuiAction(
+      moved,
+      { type: "addProject.activate", actionId: "choose.choose" },
+      KEY_CONTEXT,
+    );
+    expect(keyboardCommit.operations).toEqual([
       { type: "reviewProjectFolder", path: "/workspace/station" },
     ]);
+    expect(semanticCommit).toEqual(keyboardCommit);
 
     const filtering = handleTuiKey(choosing, { input: "/" }, KEY_CONTEXT).state;
     expect(deriveTuiInputMode(filtering)).toBe("addProjectFilter");

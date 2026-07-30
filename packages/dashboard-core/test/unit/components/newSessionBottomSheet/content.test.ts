@@ -1,5 +1,6 @@
 import {
   createNewSessionFlow,
+  newSessionEditNameContent,
   newSessionReviewContent,
   transitionNewSessionFlow,
 } from "@station/dashboard-core";
@@ -32,16 +33,46 @@ describe("new-session review content", () => {
 
     expect(newSessionReviewContent(snapshot, state)).toEqual({
       fields: [
-        { id: "project", label: "Project (P)", value: "web" },
-        { id: "name", label: "Name (N)", value: "web-aaaaaa" },
+        {
+          id: "project",
+          actionId: "review.project",
+          label: "Project",
+          accelerator: "P",
+          enabled: true,
+          focusId: "project",
+          helper: "Enter choose project",
+          value: "web",
+        },
+        {
+          id: "name",
+          actionId: "review.name",
+          label: "Name",
+          accelerator: "N",
+          enabled: true,
+          focusId: "name",
+          helper: "Enter edit name",
+          value: "web-aaaaaa",
+        },
         {
           id: "agent",
-          label: "Agent (A)",
+          actionId: "review.agent",
+          label: "Agent",
+          accelerator: "A",
+          enabled: true,
+          focusId: "agent",
+          helper: "Enter choose agent",
           value: "Codex",
           status: { glyph: "●", text: "healthy", tone: "healthy" },
         },
       ],
-      create: { label: "Create session", shortcut: "C", disabled: false },
+      create: {
+        actionId: "review.create",
+        label: "Create session",
+        accelerator: "C",
+        enabled: true,
+        focusId: "create",
+        helper: "Enter create session",
+      },
       helper: "Enter create session",
     });
   });
@@ -59,7 +90,7 @@ describe("new-session review content", () => {
       value: "Codex",
       status: { glyph: "●", text: "unavailable", tone: "unavailable" },
     });
-    expect(content.create.disabled).toBe(true);
+    expect(content.create.enabled).toBe(false);
   });
 
   it("describes the currently focused action", () => {
@@ -80,5 +111,41 @@ describe("new-session review content", () => {
     const returned = transitionNewSessionFlow(state, { type: "editName" });
     if (returned?.mode !== "editName") throw new Error("expected edit-name flow");
     expect(returned.editNameFocus).toBe("name");
+  });
+
+  it("carries semantic action and focus metadata for name-editor controls", () => {
+    const { state } = reviewState();
+    const editing = transitionNewSessionFlow(state, { type: "editName" });
+    if (editing?.mode !== "editName") throw new Error("expected edit-name flow");
+
+    expect(newSessionEditNameContent(editing)).toEqual({
+      controls: {
+        name: {
+          actionId: "editName.name",
+          label: "Name",
+          accelerator: undefined,
+          enabled: true,
+          focusId: "name",
+          helper: "Type name · Left/Right cursor · Enter save · ↑↓ focus",
+        },
+        save: {
+          actionId: "editName.save",
+          label: "Save",
+          accelerator: "Ctrl-S",
+          enabled: true,
+          focusId: "save",
+          helper: "Enter save name · ↑↓ focus · Esc back",
+        },
+        back: {
+          actionId: "editName.back",
+          label: "Back",
+          accelerator: "Esc",
+          enabled: true,
+          focusId: "back",
+          helper: "Enter back without saving · ↑↓ focus",
+        },
+      },
+      helper: "Type name · Left/Right cursor · Enter save · ↑↓ focus",
+    });
   });
 });

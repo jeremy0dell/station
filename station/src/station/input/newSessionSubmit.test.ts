@@ -63,16 +63,14 @@ describe("resolveNewSessionSubmit", () => {
     expect(resolveNewSessionSubmit(newStore()).kind).toBe("none");
   });
 
-  it("does not submit when the review focus ring is off 'create'", () => {
-    // Arrow the focus ring onto a field: Enter must reach the machine to open
-    // that field's step, not fire a hosted-launch create.
+  it("does not intercept a resolved non-Create semantic action", () => {
     const store = storeOnNewSessionReview();
-    store.getState().handleKey({ input: "", downArrow: true });
-    const screen = store.getState().screen;
-    expect(screen.name === "newSession" && screen.flow.mode === "review" && screen.flow.reviewFocus).toBe(
-      "project",
-    );
-    expect(resolveNewSessionSubmit(store).kind).toBe("none");
+    expect(
+      resolveNewSessionSubmit(store, {
+        type: "newSession.activate",
+        actionId: "review.project",
+      }).kind,
+    ).toBe("none");
   });
 });
 
