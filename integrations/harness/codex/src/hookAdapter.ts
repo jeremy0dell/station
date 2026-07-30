@@ -8,7 +8,7 @@ import {
   codexHookPayloadToHarnessEventReport,
   codexStationIdentityCwdMismatch,
 } from "./events.js";
-import { isCodexForwardedEventType } from "./ingressRules.js";
+import { isCodexIngressEventType } from "./ingressRules.js";
 
 /**
  * ADAPTER
@@ -18,10 +18,13 @@ import { isCodexForwardedEventType } from "./ingressRules.js";
  */
 export const codexHookAdapter = createHarnessHookAdapter({
   provider: "codex",
-  isForwardedEventType: isCodexForwardedEventType,
+  isForwardedEventType: isCodexIngressEventType,
   acceptCwdFallback: true,
   compactHookPayload: (event) => compactCodexHookPayload(event.payload),
-  hookPayloadReportId: (event) => codexHookPayloadReportId(event.payload, event.receivedAt),
+  hookPayloadReportId: (event) =>
+    event.event === "StationApprovalPromptOpened" && event.hookId !== undefined
+      ? event.hookId
+      : codexHookPayloadReportId(event.payload, event.receivedAt),
   hookPayloadToHarnessEventReport: codexHookPayloadToHarnessEventReport,
   corroborateCwdMismatch: codexStationIdentityCwdMismatch,
 });

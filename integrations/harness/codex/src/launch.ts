@@ -27,6 +27,14 @@ export type CodexLaunchOptions = {
 };
 
 const CODEX_YOLO_FLAG = "--dangerously-bypass-approvals-and-sandbox";
+const CODEX_APPROVAL_NOTIFICATION_ARGS = [
+  "--config",
+  'tui.notifications=["approval-requested"]',
+  "--config",
+  'tui.notification_method="osc9"',
+  "--config",
+  'tui.notification_condition="always"',
+] as const;
 
 export function buildCodexLaunchPlan(
   request: BuildHarnessLaunchRequest,
@@ -45,6 +53,9 @@ export function buildCodexLaunchPlan(
   const yolo = isYoloPermissionMode({ permissionMode, approvalPolicy, sandboxMode });
   const providerPermissionMode = yolo ? "yolo" : permissionMode;
   const args = mode === "exec" ? execArgs(request) : interactiveArgs(request);
+  if (mode === "interactive") {
+    args.push(...CODEX_APPROVAL_NOTIFICATION_ARGS);
+  }
   appendCodexOptions(args, {
     profile,
     permissionMode: providerPermissionMode,
@@ -118,6 +129,7 @@ function buildCodexResumeLaunchPlan(
   const hookProfile = options.defaultHookProfile;
   const profile = hookProfile ?? configuredProfile;
   const args = ["resume", "--cd", request.worktree.path];
+  args.push(...CODEX_APPROVAL_NOTIFICATION_ARGS);
   appendCodexOptions(args, { profile });
   args.push(request.resume.target.id);
   if (request.initialPrompt !== undefined) {

@@ -25,7 +25,7 @@ import {
   isCodexAppServerMessage,
 } from "./appServer/index.js";
 import { codexHarnessError } from "./errors.js";
-import { isCodexForwardedEventType } from "./ingressRules.js";
+import { isCodexIngressEventType } from "./ingressRules.js";
 
 const nonEmptyStringSchema = z.string().min(1);
 const hookEventNameProbeSchema = z.object({ hook_event_name: nonEmptyStringSchema }).loose();
@@ -35,7 +35,7 @@ const permissionModeSchema = z
   .enum(["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"])
   .optional();
 
-const CodexHookProviderDataSchema = z
+const CodexNativeHookProviderDataSchema = z
   .object({
     codexSessionId: nonEmptyStringSchema,
     hookEventName: nonEmptyStringSchema,
@@ -59,7 +59,27 @@ const CodexHookProviderDataSchema = z
   })
   .strict();
 
+const StationApprovalPromptOpenedProviderDataSchema = z
+  .object({
+    hookEventName: z.literal("StationApprovalPromptOpened"),
+    cwd: nonEmptyStringSchema,
+    stationProjectId: nonEmptyStringSchema,
+    stationWorktreeId: nonEmptyStringSchema,
+    stationWorktreePath: nonEmptyStringSchema,
+    stationWorktreeManagedRoot: nonEmptyStringSchema.optional(),
+    stationSessionId: nonEmptyStringSchema,
+    stationTerminalProvider: z.literal("station"),
+    stationTerminalTargetId: nonEmptyStringSchema,
+  })
+  .strict();
+
+const CodexHookProviderDataSchema = z.union([
+  CodexNativeHookProviderDataSchema,
+  StationApprovalPromptOpenedProviderDataSchema,
+]);
+
 type CodexHookProviderData = z.infer<typeof CodexHookProviderDataSchema>;
+type CodexNativeHookProviderData = z.infer<typeof CodexNativeHookProviderDataSchema>;
 
 const commonFields = {
   session_id: nonEmptyStringSchema,
@@ -169,6 +189,20 @@ const StopEventSchema = z
   })
   .strict();
 
+const StationApprovalPromptOpenedEventSchema = z
+  .object({
+    hook_event_name: z.literal("StationApprovalPromptOpened"),
+    cwd: nonEmptyStringSchema,
+    station_project_id: nonEmptyStringSchema,
+    station_worktree_id: nonEmptyStringSchema,
+    station_worktree_path: nonEmptyStringSchema,
+    station_worktree_managed_root: nonEmptyStringSchema.optional(),
+    station_session_id: nonEmptyStringSchema,
+    station_terminal_provider: z.literal("station"),
+    station_terminal_target_id: nonEmptyStringSchema,
+  })
+  .strict();
+
 export const CodexHookEventSchema = z.discriminatedUnion("hook_event_name", [
   SessionStartEventSchema,
   UserPromptSubmitEventSchema,
@@ -179,6 +213,7 @@ export const CodexHookEventSchema = z.discriminatedUnion("hook_event_name", [
   PostCompactEventSchema,
   SubagentStartEventSchema,
   StopEventSchema,
+  StationApprovalPromptOpenedEventSchema,
 ]);
 
 export type CodexHookEvent = z.infer<typeof CodexHookEventSchema>;
@@ -214,7 +249,7 @@ export function normalizeCodexRawEvent(
 ): HarnessEventObservation[] {
   const observedAt = raw.observedAt ?? new Date().toISOString();
   const eventNameProbe = hookEventNameProbeSchema.safeParse(raw.event);
-  if (eventNameProbe.success && !isCodexForwardedEventType(eventNameProbe.data.hook_event_name)) {
+  if (eventNameProbe.success && !isCodexIngressEventType(eventNameProbe.data.hook_event_name)) {
     return [];
   }
   const hookEvent = CodexHookEventSchema.safeParse(raw.event);
@@ -245,10 +280,13 @@ export function normalizeCodexRawEvent(
   const observation: HarnessEventObservation = {
     provider: "codex",
     rawEventType: event.hook_event_name,
-    status: statusFromCodexHookEvent(event, observedAt),
     observedAt,
     providerData: providerDataFromCodexEvent(event),
   };
+  const status = statusFromCodexHookEvent(event, observedAt);
+  if (status !== undefined) {
+    observation.status = status;
+  }
   const turn = turnFromCodexHookEvent(event);
   if (turn !== undefined) {
     observation.turn = turn;
@@ -259,7 +297,9 @@ export function normalizeCodexRawEvent(
     };
   }
   applyCorrelation(observation, correlation);
-  observation.nativeSessionId = event.session_id;
+  if ("session_id" in event) {
+    observation.nativeSessionId = event.session_id;
+  }
   return [observation];
 }
 
@@ -274,8 +314,11 @@ export function codexHookPayloadToHarnessEventReport(
     kind: "harness",
     eventType: event.hook_event_name,
     observedAt: input.observedAt,
-    status: statusFromCodexHookEvent(event, input.observedAt),
   };
+  const status = statusFromCodexHookEvent(event, input.observedAt);
+  if (status !== undefined) {
+    report.status = status;
+  }
   const turn = turnFromCodexHookEvent(event);
   if (turn !== undefined) {
     report.turn = turn;
@@ -310,7 +353,7 @@ export function codexHookPayloadReportId(payload: unknown, observedAt: string): 
 export function statusFromCodexHookEvent(
   event: CodexHookEvent,
   observedAt: string,
-): ObservedStatus {
+): ObservedStatus | undefined {
   if (event.hook_event_name === "SessionStart") {
     return {
       value: "starting",
@@ -321,10 +364,15 @@ export function statusFromCodexHookEvent(
     };
   }
   if (event.hook_event_name === "PermissionRequest") {
+    // PermissionRequest precedes auto-review and other hook decisions, so it does
+    // not prove a user prompt opened.
+    return undefined;
+  }
+  if (event.hook_event_name === "StationApprovalPromptOpened") {
     return {
       value: "needs_attention",
       confidence: "high",
-      reason: `Codex requested permission for ${event.tool_name}.`,
+      reason: "Codex opened a tool approval prompt.",
       source: "harness_event",
       updatedAt: observedAt,
       attention: "tool_approval",
@@ -433,7 +481,23 @@ function turnFromCodexHookEvent(event: CodexHookEvent): HarnessEventReport["turn
 }
 
 function providerDataFromCodexEvent(event: CodexHookEvent): CodexHookProviderData {
-  const providerData: CodexHookProviderData = {
+  if (event.hook_event_name === "StationApprovalPromptOpened") {
+    const providerData: CodexHookProviderData = {
+      hookEventName: event.hook_event_name,
+      cwd: event.cwd,
+      stationProjectId: event.station_project_id,
+      stationWorktreeId: event.station_worktree_id,
+      stationWorktreePath: event.station_worktree_path,
+      stationSessionId: event.station_session_id,
+      stationTerminalProvider: event.station_terminal_provider,
+      stationTerminalTargetId: event.station_terminal_target_id,
+    };
+    if (event.station_worktree_managed_root !== undefined) {
+      providerData.stationWorktreeManagedRoot = event.station_worktree_managed_root;
+    }
+    return providerData;
+  }
+  const providerData: CodexNativeHookProviderData = {
     codexSessionId: event.session_id,
     hookEventName: event.hook_event_name,
     cwd: event.cwd,
@@ -510,6 +574,13 @@ export function acceptsCodexPersistedEvent(observation: HarnessEventObservation)
   if (observation.eventType === "SubagentStop" || observation.rawEventType === "SubagentStop") {
     return false;
   }
+  if (
+    observation.status !== undefined &&
+    (observation.eventType === "PermissionRequest" ||
+      observation.rawEventType === "PermissionRequest")
+  ) {
+    return false;
+  }
   const providerData = CodexHookProviderDataSchema.safeParse(observation.providerData);
   if (!providerData.success) return true;
   return !codexStationIdentityCwdMismatch(
@@ -522,6 +593,7 @@ export function acceptsCodexPersistedEvent(observation: HarnessEventObservation)
 function reportCorrelationFromCodexEvent(
   event: CodexHookEvent,
 ): HarnessEventReport["correlation"] | undefined {
+  const nativeSessionId = "session_id" in event ? event.session_id : undefined;
   if (
     codexStationIdentityCwdMismatch(
       event.cwd,
@@ -531,12 +603,12 @@ function reportCorrelationFromCodexEvent(
   ) {
     return reportCorrelation({
       cwd: event.cwd,
-      nativeSessionId: event.session_id,
+      ...(nativeSessionId === undefined ? {} : { nativeSessionId }),
     });
   }
   return reportCorrelation({
     cwd: event.cwd,
-    nativeSessionId: event.session_id,
+    ...(nativeSessionId === undefined ? {} : { nativeSessionId }),
     projectId: event.station_project_id,
     worktreeId: event.station_worktree_id,
     sessionId: event.station_session_id,
@@ -548,7 +620,10 @@ function reportCoalesceKeyFromCodexEvent(
   event: CodexHookEvent,
   reportId: string,
 ): string | undefined {
-  if (event.hook_event_name === "PermissionRequest") {
+  if (
+    event.hook_event_name === "PermissionRequest" ||
+    event.hook_event_name === "StationApprovalPromptOpened"
+  ) {
     return `report:${reportId}`;
   }
   const parts: string[] = [];
@@ -564,7 +639,11 @@ function reportCoalesceKeyFromCodexEvent(
 }
 
 function codexHookEventReportId(event: CodexHookEvent, observedAt: string): string {
-  const parts = ["codex", event.session_id, event.hook_event_name];
+  const parts = [
+    "codex",
+    "session_id" in event ? event.session_id : event.station_session_id,
+    event.hook_event_name,
+  ];
   if ("turn_id" in event) {
     parts.push(event.turn_id);
   }
@@ -579,7 +658,13 @@ function codexHookEventReportId(event: CodexHookEvent, observedAt: string): stri
   if ("trigger" in event) {
     parts.push(`trigger:${event.trigger}`);
   }
-  if (event.hook_event_name === "PermissionRequest") {
+  if (event.hook_event_name === "StationApprovalPromptOpened") {
+    parts.push(`target:${event.station_terminal_target_id}`);
+  }
+  if (
+    event.hook_event_name === "PermissionRequest" ||
+    event.hook_event_name === "StationApprovalPromptOpened"
+  ) {
     parts.push(`request:${observedAt}`);
   }
   if ("source" in event) {

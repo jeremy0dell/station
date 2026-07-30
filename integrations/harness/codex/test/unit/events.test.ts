@@ -59,8 +59,6 @@ describe("Codex hook event parsing", () => {
       {
         provider: "codex",
         eventType: "PermissionRequest",
-        statusIntents: ["needs_attention"],
-        confidences: ["high"],
       },
       {
         provider: "codex",
@@ -92,9 +90,17 @@ describe("Codex hook event parsing", () => {
         statusIntents: ["idle", "working"],
         confidences: ["high", "medium"],
       },
+      {
+        provider: "codex",
+        eventType: "StationApprovalPromptOpened",
+        statusIntents: ["needs_attention"],
+        confidences: ["high"],
+      },
     ]);
-    expect(new Set(codexForwardedEventTypes).size).toBe(codexIngressRules.length);
+    expect(new Set(codexForwardedEventTypes).size).toBe(codexForwardedEventTypes.length);
+    expect(codexIngressRules).toHaveLength(codexForwardedEventTypes.length + 1);
     expect(codexForwardedEventTypes).not.toContain("SubagentStop");
+    expect(codexForwardedEventTypes).not.toContain("StationApprovalPromptOpened");
     expect(codexIngressRuleForEventType("SubagentStop")).toBeUndefined();
     expect(new Set(codexForwardedEventTypes)).toEqual(new Set(Object.keys(CODEX_HOOK_FIXTURES)));
     expect(CodexHookEventSchema.safeParse(subagentStop).success).toBe(false);
@@ -155,7 +161,7 @@ describe("Codex hook event parsing", () => {
     });
   });
 
-  it("maps PermissionRequest to needs_attention without leaking tool input", () => {
+  it("keeps PermissionRequest as non-status telemetry without leaking tool input", () => {
     const observations = normalizeCodexRawEvent(
       {
         provider: "codex",
@@ -178,16 +184,101 @@ describe("Codex hook event parsing", () => {
       context(),
     );
 
+    expect(observations[0]).toMatchObject({ rawEventType: "PermissionRequest" });
+    expect(observations[0]?.status).toBeUndefined();
+    expectStatusAllowedByCodexIngressRule("PermissionRequest", observations[0]?.status);
+    expect(JSON.stringify(observations[0]?.providerData)).not.toContain("rm -rf");
+  });
+
+  it("maps Station's definite approval-prompt signal to typed attention", () => {
+    const payload = stationApprovalPromptOpened();
+    const observations = normalizeCodexRawEvent(
+      { provider: "codex", observedAt: now, event: payload },
+      stationContext(),
+    );
+    const reportId = codexHookPayloadReportId(payload, now);
+    const report = codexHookPayloadToHarnessEventReport({
+      reportId,
+      observedAt: now,
+      payload,
+    });
+
     expect(observations[0]).toMatchObject({
-      rawEventType: "PermissionRequest",
+      provider: "codex",
+      sessionId: "ses_web_task",
+      worktreeId: "wt_web_task",
+      harnessRunId: "codex:native:wt_web_task",
+      rawEventType: "StationApprovalPromptOpened",
       status: {
         value: "needs_attention",
         confidence: "high",
-        reason: "Codex requested permission for Bash.",
+        reason: "Codex opened a tool approval prompt.",
         attention: "tool_approval",
       },
+      providerData: {
+        hookEventName: "StationApprovalPromptOpened",
+        stationTerminalProvider: "station",
+      },
     });
-    expect(JSON.stringify(observations[0]?.providerData)).not.toContain("rm -rf");
+    expect(observations[0]?.nativeSessionId).toBeUndefined();
+    expect(report).toMatchObject({
+      eventType: "StationApprovalPromptOpened",
+      coalesceKey: `report:${reportId}`,
+      status: {
+        value: "needs_attention",
+        confidence: "high",
+        attention: "tool_approval",
+      },
+      correlation: {
+        projectId: "web",
+        worktreeId: "wt_web_task",
+        sessionId: "ses_web_task",
+        terminalTargetId: "native:wt_web_task",
+        cwd: "/tmp/station/web/task",
+      },
+    });
+    expect(report.correlation?.nativeSessionId).toBeUndefined();
+    expect(reportId).toBe(
+      "codex:ses_web_task:StationApprovalPromptOpened:target%3Anative%3Awt_web_task:request%3A2026-05-21T12%3A00%3A00.000Z",
+    );
+    expectStatusAllowedByCodexIngressRule("StationApprovalPromptOpened", report.status);
+  });
+
+  it("uses the Host notification id for synthetic approval report deduplication", () => {
+    const event = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      provider: "codex",
+      kind: "harness" as const,
+      event: "StationApprovalPromptOpened",
+      receivedAt: now,
+      payload: stationApprovalPromptOpened(),
+    };
+    const compacted = codexHookAdapter.compactPayload?.(event);
+    if (compacted === undefined) throw new Error("Expected Codex payload compaction.");
+
+    const result = codexHookAdapter.toHarnessEventReport?.({
+      event: compacted.event,
+      payloadSummary: compacted.payloadSummary,
+      fallbackReportId: () => "fallback_report",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      report: {
+        reportId: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+        coalesceKey: "report:d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      },
+    });
+  });
+
+  it("strictly rejects malformed synthetic approval signals", () => {
+    const { station_session_id: _missing, ...missingSession } = stationApprovalPromptOpened();
+
+    expect(() => parseCodexHookEvent(missingSession)).toThrowError(CodexHarnessProviderError);
+    expect(() =>
+      parseCodexHookEvent({ ...stationApprovalPromptOpened(), message: "sensitive prompt text" }),
+    ).toThrowError(CodexHarnessProviderError);
   });
 
   it("maps request_user_input tool hooks to an attention question and back", () => {
@@ -507,6 +598,30 @@ describe("Codex hook event parsing", () => {
         rawEventType: "SubagentStop",
       }),
     ).toBe(false);
+    expect(
+      acceptsCodexPersistedEvent({
+        ...valid,
+        eventType: "PermissionRequest",
+        rawEventType: "PermissionRequest",
+        status: {
+          value: "needs_attention",
+          confidence: "high",
+          reason: "Legacy permission status.",
+          source: "harness_event",
+          updatedAt: now,
+          attention: "tool_approval",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      acceptsCodexPersistedEvent({
+        provider: "codex",
+        eventType: "PermissionRequest",
+        rawEventType: "PermissionRequest",
+        observedAt: now,
+        providerData: valid.providerData,
+      }),
+    ).toBe(true);
   });
 
   it("downgrades contradictory inherited identity to cwd hook scope", () => {
@@ -854,12 +969,12 @@ describe("Codex hook event parsing", () => {
     expect(observations[0]?.turn).toBeUndefined();
   });
 
-  it("maps every supported Codex hook event to a provider-neutral report status", () => {
+  it("maps every supported Codex hook event to provider-neutral report semantics", () => {
     const expected = [
       ["SessionStart", "starting", "high"],
       ["UserPromptSubmit", "working", "medium"],
       ["PreToolUse", "working", "medium"],
-      ["PermissionRequest", "needs_attention", "high"],
+      ["PermissionRequest", undefined, undefined],
       ["PostToolUse", "working", "medium"],
       ["PreCompact", "working", "medium"],
       ["PostCompact", "working", "medium"],
@@ -893,7 +1008,9 @@ describe("Codex hook event parsing", () => {
       expectStatusAllowedByCodexIngressRule(report.eventType, report.status);
       expect(report.provider).toBe("codex");
       expect(report.kind).toBe("harness");
-      expect(report.status?.source).toBe("harness_event");
+      if (report.status !== undefined) {
+        expect(report.status.source).toBe("harness_event");
+      }
       expect(report.correlation?.nativeSessionId).toBe("codex_session_123");
       expect(report.diagnostics).toMatchObject({
         rawEventType: report.eventType,
@@ -962,8 +1079,13 @@ function context() {
   };
 }
 
+type CodexNativeHookEvent = Exclude<
+  CodexHookEvent,
+  { hook_event_name: "StationApprovalPromptOpened" }
+>;
+
 type CodexHookFixtures = {
-  [EventName in CodexHookEvent["hook_event_name"]]: Extract<
+  [EventName in CodexNativeHookEvent["hook_event_name"]]: Extract<
     CodexHookEvent,
     { hook_event_name: EventName }
   >;
@@ -1061,12 +1183,42 @@ function codexReportPayloads(): CodexHookEvent[] {
   return codexForwardedEventTypes.map((eventType) => CODEX_HOOK_FIXTURES[eventType]);
 }
 
+function stationApprovalPromptOpened() {
+  return {
+    hook_event_name: "StationApprovalPromptOpened" as const,
+    cwd: "/tmp/station/web/task",
+    station_project_id: "web",
+    station_worktree_id: "wt_web_task",
+    station_worktree_path: "/tmp/station/web/task",
+    station_session_id: "ses_web_task",
+    station_terminal_provider: "station" as const,
+    station_terminal_target_id: "native:wt_web_task",
+  };
+}
+
+function stationContext() {
+  const value = context();
+  return {
+    ...value,
+    terminalTargets: value.terminalTargets.map((target) => ({
+      ...target,
+      id: "native:wt_web_task",
+      provider: "station",
+    })),
+  };
+}
+
 function expectStatusAllowedByCodexIngressRule(
   eventType: string,
   status: ObservedStatus | undefined,
 ): void {
   const rule = codexIngressRuleForEventType(eventType);
   expect(rule).toBeDefined();
+  if (status === undefined) {
+    expect(rule?.statusIntents).toBeUndefined();
+    expect(rule?.confidences).toBeUndefined();
+    return;
+  }
   expect(rule?.statusIntents).toContain(status?.value);
   expect(rule?.confidences).toContain(status?.confidence);
 }

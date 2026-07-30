@@ -38,7 +38,7 @@ describe("CodexHarnessProvider", () => {
     expect(createCodexHarnessProvider({ resume: true }).capabilities().canResume).toBe(true);
   });
 
-  it("rejects only legacy SubagentStop observations during persisted replay", () => {
+  it("rejects legacy SubagentStop and status-bearing PermissionRequest observations", () => {
     const accepts = createCodexHarnessProvider().acceptsPersistedEvent;
     const observation = (eventType: string): HarnessEventObservation => ({
       provider: "codex",
@@ -48,6 +48,20 @@ describe("CodexHarnessProvider", () => {
 
     expect(accepts?.(observation("SubagentStop"))).toBe(false);
     expect(accepts?.(observation("Stop"))).toBe(true);
+    expect(accepts?.(observation("PermissionRequest"))).toBe(true);
+    expect(
+      accepts?.({
+        ...observation("PermissionRequest"),
+        status: {
+          value: "needs_attention",
+          confidence: "high",
+          reason: "Legacy permission status.",
+          source: "harness_event",
+          updatedAt: now,
+          attention: "tool_approval",
+        },
+      }),
+    ).toBe(false);
     expect(
       accepts?.({
         provider: "codex",
@@ -128,6 +142,12 @@ describe("CodexHarnessProvider", () => {
       args: [
         "--cd",
         "/tmp/station/web/task",
+        "--config",
+        'tui.notifications=["approval-requested"]',
+        "--config",
+        'tui.notification_method="osc9"',
+        "--config",
+        'tui.notification_condition="always"',
         "--profile",
         "station",
         "--sandbox",
@@ -181,7 +201,17 @@ describe("CodexHarnessProvider", () => {
     });
 
     await expect(provider.buildLaunch(request())).resolves.toMatchObject({
-      args: ["--cd", "/tmp/station/web/task", "--dangerously-bypass-approvals-and-sandbox"],
+      args: [
+        "--cd",
+        "/tmp/station/web/task",
+        "--config",
+        'tui.notifications=["approval-requested"]',
+        "--config",
+        'tui.notification_method="osc9"',
+        "--config",
+        'tui.notification_condition="always"',
+        "--dangerously-bypass-approvals-and-sandbox",
+      ],
       providerData: {
         permissionMode: "yolo",
       },

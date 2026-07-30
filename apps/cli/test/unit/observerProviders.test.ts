@@ -862,6 +862,12 @@ describe("observer providers", () => {
       args: [
         "--cd",
         "/tmp/station/web/task",
+        "--config",
+        'tui.notifications=["approval-requested"]',
+        "--config",
+        'tui.notification_method="osc9"',
+        "--config",
+        'tui.notification_condition="always"',
         "--profile",
         "station",
         "--sandbox",
@@ -1122,6 +1128,12 @@ describe("observer providers", () => {
     expect(plan?.args).toEqual([
       "--cd",
       "/tmp/station/web/task",
+      "--config",
+      'tui.notifications=["approval-requested"]',
+      "--config",
+      'tui.notification_method="osc9"',
+      "--config",
+      'tui.notification_condition="always"',
       "--dangerously-bypass-approvals-and-sandbox",
     ]);
     expect(plan?.providerData).toMatchObject({
@@ -1171,6 +1183,12 @@ describe("observer providers", () => {
       args: [
         "--cd",
         "/tmp/station/web/task",
+        "--config",
+        'tui.notifications=["approval-requested"]',
+        "--config",
+        'tui.notification_method="osc9"',
+        "--config",
+        'tui.notification_condition="always"',
         "--sandbox",
         "workspace-write",
         "--ask-for-approval",

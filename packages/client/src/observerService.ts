@@ -5,6 +5,8 @@ import type {
   AgentReportExternalExitResult,
   CommandId,
   ObserverApi,
+  ProviderHookEvent,
+  ProviderHookReceipt,
   StationCommand,
   StationEvent,
   StationSnapshot,
@@ -58,6 +60,8 @@ export function createObserverService(options: CreateObserverServiceOptions): Ob
       waitForCommandCompletion(client, commandId, commandWaitTimeoutMs, copy),
     reconcile: (reason?: string) =>
       requestReconcile(reconcileClient, reason, reconcileTimeoutMs, copy),
+    ingestProviderHookEvent: (event: ProviderHookEvent) =>
+      ingestProviderHookEvent(client, event, timeoutMs, copy),
     prepareExternalLaunch: (params: AgentPrepareExternalLaunchParams) =>
       prepareExternalLaunch(client, params, timeoutMs, copy),
     reportExternalExit: (params: AgentReportExternalExitParams) =>
@@ -74,6 +78,8 @@ type ObserverServiceCopy = {
   commandWaitTimeout: string;
   reconcileFailed: string;
   reconcileTimeout: string;
+  providerHookIngestFailed: string;
+  providerHookIngestTimeout: string;
   prepareExternalLaunchFailed: string;
   prepareExternalLaunchTimeout: string;
   reportExternalExitFailed: string;
@@ -92,6 +98,8 @@ function createObserverServiceCopy(clientLabel: string | undefined): ObserverSer
     commandWaitTimeout: `${subject} timed out while waiting for command completion.`,
     reconcileFailed: `${subject} could not request observer reconciliation.`,
     reconcileTimeout: `${subject} timed out while reconciling observer state.`,
+    providerHookIngestFailed: `${subject} could not ingest the provider hook event.`,
+    providerHookIngestTimeout: `${subject} timed out while ingesting the provider hook event.`,
     prepareExternalLaunchFailed: `${subject} could not prepare the external agent launch.`,
     prepareExternalLaunchTimeout: `${subject} timed out while preparing the external agent launch.`,
     reportExternalExitFailed: `${subject} could not report the external agent exit.`,
@@ -194,6 +202,29 @@ async function prepareExternalLaunch(
       ),
     },
     () => client.prepareExternalLaunch(params),
+  );
+}
+
+async function ingestProviderHookEvent(
+  client: ObserverApi,
+  event: ProviderHookEvent,
+  timeoutMs: number,
+  copy: ObserverServiceCopy,
+): Promise<ProviderHookReceipt> {
+  return runClientRequest(
+    {
+      operation: "client.observer.providerHook.ingest",
+      timeoutMs,
+      error: observerErrorFallback(
+        "CLIENT_PROVIDER_HOOK_INGEST_FAILED",
+        copy.providerHookIngestFailed,
+      ),
+      timeoutError: timeoutErrorFallback(
+        "CLIENT_PROVIDER_HOOK_INGEST_TIMEOUT",
+        copy.providerHookIngestTimeout,
+      ),
+    },
+    () => client.ingestProviderHookEvent(event),
   );
 }
 

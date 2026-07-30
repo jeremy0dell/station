@@ -197,6 +197,160 @@ describe("createPtyRegistry", () => {
     expect(secondHandler).toEqual([PANE_A]);
   });
 
+  it("routes live notifications only to the latest handler and stops after disposal", async () => {
+    const scripted = createScriptedTerminal();
+    const firstHandler: string[] = [];
+    const secondHandler: string[] = [];
+    const registry = createPtyRegistry({
+      createTerminal: () => scripted.terminal,
+      onPaneNotification: (paneId) => {
+        firstHandler.push(paneId);
+        return true;
+      },
+    });
+    registry.resize(PANE_A, SIZE);
+    const screen = registry.get(PANE_A)?.screen;
+
+    scripted.helpers.emitData("\x1b]9;first approval\x07");
+    await screen?.whenIdle();
+    registry.setPaneNotificationHandler((paneId) => {
+      secondHandler.push(paneId);
+      return true;
+    });
+    scripted.helpers.emitData("\x1b]9;second approval\x07");
+    await screen?.whenIdle();
+    registry.dispose(PANE_A);
+    screen?.feed("\x1b]9;disposed approval\x07");
+    await screen?.whenIdle();
+
+    expect(firstHandler).toEqual([PANE_A]);
+    expect(secondHandler).toEqual([PANE_A]);
+  });
+
+  it("suppresses notifications replayed from retained terminal history", async () => {
+    const { registry, scripted, replay } = orderedGeometryHarness();
+    const notified: string[] = [];
+    registry.setPaneNotificationHandler((paneId) => {
+      notified.push(paneId);
+      return true;
+    });
+
+    await replay({
+      kind: "raw-complete",
+      initialSize: { cols: 10, rows: 4 },
+      events: [{ type: "data", data: "\x1b]9;historical approval\x07" }],
+    });
+    expect(notified).toEqual([]);
+
+    scripted.helpers.emitData("\x1b]9;live approval\x07");
+    await registry.get(PANE_A)?.screen?.whenIdle();
+    expect(notified).toEqual([PANE_A]);
+  });
+
+  it("retains an unhandled edge for HMR replacement and explicit retry", async () => {
+    const scripted = createScriptedTerminal();
+    const attempts: Array<{ handler: string; id: string }> = [];
+    const registry = createPtyRegistry({
+      createTerminal: () => scripted.terminal,
+      onPaneNotification: (_paneId, notification) => {
+        attempts.push({ handler: "first", id: notification.id });
+        return false;
+      },
+    });
+    registry.resize(PANE_A, SIZE);
+
+    scripted.helpers.emitData("\x1b]9;approval\x07");
+    await registry.get(PANE_A)?.screen?.whenIdle();
+    await sleep(0);
+    registry.setPaneNotificationHandler((_paneId, notification) => {
+      attempts.push({ handler: "second", id: notification.id });
+      return true;
+    });
+    await sleep(0);
+
+    expect(attempts).toHaveLength(2);
+    expect(attempts.map(({ handler }) => handler)).toEqual(["first", "second"]);
+    expect(attempts[0]?.id).toBe(attempts[1]?.id);
+
+    registry.retryPaneNotifications();
+    await sleep(0);
+    expect(attempts).toHaveLength(2);
+  });
+
+  it("retains a rejected attempt until state-driven retry and clears it on disposal", async () => {
+    const scripted = createScriptedTerminal();
+    let reject = true;
+    const attempts: string[] = [];
+    const registry = createPtyRegistry({
+      createTerminal: () => scripted.terminal,
+      onPaneNotification: async (_paneId, notification) => {
+        attempts.push(notification.id);
+        if (reject) throw new Error("Observer disconnected");
+        return true;
+      },
+    });
+    registry.resize(PANE_A, SIZE);
+    scripted.helpers.emitData("\x1b]9;approval\x07");
+    await registry.get(PANE_A)?.screen?.whenIdle();
+    await sleep(0);
+
+    reject = false;
+    registry.retryPaneNotifications();
+    await sleep(0);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toBe(attempts[1]);
+
+    reject = true;
+    scripted.helpers.emitData("\x1b]9;second\x07");
+    await registry.get(PANE_A)?.screen?.whenIdle();
+    await sleep(0);
+    registry.dispose(PANE_A);
+    registry.retryPaneNotifications();
+    await sleep(0);
+    expect(attempts).toHaveLength(3);
+  });
+
+  it("uses terminal notifications and ignores the matching empty OSC callback", async () => {
+    const scripted = createScriptedTerminal();
+    let terminalNotificationListener:
+      | ((notification: {
+          id: string;
+          kind: "osc9";
+          observedAt: string;
+        }) => void)
+      | undefined;
+    scripted.terminal.onNotification = (listener) => {
+      terminalNotificationListener = listener;
+      return { dispose: () => {} };
+    };
+    const received: Array<{ id: string; observedAt: string }> = [];
+    const registry = createPtyRegistry({
+      createTerminal: () => scripted.terminal,
+      onPaneNotification: (_paneId, notification) => {
+        received.push(notification);
+        return true;
+      },
+    });
+    registry.resize(PANE_A, SIZE);
+
+    scripted.helpers.emitData("\x1b]9;\x07");
+    terminalNotificationListener?.({
+      id: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      kind: "osc9",
+      observedAt: "2026-07-29T12:34:56.000Z",
+    });
+    await registry.get(PANE_A)?.screen?.whenIdle();
+    await sleep(0);
+
+    expect(received).toEqual([
+      {
+        id: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+        kind: "osc9",
+        observedAt: "2026-07-29T12:34:56.000Z",
+      },
+    ]);
+  });
+
   it("uses refreshed runtime defaults for future lazy spawns only", async () => {
     const first = createScriptedTerminal();
     const second = createScriptedTerminal();

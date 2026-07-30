@@ -1,4 +1,9 @@
 import type { TuiStore } from "@station/dashboard-core";
+import {
+  harnessRunIdForTerminalTarget,
+  type ProviderHookEvent,
+  STATION_SCHEMA_VERSION,
+} from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import type { Automation } from "../config/stationConfig.js";
 import {
@@ -23,11 +28,12 @@ import { createPaneReconciler } from "../state/reconcilers/reconcilePanes.js";
 import { createSessionReaper } from "../state/reconcilers/sessionReaper.js";
 import { selectPaneRecord } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
-import type { PaneId } from "../state/types.js";
+import { type PaneId, worktreeIdFromAgentPaneId } from "../state/types.js";
 import type { StationClient } from "../sources/types.js";
 import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { createStationHostManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
+import type { StationTerminalNotification } from "../terminal/types.js";
 import { createStationViewStore } from "../station/store/stationViewStore.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
@@ -131,11 +137,92 @@ function setupRegistry(
       .reportExternalExit({ terminalTargetId: identity.terminalTargetId })
       .catch(() => {});
   };
+  const reportPaneNotification = async (
+    paneId: PaneId,
+    notification: StationTerminalNotification,
+  ): Promise<boolean> => {
+    const ingestProviderHookEvent = stationClient.service.ingestProviderHookEvent;
+    if (ingestProviderHookEvent === undefined) {
+      return false;
+    }
+    const pane = selectPaneRecord(store.getState(), paneId);
+    const identity = pane?.agentIdentity;
+    const worktreeId = worktreeIdFromAgentPaneId(paneId);
+    if (
+      pane?.role !== "primary-agent" ||
+      identity?.harnessProvider !== "codex" ||
+      worktreeId === undefined
+    ) {
+      return true;
+    }
+    const stationState = stationClient.state.getState();
+    if (stationState.connection.state !== "connected") {
+      return false;
+    }
+    const snapshot = stationState.snapshot;
+    const session = snapshot?.sessions.find((candidate) => candidate.id === identity.sessionId);
+    const row = snapshot?.rows.find((candidate) => candidate.id === worktreeId);
+    if (session === undefined || row === undefined) {
+      return false;
+    }
+    const runId = harnessRunIdForTerminalTarget("codex", identity.terminalTargetId);
+    if (
+      session.harness.runId === undefined ||
+      session.terminal === undefined ||
+      row.terminal === undefined ||
+      row.agent === undefined
+    ) {
+      return false;
+    }
+    if (
+      session.origin !== "station" ||
+      session.worktreeId !== worktreeId ||
+      session.harness.provider !== "codex" ||
+      session.harness.mode !== "interactive" ||
+      session.harness.runId !== runId ||
+      session.terminal.provider !== "station" ||
+      session.terminal.state !== "open" ||
+      row.projectId !== session.projectId ||
+      row.path.length === 0 ||
+      row.terminal.provider !== "station" ||
+      row.terminal.state !== "open" ||
+      row.agent.harness !== "codex" ||
+      row.agent.sessionId !== session.id ||
+      row.agent.runId !== runId
+    ) {
+      return true;
+    }
+
+    const event: ProviderHookEvent = {
+      schemaVersion: STATION_SCHEMA_VERSION,
+      hookId: notification.id,
+      provider: "codex",
+      kind: "harness",
+      event: "StationApprovalPromptOpened",
+      receivedAt: notification.observedAt,
+      projectId: session.projectId,
+      worktreeId,
+      sessionId: session.id,
+      payload: {
+        hook_event_name: "StationApprovalPromptOpened",
+        cwd: row.path,
+        station_project_id: session.projectId,
+        station_worktree_id: worktreeId,
+        station_worktree_path: row.path,
+        station_session_id: session.id,
+        station_terminal_provider: "station",
+        station_terminal_target_id: identity.terminalTargetId,
+      },
+    };
+    await stationClient.service.ingestProviderHookEvent?.(event);
+    return true;
+  };
   const registry =
     options.registry ??
     createPtyRegistry({
       createTerminal: options.createTerminal,
       onPaneExit: reportPaneExit,
+      onPaneNotification: reportPaneNotification,
       ...(options.scrollOnOutput === undefined ? {} : { scrollOnOutput: options.scrollOnOutput }),
       ...(options.scrollbackLines === undefined ? {} : { scrollbackLines: options.scrollbackLines }),
     });
@@ -147,6 +234,7 @@ function setupRegistry(
     scrollbackLines: options.scrollbackLines,
   });
   registry.setPaneExitHandler(reportPaneExit);
+  registry.setPaneNotificationHandler(reportPaneNotification);
   return registry;
 }
 
@@ -276,7 +364,11 @@ function createLifecycle(deps: {
       // Seed once so a warm-restored agent's live session is recorded before any
       // later removal, then reap on every observer update.
       reconcilers.reapRemovedSessions();
-      detachSessionReconcile = stationClient.state.subscribe(reconcilers.reapRemovedSessions);
+      registry.retryPaneNotifications();
+      detachSessionReconcile = stationClient.state.subscribe(() => {
+        reconcilers.reapRemovedSessions();
+        registry.retryPaneNotifications();
+      });
       // Persist on every structural/focus change (debounced). Writing the seeded
       // layout once now means a restored session re-persists immediately, so a
       // second restart is a no-op rather than a regression.

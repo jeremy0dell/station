@@ -30,6 +30,13 @@ export type StationTerminalReplayEvent =
   | { type: "data"; data: string }
   | { type: "resize"; cols: number; rows: number };
 
+/** Content-free terminal notification with stable identity and its original observation time. */
+export type StationTerminalNotification = {
+  id: string;
+  kind: "osc9";
+  observedAt: string;
+};
+
 /**
  * Raw history, exact restoration, or Host mode-restoring degraded data handed
  * over with its production geometry; Host reset data remains one local event.
@@ -80,6 +87,13 @@ export type StationTerminalProcess = {
    */
   onGeometry?(
     listener: (size: StationTerminalSize) => void | Promise<void>,
+  ): StationTerminalDisposable;
+  /**
+   * Content-free backing-terminal notifications. Host attachments finish replay
+   * before acknowledgement metadata and deduplicate acknowledgement/live delivery by ID.
+   */
+  onNotification?(
+    listener: (notification: StationTerminalNotification) => void,
   ): StationTerminalDisposable;
   write(data: string): void;
   resize(size: StationTerminalSize): void;

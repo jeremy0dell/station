@@ -5,6 +5,8 @@ import type {
   AgentReportExternalExitResult,
   CommandId,
   CommandReceipt,
+  ProviderHookEvent,
+  ProviderHookReceipt,
   SafeError,
   StationCommand,
   StationEvent,
@@ -39,6 +41,8 @@ export type ObserverService = {
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   waitForCommandCompletion(commandId: CommandId): Promise<StationClientCommandCompletion>;
   reconcile(reason?: string): Promise<StationSnapshot>;
+  /** Ingest raw provider evidence through Observer with timeout and SafeError normalization. */
+  ingestProviderHookEvent?(event: ProviderHookEvent): Promise<ProviderHookReceipt>;
   /**
    * Ask the observer to mint a STATION identity for an externally-hosted (e.g.
    * Station-owned) primary agent and return its launch plan. A supplied title

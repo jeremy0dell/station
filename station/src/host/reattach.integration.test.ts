@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
 import { createStationVtScreen } from "../terminal/vt/screen.js";
+import type { StationTerminalNotification } from "../terminal/types.js";
 import type { PtyTableOptions } from "./ptyTable.js";
 import { type StationHostInstance, startStationHost } from "./startHost.js";
 
@@ -28,7 +29,7 @@ afterEach(async () => {
 
 async function startHostWith(
   scripted: ScriptedTerminal,
-  options: Pick<PtyTableOptions, "maxScrollbackBytes"> = {},
+  options: Pick<PtyTableOptions, "maxScrollbackBytes" | "now"> = {},
 ): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "station-reattach-"));
   const socketPath = join(dir, "station-host.sock");
@@ -136,6 +137,78 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     expect((await control.list())[0]).toMatchObject({ ptyId, alive: true });
 
     control.dispose();
+  });
+
+  it("reattaches an open content-free notification after replay with a stable id", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const socketPath = await startHostWith(scripted, {
+      now: () => new Date("2026-07-29T12:34:56.000Z"),
+    });
+    const control = createStationHostClient({ socketPath });
+    const { ptyId } = await control.spawn({
+      ...identity,
+      harnessProvider: "codex",
+      command: "codex",
+      args: [],
+      cwd: "/repo/wt-1",
+      cols: 80,
+      rows: 24,
+    });
+    scripted.helpers.emitData("before\x1b]9;sensitive approval text\x07after");
+
+    const first = createHostAttachedTerminal({
+      hostSocketPath: socketPath,
+      ptyId,
+      size: { cols: 80, rows: 24 },
+    });
+    const screen = createStationVtScreen({ size: { cols: 80, rows: 24 } });
+    const order: string[] = [];
+    const firstNotifications: StationTerminalNotification[] = [];
+    first.onReplay?.((replay) => {
+      order.push("replay");
+      for (const event of replay.events) {
+        if (event.type === "data") screen.feed(event.data);
+      }
+    });
+    first.onNotification?.((notification) => {
+      order.push("notification");
+      firstNotifications.push(notification);
+    });
+
+    try {
+      await waitFor(() => firstNotifications.length === 1);
+      await screen.whenIdle();
+      expect(order).toEqual(["replay", "notification"]);
+      expect(firstNotifications[0]).toMatchObject({
+        kind: "osc9",
+        observedAt: "2026-07-29T12:34:56.000Z",
+      });
+      expect(screenText(screen)).toContain("before");
+      expect(screenText(screen)).toContain("after");
+      expect(screenText(screen)).not.toContain("sensitive approval text");
+    } finally {
+      first.dispose();
+      screen.dispose();
+    }
+
+    const second = createHostAttachedTerminal({
+      hostSocketPath: socketPath,
+      ptyId,
+      size: { cols: 80, rows: 24 },
+    });
+    const secondNotifications: StationTerminalNotification[] = [];
+    second.onNotification?.((notification) => secondNotifications.push(notification));
+    try {
+      await waitFor(() => secondNotifications.length === 1);
+      expect(secondNotifications[0]?.id).toBe(firstNotifications[0]?.id);
+
+      scripted.helpers.emitData("\x1b]9;another sensitive message\x1b\\");
+      await waitFor(() => secondNotifications.length === 2);
+      expect(secondNotifications[1]?.id).not.toBe(firstNotifications[0]?.id);
+    } finally {
+      second.dispose();
+      control.dispose();
+    }
   });
 
   it("reattaches through the same compatible stream that rescued live xterm history", async () => {

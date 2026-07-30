@@ -11,6 +11,7 @@ import type { StationConfig } from "@station/config";
 import {
   type HarnessEventReport,
   ObserverEventHookInvocationSchema,
+  type ProviderHookEvent,
   STATION_SCHEMA_VERSION,
 } from "@station/contracts";
 import { createFakeExternalCommandRunner, type ExternalCommandInput } from "@station/runtime";
@@ -219,6 +220,157 @@ describe("observer reconcile with Codex harness", () => {
       ]),
     );
     sqlite.close();
+  });
+
+  it("waits for the definite Codex approval prompt before publishing attention", async () => {
+    const { sqlite, eventBus, core, api } = createTestObserver({
+      config,
+      providers: codexProviders({
+        terminalProvider: "station",
+        terminalTargetId: "native:wt_web_task",
+      }),
+      clock: { now: () => new Date(now) },
+    });
+
+    try {
+      await core.reconcile("initial-station-codex-context");
+      const permission = await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        codexRawHookEvent({
+          hookId: "hook_permission_preflight",
+          nativeSessionId: "native_codex_approval",
+          event: "PermissionRequest",
+          receivedAt: "2026-05-21T12:00:01.000Z",
+          terminalProvider: "station",
+          terminalTargetId: "native:wt_web_task",
+        }),
+      );
+
+      expect(
+        permission.events.filter((event) => event.type === "worktree.agentStateChanged"),
+      ).toEqual([]);
+      expect(core.getSnapshot().rows[0]?.agent).toMatchObject({ state: "unknown" });
+      expect(core.getSnapshot().counts.attention).toBe(0);
+
+      const opened = await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        stationApprovalPromptOpenedRawHookEvent("2026-05-21T12:00:02.000Z"),
+      );
+      const attentionEvents = opened.events.filter(
+        (event) => event.type === "worktree.agentStateChanged",
+      );
+      expect(attentionEvents).toHaveLength(1);
+      expect(attentionEvents[0]).toMatchObject({
+        type: "worktree.agentStateChanged",
+        worktreeId: "wt_web_task",
+        harnessEventType: "StationApprovalPromptOpened",
+        agent: {
+          state: "needs_attention",
+          confidence: "high",
+          attention: "tool_approval",
+          reason: "Codex opened a tool approval prompt.",
+        },
+      });
+      expect(core.getSnapshot().counts.attention).toBe(1);
+
+      const postTool = await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        codexRawHookEvent({
+          hookId: "hook_post_approval",
+          nativeSessionId: "native_codex_approval",
+          event: "PostToolUse",
+          receivedAt: "2026-05-21T12:00:03.000Z",
+          terminalProvider: "station",
+          terminalTargetId: "native:wt_web_task",
+        }),
+      );
+      expect(
+        postTool.events.find((event) => event.type === "worktree.agentStateChanged"),
+      ).toMatchObject({ agent: { state: "working" } });
+      expect(core.getSnapshot().counts.attention).toBe(0);
+
+      const stopped = await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        codexRawHookEvent({
+          hookId: "hook_stop_after_approval",
+          nativeSessionId: "native_codex_approval",
+          event: "Stop",
+          receivedAt: "2026-05-21T12:00:04.000Z",
+          terminalProvider: "station",
+          terminalTargetId: "native:wt_web_task",
+        }),
+      );
+      expect(
+        stopped.events.find((event) => event.type === "worktree.agentStateChanged"),
+      ).toMatchObject({ agent: { state: "idle" } });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it.each([
+    "PostToolUse",
+    "Stop",
+  ] as const)("does not project a late approval edge over newer %s resolution", async (resolutionEvent) => {
+    const { sqlite, eventBus, core, api } = createTestObserver({
+      config,
+      providers: codexProviders({
+        terminalProvider: "station",
+        terminalTargetId: "native:wt_web_task",
+      }),
+      clock: { now: () => new Date(now) },
+    });
+
+    try {
+      await core.reconcile("initial-late-approval-context");
+      await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        codexRawHookEvent({
+          hookId: `hook_${resolutionEvent}_owner`,
+          nativeSessionId: "native_codex_late_approval",
+          event: "PreToolUse",
+          receivedAt: "2026-05-21T12:00:01.000Z",
+          terminalProvider: "station",
+          terminalTargetId: "native:wt_web_task",
+        }),
+      );
+      await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        codexRawHookEvent({
+          hookId: `hook_${resolutionEvent}_resolution`,
+          nativeSessionId: "native_codex_late_approval",
+          event: resolutionEvent,
+          receivedAt: "2026-05-21T12:00:03.000Z",
+          terminalProvider: "station",
+          terminalTargetId: "native:wt_web_task",
+        }),
+      );
+
+      const late = await ingestRawHookAndWaitForReconcile(
+        api,
+        eventBus,
+        stationApprovalPromptOpenedRawHookEvent(
+          "2026-05-21T12:00:02.000Z",
+          `hook_late_approval_after_${resolutionEvent}`,
+        ),
+      );
+
+      expect(late.events.filter((event) => event.type === "worktree.agentStateChanged")).toEqual(
+        [],
+      );
+      expect(core.getSnapshot().rows[0]?.agent?.state).toBe(
+        resolutionEvent === "Stop" ? "idle" : "working",
+      );
+      expect(core.getSnapshot().counts.attention).toBe(0);
+    } finally {
+      sqlite.close();
+    }
   });
 
   it("keeps a parent owner when inherited identity crosses into a nested managed worktree", async () => {
@@ -1029,6 +1181,35 @@ describe("observer reconcile with Codex harness", () => {
     }
   });
 
+  it("repairs legacy status-bearing PermissionRequest state after an upgrade", async () => {
+    const fixture = await persistLegacyPermissionRequestSequence();
+    const upgraded = createTestObserver({
+      config,
+      providers: codexProviders(),
+      clock: { now: () => new Date(now) },
+      sqlitePath: fixture.sqlitePath,
+    });
+    try {
+      await upgraded.core.reconcile("first-reconcile-after-permission-upgrade");
+
+      expect(upgraded.core.getSnapshot().rows[0]?.agent).toMatchObject({
+        state: "idle",
+        reason: "Codex turn completed.",
+        turnReadiness: { token: "report_legacy_permission_stop" },
+      });
+      await expect(upgraded.persistence.listSessionHarnessExecutions()).resolves.toEqual([
+        expect.objectContaining({
+          nativeSessionId: "native_legacy_permission",
+          state: "idle",
+          statusUpdatedAt: "2026-05-21T12:00:02.000Z",
+        }),
+      ]);
+    } finally {
+      upgraded.sqlite.close();
+      await fixture.remove();
+    }
+  });
+
   it("does not restore legacy readiness that the user already acknowledged", async () => {
     const fixture = await persistLegacySubagentStopSequence({ acknowledge: true });
     const upgraded = createTestObserver({
@@ -1253,6 +1434,50 @@ function legacyInheritedIdentityReport(input: {
   };
 }
 
+function legacyPermissionRequestReport(): HarnessEventReport {
+  const observedAt = "2026-05-21T12:00:03.000Z";
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    reportId: "report_legacy_permission_attention",
+    provider: "codex",
+    kind: "harness",
+    eventType: "PermissionRequest",
+    observedAt,
+    status: {
+      value: "needs_attention",
+      confidence: "high",
+      reason: "Codex requested permission to use Bash.",
+      source: "harness_event",
+      updatedAt: observedAt,
+      attention: "tool_approval",
+    },
+    correlation: {
+      projectId: "web",
+      worktreeId: "wt_web_task",
+      sessionId: "ses_web_task",
+      terminalTargetId: "tmux:station:@1:%2",
+      nativeSessionId: "native_legacy_permission",
+      cwd: "/tmp/station/web/task",
+    },
+    diagnostics: { rawEventType: "PermissionRequest" },
+    providerData: {
+      codexSessionId: "native_legacy_permission",
+      hookEventName: "PermissionRequest",
+      cwd: "/tmp/station/web/task",
+      model: "gpt-5.4-codex",
+      permissionMode: "default",
+      codexTurnId: "turn_1",
+      toolName: "Bash",
+      stationProjectId: "web",
+      stationWorktreeId: "wt_web_task",
+      stationWorktreePath: "/tmp/station/web/task",
+      stationSessionId: "ses_web_task",
+      stationTerminalProvider: "tmux",
+      stationTerminalTargetId: "tmux:station:@1:%2",
+    },
+  };
+}
+
 async function persistLegacyInheritedIdentitySequence(): Promise<{
   sqlitePath: string;
   remove: () => Promise<void>;
@@ -1306,6 +1531,54 @@ async function persistLegacyInheritedIdentitySequence(): Promise<{
     expect.objectContaining({ nativeSessionId: "native_b", state: "working" }),
   ]);
   await expect(legacy.persistence.listSessionTurnReadiness()).resolves.toEqual([]);
+  legacy.sqlite.close();
+  return {
+    sqlitePath,
+    remove: () => rm(root, { recursive: true, force: true }),
+  };
+}
+
+async function persistLegacyPermissionRequestSequence(): Promise<{
+  sqlitePath: string;
+  remove: () => Promise<void>;
+}> {
+  const root = await mkdtemp(join(tmpdir(), "station-codex-permission-upgrade-"));
+  const sqlitePath = join(root, "observer.sqlite");
+  const legacy = createTestObserver({
+    config,
+    providers: codexProviders({ acceptLegacyPersistedEvents: true }),
+    clock: { now: () => new Date(now) },
+    sqlitePath,
+    idFactory: prefixedIds("legacy_permission"),
+  });
+
+  await legacy.core.reconcile("legacy-before-permission-upgrade");
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    codexLifecycleReport({
+      reportId: "report_legacy_permission_working",
+      nativeSessionId: "native_legacy_permission",
+      event: "PreToolUse",
+      observedAt: "2026-05-21T12:00:01.000Z",
+    }),
+  );
+  await reportAndReconcile(
+    legacy.api,
+    legacy.eventBus,
+    codexLifecycleReport({
+      reportId: "report_legacy_permission_stop",
+      nativeSessionId: "native_legacy_permission",
+      event: "Stop",
+      observedAt: "2026-05-21T12:00:02.000Z",
+    }),
+  );
+  await reportAndReconcile(legacy.api, legacy.eventBus, legacyPermissionRequestReport());
+
+  expect(legacy.core.getSnapshot().rows[0]?.agent).toMatchObject({
+    state: "needs_attention",
+    attention: "tool_approval",
+  });
   legacy.sqlite.close();
   return {
     sqlitePath,
@@ -1557,7 +1830,7 @@ function codexLifecycleReport(input: {
 async function ingestRawHookAndWaitForReconcile(
   api: ReturnType<typeof createTestObserver>["api"],
   eventBus: ReturnType<typeof createObserverEventBus>,
-  event: ReturnType<typeof codexRawHookEvent>,
+  event: ProviderHookEvent,
 ) {
   const eventIterator = eventBus.subscribe()[Symbol.asyncIterator]();
   const receipt = await api.ingestProviderHookEvent(event);
@@ -1576,9 +1849,13 @@ async function ingestRawHookAndWaitForReconcile(
 function codexRawHookEvent(input: {
   hookId: string;
   nativeSessionId: string;
-  event: "PreToolUse" | "Stop" | "SubagentStop";
+  event: "PreToolUse" | "PermissionRequest" | "PostToolUse" | "Stop" | "SubagentStop";
   receivedAt: string;
+  terminalProvider?: "station" | "tmux";
+  terminalTargetId?: string;
 }) {
+  const terminalProvider = input.terminalProvider ?? "tmux";
+  const terminalTargetId = input.terminalTargetId ?? "tmux:station:@1:%2";
   const common = {
     session_id: input.nativeSessionId,
     transcript_path: null,
@@ -1590,34 +1867,58 @@ function codexRawHookEvent(input: {
     station_worktree_id: "wt_web_task",
     station_worktree_path: "/tmp/station/web/task",
     station_session_id: "ses_web_task",
-    station_terminal_provider: "tmux",
-    station_terminal_target_id: "tmux:station:@1:%2",
+    station_terminal_provider: terminalProvider,
+    station_terminal_target_id: terminalTargetId,
   };
-  const payload =
-    input.event === "PreToolUse"
-      ? {
-          ...common,
-          hook_event_name: "PreToolUse",
-          tool_name: "Bash",
-          tool_input: { command: "pnpm test" },
-          tool_use_id: `call_${input.hookId}`,
-        }
-      : input.event === "Stop"
-        ? {
-            ...common,
-            hook_event_name: "Stop",
-            stop_hook_active: false,
-            last_assistant_message: "Done.",
-          }
-        : {
-            ...common,
-            hook_event_name: "SubagentStop",
-            agent_transcript_path: null,
-            agent_id: "agent_reviewer",
-            agent_type: "reviewer",
-            stop_hook_active: false,
-            last_assistant_message: "Reviewed.",
-          };
+  let payload: Record<string, unknown>;
+  switch (input.event) {
+    case "PreToolUse":
+      payload = {
+        ...common,
+        hook_event_name: input.event,
+        tool_name: "Bash",
+        tool_input: { command: "pnpm test" },
+        tool_use_id: `call_${input.hookId}`,
+      };
+      break;
+    case "PermissionRequest":
+      payload = {
+        ...common,
+        hook_event_name: input.event,
+        tool_name: "Bash",
+        tool_input: { command: "write outside sandbox" },
+      };
+      break;
+    case "PostToolUse":
+      payload = {
+        ...common,
+        hook_event_name: input.event,
+        tool_name: "Bash",
+        tool_input: { command: "write outside sandbox" },
+        tool_response: { ok: true },
+        tool_use_id: `call_${input.hookId}`,
+      };
+      break;
+    case "Stop":
+      payload = {
+        ...common,
+        hook_event_name: input.event,
+        stop_hook_active: false,
+        last_assistant_message: "Done.",
+      };
+      break;
+    case "SubagentStop":
+      payload = {
+        ...common,
+        hook_event_name: input.event,
+        agent_transcript_path: null,
+        agent_id: "agent_reviewer",
+        agent_type: "reviewer",
+        stop_hook_active: false,
+        last_assistant_message: "Reviewed.",
+      };
+      break;
+  }
   return {
     schemaVersion: STATION_SCHEMA_VERSION,
     hookId: input.hookId,
@@ -1629,6 +1930,33 @@ function codexRawHookEvent(input: {
     worktreeId: "wt_web_task",
     sessionId: "ses_web_task",
     payload,
+  };
+}
+
+function stationApprovalPromptOpenedRawHookEvent(
+  receivedAt: string,
+  hookId = "hook_station_approval_prompt",
+): ProviderHookEvent {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    hookId,
+    provider: "codex",
+    kind: "harness",
+    event: "StationApprovalPromptOpened",
+    receivedAt,
+    projectId: "web",
+    worktreeId: "wt_web_task",
+    sessionId: "ses_web_task",
+    payload: {
+      hook_event_name: "StationApprovalPromptOpened",
+      cwd: "/tmp/station/web/task",
+      station_project_id: "web",
+      station_worktree_id: "wt_web_task",
+      station_worktree_path: "/tmp/station/web/task",
+      station_session_id: "ses_web_task",
+      station_terminal_provider: "station",
+      station_terminal_target_id: "native:wt_web_task",
+    },
   };
 }
 
@@ -1646,7 +1974,13 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   throw new Error("Timed out waiting for condition.");
 }
 
-function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {}): ProviderRegistry {
+function codexProviders(
+  options: {
+    acceptLegacyPersistedEvents?: boolean;
+    terminalProvider?: "station" | "tmux";
+    terminalTargetId?: string;
+  } = {},
+): ProviderRegistry {
   const codex = createCodexHarnessProvider({
     now: () => new Date(now),
     runner: async (input) => ({
@@ -1660,6 +1994,8 @@ function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {})
   if (options.acceptLegacyPersistedEvents === true) {
     delete codex.acceptsPersistedEvent;
   }
+  const terminalProvider = options.terminalProvider ?? "tmux";
+  const terminalTargetId = options.terminalTargetId ?? "tmux:station:@1:%2";
   return new ProviderRegistry({
     worktree: new FakeWorktreeProvider({
       now,
@@ -1677,8 +2013,8 @@ function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {})
       now,
       targets: [
         createFakeTerminalTarget({
-          id: "tmux:station:@1:%2",
-          provider: "tmux",
+          id: terminalTargetId,
+          provider: terminalProvider,
           projectId: "web",
           worktreeId: "wt_web_task",
           sessionId: "ses_web_task",
@@ -1688,11 +2024,15 @@ function codexProviders(options: { acceptLegacyPersistedEvents?: boolean } = {})
             harnessProvider: "codex",
             currentCommand: "codex",
           },
-          providerData: {
-            sessionName: "station",
-            windowId: "@1",
-            paneId: "%2",
-          },
+          ...(terminalProvider === "tmux"
+            ? {
+                providerData: {
+                  sessionName: "station",
+                  windowId: "@1",
+                  paneId: "%2",
+                },
+              }
+            : {}),
         }),
       ],
     }),

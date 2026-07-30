@@ -59,6 +59,8 @@ export type StationVtScreenOptions = {
    * on them at startup.
    */
   onResponse?: (data: string) => void;
+  /** Message-free OSC 9 edge for local/fallback PTYs; the payload is discarded here. */
+  onNotification?: () => void;
   /** Pane label attached to corruption telemetry and evidence dumps. */
   diagnosticsLabel?: string;
 };
@@ -199,7 +201,8 @@ export type StationVtScreen = {
   whenIdle(): Promise<void>;
   /**
    * Forensic snapshot for corruption dumps: the visible grid plus the raw byte
-   * tail that produced it (replayable offline through a fresh screen).
+   * tail that produced it (replayable offline through a fresh screen, except
+   * for redacted OSC 9 notification payloads, which do not affect the grid).
    */
   corruptionEvidence(): { rows: string[]; rawTail: string };
   /**
@@ -241,6 +244,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   let lastFlushAt = 0;
   let syncHoldUntil: number | undefined;
   const rawRing = new ChunkRing(RAW_RING_LIMIT_CHARS);
+  const redactNotificationEvidence = createOsc9EvidenceRedactor();
   let lastFragmentScanAt = 0;
 
   const corruptionEvidence = (): { rows: string[]; rawTail: string } => ({
@@ -415,6 +419,12 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       return false;
     }
     emitResponse(`\x1b]11;${toOscRgb(theme.background)}\x07`);
+    return true;
+  });
+  terminal.parser.registerOscHandler(9, () => {
+    if (!disposed) {
+      options.onNotification?.();
+    }
     return true;
   });
 
@@ -616,7 +626,10 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       if (disposed) {
         return;
       }
-      rawRing.push(data);
+      const evidence = redactNotificationEvidence(data);
+      if (evidence.length > 0) {
+        rawRing.push(evidence);
+      }
       // U+FFFD in the feed means bytes were already destroyed upstream (the
       // bridge's UTF-8 decode of split or invalid sequences).
       if (data.includes("�")) {
@@ -804,6 +817,42 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       titleListeners.clear();
       terminal.dispose();
     },
+  };
+}
+
+function createOsc9EvidenceRedactor(): (data: string) => string {
+  const prefixes = ["\x1b]9;", "\x9d9;"] as const;
+  let candidate = "";
+  let redacting = false;
+  let sawEscape = false;
+
+  return (data) => {
+    let retained = "";
+    for (const char of data) {
+      if (redacting) {
+        if (char === "\x07" || char === "\x9c" || (sawEscape && char === "\\")) {
+          redacting = false;
+          sawEscape = false;
+          continue;
+        }
+        sawEscape = char === "\x1b";
+        continue;
+      }
+
+      candidate += char;
+      while (
+        candidate.length > 0 &&
+        !prefixes.some((prefix) => prefix.startsWith(candidate))
+      ) {
+        retained += candidate[0];
+        candidate = candidate.slice(1);
+      }
+      if (prefixes.some((prefix) => candidate === prefix)) {
+        candidate = "";
+        redacting = true;
+      }
+    }
+    return retained;
   };
 }
 

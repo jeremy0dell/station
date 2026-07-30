@@ -160,6 +160,66 @@ function terminalFor(
 }
 
 describe("createHostAttachedTerminal", () => {
+  it("emits acknowledgement notifications after replay and deduplicates matching live frames", async () => {
+    const latestNotification = {
+      id: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      kind: "osc9" as const,
+      observedAt: "2026-07-29T12:34:56.000Z",
+    };
+    const ctrl = controllableAttachment(
+      ack({ latestNotification, scrollback: ["history"] }),
+    );
+    const { terminal } = terminalFor(ctrl.attachment);
+    const replayGate = deferred<void>();
+    const notifications: typeof latestNotification[] = [];
+    terminal.onReplay?.(() => replayGate.promise);
+    terminal.onNotification?.((notification) => notifications.push(notification));
+
+    await flush();
+    expect(notifications).toEqual([]);
+
+    replayGate.resolve(undefined);
+    await flush();
+    expect(notifications).toEqual([latestNotification]);
+
+    ctrl.push({ type: "notification", ptyId: "pty-1", ...latestNotification });
+    ctrl.push({
+      type: "notification",
+      ptyId: "pty-1",
+      id: "8e596bf1-bf2a-49d5-9087-0ca9fb5513f1",
+      kind: "osc9",
+      observedAt: "2026-07-29T12:35:00.000Z",
+    });
+    await flush();
+    expect(notifications).toEqual([
+      latestNotification,
+      {
+        id: "8e596bf1-bf2a-49d5-9087-0ca9fb5513f1",
+        kind: "osc9",
+        observedAt: "2026-07-29T12:35:00.000Z",
+      },
+    ]);
+    terminal.dispose();
+  });
+
+  it("buffers the latest notification until a listener is registered", async () => {
+    const latestNotification = {
+      id: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      kind: "osc9" as const,
+      observedAt: "2026-07-29T12:34:56.000Z",
+    };
+    const ctrl = controllableAttachment(ack({ latestNotification }));
+    const { terminal } = terminalFor(ctrl.attachment);
+    await flush();
+    await flush();
+
+    const notifications: typeof latestNotification[] = [];
+    terminal.onNotification?.((notification) => notifications.push(notification));
+
+    expect(notifications).toEqual([latestNotification]);
+    terminal.dispose();
+  });
+
   it("replays the scrollback snapshot through onData, then streams live frames", async () => {
     const ctrl = controllableAttachment(ack({ scrollback: ["scroll-"] }));
     const { terminal } = terminalFor(ctrl.attachment);

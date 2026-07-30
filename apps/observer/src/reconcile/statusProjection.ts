@@ -267,9 +267,6 @@ function singleTarget(
 }
 
 function shouldPreserveCurrentAgent(agent: WorktreeAgent, status: ObservedStatus): boolean {
-  if (agent.state !== "exited" || agent.confidence !== "high") {
-    return false;
-  }
   return Date.parse(status.updatedAt) < Date.parse(agent.updatedAt);
 }
 

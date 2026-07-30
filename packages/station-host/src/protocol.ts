@@ -1,11 +1,15 @@
-import { SafeErrorSchema, TerminalOutputCompatibilitySchema } from "@station/contracts";
+import {
+  SafeErrorSchema,
+  TerminalOutputCompatibilitySchema,
+  TimestampSchema,
+} from "@station/contracts";
 import { z } from "zod";
 
 /**
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 5;
+export const HOST_PROTOCOL_VERSION = 6;
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
@@ -205,9 +209,24 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
 export type HostReplay = z.infer<typeof HostReplaySchema>;
 
 /**
- * Attach acknowledgement captured atomically with the live listener. Raw replay
- * preserves production geometry; exact semantic and control-only reset recovery
- * both begin at the Host's current geometry before the client geometry nudge.
+ * Content-free terminal notification retained by Host independently of replay.
+ * The UUID deduplicates acknowledgement/live boundary races without carrying OSC payload text.
+ */
+export const HostTerminalNotificationSchema = z
+  .object({
+    id: z.string().uuid(),
+    kind: z.literal("osc9"),
+    observedAt: TimestampSchema,
+  })
+  .strict();
+export type HostTerminalNotification = z.infer<typeof HostTerminalNotificationSchema>;
+
+/**
+ * Attach acknowledgement captured after registering the live listener. Raw replay
+ * precedes `latestNotification` at the client; a boundary-racing notification may
+ * also arrive live, so clients deduplicate by notification ID. Raw replay preserves
+ * production geometry; exact semantic and control-only reset recovery both begin
+ * at the Host's current geometry before the client geometry nudge.
  */
 export const HostAttachAckSchema = z
   .object({
@@ -218,6 +237,7 @@ export const HostAttachAckSchema = z
     rows: z.number().int(),
     exited: z.boolean(),
     replay: HostReplaySchema,
+    latestNotification: HostTerminalNotificationSchema.optional(),
   })
   .strict()
   .superRefine((ack, context) => {
@@ -259,6 +279,10 @@ export const HostFrameSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("focus"), ptyId: idSchema }).strict(),
+  HostTerminalNotificationSchema.extend({
+    type: z.literal("notification"),
+    ptyId: idSchema,
+  }).strict(),
 ]);
 export type HostFrame = z.infer<typeof HostFrameSchema>;
 export type HostExitFrame = Extract<HostFrame, { type: "exit" }>;

@@ -187,6 +187,58 @@ describe("observer client service", () => {
     await server.close();
   });
 
+  it("ingests raw provider events through the observer protocol", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const ingested: ProviderHookEvent[] = [];
+    const server = await startProtocolServer({
+      socketPath,
+      api: fakeApi({
+        ingestProviderHookEvent: async (event) => {
+          ingested.push(event);
+          return {
+            schemaVersion: STATION_SCHEMA_VERSION,
+            hookId: "hook_approval_1",
+            provider: event.provider,
+            event: event.event,
+            accepted: true,
+            status: "ingested",
+            receivedAt: event.receivedAt,
+            reconciled: false,
+          };
+        },
+      }),
+    });
+    const service = createObserverService({ socketPath, requestId: ids("hook") });
+    const ingest = service.ingestProviderHookEvent;
+
+    expect(ingest).toBeDefined();
+    await expect(ingest?.(approvalHookEvent())).resolves.toMatchObject({
+      hookId: "hook_approval_1",
+      accepted: true,
+      status: "ingested",
+    });
+    expect(ingested).toEqual([approvalHookEvent()]);
+
+    await server.close();
+  });
+
+  it("normalizes provider-ingress failures at the client boundary", async () => {
+    const service = createObserverService({
+      clientLabel: "Station",
+      client: fakeClient({
+        ingestProviderHookEvent: async () => {
+          throw new Error("socket disappeared");
+        },
+      }),
+    });
+
+    await expect(service.ingestProviderHookEvent?.(approvalHookEvent())).rejects.toMatchObject({
+      tag: "ClientObserverError",
+      code: "CLIENT_PROVIDER_HOOK_INGEST_FAILED",
+      message: "The Station could not ingest the provider hook event.",
+    });
+  });
+
   it("maps protocol SafeErrors without dropping diagnostic IDs", async () => {
     const { socketPath } = await createTempSocketPath();
     const server = await startProtocolServer({
@@ -644,6 +696,23 @@ function commandRecord(commandId: CommandId, status: CommandRecord["status"]): C
     };
   }
   return record;
+}
+
+function approvalHookEvent(): ProviderHookEvent {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    provider: "codex",
+    kind: "harness",
+    event: "StationApprovalPromptOpened",
+    receivedAt: fixtureNow,
+    projectId: "web",
+    worktreeId: "wt_web_feature",
+    sessionId: "ses_external_1",
+    payload: {
+      hook_event_name: "StationApprovalPromptOpened",
+      cwd: "/tmp/station/web/feature",
+    },
+  };
 }
 
 function ids(prefix: string): () => string {

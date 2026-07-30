@@ -1,5 +1,6 @@
 import type { ObserverService } from "@station/client";
-import type { StationEvent, StationSnapshot } from "@station/contracts";
+import type { ProviderHookEvent, StationEvent, StationSnapshot } from "@station/contracts";
+import { STATION_SCHEMA_VERSION } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mockObserverSnapshot } from "./fixtures/mockObserverSnapshot.js";
 import { createObserverStationClient } from "./observerStationClient.js";
@@ -46,6 +47,17 @@ describe("createObserverStationClient", () => {
     expect(fake.dispatchedTypes).toEqual(["observer.reconcile"]);
     expect(fake.waitedForCommandIds).toEqual([receipt.commandId]);
     expect(completion.status).toBe("succeeded");
+  });
+
+  it("preserves provider-hook ingress through the runtime service bridge", async () => {
+    const fake = createFakeObserverService(mockObserverSnapshot);
+    const client = track(createObserverStationClient({ service: fake.service }));
+    const event = approvalHookEvent();
+
+    expect(client.service.ingestProviderHookEvent).toBeDefined();
+    await client.service.ingestProviderHookEvent?.(event);
+
+    expect(fake.ingestedProviderHooks).toEqual([event]);
   });
 
   it("routes service.reconcile through the runtime so client state converges", async () => {
@@ -207,6 +219,7 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
   const dispatchedTypes: string[] = [];
   const waitedForCommandIds: string[] = [];
   const reconcileReasons: Array<string | undefined> = [];
+  const ingestedProviderHooks: ProviderHookEvent[] = [];
 
   const service: ObserverService = {
     loadSnapshot: async () => snapshot,
@@ -243,6 +256,19 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
       reconcileReasons.push(reason);
       return snapshot;
     },
+    ingestProviderHookEvent: async (event) => {
+      ingestedProviderHooks.push(event);
+      return {
+        schemaVersion: STATION_SCHEMA_VERSION,
+        hookId: "hook_station_test",
+        provider: event.provider,
+        event: event.event,
+        accepted: true,
+        status: "ingested",
+        receivedAt: event.receivedAt,
+        reconciled: false,
+      };
+    },
     prepareExternalLaunch: async (params) => ({
       kind: "existing-session",
       sessionId: `ses_${params.worktreeId}`,
@@ -259,6 +285,7 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
     dispatchedTypes,
     waitedForCommandIds,
     reconcileReasons,
+    ingestedProviderHooks,
     setSnapshot: (next: StationSnapshot) => {
       snapshot = next;
     },
@@ -274,6 +301,20 @@ function createFakeObserverService(initialSnapshot: StationSnapshot) {
       for (const waiter of waiters.splice(0)) {
         waiter.reject(error);
       }
+    },
+  };
+}
+
+function approvalHookEvent(): ProviderHookEvent {
+  return {
+    schemaVersion: STATION_SCHEMA_VERSION,
+    provider: "codex",
+    kind: "harness",
+    event: "StationApprovalPromptOpened",
+    receivedAt: "2026-06-11T12:01:00.000Z",
+    payload: {
+      hook_event_name: "StationApprovalPromptOpened",
+      cwd: "/tmp/station/web/task",
     },
   };
 }

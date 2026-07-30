@@ -314,6 +314,37 @@ describe("live harness status projection", () => {
       confidence: "high",
     });
   });
+
+  it.each([
+    "working",
+    "idle",
+  ] as const)("does not flash older approval attention over newer %s state", (state) => {
+    const result = projectHarnessEventReportOntoSnapshot({
+      snapshot: snapshotFor({
+        state,
+        confidence: "high",
+        now: "2026-05-21T12:00:10.000Z",
+      }),
+      report: report({
+        observedAt: "2026-05-21T12:00:05.000Z",
+        status: {
+          ...status(
+            "needs_attention",
+            "high",
+            "Older approval prompt.",
+            "2026-05-21T12:00:05.000Z",
+          ),
+          attention: "tool_approval",
+        },
+        correlation: { harnessRunId: "run_web_task" },
+      }),
+      projectedAt: "2026-05-21T12:00:11.000Z",
+    });
+
+    expect(result.projected).toBe(false);
+    expect(result.events).toEqual([]);
+    expect(result.snapshot.rows[0]?.agent?.state).toBe(state);
+  });
 });
 
 describe("cwd correlation resolution", () => {
