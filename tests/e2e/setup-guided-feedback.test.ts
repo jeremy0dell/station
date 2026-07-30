@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CliSetupPlanSchema } from "../../packages/contracts/src/index.js";
 import { createObserverClient } from "../../packages/protocol/src/index.js";
 import {
   expectedProviderHookScript,
@@ -113,9 +114,7 @@ describe("setup guided feedback e2e", () => {
         env: fixture.env,
         answers: [],
       });
-      const checkPlan = JSON.parse(check.stdout) as {
-        checks: Array<{ id: string; details?: Record<string, string> }>;
-      };
+      const checkPlan = CliSetupPlanSchema.parse(JSON.parse(check.stdout));
       expect(
         checkPlan.checks.find((candidate) => candidate.id === "harness-tracking:codex")?.details,
       ).toEqual(
@@ -162,9 +161,7 @@ describe("setup guided feedback e2e", () => {
         ["--config", fixture.configPath, "setup", "check", "--json"],
         { cwd: fixture.repo, env: fixture.env, answers: [] },
       );
-      const repairedPlan = JSON.parse(repairedCheck.stdout) as {
-        checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
-      };
+      const repairedPlan = CliSetupPlanSchema.parse(JSON.parse(repairedCheck.stdout));
       expect(
         repairedPlan.checks.find((candidate) => candidate.id === "harness-tracking:codex"),
       ).toMatchObject({
@@ -388,7 +385,7 @@ describe("setup guided feedback e2e", () => {
           },
         );
         expect(check.exitCode).toBe(0);
-        expect(JSON.parse(check.stdout).checks).toEqual(
+        expect(CliSetupPlanSchema.parse(JSON.parse(check.stdout)).checks).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ id: "worktrunk-shell-integration", status: "ok" }),
           ]),

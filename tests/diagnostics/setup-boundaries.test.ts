@@ -20,6 +20,8 @@ const policyNames = [
   "assessHarnessTracking",
   "selectHarnessTrackingRepairTargets",
   "deriveSetupReadiness",
+  "planSetup",
+  "deriveSetupResult",
 ] as const;
 
 describe("setup core boundaries", () => {
@@ -46,7 +48,7 @@ describe("setup core boundaries", () => {
     }
   });
 
-  it("marks exactly the four public policies and no data declarations or barrels", async () => {
+  it("marks exactly the six public policies and no data declarations or barrels", async () => {
     const declarations: string[] = [];
     let markerCount = 0;
     for (const file of await sourceFiles(sourceRoot)) {
@@ -63,7 +65,7 @@ describe("setup core boundaries", () => {
       }
     }
 
-    expect(markerCount).toBe(4);
+    expect(markerCount).toBe(6);
     expect(declarations.sort()).toEqual([...policyNames].sort());
   });
 });
