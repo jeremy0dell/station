@@ -67,9 +67,8 @@ Pinned so the release job, install script, and acceptance suite agree.
   popup geometry; custom geometry and explicit `--config` setup use this exact
   config-aware sibling alias. First use or invalid fast state also invokes the
   alias. The source POSIX launcher remains unchanged for development installs.
-- `LICENSE` — required. FSL-1.1 (LICENSE:67) obliges every redistributed
-  copy to include the Terms or a link and keep copyright notices. The
-  archive must carry it.
+- `LICENSE` — required. The archive must carry the Apache License 2.0 terms
+  distributed with Station.
 - **Extracted-at-runtime integration assets** (see A4 extraction policy):
   the Pi extension file (`integrations/harness/pi/src/piExtension.ts` is
   resolved as an on-disk `../dist/piExtension.js` via

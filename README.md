@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/jeremy0dell/station/releases"><img src="https://img.shields.io/github/v/release/jeremy0dell/station?include_prereleases&amp;sort=date&amp;display_name=tag&amp;style=flat-square&amp;label=release" alt="Latest Station release"></a>
   <a href="https://github.com/jeremy0dell/station/actions/workflows/standard-ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jeremy0dell/station/standard-ci.yml?branch=main&amp;style=flat-square&amp;logo=github&amp;label=build" alt="Standard CI build status"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-FSL--1.1--ALv2-blue?style=flat-square" alt="License: FSL-1.1-ALv2"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache-2.0"></a>
   <a href="./docs/install.md#binary-requirements"><img src="https://img.shields.io/badge/platforms-macOS%2013%2B%20%7C%20glibc%202.39%2B%20Linux-lightgrey?style=flat-square" alt="Supported platforms: macOS 13 or newer and glibc 2.39 or newer Linux"></a>
   <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen?style=flat-square" alt="Contributions are welcome"></a>
 </p>
