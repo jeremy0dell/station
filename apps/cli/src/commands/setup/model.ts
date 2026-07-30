@@ -1,6 +1,16 @@
 import type { TmuxConfig } from "@station/config";
-import { ProviderHookArtifactOwnershipSchema } from "@station/contracts";
-import { type SupportedHarnessId, supportedHarnessIds } from "@station/setup-core";
+import {
+  type CliSetupAction,
+  CliSetupActionSchema,
+  type CliSetupCheck,
+  CliSetupCheckSchema,
+  CliSetupHarnessIdSchema,
+  type CliSetupPlan,
+  CliSetupPlanSchema,
+  CliSetupSummarySchema,
+  ProviderHookArtifactOwnershipSchema,
+} from "@station/contracts";
+import type { SupportedHarnessId } from "@station/setup-core";
 import { z } from "zod";
 
 export type { SupportedHarnessId } from "@station/setup-core";
@@ -30,7 +40,7 @@ export const SetupStatusSchema = z.enum(setupStatuses);
 export const SetupModeSchema = z.enum(setupModes);
 export const SetupActionKindSchema = z.enum(setupActionKinds);
 export const SetupActionStatusSchema = z.enum(setupActionStatuses);
-export const SupportedHarnessIdSchema = z.enum(supportedHarnessIds);
+export const SupportedHarnessIdSchema = CliSetupHarnessIdSchema;
 export const SetupHarnessSelectionSourceSchema = z.enum(setupHarnessSelectionSources);
 export const SetupHarnessTrackingFactSchema = z
   .object({
@@ -63,64 +73,14 @@ export type SetupMode = z.infer<typeof SetupModeSchema>;
 export type SetupHarnessSelectionSource = z.infer<typeof SetupHarnessSelectionSourceSchema>;
 export type SetupHarnessTrackingFact = z.infer<typeof SetupHarnessTrackingFactSchema>;
 
-export const SetupCheckSchema = z
-  .object({
-    id: z.string().min(1),
-    tier: SetupTierSchema,
-    status: SetupStatusSchema,
-    label: z.string().min(1),
-    message: z.string().min(1),
-    details: z.record(z.string(), z.string()).optional(),
-  })
-  .strict();
+export const SetupCheckSchema = CliSetupCheckSchema;
+export const SetupActionSchema = CliSetupActionSchema;
+export const SetupSummarySchema = CliSetupSummarySchema;
+export const SetupPlanSchema = CliSetupPlanSchema;
 
-export const SetupActionSchema = z
-  .object({
-    id: z.string().min(1),
-    kind: SetupActionKindSchema,
-    tier: SetupTierSchema,
-    selected: z.boolean(),
-    label: z.string().min(1),
-    message: z.string().min(1),
-    command: z.array(z.string()).optional(),
-    path: z.string().optional(),
-    status: SetupActionStatusSchema.optional(),
-    data: z.record(z.string(), z.string()).optional(),
-  })
-  .strict();
-
-export const SetupSummarySchema = z
-  .object({
-    launchReady: z.boolean(),
-    workflowReady: z.boolean(),
-    requiredOk: z.boolean(),
-    requiredMissing: z.number().int().nonnegative(),
-    warnings: z.number().int().nonnegative(),
-    selectedActions: z.number().int().nonnegative(),
-    selectionSource: SetupHarnessSelectionSourceSchema,
-    selectedHarness: SupportedHarnessIdSchema.optional(),
-    configPath: z.string(),
-  })
-  .strict()
-  .refine((summary) => summary.requiredOk === summary.workflowReady, {
-    message: "requiredOk must match workflowReady",
-    path: ["requiredOk"],
-  });
-
-export const SetupPlanSchema = z
-  .object({
-    generatedAt: z.string().min(1),
-    mode: SetupModeSchema,
-    checks: z.array(SetupCheckSchema),
-    actions: z.array(SetupActionSchema),
-    summary: SetupSummarySchema,
-    nextSteps: z.array(z.string()),
-  })
-  .strict();
-
-export type SetupCheck = z.infer<typeof SetupCheckSchema>;
-export type SetupAction = z.infer<typeof SetupActionSchema>;
-export type SetupPlan = z.infer<typeof SetupPlanSchema>;
+export type SetupCheck = CliSetupCheck;
+export type SetupAction = CliSetupAction;
+export type SetupPlan = CliSetupPlan;
 
 export type SetupDependencyFact = {
   status: "ok" | "missing";

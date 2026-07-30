@@ -14028,6 +14028,37 @@
       "dependencies": []
     },
     {
+      "path": "packages/setup-core/src/policy/deriveSetupResult.ts",
+      "declaration": "deriveSetupResult",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives readiness and compatibility counts from current semantic evidence without trusting attempted mutations.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/planSetup.ts",
+      "declaration": "planSetup",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives semantic setup issues and operations from normalized evidence and intent without rendering or performing effects.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/deriveSetupResult.ts",
+          "declaration": "deriveSetupResult",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
+          "declaration": "resolveHarnessSelection",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
       "declaration": "resolveHarnessSelection",
       "kind": "function",
