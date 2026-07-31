@@ -250,9 +250,10 @@ immediately, and Left/Right on a session row is inert. Remove, rename, and fork 
 a separate session-only traversal, as do slot keys and next-needs-me. Gaps, empty placeholders, and
 optimistic create rows remain non-focusable.
 
-Only the focused header segment receives `STATION_COLORS.focusBackground`: primary covers the
-rendered disclosure/name/summary text without painting flexible trailing whitespace, while each
-trailing control owns exactly its label cells and separator spaces remain inert. Wide and compact
+Only the focused header segment receives the stronger bounded fill from
+`STATION_COLORS.projectHeaderFocusBackground`: primary covers the rendered
+disclosure/name/summary text without painting flexible trailing whitespace, while each trailing
+control owns exactly its label cells and separator spaces remain inert. Wide and compact
 labels preserve the same control identity. Hover stays component-local, temporarily supersedes the
 focus background, and reveals persistent keyboard focus again when the pointer leaves; no focus
 glyph is added.
