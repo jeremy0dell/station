@@ -66,13 +66,15 @@ const tmuxCapabilities: TerminalCapabilities = {
   canCaptureOutput: true,
   canSendInput: true,
   canPersistIdentityBinding: true,
+  canLaunchProcessPersistently: true,
   canDisplayPopup: true,
 };
 
 /**
  * ADAPTER
  *
- * Translates Station terminal operations into tmux-owned topology and commands.
+ * Translates Station terminal operations into tmux-owned topology, durable process
+ * launch, and commands.
  *
  * An absent tmux server is empty topology; other operational failures retain diagnostic evidence while
  * provider health exposes only the lean public projection.

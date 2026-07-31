@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { runCli as runCliBase } from "@station/cli";
+import { CliSetupPlanSchema } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
@@ -67,7 +68,7 @@ describe("CLI setup command", () => {
     );
 
     expect(result.code).toBe(1);
-    expect(result.output).toMatchObject({
+    expect(CliSetupPlanSchema.parse(result.output)).toMatchObject({
       generatedAt: "2026-06-08T12:00:00.000Z",
       mode: "check",
       summary: {
@@ -117,9 +118,7 @@ describe("CLI setup command", () => {
       },
     });
 
-    const plan = result.output as {
-      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
-    };
+    const plan = CliSetupPlanSchema.parse(result.output);
     expect(plan.checks.find((check) => check.id === "harness")?.details).toMatchObject({
       default: "codex",
       enabled: "codex",
@@ -190,9 +189,7 @@ describe("CLI setup command", () => {
       },
     });
 
-    const plan = result.output as {
-      checks: Array<{ id: string; details?: Record<string, string> }>;
-    };
+    const plan = CliSetupPlanSchema.parse(result.output);
     expect(plan.checks.find((check) => check.id === "harness-tracking:codex")?.details).toEqual(
       expect.objectContaining({
         ownership: "different-owner",
@@ -312,10 +309,7 @@ describe("CLI setup command", () => {
       },
     });
 
-    const plan = result.output as {
-      summary: { selectedHarness?: string };
-      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
-    };
+    const plan = CliSetupPlanSchema.parse(result.output);
     expect(result.code).toBe(1);
     expect(plan.summary.selectedHarness).toBe("codex");
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
@@ -353,10 +347,7 @@ describe("CLI setup command", () => {
       },
     });
 
-    const plan = result.output as {
-      summary: { requiredOk: boolean };
-      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
-    };
+    const plan = CliSetupPlanSchema.parse(result.output);
     expect(result.code).toBe(1);
     expect(plan.summary.requiredOk).toBe(false);
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
@@ -385,11 +376,7 @@ describe("CLI setup command", () => {
     });
 
     expect(result.code).toBe(1);
-    const plan = result.output as {
-      summary: { launchReady: boolean; workflowReady: boolean; requiredOk: boolean };
-      checks: Array<{ id: string }>;
-      actions: Array<{ id: string }>;
-    };
+    const plan = CliSetupPlanSchema.parse(result.output);
     expect(plan.summary).toMatchObject({
       launchReady: true,
       workflowReady: false,
@@ -423,10 +410,7 @@ describe("CLI setup command", () => {
         fs: readOnlyFs({}),
       },
     });
-    const plan = result.output as {
-      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
-      actions: Array<{ id: string }>;
-    };
+    const plan = CliSetupPlanSchema.parse(result.output);
 
     expect(plan.checks.find((check) => check.id === "station-launchers")).toMatchObject({
       status: "warning",
@@ -483,10 +467,7 @@ describe("CLI setup command", () => {
     const check = await runCli(["--config", configPath, "setup", "check", "--json"], {
       setupDeps,
     });
-    const finalPlan = check.output as {
-      checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
-      summary: { requiredOk: boolean };
-    };
+    const finalPlan = CliSetupPlanSchema.parse(check.output);
     const output = chunks.join("");
 
     expect(apply.code).toBe(0);
@@ -573,10 +554,7 @@ describe("CLI setup command", () => {
     });
 
     expect(result.code).toBe(0);
-    const plan = result.output as {
-      actions: Array<{ id: string; data?: { appendedText?: string } }>;
-      checks: Array<{ id: string; details?: Record<string, string> }>;
-    };
+    const plan = CliSetupPlanSchema.parse(result.output);
     const runShellCommand = buildManagedFastPopupRunShellCommand({
       installedRoot,
       fallbackAlias: popupAlias,
@@ -754,7 +732,7 @@ describe("CLI setup command", () => {
     });
 
     expect(result.code).toBe(1);
-    expect(result.output).toMatchObject({
+    expect(CliSetupPlanSchema.parse(result.output)).toMatchObject({
       checks: expect.arrayContaining([
         expect.objectContaining({
           id: "harness-tracking:codex",
@@ -961,7 +939,7 @@ describe("CLI setup command", () => {
     });
 
     expect(result.code).toBe(1);
-    expect(result.output).toMatchObject({
+    expect(CliSetupPlanSchema.parse(result.output)).toMatchObject({
       summary: { workflowReady: false, requiredOk: false },
     });
   });

@@ -22,6 +22,7 @@ import { createSessionAcknowledgeTurnHandler } from "./session/acknowledgeTurn.j
 import { createSessionCloseHandler } from "./session/close.js";
 import { createSessionCreateHandler } from "./session/create.js";
 import { createSessionForkHandler } from "./session/fork.js";
+import { createSessionImportRecoveryHandleHandler } from "./session/importRecoveryHandle.js";
 import { createSessionRenameHandler } from "./session/rename.js";
 import { createSessionResumeAgentHandler } from "./session/resumeAgent.js";
 import type { SessionCommandIdFactory } from "./session/shared.js";
@@ -154,6 +155,15 @@ export function registerObserverCommandHandlers(
       clock: options.clock,
       idFactory: options.idFactory,
       commandTimeoutMs: options.commandTimeoutMs,
+    }),
+    "session.importRecoveryHandle": createSessionImportRecoveryHandleHandler({
+      getProjects,
+      providers: options.providers,
+      core: options.core,
+      persistence: options.persistence,
+      featureFlags,
+      eventBus: options.eventBus,
+      clock: options.clock,
     }),
     "session.fork": createSessionForkHandler({
       getProjects,

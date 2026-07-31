@@ -202,13 +202,96 @@ version (`0.7.0` in this example).
 
 `OBSERVER_HANDOFF_REFUSED` means automatic build or cross-version replacement
 could not proceed safely. Read the running/requested display versions and build
-IDs in the error. A same-version legacy or losing identified build with stable
-PID/start-time health can be stopped explicitly; missing process identity
-refuses rather than risking a successor. It must not attach to different code.
-Inspect `logs/observer-boot.log`, compare `lsof -t <socket>` with the
-strict pidfile and `ps -ww -p <pid> -o lstart=,command=`, then retry only after
-resolving missing or conflicting evidence. Automatic handoff never uses
-SIGKILL.
+IDs in the error. When a replacement child exits, the error also reports its
+exit code, signal, redacted spawn error, or unknown status; the health rejection
+code or unchanged one-second convergence expiry; and that child's bounded,
+redacted boot-log tail or an explicit unavailable marker. Use the included
+trace ID against the same state directory. A same-version legacy or losing
+identified build with stable PID/start-time health can be stopped explicitly;
+missing process identity refuses rather than risking a successor. It must not
+attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
+`ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
+or conflicting evidence. Automatic handoff never uses SIGKILL.
+
+## Preserve Sessions Before Runtime Surgery
+
+When an Observer or Host handoff is blocked and live agent work must survive,
+make a private preservation archive before stopping, unlinking, resuming, or
+replacing anything:
+
+```bash
+pnpm station:sessions:save -- --devbox
+pnpm station:sessions:save -- --config ~/.config/station/config.toml
+pnpm station:sessions:verify -- ~/.local/state/station-session-rescues/<timestamp>
+```
+
+The save command is read-only with respect to Station, provider sessions, and
+worktrees. It captures pinned Observer health and snapshot evidence, an online
+SQLite backup, recovery handles, current-build Host inventory and replay,
+provider-native recovery data, and dirty or unpublished Git worktree state. It
+never stops, closes, resumes, writes to, resizes, or unlinks a live runtime.
+Archives contain terminal output, provider state, configuration, and untracked
+files, so they are created with owner-only permissions and must be handled as
+sensitive data.
+
+A `partial` result is preservation evidence, not permission to proceed. In
+particular, a build mismatch means the script deliberately skipped the
+incompatible Observer snapshot or Host replay. Reopen the checkout/build named
+by the health or handoff evidence and run the same command there; do not spoof
+the build selector. Only consider runtime surgery after `verify` returns
+`"ok": true` and every active session has provider-native recovery data.
+
+A complete archive can drive a fail-closed migration into a separate Station
+runtime. Plan first; planning verifies the archive, requires one exact recovery
+handle per active session, matches the same project/worktree identities in the
+target, and refuses any target worktree that already owns a session:
+
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station
+```
+
+The plan is read-only: it uses `snapshot --require-running`, checks the exact
+source Observer and Host census, verifies target worktree and Host identities,
+refuses live target sessions on providers being migrated, checks provider-file
+conflicts, and prints a SHA-256 digest. It never starts an Observer or
+edits configuration. Apply must bind confirmation to that evidence:
+
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station \
+  --yes --expect-plan <digest-from-plan>
+```
+
+Apply intentionally has downtime. It closes only the planned source sessions
+without force, proves the source Host owns no live PTY, captures stable final
+provider state into a hash-inventoried private directory, and stops the pinned source
+Observer before importing handles through the recorded
+`session.importRecoveryHandle` command. It then resumes each target and verifies
+its exact Host PTY and provider-native identity. Source and target agents never
+run concurrently, target TOML is never edited, target SQLite is never opened by
+the maintenance script, and an entire devbox is never stopped as a side effect.
+
+Only one apply process may own a digest at a time; a stale owner-private lock is
+reclaimed only after its recorded process is gone. `SIGINT`, `SIGTERM`, and
+`SIGHUP` stop the active child and write the last durable phase to `journal.jsonl`
+plus `report.json`. Before source quiescence, the source
+remains authoritative. An interruption during quiescence may leave only a subset
+of source sessions running; rerun with the same digest so the journal closes the
+remaining sessions. After `source-sealed`, source agents remain stopped and the
+sealed directory is authoritative; the same retry accepts already-resumed exact
+target sessions and continues from sealed evidence instead of rerunning live
+source planning checks.
+
+Codex and OpenCode migration accept each provider's shared source database, an
+absent target database, or a byte-identical target database. They refuse instead
+of merging different nonempty provider databases. Override provider locations with
+`--target-codex-home`, `--target-opencode-db`, and
+`--target-claude-projects` when the target uses isolated homes.
 
 After startup reconcile, the Observer performs one report-only duplicate
 inspection. `stn doctor` reports this as `observer-singleton`: an eligible
@@ -239,6 +322,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 ## Reading Evidence
 
 - `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.
+- A failed hosted binary smoke can upload `binary-smoke-evidence-<run-id>-<attempt>` for three days. Download it with `gh run download <run-id> --name binary-smoke-evidence-<run-id>-<attempt> --dir /tmp/station-binary-smoke-evidence-<run-id>`, then read `manifest.json` before the round's `failure.json`, bounded logs, and runtime summary. The bundle is redacted, allowlisted, and capped at 1 MiB, but collaborators with Actions access can download it. Do not run `stn debug trace` against unrelated live state and treat it as evidence for the downloaded CI run.
 - `observer.claim.sqlite` is boot-exclusion evidence only. Inspect it with
   read-only SQLite tooling after confirming no startup is in progress; never
   infer ownership from the file or sidecars being present.

@@ -351,6 +351,7 @@ function commandScope(command: StationCommand): string {
     case "worktree.remove":
     case "session.startAgent":
     case "session.resumeAgent":
+    case "session.importRecoveryHandle":
       return `worktree:${command.payload.worktreeId}`;
     case "worktree.create":
     case "worktree.fork":

@@ -3,6 +3,7 @@ import type { StationSnapshot } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
 import { runRuntimeBoundaryWithTimeout } from "@station/runtime";
 import {
+  getObserverStatus,
   type ObserverProcessDeps,
   type ObserverStatus,
   observerStatusErrorMessage,
@@ -16,6 +17,12 @@ export type SnapshotCommandOptions = {
   timeoutMs?: number;
 };
 
+/**
+ * ADAPTER
+ *
+ * Translates snapshot CLI options into a pinned Observer query, optionally
+ * refusing to spawn a missing runtime for read-only maintenance planning.
+ */
 export async function runSnapshotCommand(
   args: string[],
   options: SnapshotCommandOptions = {},
@@ -24,7 +31,10 @@ export async function runSnapshotCommand(
   const parsed = parseSnapshotArgs(args);
   const timeoutMs = options.timeoutMs ?? 30_000;
   const paths = resolveObserverPaths(options.config);
-  const status = await startObserver({ ...options, paths, timeoutMs }, deps);
+  const processOptions = { ...options, paths, timeoutMs };
+  const status = parsed.requireRunning
+    ? await getObserverStatus(processOptions, deps)
+    : await startObserver(processOptions, deps);
   assertRunning(status);
   const client =
     deps.clientFactory?.(paths.socketPath) ??
@@ -58,12 +68,17 @@ export async function runSnapshotCommand(
   return result.value;
 }
 
-function parseSnapshotArgs(args: string[]): { includeDebug: boolean } {
-  const unknown = args.find((arg) => arg !== "--json" && arg !== "--include-debug");
+function parseSnapshotArgs(args: string[]): { includeDebug: boolean; requireRunning: boolean } {
+  const unknown = args.find(
+    (arg) => arg !== "--json" && arg !== "--include-debug" && arg !== "--require-running",
+  );
   if (unknown !== undefined) {
     throw new Error(`Unknown snapshot option: ${unknown}`);
   }
-  return { includeDebug: args.includes("--include-debug") };
+  return {
+    includeDebug: args.includes("--include-debug"),
+    requireRunning: args.includes("--require-running"),
+  };
 }
 
 function assertRunning(

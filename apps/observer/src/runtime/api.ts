@@ -16,6 +16,7 @@ import type {
   ProviderHookEvent,
   ProviderHookReceipt,
   ReconcileReceipt,
+  SessionRecoveryReadiness,
   StationCommand,
   StationEvent,
 } from "@station/contracts";
@@ -115,8 +116,8 @@ export type CreateObserverApiOptions = {
  *
  * Wires Observer use cases with supplied durable, local-metadata, and diagnostic-
  * evidence roles, ingress workers, provider-health publication, scheduling, exact
- * build publication, read-only singleton diagnostics, and adapter shutdown behind
- * the application API.
+ * build publication, recovery-readiness queries, read-only singleton diagnostics,
+ * and adapter shutdown behind the application API.
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
@@ -275,6 +276,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
         clock,
       ),
     getSnapshot: async () => options.core.getSnapshot(),
+    getSessionRecoveryReadiness: async () => sessionRecoveryReadiness(options),
     subscribe: (filter?: EventFilter): AsyncIterable<StationEvent> =>
       options.eventBus.subscribe(filter),
     dispatch: (command: StationCommand) => options.commandQueue.dispatch(command),
@@ -297,6 +299,26 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
   };
 
   return api;
+}
+
+function sessionRecoveryReadiness(options: CreateObserverApiOptions): SessionRecoveryReadiness {
+  const managedTerminal = options.providers?.managedTerminal;
+  const readiness: SessionRecoveryReadiness = {
+    resumeEnabled: options.config?.featureFlags?.sessionResumeAgent === true,
+    harnesses: Array.from(options.providers?.harnesses.values() ?? [])
+      .map((provider) => ({
+        provider: provider.id,
+        canResume: provider.capabilities().canResume,
+      }))
+      .sort((left, right) => left.provider.localeCompare(right.provider)),
+  };
+  if (managedTerminal !== undefined) {
+    readiness.managedTerminal = {
+      provider: managedTerminal.id,
+      canLaunchProcessPersistently: managedTerminal.capabilities().canLaunchProcessPersistently,
+    };
+  }
+  return readiness;
 }
 
 function reconcileAfterExternalLaunch(

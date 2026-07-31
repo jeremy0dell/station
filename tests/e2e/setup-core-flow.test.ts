@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../../packages/config/src/index.js";
+import { CliSetupPlanSchema } from "../../packages/contracts/src/index.js";
 import { createObserverClient } from "../../packages/protocol/src/index.js";
 import { environmentWithoutGitLocals } from "../../packages/runtime/src/index.js";
 import { waitForSocketClosed } from "../support/sockets";
@@ -245,7 +246,7 @@ describe("setup core flow e2e", () => {
         allowFailure: true,
       });
       expect(firstCheck.status).toBe(1);
-      const firstPlan = JSON.parse(firstCheck.stdout);
+      const firstPlan = CliSetupPlanSchema.parse(JSON.parse(firstCheck.stdout));
       expect(firstPlan.checks).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: "worktrunk", status: "ok" }),
@@ -259,7 +260,7 @@ describe("setup core flow e2e", () => {
         cwd: setupCwd,
         env,
       });
-      const parsedPlan = JSON.parse(plan.stdout);
+      const parsedPlan = CliSetupPlanSchema.parse(JSON.parse(plan.stdout));
       expect(parsedPlan.actions).toEqual(
         expect.arrayContaining([expect.objectContaining({ id: "write-config" })]),
       );
@@ -316,7 +317,7 @@ describe("setup core flow e2e", () => {
         cwd: setupCwd,
         env,
       });
-      const finalPlan = JSON.parse(finalCheck.stdout);
+      const finalPlan = CliSetupPlanSchema.parse(JSON.parse(finalCheck.stdout));
       expect(finalPlan.summary.requiredOk).toBe(true);
       await expect(loadConfig({ configPath, homeDir: home })).resolves.toMatchObject({
         config: {
@@ -456,7 +457,7 @@ describe("setup core flow e2e", () => {
         },
         allowFailure: true,
       });
-      const output = JSON.parse(result.stdout);
+      const output = CliSetupPlanSchema.parse(JSON.parse(result.stdout));
 
       expect(result.status).toBe(1);
       expect(output.summary.requiredOk).toBe(false);

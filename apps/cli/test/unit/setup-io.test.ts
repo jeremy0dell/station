@@ -12,8 +12,9 @@ describe("setup prompt input", () => {
     expect(parseMultiSelectAnswer("3, 1,3,99,nope", choices)).toEqual(["pi", "codex"]);
   });
 
-  it("falls back to the first choice when no valid slot was selected", () => {
-    expect(parseMultiSelectAnswer("", choices)).toEqual(["codex"]);
-    expect(parseMultiSelectAnswer("99", choices)).toEqual(["codex"]);
+  it("returns no selection when no valid slot was selected", () => {
+    expect(parseMultiSelectAnswer("", choices)).toEqual([]);
+    expect(parseMultiSelectAnswer("99", choices)).toEqual([]);
+    expect(parseMultiSelectAnswer("nope", choices)).toEqual([]);
   });
 });
