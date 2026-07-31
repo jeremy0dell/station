@@ -470,7 +470,7 @@ function ProjectHeaderPrimary({
   const background = hover
     ? { bg: HOVER_BG }
     : focused
-      ? { bg: STATION_COLORS.focusBackground }
+      ? { bg: STATION_COLORS.projectHeaderFocusBackground }
       : {};
   return (
     <text
@@ -500,7 +500,7 @@ function ProjectHeaderActionSegment({
   const background = hover
     ? { bg: HOVER_BG }
     : focused
-      ? { bg: STATION_COLORS.focusBackground }
+      ? { bg: STATION_COLORS.projectHeaderFocusBackground }
       : {};
   return (
     <text

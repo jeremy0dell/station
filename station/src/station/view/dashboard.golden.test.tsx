@@ -504,22 +504,22 @@ describe("dashboard golden frames", () => {
         for (const [control, column] of Object.entries(samples)) {
           const background = spanBgHex(spanAtFrameCell(spans, row, column));
           if (control === controls[index]) {
-            expect(background).toBe(STATION_COLORS.focusBackground);
+            expect(background).toBe(STATION_COLORS.projectHeaderFocusBackground);
           } else {
-            expect(background).not.toBe(STATION_COLORS.focusBackground);
+            expect(background).not.toBe(STATION_COLORS.projectHeaderFocusBackground);
           }
         }
         expect(spanBgHex(spanAtFrameCell(spans, row, primaryEnd))).not.toBe(
-          STATION_COLORS.focusBackground,
+          STATION_COLORS.projectHeaderFocusBackground,
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, shellStart - 1))).not.toBe(
-          STATION_COLORS.focusBackground,
+          STATION_COLORS.projectHeaderFocusBackground,
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, quickStart - 1))).not.toBe(
-          STATION_COLORS.focusBackground,
+          STATION_COLORS.projectHeaderFocusBackground,
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, defaultStart - 1))).not.toBe(
-          STATION_COLORS.focusBackground,
+          STATION_COLORS.projectHeaderFocusBackground,
         );
       }
     }
@@ -575,7 +575,7 @@ describe("dashboard golden frames", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     await setup.flush();
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, shell))).toBe(
-      STATION_COLORS.focusBackground,
+      STATION_COLORS.projectHeaderFocusBackground,
     );
   });
 
