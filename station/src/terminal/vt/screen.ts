@@ -150,19 +150,11 @@ export type StationVtScreen = {
    */
   viewRowText(viewRow: number, startCol?: number, endCol?: number): string;
   /**
-   * Whether an in-view row is a soft-wrap continuation of the row above it
-   * (xterm `IBufferLine.isWrapped`). Lets copy join a wrapped logical line
-   * back into one line instead of inserting a newline at each wrap boundary.
-   */
-  isViewRowWrapped(viewRow: number): boolean;
-  /**
    * Copy semantics for the boundary before an in-view row. Native xterm wraps
    * are authoritative; an application continuation contributes only its
    * cursor-derived visual prefix and bounded separator-space count.
    */
   viewRowCopyContinuation(viewRow: number): RowCopyContinuation | undefined;
-  /** Content-free semantic-copy sidecar for normal and alternate xterm rows. */
-  semanticCopySnapshot(): SemanticCopySnapshot;
   /**
    * Clears existing application continuation state and restores a validated
    * sidecar, reporting entries that no longer map to the restored buffers.
@@ -702,10 +694,6 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
       return line?.translateToString(false, startCol, endCol) ?? "";
     },
-    isViewRowWrapped: (viewRow) => {
-      const buffer = terminal.buffer.active;
-      return buffer.getLine(buffer.baseY - scrollOffset + viewRow)?.isWrapped ?? false;
-    },
     viewRowCopyContinuation: (viewRow) => {
       const buffer = terminal.buffer.active;
       const bufferRow = buffer.baseY - scrollOffset + viewRow;
@@ -720,7 +708,6 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
         ? undefined
         : { kind: "application-soft", ...continuation };
     },
-    semanticCopySnapshot: () => semanticCopy.snapshot(),
     restoreSemanticCopySnapshot: (snapshot) => semanticCopy.restore(snapshot),
     cellColumnForCharIndex: (viewRow, charIndex) => {
       if (charIndex <= 0) {

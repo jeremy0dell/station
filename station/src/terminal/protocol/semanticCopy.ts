@@ -2,14 +2,14 @@ import { type IMarker, Terminal } from "@xterm/headless";
 import { z } from "zod";
 import { CsiFinal, EraseInDisplayMode } from "./controlBytes.js";
 
-export const STATION_SEMANTIC_COPY_OSC = 6973;
-export const STATION_SEMANTIC_COPY_VERSION = 1;
-export const MAX_SEMANTIC_COPY_SEPARATOR_SPACES = 1024;
+const STATION_SEMANTIC_COPY_OSC = 6973;
+const STATION_SEMANTIC_COPY_VERSION = 1;
+const MAX_SEMANTIC_COPY_SEPARATOR_SPACES = 1024;
 const MAX_SEMANTIC_COPY_BUFFER_ROW = 1_000_000;
 const MAX_SEMANTIC_COPY_LEADING_COLUMNS = 1_000_000;
 const MAX_SEMANTIC_COPY_ROWS_PER_BUFFER = 20_000;
 
-export const SemanticCopySnapshotEntrySchema = z
+const SemanticCopySnapshotEntrySchema = z
   .object({
     row: z.number().int().min(0).max(MAX_SEMANTIC_COPY_BUFFER_ROW),
     leadingColumns: z.number().int().min(0).max(MAX_SEMANTIC_COPY_LEADING_COLUMNS),
@@ -34,17 +34,17 @@ const SemanticCopySnapshotRowsSchema = z
     }
   });
 
-export const SemanticCopySnapshotSchema = z
+const SemanticCopySnapshotSchema = z
   .object({
     normal: SemanticCopySnapshotRowsSchema,
     alternate: SemanticCopySnapshotRowsSchema,
   })
   .strict();
 
-export type SemanticCopySnapshotEntry = z.infer<typeof SemanticCopySnapshotEntrySchema>;
+type SemanticCopySnapshotEntry = z.infer<typeof SemanticCopySnapshotEntrySchema>;
 export type SemanticCopySnapshot = z.infer<typeof SemanticCopySnapshotSchema>;
-export type SemanticCopyApplicationContinuation = Omit<SemanticCopySnapshotEntry, "row">;
-export type SemanticCopyBufferType = "normal" | "alternate";
+type SemanticCopyApplicationContinuation = Omit<SemanticCopySnapshotEntry, "row">;
+type SemanticCopyBufferType = "normal" | "alternate";
 export type SemanticCopyRestoreResult = { applied: number; dropped: number };
 
 export type SemanticCopyState = {
@@ -59,8 +59,6 @@ export type SemanticCopyState = {
 };
 
 type PinnedMarkerBuffer = {
-  ybase: number;
-  y: number;
   addMarker(row: number): IMarker;
 };
 
@@ -68,8 +66,8 @@ type PinnedXtermTerminal = {
   _core: {
     _bufferService: {
       buffers: {
-        _normal: PinnedMarkerBuffer;
-        _alt: PinnedMarkerBuffer;
+        normal: PinnedMarkerBuffer;
+        alt: PinnedMarkerBuffer;
       };
     };
   };
@@ -121,7 +119,7 @@ class XtermSemanticCopyState implements SemanticCopyState {
     this.#terminal = terminal;
     const pinned = terminal as unknown as PinnedXtermTerminal;
     const markerBuffers = pinned._core?._bufferService?.buffers;
-    if (markerBuffers?._normal === undefined || markerBuffers._alt === undefined) {
+    if (markerBuffers?.normal === undefined || markerBuffers.alt === undefined) {
       throw new Error("The pinned xterm build does not expose semantic-copy marker buffers.");
     }
     this.#markerBuffers = markerBuffers;
@@ -212,9 +210,9 @@ class XtermSemanticCopyState implements SemanticCopyState {
       return true;
     }
     const bufferType = this.#activeBufferType();
-    const buffer = this.#markerBuffer(bufferType);
-    this.#addEntry(bufferType, buffer.ybase + buffer.y, {
-      leadingColumns: this.#terminal.buffer.active.cursorX,
+    const buffer = this.#terminal.buffer.active;
+    this.#addEntry(bufferType, buffer.baseY + buffer.cursorY, {
+      leadingColumns: buffer.cursorX,
       separatorSpaces,
     });
     return true;
@@ -222,18 +220,18 @@ class XtermSemanticCopyState implements SemanticCopyState {
 
   #clearActiveRow(): false {
     const bufferType = this.#activeBufferType();
-    const buffer = this.#markerBuffer(bufferType);
-    const row = buffer.ybase + buffer.y;
+    const buffer = this.#terminal.buffer.active;
+    const row = buffer.baseY + buffer.cursorY;
     this.#clearRange(bufferType, row, row);
     return false;
   }
 
   #handleDisplayErase(params: (number | number[])[]): false {
     const bufferType = this.#activeBufferType();
-    const buffer = this.#markerBuffer(bufferType);
-    const firstViewportRow = buffer.ybase;
-    const cursorRow = buffer.ybase + buffer.y;
-    const lastViewportRow = buffer.ybase + this.#terminal.rows - 1;
+    const buffer = this.#terminal.buffer.active;
+    const firstViewportRow = buffer.baseY;
+    const cursorRow = buffer.baseY + buffer.cursorY;
+    const lastViewportRow = buffer.baseY + this.#terminal.rows - 1;
     const rawMode = params[0];
     const mode = Array.isArray(rawMode) ? rawMode[0] : rawMode;
     if (mode === 1) {
@@ -340,7 +338,7 @@ class XtermSemanticCopyState implements SemanticCopyState {
   }
 
   #markerBuffer(bufferType: SemanticCopyBufferType): PinnedMarkerBuffer {
-    return bufferType === "normal" ? this.#markerBuffers._normal : this.#markerBuffers._alt;
+    return bufferType === "normal" ? this.#markerBuffers.normal : this.#markerBuffers.alt;
   }
 
   #publicBuffer(bufferType: SemanticCopyBufferType) {

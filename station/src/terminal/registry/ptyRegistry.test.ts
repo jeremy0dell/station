@@ -1,4 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import {
+  resetTerminalDiagnosticsForTest,
+  terminalCorruptionCounters,
+} from "../diagnostics.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../testing/scriptedTerminal.js";
 import type {
   StationTerminalDisposable,
@@ -399,6 +403,63 @@ describe("createPtyRegistry", () => {
     });
 
     expect(screen?.viewRowCopyContinuation(1)).toBeUndefined();
+  });
+
+  it("reports semantic-copy rows that do not map to the restored buffer", async () => {
+    resetTerminalDiagnosticsForTest();
+    const { registry, replay } = orderedGeometryHarness();
+    try {
+      await replay({
+        kind: "semantic-truncation-recovery",
+        initialSize: { cols: 10, rows: 4 },
+        events: [
+          { type: "data", data: "restored" },
+          {
+            type: "semantic-copy",
+            normal: [{ row: 99, leadingColumns: 0, separatorSpaces: 0 }],
+            alternate: [],
+          },
+        ],
+      });
+
+      expect(terminalCorruptionCounters()).toMatchObject({
+        "terminal_diagnostic:semantic_copy_restore_dropped": 1,
+      });
+    } finally {
+      registry.disposeAll();
+      resetTerminalDiagnosticsForTest();
+    }
+  });
+
+  it("clears stale state and reports an invalid local semantic-copy sidecar", async () => {
+    resetTerminalDiagnosticsForTest();
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+    try {
+      screen?.feed("first\r\n\x1b]6973;station-copy;1;0\x1b\\stale");
+      await screen?.whenIdle();
+
+      await replay({
+        kind: "semantic-truncation-recovery",
+        initialSize: { cols: 10, rows: 4 },
+        events: [
+          { type: "data", data: "hard" },
+          {
+            type: "semantic-copy",
+            normal: [{ row: 1, leadingColumns: 0, separatorSpaces: 1025 }],
+            alternate: [],
+          },
+        ],
+      } as unknown as StationTerminalReplay);
+
+      expect(screen?.viewRowCopyContinuation(1)).toBeUndefined();
+      expect(terminalCorruptionCounters()).toMatchObject({
+        "terminal_diagnostic:semantic_copy_restore_invalid": 1,
+      });
+    } finally {
+      registry.disposeAll();
+      resetTerminalDiagnosticsForTest();
+    }
   });
 
   it("parses pre-barrier output at 10 columns before reflowing it to 5", async () => {

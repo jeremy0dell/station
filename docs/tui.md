@@ -133,24 +133,14 @@ not have.
 
 ## Semantic Pane Copy
 
-Native panes implement the versioned [Station Semantic Copy Protocol](terminal-semantic-copy.md).
-Natural xterm wraps and marked child-renderer continuations copy without a newline;
-unmarked rows preserve hard boundaries. Application markers carry no text: Station
-derives the visible-prefix width at parse time and accepts only a bounded ASCII-space
-count. Native xterm wrapping remains authoritative.
+Native panes implement the versioned [Station Semantic Copy Protocol](terminal-semantic-copy.md):
+native and marked child-renderer wraps copy without a newline, while unmarked rows
+remain hard boundaries. Host protocol 6 preserves its bounded row metadata through
+semantic recovery before queued live frames.
 
-The same parser/state helper runs in pane VT screens and the Host's headless semantic
-terminal. Complete Host replay re-parses original marker bytes. Host protocol 6
-restores a bounded, content-free sidecar after serialized VT when raw replay was
-evicted, before queued live frames and pane resize recovery. Erase, reset, alternate
-buffer lifetime, resize reflow, scrollback movement, and eviction follow xterm row
-markers so stale metadata cannot be reused.
-
-Plain pane drag selection uses this state. OpenTUI global selection and outer-terminal
-selection remain separate. Unsupported children keep hard rows, and application-owned
-copy commands are unchanged. Pi renderer support must land in `@earendil-works/pi-tui`;
-the Station Pi lifecycle extension remains transcript-free. The pinned Pi 0.80.10
-fixture does not yet emit semantic-copy markers.
+This affects only plain pane drag selection. OpenTUI global selection, application
+copy commands, and Station's Pi lifecycle extension remain unchanged. Pi renderer
+support belongs in `@earendil-works/pi-tui`; pinned Pi 0.80.10 emits no markers.
 
 ## Native OSC 8 Hyperlinks
 

@@ -11,6 +11,18 @@ async function write(terminal: Terminal, data: string): Promise<void> {
 }
 
 describe("Station semantic copy protocol", () => {
+  it("encodes the exact bounded v1 marker", () => {
+    expect(semanticCopyContinuationMarker(2)).toBe(
+      "\x1b]6973;station-copy;1;2\x1b\\",
+    );
+    expect(semanticCopyContinuationMarker(1024)).toBe(
+      "\x1b]6973;station-copy;1;1024\x1b\\",
+    );
+    for (const invalid of [-1, 1.5, 1025]) {
+      expect(() => semanticCopyContinuationMarker(invalid)).toThrow(/must be an integer/);
+    }
+  });
+
   it("consumes OSC 6973 invisibly and records only a valid continuation", async () => {
     const terminal = new Terminal({ cols: 20, rows: 4, allowProposedApi: true });
     const state = createSemanticCopyState(terminal);
@@ -27,6 +39,11 @@ describe("Station semantic copy protocol", () => {
         leadingColumns: 2,
         separatorSpaces: 2,
       });
+
+      await write(terminal, `\r> ${semanticCopyContinuationMarker(3)}`);
+      expect(state.snapshot().normal).toEqual([
+        { row: 1, leadingColumns: 2, separatorSpaces: 3 },
+      ]);
 
       await write(terminal, "\r\nvisible\x1b]6973;station-copy;1;not-a-number\x1b\\text");
       expect(terminal.buffer.active.getLine(2)?.translateToString(true)).toBe("visibletext");
@@ -132,6 +149,55 @@ describe("Station semantic copy protocol", () => {
       await write(terminal, `${semanticCopyContinuationMarker(0)}soft`);
       await write(terminal, "\x1bc");
       expect(state.snapshot()).toEqual({ normal: [], alternate: [] });
+    } finally {
+      state.dispose();
+      terminal.dispose();
+    }
+  });
+
+  it("clears only the rows affected by ECH, ED0, ED1, ED3, and DECSTR", async () => {
+    const entries = [0, 1, 2].map((row) => ({
+      row,
+      leadingColumns: 0,
+      separatorSpaces: 0,
+    }));
+    const scenarios = [
+      { sequence: "\x1b[2;1H\x1b[X", remaining: [0, 2] },
+      { sequence: "\x1b[2;1H\x1b[J", remaining: [0] },
+      { sequence: "\x1b[2;1H\x1b[1J", remaining: [2] },
+      { sequence: "\x1b[2;1H\x1b[3J", remaining: [] },
+      { sequence: "\x1b[!p", remaining: [] },
+    ];
+
+    for (const scenario of scenarios) {
+      const terminal = new Terminal({ cols: 20, rows: 4, allowProposedApi: true });
+      const state = createSemanticCopyState(terminal);
+      try {
+        state.restore({ normal: entries, alternate: [] });
+        await write(terminal, scenario.sequence);
+        expect(state.snapshot().normal.map(({ row }) => row)).toEqual(
+          scenario.remaining,
+        );
+      } finally {
+        state.dispose();
+        terminal.dispose();
+      }
+    }
+  });
+
+  it("moves metadata with xterm line insertion and deletion", async () => {
+    const terminal = new Terminal({ cols: 20, rows: 4, allowProposedApi: true });
+    const state = createSemanticCopyState(terminal);
+    try {
+      state.restore({
+        normal: [{ row: 2, leadingColumns: 0, separatorSpaces: 1 }],
+        alternate: [],
+      });
+      await write(terminal, "\x1b[2;1H\x1b[L");
+      expect(state.snapshot().normal[0]?.row).toBe(3);
+
+      await write(terminal, "\x1b[2;1H\x1b[M");
+      expect(state.snapshot().normal[0]?.row).toBe(2);
     } finally {
       state.dispose();
       terminal.dispose();

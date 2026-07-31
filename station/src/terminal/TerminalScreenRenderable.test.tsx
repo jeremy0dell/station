@@ -208,6 +208,18 @@ describe("TerminalScreenRenderable selection", () => {
     }
   });
 
+  it("reconstructs chained application continuations", async () => {
+    const { setup, screen, copied } = await renderPane(
+      `one  \r\n│ ${semanticCopyContinuationMarker(2)}two \r\n│ ${semanticCopyContinuationMarker(1)}three`,
+    );
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 2);
+      expect(copied).toEqual(["one  two three"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
   it("double-clicks the correct word on a line with wide (CJK) characters", async () => {
     // 漢 and 字 are each two cells but one code point; without cell↔char mapping
     // the click column would land in the wrong place.

@@ -212,21 +212,11 @@ const HostSemanticRecoveryEventsSchema = z
   )
   .min(2)
   .superRefine((events, context) => {
-    const semanticIndexes = events.flatMap((event, index) =>
-      event.type === "semantic-copy" ? [index] : [],
-    );
-    if (semanticIndexes.length !== 1) {
+    const hasEarlySidecar = events.slice(0, -1).some((event) => event.type === "semantic-copy");
+    if (hasEarlySidecar || events.at(-1)?.type !== "semantic-copy") {
       context.addIssue({
         code: "custom",
-        message: "Semantic recovery requires exactly one semantic-copy event.",
-      });
-      return;
-    }
-    if (semanticIndexes[0] !== events.length - 1) {
-      context.addIssue({
-        code: "custom",
-        path: [semanticIndexes[0] ?? 0],
-        message: "The semantic-copy event must follow serialized terminal data.",
+        message: "Semantic recovery requires exactly one final semantic-copy event.",
       });
     }
   });

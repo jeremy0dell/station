@@ -365,11 +365,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           kind: "raw-complete",
           initialCols: raw.initialCols,
           initialRows: raw.initialRows,
-          events: raw.events.map((event) =>
-            event.type === "data"
-              ? { type: "data", data: event.data }
-              : { type: "resize", cols: event.cols, rows: event.rows },
-          ),
+          events: raw.events,
         };
       } else {
         // Incomplete raw bytes are not a terminal state and must never cross the wire.
