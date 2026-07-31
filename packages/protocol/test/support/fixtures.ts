@@ -26,6 +26,11 @@ export function createFakeObserverApi(
       at: protocolTestNow,
     }),
     getSnapshot: async () => snapshot,
+    getSessionRecoveryReadiness: async () => ({
+      resumeEnabled: true,
+      managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
+      harnesses: [],
+    }),
     subscribe: () => stream([]),
     dispatch: async () => ({ commandId: "cmd_1", accepted: true, status: "accepted" }),
     getCommand: async () => undefined,

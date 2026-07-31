@@ -3,6 +3,7 @@ import type {
   BuildHarnessLaunchRequest,
   HarnessLaunchPlan,
   HarnessProvider,
+  ManagedTerminalLifecycle,
   ProviderHealth,
   SafeError,
   TerminalIntent,
@@ -462,7 +463,12 @@ describe("session command vertical slice", () => {
       now: () => new Date(now),
     });
     vi.spyOn(harness, "health").mockResolvedValue(healthyHarnessHealth(harness));
-    vi.spyOn(harness, "hooksStatus").mockResolvedValue({
+    vi.spyOn(
+      harness as HarnessProvider & {
+        hooksStatus: NonNullable<HarnessProvider["hooksStatus"]>;
+      },
+      "hooksStatus",
+    ).mockResolvedValue({
       provider: "cursor",
       requested: true,
       installed: true,
@@ -1303,6 +1309,122 @@ describe("session command vertical slice", () => {
     fixture.sqlite.close();
   });
 
+  it("imports one recovery handle only when persistent managed launch is available", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_import_recovery",
+      projectId: "web",
+      branch: "import-recovery",
+      now,
+    });
+    const fixture = createFixture({
+      featureFlags: { sessionResumeAgent: true },
+      managedTerminal: persistentManagedTerminal(),
+      worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+    });
+    await fixture.core.reconcile("pre-import-recovery");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.importRecoveryHandle",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        expectedPath: worktree.path,
+        handle: {
+          id: "rec_import_recovery",
+          provider: "fake-harness",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: "ses_import_recovery",
+          target: { kind: "native-session", id: "native_import_recovery" },
+          cwd: worktree.path,
+          observedAt: now,
+          lastSeenAt: now,
+        },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    const conflict = await fixture.queue.dispatch({
+      type: "session.importRecoveryHandle",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        expectedPath: worktree.path,
+        handle: {
+          id: "rec_import_conflict",
+          provider: "fake-harness",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: "ses_other_owner",
+          target: { kind: "native-session", id: "native_import_recovery" },
+          cwd: worktree.path,
+          observedAt: now,
+          lastSeenAt: now,
+        },
+      },
+    });
+    await fixture.queue.drain();
+    await expect(fixture.persistence.getCommand(conflict.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_RECOVERY_IDENTITY_CONFLICT" },
+    });
+    await expect(
+      fixture.persistence.listSessionRecoveryHandles({ worktreeId: worktree.id }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        provider: "fake-harness",
+        sessionId: "ses_import_recovery",
+        target: { kind: "native-session", id: "native_import_recovery" },
+      }),
+    ]);
+    fixture.sqlite.close();
+  });
+
+  it("rejects recovery import without persistent managed launch", async () => {
+    const worktree = createFakeWorktree({
+      id: "wt_web_import_unmanaged",
+      projectId: "web",
+      branch: "import-unmanaged",
+      now,
+    });
+    const fixture = createFixture({
+      featureFlags: { sessionResumeAgent: true },
+      worktree: new FakeWorktreeProvider({ now, worktrees: [worktree] }),
+    });
+    await fixture.core.reconcile("pre-import-unmanaged");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "session.importRecoveryHandle",
+      payload: {
+        projectId: "web",
+        worktreeId: worktree.id,
+        expectedPath: worktree.path,
+        handle: {
+          id: "rec_import_unmanaged",
+          provider: "fake-harness",
+          projectId: "web",
+          worktreeId: worktree.id,
+          sessionId: "ses_import_unmanaged",
+          target: { kind: "native-session", id: "native_import_unmanaged" },
+          cwd: worktree.path,
+          observedAt: now,
+          lastSeenAt: now,
+        },
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_RECOVERY_PERSISTENT_TERMINAL_REQUIRED" },
+    });
+    await expect(fixture.persistence.listSessionRecoveryHandles()).resolves.toEqual([]);
+    fixture.sqlite.close();
+  });
+
   it("resumes an exact persisted recovery handle through the terminal intent runner seam", async () => {
     const terminalIntentRunner = new CapturingTerminalIntentRunner();
     const fixture = createFixture({
@@ -2043,6 +2165,7 @@ function createFixture(
     harness?: HarnessProvider;
     harnesses?: HarnessProvider[];
     terminalIntentRunner?: TerminalIntentRunner;
+    managedTerminal?: ManagedTerminalLifecycle;
     sessionIds?: string[];
     featureFlags?: { sessionResumeAgent?: boolean };
   } = {},
@@ -2056,6 +2179,7 @@ function createFixture(
   const providers = new ProviderRegistry({
     worktree: options.worktree ?? new FakeWorktreeProvider({ now }),
     terminal: options.terminal ?? new FakeTerminalProvider({ now }),
+    ...(options.managedTerminal === undefined ? {} : { managedTerminal: options.managedTerminal }),
     harnesses: options.harnesses ?? [options.harness ?? new FakeHarnessProvider({ now })],
   });
   const featureFlags = createFeatureFlagEvaluator({
@@ -2091,6 +2215,35 @@ function createFixture(
     },
   });
   return { sqlite, persistence, eventBus, queue, providers, core };
+}
+
+function persistentManagedTerminal(): ManagedTerminalLifecycle {
+  const terminal = new FakeTerminalProvider({ now });
+  return {
+    id: "native",
+    capabilities: () => terminal.capabilities(),
+    health: () => terminal.health(),
+    listTargets: () => terminal.listTargets(),
+    openWorkspace: (request) => terminal.openWorkspace(request),
+    launchProcess: async (request) => {
+      await terminal.launchProcess(request);
+      return {
+        terminalTargetId: request.terminalTarget.targetId,
+        agentEndpointId: request.agentEndpointId,
+        started: true,
+        attachment: {
+          kind: "managed-terminal",
+          terminalTargetId: request.terminalTarget.targetId,
+        },
+      };
+    },
+    focusTarget: (targetId, context) => terminal.focusTarget(targetId, context),
+    closeTarget: (targetId) => terminal.closeTarget(targetId),
+    captureTarget: (targetId) => terminal.captureTarget(targetId),
+    sendInput: (targetId, input) => terminal.sendInput(targetId, input),
+    attachmentForTarget: async () => undefined,
+    releaseTarget: async () => true,
+  };
 }
 
 const config: StationConfig = {

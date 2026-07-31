@@ -23,6 +23,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { backup, DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { SessionRescueManifestSchema } from "../../packages/contracts/dist/index.js";
 
 const execFile = promisify(execFileCallback);
 const manifestName = "manifest.json";
@@ -46,6 +47,7 @@ export function parseSessionRescueArgs(args, deps = {}) {
 
   let configPath;
   let codexHome;
+  let claudeConfigDir;
   let opencodeDb;
   let outputPath;
   let devbox = false;
@@ -62,6 +64,9 @@ export function parseSessionRescueArgs(args, deps = {}) {
         break;
       case "--codex-home":
         codexHome = requiredOptionValue(input, ++index, arg);
+        break;
+      case "--claude-config-dir":
+        claudeConfigDir = requiredOptionValue(input, ++index, arg);
         break;
       case "--opencode-db":
         opencodeDb = requiredOptionValue(input, ++index, arg);
@@ -84,8 +89,13 @@ export function parseSessionRescueArgs(args, deps = {}) {
     }
   }
 
-  if (devbox && (configPath !== undefined || codexHome !== undefined)) {
-    throw new Error("--devbox cannot be combined with --config or --codex-home");
+  if (
+    devbox &&
+    (configPath !== undefined || codexHome !== undefined || claudeConfigDir !== undefined)
+  ) {
+    throw new Error(
+      "--devbox cannot be combined with --config, --codex-home, or --claude-config-dir",
+    );
   }
 
   const timestamp = now.toISOString().replaceAll(":", "-").replaceAll(".", "-");
@@ -102,6 +112,13 @@ export function parseSessionRescueArgs(args, deps = {}) {
       devbox
         ? join(cwd, ".dev-state", "codex-home")
         : (codexHome ?? process.env.CODEX_HOME ?? "~/.codex"),
+      cwd,
+      homeDir,
+    ),
+    claudeProjectsRoot: resolveInputPath(
+      devbox
+        ? join(cwd, ".dev-state", "claude-home", "projects")
+        : join(claudeConfigDir ?? process.env.CLAUDE_CONFIG_DIR ?? "~/.claude", "projects"),
       cwd,
       homeDir,
     ),
@@ -123,17 +140,6 @@ export function parseSessionRescueArgs(args, deps = {}) {
     devbox,
     timeoutMs,
   };
-}
-
-export async function findCodexSessionAssets(codexHome, nativeSessionId) {
-  const matches = new Set();
-  await walkFiles(join(codexHome, "sessions"), (path) => {
-    if (basename(path).endsWith(`-${nativeSessionId}.jsonl`)) matches.add(path);
-  });
-  await walkFiles(join(codexHome, "shell_snapshots"), (path) => {
-    if (basename(path).startsWith(`${nativeSessionId}.`)) matches.add(path);
-  });
-  return matches;
 }
 
 export function buildRecoveryCoverage(hostPtys, snapshot, recoveryHandles) {
@@ -214,23 +220,18 @@ export async function verifySessionRescueArchive(root) {
   const errors = [];
   let manifest;
   try {
-    manifest = JSON.parse(await readFile(join(root, manifestName), "utf8"));
+    const value = JSON.parse(await readFile(join(root, manifestName), "utf8"));
+    const parsed = SessionRescueManifestSchema.safeParse(value);
+    if (!parsed.success) {
+      return { ok: false, errors: [`Manifest shape is invalid: ${parsed.error.message}`] };
+    }
+    manifest = parsed.data;
   } catch (error) {
     return { ok: false, errors: [`Manifest could not be read: ${errorMessage(error)}`] };
-  }
-  if (manifest?.archiveVersion !== archiveVersion || !Array.isArray(manifest.files)) {
-    return { ok: false, errors: ["Manifest shape or archive version is invalid"] };
-  }
-  if (manifest.status !== "complete" && manifest.status !== "partial") {
-    errors.push("Manifest status is invalid");
   }
 
   const expectedPaths = new Set();
   for (const entry of manifest.files) {
-    if (!validManifestEntry(entry)) {
-      errors.push("Manifest contains an invalid file entry");
-      continue;
-    }
     if (expectedPaths.has(entry.path)) {
       errors.push(`Manifest contains a duplicate path: ${entry.path}`);
       continue;
@@ -273,20 +274,35 @@ async function saveSessionRescue(options) {
     protocol,
     runtime,
     host,
-    contracts,
+    observer,
+    codex,
+    claude,
+    opencode,
   ] = await Promise.all([
     import("../../packages/config/dist/index.js"),
     import("../../packages/protocol/dist/index.js"),
     import("../../packages/runtime/dist/index.js"),
     import("../../packages/station-host/dist/index.js"),
-    import("../../packages/contracts/dist/index.js"),
+    import("../../apps/observer/dist/internal.js"),
+    import("../../integrations/harness/codex/dist/index.js"),
+    import("../../integrations/harness/claude/dist/index.js"),
+    import("../../integrations/harness/opencode/dist/index.js"),
   ]);
   const loaded = await loadConfig(options.configPath);
   const observerPaths = resolveObserverPaths(loaded.config);
   const hostSocketPath = stationHostSocketPath(loaded.config);
   const buildInfo = runtime.stationBuildInfo();
   const observerBuildVersion = runtime.stationObserverBuildVersion(buildInfo);
-  const protectedRoots = [observerPaths.stateDir, options.codexHome];
+  const artifactLocators = new Map([
+    ["codex", codex.createCodexRecoveryArtifactLocator(options.codexHome)],
+    ["claude", claude.createClaudeRecoveryArtifactLocator(options.claudeProjectsRoot)],
+    ["opencode", opencode.createOpenCodeRecoveryArtifactLocator(options.opencodeDb)],
+  ]);
+  const protectedRoots = [
+    observerPaths.stateDir,
+    dirname(options.opencodeDb),
+    ...Array.from(artifactLocators.values()).flatMap((locator) => locator.protectedRoots()),
+  ];
   if (options.devbox) protectedRoots.push(dirname(options.configPath));
   const physicalOutput = await canonicalFuturePath(options.outputPath);
   for (const protectedRoot of protectedRoots) {
@@ -295,6 +311,7 @@ async function saveSessionRescue(options) {
     }
   }
 
+  await mkdir(dirname(options.outputPath), { recursive: true, mode: 0o700 });
   await mkdir(dirname(options.outputPath), { recursive: true, mode: 0o700 });
   await mkdir(options.outputPath, { mode: 0o700 });
   await writePrivateFile(
@@ -307,6 +324,7 @@ async function saveSessionRescue(options) {
   const metadata = {
     configPath: options.configPath,
     codexHome: options.codexHome,
+    claudeProjectsRoot: options.claudeProjectsRoot,
     opencodeDb: options.opencodeDb,
     observerPaths,
     hostSocketPath,
@@ -326,10 +344,7 @@ async function saveSessionRescue(options) {
     let recoveryHandles = [];
     try {
       await backupSqlite(observerPaths.dbPath, observerBackupPath);
-      recoveryHandles = readRecoveryHandles(
-        observerBackupPath,
-        contracts.SessionRecoveryHandleSchema,
-      );
+      recoveryHandles = observer.readSessionRecoveryHandlesFromBackup(observerBackupPath);
       await writePrivateJson(
         join(options.outputPath, "observer", "recovery-handles.json"),
         recoveryHandles,
@@ -416,9 +431,31 @@ async function saveSessionRescue(options) {
       recoveryCoverage,
     );
     for (const session of recoveryCoverage) {
-      if (session.exactHandleIds.length === 0) {
+      if (session.exactHandleIds.length !== 1) {
         critical.push(
-          `Active Station session ${session.sessionId} has no provider recovery handle`,
+          `Active Station session ${session.sessionId} requires one exact provider recovery handle; found ${session.exactHandleIds.length}`,
+        );
+        continue;
+      }
+      const handle = recoveryHandles.find(
+        (candidate) => candidate.id === session.exactHandleIds[0],
+      );
+      const row = snapshot?.rows.find((candidate) => candidate.id === session.worktreeId);
+      if (handle?.cwd === undefined || row === undefined || !isUnder(handle.cwd, row.path)) {
+        critical.push(
+          `Active Station session ${session.sessionId} has no recovery cwd inside its exact worktree`,
+        );
+      }
+      const hostPty = hostPtys.find(
+        (pty) => pty.alive && pty.kind === "agent" && pty.sessionId === session.sessionId,
+      );
+      if (
+        handle?.target.kind === "native-session" &&
+        hostPty !== undefined &&
+        hostPty.nativeSessionId !== handle.target.id
+      ) {
+        critical.push(
+          `Active Station session ${session.sessionId} recovery identity does not match its Host PTY`,
         );
       }
     }
@@ -429,8 +466,9 @@ async function saveSessionRescue(options) {
       recoveryHandles,
       activeProviders,
       codexHome: options.codexHome,
+      claudeProjectsRoot: options.claudeProjectsRoot,
       opencodeDb: options.opencodeDb,
-      warnings,
+      artifactLocators,
       critical,
     });
 
@@ -488,12 +526,10 @@ async function preserveProviderState(input) {
       await copyProviderTree(
         join(input.codexHome, "sessions"),
         join(input.root, "providers", "codex", "sessions"),
-        input.warnings,
       );
       await copyProviderTree(
         join(input.codexHome, "shell_snapshots"),
         join(input.root, "providers", "codex", "shell_snapshots"),
-        input.warnings,
       );
     } catch (error) {
       input.critical.push(`Codex provider state could not be preserved: ${errorMessage(error)}`);
@@ -510,13 +546,12 @@ async function preserveProviderState(input) {
     }
   }
 
-  const claudeRoot = join(homedir(), ".claude", "projects");
+  const claudeRoot = input.claudeProjectsRoot;
   if (providers.has("claude")) {
     try {
       await copyProviderTree(
         claudeRoot,
         join(input.root, "providers", "claude", "projects"),
-        input.warnings,
         (path) => path.endsWith(".jsonl"),
       );
     } catch (error) {
@@ -525,58 +560,33 @@ async function preserveProviderState(input) {
   }
 
   for (const handle of input.recoveryHandles) {
-    const targetDir = join(
-      input.root,
-      "providers",
-      safeSegment(handle.provider),
-      "sessions",
-      safeSegment(handle.id),
-    );
-    if (handle.target.kind === "session-file") {
-      try {
-        await copyStableFile(
-          handle.target.path,
-          join(targetDir, basename(handle.target.path)),
-          input.warnings,
-        );
-      } catch (error) {
+    const locator = input.artifactLocators.get(handle.provider);
+    if (locator === undefined) {
+      input.critical.push(
+        `Provider ${handle.provider} has no recovery artifact adapter for ${handle.id}`,
+      );
+      continue;
+    }
+    try {
+      const assets = await locator.locate(handle);
+      if (assets.length === 0) {
         input.critical.push(
-          `Recovery file ${handle.id} could not be preserved: ${errorMessage(error)}`,
+          `No exact ${handle.provider} recovery assets found for handle ${handle.id}`,
         );
       }
-      continue;
+    } catch (error) {
+      input.critical.push(
+        `Recovery assets for ${handle.id} could not be located: ${errorMessage(error)}`,
+      );
     }
-    if (handle.provider === "codex") {
-      const assets = await findCodexSessionAssets(input.codexHome, handle.target.id);
-      if (assets.size === 0) {
-        input.critical.push(`No exact Codex files found for native session ${handle.target.id}`);
-      }
-      continue;
-    }
-    if (handle.provider === "opencode") {
-      continue;
-    }
-    if (handle.provider === "claude") {
-      const matches = new Set();
-      await walkFiles(claudeRoot, (path) => {
-        if (basename(path) === `${handle.target.id}.jsonl`) matches.add(path);
-      });
-      if (matches.size === 0) {
-        input.critical.push(`No exact Claude file found for native session ${handle.target.id}`);
-      }
-      continue;
-    }
-    input.critical.push(
-      `Provider ${handle.provider} native session ${handle.target.id} was not preserved; use the provider's matching recovery procedure.`,
-    );
   }
 }
 
-async function copyProviderTree(sourceRoot, targetRoot, warnings, include = () => true) {
+async function copyProviderTree(sourceRoot, targetRoot, include = () => true) {
   await walkFiles(sourceRoot, async (source) => {
     if (!include(source)) return;
     const relativePath = relative(sourceRoot, source);
-    await copyStableFile(source, safeChildPath(targetRoot, relativePath), warnings);
+    await copyStableFile(source, safeChildPath(targetRoot, relativePath));
   });
 }
 
@@ -624,9 +634,14 @@ async function preserveWorktrees(archiveRoot, candidates, warnings, critical) {
       );
       await copyUntrackedFiles(root, join(target, "untracked"));
 
-      const uniqueCount = Number(
-        (await gitText(root, ["rev-list", "--count", "HEAD", "--not", "--remotes"])).trim(),
-      );
+      const uniqueCountOutput = await gitText(root, [
+        "rev-list",
+        "--count",
+        "HEAD",
+        "--not",
+        "--remotes",
+      ]);
+      const uniqueCount = Number(uniqueCountOutput.trim());
       if (uniqueCount > 0) {
         await mkdir(target, { recursive: true, mode: 0o700 });
         await runGit(root, [
@@ -696,47 +711,14 @@ async function backupSqlite(sourcePath, targetPath) {
   await chmod(targetPath, 0o600);
 }
 
-function readRecoveryHandles(path, schema) {
-  const database = new DatabaseSync(path, { readOnly: true });
-  try {
-    const table = database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-      .get("session_recovery_handles");
-    if (table === undefined) return [];
-    return database
-      .prepare("SELECT * FROM session_recovery_handles ORDER BY last_seen_at DESC, id")
-      .all()
-      .map((row) =>
-        schema.parse({
-          id: row.id,
-          provider: row.provider,
-          projectId: row.project_id,
-          worktreeId: row.worktree_id,
-          ...(row.session_id === null ? {} : { sessionId: row.session_id }),
-          target:
-            row.target_kind === "native-session"
-              ? { kind: "native-session", id: row.target_value }
-              : { kind: "session-file", path: row.target_value },
-          ...(row.cwd === null ? {} : { cwd: row.cwd }),
-          ...(row.terminal_target_id === null ? {} : { terminalTargetId: row.terminal_target_id }),
-          ...(row.harness_run_id === null ? {} : { harnessRunId: row.harness_run_id }),
-          observedAt: row.observed_at,
-          lastSeenAt: row.last_seen_at,
-        }),
-      );
-  } finally {
-    database.close();
-  }
-}
-
-async function copyStableFile(source, target, warnings) {
+async function copyStableFile(source, target) {
   const before = await stat(source);
   await mkdir(dirname(target), { recursive: true, mode: 0o700 });
   await copyFile(source, target);
   await chmod(target, 0o600);
   const after = await stat(source);
   if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
-    warnings.push(`Source changed during capture: ${source}`);
+    throw new Error(`Source changed during capture: ${source}`);
   }
 }
 
@@ -801,20 +783,6 @@ function sqliteIntegrity(path) {
   }
 }
 
-function validManifestEntry(entry) {
-  return (
-    entry !== null &&
-    typeof entry === "object" &&
-    typeof entry.path === "string" &&
-    entry.path.length > 0 &&
-    (entry.type === "file" || entry.type === "symlink") &&
-    typeof entry.sha256 === "string" &&
-    /^[0-9a-f]{64}$/u.test(entry.sha256) &&
-    (entry.type !== "file" || (Number.isSafeInteger(entry.size) && entry.size >= 0)) &&
-    (entry.type !== "symlink" || typeof entry.target === "string")
-  );
-}
-
 function safeArchivePath(root, relativePath) {
   if (isAbsolute(relativePath) || relativePath.split(/[\\/]/u).includes("..")) {
     throw new Error(`Unsafe archive path: ${relativePath}`);
@@ -849,7 +817,7 @@ async function canonicalFuturePath(path) {
   let candidate = resolve(path);
   for (;;) {
     try {
-      return resolve(await realpath(candidate), ...suffix.reverse());
+      return resolve(await realpath(candidate), ...suffix.toReversed());
     } catch (error) {
       if (nodeErrorCode(error) !== "ENOENT") throw error;
       const parent = dirname(candidate);
@@ -891,10 +859,37 @@ async function gitText(root, args) {
 }
 
 function runGit(root, args, options = {}) {
+  const env = environmentWithoutGitLocals(options.env ?? process.env);
   return run("git", ["-C", root, ...args], {
     ...options,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    env: { ...env, GIT_OPTIONAL_LOCKS: "0" },
   });
+}
+
+export function isUnder(path, root) {
+  const candidate = resolve(path);
+  const boundary = resolve(root);
+  const relativePath = relative(boundary, candidate);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith(`..${sep}`) && relativePath !== ".." && !isAbsolute(relativePath))
+  );
+}
+
+export function environmentWithoutGitLocals(source) {
+  const env = { ...source };
+  for (const key of [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_PREFIX",
+  ]) {
+    delete env[key];
+  }
+  return env;
 }
 
 function run(command, args, options = {}) {
@@ -912,8 +907,9 @@ function requiredOptionValue(args, index, option) {
 }
 
 function resolveInputPath(input, cwd, homeDir) {
-  const expanded =
-    input === "~" ? homeDir : input.startsWith("~/") ? join(homeDir, input.slice(2)) : input;
+  let expanded = input;
+  if (input === "~") expanded = homeDir;
+  else if (input.startsWith("~/")) expanded = join(homeDir, input.slice(2));
   return isAbsolute(expanded) ? resolve(expanded) : resolve(cwd, expanded);
 }
 
@@ -955,14 +951,14 @@ function errorMessage(error) {
 }
 
 function printHelp() {
-  console.log(`Usage:
+  process.stdout.write(`Usage:
   pnpm station:sessions:save -- --devbox [--output <path>]
-  pnpm station:sessions:save -- --config <config.toml> [--codex-home <path>] [--output <path>]
+  pnpm station:sessions:save -- --config <config.toml> [--codex-home <path>] [--claude-config-dir <path>] [--output <path>]
   pnpm station:sessions:verify -- <archive-path>
 
 The save is read-only with respect to Station, provider sessions, and worktrees. It never stops,
 closes, resumes, writes to, resizes, or unlinks a live runtime. Archives contain sensitive session
-output and provider state and are created with owner-only permissions.`);
+output and provider state and are created with owner-only permissions.\n`);
 }
 
 async function main() {
@@ -973,12 +969,12 @@ async function main() {
   }
   if (options.command === "verify") {
     const result = await verifySessionRescueArchive(options.archivePath);
-    console.log(JSON.stringify(result, null, 2));
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (!result.ok) process.exitCode = 1;
     return;
   }
   const result = await saveSessionRescue(options);
-  console.log(JSON.stringify(result, null, 2));
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   if (result.status !== "complete") process.exitCode = 2;
 }
 

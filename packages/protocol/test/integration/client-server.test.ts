@@ -45,6 +45,11 @@ describe("protocol client/server", () => {
       schemaVersion: STATION_SCHEMA_VERSION,
       counts: { projects: 0 },
     });
+    await expect(client.getSessionRecoveryReadiness()).resolves.toEqual({
+      resumeEnabled: true,
+      managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
+      harnesses: [],
+    });
 
     const command: StationCommand = {
       type: "worktree.create",

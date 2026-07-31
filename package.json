@@ -63,7 +63,7 @@
     "test:e2e:setup:guided:all-shells": "STATION_SETUP_E2E_ALL_SHELLS=true pnpm test:e2e:setup:guided",
     "test:e2e:setup:core": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/setup-core-flow.test.ts",
     "test:e2e:setup:sqlite": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/observer-sqlite-smoke.test.ts",
-    "test:e2e:observer": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/observer-lifecycle.test.ts",
+    "test:e2e:observer": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/observer-lifecycle.test.ts tests/e2e/session-migration.test.ts",
     "test:e2e": "vitest run --config config/vitest/vitest.e2e.config.ts",
     "test:e2e:real": "vitest run --config config/vitest/vitest.real-e2e.config.ts",
     "test:e2e:real:local": "node scripts/test-runners/run-real-e2e.mjs",

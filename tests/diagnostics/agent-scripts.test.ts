@@ -1,13 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -21,14 +13,12 @@ import {
 } from "../../scripts/maintenance/agent-reset.mjs";
 import {
   buildSessionMigrationPlan,
-  enableSessionResumeFeature,
-  importRecoveryHandles,
   parseSessionMigrationArgs,
 } from "../../scripts/maintenance/session-migrate.mjs";
 import {
   assertSqliteTables,
   buildRecoveryCoverage,
-  findCodexSessionAssets,
+  environmentWithoutGitLocals,
   parseSessionRescueArgs,
   verifySessionRescueArchive,
   writeSessionRescueManifest,
@@ -46,6 +36,25 @@ import {
   createBuildIdentityRestartProbe,
   mouseReportingDisableSequence,
 } from "../../scripts/tui-watch-runner.mjs";
+
+const rescueMetadata = {
+  configPath: "/tmp/source/config.toml",
+  codexHome: "/tmp/source/codex",
+  claudeProjectsRoot: "/tmp/source/claude/projects",
+  opencodeDb: "/tmp/source/opencode.db",
+  observerPaths: {
+    stateDir: "/tmp/source/observer",
+    socketPath: "/tmp/source/observer.sock",
+    dbPath: "/tmp/source/observer.sqlite",
+    logDir: "/tmp/source/logs",
+    diagnosticsDir: "/tmp/source/diagnostics",
+    hookSpoolDir: "/tmp/source/spool",
+  },
+  hostSocketPath: "/tmp/source/host.sock",
+  stationVersion: "0.0.0-test",
+  stationBuildIdentity: "test-build",
+  observerBuildVersion: "0.0.0-test+station.test",
+};
 
 type TurboConfig = {
   futureFlags?: {
@@ -147,12 +156,19 @@ describe("session migration script", () => {
       targetConfig: "/tmp/target.toml",
       targetCodexHome: "/Users/example/.codex",
     });
+    const digest = "a".repeat(64);
     expect(
+      parseSessionMigrationArgs(
+        ["--archive", "rescue", "--target-config", "target.toml", "--yes", "--expect-plan", digest],
+        { cwd: "/tmp", homeDir: "/Users/example" },
+      ),
+    ).toMatchObject({ command: "apply", expectPlan: digest });
+    expect(() =>
       parseSessionMigrationArgs(
         ["--archive", "rescue", "--target-config", "target.toml", "--yes"],
         { cwd: "/tmp", homeDir: "/Users/example" },
-      ).command,
-    ).toBe("apply");
+      ),
+    ).toThrow("--yes requires --expect-plan");
     expect(() =>
       parseSessionMigrationArgs([
         "--archive",
@@ -167,16 +183,22 @@ describe("session migration script", () => {
     ).toThrow("Use --source-config or --source-devbox-root, not both");
   });
 
-  it("enables resume without reserializing unrelated TOML", () => {
-    expect(enableSessionResumeFeature("schema_version = 1\n")).toBe(
-      "schema_version = 1\n\n[feature_flags]\nsession_resume_agent = true\n",
+  it("does not edit target config or write target SQLite directly", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("../../scripts/maintenance/session-migrate.mjs", import.meta.url)),
+      "utf8",
     );
-    expect(
-      enableSessionResumeFeature(
-        "[feature_flags]\nsession_resume_agent = false\nstation_persistent_agents = true\n\n[tui]\n",
-      ),
-    ).toBe(
-      "[feature_flags]\nsession_resume_agent = true\nstation_persistent_agents = true\n\n[tui]\n",
+    expect(source).not.toContain("enableSessionResumeFeature");
+    expect(source).not.toContain("INSERT INTO session_recovery_handles");
+    expect(source).not.toContain("atomicReplace(options.targetConfig");
+    expect(source).toContain("SessionMigrationSealSchema");
+    expect(source).toContain("SessionMigrationLockSchema");
+    expect(source).toContain("loadResumableMigration");
+    expect(source.indexOf("await quiesceSource")).toBeLessThan(
+      source.indexOf('type: "session.importRecoveryHandle"'),
+    );
+    expect(source.lastIndexOf("await verifySealedProviderState")).toBeLessThan(
+      source.indexOf('phase = "staging-target"'),
     );
   });
 
@@ -234,67 +256,6 @@ describe("session migration script", () => {
     ]);
   });
 
-  it("imports exact recovery handles into a stopped target database idempotently", () => {
-    const root = mkdtempSync(join(tmpdir(), "station-session-migration-db-"));
-    const databasePath = join(root, "observer.sqlite");
-    const database = new DatabaseSync(databasePath);
-    database.exec(`
-      CREATE TABLE session_recovery_handles (
-        id TEXT PRIMARY KEY,
-        provider TEXT NOT NULL,
-        project_id TEXT NOT NULL,
-        worktree_id TEXT NOT NULL,
-        session_id TEXT,
-        target_kind TEXT NOT NULL,
-        target_value TEXT NOT NULL,
-        cwd TEXT,
-        terminal_target_id TEXT,
-        harness_run_id TEXT,
-        observed_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL,
-        UNIQUE(provider, target_kind, target_value)
-      )
-    `);
-    database.close();
-    const plan = [
-      {
-        sessionId: "ses_feature",
-        provider: "codex",
-        projectId: "station",
-        worktreeId: "wt_station_feature",
-        worktreePath: "/worktrees/feature",
-        handle: {
-          id: "rec_feature",
-          provider: "codex",
-          target: { kind: "native-session" as const, id: "thread-1" },
-          observedAt: "2026-07-29T12:00:00.000Z",
-          lastSeenAt: "2026-07-29T12:00:01.000Z",
-        },
-      },
-    ];
-
-    try {
-      expect(importRecoveryHandles(databasePath, plan, root)).toEqual(
-        new Map([["rec_feature", "rec_feature"]]),
-      );
-      expect(importRecoveryHandles(databasePath, plan, root)).toEqual(
-        new Map([["rec_feature", "rec_feature"]]),
-      );
-      const reopened = new DatabaseSync(databasePath, { readOnly: true });
-      expect(reopened.prepare("SELECT * FROM session_recovery_handles").all()).toEqual([
-        expect.objectContaining({
-          id: "rec_feature",
-          session_id: "ses_feature",
-          target_value: "thread-1",
-          cwd: "/worktrees/feature",
-        }),
-      ]);
-      reopened.close();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
   it("refuses migration when the target worktree already owns a session", () => {
     const coverage = [
       {
@@ -314,6 +275,7 @@ describe("session migration script", () => {
         worktreeId: "wt_station_feature",
         sessionId: "ses_source",
         target: { kind: "native-session" as const, id: "thread-1" },
+        cwd: "/worktrees/feature",
       },
     ];
     const row = {
@@ -344,6 +306,26 @@ describe("session migration script", () => {
         ],
       }),
     ).toThrow("Target worktree already has a session");
+
+    expect(
+      buildSessionMigrationPlan(
+        coverage,
+        handles,
+        source,
+        {
+          rows: [row],
+          sessions: [
+            {
+              id: "ses_source",
+              projectId: "station",
+              worktreeId: row.id,
+              harness: { provider: "codex" },
+            },
+          ],
+        },
+        { allowMatchingTargetSessions: true },
+      ),
+    ).toEqual([expect.objectContaining({ sessionId: "ses_source", alreadyResumed: true })]);
   });
 });
 
@@ -359,34 +341,23 @@ describe("session rescue script", () => {
       command: "save",
       configPath: "/repo/station/.dev-state/config.toml",
       codexHome: "/repo/station/.dev-state/codex-home",
+      claudeProjectsRoot: "/repo/station/.dev-state/claude-home/projects",
       outputPath: "/Users/example/.local/state/station-session-rescues/2026-07-29T16-00-00-000Z",
     });
     expect(() =>
       parseSessionRescueArgs(["save", "--devbox", "--config", "/tmp/config.toml"]),
-    ).toThrow("--devbox cannot be combined with --config or --codex-home");
+    ).toThrow("--devbox cannot be combined with --config, --codex-home, or --claude-config-dir");
   });
 
-  it("selects only exact Codex session and shell snapshot ids", async () => {
-    const root = mkdtempSync(join(tmpdir(), "station-session-assets-"));
-    const id = "019faf49-9be1-7123-80a4-6c62539a907b";
-    const exactSession = join(root, "sessions", "2026", "07", "29", `rollout-now-${id}.jsonl`);
-    const nearSession = join(root, "sessions", "2026", "07", "29", `rollout-now-${id}-copy.jsonl`);
-    const exactSnapshot = join(root, "shell_snapshots", `${id}.123.sh`);
-    const nearSnapshot = join(root, "shell_snapshots", `${id}-copy.123.sh`);
-
-    try {
-      mkdirSync(join(root, "sessions", "2026", "07", "29"), { recursive: true });
-      mkdirSync(join(root, "shell_snapshots"), { recursive: true });
-      for (const path of [exactSession, nearSession, exactSnapshot, nearSnapshot]) {
-        writeFileSync(path, "saved\n");
-      }
-
-      await expect(findCodexSessionAssets(root, id)).resolves.toEqual(
-        new Set([exactSession, exactSnapshot]),
-      );
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+  it("removes repository-local Git variables before worktree capture", () => {
+    expect(
+      environmentWithoutGitLocals({
+        PATH: "/bin",
+        GIT_DIR: "/wrong/.git",
+        GIT_WORK_TREE: "/wrong",
+        GIT_INDEX_FILE: "/wrong/index",
+      }),
+    ).toEqual({ PATH: "/bin" });
   });
 
   it("reports candidate handles without treating them as exact recovery coverage", () => {
@@ -447,7 +418,12 @@ describe("session rescue script", () => {
 
     try {
       writeFileSync(join(root, "snapshot.json"), "{}\n");
-      await writeSessionRescueManifest(root, { status: "complete", warnings: [] });
+      await writeSessionRescueManifest(root, {
+        status: "complete",
+        warnings: [],
+        critical: [],
+        metadata: rescueMetadata,
+      });
       await expect(verifySessionRescueArchive(root)).resolves.toMatchObject({ ok: true });
 
       writeFileSync(join(root, "snapshot.json"), '{"changed":true}\n');
@@ -467,7 +443,11 @@ describe("session rescue script", () => {
         join(root, "manifest.json"),
         `${JSON.stringify({
           archiveVersion: 1,
+          createdAt: "2026-07-30T12:00:00.000Z",
           status: "partial",
+          warnings: [],
+          critical: ["incomplete"],
+          metadata: rescueMetadata,
           files: [
             {
               path: "../outside",
@@ -504,7 +484,11 @@ describe("session rescue script", () => {
         join(root, "manifest.json"),
         `${JSON.stringify({
           archiveVersion: 1,
+          createdAt: "2026-07-30T12:00:00.000Z",
           status: "partial",
+          warnings: [],
+          critical: ["symlink"],
+          metadata: rescueMetadata,
           files: [
             {
               path: "escape/secret",

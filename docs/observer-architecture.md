@@ -182,15 +182,15 @@ ownership even where current ownership is still a deviation.
 
 | Conversation | Direction | Application seam | Actor or adapter | Rule and current status |
 | --- | --- | --- | --- | --- |
-| Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. |
+| Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. Recovery readiness is a read-only query over loaded feature policy and injected provider capabilities. |
 | Observer reap | Driving | `ObserverReap` | CLI observer-reap adapter, direct tests | Observer-owned local-process operation; dry-run and explicit force share one selection and revalidation use case while CLI composition supplies boundary evidence. |
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
 | Harness status delivery | Driving | harness event report ingress | harness hooks, provider hook adapters, protocol clients | Reports are deduplicated, queued, projected, persisted, and followed by reconcile. |
 | Worktree operations | Driven | `WorktreeProvider` | Worktrunk and test adapters | Strong purpose-owned port. |
 | Terminal operations | Driven | `TerminalProvider` | tmux, Station terminal, and test adapters | General topology and operations are provider-owned. |
-| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
-| Harness operations | Driven | `HarnessProvider` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned port with provider-local parsing and compatibility admission for observations persisted by earlier builds. |
+| Managed terminal lifecycle | Driven | `ManagedTerminalLifecycle` | Station terminal adapter, optionally backed by Station Host | Explicit injected role returning only an opaque target identity and declaring whether launched processes persist beyond the caller; Host backing may add spawn/list/close/attachment lifecycle, while Station retains native presentation and host-backed targets remain externally non-focusable. |
+| Harness operations | Driven | `HarnessProvider`, `SessionRecoveryArtifactLocator` | Claude, Codex, Cursor, OpenCode, Pi, scripted, and test adapters | Strong purpose-owned ports with provider-local parsing, compatibility admission, and exact recovery-artifact location; unsupported artifact providers make migration ineligible. |
 | Repository metadata | Driven | `RepositoryProvider` | GitHub and test repository adapters | Adapters declare deterministic remote support; provider-neutral metadata policy selects zero or one match and rejects overlaps. |
 | Durable observer memory | Driven | `CommandJournal`, `EventJournal`, `IngressJournal`, `ObservationStore`, `ReconcileStore`, `SessionStore`, `WorktreeMetadataStore` | Production SQLite adapter and test-only in-memory adapter | Observer-private, application-purpose ports separate current conversations from storage representation. Consumers receive only the named ports they use; the unmarked `ObserverPersistenceBundle` intersection exists only at adapter and composition seams. |
 | Persistence health | Driven | `PersistenceHealthSource` | SQLite adapter created by `createSqliteObserverPersistence` | Runtime health and diagnostics read the public SQLite health projection without receiving the concrete database handle. |
@@ -373,6 +373,25 @@ adapter rechecks the expected registration identity, path, and branch immediatel
 before mutation so an external checkout replacement cannot reuse the selected
 path and branch as removal identity. Adapter race refusals retain provider-neutral,
 trace-correlated diagnostic evidence.
+
+### Session Recovery Cutover
+
+Session migration is an exclusive cutover, not a blue/green launch. Its
+read-only plan pins source and target Observer identities, compares the complete
+source Host PTY census, verifies target worktree identity, queries live recovery
+readiness, and binds confirmation to a digest. Apply closes only those exact
+source sessions without force and requires the source Host to reach zero live
+PTYs before final provider artifacts are sealed.
+
+The sealed private directory becomes temporary authority after source
+quiescence. Provider integrations locate exact native artifacts; target file
+collisions require byte-identical content. Recovery handles enter target
+Observer memory only through the recorded `session.importRecoveryHandle`
+command, while the maintenance process treats the target database as opaque.
+Each target launch rechecks that the source Observer remains stopped and verifies
+the resulting Host PTY, worktree, provider, session, and native identity before
+completion. An append-only owner-private journal makes interruption retryable;
+it never authorizes concurrent source and target agents.
 
 ### Reconciliation
 

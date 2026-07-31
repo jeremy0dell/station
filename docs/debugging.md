@@ -253,21 +253,43 @@ pnpm station:sessions:migrate -- \
   --source-devbox-root ~/Developer/station
 ```
 
-Repeat with `--yes` only after reviewing that plan. Apply stages provider-native
-state, stops the target Observer without stopping its Host, imports exact
-recovery handles into an online-backup-protected target database, resumes every
-agent through the existing `session.resumeAgent` command, restores session
-titles, and verifies a live target terminal for every session. Only then does it
-finalize the source, either through `station:devbox stop` or force-closing the
-archived source sessions. Source and target state/config paths must be distinct.
-An interrupted or failed migration writes an owner-only report under the target
-state directory and leaves source finalization incomplete; preserve both
-runtimes until that report is understood.
+The plan is read-only: it uses `snapshot --require-running`, checks the exact
+source Observer and Host census, verifies target worktree and Host identities,
+refuses live target sessions on providers being migrated, checks provider-file
+conflicts, and prints a SHA-256 digest. It never starts an Observer or
+edits configuration. Apply must bind confirmation to that evidence:
 
-OpenCode migration currently requires the rescued session IDs to already exist
-in the target OpenCode database, as they normally do when both runtimes share
-its default data home. The command refuses instead of merging two nonempty
-OpenCode databases. Override provider locations with
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station \
+  --yes --expect-plan <digest-from-plan>
+```
+
+Apply intentionally has downtime. It closes only the planned source sessions
+without force, proves the source Host owns no live PTY, captures stable final
+provider state into a hash-inventoried private directory, and stops the pinned source
+Observer before importing handles through the recorded
+`session.importRecoveryHandle` command. It then resumes each target and verifies
+its exact Host PTY and provider-native identity. Source and target agents never
+run concurrently, target TOML is never edited, target SQLite is never opened by
+the maintenance script, and an entire devbox is never stopped as a side effect.
+
+Only one apply process may own a digest at a time; a stale owner-private lock is
+reclaimed only after its recorded process is gone. `SIGINT`, `SIGTERM`, and
+`SIGHUP` stop the active child and write the last durable phase to `journal.jsonl`
+plus `report.json`. Before source quiescence, the source
+remains authoritative. An interruption during quiescence may leave only a subset
+of source sessions running; rerun with the same digest so the journal closes the
+remaining sessions. After `source-sealed`, source agents remain stopped and the
+sealed directory is authoritative; the same retry accepts already-resumed exact
+target sessions and continues from sealed evidence instead of rerunning live
+source planning checks.
+
+Codex and OpenCode migration accept each provider's shared source database, an
+absent target database, or a byte-identical target database. They refuse instead
+of merging different nonempty provider databases. Override provider locations with
 `--target-codex-home`, `--target-opencode-db`, and
 `--target-claude-projects` when the target uses isolated homes.
 

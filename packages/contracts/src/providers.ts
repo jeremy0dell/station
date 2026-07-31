@@ -72,6 +72,7 @@ export const TerminalCapabilitiesSchema = z
     canCaptureOutput: z.boolean(),
     canSendInput: z.boolean(),
     canPersistIdentityBinding: z.boolean(),
+    canLaunchProcessPersistently: z.boolean(),
     canDisplayPopup: z.boolean(),
   })
   .strict();
@@ -512,9 +513,9 @@ export type ManagedTerminalLaunchProcessResult =
  * DRIVEN PORT
  *
  * Owns the single managed terminal target used for an external Station launch.
- * Attachments expose only adapter-owned target identity. A local fallback may
- * instead carry a provider-neutral output policy for the caller-owned process,
- * and at most one target may exist per worktree.
+ * Its capabilities state whether process ownership survives the launching client;
+ * attachments expose only adapter-owned target identity, and at most one target
+ * may exist per worktree.
  */
 export interface ManagedTerminalLifecycle extends TerminalProvider {
   launchProcess(request: TerminalLaunchProcessRequest): Promise<ManagedTerminalLaunchProcessResult>;

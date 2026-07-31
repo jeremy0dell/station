@@ -13,6 +13,7 @@ export * from "./observer.js";
 export * from "./providers.js";
 export * from "./recovery.js";
 export * from "./recoveryBreadcrumbs.js";
+export * from "./sessionRecovery.js";
 export * from "./setupTypes.js";
 export * from "./snapshot.js";
 export * from "./terminalIntents.js";
