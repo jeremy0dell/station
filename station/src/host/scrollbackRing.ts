@@ -1,16 +1,19 @@
 import type { HostReplayEvent } from "@station/host";
 
 type ScrollbackSize = { cols: number; rows: number };
+type RawHostReplayEvent =
+  | Extract<HostReplayEvent, { type: "data" }>
+  | Extract<HostReplayEvent, { type: "resize" }>;
 type ScrollbackEntry = {
   before: ScrollbackSize;
-  event: HostReplayEvent;
+  event: RawHostReplayEvent;
   bytes: number;
 };
 
 export type ScrollbackSnapshot = {
   initialCols: number;
   initialRows: number;
-  events: HostReplayEvent[];
+  events: RawHostReplayEvent[];
   complete: boolean;
 };
 

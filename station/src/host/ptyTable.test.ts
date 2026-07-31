@@ -7,10 +7,13 @@ import type {
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createPtyTable } from "./ptyTable.js";
 import {
+  type SemanticTerminalCapture,
   type SemanticTerminalModel,
   TerminalSnapshotPendingError,
   TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
+
+const EMPTY_SEMANTIC_COPY = { normal: [], alternate: [] } as const;
 
 const baseParams: HostSpawnParams = {
   kind: "agent",
@@ -228,7 +231,10 @@ describe("createPtyTable", () => {
       const semantic: SemanticTerminalModel = {
         write() {},
         resize() {},
-        capture: async () => ["semantic-state"],
+        capture: async () => ({
+          events: ["semantic-state"],
+          semanticCopy: { normal: [], alternate: [] },
+        }),
         dispose() {},
       };
       return {
@@ -248,13 +254,16 @@ describe("createPtyTable", () => {
       kind: "semantic-truncation-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [{ type: "data", data: "semantic-state" }],
+      events: [
+        { type: "data", data: "semantic-state" },
+        { type: "semantic-copy", normal: [], alternate: [] },
+      ],
     });
   });
 
   it("captures behind a registered sink so boundary output is delivered once as live data", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
-    const capture = Promise.withResolvers<string[]>();
+    const capture = Promise.withResolvers<SemanticTerminalCapture>();
     const operations: string[] = [];
     const semantic: SemanticTerminalModel = {
       write(data) {
@@ -281,7 +290,10 @@ describe("createPtyTable", () => {
     const attaching = table.attach(ptyId);
     scripted.helpers.emitData("during");
     table.resize(ptyId, 100, 30);
-    capture.resolve(["snapshot-at-boundary"]);
+    capture.resolve({
+      events: ["snapshot-at-boundary"],
+      semanticCopy: { normal: [], alternate: [] },
+    });
     const attached = await attaching;
     const frames = attached.frames[Symbol.asyncIterator]();
 
@@ -292,7 +304,10 @@ describe("createPtyTable", () => {
         kind: "semantic-truncation-recovery",
         initialCols: 80,
         initialRows: 24,
-        events: [{ type: "data", data: "snapshot-at-boundary" }],
+        events: [
+          { type: "data", data: "snapshot-at-boundary" },
+          { type: "semantic-copy", ...EMPTY_SEMANTIC_COPY },
+        ],
       },
     });
     expect(await frames.next()).toMatchObject({ value: { type: "data", data: "during" } });

@@ -252,7 +252,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
           }
           // Parse each retained segment at its production geometry; erase,
           // cursor, and wrapping semantics cannot be reconstructed at one width.
-          // The terminal holds live frames until this resolves.
+          // The terminal holds live frames until VT and copy metadata both settle.
           entry.replayingSnapshot = true;
           try {
             current.resize(initialSize);
@@ -262,7 +262,31 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
                 continue;
               }
               await current.whenIdle();
-              current.resize({ cols: event.cols, rows: event.rows });
+              if (event.type === "resize") {
+                current.resize({ cols: event.cols, rows: event.rows });
+                continue;
+              }
+              try {
+                const result = current.restoreSemanticCopySnapshot({
+                  normal: event.normal,
+                  alternate: event.alternate,
+                });
+                if (result.dropped > 0) {
+                  reportTerminalCorruption({
+                    kind: "terminal_diagnostic",
+                    pane: entry.paneId,
+                    key: "semantic_copy_restore_dropped",
+                    detail: { dropped: result.dropped },
+                  });
+                }
+              } catch {
+                current.restoreSemanticCopySnapshot({ normal: [], alternate: [] });
+                reportTerminalCorruption({
+                  kind: "terminal_diagnostic",
+                  pane: entry.paneId,
+                  key: "semantic_copy_restore_invalid",
+                });
+              }
             }
             await current.whenIdle();
           } finally {

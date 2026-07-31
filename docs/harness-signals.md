@@ -23,6 +23,11 @@ Bugs live at layer boundaries. When diagnosing, first establish which layer
 produced the wrong value (`stn debug logs "Harness event report"` shows the
 normalized result and the projection decision for every ingested event).
 
+Terminal presentation metadata is outside these layers. In particular, the
+[semantic-copy protocol](terminal-semantic-copy.md) travels in a child PTY byte
+stream and records only row-boundary facts; it is not a `HarnessEventReport`,
+status signal, transcript transport, or Observer concern.
+
 ## Current Contract (v0)
 
 Normalized events are `HarnessEventReport` / `HarnessEventObservation`

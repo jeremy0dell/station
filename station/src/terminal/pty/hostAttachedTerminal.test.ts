@@ -778,7 +778,10 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           kind: "semantic-truncation-recovery",
           initialCols: 80,
           initialRows: 24,
-          events: [{ type: "data", data: semanticData }],
+          events: [
+            { type: "data", data: semanticData },
+            { type: "semantic-copy", normal: [], alternate: [] },
+          ],
         },
       }),
     );

@@ -111,9 +111,10 @@ export type HostAttachedTerminalOptions = {
 };
 
 /**
- * Host-attached `StationTerminalProcess`: attach, replay, then stream live
- * data and geometry frames. Degraded reconstruction replays the Host's
- * mode-restoring reset data and keeps I/O live; proven PTY loss emits exit,
+ * Host-attached `StationTerminalProcess`: attach, await ordered VT and semantic
+ * copy restoration, then stream live data and geometry frames. Degraded
+ * reconstruction replays the Host's mode-restoring reset data and keeps I/O
+ * live; proven PTY loss emits exit,
  * while compatibility failures emit unavailable. `dispose()` only detaches.
  */
 export function createHostAttachedTerminal(
@@ -222,8 +223,9 @@ export function createHostAttachedTerminal(
       listener(event);
     }
   };
-  // A wired replay listener gets the ordered production geometry and is awaited
-  // so live frames never interleave with replay; legacy consumers receive data.
+  // A wired replay listener gets ordered production geometry and copy metadata;
+  // awaiting it keeps every queued live frame behind exact restoration. Legacy
+  // consumers receive only data because they have no row-sidecar contract.
   const emitReplay = async (replay: StationTerminalReplay): Promise<void> => {
     if (disposed) {
       return;
@@ -290,17 +292,32 @@ export function createHostAttachedTerminal(
     isReconnect: boolean,
   ): Promise<void> => {
     const hostReplay = opened.ack.replay;
-    const replay: StationTerminalReplay = {
-      initialSize: {
-        cols: hostReplay.initialCols,
-        rows: hostReplay.initialRows,
-      },
-      events:
-        hostReplay.kind === "live-reset-recovery"
-          ? [{ type: "data", data: hostReplay.resetData }]
-          : hostReplay.events,
-      kind: hostReplay.kind,
+    const initialSize = {
+      cols: hostReplay.initialCols,
+      rows: hostReplay.initialRows,
     };
+    let replay: StationTerminalReplay;
+    switch (hostReplay.kind) {
+      case "raw-complete":
+        replay = { kind: "raw-complete", initialSize, events: hostReplay.events };
+        break;
+      case "semantic-truncation-recovery":
+        replay = {
+          kind: "semantic-truncation-recovery",
+          initialSize,
+          events: hostReplay.events,
+        };
+        break;
+      case "live-reset-recovery":
+        replay = {
+          kind: "live-reset-recovery",
+          initialSize,
+          events: [{ type: "data", data: hostReplay.resetData }],
+        };
+        break;
+      default:
+        return unreachableAttachmentState(hostReplay);
+    }
     if (replay.kind === "live-reset-recovery") {
       reportTerminalCorruption({
         kind: "terminal_diagnostic",

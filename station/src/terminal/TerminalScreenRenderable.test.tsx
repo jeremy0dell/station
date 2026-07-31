@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { getLinkId } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { semanticCopyContinuationMarker } from "./protocol/semanticCopy.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
 
@@ -143,6 +144,65 @@ describe("TerminalScreenRenderable selection", () => {
     try {
       await setup.mockMouse.drag(0, 0, 19, 1);
       expect(copied).toEqual([text]); // no space between "s" and "漢"
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("rejoins an application-painted continuation and restores consumed spaces", async () => {
+    const marker = semanticCopyContinuationMarker(3);
+    const { setup, screen, copied } = await renderPane(`echo one   \r\n│ ${marker}two`);
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual(["echo one   two"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("keeps wide glyphs, ANSI, and hyperlinks out of application-wrap metadata", async () => {
+    const marker = semanticCopyContinuationMarker(0);
+    const first = "abcdefghijklmnopqr漢";
+    const uri = "https://example.com/semantic-copy";
+    const feed =
+      `\x1b[31m${first}\x1b[0m\r\n│ ${marker}` +
+      `\x1b]8;;${uri}\x1b\\\x1b[1m字\x1b[0m\x1b]8;;\x1b\\`;
+    const { setup, screen, copied } = await renderPane(feed);
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual([`${first}字`]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("keeps unmarked application rows as hard lines", async () => {
+    const { setup, screen, copied } = await renderPane("echo one\r\n│ two");
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual(["echo one\n│ two"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("joins long-token continuations without inserting a separator", async () => {
+    const marker = semanticCopyContinuationMarker(0);
+    const { setup, screen, copied } = await renderPane(`abcdefghijkl\r\n> ${marker}mnop`);
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual(["abcdefghijklmnop"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("preserves the visible prefix when selection starts on a continuation row", async () => {
+    const marker = semanticCopyContinuationMarker(1);
+    const { setup, screen, copied } = await renderPane(`first\r\n│ ${marker}second`);
+    try {
+      await setup.mockMouse.drag(0, 1, 19, 1);
+      expect(copied).toEqual(["│ second"]);
     } finally {
       await teardown(setup, screen);
     }

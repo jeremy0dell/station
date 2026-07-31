@@ -1,4 +1,5 @@
 import type { TerminalOutputCompatibility } from "@station/contracts";
+import type { SemanticCopySnapshot } from "./protocol/semanticCopy.js";
 
 export type StationTerminalId = string;
 
@@ -26,19 +27,33 @@ export type StationTerminalDisposable = {
   dispose(): void;
 };
 
+/** Ordered replay data, production geometry, or content-free row-copy state. */
 export type StationTerminalReplayEvent =
   | { type: "data"; data: string }
-  | { type: "resize"; cols: number; rows: number };
+  | { type: "resize"; cols: number; rows: number }
+  | ({ type: "semantic-copy" } & SemanticCopySnapshot);
 
 /**
- * Raw history, exact restoration, or Host mode-restoring degraded data handed
- * over with its production geometry; Host reset data remains one local event.
+ * Raw history, exact VT plus semantic-copy restoration, or Host mode-restoring
+ * degraded data handed over with production geometry; Host reset data remains
+ * one local event.
  */
 export type StationTerminalReplay = {
   initialSize: StationTerminalSize;
-  events: readonly StationTerminalReplayEvent[];
-  kind: "raw-complete" | "semantic-truncation-recovery" | "live-reset-recovery";
-};
+} & (
+  | {
+      kind: "raw-complete";
+      events: readonly Exclude<StationTerminalReplayEvent, { type: "semantic-copy" }>[];
+    }
+  | {
+      kind: "semantic-truncation-recovery";
+      events: readonly Exclude<StationTerminalReplayEvent, { type: "resize" }>[];
+    }
+  | {
+      kind: "live-reset-recovery";
+      events: readonly Extract<StationTerminalReplayEvent, { type: "data" }>[];
+    }
+);
 
 /** Attachment failure that does not prove the backing process exited. */
 export type StationTerminalUnavailable = {
@@ -66,9 +81,9 @@ export type StationTerminalProcess = {
     listener: (event: StationTerminalUnavailable) => void,
   ): StationTerminalDisposable;
   /**
-   * Replayed snapshot delivery. When wired, snapshot events bypass onData and
-   * the terminal awaits the listener before streaming live data, so consumers
-   * apply recorded resizes before parsing later bytes. Terminals without
+   * Replayed snapshot delivery. When wired, ordered data, resize, and semantic-copy
+   * events bypass onData and the terminal awaits the listener before streaming live
+   * data, so exact copy state is restored before queued output. Terminals without
    * replayable history never emit this.
    */
   onReplay?(

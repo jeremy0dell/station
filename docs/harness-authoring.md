@@ -20,6 +20,12 @@ Prefer one transport per fact. If two transports can report the same fact,
 they must derive the same `coalesceKey` from a harness-native id so they
 coalesce instead of racing.
 
+Renderer-owned row wrapping is not a harness transport. A child TUI that adopts
+[terminal semantic copy](terminal-semantic-copy.md) emits bounded continuation
+markers from its wrapping layer only. Harness adapters and lifecycle extensions
+must not infer wraps, send transcript bodies, inspect session files, or branch
+core behavior on provider identity.
+
 ## 2. Run the census
 
 Before writing mapping code, capture what the harness actually emits per

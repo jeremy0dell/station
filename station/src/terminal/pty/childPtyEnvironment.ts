@@ -2,6 +2,7 @@ export const STATION_CHILD_TERMINAL_ENV = {
   TERM: "xterm-256color",
   COLORTERM: "truecolor",
   TERM_PROGRAM: "Station",
+  STATION_SEMANTIC_COPY: "1",
 } as const;
 
 /**
@@ -59,7 +60,8 @@ type Environment = Readonly<Record<string, string | undefined>>;
  * Builds the environment for a Station-rendered child PTY without mutating the
  * outer renderer environment; ordinary launch values, including authentication,
  * provider context, and color preferences, pass through. Station-owned terminal
- * identity is applied after inherited outer-only hints are removed.
+ * identity and the versioned semantic-copy capability are applied after inherited
+ * outer-only hints are removed, so launch values cannot forge or suppress them.
  */
 export function createStationChildPtyEnvironment(
   inheritedEnvironment: Environment,

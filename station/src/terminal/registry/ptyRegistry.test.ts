@@ -358,6 +358,49 @@ describe("createPtyRegistry", () => {
     expect(screen?.cursor()).toEqual({ x: 1, y: 0 });
   });
 
+  it("restores semantic-copy metadata after exact VT replay and before live output", async () => {
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+
+    await replay({
+      kind: "semantic-truncation-recovery",
+      initialSize: { cols: 10, rows: 4 },
+      events: [
+        { type: "data", data: "first\r\n│ second" },
+        {
+          type: "semantic-copy",
+          normal: [{ row: 1, leadingColumns: 2, separatorSpaces: 1 }],
+          alternate: [],
+        },
+      ],
+    });
+
+    expect(screen?.viewRowCopyContinuation(1)).toEqual({
+      kind: "application-soft",
+      leadingColumns: 2,
+      separatorSpaces: 1,
+    });
+  });
+
+  it("an explicit empty semantic-copy sidecar clears stale metadata", async () => {
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+    screen?.feed("first\r\n\x1b]6973;station-copy;1;0\x1b\\stale");
+    await screen?.whenIdle();
+    expect(screen?.viewRowCopyContinuation(1)?.kind).toBe("application-soft");
+
+    await replay({
+      kind: "semantic-truncation-recovery",
+      initialSize: { cols: 10, rows: 4 },
+      events: [
+        { type: "data", data: "\x1bcfirst\r\nhard" },
+        { type: "semantic-copy", normal: [], alternate: [] },
+      ],
+    });
+
+    expect(screen?.viewRowCopyContinuation(1)).toBeUndefined();
+  });
+
   it("parses pre-barrier output at 10 columns before reflowing it to 5", async () => {
     const { registry, scripted, replay, geometry } = orderedGeometryHarness();
     const screen = registry.get(PANE_A)?.screen;

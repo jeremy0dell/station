@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { createStationHostClient } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
+import { semanticCopyContinuationMarker } from "../terminal/protocol/semanticCopy.js";
 import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
+import { createPtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import { createStationVtScreen } from "../terminal/vt/screen.js";
 import type { PtyTableOptions } from "./ptyTable.js";
 import { type StationHostInstance, startStationHost } from "./startHost.js";
@@ -88,6 +90,82 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     } finally {
       terminal.dispose();
       screen.dispose();
+      control.dispose();
+    }
+  });
+
+  it("restores semantic-copy OSC metadata through complete raw replay", async () => {
+    const scripted = createScriptedTerminal({ cols: 20, rows: 4 });
+    const socketPath = await startHostWith(scripted);
+    const control = createStationHostClient({ socketPath });
+    const { ptyId } = await control.spawn({
+      ...identity,
+      command: "pi",
+      args: [],
+      cwd: "/repo/wt-1",
+      cols: 20,
+      rows: 4,
+    });
+    scripted.helpers.emitData(`first\r\n│ ${semanticCopyContinuationMarker(1)}second`);
+
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: socketPath,
+      ptyId,
+      size: { cols: 20, rows: 4 },
+    });
+    const screen = createStationVtScreen({ size: { cols: 20, rows: 4 } });
+    terminal.onData((data) => screen.feed(data));
+    try {
+      await waitFor(() => screen.viewRowCopyContinuation(1)?.kind === "application-soft");
+      expect(screen.viewRowCopyContinuation(1)).toEqual({
+        kind: "application-soft",
+        leadingColumns: 2,
+        separatorSpaces: 1,
+      });
+    } finally {
+      terminal.dispose();
+      screen.dispose();
+      control.dispose();
+    }
+  });
+
+  it("restores semantic-copy sidecar state after raw replay eviction", async () => {
+    const scripted = createScriptedTerminal({ cols: 20, rows: 4 });
+    const socketPath = await startHostWith(scripted, { maxScrollbackBytes: 5 });
+    const control = createStationHostClient({ socketPath });
+    const { ptyId } = await control.spawn({
+      ...identity,
+      command: "pi",
+      args: [],
+      cwd: "/repo/wt-1",
+      cols: 20,
+      rows: 4,
+    });
+    scripted.helpers.emitData("first\r\n");
+    scripted.helpers.emitData(`│ ${semanticCopyContinuationMarker(2)}second`);
+
+    const registry = createPtyRegistry();
+    registry.ensure("pane-semantic-copy", undefined, (spawn) =>
+      createHostAttachedTerminal({
+        hostSocketPath: socketPath,
+        ptyId,
+        size: { cols: spawn.size?.cols ?? 20, rows: spawn.size?.rows ?? 4 },
+      }),
+    );
+    registry.resize("pane-semantic-copy", { cols: 20, rows: 4 });
+    const screen = registry.get("pane-semantic-copy")?.screen;
+    if (screen === null || screen === undefined) {
+      throw new Error("semantic-copy registry screen was not created");
+    }
+    try {
+      await waitFor(() => screen.viewRowCopyContinuation(1)?.kind === "application-soft");
+      expect(screen.viewRowCopyContinuation(1)).toEqual({
+        kind: "application-soft",
+        leadingColumns: 2,
+        separatorSpaces: 2,
+      });
+    } finally {
+      registry.disposeAll();
       control.dispose();
     }
   });

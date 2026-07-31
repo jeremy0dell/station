@@ -86,8 +86,8 @@ The outer terminal environment belongs to OpenTUI and remains unchanged so the
 renderer can use the real host terminal. At the final Station-owned PTY spawn
 boundary, inherited and per-launch environment values are merged, outer-renderer
 identity and feature hints are removed, and Station applies `TERM=xterm-256color`,
-`COLORTERM=truecolor`, and `TERM_PROGRAM=Station`. Per-launch values cannot replace
-those fields or the derived `STATION_PANE` marker.
+`COLORTERM=truecolor`, `TERM_PROGRAM=Station`, and `STATION_SEMANTIC_COPY=1`.
+Per-launch values cannot replace those fields or the derived `STATION_PANE` marker.
 
 Ordinary locale, authentication, provider, project, worktree, and user environment
 continues to pass through, including functional Git askpass and provider context.
@@ -125,11 +125,32 @@ adopt a capability-policy update.
 
 The pinned Pi 0.80.10 detector fixture does not yet recognize Station or
 `FORCE_HYPERLINK`; it intentionally remains `hyperlinks: false`. Inherited
-hyperlink overrides are scrubbed and Station does not replace them. Capability
-advertisement remains disabled until a coordinated Pi release and an
+hyperlink overrides are scrubbed and Station does not replace them. Hyperlink
+capability advertisement remains disabled until a coordinated Pi release and an
 outer-terminal capability gate can land atomically; do not impersonate another
 emulator or patch the fixture to claim behavior the published Pi executable does
 not have.
+
+## Semantic Pane Copy
+
+Native panes implement the versioned [Station Semantic Copy Protocol](terminal-semantic-copy.md).
+Natural xterm wraps and marked child-renderer continuations copy without a newline;
+unmarked rows preserve hard boundaries. Application markers carry no text: Station
+derives the visible-prefix width at parse time and accepts only a bounded ASCII-space
+count. Native xterm wrapping remains authoritative.
+
+The same parser/state helper runs in pane VT screens and the Host's headless semantic
+terminal. Complete Host replay re-parses original marker bytes. Host protocol 6
+restores a bounded, content-free sidecar after serialized VT when raw replay was
+evicted, before queued live frames and pane resize recovery. Erase, reset, alternate
+buffer lifetime, resize reflow, scrollback movement, and eviction follow xterm row
+markers so stale metadata cannot be reused.
+
+Plain pane drag selection uses this state. OpenTUI global selection and outer-terminal
+selection remain separate. Unsupported children keep hard rows, and application-owned
+copy commands are unchanged. Pi renderer support must land in `@earendil-works/pi-tui`;
+the Station Pi lifecycle extension remains transcript-free. The pinned Pi 0.80.10
+fixture does not yet emit semantic-copy markers.
 
 ## Native OSC 8 Hyperlinks
 
@@ -266,7 +287,7 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 - `station/src/station/` holds the STATION overlay (the dashboard surface): `view/` is the OpenTUI render layer over `@station/dashboard-core`, `input/` is the overlay keymap and mouse routing, and `store/` is the overlay store.
 - `station/src/terminal/` is the app-local PTY boundary (VT parser/screen model under `terminal/vt/`); `station/src/host/` is the PTY-host client for warm/cold reattach.
 - For managed Codex launches, the Station terminal provider selects a generic output-compatibility policy that both UI-owned fallback PTYs and Host-owned PTYs apply before replay storage and live delivery. It rewrites only the exact row-1 region scroll followed by its correlated cursor-and-erase repaint; both PTY boundaries remain provider-neutral, and manually starting Codex in an auxiliary shell remains outside this compatibility scope.
-- Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
+- Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement and content-free semantic-copy row sidecar. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
 - Attachment-unavailable state is not process exit: version and exhausted-reconnect failures stop pane input and resize forwarding and show `attachment unavailable`, while only proven Host absence, an exited acknowledgement, or an exit frame reaches the pane-exit lifecycle. Lost historical replay fidelity keeps the pane attached and logs a typed degraded-snapshot diagnostic instead.
 - In `@station/dashboard-core`: `selectors/` for snapshot-to-view grouping/filtering, `state/commandBuilders.ts` for typed observer command construction, `state/screens/*` for pure screen-owned key transitions, `state/observerBridge.ts` and `state/operations/*` for command/operation flow, and `components/`/`widgets/` for shared layout/content logic.
 - Station may import only the linked `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`); it must never import `apps/tui` or `ink` (enforced by `station/src/station/importBoundaries.test.ts`).

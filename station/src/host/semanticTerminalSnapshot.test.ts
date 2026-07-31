@@ -2,6 +2,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
+import { semanticCopyContinuationMarker } from "../terminal/protocol/semanticCopy.js";
 import { createStationVtScreen } from "../terminal/vt/screen.js";
 import { resolveXtermCellHyperlink } from "../terminal/vt/xtermHyperlinks.js";
 import {
@@ -47,6 +48,15 @@ function margins(terminal: Terminal): [number, number] {
   ];
 }
 
+async function captureData(source: SemanticTerminalSnapshot): Promise<string> {
+  const capture = await source.capture();
+  const data = capture.events[0];
+  if (data === undefined) {
+    throw new Error("Expected semantic capture data.");
+  }
+  return data;
+}
+
 async function captureError(source: SemanticTerminalSnapshot): Promise<Error> {
   try {
     await source.capture();
@@ -69,7 +79,7 @@ describe("SemanticTerminalSnapshot", () => {
     });
     try {
       source.write("one\r\ntwo\r\nthree\r\nfour\r\nfive\x1b[31;1m red\x1b]2;agent\x07");
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, `dirty${CSI}?1049hother${CSI}?1049l${snapshot}`);
 
       expect(lines(restored)).toEqual(["one", "two", "three", "four", "five red"]);
@@ -92,7 +102,7 @@ describe("SemanticTerminalSnapshot", () => {
     try {
       source.write("n1\r\nn2\r\nn3\r\nn4\r\nn5");
       source.write(`${CSI}?1049h${CSI}Halternate`);
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
 
       expect(restored.buffer.active.type).toBe("alternate");
@@ -105,13 +115,41 @@ describe("SemanticTerminalSnapshot", () => {
     }
   });
 
+  it("atomically captures VT restoration and semantic-copy rows", async () => {
+    const source = new SemanticTerminalSnapshot(20, 4);
+    const restored = createStationVtScreen({ size: { cols: 20, rows: 4 } });
+    try {
+      source.write(`first\r\n│ ${semanticCopyContinuationMarker(2)}second`);
+      const capture = await source.capture();
+      expect(capture.semanticCopy).toEqual({
+        normal: [{ row: 1, leadingColumns: 2, separatorSpaces: 2 }],
+        alternate: [],
+      });
+
+      restored.feed(capture.events.join(""));
+      await restored.whenIdle();
+      expect(restored.restoreSemanticCopySnapshot(capture.semanticCopy)).toEqual({
+        applied: 1,
+        dropped: 0,
+      });
+      expect(restored.viewRowCopyContinuation(1)).toEqual({
+        kind: "application-soft",
+        leadingColumns: 2,
+        separatorSpaces: 2,
+      });
+    } finally {
+      source.dispose();
+      restored.dispose();
+    }
+  });
+
   it("preserves resize reflow and Unicode 11 cell widths", async () => {
     const source = new SemanticTerminalSnapshot(8, 3);
     const restored = target(5, 6);
     try {
       source.write("alpha界bravo\r\ncharlie");
       source.resize(5, 6);
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       restored.resize(5, 6);
       await write(restored, snapshot);
 
@@ -135,7 +173,7 @@ describe("SemanticTerminalSnapshot", () => {
       ).join("");
       expect(Buffer.byteLength(output, "utf8")).toBeGreaterThan(256 * 1024);
       source.write(output);
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
 
       const restoredText = lines(restored).join("\n");
@@ -152,7 +190,7 @@ describe("SemanticTerminalSnapshot", () => {
     const restored = target(12, 5);
     try {
       source.write(`one\r\ntwo${CSI}?2026h${CSI}2J${CSI}Hframe`);
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
 
       expect(lines(restored)).toEqual(["one", "two", "frame", "", "", "", ""]);
@@ -169,7 +207,7 @@ describe("SemanticTerminalSnapshot", () => {
     const originTarget = target(12, 5);
     try {
       originSource.write(`${CSI}?6h${CSI}3;4H`);
-      const [originSnapshot] = await originSource.capture();
+      const originSnapshot = await captureData(originSource);
       await write(originTarget, originSnapshot);
       expect(originTarget.modes.originMode).toBe(true);
       expect([originTarget.buffer.active.cursorX, originTarget.buffer.active.cursorY]).toEqual([
@@ -193,7 +231,7 @@ describe("SemanticTerminalSnapshot", () => {
       source.write(
         `${CSI}2;4r${CSI}3;4H${CSI}=1u` + `${CSI}?1049h${CSI}=2uALT`,
       );
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, `${snapshot}${CSI}?1049lX`);
 
       const normal = restored.buffer.normal;
@@ -221,7 +259,7 @@ describe("SemanticTerminalSnapshot", () => {
     const restored = target(12, 5);
     try {
       source.write(`${CSI}44m${CSI}2J${CSI}3;1H${CSI}49m${CSI}12X${CSI}31;1m`);
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, `${snapshot}X`);
 
       expect(
@@ -244,7 +282,7 @@ describe("SemanticTerminalSnapshot", () => {
     const restored = target(12, 5);
     try {
       source.write(`${CSI}31;44m界${CSI}0m`);
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
 
       const line = restored.buffer.active.getLine(0);
@@ -264,7 +302,7 @@ describe("SemanticTerminalSnapshot", () => {
     const restored = target(12, 5);
     try {
       source.write("abcdefghijk界");
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
 
       const wrapped = restored.buffer.active.getLine(1);
@@ -361,7 +399,7 @@ describe("SemanticTerminalSnapshot", () => {
       const restored = target(12, 6);
       try {
         source.write(testCase.input);
-        const [snapshot] = await source.capture();
+        const snapshot = await captureData(source);
         await write(restored, snapshot);
 
         const expectedLines = ["", "", testCase.text, "", "", ""];
@@ -421,7 +459,7 @@ describe("SemanticTerminalSnapshot", () => {
     const screen = createStationVtScreen({ size: { cols: 12, rows: 5 } });
     try {
       source.write(`${CSI}?25l\x1bc${CSI}?1002h${CSI}?1006h${CSI}?1016h`);
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       screen.feed(snapshot);
       await screen.whenIdle();
 
@@ -443,7 +481,7 @@ describe("SemanticTerminalSnapshot", () => {
         `${CSI}31m${CSI}3;4H${CSI}?1049h${CSI}34m${CSI}2;3H\x1b7ALT` +
           `${CSI}?1049l${CSI}32m${CSI}Hshell`,
       );
-      const [normalSnapshot] = await normalSource.capture();
+      const normalSnapshot = await captureData(normalSource);
       await write(normalTarget, `${normalSnapshot}\x1b8X`);
       expect([normalTarget.buffer.active.cursorX, normalTarget.buffer.active.cursorY]).toEqual([
         4, 2,
@@ -453,7 +491,7 @@ describe("SemanticTerminalSnapshot", () => {
       expect(normalTarget.buffer.active.getLine(1)?.getCell(2)?.getFgColor()).toBe(4);
 
       alternateSource.write(`${CSI}3;4H${CSI}?1049h${CSI}2;3H${CSI}1;2s${CSI}H`);
-      const [alternateSnapshot] = await alternateSource.capture();
+      const alternateSnapshot = await captureData(alternateSource);
       await write(alternateTarget, `${alternateSnapshot}\x1b8`);
       expect([alternateTarget.buffer.active.cursorX, alternateTarget.buffer.active.cursorY]).toEqual([
         2, 1,
@@ -475,7 +513,7 @@ describe("SemanticTerminalSnapshot", () => {
     const restored = target(20, 4);
     try {
       source.write("\x1b]8;;https://example.com\x1b\\linked\x1b]8;;\x1b\\ text");
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
 
       expect(restored.buffer.active.getLine(0)?.translateToString(true)).toBe("linked text");
@@ -643,7 +681,7 @@ describe("SemanticTerminalSnapshot", () => {
       expect((pending as TerminalSnapshotPendingError & { resetData?: string }).resetData).toBeUndefined();
 
       source.write("mred");
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
       expect(restored.buffer.active.getLine(0)?.translateToString(true)).toBe("red");
       expect(restored.buffer.active.getLine(0)?.getCell(0)?.getFgColor()).toBe(1);
@@ -669,7 +707,7 @@ describe("SemanticTerminalSnapshot", () => {
       });
 
       source.write("\ude42");
-      const [snapshot] = await source.capture();
+      const snapshot = await captureData(source);
       await write(restored, snapshot);
       expect(restored.buffer.active.getLine(0)?.translateToString(true)).toBe("emoji-🙂");
     } finally {

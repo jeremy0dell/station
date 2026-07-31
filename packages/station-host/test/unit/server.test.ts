@@ -256,7 +256,10 @@ describe("serveHostConnection", () => {
           kind: "semantic-truncation-recovery",
           initialCols: 100,
           initialRows: 30,
-          events: [{ type: "data", data: "\x1bcsemantic" }],
+          events: [
+            { type: "data", data: "\x1bcsemantic" },
+            { type: "semantic-copy", normal: [], alternate: [] },
+          ],
         },
       }).success,
     ).toBe(true);
@@ -264,13 +267,57 @@ describe("serveHostConnection", () => {
       HostAttachAckSchema.safeParse({
         ...ack,
         replay: {
-          kind: "semantic-truncation-recovery",
-          initialCols: 80,
-          initialRows: 24,
-          events: [{ type: "resize", cols: 100, rows: 30 }],
+          kind: "raw-complete",
+          initialCols: 100,
+          initialRows: 30,
+          events: [{ type: "semantic-copy", normal: [], alternate: [] }],
         },
       }).success,
     ).toBe(false);
+    for (const events of [
+      [{ type: "resize", cols: 100, rows: 30 }],
+      [{ type: "data", data: "missing-sidecar" }],
+      [
+        { type: "semantic-copy", normal: [], alternate: [] },
+        { type: "data", data: "out-of-order" },
+      ],
+      [
+        { type: "data", data: "duplicate" },
+        { type: "semantic-copy", normal: [], alternate: [] },
+        { type: "semantic-copy", normal: [], alternate: [] },
+      ],
+      [
+        { type: "data", data: "bad-count" },
+        {
+          type: "semantic-copy",
+          normal: [{ row: 0, leadingColumns: 0, separatorSpaces: 1025 }],
+          alternate: [],
+        },
+      ],
+      [
+        { type: "data", data: "duplicate-row" },
+        {
+          type: "semantic-copy",
+          normal: [
+            { row: 0, leadingColumns: 0, separatorSpaces: 0 },
+            { row: 0, leadingColumns: 1, separatorSpaces: 1 },
+          ],
+          alternate: [],
+        },
+      ],
+    ]) {
+      expect(
+        HostAttachAckSchema.safeParse({
+          ...ack,
+          replay: {
+            kind: "semantic-truncation-recovery",
+            initialCols: 100,
+            initialRows: 30,
+            events,
+          },
+        }).success,
+      ).toBe(false);
+    }
     expect(
       HostAttachAckSchema.safeParse({
         ...ack,

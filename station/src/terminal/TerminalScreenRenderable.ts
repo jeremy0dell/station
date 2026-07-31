@@ -392,9 +392,11 @@ export class TerminalScreenRenderable extends Renderable {
   }
 
   /**
-   * Selected text in reading order, newline-joined. Soft-wrapped buffer rows of
-   * one logical line are rejoined without a newline (so a wrapped command pastes
-   * as one line); only a non-wrapped row ends a line and gets right-trimmed.
+   * Reconstructs selected logical text from native wraps, cooperating-application
+   * continuations, and hard rows. Native wraps retain full cells (apart from the
+   * wide-glyph phantom cell); application continuations trim renderer padding,
+   * restore bounded separator spaces, and omit their visible prefix only when the
+   * preceding row is selected. Hard rows remain newline-delimited.
    */
   getSelectedText(): string {
     const screen = this.#screen;
@@ -412,20 +414,27 @@ export class TerminalScreenRenderable extends Renderable {
       if (cols === null) {
         continue;
       }
-      // When the next row is a wrap continuation, this row's glyphs fill the full
-      // width: keep its tail (trimming would drop real content) and let the line
-      // continue. Only a non-wrapped row ends the logical line.
-      const wrappedIntoNext = row < last && screen.isViewRowWrapped(row + 1);
-      let text = screen.viewRowText(row, cols.start, cols.end);
-      if (wrappedIntoNext && screen.firstGlyphWidth(row + 1) === 2) {
-        // xterm pads this row's last column with a blank when the next row's
-        // leading wide glyph couldn't fit; drop that one phantom space so a
-        // wrapped CJK/emoji line doesn't paste with a stray gap at the boundary.
-        text = text.replace(/ $/, "");
+      const continuation = row === first ? undefined : screen.viewRowCopyContinuation(row);
+      let startColumn = cols.start;
+      if (continuation?.kind === "application-soft") {
+        startColumn = Math.max(startColumn, continuation.leadingColumns);
       }
-      current = (current ?? "") + (wrappedIntoNext ? text : text.replace(/\s+$/, ""));
-      if (!wrappedIntoNext) {
-        lines.push(current);
+      const text = screen.viewRowText(row, startColumn, cols.end);
+      current ??= "";
+      if (continuation?.kind === "terminal-soft") {
+        if (screen.firstGlyphWidth(row) === 2) {
+          // xterm leaves one phantom blank when a wide glyph cannot fit at the
+          // prior row's edge; that cell is geometry, not selected text.
+          current = current.replace(/ $/, "");
+        }
+      } else if (continuation?.kind === "application-soft") {
+        current = current.replace(/\s+$/, "");
+        current += " ".repeat(continuation.separatorSpaces);
+      }
+      current += text;
+
+      if (row === last || screen.viewRowCopyContinuation(row + 1) === undefined) {
+        lines.push(current.replace(/\s+$/, ""));
         current = null;
       }
     }

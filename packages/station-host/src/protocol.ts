@@ -5,7 +5,7 @@ import { z } from "zod";
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 5;
+export const HOST_PROTOCOL_VERSION = 6;
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
@@ -158,22 +158,85 @@ export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;
 export const HostReplayDataEventSchema = z
   .object({ type: z.literal("data"), data: z.string() })
   .strict();
+export const HostReplayResizeEventSchema = z
+  .object({
+    type: z.literal("resize"),
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+  })
+  .strict();
+const HostSemanticCopyRowSchema = z
+  .object({
+    row: z.number().int().min(0).max(1_000_000),
+    leadingColumns: z.number().int().min(0).max(1_000_000),
+    separatorSpaces: z.number().int().min(0).max(1024),
+  })
+  .strict();
+const HostSemanticCopyRowsSchema = z
+  .array(HostSemanticCopyRowSchema)
+  .max(20_000)
+  .superRefine((rows, context) => {
+    const seen = new Set<number>();
+    for (const [index, row] of rows.entries()) {
+      if (seen.has(row.row)) {
+        context.addIssue({
+          code: "custom",
+          path: [index, "row"],
+          message: "Semantic-copy buffer rows must be unique.",
+        });
+      }
+      seen.add(row.row);
+    }
+  });
+export const HostReplaySemanticCopyEventSchema = z
+  .object({
+    type: z.literal("semantic-copy"),
+    normal: HostSemanticCopyRowsSchema,
+    alternate: HostSemanticCopyRowsSchema,
+  })
+  .strict();
 export const HostReplayEventSchema = z.discriminatedUnion("type", [
   HostReplayDataEventSchema,
-  z
-    .object({
-      type: z.literal("resize"),
-      cols: z.number().int().positive(),
-      rows: z.number().int().positive(),
-    })
-    .strict(),
+  HostReplayResizeEventSchema,
+  HostReplaySemanticCopyEventSchema,
 ]);
 export type HostReplayEvent = z.infer<typeof HostReplayEventSchema>;
 
+const HostRawReplayEventSchema = z.discriminatedUnion("type", [
+  HostReplayDataEventSchema,
+  HostReplayResizeEventSchema,
+]);
+const HostSemanticRecoveryEventsSchema = z
+  .array(
+    z.discriminatedUnion("type", [HostReplayDataEventSchema, HostReplaySemanticCopyEventSchema]),
+  )
+  .min(2)
+  .superRefine((events, context) => {
+    const semanticIndexes = events.flatMap((event, index) =>
+      event.type === "semantic-copy" ? [index] : [],
+    );
+    if (semanticIndexes.length !== 1) {
+      context.addIssue({
+        code: "custom",
+        message: "Semantic recovery requires exactly one semantic-copy event.",
+      });
+      return;
+    }
+    if (semanticIndexes[0] !== events.length - 1) {
+      context.addIssue({
+        code: "custom",
+        path: [semanticIndexes[0] ?? 0],
+        message: "The semantic-copy event must follow serialized terminal data.",
+      });
+    }
+  });
+
 /**
  * Verbatim history, exact semantic restoration, or a control-only degraded
- * reset captured at the Host's semantic boundary. Live reset never carries
- * historical events, and its reset data must begin with RIS.
+ * reset captured at the Host's semantic boundary. Exact semantic recovery ends
+ * with one content-free semantic-copy sidecar after serialized VT; raw replay
+ * carries the original OSC bytes and must not duplicate that sidecar. Live reset
+ * never carries historical events, and its reset data must begin with RIS.
  */
 export const HostReplaySchema = z.discriminatedUnion("kind", [
   z
@@ -181,7 +244,7 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
       kind: z.literal("raw-complete"),
       initialCols: z.number().int().positive(),
       initialRows: z.number().int().positive(),
-      events: z.array(HostReplayEventSchema),
+      events: z.array(HostRawReplayEventSchema),
     })
     .strict(),
   z
@@ -189,7 +252,7 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
       kind: z.literal("semantic-truncation-recovery"),
       initialCols: z.number().int().positive(),
       initialRows: z.number().int().positive(),
-      events: z.array(HostReplayDataEventSchema).min(1),
+      events: HostSemanticRecoveryEventsSchema,
     })
     .strict(),
   z
@@ -206,8 +269,9 @@ export type HostReplay = z.infer<typeof HostReplaySchema>;
 
 /**
  * Attach acknowledgement captured atomically with the live listener. Raw replay
- * preserves production geometry; exact semantic and control-only reset recovery
- * both begin at the Host's current geometry before the client geometry nudge.
+ * preserves production geometry; exact semantic recovery restores its terminal
+ * data and copy sidecar in order, while control-only reset recovery begins at the
+ * Host's current geometry before the client geometry nudge.
  */
 export const HostAttachAckSchema = z
   .object({

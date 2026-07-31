@@ -61,8 +61,9 @@ export type PtyTable = {
   /**
    * Register the live sink before capturing raw history or semantic state, so
    * output after the capture boundary is queued exactly once as live frames.
-   * Ordered resize barriers preserve geometry; classified exact-capture failure
-   * retains the sink and returns mode-restoring control VT with no history.
+   * Exact recovery atomically orders serialized VT before its content-free copy
+   * sidecar. Ordered resize barriers preserve geometry; classified exact-capture
+   * failure retains the sink and returns mode-restoring control VT with no history.
    */
   attach(ptyId: string): Promise<HostAttachmentSource>;
   /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */
@@ -364,16 +365,24 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           kind: "raw-complete",
           initialCols: raw.initialCols,
           initialRows: raw.initialRows,
-          events: raw.events,
+          events: raw.events.map((event) =>
+            event.type === "data"
+              ? { type: "data", data: event.data }
+              : { type: "resize", cols: event.cols, rows: event.rows },
+          ),
         };
       } else {
         // Incomplete raw bytes are not a terminal state and must never cross the wire.
         try {
+          const capture = await entry.semantic.capture();
           replay = {
             kind: "semantic-truncation-recovery",
             initialCols: recorded.cols,
             initialRows: recorded.rows,
-            events: (await entry.semantic.capture()).map((data) => ({ type: "data", data })),
+            events: [
+              ...capture.events.map((data) => ({ type: "data" as const, data })),
+              { type: "semantic-copy", ...capture.semanticCopy },
+            ],
           };
           captureDurationMs = performance.now() - captureStartedAt;
         } catch (error) {

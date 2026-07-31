@@ -69,6 +69,7 @@ describe("createStationChildPtyEnvironment", () => {
       COLORTERM: "24bit",
       TERM_PROGRAM: "ghostty",
       STATION_PANE: "inherited",
+      STATION_SEMANTIC_COPY: "0",
     };
     const launch = {
       ...outerTerminalHints,
@@ -76,6 +77,7 @@ describe("createStationChildPtyEnvironment", () => {
       COLORTERM: "station-test-color",
       TERM_PROGRAM: "WezTerm",
       STATION_PANE: "launch",
+      STATION_SEMANTIC_COPY: "999",
     };
     const inheritedBefore = { ...inherited };
     const launchBefore = { ...launch };
@@ -86,6 +88,7 @@ describe("createStationChildPtyEnvironment", () => {
     expect(child.COLORTERM).toBe("truecolor");
     expect(child.TERM_PROGRAM).toBe("Station");
     expect(child.STATION_PANE).toBe("1");
+    expect(child.STATION_SEMANTIC_COPY).toBe("1");
     for (const key of Object.keys(outerTerminalHints)) {
       expect(child[key]).toBeUndefined();
     }
