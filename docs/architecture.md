@@ -51,7 +51,8 @@ No single layer owns all truth.
 - Config is authoritative for the projects station manages, project defaults, provider choices, and safe local policy.
 - Worktree providers are authoritative for external worktree existence and worktree metadata they can prove.
 - Terminal providers are authoritative for terminal topology and provider-owned target identity.
-- Harness providers are authoritative for agent launch, discovery, event ingestion, and status signals they can prove.
+- Harness providers are authoritative for agent launch, discovery, event ingestion, status signals, and provider-native recovery artifacts they can prove.
+- A sealed session-rescue archive becomes temporary cutover authority only after the exact source sessions have stopped and every recovery-critical asset has been captured and hashed; a live-source archive remains evidence, not launch authority.
 - Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
 - Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.
 - Observer snapshots are the normalized current graph exposed to clients. `rows` is configured
@@ -64,7 +65,7 @@ When these disagree, reconcile from config, providers, and current observer stat
 
 ## Boundary Rules
 
-- Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces.
+- Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces; session migration locates Codex, Claude, and OpenCode recovery artifacts through provider-owned adapters rather than scraping their layouts in Observer code.
 - Station-managed terminal lifecycle is supplied as an explicit application role. Observer application code may forward opaque managed-terminal attachments returned by that role, but must not select its adapter by provider ID, reconstruct provider-owned target IDs, or expose Station Host PTY and socket mechanics.
 - Station resolves managed-terminal attachments through its own host attacher. An absent attachment permits the existing local launch; an advertised attachment that cannot resolve fails visibly and must never fall through to a local spawn.
 - The Station UI is a client. It renders snapshots/events and dispatches typed commands; it must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.

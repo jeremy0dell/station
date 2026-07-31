@@ -270,7 +270,8 @@ check Node/Bun inaccessible and stale classification plus displaced-listener aba
 claim gate makes no fairness claim.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
-real stale-socket races, XDG/state divergence, explicit paths with spaces,
+real stale-socket races, read-only snapshot refusal, XDG/state divergence,
+explicit paths with spaces,
 claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
 same-version build-identity handoff and refusal, cross-version graceful handoff,
 inaccessible-socket preservation, displaced shutdown, clean restart while the
