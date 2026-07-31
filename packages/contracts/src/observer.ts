@@ -30,6 +30,7 @@ import {
   ProviderHealthSchema,
   TerminalOutputCompatibilitySchema,
 } from "./providers.js";
+import type { SessionRecoveryReadiness } from "./sessionRecovery.js";
 import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 import { type StationSnapshot, StationSnapshotSchema } from "./snapshot.js";
 
@@ -207,13 +208,14 @@ export type AgentReportExternalExitResult = z.infer<typeof AgentReportExternalEx
 /**
  * DRIVING PORT
  *
- * Exposes Observer queries, handshakes, ingress reports, maintenance, and lifecycle
- * operations to external actors.
+ * Exposes Observer state and recovery-readiness queries, handshakes, ingress reports,
+ * maintenance, and lifecycle operations to external actors.
  */
 export type ObserverApi = {
   health(): Promise<ObserverHealth>;
   stop(): Promise<ObserverStopReceipt>;
   getSnapshot(options?: { includeDebug?: boolean }): Promise<StationSnapshot>;
+  getSessionRecoveryReadiness(): Promise<SessionRecoveryReadiness>;
   subscribe(filter?: EventFilter): AsyncIterable<StationEvent>;
   dispatch(command: StationCommand): Promise<CommandReceipt>;
   getCommand(commandId: CommandId): Promise<CommandRecord | undefined>;

@@ -22,6 +22,7 @@ export * from "./metadata/refresh.js";
 export * from "./metadata/repositoryGit.js";
 export * from "./migrations/index.js";
 export * from "./persistence/index.js";
+export * from "./persistence/recoveryArchiveReader.js";
 export * from "./providers/healthCache.js";
 export * from "./providers/registry.js";
 export * from "./reconcile/core.js";

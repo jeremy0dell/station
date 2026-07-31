@@ -1,10 +1,17 @@
+import {
+  type HarnessSelectionFacts,
+  type HarnessSelectionIntent,
+  type HarnessTrackingRepairFact,
+  resolveHarnessSelection,
+  selectHarnessTrackingRepairTargets,
+  supportedHarnessIds,
+} from "@station/setup-core";
 import type {
   SetupFacts,
   SetupHarnessFact,
   SetupHarnessSelectionSource,
   SupportedHarnessId,
 } from "./model.js";
-import { supportedHarnessIds } from "./model.js";
 
 export type SetupHarnessSelection = {
   selected: readonly SetupHarnessFact[];
@@ -17,69 +24,49 @@ export function resolveSetupHarnessSelection(
   facts: Pick<SetupFacts, "config" | "harnesses">,
   selectedIds?: readonly SupportedHarnessId[],
 ): SetupHarnessSelection {
-  const configuredDefault = configuredDefaultHarness(facts);
-  if (selectedIds !== undefined) {
-    return resolveExplicitSelection(facts, selectedIds, configuredDefault);
-  }
-  if (facts.config.status === "valid") {
-    if (configuredDefault === undefined) return unresolvedSelection();
-    return {
-      selected: availableHarnesses(facts.harnesses, [configuredDefault]),
-      requiredHarnessIds: [configuredDefault],
-      source: "configured",
-      defaultHarness: configuredDefault,
-    };
-  }
-  return inferSingleAvailableHarness(facts) ?? unresolvedSelection();
-}
-
-function configuredDefaultHarness(
-  facts: Pick<SetupFacts, "config">,
-): SupportedHarnessId | undefined {
-  if (facts.config.status !== "valid") return undefined;
-  return isSupportedHarnessId(facts.config.defaults.harness)
-    ? facts.config.defaults.harness
-    : undefined;
-}
-
-function resolveExplicitSelection(
-  facts: Pick<SetupFacts, "config" | "harnesses">,
-  selectedIds: readonly SupportedHarnessId[],
-  configuredDefault: SupportedHarnessId | undefined,
-): SetupHarnessSelection {
-  if (facts.config.status === "valid" && configuredDefault === undefined) {
-    return unresolvedSelection();
-  }
-  const explicitIds = uniqueSupportedIds(selectedIds);
-  const firstExplicit = explicitIds[0];
-  if (firstExplicit === undefined) return unresolvedSelection();
-
-  // Explicit choices may extend an existing config, but cannot replace its authoritative default.
-  const requiredHarnessIds =
-    configuredDefault === undefined || explicitIds.includes(configuredDefault)
-      ? explicitIds
-      : [...explicitIds, configuredDefault];
+  const resolution = resolveHarnessSelection(
+    coreSelectionFacts(facts),
+    selectionIntent(selectedIds),
+  );
+  if (resolution.outcome !== "selected") return unresolvedSelection();
   return {
-    selected: availableHarnesses(facts.harnesses, requiredHarnessIds),
-    requiredHarnessIds,
-    source: "explicit",
-    defaultHarness: configuredDefault ?? firstExplicit,
+    selected: availableHarnesses(facts.harnesses, resolution.requiredHarnessIds),
+    requiredHarnessIds: resolution.requiredHarnessIds,
+    source: resolution.source,
+    defaultHarness: resolution.defaultHarness,
   };
 }
 
-function inferSingleAvailableHarness(
+function coreSelectionFacts(
   facts: Pick<SetupFacts, "config" | "harnesses">,
-): SetupHarnessSelection | undefined {
-  if (facts.config.status !== "missing") return undefined;
-  const available = facts.harnesses.filter((harness) => harness.status === "ok");
-  const inferred = available.length === 1 ? available[0] : undefined;
-  if (inferred === undefined) return undefined;
+): HarnessSelectionFacts {
+  let config: HarnessSelectionFacts["config"];
+  switch (facts.config.status) {
+    case "missing":
+      config = { status: "missing" };
+      break;
+    case "invalid":
+      config = { status: "invalid" };
+      break;
+    case "valid":
+      config = { status: "valid", defaultHarness: facts.config.defaults.harness };
+      break;
+  }
   return {
-    selected: [inferred],
-    requiredHarnessIds: [inferred.id],
-    source: "inferred",
-    defaultHarness: inferred.id,
+    config,
+    harnesses: facts.harnesses.map((harness) => ({
+      id: harness.id,
+      availability: harness.status === "ok" ? "available" : "unavailable",
+    })),
   };
+}
+
+function selectionIntent(
+  selectedIds: readonly SupportedHarnessId[] | undefined,
+): HarnessSelectionIntent {
+  return selectedIds === undefined
+    ? { kind: "automatic" }
+    : { kind: "explicit", harnessIds: selectedIds };
 }
 
 function unresolvedSelection(): SetupHarnessSelection {
@@ -99,15 +86,28 @@ export function harnessSupportsSetupHooks(
 }
 
 export function harnessTrackingRepairTargets(
-  facts: Pick<SetupFacts, "config" | "harnesses">,
+  facts: Pick<SetupFacts, "config" | "harnesses" | "harnessTracking">,
   harnessSelection: SetupHarnessSelection,
 ): SetupHarnessFact[] {
-  const persistedHookIds =
+  const persistedTrackingHarnessIds =
     facts.config.status === "valid" ? facts.config.configuredHookHarnesses : [];
-  const repairIds = uniqueSupportedIds([
-    ...harnessSelection.requiredHarnessIds,
-    ...persistedHookIds,
-  ]);
+  const harnesses: HarnessTrackingRepairFact[] = facts.harnesses.map((harness) => {
+    const tracking = facts.harnessTracking.find((candidate) => candidate.harnessId === harness.id);
+    return {
+      id: harness.id,
+      available: harness.status === "ok",
+      capability: harnessSupportsSetupHooks(harness.id) ? "supported" : "unsupported",
+      prepared:
+        tracking?.capability === "supported" &&
+        tracking.requested === true &&
+        tracking.installed === true,
+    };
+  });
+  const repairIds = selectHarnessTrackingRepairTargets({
+    requiredHarnessIds: harnessSelection.requiredHarnessIds,
+    persistedTrackingHarnessIds,
+    harnesses,
+  });
   return availableHarnesses(facts.harnesses, repairIds);
 }
 

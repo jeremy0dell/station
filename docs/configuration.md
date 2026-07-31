@@ -393,8 +393,8 @@ Strict boolean record. Unknown flag names are rejected.
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. |
-| `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. |
+| `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. Session migration requires this to already be enabled in the running target Observer; migration never edits the config. |
+| `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. Session migration requires the running target to report persistent native launch capability. |
 
 ---
 

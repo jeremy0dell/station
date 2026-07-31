@@ -91,6 +91,29 @@
       "initialPrompt": "Continue the recovered task."
     }
   },
+  "sessionImportRecoveryHandle": {
+    "type": "session.importRecoveryHandle",
+    "payload": {
+      "projectId": "api",
+      "worktreeId": "wt_api_cache",
+      "expectedPath": "/tmp/station/api/worktrees/cache",
+      "expectedRegistrationIdentity": "git-registration:fixture-cache",
+      "handle": {
+        "id": "rec_codex_123",
+        "provider": "codex",
+        "projectId": "api",
+        "worktreeId": "wt_api_cache",
+        "sessionId": "ses_api_cache",
+        "target": {
+          "kind": "native-session",
+          "id": "thread-cache-123"
+        },
+        "cwd": "/tmp/station/api/worktrees/cache",
+        "observedAt": "2026-07-29T12:00:00.000Z",
+        "lastSeenAt": "2026-07-29T12:00:01.000Z"
+      }
+    }
+  },
   "sessionFork": {
     "type": "session.fork",
     "payload": {

@@ -224,6 +224,70 @@ describe("guided setup command", () => {
     expect(fs.files[configPath].match(/^\[harness\.(codex|opencode)\]$/gm)).toHaveLength(2);
   });
 
+  it("reprompts invalid harness selection before any mutation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const activations: string[] = [];
+    const chunks: string[] = [];
+    let selectionPrompts = 0;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+          "opencode --version": "opencode 1.0.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        activateObserverConfig: async ({ configPath: activatedPath }) => {
+          activations.push(activatedPath);
+        },
+        prompt: {
+          async confirm(message) {
+            return message.includes("Write core STATION config");
+          },
+          async selectMany() {
+            selectionPrompts += 1;
+            expect(fs.files[configPath]).toBeUndefined();
+            expect(activations).toEqual([]);
+            expect(calls.some((call) => call.stdio === "inherit")).toBe(false);
+            return selectionPrompts === 1 ? [] : ["opencode"];
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(selectionPrompts).toBe(2);
+    expect(chunks.join("")).toContain("Select at least one available agent CLI.");
+    expect(fs.files[configPath]).toContain('harness = "opencode"');
+    expect(fs.files[configPath]).not.toContain("[harness.codex]");
+    expect(activations).toEqual([configPath]);
+  });
+
   it("does not silently drop a selected harness after linking checkout launchers", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

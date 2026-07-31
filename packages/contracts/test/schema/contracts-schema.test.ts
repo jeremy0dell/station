@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import {
   AgentPrepareExternalLaunchParamsSchema,
@@ -47,6 +48,11 @@ import {
   RepositoryPullRequestRequestSchema,
   RepositoryRemoteSchema,
   SafeErrorSchema,
+  SessionMigrationJournalEntrySchema,
+  SessionMigrationLockSchema,
+  SessionMigrationSealSchema,
+  SessionRecoveryReadinessSchema,
+  SessionRescueManifestSchema,
   STATION_SCHEMA_VERSION,
   StationCommandSchema,
   StationCommandTypeSchema,
@@ -1681,6 +1687,74 @@ describe("contract schemas", () => {
         message: "External command failed.\n    at run (/tmp/internal.ts:10:1)",
       },
       "stack-like SafeError message",
+    );
+  });
+
+  it("parses strict session recovery artifacts and journal entries", () => {
+    expectParses(
+      SessionMigrationJournalEntrySchema,
+      {
+        at: "2026-07-30T12:00:00.000Z",
+        phase: "source-sealed",
+        status: "complete",
+        digest: "a".repeat(64),
+        sealedRoot: "/tmp/session-migration/sealed",
+      },
+      "session migration journal entry",
+    );
+    expectParses(
+      SessionMigrationLockSchema,
+      {
+        pid: 1234,
+        token: randomUUID(),
+        createdAt: "2026-07-30T12:00:00.000Z",
+      },
+      "session migration lock",
+    );
+    expectParses(
+      SessionMigrationSealSchema,
+      {
+        sealedAt: "2026-07-30T12:00:00.000Z",
+        digest: "a".repeat(64),
+        sessions: ["ses_1"],
+        files: [
+          { path: "providers/codex/session.jsonl", type: "file", size: 10, sha256: "b".repeat(64) },
+        ],
+      },
+      "session migration seal",
+    );
+    expectFails(
+      SessionRescueManifestSchema,
+      {
+        archiveVersion: 1,
+        createdAt: "2026-07-30T12:00:00.000Z",
+        status: "complete",
+        warnings: [],
+        critical: [],
+        metadata: {},
+        files: [],
+      },
+      "session rescue manifest without source identity",
+    );
+  });
+
+  it("parses strict session recovery readiness", () => {
+    expectParses(
+      SessionRecoveryReadinessSchema,
+      {
+        resumeEnabled: true,
+        managedTerminal: {
+          provider: "native",
+          canLaunchProcessPersistently: true,
+        },
+        harnesses: [{ provider: "codex", canResume: true }],
+      },
+      "session recovery readiness",
+    );
+    expectFails(
+      SessionRecoveryReadinessSchema,
+      { resumeEnabled: true, harnesses: [], providerData: {} },
+      "session recovery readiness with unknown fields",
     );
   });
 

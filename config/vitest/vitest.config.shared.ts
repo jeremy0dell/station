@@ -58,6 +58,9 @@ export const stationAliases = {
   "@station/scripted-harness": fileURLToPath(
     new URL("../../integrations/harness/scripted/src/index.ts", import.meta.url),
   ),
+  "@station/setup-core": fileURLToPath(
+    new URL("../../packages/setup-core/src/index.ts", import.meta.url),
+  ),
   "@station/host": fileURLToPath(
     new URL("../../packages/station-host/src/index.ts", import.meta.url),
   ),

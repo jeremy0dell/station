@@ -642,6 +642,7 @@ class NoopTerminalProvider implements TerminalProvider {
       canCaptureOutput: false,
       canSendInput: false,
       canPersistIdentityBinding: false,
+      canLaunchProcessPersistently: false,
       canDisplayPopup: false,
     };
   }
@@ -674,6 +675,7 @@ class UnavailableTerminalProvider implements TerminalProvider {
       canCaptureOutput: false,
       canSendInput: false,
       canPersistIdentityBinding: false,
+      canLaunchProcessPersistently: false,
       canDisplayPopup: false,
     };
   }

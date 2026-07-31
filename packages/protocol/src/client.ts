@@ -96,6 +96,8 @@ export function createObserverClient(options: CreateObserverClientOptions): Obse
     stop: async () => requestProtocolMethod(options, requestId(), "observer.stop"),
     getSnapshot: async (params) =>
       requestProtocolMethod(options, requestId(), "snapshot.get", params),
+    getSessionRecoveryReadiness: async () =>
+      requestProtocolMethod(options, requestId(), "session.recoveryReadiness"),
     dispatch: async (command: StationCommand) =>
       requestProtocolMethod(options, requestId(), "command.dispatch", { command }),
     getCommand: async (commandId: CommandId) => {
