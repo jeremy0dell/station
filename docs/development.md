@@ -228,6 +228,31 @@ pnpm smoke:release
 pnpm smoke:install
 ```
 
+Native Station per-TTY ownership has a focused Bun suite and a private real-PTY
+acceptance lane:
+
+```bash
+cd station
+bun test src/singleInstance.test.ts
+bun run typecheck
+cd ..
+
+STATION_REAL_E2E=1 pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-tui-singleton.test.ts
+
+pnpm build:binary -- --version 0.0.0-local
+STATION_REAL_E2E=1 \
+STATION_COMPILED_BIN="$PWD/station/dist/bin/stn" \
+pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-tui-singleton.test.ts
+pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+The real lane requires macOS or Linux, Bun, and Python 3. It owns its PTY and
+fixture processes and does not use the user's Station configuration.
+
 Dead-code audits are repository-owned and cover both the pnpm monorepo and the separate
 `station/` Bun workspace:
 
