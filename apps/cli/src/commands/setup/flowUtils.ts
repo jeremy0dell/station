@@ -18,7 +18,7 @@ import {
   resolveSetupHarnessSelection,
   type SetupHarnessSelection,
 } from "./harnessSelection.js";
-import { renderOptions, write } from "./io.js";
+import { setupPresenter } from "./io.js";
 import type {
   SetupAction,
   SetupFacts,
@@ -29,13 +29,7 @@ import type {
 } from "./model.js";
 import { SetupHarnessTrackingFactSchema } from "./model.js";
 import { type buildSetupPlan, buildSetupPlans } from "./planner.js";
-import {
-  formatCommand,
-  renderActionComplete,
-  renderActionFailed,
-  renderActionStart,
-  renderBoundActionStart,
-} from "./render.js";
+import type { ProjectSetupView } from "./presentation/projectSetupView.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "./types.js";
 
 export function collectForCommand(
@@ -73,6 +67,7 @@ export type CollectedSetupPlan = {
   harnessSelection: SetupHarnessSelection;
   plan: SetupPlan;
   semanticPlan: CoreSetupPlan;
+  presentationView: ProjectSetupView;
   operationBindings: readonly SetupOperationBinding[];
   executeOperation: SetupOperationExecutor;
 };
@@ -126,6 +121,7 @@ export async function collectSetupPlanFromFacts(
     harnessSelection,
     plan: built.compatibilityPlan,
     semanticPlan: built.semanticPlan,
+    presentationView: built.presentationView,
     operationBindings: built.operationBindings,
     executeOperation: createSetupOperationAdapter({ facts, deps }),
   };
@@ -228,20 +224,18 @@ export function applyOptions(
     options.executeOperation = input.execution.executeOperation;
   }
   if (input.announceActions === true) {
-    const boundActionIds = new Set(
-      input.execution?.operationBindings.map((binding) => binding.actionId) ?? [],
-    );
-    options.onActionStart = async (action) => {
-      const rendered = boundActionIds.has(action.id)
-        ? renderBoundActionStart(action, renderOptions(deps))
-        : renderActionStart(action, renderOptions(deps));
-      await write(deps, `${rendered}\n`);
-    };
+    const presenter = setupPresenter(deps);
+    if (input.showCommandOutput === true) {
+      options.onActionStart = async (action) => {
+        await presenter.write(`${presenter.renderProgressStart(action)}\n`);
+      };
+    }
     options.onActionComplete = async (action) => {
-      await write(deps, `${renderActionComplete(action, renderOptions(deps))}\n`);
+      if (action.id === "mkdir-config-dir") return;
+      await presenter.write(`${presenter.renderProgressComplete(action)}\n`);
     };
-    options.onActionFailed = async (action) => {
-      await write(deps, `${renderActionFailed(action, renderOptions(deps))}\n`);
+    options.onActionFailed = async (action, error) => {
+      await presenter.write(`${presenter.renderProgressFailure(action, error)}\n`);
     };
   }
   return options;
@@ -256,41 +250,21 @@ export async function activateCompletedConfigWrite(
   );
   if (operation === undefined) return undefined;
 
-  await write(deps, "Activating observer configuration...\n");
+  const presenter = setupPresenter(deps);
+  await presenter.write(`${presenter.renderActivationStart()}\n`);
   const outcome = await collected.executeOperation(operation);
   if (outcome.status === "completed") {
-    await write(deps, "Observer configuration active.\n");
+    await presenter.write(`${presenter.renderActivationComplete()}\n`);
     return undefined;
   }
-  await write(deps, renderObserverActivationFailure(outcome.error, collected.facts.configPath));
-  return outcome.error;
-}
-
-function renderObserverActivationFailure(error: SafeError, configPath: string | undefined): string {
-  const lines = [
-    "Config was written, but observer activation failed.",
-    error.message,
-    `Code: ${error.code}`,
-  ];
-  if (error.hint !== undefined) {
-    lines.push(`Hint: ${error.hint}`);
-  }
-  const restartCommand =
-    configPath === undefined
-      ? formatCommand(["stn", "observer", "restart"])
-      : formatCommand(["stn", "--config", configPath, "observer", "restart"]);
-  const setupCommand =
-    configPath === undefined
-      ? formatCommand(["stn", "setup", "apply", "--yes"])
-      : formatCommand(["stn", "--config", configPath, "setup", "apply", "--yes"]);
-  lines.push(
-    "The config is saved; remaining setup actions were not applied.",
-    "Resolve the error above, then activate it with:",
-    `Run: ${restartCommand}`,
-    `Then rerun: ${setupCommand}`,
-    "",
+  const configPath = collected.facts.configPath;
+  await presenter.write(
+    presenter.renderActivationFailure(outcome.error, {
+      restart: ["stn", "--config", configPath, "observer", "restart"],
+      setup: ["stn", "--config", configPath, "setup", "apply", "--yes"],
+    }),
   );
-  return lines.join("\n");
+  return outcome.error;
 }
 
 const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];

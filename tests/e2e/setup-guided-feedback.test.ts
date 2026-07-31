@@ -49,18 +49,23 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Link STATION launchers globally?");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex tracking?");
-      expect(result.stdout).toContain("Applying: Write STATION config");
+      expect(result.stdout).not.toContain("Applying: Write STATION config");
       expect(result.stdout).not.toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Completed: Write STATION config");
       expect(result.stdout).toContain("Applying: Install Worktrunk shell integration");
       expect(result.stdout).toContain("fake shell integration installed");
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
+      expect(result.stdout).not.toContain(
+        "Run stn doctor after setup to validate the Observer runtime.",
+      );
+      expect(result.stdout).not.toMatch(/"(?:provider|commands|before|after|rawResult|data)"\s*:/);
+      expect(result.stdout).not.toMatch(/command\s+\[[^\]]*\]/);
       expect(result.stdout).toContain("Remaining");
       expect(result.stdout).toContain(
         "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup",
       );
-      expect(result.stdout).toContain(`command pnpm --dir ${process.cwd()} station:link`);
+      expect(result.stdout).toContain(`Run: pnpm --dir ${process.cwd()} station:link`);
       expect(result.stdout).toContain(`'${join(process.cwd(), "bin", "stn")}' doctor`);
       expect(result.stdout).toContain("Use stn instead of the absolute path (optional):");
       expect(result.stdout).toContain(
@@ -459,7 +464,8 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Codex install completed.");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex tracking?");
-      expect(result.stdout).toContain("Applying: Write STATION config");
+      expect(result.stdout).not.toContain("Applying: Write STATION config");
+      expect(result.stdout).toContain("Completed: Write STATION config");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
     } finally {

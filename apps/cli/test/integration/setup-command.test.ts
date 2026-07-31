@@ -495,9 +495,9 @@ describe("CLI setup command", () => {
     expect(output).toContain(
       "these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup",
     );
-    expect(output).toContain(`station ${stationLauncher}`);
-    expect(output).toContain(`ingress ${providerHookIngressLauncher}`);
-    expect(output).toContain(`tmuxPopup ${popupLauncher}`);
+    expect(output).toContain(`Station: ${stationLauncher}`);
+    expect(output).toContain(`Ingress: ${providerHookIngressLauncher}`);
+    expect(output).toContain(`tmux popup: ${popupLauncher}`);
     expect(output).toContain(`PATH=${shellQuotedRoot}\${PATH:+":$PATH"}`);
     expect(output).toContain(`${shellQuotedStation} doctor`);
     expect(output).toContain(`  ${shellQuotedStation}\n`);
@@ -513,6 +513,11 @@ describe("CLI setup command", () => {
     expect(output).not.toContain("\n  stn doctor\n");
     expect(output).not.toContain("\n  stn\n");
     expect(output).not.toContain("station:link");
+    expect(output.split("\n").some((line) => /^\s*[[{]/.test(line))).toBe(false);
+    expect(output).not.toMatch(
+      /"(?:provider|commands|before|after|rawResult|serializedResult|data)"\s*:/,
+    );
+    expect(output).not.toMatch(/command\s+\[[^\]]*\]/);
   });
 
   it("generates the compiled binding from installed ownership while preserving its key", async () => {
@@ -982,7 +987,7 @@ describe("CLI setup command", () => {
     const output = chunks.join("");
     expect(result.code).toBe(1);
     expect(output).toContain("expected >=24.2 <25");
-    expect(output).toContain("incompatible pnpm 8.15.0 (expected 11.x)");
+    expect(output).toContain("WARN pnpm incompatible 8.15.0 (expected 11.x)");
     expect(output).toContain("After Node.js 24.2+ (and below 25) is active");
     expect(output).toContain("corepack prepare pnpm@11.0.0 --activate");
     expect(output).toContain("STATION setup does not change Node or pnpm automatically.");
@@ -1068,7 +1073,7 @@ describe("CLI setup command", () => {
       ]),
     );
     expect(chunks.join("")).toContain("stn setup system final");
-    expect(chunks.join("")).toContain("ok Worktrunk / wt");
+    expect(chunks.join("")).toContain("OK Worktrunk / wt");
   });
 });
 

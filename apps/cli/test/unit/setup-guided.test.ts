@@ -93,7 +93,7 @@ describe("guided setup command", () => {
     const configPath = join(root, "home/.config/station/config.toml");
     expect(fs.files[configPath]).toContain("projects = []");
     expect(activations).toEqual([{ configPath, homeDir: join(root, "home") }]);
-    expect(chunks.join("")).toContain("Applying: Write STATION config");
+    expect(chunks.join("")).not.toContain("Applying: Write STATION config");
     expect(chunks.join("")).not.toContain(`Applying: Write STATION config (${configPath})`);
     expect(chunks.join("")).toContain("Completed: Write STATION config");
     expect(chunks.join("")).toContain("Observer configuration active.");
@@ -1127,7 +1127,7 @@ describe("guided setup command", () => {
         (path) => path.startsWith(`${tmuxConfigPath}.`) && path.endsWith(".bak"),
       ),
     ).toBe(false);
-    expect(chunks.join("")).toContain("Failed: Install tmux popup binding");
+    expect(chunks.join("")).toContain("Failed: Save tmux popup binding");
   });
 
   it("does not report a rebound tmux launcher as loaded when startup still fails", async () => {

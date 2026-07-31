@@ -305,7 +305,7 @@ describe("setup core flow e2e", () => {
         ["--config", configPath, "setup", "apply", "--yes", "--no-brew"],
         { cwd: setupCwd, env },
       );
-      expect(finishSetup.stdout).toContain("Station tracking artifacts are prepared for Codex.");
+      expect(finishSetup.stdout).toContain("Core setup complete. Tracking is prepared for Codex.");
       const afterHealth = await observer.health();
       const afterSnapshot = await observer.getSnapshot();
       expect(afterHealth.pid).toBeTypeOf("number");

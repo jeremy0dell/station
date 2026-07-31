@@ -712,7 +712,7 @@ describe("setup dependency checks", () => {
     expect(plan.summary.selectedHarness).toBeUndefined();
     expect(plan.checks.find((check) => check.id === "harness")).toMatchObject({
       status: "missing",
-      message: "Install one supported harness CLI: claude, codex, cursor agent, opencode, or pi.",
+      message: "Install one supported agent CLI: claude, codex, cursor agent, opencode, or pi.",
     });
   });
 

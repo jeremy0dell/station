@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { createTextSetupPresenter, type TextSetupPresenter } from "./presenters/text.js";
 import type { SetupRenderOptions } from "./theme.js";
 import type { SetupCommandDeps, SetupPromptAdapter, SetupPromptChoice } from "./types.js";
 
@@ -21,6 +22,13 @@ export function renderOptions(deps: SetupCommandDeps): SetupRenderOptions {
   const env = deps.env ?? process.env;
   if (env.NO_COLOR !== undefined || env.TERM === "dumb") return { color: false };
   return { color: process.stdout.isTTY === true };
+}
+
+export function setupPresenter(deps: SetupCommandDeps): TextSetupPresenter {
+  return createTextSetupPresenter({
+    ...renderOptions(deps),
+    write: deps.writeStdout ?? defaultWriteStdout,
+  });
 }
 
 export function defaultPrompt(): SetupPromptAdapter {

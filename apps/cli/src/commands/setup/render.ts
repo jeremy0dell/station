@@ -1,401 +1,44 @@
-import type { SetupAction, SetupCheck, SetupPlan, SetupTier } from "./model.js";
-import { type SetupRenderOptions, type SetupTheme, setupTheme } from "./theme.js";
+import type { SafeError } from "@station/contracts";
+import type { SetupAction } from "./model.js";
+import type { ProjectSetupView } from "./presentation/projectSetupView.js";
+import { createTextSetupPresenter, formatSetupCommand } from "./presenters/text.js";
+import type { SetupRenderOptions } from "./theme.js";
 
-const tierHeadings: Record<SetupTier, string> = {
-  required: "Core",
-  recommended: "Recommended",
-  optional: "Later",
-};
-
-const statusLabels: Record<SetupCheck["status"], string> = {
-  ok: "OK",
-  missing: "MISSING",
-  warning: "WARN",
-  skipped: "SKIP",
-};
-
-const actionLabels = {
-  selected: "WILL",
-  skipped: "SKIP",
-} as const;
-
-const statusColumnWidth = 9;
-const labelColumnWidth = 36;
-
-export function renderSetupPlan(plan: SetupPlan, options: SetupRenderOptions = {}): string {
-  const theme = setupTheme(options);
-  const lines: string[] = [];
-  lines.push(theme.bold(theme.cyan(`stn setup ${plan.mode}`)));
-  lines.push(`Harness selection: ${plan.summary.selectionSource}`);
-  lines.push("");
-  for (const tier of ["required", "recommended", "optional"] as const) {
-    const checks = plan.checks.filter((check) => check.tier === tier);
-    if (checks.length === 0) continue;
-    lines.push(sectionHeading(tierHeadings[tier], theme));
-    lines.push("");
-    for (const check of checks) {
-      lines.push(...renderCheck(check, theme));
-    }
-    lines.push("");
-  }
-
-  if (plan.actions.length > 0) {
-    lines.push(sectionHeading("Actions", theme));
-    lines.push("");
-    for (const action of plan.actions) {
-      lines.push(...renderAction(action, theme));
-    }
-    lines.push("");
-  }
-
-  if (plan.nextSteps.length > 0) {
-    lines.push(sectionHeading("Next", theme));
-    lines.push("");
-    for (const step of plan.nextSteps) {
-      lines.push(`  ${theme.cyan(step)}`);
-    }
-  }
-  return `${lines.join("\n").trimEnd()}\n`;
+export function renderSetupPlan(view: ProjectSetupView, options: SetupRenderOptions = {}): string {
+  return createTextSetupPresenter(options).renderPlan(view);
 }
-
-type SetupApplyRenderOptions = SetupRenderOptions & {
-  selectionRequired?: boolean;
-};
 
 export function renderSetupApplyResult(
-  plan: SetupPlan,
-  options: SetupApplyRenderOptions = {},
+  view: ProjectSetupView,
+  options: SetupRenderOptions & { selectionRequired?: boolean } = {},
 ): string {
-  const theme = setupTheme(options);
-  if (options.selectionRequired === true) {
-    const harnessCheck = plan.checks.find((check) => check.id === "harness");
-    return missingResult(
-      harnessCheck?.message ?? "Agent CLI selection is required.",
-      "Run guided setup and choose an agent CLI:",
-      theme,
-      formatCommand(["stn", "--config", plan.summary.configPath, "setup"]),
-    );
-  }
-  if (plan.summary.requiredOk) {
-    // Pre-apply next steps can be stale; final launcher mismatches must retain runnable absolute commands and current evidence.
-    const prepared = preparedHarnesses(plan);
-    const completionMessage = setupCompletionMessage(prepared);
-    const completionNotices = setupCompletionNotices(prepared);
-    const launcherWarning = plan.checks.find(
-      (check) => check.id === "station-launchers" && check.status === "warning",
-    );
-    const launcherExecutable = launcherWarning?.details?.station;
-    const nextSteps =
-      launcherExecutable === undefined
-        ? ["stn doctor", "stn"]
-        : [
-            formatSelectedLauncherCommand(launcherExecutable, ["doctor"]),
-            formatSelectedLauncherCommand(launcherExecutable),
-          ];
-    const launcherLinkAction = plan.actions.find(
-      (action) => action.id === "link-station-launchers",
-    );
-    const remainingLines: string[] = [];
-    if (launcherWarning !== undefined) {
-      remainingLines.push(
-        "",
-        sectionHeading("Remaining", theme),
-        "",
-        ...renderCheck(launcherWarning, theme),
-      );
-      if (launcherLinkAction !== undefined) {
-        remainingLines.push(...renderAction(launcherLinkAction, theme));
-      }
-      const pathDirectory = launcherWarning.details?.pathDirectory;
-      if (pathDirectory !== undefined) {
-        remainingLines.push(
-          "",
-          theme.bold("Current shell PATH recovery (does not edit startup files):"),
-          `  ${theme.cyan(`PATH=${quoteShellPart(pathDirectory)}\${PATH:+":$PATH"}`)}`,
-          `  ${theme.cyan("export PATH")}`,
-          `  ${theme.cyan("hash -r")}`,
-        );
-      }
-      remainingLines.push(
-        ...bareLauncherConvenienceLines(pathDirectory, launcherLinkAction, theme),
-      );
-    }
-    return [
-      theme.bold(theme.green(completionMessage)),
-      ...completionNotices,
-      ...remainingLines,
-      "",
-      sectionHeading("Next", theme),
-      "",
-      ...nextSteps.map((step) => `  ${theme.cyan(step)}`),
-      "",
-    ].join("\n");
-  }
-  const missing = plan.checks.find(
-    (check) => check.tier === "required" && check.status === "missing",
-  );
-  if (missing?.id === "command-line-tools") {
-    return missingResult(missing.message, "Then run:", theme);
-  }
-  if (missing?.id === "worktrunk") {
-    return missingResult("Worktrunk is still missing.", "Install it, then run:", theme);
-  }
-  if (missing?.id === "tmux") {
-    return missingResult("tmux is still missing.", "Install it, then run:", theme);
-  }
-  if (missing?.id === "bun") {
-    return missingResult(
-      "Bun is still missing (bare stn renders the TUI through it).",
-      "Install it (brew install bun), then run:",
-      theme,
-    );
-  }
-  if (missing?.id === "git-project") {
-    return `${theme.bold(theme.red(missing.message))}\n`;
-  }
-  if (missing?.id === "harness") {
-    return missingResult(missing.message, "Resolve the agent selection, then run:", theme);
-  }
-  if (missing?.id.startsWith("harness-tracking:") === true) {
-    return missingResult(missing.message, "Prepare that selected agent, then run:", theme);
-  }
-  if (missing?.id === "diffnav") {
-    return missingResult(
-      "diffnav is still missing.",
-      "Install it (brew install diffnav), then run:",
-      theme,
-    );
-  }
-  if (missing?.id === "git-delta") {
-    return missingResult(
-      "git-delta is still missing (diffnav renders through it).",
-      "Install it (brew install git-delta), then run:",
-      theme,
-    );
-  }
-  return missingResult("Core setup is incomplete.", "Resolve the missing item, then run:", theme);
+  return createTextSetupPresenter(options).renderApplyResult(view, options);
 }
 
-export function formatCommand(command: readonly string[]): string {
-  return command.map((part) => quoteCommandPart(part)).join(" ");
-}
-
-function formatSelectedLauncherCommand(executable: string, args: readonly string[] = []): string {
-  return [quoteShellPart(executable), ...args.map((part) => quoteCommandPart(part))].join(" ");
-}
-
-function bareLauncherConvenienceLines(
-  pathDirectory: string | undefined,
-  launcherLinkAction: SetupAction | undefined,
-  theme: SetupTheme,
-): string[] {
-  if (pathDirectory === undefined && launcherLinkAction === undefined) {
-    return ["", `  ${theme.dim("Future login shell launcher resolution remains unverified.")}`];
-  }
-
-  const lines = [
-    "",
-    theme.bold("Use stn instead of the absolute path (optional):"),
-    `  The absolute commands under ${theme.bold("Next")} already work; these steps only enable the shorter launcher names.`,
-  ];
-  if (pathDirectory !== undefined) {
-    lines.push(
-      "  To use stn in this shell, run the current-shell PATH block above.",
-      `  For future shells, add ${theme.cyan(quoteShellPart(pathDirectory))} to PATH in a shell configuration you choose.`,
-      "  Use PATH rather than an alias so all three STATION launcher names resolve together.",
-    );
-  }
-  if (launcherLinkAction !== undefined) {
-    lines.push(
-      "  To use stn from this checkout, run the link command above; it exposes all three launcher names together.",
-    );
-  }
-  lines.push(
-    "  Then verify:",
-    `    ${theme.cyan("command -v stn")}`,
-    `    ${theme.cyan("command -v stn-ingress")}`,
-    `    ${theme.cyan("command -v stn-tmux-popup")}`,
-    `  ${theme.dim("Future login shell launcher resolution remains unverified until those checks pass in a new login shell.")}`,
-  );
-  return lines;
-}
+export const formatCommand = formatSetupCommand;
 
 export function renderBoundActionStart(
   action: SetupAction,
   options: SetupRenderOptions = {},
 ): string {
-  const theme = setupTheme(options);
-  return `${theme.bold("Applying:")} ${action.label}`;
+  return createTextSetupPresenter(options).renderProgressStart(action);
 }
 
 export function renderActionStart(action: SetupAction, options: SetupRenderOptions = {}): string {
-  const theme = setupTheme(options);
-  if (action.command !== undefined) {
-    return `${theme.bold("Running:")} ${theme.cyan(formatCommand(action.command))}`;
-  }
-  if (action.path !== undefined) {
-    return `${theme.bold("Applying:")} ${action.label} ${theme.dim(`(${action.path})`)}`;
-  }
-  return `${theme.bold("Applying:")} ${action.label}`;
+  return createTextSetupPresenter(options).renderProgressStart(action);
 }
 
 export function renderActionComplete(
   action: SetupAction,
   options: SetupRenderOptions = {},
 ): string {
-  const theme = setupTheme(options);
-  return `${theme.green("Completed:")} ${action.label}`;
+  return createTextSetupPresenter(options).renderProgressComplete(action);
 }
 
-export function renderActionFailed(action: SetupAction, options: SetupRenderOptions = {}): string {
-  const theme = setupTheme(options);
-  return `${theme.red("Failed:")} ${action.label}`;
-}
-
-function renderCheck(check: SetupCheck, theme: SetupTheme): string[] {
-  const status = colorStatus(statusLabels[check.status], check.status, theme);
-  const lines = [
-    `  ${pad(status, statusColumnWidth)} ${pad(check.label, labelColumnWidth)} ${check.message}`,
-  ];
-  lines.push(...detailLines(check.details, theme));
-  return lines;
-}
-
-function renderAction(action: SetupAction, theme: SetupTheme): string[] {
-  const status = action.selected
-    ? theme.cyan(actionLabels.selected)
-    : theme.dim(actionLabels.skipped);
-  const lines = [
-    `  ${pad(status, statusColumnWidth)} ${pad(action.label, labelColumnWidth)} ${action.message}`,
-  ];
-  if (action.command !== undefined) {
-    lines.push(
-      `  ${"".padEnd(statusColumnWidth)} ${theme.dim(`command ${formatCommand(action.command)}`)}`,
-    );
-  }
-  if (action.path !== undefined) {
-    lines.push(`  ${"".padEnd(statusColumnWidth)} ${theme.dim(`path ${action.path}`)}`);
-  }
-  return lines;
-}
-
-function detailLines(details: SetupCheck["details"], theme: SetupTheme): string[] {
-  if (details === undefined) return [];
-  const orderedKeys = [
-    "command",
-    "version",
-    "path",
-    "root",
-    "defaultBranch",
-    "selected",
-    "selectionSource",
-    "available",
-    "state",
-    "capability",
-    "requested",
-    "installed",
-    "automationMode",
-    "flag",
-    "missingSubcommands",
-    "station",
-    "ingress",
-    "tmuxPopup",
-    "resolvedPath",
-    "launcherCommand",
-    "liveStatus",
-  ];
-  const lines: string[] = [];
-  for (const key of orderedKeys) {
-    const value = details[key];
-    if (value === undefined || value.length === 0) continue;
-    lines.push(`  ${"".padEnd(statusColumnWidth)} ${theme.dim(`${key} ${value}`)}`);
-  }
-  return lines;
-}
-
-type PreparedHarness = { id: string; label: string };
-
-function setupCompletionMessage(prepared: readonly PreparedHarness[]): string {
-  if (prepared.length === 0) return "Core setup complete.";
-  const harnessLabels = prepared.map((harness) => harness.label).join(" and ");
-  return `Core setup complete. Station tracking artifacts are prepared for ${harnessLabels}.`;
-}
-
-function setupCompletionNotices(prepared: readonly PreparedHarness[]): string[] {
-  const includesCodex = prepared.some((harness) => harness.id === "codex");
-  if (!includesCodex) return [];
-  return [
-    "",
-    "Codex may require review of Station’s current hook definition through /hooks; setup did not bypass or verify that review.",
-  ];
-}
-
-function preparedHarnesses(plan: SetupPlan): PreparedHarness[] {
-  const displayNames: Record<string, string> = {
-    claude: "Claude",
-    codex: "Codex",
-    cursor: "Cursor",
-    opencode: "OpenCode",
-  };
-  return plan.checks.flatMap((check) => {
-    const id = check.details?.harness;
-    if (check.details?.state !== "prepared" || id === undefined) return [];
-    return [{ id, label: displayNames[id] ?? id }];
-  });
-}
-
-function colorStatus(label: string, status: SetupCheck["status"], theme: SetupTheme): string {
-  switch (status) {
-    case "ok":
-      return theme.green(label);
-    case "missing":
-      return theme.red(label);
-    case "warning":
-      return theme.yellow(label);
-    case "skipped":
-      return theme.dim(label);
-  }
-}
-
-function sectionHeading(label: string, theme: SetupTheme): string {
-  return theme.bold(label);
-}
-
-function missingResult(
-  title: string,
-  detail: string,
-  theme: SetupTheme,
-  command = "stn setup check",
+export function renderActionFailed(
+  action: SetupAction,
+  options: SetupRenderOptions = {},
+  error?: SafeError,
 ): string {
-  return [theme.bold(theme.red(title)), detail, `  ${theme.cyan(command)}`, ""].join("\n");
-}
-
-function pad(value: string, width: number): string {
-  return `${value}${" ".repeat(Math.max(0, width - visibleLength(value)))}`;
-}
-
-function visibleLength(value: string): number {
-  let length = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    if (value.charCodeAt(index) === 0x1b && value[index + 1] === "[") {
-      index += 2;
-      while (index < value.length && value[index] !== "m") {
-        index += 1;
-      }
-      continue;
-    }
-    length += 1;
-  }
-  return length;
-}
-
-function quoteCommandPart(part: string): string {
-  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(part)) {
-    return part;
-  }
-  return quoteShellPart(part);
-}
-
-function quoteShellPart(part: string): string {
-  return `'${part.replaceAll("'", "'\\''")}'`;
+  return createTextSetupPresenter(options).renderProgressFailure(action, error);
 }

@@ -39,6 +39,16 @@ describe("setup plan projection", () => {
         (operation) => operation.kind === "activate-observer-config",
       ),
     ).toBe(true);
+    expect(built.presentationView.checks.find((check) => check.id === "harness")).toMatchObject({
+      label: { id: "label.agent-cli" },
+      explanation: { id: "check.harness-inferred" },
+    });
+    expect(
+      built.presentationView.checks
+        .flatMap((check) => check.details)
+        .some((detail) => detail.kind === "selection-origin"),
+    ).toBe(true);
+    expect(JSON.parse(JSON.stringify(built.compatibilityPlan))).toEqual(built.compatibilityPlan);
   });
   it("reports all core checks ready and no selected actions", () => {
     const plan = buildSetupPlan(facts());

@@ -12016,6 +12016,14 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/setup/presenters/text.ts",
+      "declaration": "createTextSetupPresenter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves typed setup views and message references into terminal prompts and output.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/snapshot.ts",
       "declaration": "runSnapshotCommand",
       "kind": "function",

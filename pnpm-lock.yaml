@@ -80,6 +80,9 @@ importers:
       '@station/setup-core':
         specifier: workspace:*
         version: link:../../packages/setup-core
+      '@station/setup-messages':
+        specifier: workspace:*
+        version: link:../../packages/setup-messages
       '@station/terminal':
         specifier: workspace:*
         version: link:../../integrations/terminal/station
@@ -390,6 +393,8 @@ importers:
       '@station/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/setup-messages: {}
 
   packages/station-host:
     dependencies:

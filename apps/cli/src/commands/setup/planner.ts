@@ -20,6 +20,7 @@ import {
 import type { ConfigWritePlan, SetupFacts, SetupPlan, SupportedHarnessId } from "./model.js";
 import { SetupHarnessTrackingFactSchema } from "./model.js";
 import { projectCliSetupPlan } from "./presentation/projectCliSetupPlan.js";
+import { type ProjectSetupView, projectSetupView } from "./presentation/projectSetupView.js";
 
 export type BuildSetupPlanOptions = {
   configWrite?: ConfigWritePlan;
@@ -29,6 +30,7 @@ export type BuildSetupPlanOptions = {
 
 export type BuiltSetupPlans = {
   readonly semanticPlan: CoreSetupPlan;
+  readonly presentationView: ProjectSetupView;
   readonly compatibilityPlan: SetupPlan;
   readonly operationBindings: readonly SetupOperationBinding[];
 };
@@ -50,13 +52,15 @@ export function buildSetupPlans(
     installWorktrunkHooks: options.installWorktrunkHooks === true,
   };
   const semanticPlan = planSetup(evidence, intent);
-  const compatibilityPlan = projectCliSetupPlan(
+  const presentationView = projectSetupView(
     options.configWrite === undefined
       ? { plan: semanticPlan, facts }
       : { plan: semanticPlan, facts, configWrite: options.configWrite },
   );
+  const compatibilityPlan = projectCliSetupPlan(presentationView);
   return {
     semanticPlan,
+    presentationView,
     compatibilityPlan,
     operationBindings: bindSetupOperations(semanticPlan.operations),
   };
