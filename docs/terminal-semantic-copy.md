@@ -97,8 +97,8 @@ reset recovery uses RIS and contains neither history nor a semantic-copy sidecar
 
 - Selected text never enters Observer, Station Host metadata, provider integrations,
   or lifecycle events.
-- Semantic snapshots contain only bounded enums and integers. Host geometry is constrained to
-  2–1000 columns and 1–1000 rows; normal-buffer rows are additionally bounded by the
+- Semantic snapshots contain only bounded enums and integers. Host geometry is
+  constrained to 2–1000 columns and 1–1000 rows; normal-buffer rows are additionally bounded by the
   shared 10,000-line scrollback policy, while alternate rows and prefix columns must
   fit the replay geometry.
 - Core and Station UI code never branch on harness or provider identity.
@@ -126,6 +126,12 @@ upstream release exists. Other child TUIs need equivalent producer support; Stat
 cannot infer an authored newline from an unmarked CRLF row without risking command
 corruption.
 
+Codex rich-output mode is one current example: it emits pre-wrapped rows and a two-column
+visual gutter without semantic markers. Codex 0.146.0's `Alt-R` raw-output mode is an
+independent workaround when enabled before the response is rendered. Raw mode omits the rich
+gutter and leaves wrapping to the terminal, so Station can reconstruct it from native wrap
+metadata; switching modes after output was rendered cannot restore boundary provenance.
+
 ## Manual verification
 
 In a compatible child TUI inside a newly spawned native Station pane, drag-select a
@@ -138,5 +144,7 @@ pbpaste | python3 -c 'import sys; s=sys.stdin.read(); print("line breaks:", s.co
 The wrapped command should report zero line breaks and no renderer gutter. A
 two-source-line block should report exactly one. Repeat at narrow and wide pane widths,
 after scrolling into history, after resizing, after complete Host reattach, and after
-semantic recovery once the 256 KiB raw replay budget is exceeded. Use an ordinary
-pane drag; Shift/Ctrl outer-terminal selection does not exercise Station extraction.
+semantic recovery once the 256 KiB raw replay budget is exceeded. For the current Codex
+workaround, press `Alt-R` before requesting the command and compare it with the same response
+rendered in rich mode. Use an ordinary pane drag; Shift/Ctrl outer-terminal selection does not
+exercise Station extraction.
