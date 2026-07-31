@@ -139,12 +139,12 @@ their newline without renderer gutters, and unmarked rows remain hard boundaries
 protocol 6 preserves the bounded hard/soft row sidecar through semantic recovery before
 queued live frames.
 
-This affects Station-owned pane selection, shared by every harness in a Station pane.
-Plain drag copies immediately, while OpenTUI global `Ctrl-C` calls the same pane
-`getSelectedText()` path when that selection is active. Outer-terminal Shift/Ctrl selection,
-application copy commands, and Station's Pi lifecycle extension remain unchanged. Pi producer
-support belongs in `@earendil-works/pi-tui`; pinned Pi 0.80.10 emits no markers, and other
-child renderers must independently adopt the provider-neutral protocol.
+This affects only plain pane drag selection, shared by every harness in a Station pane.
+Terminal panes use custom grid selection rather than OpenTUI's selectable-text model, so global
+`Ctrl-C` sees no pane selection and retains its interrupt/exit behavior. Outer-terminal Shift/Ctrl
+selection, application copy commands, and Station's Pi lifecycle extension also remain unchanged.
+Pi producer support belongs in `@earendil-works/pi-tui`; pinned Pi 0.80.10 emits no markers, and
+other child renderers must independently adopt the provider-neutral protocol.
 
 ## Native OSC 8 Hyperlinks
 

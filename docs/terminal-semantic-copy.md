@@ -10,8 +10,7 @@ than guessing from pane width or output content.
 
 ## Product behavior
 
-Station-owned selection inside a native pane, copied either on plain drag release or with
-`Ctrl-C` while that pane selection is active:
+Plain drag-copy inside a native Station pane:
 
 - joins xterm-native soft wraps without a newline;
 - joins marked application continuations without a newline;
@@ -21,10 +20,11 @@ Station-owned selection inside a native pane, copied either on plain drag releas
 
 All harness providers hosted in a Station pane use this same extraction path; there
 is no Pi-specific or non-Pi clipboard adapter. The drag release copies immediately
-through Station's clipboard sinks. OpenTUI's global `Ctrl-C` resolves the active
-selection source and calls the same pane `getSelectedText()` method before those sinks.
-An outer terminal's Shift/Ctrl selection and application-owned copy commands bypass
-pane row metadata; Pi's whole-message `Ctrl-X` behavior is unchanged.
+through Station's clipboard sinks. Terminal panes deliberately own selection rather
+than registering it with OpenTUI's selectable-text model, so global `Ctrl-C` sees no
+pane selection and falls through to the normal interrupt/exit path. An outer terminal's
+Shift/Ctrl selection and application-owned copy commands also bypass pane row metadata;
+Pi's whole-message `Ctrl-X` behavior is unchanged.
 
 ## Capability
 
@@ -147,6 +147,5 @@ two-source-line block should report exactly one. Repeat at narrow and wide pane 
 after scrolling into history, after resizing, after complete Host reattach, and after
 semantic recovery once the 256 KiB raw replay budget is exceeded. For the current Codex
 workaround, press `Alt-R` before requesting the command and compare it with the same response
-rendered in rich mode. Verify plain drag release and `Ctrl-C` over the active pane selection
-separately; both should produce the same bytes. Shift/Ctrl outer-terminal selection does not
-exercise Station extraction.
+rendered in rich mode. Use an ordinary pane drag; global `Ctrl-C` and Shift/Ctrl
+outer-terminal selection do not exercise Station extraction.
