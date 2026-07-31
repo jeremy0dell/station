@@ -296,6 +296,31 @@ describe("routeStationMouse", () => {
     expect(outcome).toEqual({ kind: "handled" });
   });
 
+  it("submits Rename Session through its semantic sheet button", () => {
+    const store = makeStore();
+    const rowId = "ses_wt_station_idle";
+    store.getState().handleKey({ input: "R" });
+    store.getState().handleKey({ input: slotForRow(store, rowId) });
+    store.getState().handleKey({ input: "Mouse title" });
+
+    const outcome = routeStationMouse({ kind: "renameSessionSubmit" }, LEFT_DOWN, store);
+
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.getState().localRows.pendingRenameTitles?.[rowId]?.title).toBe("Mouse title");
+  });
+
+  it("keeps a stale Rename Session button inert", () => {
+    const store = makeStore();
+    const before = store.getState().screen;
+
+    expect(routeStationMouse({ kind: "renameSessionSubmit" }, LEFT_DOWN, store)).toEqual({
+      kind: "handled",
+    });
+    expect(store.getState().screen).toBe(before);
+    expect(store.getState().localRows.pendingRenameTitles).toEqual({});
+  });
+
   it("ignores row clicks in text-input modes", () => {
     const store = makeStore();
     store.getState().handleKey({ input: "/" });

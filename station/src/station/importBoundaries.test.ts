@@ -99,6 +99,12 @@ describe("station view import boundaries", () => {
   it("keeps sheet action sizing and pointer wiring in shared controls", () => {
     const frame = "view/sheets/BottomSheetFrameView.tsx";
     const primitives = "view/sheets/parts.tsx";
+    const actionSheets = new Set([
+      "view/sheets/AddProjectSheetView.tsx",
+      "view/sheets/ForkSessionSheetView.tsx",
+      "view/sheets/NewSessionSheetView.tsx",
+      "view/sheets/RenameSessionSheetView.tsx",
+    ]);
     const failures: string[] = [];
     for (const file of files) {
       const rel = relative(STATION_ROOT, file);
@@ -112,6 +118,9 @@ describe("station view import boundaries", () => {
       }
       const source = readFileSync(file, "utf8");
       const reasons: string[] = [];
+      if (actionSheets.has(rel) && !/<SheetButtonRow(?:\s|\/?>)/.test(source)) {
+        reasons.push("omits shared action buttons");
+      }
       if (/<SheetButton(?:\s|\/?>)/.test(source)) reasons.push("uses low-level SheetButton");
       if (rel !== frame && /\bstationMouseProps\s*\(/.test(source)) {
         reasons.push("calls stationMouseProps");

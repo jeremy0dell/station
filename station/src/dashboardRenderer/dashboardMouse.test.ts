@@ -50,6 +50,7 @@ const DASHBOARD_MOUSE_TARGET_KINDS = {
   projectSettingsConfirmRemove: true,
   projectSettingsItem: true,
   quickSessionForProject: true,
+  renameSessionSubmit: true,
   row: true,
   screenBackdrop: true,
   scrollIndicator: true,

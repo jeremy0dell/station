@@ -85,6 +85,8 @@ export type StationMouseTarget =
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
   /** A Create Session field or editor control represented by its semantic action. */
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
+  /** The Rename Session button represented by its semantic submit action. */
+  | { kind: "renameSessionSubmit" }
   /** A sheet's primary submit button (the fork details "Fork" action). */
   | { kind: "sheetSubmit" }
   /** The viewport outside a bounded screen; primary-down safely cancels that screen. */
@@ -316,6 +318,8 @@ export function routeStationMouse(
       }
       return fromKeyOutcome(dispatchStationAction(store, action));
     }
+    case "renameSessionSubmit":
+      return fromKeyOutcome(dispatchStationAction(store, { type: "renameSession.submit" }));
     case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {
         return { kind: "handled" };

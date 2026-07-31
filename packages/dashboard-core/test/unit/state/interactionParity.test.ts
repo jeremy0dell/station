@@ -135,6 +135,40 @@ describe("primary workflow interaction parity", () => {
     expect(handleTuiKey(state, { input: "\r", return: true }, context)).toEqual({ state });
   });
 
+  it("submits Rename Session through the same semantic and Enter transition", () => {
+    const opened = handleTuiKey(
+      handleTuiKey(
+        createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+        { input: "R" },
+        context,
+      ).state,
+      { input: "4" },
+      context,
+    ).state;
+    const edited = "semantic"
+      .split("")
+      .reduce((state, input) => handleTuiKey(state, { input }, context).state, opened);
+
+    const semantic = handleTuiAction(edited, { type: "renameSession.submit" }, context);
+    const keyboard = handleTuiKey(edited, { input: "\r", return: true }, context);
+
+    expect(semantic.state.screen).toEqual({ name: "dashboard" });
+    expect(semantic.operations).toEqual(keyboard.operations);
+    expect(semantic.operations).toEqual([
+      {
+        type: "renameSession",
+        sessionId: "ses_wt_web_idle",
+        title: "semantic",
+        command: {
+          type: "session.rename",
+          payload: { sessionId: "ses_wt_web_idle", title: "semantic" },
+        },
+      },
+    ]);
+    expect(semantic.state.localRows.pendingRenameTitles?.ses_wt_web_idle?.title).toBe("semantic");
+    expect(keyboard.state.localRows.pendingRenameTitles?.ses_wt_web_idle?.title).toBe("semantic");
+  });
+
   it("gives every visible Create Session control a semantic intent", () => {
     const review = createNewSessionFlow(createDashboardSnapshot(), "aaaaaa");
     if (review === undefined) throw new Error("expected New Session");

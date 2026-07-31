@@ -358,8 +358,8 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0
 │ Rename Session                                                               │
 │                                                                              │
 │ Name       |hook-scope                                                       │
+│  Rename (enter)                                                              │
 │ Enter:rename   Esc:back                                                      │
-│                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;

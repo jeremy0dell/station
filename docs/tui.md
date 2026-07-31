@@ -280,6 +280,8 @@ Ordinary sheet commands must use `SheetButtonRow`: fitting controls keep their n
 leave trailing cells inert, while compact equal-width controls are reserved for constrained-width
 overflow. The low-level fixed-width button remains private to shared sheet compositions such as
 confirm controls; full-width interaction styling belongs to selectable list rows, not commands.
+Rename Session exposes its primary command through the same semantic button path as keyboard Enter,
+so pointer submit and keyboard submit produce one dashboard-core rename operation.
 Horizontal review and failure groups move with Left/Right; the id editor keeps Save and Back
 vertically stacked so Up/Down does not conflict with text-cursor movement. Missing Git-root review
 keeps submit disabled and stale disabled targets inert; these interaction paths do not weaken

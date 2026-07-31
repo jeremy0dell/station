@@ -181,7 +181,12 @@ const CASES: ModalCase[] = [
     name: "rename sheet",
     keys: [{ input: "R" }, { input: "1" }],
     snapshot: attentionAndFailuresSnapshot,
-    expect: ["Rename Session", "Name       |hook-scope", "Enter:rename   Esc:back"],
+    expect: [
+      "Rename Session",
+      "Name       |hook-scope",
+      "Rename (enter)",
+      "Enter:rename   Esc:back",
+    ],
   },
   {
     name: "fork slot sheet",
