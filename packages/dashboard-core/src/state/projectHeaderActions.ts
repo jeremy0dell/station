@@ -1,10 +1,7 @@
 import type { ProjectId } from "@station/contracts";
-import { resolveNewSessionProjectAvailability } from "../flows/newSession.js";
 import { selectDashboardItems } from "../selectors/dashboardViewport.js";
-import { safeErrorToToast } from "../services/errors/errors.js";
 import { focusDashboardProjectHeader, reconcileDashboardFocus } from "./dashboardFocus.js";
 import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
-import { addTuiToast } from "./toasts.js";
 import type { TuiTransition } from "./transition.js";
 import type { ProjectHeaderControl, TuiState } from "./types.js";
 
@@ -26,21 +23,11 @@ export function activateProjectHeaderControl(
         state: focused,
         controlIntent: { type: "projectShell.open", projectId },
       };
-    case "quickSession": {
-      const resolution = resolveNewSessionProjectAvailability(
-        focused.snapshot?.projects.find((candidate) => candidate.id === projectId),
-      );
-      if (resolution.kind === "missing") {
-        return { state: focused };
-      }
-      if (resolution.kind === "blocked") {
-        return { state: addTuiToast(focused, safeErrorToToast(resolution.error)) };
-      }
+    case "quickSession":
       return {
         state: focused,
         controlIntent: { type: "quickSession.create", projectId },
       };
-    }
     case "defaultAgent":
       return { state: openProjectDefaultAgentPicker(focused, projectId) };
   }

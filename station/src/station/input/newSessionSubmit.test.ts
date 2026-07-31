@@ -8,6 +8,8 @@ import { FakeStationSource } from "../test/support/fakeStationSource.js";
 import { resolveKeyNewSessionSubmit, resolveNewSessionSubmit } from "./stationActions.js";
 import { createStationOverlayLayer } from "./stationOverlayLayer.js";
 
+const CREATE_ACTION = { type: "newSession.activate", actionId: "review.create" } as const;
+
 // Station hosts new agents in a pane (worktree.create + managed launch) rather
 // than the shared machine's tmux session.create, which it can't render. These
 // resolvers are the interception point: focused Enter or direct C on review
@@ -50,7 +52,7 @@ describe("resolveNewSessionSubmit", () => {
     const store = storeOnNewSessionReview();
     expect(store.getState().screen.name).toBe("newSession");
 
-    const submit = resolveNewSessionSubmit(store);
+    const submit = resolveNewSessionSubmit(store, CREATE_ACTION);
     expect(submit.kind).toBe("submit");
     if (submit.kind === "submit") {
       expect(submit.projectId).toBe("station");
@@ -70,7 +72,7 @@ describe("resolveNewSessionSubmit", () => {
     store.getState().handleKey({ input: "Hexagonal PT 12" });
     store.getState().handleKey({ input: "\r", return: true });
 
-    expect(resolveNewSessionSubmit(store)).toMatchObject({
+    expect(resolveNewSessionSubmit(store, CREATE_ACTION)).toMatchObject({
       kind: "submit",
       title: "Hexagonal PT 12",
       branch,
@@ -78,7 +80,7 @@ describe("resolveNewSessionSubmit", () => {
   });
 
   it("does not submit from the dashboard (no wizard open)", () => {
-    expect(resolveNewSessionSubmit(newStore()).kind).toBe("none");
+    expect(resolveNewSessionSubmit(newStore(), CREATE_ACTION).kind).toBe("none");
   });
 
   it("does not intercept a resolved non-Create semantic action", () => {

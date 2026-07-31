@@ -212,7 +212,7 @@ describe("primary workflow interaction parity", () => {
     expect(semantic.controlIntent).toEqual(keyboard.controlIntent);
   });
 
-  it("focuses blocked and stale project-header actions without emitting renderer effects", () => {
+  it("defers Quick Session availability to the renderer consumer and keeps stale targets inert", () => {
     const snapshot = createDashboardSnapshot();
     const unavailable = {
       ...snapshot,
@@ -232,13 +232,13 @@ describe("primary workflow interaction parity", () => {
       },
       context,
     );
-    expect(blocked.controlIntent).toBeUndefined();
+    expect(blocked.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
     expect(blocked.state.dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "web",
       control: "quickSession",
     });
-    expect(blocked.state.toasts.at(-1)?.toast.kind).toBe("error");
+    expect(blocked.state.toasts).toEqual([]);
 
     const stale = handleTuiAction(
       state,

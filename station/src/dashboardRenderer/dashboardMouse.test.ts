@@ -416,6 +416,60 @@ describe("routeDashboardMouse", () => {
     });
   });
 
+  it("resolves blocked Quick Session availability once at the standalone consumer", () => {
+    const snapshot = manyProjectsSnapshot();
+    const unavailable: StationSnapshot = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "station"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const store = makeStore(unavailable);
+
+    routeDashboardMouse(
+      { kind: "quickSessionForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+    );
+
+    expect(store.getState().localRows.pendingCreate).toEqual([]);
+    expect(store.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "The worktree provider is unavailable.",
+    });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
+  });
+
+  it("retains shell focus when the renderer effect reports a recoverable failure", () => {
+    const store = makeStore();
+    const effects: DashboardMouseEffects = {
+      openShell: () => {
+        throw new Error("shell unavailable");
+      },
+      openUrl: () => {},
+    };
+
+    expect(() =>
+      routeDashboardMouse(
+        { kind: "openShellForProject", projectId: "station" },
+        LEFT_DOWN,
+        store,
+        effects,
+      ),
+    ).toThrow(/shell unavailable/);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
+    });
+  });
+
   it("ignores mouse-up, right, middle, and modal background actions", () => {
     const store = makeStore();
     const before = store.getState();

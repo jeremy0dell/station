@@ -155,10 +155,15 @@ describe("dashboard focus", () => {
   it("leaves session Left/Right inert and resets headers to primary on vertical entry", () => {
     const primary = handleTuiKey(state(), DOWN).state;
     const shell = handleTuiKey(primary, RIGHT).state;
+    expect(handleTuiKey(shell, UP).state).toBe(shell);
+
     const row = handleTuiKey(shell, DOWN).state;
     expect(handleTuiKey(row, LEFT).state).toBe(row);
     expect(handleTuiKey(row, RIGHT).state).toBe(row);
     expect(handleTuiKey(row, UP).state.dashboardFocus).toEqual(header("web", "primary"));
+
+    const apiShell = state({ dashboardFocus: header("api", "shell") });
+    expect(handleTuiKey(apiShell, UP).state.dashboardFocus).toEqual(session("ses_wt_web_stuck"));
   });
 
   it("skips hidden sessions after collapse and re-enters them after expansion", () => {
@@ -262,6 +267,19 @@ describe("dashboard focus", () => {
 
     expect(current.searchQuery).toBe("queue-worker");
     expect(current.dashboardFocus).toEqual(session("ses_wt_api_working"));
+  });
+
+  it("keeps a focused header when accepted search hides only its sessions", () => {
+    let current = state({
+      terminalRows: 40,
+      dashboardFocus: header("web", "shell"),
+    });
+    current = handleTuiKey(current, { input: "/" }).state;
+    current = handleTuiKey(current, { input: "queue-worker" }).state;
+    current = handleTuiKey(current, RETURN).state;
+
+    expect(current.searchQuery).toBe("queue-worker");
+    expect(current.dashboardFocus).toEqual(header("web", "shell"));
   });
 
   it("preserves stable identity through snapshot replacement and resize", () => {

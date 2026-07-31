@@ -38,9 +38,6 @@ export type TuiRuntimeContext = {
   homeDir: string;
 };
 
-/** @deprecated Use TuiRuntimeContext for input-modality-neutral runtime context. */
-export type TuiKeyRuntimeContext = TuiRuntimeContext;
-
 export function handleTuiKey(
   state: TuiState,
   key: TuiKey,

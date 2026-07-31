@@ -543,6 +543,9 @@ describe("dashboard golden frames", () => {
 
     await setup.mockMouse.click(1, row, MouseButtons.LEFT);
     await setup.mockMouse.click(inert, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(shell - 1, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(quick - 1, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(picker - 1, row, MouseButtons.LEFT);
     await setup.mockMouse.click(shell, row, MouseButtons.LEFT);
     await setup.mockMouse.click(quick, row, MouseButtons.LEFT);
     await setup.mockMouse.click(picker, row, MouseButtons.LEFT);

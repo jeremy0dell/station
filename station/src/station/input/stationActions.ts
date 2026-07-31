@@ -108,7 +108,13 @@ function outcomeForControlIntent(
         ? { kind: "launch-new-session", target }
         : { kind: "handled" };
     }
+    default:
+      return assertNeverControlIntent(intent);
   }
+}
+
+function assertNeverControlIntent(intent: never): never {
+  throw new Error(`Unhandled Station control intent: ${JSON.stringify(intent)}`);
 }
 
 /**
@@ -256,7 +262,7 @@ export type NewSessionSubmitTarget =
  */
 export function resolveNewSessionSubmit(
   store: StoreApi<TuiStore>,
-  action: TuiSemanticAction = { type: "newSession.activate", actionId: "review.create" },
+  action: TuiSemanticAction,
 ): NewSessionSubmitTarget {
   const state = store.getState();
   if (state.screen.name !== "newSession" || action.type !== "newSession.activate") {

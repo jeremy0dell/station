@@ -182,8 +182,7 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
     },
     setTerminalRows: (rows): void => {
       const current = get();
-      const resized = clampDashboardStateScroll({ ...current, terminalRows: rows });
-      set(reconcileDashboardFocus(current, resized));
+      set(reconcileDashboardFocus(current, { ...current, terminalRows: rows }));
     },
     focusDashboardSession: (sessionId): void => {
       set(

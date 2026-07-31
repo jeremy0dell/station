@@ -37,7 +37,7 @@ export function focusDashboardSession(state: TuiState, sessionId: SessionId): Tu
 export function focusDashboardProjectHeader(
   state: TuiState,
   projectId: ProjectId,
-  control: ProjectHeaderControl = "primary",
+  control: ProjectHeaderControl,
 ): TuiState {
   if (state.snapshot === undefined) {
     return state;
@@ -77,7 +77,7 @@ export function moveDashboardFocusHorizontal(state: TuiState, delta: -1 | 1): Tu
   }
   const items = selectDashboardItems(state.snapshot, state);
   const index = focusedItemIndex(items, focus);
-  if (index === undefined || items[index]?.type !== "projectHeader") {
+  if (index === undefined) {
     return state;
   }
   const position = PROJECT_HEADER_CONTROLS.indexOf(focus.control);
@@ -152,7 +152,7 @@ export function focusedSelectableRow(state: TuiState): DashboardSessionRow | und
  */
 export function reconcileDashboardFocus(previous: TuiState, next: TuiState): TuiState {
   if (next.snapshot === undefined) {
-    return clearDashboardFocus(next);
+    return clearDashboardFocus(withClampedScroll(next, 0));
   }
   const nextItems = selectDashboardItems(next.snapshot, next);
   const nextFocusable = focusableIndexes(nextItems, "dashboard");
@@ -176,11 +176,7 @@ export function reconcileDashboardFocus(previous: TuiState, next: TuiState): Tui
     return clearDashboardFocus(withClampedScroll(next, nextItems.length));
   }
   const following = nextFocusable.find((index) => index >= previousIndex);
-  const preceding = [...nextFocusable].reverse().find((index) => index < previousIndex);
-  const fallback = following ?? preceding;
-  return fallback === undefined
-    ? clearDashboardFocus(withClampedScroll(next, nextItems.length))
-    : focusItem(next, nextItems, fallback);
+  return focusItem(next, nextItems, following ?? Math.max(...nextFocusable));
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {
@@ -205,7 +201,7 @@ function moveFocus(state: TuiState, delta: -1 | 1, mode: "dashboard" | "session"
     return focusItem(state, items, enterFocusIndex(state, items, focusable, delta));
   }
   const next = focusable[currentPosition + delta] ?? current;
-  return focusItem(state, items, next);
+  return next === current ? state : focusItem(state, items, next);
 }
 
 function focusableIndexes(

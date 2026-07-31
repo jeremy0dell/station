@@ -55,7 +55,13 @@ export function executeDashboardControlIntent(
     case "quickSession.create":
       store.getState().createQuickSession(intent.projectId);
       return;
+    default:
+      return assertNeverControlIntent(intent);
   }
+}
+
+function assertNeverControlIntent(intent: never): never {
+  throw new Error(`Unhandled dashboard control intent: ${JSON.stringify(intent)}`);
 }
 
 /** Translates standalone semantic targets into shared dashboard actions and renderer effects. */

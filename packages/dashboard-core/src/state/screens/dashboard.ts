@@ -15,7 +15,7 @@ import type { TuiKey } from "../keys.js";
 import { activateProjectHeaderControl } from "../projectHeaderActions.js";
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
-import type { TuiKeyRuntimeContext, TuiTransition } from "../transition.js";
+import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
@@ -26,7 +26,7 @@ export const dashboardScreenBehavior = {};
 export function handleDashboardKey(
   state: TuiState,
   key: TuiKey,
-  context: TuiKeyRuntimeContext,
+  context: TuiRuntimeContext,
 ): TuiTransition {
   const mouseScrollDelta = mouseScrollDeltaForKey(key);
   if (mouseScrollDelta !== 0) {
@@ -43,11 +43,11 @@ export function handleDashboardKey(
   return handleDashboardAction(state, binding.action, context, key);
 }
 
-export function handleDashboardAction(
+function handleDashboardAction(
   state: TuiState,
   action: TuiDashboardAction,
-  context: TuiKeyRuntimeContext,
-  key: TuiKey = { input: "" },
+  context: TuiRuntimeContext,
+  key: TuiKey,
 ): TuiTransition {
   switch (action) {
     case "tui.focus.up":
@@ -145,7 +145,7 @@ export function handleDashboardAction(
 /** Executes dashboard Add Project intent independently of the input modality. */
 export function handleDashboardAddProjectAction(
   state: TuiState,
-  context: TuiKeyRuntimeContext,
+  context: TuiRuntimeContext,
 ): TuiTransition {
   if (state.screen.name !== "dashboard") return { state };
   return {
@@ -156,7 +156,7 @@ export function handleDashboardAddProjectAction(
 /** Keeps stale first-project targets inert after the dashboard gains a project. */
 export function handleFirstProjectAddAction(
   state: TuiState,
-  context: TuiKeyRuntimeContext,
+  context: TuiRuntimeContext,
 ): TuiTransition {
   return hasNoProjects(state) ? handleDashboardAddProjectAction(state, context) : { state };
 }
