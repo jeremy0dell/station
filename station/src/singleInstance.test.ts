@@ -44,8 +44,11 @@ type TestChild = {
 let tempRoot: string | undefined;
 let ownerships: StationTtyOwnership[] = [];
 let childProcesses: TestChild[] = [];
+let processKillRestorers: Array<() => void> = [];
 
 afterEach(async () => {
+  for (const restore of processKillRestorers.reverse()) restore();
+  processKillRestorers = [];
   for (const ownership of ownerships.reverse()) ownership.release();
   ownerships = [];
   for (const child of childProcesses) {
@@ -85,6 +88,7 @@ function makeDeps(
     isStdinTty: () => true,
     platform: "darwin",
     readStdinStat: () => fakeStat(),
+    readTtyPathStat: () => fakeStat(),
     effectiveUid: () => UID,
     rendezvousDirectory: () => root,
     runPs: (args) => (args[0] === "-p" ? `${TEST_TTY}\n` : clearPsListing()),
@@ -122,6 +126,10 @@ describe("TTY identity and legacy upgrade evidence", () => {
         calls.push("fstat");
         return fakeStat();
       },
+      readTtyPathStat: () => {
+        calls.push("tty-stat");
+        return fakeStat();
+      },
       runPs: () => {
         calls.push("ps");
         return "";
@@ -136,7 +144,7 @@ describe("TTY identity and legacy upgrade evidence", () => {
     expect(calls).toEqual([]);
   });
 
-  it("derives one claim from fstat identity and reuses it across source/compiled HMR entry shapes", async () => {
+  it("derives one claim from fstat identity and reuses it across HMR acquisition", async () => {
     const root = makeRoot();
     const first = await acquireOwned(makeDeps(root));
     first.setTakeoverHandler(() => {});
@@ -154,9 +162,11 @@ describe("TTY identity and legacy upgrade evidence", () => {
   });
 
   it("canonicalizes signed Bun device metadata before hashing or protocol exchange", async () => {
+    const signedDeviceStat = () => ({ ...fakeStat(), dev: -227_081_116n });
     const result = await acquireStationTtyOwnership(
       makeDeps(makeRoot(), {
-        readStdinStat: () => ({ ...fakeStat(), dev: -227_081_116n }),
+        readStdinStat: signedDeviceStat,
+        readTtyPathStat: signedDeviceStat,
       }),
     );
     expect(result).toMatchObject({
@@ -164,6 +174,39 @@ describe("TTY identity and legacy upgrade evidence", () => {
       ownership: { identity: { dev: "18446744073482470500" } },
     });
     if (result.kind === "owned") ownerships.push(result.ownership);
+  });
+
+  it("accepts Linux pts names after corroborating the controlling TTY device", async () => {
+    const tty = "pts/7";
+    const ttyPaths: string[] = [];
+    await acquireOwned(
+      makeDeps(makeRoot(), {
+        platform: "linux",
+        readTtyPathStat: (path) => {
+          ttyPaths.push(path);
+          return fakeStat();
+        },
+        runPs: (args) =>
+          args[0] === "-p" ? `${tty}\n` : `${TEST_PID} ${tty} bun test src/main.tsx\n`,
+      }),
+    );
+    expect(ttyPaths).toEqual(["/dev/pts/7"]);
+  });
+
+  it("fails closed before scanning peers when the controlling TTY is not stdin", async () => {
+    let listedPeers = false;
+    const result = await acquireStationTtyOwnership(
+      makeDeps(makeRoot(), {
+        readTtyPathStat: () => fakeStat({ ...TEST_IDENTITY, ino: "34" }),
+        runPs: (args) => {
+          if (args[0] === "-p") return `${TEST_TTY}\n`;
+          listedPeers = true;
+          return clearPsListing();
+        },
+      }),
+    );
+    expect(result).toMatchObject({ kind: "refused", reason: "claim-unavailable" });
+    expect(listedPeers).toBe(false);
   });
 
   it("revalidates the exact stdin device before raw mode", () => {
@@ -417,6 +460,7 @@ async function spawnOwner(
       isStdinTty: () => true,
       platform: "darwin",
       readStdinStat: () => ({ dev: 11n, rdev: 22n, ino: 33n, isCharacterDevice: () => true }),
+      readTtyPathStat: () => ({ dev: 11n, rdev: 22n, ino: 33n, isCharacterDevice: () => true }),
       effectiveUid: () => process.geteuid(),
       rendezvousDirectory: () => root,
       runPs: (args) => args[0] === "-p" ? tty + "\\n" : process.pid + " " + tty + " bun child-owner\\n",
@@ -455,6 +499,7 @@ async function spawnContender(root: string, name: string): Promise<TestChild> {
       isStdinTty: () => true,
       platform: "darwin",
       readStdinStat: () => ({ dev: 11n, rdev: 22n, ino: 33n, isCharacterDevice: () => true }),
+      readTtyPathStat: () => ({ dev: 11n, rdev: 22n, ino: 33n, isCharacterDevice: () => true }),
       effectiveUid: () => process.geteuid(),
       rendezvousDirectory: () => root,
       runPs: (args) => args[0] === "-p" ? tty + "\\n" : process.pid + " " + tty + " bun contender\\n",
@@ -510,15 +555,17 @@ function spawnTestChild(script: string, env: NodeJS.ProcessEnv): TestChild {
 function forbidProcessKill(onCall?: () => void): { calls(): number; restore(): void } {
   const original = process.kill;
   let calls = 0;
+  let restored = false;
+  const restore = (): void => {
+    if (restored) return;
+    restored = true;
+    process.kill = original;
+  };
+  processKillRestorers.push(restore);
   process.kill = ((..._args: Parameters<typeof process.kill>) => {
     calls += 1;
     onCall?.();
     throw new Error("process.kill must not be called");
   }) as typeof process.kill;
-  return {
-    calls: () => calls,
-    restore: () => {
-      process.kill = original;
-    },
-  };
+  return { calls: () => calls, restore };
 }

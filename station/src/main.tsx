@@ -141,9 +141,7 @@ async function startStationMain(
       message: "Station host cannot be safely reused by this Station build.",
       provider: "native",
     });
-    process.stderr.write(
-      `[station] ${safeError.code}: ${safeError.message}${safeError.hint === undefined ? "" : `\n${safeError.hint}`}\n`,
-    );
+    writeStartupError(safeError);
     await stationClient.stop();
     process.exitCode = 1;
     return false;

@@ -376,9 +376,9 @@ result = None
 try:
     if scenario == "takeover":
         incumbent = spawn_owned(station_command)
-        incumbent_output = wait_for_output(incumbent)
+        wait_for_output(incumbent)
         try:
-            starts = wait_for_shell_starts(1)
+            wait_for_shell_starts(1)
         except AssertionError as error:
             raise AssertionError(str(error) + ": replies=" + repr(query_counts) + " output=" + repr(all_output[-4000:]))
         read_output(0.2)
