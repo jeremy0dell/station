@@ -27,9 +27,15 @@ describe("setup apply engine", () => {
     const result = await applySetupPlan(plan([brewAction("install-worktrunk", "worktrunk")]), {
       runner: fakeRunner(calls),
       showCommandOutput: true,
-      onActionStart: (action) => events.push(`start:${action.id}`),
-      onActionComplete: (action) => events.push(`complete:${action.id}`),
-      onActionFailed: (action) => events.push(`failed:${action.id}`),
+      onActionStart: (action) => {
+        events.push(`start:${action.id}`);
+      },
+      onActionComplete: (action) => {
+        events.push(`complete:${action.id}`);
+      },
+      onActionFailed: (action) => {
+        events.push(`failed:${action.id}`);
+      },
     });
 
     expect(result.failedAction).toBeUndefined();
@@ -93,6 +99,130 @@ describe("setup apply engine", () => {
     expect(result.failedAction).toMatchObject({ id: "install-worktrunk", status: "failed" });
     expect(fs.writes).toEqual({});
     expect(result.plan.actions.map((action) => action.status)).toEqual(["failed", "skipped"]);
+  });
+
+  it("executes bound semantic operations without trusting compatibility command data", async () => {
+    const runnerCalls: ExternalCommandInput[] = [];
+    const executed: string[] = [];
+    const operation = {
+      id: "install:tmux",
+      kind: "install-tool",
+      tier: "required",
+      selected: true,
+      tool: "tmux",
+    } as const;
+    const compatibilityAction = {
+      ...brewAction("install-tmux", "hostile-formula"),
+      command: ["hostile-command", "--leak", "serializedResult"],
+      data: { rawResult: "provider sentinel" },
+    };
+
+    const result = await applySetupPlan(plan([compatibilityAction]), {
+      runner: fakeRunner(runnerCalls),
+      operationBindings: [{ actionId: compatibilityAction.id, operation }],
+      executeOperation: async (selected) => {
+        executed.push(selected.id);
+        return {
+          status: "completed",
+          operationId: selected.id,
+          commit: {
+            kind: "package-installer",
+            target: { kind: "tool", id: "tmux" },
+          },
+        };
+      },
+    });
+
+    expect(executed).toEqual(["install:tmux"]);
+    expect(runnerCalls).toEqual([]);
+    expect(result.operationOutcomes).toHaveLength(1);
+    expect(JSON.stringify(result.operationOutcomes)).not.toContain("provider sentinel");
+  });
+
+  it("continues independent provider tracking after one bound failure", async () => {
+    const operations = ["codex", "opencode"].map((harnessId) => ({
+      id: `prepare-harness-tracking:${harnessId}` as
+        | "prepare-harness-tracking:codex"
+        | "prepare-harness-tracking:opencode",
+      kind: "prepare-harness-tracking" as const,
+      tier: "required" as const,
+      selected: true as const,
+      harnessId: harnessId as "codex" | "opencode",
+    }));
+    const actions = operations.map((operation) => ({
+      id: `${operation.harnessId}-hooks`,
+      kind: "run-command" as const,
+      tier: "required" as const,
+      selected: true,
+      label: `Install ${operation.harnessId} tracking`,
+      message: "tracking",
+      command: ["hostile-child-command"],
+    }));
+    const executed: string[] = [];
+
+    const result = await applySetupPlan(plan(actions), {
+      operationBindings: operations.map((operation) => ({
+        actionId: `${operation.harnessId}-hooks`,
+        operation,
+      })),
+      executeOperation: async (operation) => {
+        executed.push(operation.id);
+        return operation.id === "prepare-harness-tracking:codex"
+          ? {
+              status: "failed",
+              operationId: operation.id,
+              error: {
+                tag: "SyntheticTrackingError",
+                code: "SYNTHETIC_TRACKING_FAILED",
+                message: "synthetic failure",
+              },
+            }
+          : {
+              status: "completed",
+              operationId: operation.id,
+              commit: { kind: "provider-tracking", provider: "opencode", changed: true },
+            };
+      },
+    });
+
+    expect(executed).toEqual([
+      "prepare-harness-tracking:codex",
+      "prepare-harness-tracking:opencode",
+    ]);
+    expect(result.failedAction).toMatchObject({ id: "codex-hooks", status: "failed" });
+    expect(result.plan.actions.map((action) => action.status)).toEqual(["failed", "completed"]);
+  });
+
+  it("does not invoke bound ports during dry-run", async () => {
+    let executions = 0;
+    const operation = {
+      id: "install:tmux",
+      kind: "install-tool",
+      tier: "required",
+      selected: true,
+      tool: "tmux",
+    } as const;
+    const action = brewAction("install-tmux", "tmux");
+
+    const result = await applySetupPlan(plan([action]), {
+      dryRun: true,
+      operationBindings: [{ actionId: action.id, operation }],
+      executeOperation: async (selected) => {
+        executions += 1;
+        return {
+          status: "completed",
+          operationId: selected.id,
+          commit: {
+            kind: "package-installer",
+            target: { kind: "tool", id: "tmux" },
+          },
+        };
+      },
+    });
+
+    expect(executions).toBe(0);
+    expect(result.operationOutcomes).toEqual([]);
+    expect(result.plan.actions[0]?.status).toBe("skipped");
   });
 
   it("writes config atomically with a backup for existing targets", async () => {
@@ -224,6 +354,7 @@ function plan(actions: SetupPlan["actions"]): SetupPlan {
       requiredMissing: 0,
       warnings: 0,
       selectedActions: actions.filter((action) => action.selected).length,
+      selectionSource: "unresolved",
       configPath: "/tmp/config.toml",
     },
     nextSteps: [],

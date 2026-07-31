@@ -1,8 +1,9 @@
-import { loadConfig, resolveObserverPaths } from "@station/config";
+import type { SafeError } from "@station/contracts";
 import { type RuntimeSafeError, safeErrorFromUnknown } from "@station/runtime";
+import type { SetupPlan as CoreSetupPlan, SetupOperationExecutor } from "@station/setup-core";
 import type { CliEnv } from "../../env.js";
-import { restartObserver } from "../../observerProcess.js";
-import type { applySetupPlan } from "./apply.js";
+import { createSetupOperationAdapter } from "./adapters/operations.js";
+import type { applySetupPlan, SetupOperationBinding } from "./apply.js";
 import { commandEnv } from "./checks/env.js";
 import {
   type CollectSetupFactsOptions,
@@ -27,12 +28,13 @@ import type {
   SupportedHarnessId,
 } from "./model.js";
 import { SetupHarnessTrackingFactSchema } from "./model.js";
-import { buildSetupPlan } from "./planner.js";
+import { type buildSetupPlan, buildSetupPlans } from "./planner.js";
 import {
   formatCommand,
   renderActionComplete,
   renderActionFailed,
   renderActionStart,
+  renderBoundActionStart,
 } from "./render.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "./types.js";
 
@@ -70,6 +72,9 @@ export type CollectedSetupPlan = {
   facts: SetupFacts;
   harnessSelection: SetupHarnessSelection;
   plan: SetupPlan;
+  semanticPlan: CoreSetupPlan;
+  operationBindings: readonly SetupOperationBinding[];
+  executeOperation: SetupOperationExecutor;
 };
 
 type SetupPlanCollectionOptions = {
@@ -115,10 +120,14 @@ export async function collectSetupPlanFromFacts(
         : { installWorktrunkHooks: input.installWorktrunkHooks }),
     });
   }
+  const built = buildSetupPlans(facts, plannerOptions);
   return {
     facts,
     harnessSelection,
-    plan: buildSetupPlan(facts, plannerOptions),
+    plan: built.compatibilityPlan,
+    semanticPlan: built.semanticPlan,
+    operationBindings: built.operationBindings,
+    executeOperation: createSetupOperationAdapter({ facts, deps }),
   };
 }
 
@@ -201,6 +210,7 @@ export function applyOptions(
     actionFilter?: (action: SetupAction) => boolean;
     showCommandOutput?: boolean;
     announceActions?: boolean;
+    execution?: Pick<CollectedSetupPlan, "operationBindings" | "executeOperation">;
   },
 ): Parameters<typeof applySetupPlan>[1] {
   const options: Parameters<typeof applySetupPlan>[1] = {};
@@ -213,9 +223,19 @@ export function applyOptions(
   if (input.dryRun !== undefined) options.dryRun = input.dryRun;
   if (input.actionFilter !== undefined) options.actionFilter = input.actionFilter;
   if (input.showCommandOutput !== undefined) options.showCommandOutput = input.showCommandOutput;
+  if (input.execution !== undefined) {
+    options.operationBindings = input.execution.operationBindings;
+    options.executeOperation = input.execution.executeOperation;
+  }
   if (input.announceActions === true) {
+    const boundActionIds = new Set(
+      input.execution?.operationBindings.map((binding) => binding.actionId) ?? [],
+    );
     options.onActionStart = async (action) => {
-      await write(deps, `${renderActionStart(action, renderOptions(deps))}\n`);
+      const rendered = boundActionIds.has(action.id)
+        ? renderBoundActionStart(action, renderOptions(deps))
+        : renderActionStart(action, renderOptions(deps));
+      await write(deps, `${rendered}\n`);
     };
     options.onActionComplete = async (action) => {
       await write(deps, `${renderActionComplete(action, renderOptions(deps))}\n`);
@@ -228,65 +248,25 @@ export function applyOptions(
 }
 
 export async function activateCompletedConfigWrite(
-  plan: SetupPlan,
-  homeDir: string,
+  collected: Pick<CollectedSetupPlan, "semanticPlan" | "executeOperation" | "facts">,
   deps: SetupCommandDeps,
-): Promise<RuntimeSafeError | undefined> {
-  const completedWrite = plan.actions.find(
-    (action) => action.kind === "write-config" && action.status === "completed",
+): Promise<SafeError | undefined> {
+  const operation = collected.semanticPlan.operations.find(
+    (candidate) => candidate.kind === "activate-observer-config",
   );
-  if (completedWrite === undefined) {
-    return undefined;
-  }
+  if (operation === undefined) return undefined;
 
   await write(deps, "Activating observer configuration...\n");
-  try {
-    if (completedWrite.path === undefined) {
-      throw observerActivationError;
-    }
-    await (deps.activateObserverConfig ?? activateObserverConfig)({
-      configPath: completedWrite.path,
-      homeDir,
-    });
+  const outcome = await collected.executeOperation(operation);
+  if (outcome.status === "completed") {
     await write(deps, "Observer configuration active.\n");
     return undefined;
-  } catch (error) {
-    const safeError = safeErrorFromUnknown(error, observerActivationError);
-    await write(deps, renderObserverActivationFailure(safeError, completedWrite.path));
-    return safeError;
   }
+  await write(deps, renderObserverActivationFailure(outcome.error, collected.facts.configPath));
+  return outcome.error;
 }
 
-async function activateObserverConfig(input: {
-  configPath: string;
-  homeDir: string;
-}): Promise<void> {
-  try {
-    const loaded = await loadConfig({ configPath: input.configPath, homeDir: input.homeDir });
-    const paths = resolveObserverPaths(loaded.config, input.homeDir);
-    const status = await restartObserver({
-      config: loaded.config,
-      configPath: loaded.configPath,
-      paths,
-    });
-    if (status.status !== "running") {
-      throw safeErrorFromUnknown(status.error, observerActivationError);
-    }
-  } catch (error) {
-    throw safeErrorFromUnknown(error, observerActivationError);
-  }
-}
-
-const observerActivationError: RuntimeSafeError = {
-  tag: "ObserverActivationError",
-  code: "OBSERVER_ACTIVATION_FAILED",
-  message: "Observer configuration could not be activated.",
-};
-
-function renderObserverActivationFailure(
-  error: RuntimeSafeError,
-  configPath: string | undefined,
-): string {
+function renderObserverActivationFailure(error: SafeError, configPath: string | undefined): string {
   const lines = [
     "Config was written, but observer activation failed.",
     error.message,
@@ -353,18 +333,6 @@ export function isHookSetupAction(action: SetupAction): boolean {
 
 export function isTmuxPopupBindingAction(action: SetupAction): boolean {
   return action.id === "tmux-popup-binding" || action.id === "tmux-live-popup-binding";
-}
-
-export function markRequiredIncomplete(plan: SetupPlan): SetupPlan {
-  return {
-    ...plan,
-    summary: {
-      ...plan.summary,
-      workflowReady: false,
-      requiredOk: false,
-      requiredMissing: Math.max(1, plan.summary.requiredMissing),
-    },
-  };
 }
 
 export function coreReadyForConfigWrite(plan: SetupPlan): boolean {

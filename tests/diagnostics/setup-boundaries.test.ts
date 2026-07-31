@@ -23,13 +23,25 @@ const policyNames = [
   "planSetup",
   "deriveSetupResult",
 ] as const;
+const drivenPortNames = [
+  "SetupConfigMutationPort",
+  "SetupObserverActivationPort",
+  "SetupHarnessTrackingPort",
+  "SetupWorktrunkIntegrationPort",
+  "SetupTmuxConfigurationPort",
+  "SetupPackageInstallationPort",
+  "SetupLauncherLinkPort",
+  "SetupOperationExecutor",
+] as const;
 
 describe("setup core boundaries", () => {
-  it("has no runtime, CLI, provider, presentation, or package dependency", async () => {
+  it("has no runtime, CLI, provider, or presentation dependency", async () => {
     const packageJson = JSON.parse(await readFile("packages/setup-core/package.json", "utf8")) as {
       dependencies?: Record<string, string>;
     };
-    expect(packageJson.dependencies ?? {}).toEqual({});
+    expect(packageJson.dependencies ?? {}).toEqual({
+      "@station/contracts": "workspace:*",
+    });
 
     for (const file of await sourceFiles(sourceRoot)) {
       const source = await readFile(file, "utf8");
@@ -39,6 +51,12 @@ describe("setup core boundaries", () => {
       for (const specifier of importSpecifiers(source)) {
         expect(nodeBuiltins.has(specifier), `${displayPath}: ${specifier}`).toBe(false);
         expect(forbiddenPackage.test(specifier), `${displayPath}: ${specifier}`).toBe(false);
+        if (specifier === "@station/contracts") {
+          expect(source, `${displayPath}: contracts imports must be type-only`).toMatch(
+            /import\s+type\s+\{[^}]*\}\s+from\s+["']@station\/contracts["']/s,
+          );
+          continue;
+        }
         if (!specifier.startsWith(".")) continue;
         const target = resolve(dirname(file), specifier);
         expect(target === sourceRoot || target.startsWith(`${sourceRoot}/`), displayPath).toBe(
@@ -48,8 +66,9 @@ describe("setup core boundaries", () => {
     }
   });
 
-  it("marks exactly the six public policies and no data declarations or barrels", async () => {
-    const declarations: string[] = [];
+  it("marks exactly the six policies and eight driven ports", async () => {
+    const policies: string[] = [];
+    const drivenPorts: string[] = [];
     let markerCount = 0;
     for (const file of await sourceFiles(sourceRoot)) {
       const source = await readFile(file, "utf8");
@@ -61,12 +80,19 @@ describe("setup core boundaries", () => {
         /\/\*\*\s*\n\s*\* POLICY\s*\n\s*\*\s*\n(?:\s*\* .+\n)+?\s*\*\/\s*\nexport function (\w+)/g;
       for (const match of source.matchAll(policyPattern)) {
         const name = match[1];
-        if (name !== undefined) declarations.push(name);
+        if (name !== undefined) policies.push(name);
+      }
+      const portPattern =
+        /\/\*\*\s*\n\s*\* DRIVEN PORT\s*\n\s*\*\s*\n(?:\s*\* .+\n)+?\s*\*\/\s*\nexport type (\w+)/g;
+      for (const match of source.matchAll(portPattern)) {
+        const name = match[1];
+        if (name !== undefined) drivenPorts.push(name);
       }
     }
 
-    expect(markerCount).toBe(6);
-    expect(declarations.sort()).toEqual([...policyNames].sort());
+    expect(markerCount).toBe(14);
+    expect(policies.sort()).toEqual([...policyNames].sort());
+    expect(drivenPorts.sort()).toEqual([...drivenPortNames].sort());
   });
 });
 

@@ -7,7 +7,7 @@ export type HarnessInstallOptions = {
   macos: boolean;
 };
 
-type HarnessInstallDefinition = {
+export type HarnessInstallDefinition = {
   id: SetupHarnessFact["id"];
   command: readonly string[];
   message: string;
@@ -33,7 +33,7 @@ export function missingHarnessInstallActions(
     if (!missing.has(id)) continue;
     const harness = harnessDefinitions.find((candidate) => candidate.id === id);
     if (harness === undefined) continue;
-    const definition = harnessInstallDefinition(id, options);
+    const definition = resolveHarnessInstallDefinition(id, options);
     actions.push({
       id: `install-harness-${id}`,
       kind: "run-command",
@@ -48,7 +48,7 @@ export function missingHarnessInstallActions(
   return actions;
 }
 
-function harnessInstallDefinition(
+export function resolveHarnessInstallDefinition(
   id: SetupHarnessFact["id"],
   options: HarnessInstallOptions,
 ): HarnessInstallDefinition {

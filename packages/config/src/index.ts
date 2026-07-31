@@ -6,4 +6,5 @@ export * from "./observerPaths.js";
 export * from "./observerProcessArgs.js";
 export * from "./projects/index.js";
 export * from "./schema.js";
+export * from "./setup/index.js";
 export * from "./tui/index.js";

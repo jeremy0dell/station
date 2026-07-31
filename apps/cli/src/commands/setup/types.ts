@@ -1,5 +1,6 @@
-import type { HarnessHooksStatus } from "@station/contracts";
+import type { HarnessHooksStatus, ProviderHookArtifactOwner } from "@station/contracts";
 import type { ExternalCommandRunner } from "@station/runtime";
+import type { SetupOperation, SetupOperationOutcome } from "@station/setup-core";
 import type { CliEnv } from "../../env.js";
 import type { SetupApplyFileSystem } from "./apply.js";
 import type { SetupFileSystemReader } from "./checks/config.js";
@@ -35,6 +36,13 @@ export type SetupCommandDeps = {
   platform?: NodeJS.Platform;
   compiled?: boolean;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
+  providerTrackingPort?: (
+    operation: Extract<
+      SetupOperation,
+      { kind: "prepare-harness-tracking" | "prepare-worktrunk-tracking" }
+    >,
+  ) => Promise<SetupOperationOutcome>;
   /**
    * Inspects Station-owned tracking artifacts without contacting the Observer.
    * An absent result is valid only for a harness with no external tracking artifact.

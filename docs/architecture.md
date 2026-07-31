@@ -37,11 +37,11 @@ The repo is organized around these boundaries:
 - `packages/contracts` owns shared application schemas and types, including `ObserverApi`, external-launch values, commands, events, snapshots, observations, provider ports, hooks, diagnostics, and safe errors.
 - `packages/protocol` owns the observer NDJSON transport: envelopes, method mapping, validation execution, client/server mechanics, and fail-closed Unix-socket probing and stale-owner evidence.
 - `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, typed error conversion, and atomic text replacement.
-- `packages/setup-core` owns dependency-free deterministic setup decisions over normalized evidence and intent, including semantic issues, operations, plans, and readiness results.
+- `packages/setup-core` owns runtime-independent setup decisions and operation ports over normalized evidence and intent, including semantic issues, operations, plans, typed outcomes, and readiness results. Its only package dependency is the shared `SafeError` type from contracts.
 - `packages/client` owns the framework-neutral rich-client observer runtime: snapshot loading, the event subscription/reconnect loop, event-to-snapshot reduction, and command dispatch/completion-wait wrappers consumed by the Station UI.
 - `apps/cli/src/ingress` owns the tiny `stn-ingress` sender: raw provider hook delivery to the observer socket and offline spool writes. Events sent through this raw path normalize and compact observer-side via provider hook adapters; integrations that submit typed harness reports normalize in their own adapter.
 - `packages/station-host` owns the standalone `station-station-host` daemon contract and client: a process that owns PTYs and their bounded raw/semantic replay state beyond the Station UI lifetime, exposing attach/list/close over its own local socket so panes can warm-reattach. Station consumes it directly; Observer application code can reach host-backed terminal behavior only through an adapter supplied by CLI composition.
-- `packages/config`, `packages/observability`, and `packages/testing` are shared support packages.
+- `packages/config` owns runtime-config parsing plus setup config generation, source-preserving mutation planning, validation, preconditions, backups, and atomic persistence. `packages/observability` and `packages/testing` are shared support packages.
 - `integrations/...` adapt external tools: Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, OpenCode, scripted harnesses, and GitHub repository metadata.
 
 ## Source Of Truth
@@ -78,7 +78,7 @@ When these disagree, reconcile from config, providers, and current observer stat
   context and on daemon-inherited color controls; only color controls carried
   by the explicit launch request are authoritative.
 - The CLI is the command/debug entrypoint, but long-lived runtime correlation belongs in the observer.
-- Setup IO and orchestration remain in the CLI: it validates and normalizes external facts, projects setup-core semantic plans and results into the existing CLI compatibility schemas and copy, and owns config, provider, process, and persistence effects. `@station/setup-core` imports none of those concerns.
+- Setup orchestration remains in the CLI: it validates and normalizes external facts, projects semantic plans into the existing CLI compatibility schema, and implements setup-core driven ports with config, provider, process, filesystem, and Observer adapters. Compatibility action commands and data are presentation only when a semantic binding exists; provider tracking runs in-process and only sanitized commit evidence returns to setup-core. `@station/setup-core` imports none of those runtime concerns.
 - `packages/contracts` defines shared language with strict schemas for untrusted input and shared payloads.
 - The protocol validates transport messages and keeps consumer APIs simple. It should not become a provider boundary.
 - Client processes may spawn after an absent or proven-stale socket, but only the process binding the replacement may unlink it. Inaccessible ownership is preserved; pidfiles never establish liveness or authorize reclaim.

@@ -908,6 +908,14 @@ function setupActions(
       case "write-config":
         actions.push(...configWriteActions(configWrite, true));
         break;
+      case "activate-observer-config":
+        // Activation is orchestration-only until the compatibility action contract is retired.
+        break;
+      case "install-harness":
+      case "install-homebrew":
+      case "install-xcode-command-line-tools":
+        // Guided and system-only installers are projected by their existing compatibility helpers.
+        break;
     }
   }
   if (configWrite?.operation === "blocked") {
