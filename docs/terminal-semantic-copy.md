@@ -10,7 +10,8 @@ than guessing from pane width or output content.
 
 ## Product behavior
 
-Plain drag-copy inside a native Station pane:
+Station-owned selection inside a native pane, copied either on plain drag release or with
+`Ctrl-C` while that pane selection is active:
 
 - joins xterm-native soft wraps without a newline;
 - joins marked application continuations without a newline;
@@ -20,10 +21,10 @@ Plain drag-copy inside a native Station pane:
 
 All harness providers hosted in a Station pane use this same extraction path; there
 is no Pi-specific or non-Pi clipboard adapter. The drag release copies immediately
-through Station's clipboard sinks. OpenTUI `Ctrl-C` handles its own non-pane text
-selection and falls through for a pane-owned selection. An outer terminal's
-Shift/Ctrl selection and application-owned copy commands bypass pane row metadata;
-Pi's whole-message `Ctrl-X` behavior is unchanged.
+through Station's clipboard sinks. OpenTUI's global `Ctrl-C` resolves the active
+selection source and calls the same pane `getSelectedText()` method before those sinks.
+An outer terminal's Shift/Ctrl selection and application-owned copy commands bypass
+pane row metadata; Pi's whole-message `Ctrl-X` behavior is unchanged.
 
 ## Capability
 
@@ -146,5 +147,6 @@ two-source-line block should report exactly one. Repeat at narrow and wide pane 
 after scrolling into history, after resizing, after complete Host reattach, and after
 semantic recovery once the 256 KiB raw replay budget is exceeded. For the current Codex
 workaround, press `Alt-R` before requesting the command and compare it with the same response
-rendered in rich mode. Use an ordinary pane drag; Shift/Ctrl outer-terminal selection does not
+rendered in rich mode. Verify plain drag release and `Ctrl-C` over the active pane selection
+separately; both should produce the same bytes. Shift/Ctrl outer-terminal selection does not
 exercise Station extraction.
