@@ -2,6 +2,7 @@ import {
   type AddProjectActionId,
   addProjectActions,
   applyAddProjectFolderReviewed,
+  applyAddProjectFolderReviewFailed,
   createInitialTuiState,
   createNewSessionFlow,
   handleTuiAction,
@@ -32,6 +33,43 @@ describe("primary workflow interaction parity", () => {
       "review.chooseFolder",
       "review.cancel",
     ]);
+  });
+
+  it("aligns Add Project arrow navigation with each action layout", () => {
+    let state = openAddProject(createInitialTuiState(), context);
+    state = applyAddProjectFolderReviewed(state, {
+      selectedPath: "/workspace/station",
+      gitRoot: "/workspace/station",
+      id: "station",
+      label: "Station",
+    });
+
+    const down = handleTuiKey(state, { input: "", downArrow: true }, context).state;
+    expect(addProjectFocus(down)).toBe("submit");
+
+    const right = handleTuiKey(state, { input: "", rightArrow: true }, context).state;
+    expect(addProjectFocus(right)).toBe("editId");
+
+    const left = handleTuiKey(right, { input: "", leftArrow: true }, context).state;
+    expect(addProjectFocus(left)).toBe("submit");
+
+    const editing = handleTuiKey(state, { input: "N" }, context).state;
+    expect(addProjectEditFocus(editing)).toBe("save");
+    const editingRight = handleTuiKey(editing, { input: "", rightArrow: true }, context).state;
+    expect(addProjectEditFocus(editingRight)).toBe("save");
+    const editingDown = handleTuiKey(editing, { input: "", downArrow: true }, context).state;
+    expect(addProjectEditFocus(editingDown)).toBe("back");
+
+    let failed = openAddProject(createInitialTuiState(), context);
+    failed = applyAddProjectFolderReviewFailed(
+      failed,
+      "/workspace/station",
+      new Error("review failed"),
+    );
+    const failedDown = handleTuiKey(failed, { input: "", downArrow: true }, context).state;
+    expect(addProjectFocus(failedDown)).toBe("retry");
+    const failedRight = handleTuiKey(failed, { input: "", rightArrow: true }, context).state;
+    expect(addProjectFocus(failedRight)).toBe("chooseFolder");
   });
 
   it("keeps Git-invalid and submitting Add Project controls inert in core", () => {
@@ -111,6 +149,27 @@ describe("primary workflow interaction parity", () => {
     }
   });
 });
+
+function addProjectFocus(state: ReturnType<typeof createInitialTuiState>): string | undefined {
+  if (state.screen.name !== "addProject") return undefined;
+  switch (state.screen.flow.mode) {
+    case "review":
+    case "failed":
+      return state.screen.flow.actionFocus;
+    case "start":
+    case "choose":
+    case "success":
+      return undefined;
+  }
+}
+
+function addProjectEditFocus(state: ReturnType<typeof createInitialTuiState>): string | undefined {
+  return state.screen.name === "addProject" &&
+    state.screen.flow.mode === "review" &&
+    state.screen.flow.editingId !== undefined
+    ? state.screen.flow.editIdActionFocus
+    : undefined;
+}
 
 function actionIds(state: ReturnType<typeof createInitialTuiState>): AddProjectActionId[] {
   if (state.screen.name !== "addProject") throw new Error("expected Add Project");

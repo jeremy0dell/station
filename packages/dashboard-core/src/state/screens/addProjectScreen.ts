@@ -262,8 +262,8 @@ function reviewIntent(
   flow: AddProjectReviewState,
   key: TuiKey,
 ): AddProjectInputIntent {
-  if (key.upArrow === true) return transitionIntent({ type: "actionFocus", dir: -1 });
-  if (key.downArrow === true) return transitionIntent({ type: "actionFocus", dir: 1 });
+  if (key.leftArrow === true) return transitionIntent({ type: "actionFocus", dir: -1 });
+  if (key.rightArrow === true) return transitionIntent({ type: "actionFocus", dir: 1 });
   if (key.input === "A") return addProjectIntentForAction(state, "review.submit");
   if (key.input === "N") return addProjectIntentForAction(state, "review.editId");
   if (key.input === "B") return addProjectIntentForAction(state, "review.chooseFolder");
@@ -284,8 +284,8 @@ function failedIntent(
   flow: Extract<AddProjectFlowState, { mode: "failed" }>,
   key: TuiKey,
 ): AddProjectInputIntent {
-  if (key.upArrow === true) return transitionIntent({ type: "actionFocus", dir: -1 });
-  if (key.downArrow === true) return transitionIntent({ type: "actionFocus", dir: 1 });
+  if (key.leftArrow === true) return transitionIntent({ type: "actionFocus", dir: -1 });
+  if (key.rightArrow === true) return transitionIntent({ type: "actionFocus", dir: 1 });
   if (key.input === "R") return addProjectIntentForAction(state, "failed.retry");
   if (key.input === "B") return addProjectIntentForAction(state, "failed.chooseFolder");
   if (!isReturnKey(key)) return { type: "none" };

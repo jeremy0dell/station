@@ -638,7 +638,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project      station                                                         │
 │▸ Name        |station-XXXXXX                                                 │
 │  Save (Ctrl-S)    Back (Esc)                                                 │
-│ Type name · Left/Right cursor · Enter save · ↑↓ focus                        │
+│ Type name · Left/Right cursor · ↓ actions · Enter save                       │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -666,7 +666,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project      station                                                         │
 │  Name        station-XXXXXX                                                  │
 │▸ Save (Ctrl-S)    Back (Esc)                                                 │
-│ Enter save name · ↑↓ focus · Esc back                                        │
+│ ←→ action · ↑ name · Enter save · Esc back                                   │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -694,7 +694,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project      station                                                         │
 │  Name        station-XXXXXX                                                  │
 │  Save (Ctrl-S)  ▸ Back (Esc)                                                 │
-│ Enter back without saving · ↑↓ focus                                         │
+│ ←→ action · ↑ name · Enter back without saving                               │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -903,7 +903,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Display name    Station                                                      │
 │                                                                              │
 │▸ Add project (A)    Edit id (N)    Choose folder (B)    Cancel (Esc)         │
-│ Enter add project                                                            │
+│ ←→ action · Enter add project                                                │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -931,7 +931,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Display name    Station                                                      │
 │ Choose a folder inside an existing Git repository.                           │
 │  Add project (A)    Edit id (N)  ▸ Choose folder (B)    Cancel (Esc)         │
-│ Enter choose another folder                                                  │
+│ ←→ action · Enter choose another folder                                      │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -958,9 +958,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project id      station|                                                     │
 │ Display name    Station                                                      │
 │                                                                              │
-│▸ Save id (Ctrl-S)    Back (Esc)                                              │
-│ Enter save project id                                                        │
-│                                                                              │
+│▸ Save id (Ctrl-S)                                                            │
+│  Back (Esc)                                                                  │
+│ ↑↓ action · Enter save project id                                            │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -1013,7 +1013,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ The TUI could not complete the observer operation.                           │
 │ Code    CLIENT_OBSERVER_OPERATION_FAILED                                     │
 │▸ Retry (R)    Choose folder (B)    Cancel (Esc)                              │
-│ ↑↓ action · Enter activates focused action                                   │
+│ ←→ action · Enter activates focused action                                   │
 │                                                                              │
 │                                                                              │
 │                                                                              │

@@ -126,7 +126,7 @@ describe("new-session review content", () => {
           accelerator: undefined,
           enabled: true,
           focusId: "name",
-          helper: "Type name · Left/Right cursor · Enter save · ↑↓ focus",
+          helper: "Type name · Left/Right cursor · ↓ actions · Enter save",
         },
         save: {
           actionId: "editName.save",
@@ -134,7 +134,7 @@ describe("new-session review content", () => {
           accelerator: "Ctrl-S",
           enabled: true,
           focusId: "save",
-          helper: "Enter save name · ↑↓ focus · Esc back",
+          helper: "←→ action · ↑ name · Enter save · Esc back",
         },
         back: {
           actionId: "editName.back",
@@ -142,10 +142,10 @@ describe("new-session review content", () => {
           accelerator: "Esc",
           enabled: true,
           focusId: "back",
-          helper: "Enter back without saving · ↑↓ focus",
+          helper: "←→ action · ↑ name · Enter back without saving",
         },
       },
-      helper: "Type name · Left/Right cursor · Enter save · ↑↓ focus",
+      helper: "Type name · Left/Right cursor · ↓ actions · Enter save",
     });
   });
 });

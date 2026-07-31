@@ -264,7 +264,7 @@ const CASES: ModalCase[] = [
   {
     name: "new session edit name save focus",
     keys: [{ input: "N" }, { input: "N" }, { input: "", downArrow: true }],
-    expect: ["▸ Save (Ctrl-S)", "Enter save name"],
+    expect: ["▸ Save (Ctrl-S)", "↑ name · Enter save"],
     reject: ["|station-"],
   },
   {
@@ -273,7 +273,7 @@ const CASES: ModalCase[] = [
       { input: "N" },
       { input: "N" },
       { input: "", downArrow: true },
-      { input: "", downArrow: true },
+      { input: "", rightArrow: true },
     ],
     expect: ["▸ Back (Esc)", "Enter back without saving"],
     reject: ["|station-"],

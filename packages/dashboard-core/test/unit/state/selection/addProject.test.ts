@@ -165,7 +165,7 @@ describe("add-project mode intents", () => {
       flow: { actionFocus: "submit" },
     });
 
-    const editFocused = handleTuiKey(reviewing, { input: "", downArrow: true }, KEY_CONTEXT).state;
+    const editFocused = handleTuiKey(reviewing, { input: "", rightArrow: true }, KEY_CONTEXT).state;
     expect(editFocused.screen).toMatchObject({
       name: "addProject",
       flow: { actionFocus: "editId" },

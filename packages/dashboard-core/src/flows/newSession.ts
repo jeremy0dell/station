@@ -441,19 +441,25 @@ function editNameInputIntent(
   state: NewSessionEditNameState,
   input: NewSessionInput,
 ): NewSessionInputIntent {
+  if (state.editNameFocus === "name") {
+    if (input.key.downArrow === true) {
+      return transitionIntent({ type: "editNameFocusSet", focus: "save" });
+    }
+    const intent = editableTextInputIntentForInput(input);
+    return intent.type === "edit"
+      ? transitionIntent({ type: "editNameInput", action: intent.action })
+      : { type: "none" };
+  }
   if (input.key.upArrow === true) {
-    return transitionIntent({ type: "editNameFocus", dir: -1 });
+    return transitionIntent({ type: "editNameFocusSet", focus: "name" });
   }
-  if (input.key.downArrow === true) {
-    return transitionIntent({ type: "editNameFocus", dir: 1 });
+  if (input.key.leftArrow === true || input.key.rightArrow === true) {
+    return transitionIntent({
+      type: "editNameFocusSet",
+      focus: state.editNameFocus === "save" ? "back" : "save",
+    });
   }
-  if (state.editNameFocus !== "name") {
-    return { type: "none" };
-  }
-  const intent = editableTextInputIntentForInput(input);
-  return intent.type === "edit"
-    ? transitionIntent({ type: "editNameInput", action: intent.action })
-    : { type: "none" };
+  return { type: "none" };
 }
 
 function cycleFocus<T extends string>(values: readonly T[], current: T, dir: -1 | 1): T {

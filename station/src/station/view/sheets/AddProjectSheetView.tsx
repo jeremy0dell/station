@@ -10,6 +10,7 @@ import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   SheetButtonRow,
+  type SheetButtonSpec,
   SheetFill,
   SheetFooter,
   SheetLabelValue,
@@ -303,7 +304,7 @@ function Failure({
         <SheetMetaLine key={row.label} width={width} label={row.label} value={row.value} />
       ))}
       <AddProjectActionBar width={width} state={state} />
-      <SheetFooter width={width}>↑↓ action · Enter activates focused action</SheetFooter>
+      <SheetFooter width={width}>←→ action · Enter activates focused action</SheetFooter>
     </>
   );
 }
@@ -320,17 +321,19 @@ function failureMetadataRows(
 
 function reviewHelper(state: Extract<AddProjectFlowState, { mode: "review" }>): string {
   if (state.editingId !== undefined) {
-    return state.editIdActionFocus === "back" ? "Enter back without saving" : "Enter save project id";
+    const action =
+      state.editIdActionFocus === "back" ? "Enter back without saving" : "Enter save project id";
+    return `↑↓ action · ${action}`;
   }
   switch (state.actionFocus) {
     case "submit":
-      return state.gitRoot === undefined ? "Enter choose Git folder" : "Enter add project";
+      return `←→ action · ${state.gitRoot === undefined ? "Enter choose Git folder" : "Enter add project"}`;
     case "editId":
-      return "Enter edit project id";
+      return "←→ action · Enter edit project id";
     case "chooseFolder":
-      return "Enter choose another folder";
+      return "←→ action · Enter choose another folder";
     case "cancel":
-      return "Enter cancel";
+      return "←→ action · Enter cancel";
   }
 }
 
@@ -364,10 +367,9 @@ function AddProjectActionBar({
       : state.mode === "success" || state.mode === "failed"
         ? state.actionFocus
         : undefined;
-  return (
-    <SheetButtonRow
-      width={width}
-      buttons={actions.map((action) => ({
+  const buttons = actions.map(
+    (action) =>
+      ({
         id: action.id,
         label: action.label,
         compactLabel: action.compactLabel,
@@ -376,7 +378,16 @@ function AddProjectActionBar({
         mouseTarget: { kind: "addProjectAction", actionId: action.id },
         focused: action.focus !== undefined && action.focus === focusedAction,
         disabled: !action.enabled,
-      }))}
-    />
+      }) satisfies SheetButtonSpec,
   );
+  if (state.mode === "review" && state.editingId !== undefined) {
+    return (
+      <>
+        {buttons.map((button) => (
+          <SheetButtonRow key={button.id} width={width} buttons={[button]} />
+        ))}
+      </>
+    );
+  }
+  return <SheetButtonRow width={width} buttons={buttons} />;
 }

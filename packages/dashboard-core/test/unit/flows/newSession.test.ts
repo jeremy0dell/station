@@ -247,7 +247,7 @@ describe("new session flow", () => {
     expect(chooseNewSessionAgentById(picker, snapshot, "ghost")).toBe(picker);
   });
 
-  it("moves edit-name focus among Name, Save, and Back", () => {
+  it("uses vertical movement into the action row and horizontal movement within it", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
     if (opened === undefined) throw new Error("expected a flow");
@@ -258,7 +258,7 @@ describe("new session flow", () => {
     const saveIntent = newSessionIntentForInput(editing, input("", { downArrow: true }));
     expect(saveIntent).toEqual({
       type: "transition",
-      action: { type: "editNameFocus", dir: 1 },
+      action: { type: "editNameFocusSet", focus: "save" },
     });
     if (saveIntent.type !== "transition") throw new Error("expected transition");
     const saveFocused = transitionNewSessionFlow(editing, saveIntent.action);
@@ -266,23 +266,27 @@ describe("new session flow", () => {
     if (saveFocused?.mode !== "editName") throw new Error("expected edit mode");
 
     expect(newSessionIntentForInput(saveFocused, input("x"))).toEqual({ type: "none" });
-    expect(newSessionIntentForInput(saveFocused, input("", { leftArrow: true }))).toEqual({
-      type: "none",
-    });
     expect(newSessionIntentForInput(saveFocused, input("\r", { return: true }))).toEqual({
       type: "transition",
       action: { type: "commitName" },
     });
 
-    const backFocused = transitionNewSessionFlow(saveFocused, {
-      type: "editNameFocus",
-      dir: 1,
+    const backIntent = newSessionIntentForInput(saveFocused, input("", { rightArrow: true }));
+    expect(backIntent).toEqual({
+      type: "transition",
+      action: { type: "editNameFocusSet", focus: "back" },
     });
+    if (backIntent.type !== "transition") throw new Error("expected transition");
+    const backFocused = transitionNewSessionFlow(saveFocused, backIntent.action);
     if (backFocused?.mode !== "editName") throw new Error("expected edit mode");
     expect(backFocused.editNameFocus).toBe("back");
     expect(newSessionIntentForInput(backFocused, input("\r", { return: true }))).toEqual({
       type: "transition",
       action: { type: "cancel" },
+    });
+    expect(newSessionIntentForInput(backFocused, input("", { upArrow: true }))).toEqual({
+      type: "transition",
+      action: { type: "editNameFocusSet", focus: "name" },
     });
     expect(newSessionIntentForInput(backFocused, input("", { escape: true }))).toEqual({
       type: "transition",

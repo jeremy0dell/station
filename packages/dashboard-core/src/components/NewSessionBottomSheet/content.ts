@@ -91,7 +91,7 @@ const EDIT_NAME_CONTROLS: {
     accelerator: undefined,
     enabled: true,
     focusId: "name",
-    helper: "Type name · Left/Right cursor · Enter save · ↑↓ focus",
+    helper: "Type name · Left/Right cursor · ↓ actions · Enter save",
   },
   save: {
     actionId: "editName.save",
@@ -99,7 +99,7 @@ const EDIT_NAME_CONTROLS: {
     accelerator: "Ctrl-S",
     enabled: true,
     focusId: "save",
-    helper: "Enter save name · ↑↓ focus · Esc back",
+    helper: "←→ action · ↑ name · Enter save · Esc back",
   },
   back: {
     actionId: "editName.back",
@@ -107,7 +107,7 @@ const EDIT_NAME_CONTROLS: {
     accelerator: "Esc",
     enabled: true,
     focusId: "back",
-    helper: "Enter back without saving · ↑↓ focus",
+    helper: "←→ action · ↑ name · Enter back without saving",
   },
 };
 

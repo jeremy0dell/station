@@ -275,17 +275,20 @@ and focused activation. Folder rows remain single-click selection targets. Choos
 prefers a pasted absolute or home-relative path and otherwise commits the registered-list
 cursor used by keyboard Enter; Open is enabled only for a navigable child or search row.
 Review, id editing, success, and failure use a visible action focus cursor. Their actions
-render through the shared compact sheet-button group instead of stretching each control across
-the sheet. Missing Git-root review keeps submit disabled and stale disabled targets inert; these
-interaction paths do not weaken project admission policy.
+render through shared compact sheet buttons instead of stretching each control across the sheet.
+Horizontal review and failure groups move with Left/Right; the id editor keeps Save and Back
+vertically stacked so Up/Down does not conflict with text-cursor movement. Missing Git-root review
+keeps submit disabled and stale disabled targets inert; these interaction paths do not weaken
+project admission policy.
 
 Create Session review renders Project, Name, and Agent as compact field controls, followed by a
 compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, and `C`), values, and inline
 health status use separate spans so their roles and associations remain visible. Arrow focus uses
 a non-color marker and contextual Enter helper without painting the full row as selected. The name
-editor gives Name, Save, and Back independent semantic controls, hides the text cursor while an
-action owns focus, and reserves Left/Right for text-cursor movement while Name owns focus. Selecting
-Name sets focus directly and never generates arrow input. Native pointer Create, focused Enter, and
+editor gives Name, Save, and Back independent semantic controls and hides the text cursor while an
+action owns focus. Down moves from the Name field into the button row, Left/Right moves between Save
+and Back, and Up returns to Name; Left/Right remains text-cursor movement while Name owns focus.
+Selecting Name sets focus directly and never generates arrow input. Native pointer Create, focused Enter, and
 direct `C` pass through one semantic Create resolver and shared validation before producing the
 managed-pane effect; when validation disables Create, all three activation paths remain inert.
 Standalone creation applies the same action through its existing observer operation path.
