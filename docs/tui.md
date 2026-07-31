@@ -80,6 +80,30 @@ STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
 bun run dashboard                     # interactive dashboard renderer without native panes
 ```
 
+## Native TTY Ownership
+
+Before native Station starts its client, reads configuration, or creates an
+OpenTUI renderer, it identifies interactive stdin from the character device's
+typed `fstat(0)` metadata. The complete platform, device, terminal-device, and
+inode identity selects a private per-user rendezvous under
+`/tmp/station-tui-<uid>/`, independent of checkout and Station configuration.
+Piped stdin does not enter this ownership path.
+
+Ownership is an active `BEGIN IMMEDIATE` transaction in the identity's SQLite
+database, not the presence of that database file. A second current Station asks
+the transaction holder to shut down through the adjacent private Unix socket,
+then waits up to two seconds to acquire the released transaction. The incumbent
+disposes subscriptions and PTYs, unmounts React, destroys OpenTUI to release raw
+stdin, closes its control endpoint, and releases the transaction last. The
+successor cannot enter raw mode until that acquisition succeeds. Station never
+signals another process during this flow and never escalates a failed takeover.
+
+Bun HMR retains the transaction and control endpoint in process-global state
+while replacing the takeover handler with the newest Station composition. An
+already-running pre-protocol Station does not hold the transaction, so startup
+conservatively refuses when same-TTY process evidence could indicate a legacy
+owner; close that UI with `Ctrl-Q` before retrying.
+
 ## Child PTY Capability Environment
 
 The outer terminal environment belongs to OpenTUI and remains unchanged so the
