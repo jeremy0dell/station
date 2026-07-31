@@ -8,95 +8,62 @@ import type {
   AddProjectSuccessActionFocus,
 } from "./types.js";
 
-export type AddProjectActionId =
-  | "start.open"
-  | "start.cancel"
-  | "choose.choose"
-  | "choose.open"
-  | "choose.parent"
-  | "choose.search"
-  | "choose.cancel"
-  | "review.submit"
-  | "review.editId"
-  | "review.chooseFolder"
-  | "review.cancel"
-  | "editId.save"
-  | "editId.back"
-  | "success.dashboard"
-  | "failed.retry"
-  | "failed.chooseFolder"
-  | "failed.cancel";
-
 export type AddProjectActionFocus =
   | AddProjectReviewActionFocus
   | AddProjectEditIdActionFocus
   | AddProjectSuccessActionFocus
   | AddProjectFailedActionFocus;
 
-export type AddProjectActionDescriptor = {
-  id: AddProjectActionId;
+type AddProjectActionDefinition = {
   label: string;
-  compactLabel: string;
+  compactLabel?: string;
   accelerator: string;
   intent: "primary" | "secondary";
   focus?: AddProjectActionFocus;
-  enabled: boolean;
 };
 
-type AddProjectActionDefinition = Omit<AddProjectActionDescriptor, "enabled">;
-
-const DEFINITIONS: Readonly<Record<AddProjectActionId, AddProjectActionDefinition>> = {
+const DEFINITIONS = {
   "start.open": {
-    id: "start.open",
     label: "Open",
-    compactLabel: "Open",
     accelerator: "→/↵",
     intent: "primary",
   },
   "start.cancel": {
-    id: "start.cancel",
     label: "Cancel",
     compactLabel: "Back",
     accelerator: "Esc",
     intent: "secondary",
   },
   "choose.choose": {
-    id: "choose.choose",
     label: "Choose",
     compactLabel: "Use",
     accelerator: "↵",
     intent: "primary",
   },
   "choose.open": {
-    id: "choose.open",
     label: "Open",
-    compactLabel: "Open",
     accelerator: "→",
     intent: "secondary",
   },
   "choose.parent": {
-    id: "choose.parent",
     label: "Parent",
     compactLabel: "Up",
     accelerator: "←",
     intent: "secondary",
   },
   "choose.search": {
-    id: "choose.search",
     label: "Search",
     compactLabel: "Find",
     accelerator: "/",
     intent: "secondary",
   },
   "choose.cancel": {
-    id: "choose.cancel",
     label: "Cancel",
     compactLabel: "Exit",
     accelerator: "Esc",
     intent: "secondary",
   },
   "review.submit": {
-    id: "review.submit",
     label: "Add project",
     compactLabel: "Add",
     accelerator: "A",
@@ -104,7 +71,6 @@ const DEFINITIONS: Readonly<Record<AddProjectActionId, AddProjectActionDefinitio
     focus: "submit",
   },
   "review.editId": {
-    id: "review.editId",
     label: "Edit id",
     compactLabel: "Edit",
     accelerator: "N",
@@ -112,7 +78,6 @@ const DEFINITIONS: Readonly<Record<AddProjectActionId, AddProjectActionDefinitio
     focus: "editId",
   },
   "review.chooseFolder": {
-    id: "review.chooseFolder",
     label: "Choose folder",
     compactLabel: "Choose",
     accelerator: "B",
@@ -120,15 +85,12 @@ const DEFINITIONS: Readonly<Record<AddProjectActionId, AddProjectActionDefinitio
     focus: "chooseFolder",
   },
   "review.cancel": {
-    id: "review.cancel",
     label: "Cancel",
-    compactLabel: "Cancel",
     accelerator: "Esc",
     intent: "secondary",
     focus: "cancel",
   },
   "editId.save": {
-    id: "editId.save",
     label: "Save id",
     compactLabel: "Save",
     accelerator: "Ctrl-S",
@@ -136,31 +98,24 @@ const DEFINITIONS: Readonly<Record<AddProjectActionId, AddProjectActionDefinitio
     focus: "save",
   },
   "editId.back": {
-    id: "editId.back",
     label: "Back",
-    compactLabel: "Back",
     accelerator: "Esc",
     intent: "secondary",
     focus: "back",
   },
   "success.dashboard": {
-    id: "success.dashboard",
     label: "Dashboard",
-    compactLabel: "Dashboard",
     accelerator: "D",
     intent: "primary",
     focus: "dashboard",
   },
   "failed.retry": {
-    id: "failed.retry",
     label: "Retry",
-    compactLabel: "Retry",
     accelerator: "R",
     intent: "primary",
     focus: "retry",
   },
   "failed.chooseFolder": {
-    id: "failed.chooseFolder",
     label: "Choose folder",
     compactLabel: "Choose",
     accelerator: "B",
@@ -168,13 +123,19 @@ const DEFINITIONS: Readonly<Record<AddProjectActionId, AddProjectActionDefinitio
     focus: "chooseFolder",
   },
   "failed.cancel": {
-    id: "failed.cancel",
     label: "Cancel",
-    compactLabel: "Cancel",
     accelerator: "Esc",
     intent: "secondary",
     focus: "cancel",
   },
+} as const satisfies Readonly<Record<string, AddProjectActionDefinition>>;
+
+export type AddProjectActionId = keyof typeof DEFINITIONS;
+
+export type AddProjectActionDescriptor = AddProjectActionDefinition & {
+  id: AddProjectActionId;
+  compactLabel: string;
+  enabled: boolean;
 };
 
 const ACTIONS_BY_MODE = {
@@ -198,10 +159,15 @@ export function addProjectActions(
     state.mode === "review" && state.editingId !== undefined
       ? ACTIONS_BY_MODE.editId
       : ACTIONS_BY_MODE[state.mode];
-  return ids.map((id) => ({
-    ...DEFINITIONS[id],
-    enabled: isActionEnabled(state, id, selectedIndex),
-  }));
+  return ids.map((id) => {
+    const definition: AddProjectActionDefinition = DEFINITIONS[id];
+    return {
+      id,
+      ...definition,
+      compactLabel: definition.compactLabel ?? definition.label,
+      enabled: isActionEnabled(state, id, selectedIndex),
+    };
+  });
 }
 
 export function addProjectAction(

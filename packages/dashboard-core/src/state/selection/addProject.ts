@@ -39,14 +39,6 @@ export function addProjectSelectedIndexForFlow(
   return undefined;
 }
 
-export function selectedAddProjectStartPath(state: TuiState): string | undefined {
-  if (state.screen.name !== "addProject" || state.screen.flow.mode !== "start") {
-    return undefined;
-  }
-  const index = addProjectSelectedIndex(state);
-  return index === undefined ? undefined : state.screen.flow.choices[index]?.path;
-}
-
 export function selectedAddProjectFolderRow(state: TuiState) {
   if (state.screen.name !== "addProject" || state.screen.flow.mode !== "choose") {
     return undefined;

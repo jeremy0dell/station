@@ -98,7 +98,10 @@ describe("NewSessionSheetView", () => {
     if (review === undefined) throw new Error("expected new-session flow");
     const edit = transitionNewSessionFlow(review, { type: "editName" });
     if (edit?.mode !== "editName") throw new Error("expected edit-name flow");
-    const save = transitionNewSessionFlow(edit, { type: "editNameFocus", dir: 1 });
+    const save = transitionNewSessionFlow(edit, {
+      type: "editNameFocusSet",
+      focus: "save",
+    });
     if (save?.mode !== "editName") throw new Error("expected edit-name flow");
 
     const { setup } = await render(snapshot, save);

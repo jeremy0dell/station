@@ -1,6 +1,11 @@
 import { dirname } from "node:path";
 import { editableTextInputIntentForInput } from "../../components/EditableTextInput/editing.js";
-import { type AddProjectActionId, addProjectAction } from "../../flows/addProject/actions.js";
+import {
+  type AddProjectActionFocus,
+  type AddProjectActionId,
+  addProjectAction,
+  addProjectActions,
+} from "../../flows/addProject/actions.js";
 import { createAddProjectFlow } from "../../flows/addProject/flow.js";
 import { pastedPathCandidate } from "../../flows/addProject/input.js";
 import type {
@@ -268,15 +273,7 @@ function reviewIntent(
   if (key.input === "N") return addProjectIntentForAction(state, "review.editId");
   if (key.input === "B") return addProjectIntentForAction(state, "review.chooseFolder");
   if (!isReturnKey(key)) return { type: "none" };
-  const actionId: AddProjectActionId =
-    flow.actionFocus === "submit"
-      ? "review.submit"
-      : flow.actionFocus === "editId"
-        ? "review.editId"
-        : flow.actionFocus === "chooseFolder"
-          ? "review.chooseFolder"
-          : "review.cancel";
-  return addProjectIntentForAction(state, actionId);
+  return focusedActionIntent(state, flow, flow.actionFocus);
 }
 
 function failedIntent(
@@ -289,13 +286,16 @@ function failedIntent(
   if (key.input === "R") return addProjectIntentForAction(state, "failed.retry");
   if (key.input === "B") return addProjectIntentForAction(state, "failed.chooseFolder");
   if (!isReturnKey(key)) return { type: "none" };
-  const actionId: AddProjectActionId =
-    flow.actionFocus === "retry"
-      ? "failed.retry"
-      : flow.actionFocus === "chooseFolder"
-        ? "failed.chooseFolder"
-        : "failed.cancel";
-  return addProjectIntentForAction(state, actionId);
+  return focusedActionIntent(state, flow, flow.actionFocus);
+}
+
+function focusedActionIntent(
+  state: TuiState,
+  flow: AddProjectFlowState,
+  focus: AddProjectActionFocus,
+): AddProjectInputIntent {
+  const actionId = addProjectActions(flow).find((action) => action.focus === focus)?.id;
+  return actionId === undefined ? { type: "none" } : addProjectIntentForAction(state, actionId);
 }
 
 function transitionIntent(action: AddProjectFlowAction): AddProjectInputIntent {

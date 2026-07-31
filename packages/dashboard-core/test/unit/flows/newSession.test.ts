@@ -306,7 +306,10 @@ describe("new session flow", () => {
 
     const editing = transitionNewSessionFlow(opened, { type: "editName" });
     if (editing?.mode !== "editName") throw new Error("expected edit mode");
-    const saveFocused = transitionNewSessionFlow(editing, { type: "editNameFocus", dir: 1 });
+    const saveFocused = transitionNewSessionFlow(editing, {
+      type: "editNameFocusSet",
+      focus: "save",
+    });
     if (saveFocused?.mode !== "editName") throw new Error("expected edit mode");
     const focusName = newSessionIntentForAction(saveFocused, "editName.name");
     expect(focusName).toEqual({

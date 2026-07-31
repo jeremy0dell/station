@@ -15,11 +15,8 @@ import {
   withoutSearchError,
 } from "./state.js";
 import type {
-  AddProjectEditIdActionFocus,
-  AddProjectFailedActionFocus,
   AddProjectFlowAction,
   AddProjectFlowState,
-  AddProjectReviewActionFocus,
   AddProjectTransition,
   CreateAddProjectFlowInput,
 } from "./types.js";
@@ -189,44 +186,31 @@ function moveActionFocus(state: AddProjectFlowState, dir: -1 | 1): AddProjectFlo
     if (state.editingId !== undefined) {
       return {
         ...state,
-        editIdActionFocus: cycleAction(
-          enabledActionFocus<AddProjectEditIdActionFocus>(state),
-          state.editIdActionFocus ?? "save",
-          dir,
-        ),
+        editIdActionFocus: nextEnabledActionFocus(state, state.editIdActionFocus ?? "save", dir),
       };
     }
     return {
       ...state,
-      actionFocus: cycleAction(
-        enabledActionFocus<AddProjectReviewActionFocus>(state),
-        state.actionFocus,
-        dir,
-      ),
+      actionFocus: nextEnabledActionFocus(state, state.actionFocus, dir),
     };
   }
   if (state.mode === "failed") {
     return {
       ...state,
-      actionFocus: cycleAction(
-        enabledActionFocus<AddProjectFailedActionFocus>(state),
-        state.actionFocus,
-        dir,
-      ),
+      actionFocus: nextEnabledActionFocus(state, state.actionFocus, dir),
     };
   }
   return state;
 }
 
-function enabledActionFocus<TFocus extends AddProjectActionFocus>(
+function nextEnabledActionFocus<TFocus extends AddProjectActionFocus>(
   state: AddProjectFlowState,
-): readonly TFocus[] {
-  return addProjectActions(state).flatMap((action) =>
+  current: TFocus,
+  dir: -1 | 1,
+): TFocus {
+  const actions = addProjectActions(state).flatMap((action) =>
     action.enabled && action.focus !== undefined ? [action.focus as TFocus] : [],
   );
-}
-
-function cycleAction<T extends string>(actions: readonly T[], current: T, dir: -1 | 1): T {
   const currentIndex = actions.indexOf(current);
   const start = currentIndex < 0 ? (dir === 1 ? -1 : 0) : currentIndex;
   const next = (start + dir + actions.length) % actions.length;
