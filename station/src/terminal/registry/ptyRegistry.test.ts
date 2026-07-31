@@ -362,6 +362,22 @@ describe("createPtyRegistry", () => {
     expect(screen?.cursor()).toEqual({ x: 1, y: 0 });
   });
 
+  it("applies control-only live reset data as one typed replay payload", async () => {
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+    screen?.feed("dirty\x1b[?1049halt");
+    await screen?.whenIdle();
+
+    await replay({
+      kind: "live-reset-recovery",
+      initialSize: { cols: 10, rows: 4 },
+      resetData: "\x1bcreset",
+    });
+
+    expect(screen?.isAltScreen()).toBe(false);
+    expect(screen?.viewRowText(0).trimEnd()).toBe("reset");
+  });
+
   it("restores semantic-copy metadata after exact VT replay and before live output", async () => {
     const { registry, replay } = orderedGeometryHarness();
     const screen = registry.get(PANE_A)?.screen;
@@ -369,14 +385,11 @@ describe("createPtyRegistry", () => {
     await replay({
       kind: "semantic-truncation-recovery",
       initialSize: { cols: 10, rows: 4 },
-      events: [
-        { type: "data", data: "first\r\n│ second" },
-        {
-          type: "semantic-copy",
-          normal: [{ row: 1, leadingColumns: 2, separatorSpaces: 1 }],
-          alternate: [],
-        },
-      ],
+      serializedVt: "first\r\n│ second",
+      semanticCopy: {
+        normal: [{ row: 1, leadingColumns: 2, separatorSpaces: 1 }],
+        alternate: [],
+      },
     });
 
     expect(screen?.viewRowCopyContinuation(1)).toEqual({
@@ -396,10 +409,8 @@ describe("createPtyRegistry", () => {
     await replay({
       kind: "semantic-truncation-recovery",
       initialSize: { cols: 10, rows: 4 },
-      events: [
-        { type: "data", data: "\x1bcfirst\r\nhard" },
-        { type: "semantic-copy", normal: [], alternate: [] },
-      ],
+      serializedVt: "\x1bcfirst\r\nhard",
+      semanticCopy: { normal: [], alternate: [] },
     });
 
     expect(screen?.viewRowCopyContinuation(1)).toBeUndefined();
@@ -412,14 +423,11 @@ describe("createPtyRegistry", () => {
       await replay({
         kind: "semantic-truncation-recovery",
         initialSize: { cols: 10, rows: 4 },
-        events: [
-          { type: "data", data: "restored" },
-          {
-            type: "semantic-copy",
-            normal: [{ row: 99, leadingColumns: 0, separatorSpaces: 0 }],
-            alternate: [],
-          },
-        ],
+        serializedVt: "restored",
+        semanticCopy: {
+          normal: [{ row: 99, leadingColumns: 0, separatorSpaces: 0 }],
+          alternate: [],
+        },
       });
 
       expect(terminalCorruptionCounters()).toMatchObject({
@@ -442,14 +450,11 @@ describe("createPtyRegistry", () => {
       await replay({
         kind: "semantic-truncation-recovery",
         initialSize: { cols: 10, rows: 4 },
-        events: [
-          { type: "data", data: "hard" },
-          {
-            type: "semantic-copy",
-            normal: [{ row: 1, leadingColumns: 0, separatorSpaces: 1025 }],
-            alternate: [],
-          },
-        ],
+        serializedVt: "hard",
+        semanticCopy: {
+          normal: [{ row: 1, leadingColumns: 0, separatorSpaces: 1025 }],
+          alternate: [],
+        },
       } as unknown as StationTerminalReplay);
 
       expect(screen?.viewRowCopyContinuation(1)).toBeUndefined();

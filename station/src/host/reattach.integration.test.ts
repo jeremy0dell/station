@@ -277,9 +277,10 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
 
     const captured = await control.attach(ptyId);
     expect(captured.ack.replay.kind).toBe("semantic-truncation-recovery");
-    const replay = captured.ack.replay.events
-      .flatMap((event) => (event.type === "data" ? [event.data] : []))
-      .join("");
+    if (captured.ack.replay.kind !== "semantic-truncation-recovery") {
+      throw new Error("Expected semantic truncation recovery.");
+    }
+    const replay = captured.ack.replay.serializedVt;
     const capturedScreen = createStationVtScreen({ size: { cols: 12, rows: 6 } });
     capturedScreen.feed(replay);
     await capturedScreen.whenIdle();

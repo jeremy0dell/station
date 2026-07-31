@@ -375,10 +375,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
             kind: "semantic-truncation-recovery",
             initialCols: recorded.cols,
             initialRows: recorded.rows,
-            events: [
-              ...capture.events.map((data) => ({ type: "data" as const, data })),
-              { type: "semantic-copy", ...capture.semanticCopy },
-            ],
+            serializedVt: capture.serializedVt,
+            semanticCopy: capture.semanticCopy,
           };
           captureDurationMs = performance.now() - captureStartedAt;
         } catch (error) {
@@ -401,7 +399,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
               kind: "live-reset-recovery",
               initialCols: recorded.cols,
               initialRows: recorded.rows,
-              events: [],
               resetData: error.resetData,
             };
           } else {

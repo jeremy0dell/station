@@ -1,5 +1,7 @@
-import type { TerminalOutputCompatibility } from "@station/contracts";
-import type { SemanticCopySnapshot } from "./protocol/semanticCopy.js";
+import type {
+  SemanticCopySnapshot,
+  TerminalOutputCompatibility,
+} from "@station/contracts";
 
 export type StationTerminalId = string;
 
@@ -27,33 +29,33 @@ export type StationTerminalDisposable = {
   dispose(): void;
 };
 
-/** Ordered replay data, production geometry, or content-free row-copy state. */
-export type StationTerminalReplayEvent =
+/** Verbatim terminal data or a production-geometry barrier retained by raw replay. */
+export type StationTerminalRawReplayEvent =
   | { type: "data"; data: string }
-  | { type: "resize"; cols: number; rows: number }
-  | ({ type: "semantic-copy" } & SemanticCopySnapshot);
+  | { type: "resize"; cols: number; rows: number };
 
 /**
- * Raw history, exact VT plus semantic-copy restoration, or Host mode-restoring
- * degraded data handed over with production geometry; Host reset data remains
- * one local event.
+ * Raw history, exact serialized VT plus semantic-copy restoration, or a
+ * control-only reset. Variant-specific fields make invalid replay ordering
+ * unrepresentable inside Station.
  */
-export type StationTerminalReplay = {
-  initialSize: StationTerminalSize;
-} & (
+export type StationTerminalReplay =
   | {
       kind: "raw-complete";
-      events: readonly Exclude<StationTerminalReplayEvent, { type: "semantic-copy" }>[];
+      initialSize: StationTerminalSize;
+      events: readonly StationTerminalRawReplayEvent[];
     }
   | {
       kind: "semantic-truncation-recovery";
-      events: readonly Exclude<StationTerminalReplayEvent, { type: "resize" }>[];
+      initialSize: StationTerminalSize;
+      serializedVt: string;
+      semanticCopy: SemanticCopySnapshot;
     }
   | {
       kind: "live-reset-recovery";
-      events: readonly Extract<StationTerminalReplayEvent, { type: "data" }>[];
-    }
-);
+      initialSize: StationTerminalSize;
+      resetData: string;
+    };
 
 /** Attachment failure that does not prove the backing process exited. */
 export type StationTerminalUnavailable = {
@@ -81,10 +83,10 @@ export type StationTerminalProcess = {
     listener: (event: StationTerminalUnavailable) => void,
   ): StationTerminalDisposable;
   /**
-   * Replayed snapshot delivery. When wired, ordered data, resize, and semantic-copy
-   * events bypass onData and the terminal awaits the listener before streaming live
-   * data, so exact copy state is restored before queued output. Terminals without
-   * replayable history never emit this.
+   * Replayed snapshot delivery. Raw events, exact serialized VT plus semantic-copy
+   * state, or control-only reset data bypass onData; the terminal awaits the listener
+   * before streaming live data, so replay reaches VT idle and restores copy state
+   * before queued output. Terminals without replayable history never emit this.
    */
   onReplay?(
     listener: (replay: StationTerminalReplay) => void | Promise<void>,

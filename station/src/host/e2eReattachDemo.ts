@@ -15,6 +15,21 @@ const HOST_ENTRY = fileURLToPath(new URL("./hostMain.ts", import.meta.url));
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const log = (text = "") => process.stdout.write(`${text}\n`);
 
+function replayText(replay: HostAttachment["ack"]["replay"]): string {
+  switch (replay.kind) {
+    case "raw-complete":
+      return replay.events
+        .flatMap((event) => (event.type === "data" ? [event.data] : []))
+        .join("");
+    case "semantic-truncation-recovery":
+      return replay.serializedVt;
+    case "live-reset-recovery":
+      return replay.resetData;
+    default:
+      throw new Error("Unexpected Station Host replay kind.");
+  }
+}
+
 async function main(): Promise<void> {
   const stateDir = process.argv.includes("--dev")
     ? devStateDir()
@@ -77,13 +92,7 @@ async function main(): Promise<void> {
   const samePid = attach2.ack.pid === livePid;
   log(`  pid=${attach2.ack.pid} — same agent as before (pid ${livePid})? ${samePid ? "YES ✓" : "NO ✗"}`);
   log(`  replayed terminal state (${attach2.ack.replay.kind}):`);
-  log(
-    `    ${attach2.ack.replay.events
-      .flatMap((event) => (event.type === "data" ? [event.data] : []))
-      .join("")
-      .trim()
-      .replace(/\n/g, " | ")}`,
-  );
+  log(`    ${replayText(attach2.ack.replay).trim().replace(/\n/g, " | ")}`);
   await readFramesFor(attach2, 3000, (data) => process.stdout.write(`  [c2] ${data}`));
   client2.dispose();
   log("");

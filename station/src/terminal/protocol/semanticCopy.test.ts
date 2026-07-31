@@ -48,6 +48,13 @@ describe("Station semantic copy protocol", () => {
       await write(terminal, "\r\nvisible\x1b]6973;station-copy;1;not-a-number\x1b\\text");
       expect(terminal.buffer.active.getLine(2)?.translateToString(true)).toBe("visibletext");
       expect(state.continuationForBufferRow("normal", 2)).toBeUndefined();
+
+      const oversizedPayload = `station-copy;1;${"0".repeat(10_000)}`;
+      await write(terminal, `\r\n\x1b]6973;${oversizedPayload}\x1b\\still-visible`);
+      expect(terminal.buffer.active.getLine(3)?.translateToString(true)).toBe(
+        "still-visible",
+      );
+      expect(state.continuationForBufferRow("normal", 3)).toBeUndefined();
     } finally {
       state.dispose();
       terminal.dispose();
@@ -119,6 +126,10 @@ describe("Station semantic copy protocol", () => {
         }),
       ).toEqual({ applied: 0, dropped: 1 });
       expect(state.snapshot()).toEqual({ normal: [], alternate: [] });
+      state.restore({
+        normal: [{ row: 0, leadingColumns: 0, separatorSpaces: 0 }],
+        alternate: [],
+      });
       expect(() =>
         state.restore({
           normal: [
@@ -128,6 +139,7 @@ describe("Station semantic copy protocol", () => {
           alternate: [],
         }),
       ).toThrow();
+      expect(state.snapshot()).toEqual({ normal: [], alternate: [] });
     } finally {
       state.dispose();
       terminal.dispose();
@@ -166,6 +178,7 @@ describe("Station semantic copy protocol", () => {
       { sequence: "\x1b[2;1H\x1b[J", remaining: [0] },
       { sequence: "\x1b[2;1H\x1b[1J", remaining: [2] },
       { sequence: "\x1b[2;1H\x1b[3J", remaining: [] },
+      { sequence: "\x1b[99J", remaining: [] },
       { sequence: "\x1b[!p", remaining: [] },
     ];
 

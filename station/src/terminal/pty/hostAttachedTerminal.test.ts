@@ -778,10 +778,8 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           kind: "semantic-truncation-recovery",
           initialCols: 80,
           initialRows: 24,
-          events: [
-            { type: "data", data: semanticData },
-            { type: "semantic-copy", normal: [], alternate: [] },
-          ],
+          serializedVt: semanticData,
+          semanticCopy: { normal: [], alternate: [] },
         },
       }),
     );
@@ -819,7 +817,6 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           kind: "live-reset-recovery",
           initialCols: 80,
           initialRows: 24,
-          events: [],
           resetData,
         },
       }),
@@ -844,7 +841,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
         {
           kind: "live-reset-recovery",
           initialSize: { cols: 80, rows: 24 },
-          events: [{ type: "data", data: resetData }],
+          resetData,
         },
       ]);
       expect(ctrl.state.resizes).toEqual([]);

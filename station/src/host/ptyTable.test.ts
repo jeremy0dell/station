@@ -202,7 +202,12 @@ describe("createPtyTable", () => {
     expect(await iterator.next()).toMatchObject({
       value: { type: "resize", cols: 100, rows: 30 },
     });
-    expect((await table.attach(ptyId)).ack.replay.events).toEqual([
+    const replay = (await table.attach(ptyId)).ack.replay;
+    expect(replay.kind).toBe("raw-complete");
+    if (replay.kind !== "raw-complete") {
+      throw new Error("Expected complete raw replay.");
+    }
+    expect(replay.events).toEqual([
       { type: "data", data: "before" },
       { type: "data", data: "\x1b[1;23r\x1b[" },
       { type: "resize", cols: 100, rows: 30 },
@@ -232,7 +237,7 @@ describe("createPtyTable", () => {
         write() {},
         resize() {},
         capture: async () => ({
-          events: ["semantic-state"],
+          serializedVt: "\x1bcsemantic-state",
           semanticCopy: { normal: [], alternate: [] },
         }),
         dispose() {},
@@ -254,10 +259,8 @@ describe("createPtyTable", () => {
       kind: "semantic-truncation-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [
-        { type: "data", data: "semantic-state" },
-        { type: "semantic-copy", normal: [], alternate: [] },
-      ],
+      serializedVt: "\x1bcsemantic-state",
+      semanticCopy: { normal: [], alternate: [] },
     });
   });
 
@@ -291,7 +294,7 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("during");
     table.resize(ptyId, 100, 30);
     capture.resolve({
-      events: ["snapshot-at-boundary"],
+      serializedVt: "\x1bcsnapshot-at-boundary",
       semanticCopy: { normal: [], alternate: [] },
     });
     const attached = await attaching;
@@ -304,10 +307,8 @@ describe("createPtyTable", () => {
         kind: "semantic-truncation-recovery",
         initialCols: 80,
         initialRows: 24,
-        events: [
-          { type: "data", data: "snapshot-at-boundary" },
-          { type: "semantic-copy", ...EMPTY_SEMANTIC_COPY },
-        ],
+        serializedVt: "\x1bcsnapshot-at-boundary",
+        semanticCopy: EMPTY_SEMANTIC_COPY,
       },
     });
     expect(await frames.next()).toMatchObject({ value: { type: "data", data: "during" } });
@@ -355,7 +356,6 @@ describe("createPtyTable", () => {
       kind: "live-reset-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [],
       resetData,
     });
     expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({
@@ -403,7 +403,6 @@ describe("createPtyTable", () => {
       kind: "live-reset-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [],
       resetData,
     });
     expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({

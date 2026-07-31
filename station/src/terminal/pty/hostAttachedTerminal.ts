@@ -231,10 +231,22 @@ export function createHostAttachedTerminal(
       return;
     }
     if (replayListeners.size === 0) {
-      for (const event of replay.events) {
-        if (event.type === "data") {
-          emitData(event.data);
-        }
+      switch (replay.kind) {
+        case "raw-complete":
+          for (const event of replay.events) {
+            if (event.type === "data") {
+              emitData(event.data);
+            }
+          }
+          break;
+        case "semantic-truncation-recovery":
+          emitData(replay.serializedVt);
+          break;
+        case "live-reset-recovery":
+          emitData(replay.resetData);
+          break;
+        default:
+          return unreachableAttachmentState(replay);
       }
       return;
     }
@@ -305,14 +317,15 @@ export function createHostAttachedTerminal(
         replay = {
           kind: "semantic-truncation-recovery",
           initialSize,
-          events: hostReplay.events,
+          serializedVt: hostReplay.serializedVt,
+          semanticCopy: hostReplay.semanticCopy,
         };
         break;
       case "live-reset-recovery":
         replay = {
           kind: "live-reset-recovery",
           initialSize,
-          events: [{ type: "data", data: hostReplay.resetData }],
+          resetData: hostReplay.resetData,
         };
         break;
       default:
@@ -369,10 +382,11 @@ export function createHostAttachedTerminal(
     // A same-size TIOCSWINSZ emits no SIGWINCH, so stale same-size frames need a
     // temporary row change whenever replay or reconnect requires a child repaint.
     const sizeUnchanged = size.cols === attachTarget.cols && size.rows === attachTarget.rows;
+    const replay = opened.ack.replay;
     const requiresChildRepaint =
       isReconnect ||
-      opened.ack.replay.kind === "live-reset-recovery" ||
-      opened.ack.replay.events.some((event) => event.type === "data");
+      replay.kind !== "raw-complete" ||
+      replay.events.some((event) => event.type === "data");
     if (
       sizeUnchanged &&
       requiresChildRepaint &&
@@ -404,6 +418,7 @@ export function createHostAttachedTerminal(
       if (data === undefined) {
         break;
       }
+      // pi-lens-ignore: await-in-loop
       await opened.write(data);
       pendingWrites.shift();
     }

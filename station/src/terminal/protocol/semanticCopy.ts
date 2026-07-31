@@ -1,48 +1,25 @@
+import {
+  SEMANTIC_COPY_MAX_SEPARATOR_SPACES,
+  SemanticCopySnapshotSchema,
+  type SemanticCopySnapshot,
+  type SemanticCopySnapshotEntry,
+} from "@station/contracts";
 import { type IMarker, Terminal } from "@xterm/headless";
-import { z } from "zod";
-import { CsiFinal, EraseInDisplayMode } from "./controlBytes.js";
+import {
+  CsiFinal,
+  CsiIdentifier,
+  EraseInDisplayMode,
+  EscIdentifier,
+} from "./controlBytes.js";
+
+export type { SemanticCopySnapshot } from "@station/contracts";
 
 const STATION_SEMANTIC_COPY_OSC = 6973;
 const STATION_SEMANTIC_COPY_VERSION = 1;
-const MAX_SEMANTIC_COPY_SEPARATOR_SPACES = 1024;
-const MAX_SEMANTIC_COPY_BUFFER_ROW = 1_000_000;
-const MAX_SEMANTIC_COPY_LEADING_COLUMNS = 1_000_000;
-const MAX_SEMANTIC_COPY_ROWS_PER_BUFFER = 20_000;
+const SEMANTIC_COPY_OSC_PREFIX = `station-copy;${STATION_SEMANTIC_COPY_VERSION};`;
+const MAX_SEMANTIC_COPY_OSC_PAYLOAD_LENGTH =
+  SEMANTIC_COPY_OSC_PREFIX.length + String(SEMANTIC_COPY_MAX_SEPARATOR_SPACES).length;
 
-const SemanticCopySnapshotEntrySchema = z
-  .object({
-    row: z.number().int().min(0).max(MAX_SEMANTIC_COPY_BUFFER_ROW),
-    leadingColumns: z.number().int().min(0).max(MAX_SEMANTIC_COPY_LEADING_COLUMNS),
-    separatorSpaces: z.number().int().min(0).max(MAX_SEMANTIC_COPY_SEPARATOR_SPACES),
-  })
-  .strict();
-
-const SemanticCopySnapshotRowsSchema = z
-  .array(SemanticCopySnapshotEntrySchema)
-  .max(MAX_SEMANTIC_COPY_ROWS_PER_BUFFER)
-  .superRefine((rows, context) => {
-    const seen = new Set<number>();
-    for (const [index, row] of rows.entries()) {
-      if (seen.has(row.row)) {
-        context.addIssue({
-          code: "custom",
-          path: [index, "row"],
-          message: "Semantic-copy buffer rows must be unique.",
-        });
-      }
-      seen.add(row.row);
-    }
-  });
-
-const SemanticCopySnapshotSchema = z
-  .object({
-    normal: SemanticCopySnapshotRowsSchema,
-    alternate: SemanticCopySnapshotRowsSchema,
-  })
-  .strict();
-
-type SemanticCopySnapshotEntry = z.infer<typeof SemanticCopySnapshotEntrySchema>;
-export type SemanticCopySnapshot = z.infer<typeof SemanticCopySnapshotSchema>;
 type SemanticCopyApplicationContinuation = Omit<SemanticCopySnapshotEntry, "row">;
 type SemanticCopyBufferType = "normal" | "alternate";
 export type SemanticCopyRestoreResult = { applied: number; dropped: number };
@@ -85,10 +62,10 @@ export function semanticCopyContinuationMarker(separatorSpaces: number): string 
   if (
     !Number.isInteger(separatorSpaces) ||
     separatorSpaces < 0 ||
-    separatorSpaces > MAX_SEMANTIC_COPY_SEPARATOR_SPACES
+    separatorSpaces > SEMANTIC_COPY_MAX_SEPARATOR_SPACES
   ) {
     throw new RangeError(
-      `Semantic-copy separator spaces must be an integer from 0 to ${MAX_SEMANTIC_COPY_SEPARATOR_SPACES}.`,
+      `Semantic-copy separator spaces must be an integer from 0 to ${SEMANTIC_COPY_MAX_SEPARATOR_SPACES}.`,
     );
   }
   return `\x1b]${STATION_SEMANTIC_COPY_OSC};station-copy;${STATION_SEMANTIC_COPY_VERSION};${separatorSpaces}\x1b\\`;
@@ -119,7 +96,10 @@ class XtermSemanticCopyState implements SemanticCopyState {
     this.#terminal = terminal;
     const pinned = terminal as unknown as PinnedXtermTerminal;
     const markerBuffers = pinned._core?._bufferService?.buffers;
-    if (markerBuffers?.normal === undefined || markerBuffers.alt === undefined) {
+    if (
+      typeof markerBuffers?.normal?.addMarker !== "function" ||
+      typeof markerBuffers.alt?.addMarker !== "function"
+    ) {
       throw new Error("The pinned xterm build does not expose semantic-copy marker buffers.");
     }
     this.#markerBuffers = markerBuffers;
@@ -138,8 +118,10 @@ class XtermSemanticCopyState implements SemanticCopyState {
       terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) =>
         this.#handleDisplayErase(params),
       ),
-      terminal.parser.registerEscHandler({ final: "c" }, () => this.#handleReset()),
-      terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () =>
+      terminal.parser.registerEscHandler(EscIdentifier.ResetToInitialState, () =>
+        this.#handleReset(),
+      ),
+      terminal.parser.registerCsiHandler(CsiIdentifier.SoftTerminalReset, () =>
         this.#handleReset(),
       ),
     ];
@@ -164,20 +146,25 @@ class XtermSemanticCopyState implements SemanticCopyState {
   }
 
   restore(snapshot: SemanticCopySnapshot): SemanticCopyRestoreResult {
-    const parsed = SemanticCopySnapshotSchema.parse(snapshot);
     this.clear();
-    let applied = 0;
-    let dropped = 0;
-    for (const bufferType of ["normal", "alternate"] as const) {
-      for (const { row, leadingColumns, separatorSpaces } of parsed[bufferType]) {
-        if (this.#addEntry(bufferType, row, { leadingColumns, separatorSpaces })) {
-          applied += 1;
-        } else {
-          dropped += 1;
+    try {
+      const parsed = SemanticCopySnapshotSchema.parse(snapshot);
+      let applied = 0;
+      let dropped = 0;
+      for (const bufferType of ["normal", "alternate"] as const) {
+        for (const { row, leadingColumns, separatorSpaces } of parsed[bufferType]) {
+          if (this.#addEntry(bufferType, row, { leadingColumns, separatorSpaces })) {
+            applied += 1;
+          } else {
+            dropped += 1;
+          }
         }
       }
+      return { applied, dropped };
+    } catch (error) {
+      this.clear();
+      throw error;
     }
-    return { applied, dropped };
   }
 
   clear(): void {
@@ -201,12 +188,15 @@ class XtermSemanticCopyState implements SemanticCopyState {
   }
 
   #handleOsc(data: string): boolean {
+    if (data.length > MAX_SEMANTIC_COPY_OSC_PAYLOAD_LENGTH) {
+      return true;
+    }
     const match = /^station-copy;1;(0|[1-9]\d{0,3})$/.exec(data);
     if (match === null) {
       return true;
     }
     const separatorSpaces = Number(match[1]);
-    if (separatorSpaces > MAX_SEMANTIC_COPY_SEPARATOR_SPACES) {
+    if (separatorSpaces > SEMANTIC_COPY_MAX_SEPARATOR_SPACES) {
       return true;
     }
     const bufferType = this.#activeBufferType();
@@ -233,15 +223,28 @@ class XtermSemanticCopyState implements SemanticCopyState {
     const cursorRow = buffer.baseY + buffer.cursorY;
     const lastViewportRow = buffer.baseY + this.#terminal.rows - 1;
     const rawMode = params[0];
-    const mode = Array.isArray(rawMode) ? rawMode[0] : rawMode;
-    if (mode === 1) {
-      this.#clearRange(bufferType, firstViewportRow, cursorRow);
-    } else if (mode === EraseInDisplayMode.EntireDisplay) {
-      this.#clearRange(bufferType, firstViewportRow, lastViewportRow);
-    } else if (mode === 3) {
-      this.#clearRange(bufferType, 0, lastViewportRow);
-    } else {
-      this.#clearRange(bufferType, cursorRow, lastViewportRow);
+    const mode = Array.isArray(rawMode)
+      ? rawMode[0]
+      : (rawMode ?? EraseInDisplayMode.CursorToEnd);
+    switch (mode) {
+      case EraseInDisplayMode.CursorToEnd:
+        this.#clearRange(bufferType, cursorRow, lastViewportRow);
+        break;
+      case EraseInDisplayMode.StartToCursor:
+        this.#clearRange(bufferType, firstViewportRow, cursorRow);
+        break;
+      case EraseInDisplayMode.EntireDisplay:
+        this.#clearRange(bufferType, firstViewportRow, lastViewportRow);
+        break;
+      case EraseInDisplayMode.SavedLines:
+        // ED3 renumbers saved-line markers when xterm clears scrollback, so all
+        // application continuations in that buffer must fail closed beforehand.
+        this.#clearBuffer(bufferType);
+        break;
+      default:
+        // Unknown erase modes must not leave a stale continuation on content
+        // whose mutation semantics this observer cannot prove.
+        this.#clearBuffer(bufferType);
     }
     return false;
   }
@@ -284,6 +287,14 @@ class XtermSemanticCopyState implements SemanticCopyState {
     this.#invalidateIndex();
     if (!entry.marker.isDisposed) {
       entry.marker.dispose();
+    }
+  }
+
+  #clearBuffer(bufferType: SemanticCopyBufferType): void {
+    for (const entry of [...this.#entries]) {
+      if (entry.bufferType === bufferType) {
+        this.#removeEntry(entry);
+      }
     }
   }
 

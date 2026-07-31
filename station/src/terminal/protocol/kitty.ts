@@ -22,7 +22,12 @@ export const KittyEvent = {
   Release: 3,
 } as const;
 
-/** Bounded keyboard-mode stack; full pushes evict the oldest entry per the protocol. */
+/** Keyboard-mode operations and bounded mode stack from the kitty protocol. */
 export const KittyKeyboard = {
+  FlagMode: {
+    Replace: 1,
+    Add: 2,
+    Remove: 3,
+  },
   StackLimit: 64,
 } as const;

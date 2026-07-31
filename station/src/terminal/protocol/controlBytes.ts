@@ -20,9 +20,25 @@ export const CsiFinal = {
   EraseCharacter: "X",
 } as const;
 
+export const EscIdentifier = {
+  /** RIS — Reset to Initial State (ESC c). */
+  ResetToInitialState: { final: "c" },
+} as const;
+
+export const CsiIdentifier = {
+  /** DECSTR — Soft Terminal Reset (CSI ! p). */
+  SoftTerminalReset: { intermediates: "!", final: "p" },
+} as const;
+
 export const EraseInDisplayMode = {
-  /** ED2 — erase the entire display. */
+  /** ED0 — erase from the cursor through the end of the viewport. */
+  CursorToEnd: 0,
+  /** ED1 — erase from the start of the viewport through the cursor. */
+  StartToCursor: 1,
+  /** ED2 — erase the entire viewport. */
   EntireDisplay: 2,
+  /** ED3 — erase saved lines. */
+  SavedLines: 3,
 } as const;
 
 /** Regex-source escapes of the same bytes, for patterns built via `new RegExp`. */

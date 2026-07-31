@@ -1,4 +1,13 @@
-import { SafeErrorSchema, TerminalOutputCompatibilitySchema } from "@station/contracts";
+import {
+  SafeErrorSchema,
+  SemanticCopySnapshotSchema,
+  STATION_TERMINAL_MAX_COLUMNS,
+  STATION_TERMINAL_MAX_ROWS,
+  STATION_TERMINAL_MAX_SCROLLBACK_ROWS,
+  STATION_TERMINAL_MIN_COLUMNS,
+  STATION_TERMINAL_MIN_ROWS,
+  TerminalOutputCompatibilitySchema,
+} from "@station/contracts";
 import { z } from "zod";
 
 /**
@@ -9,6 +18,16 @@ export const HOST_PROTOCOL_VERSION = 6;
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
+const terminalColumnsSchema = z
+  .number()
+  .int()
+  .min(STATION_TERMINAL_MIN_COLUMNS)
+  .max(STATION_TERMINAL_MAX_COLUMNS);
+const terminalRowsSchema = z
+  .number()
+  .int()
+  .min(STATION_TERMINAL_MIN_ROWS)
+  .max(STATION_TERMINAL_MAX_ROWS);
 
 export const HostRequestSchema = z
   .object({
@@ -85,8 +104,8 @@ export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
   args: z.array(z.string()),
   env: z.record(z.string(), z.string()).optional(),
   cwd: z.string().min(1),
-  cols: z.number().int().positive(),
-  rows: z.number().int().positive(),
+  cols: terminalColumnsSchema,
+  rows: terminalRowsSchema,
   outputCompatibility: TerminalOutputCompatibilitySchema.optional(),
 }).strict();
 export type HostSpawnParams = z.infer<typeof HostSpawnParamsSchema>;
@@ -96,15 +115,15 @@ export type HostSpawnResult = z.infer<typeof HostSpawnResultSchema>;
 
 export const HostWriteParamsSchema = z.object({ ptyId: idSchema, data: z.string() }).strict();
 export const HostResizeParamsSchema = z
-  .object({ ptyId: idSchema, cols: z.number().int(), rows: z.number().int() })
+  .object({ ptyId: idSchema, cols: terminalColumnsSchema, rows: terminalRowsSchema })
   .strict();
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
 export const HostListEntrySchema = HostPtyIdentitySchema.extend({
   ptyId: idSchema,
   pid: z.number().int(),
   alive: z.boolean(),
-  cols: z.number().int(),
-  rows: z.number().int(),
+  cols: terminalColumnsSchema,
+  rows: terminalRowsSchema,
 }).strict();
 export type HostListEntry = z.infer<typeof HostListEntrySchema>;
 
@@ -161,101 +180,85 @@ export const HostReplayDataEventSchema = z
 export const HostReplayResizeEventSchema = z
   .object({
     type: z.literal("resize"),
-    cols: z.number().int().positive(),
-    rows: z.number().int().positive(),
-  })
-  .strict();
-const HostSemanticCopyRowSchema = z
-  .object({
-    row: z.number().int().min(0).max(1_000_000),
-    leadingColumns: z.number().int().min(0).max(1_000_000),
-    separatorSpaces: z.number().int().min(0).max(1024),
-  })
-  .strict();
-const HostSemanticCopyRowsSchema = z
-  .array(HostSemanticCopyRowSchema)
-  .max(20_000)
-  .superRefine((rows, context) => {
-    const seen = new Set<number>();
-    for (const [index, row] of rows.entries()) {
-      if (seen.has(row.row)) {
-        context.addIssue({
-          code: "custom",
-          path: [index, "row"],
-          message: "Semantic-copy buffer rows must be unique.",
-        });
-      }
-      seen.add(row.row);
-    }
-  });
-export const HostReplaySemanticCopyEventSchema = z
-  .object({
-    type: z.literal("semantic-copy"),
-    normal: HostSemanticCopyRowsSchema,
-    alternate: HostSemanticCopyRowsSchema,
+    cols: terminalColumnsSchema,
+    rows: terminalRowsSchema,
   })
   .strict();
 export const HostReplayEventSchema = z.discriminatedUnion("type", [
   HostReplayDataEventSchema,
   HostReplayResizeEventSchema,
-  HostReplaySemanticCopyEventSchema,
 ]);
 export type HostReplayEvent = z.infer<typeof HostReplayEventSchema>;
 
-const HostRawReplayEventSchema = z.discriminatedUnion("type", [
-  HostReplayDataEventSchema,
-  HostReplayResizeEventSchema,
-]);
-const HostSemanticRecoveryEventsSchema = z
-  .array(
-    z.discriminatedUnion("type", [HostReplayDataEventSchema, HostReplaySemanticCopyEventSchema]),
-  )
-  .min(2)
-  .superRefine((events, context) => {
-    const hasEarlySidecar = events.slice(0, -1).some((event) => event.type === "semantic-copy");
-    if (hasEarlySidecar || events.at(-1)?.type !== "semantic-copy") {
-      context.addIssue({
-        code: "custom",
-        message: "Semantic recovery requires exactly one final semantic-copy event.",
-      });
+const HostSemanticRecoveryReplaySchema = z
+  .object({
+    kind: z.literal("semantic-truncation-recovery"),
+    initialCols: terminalColumnsSchema,
+    initialRows: terminalRowsSchema,
+    serializedVt: z.string().startsWith(RIS),
+    semanticCopy: SemanticCopySnapshotSchema,
+  })
+  .strict()
+  .superRefine((replay, context) => {
+    const rowLimits = {
+      normal: STATION_TERMINAL_MAX_SCROLLBACK_ROWS + replay.initialRows,
+      alternate: replay.initialRows,
+    } as const;
+    for (const bufferType of ["normal", "alternate"] as const) {
+      const rows = replay.semanticCopy[bufferType];
+      const rowLimit = rowLimits[bufferType];
+      if (rows.length > rowLimit) {
+        context.addIssue({
+          code: "custom",
+          path: ["semanticCopy", bufferType],
+          message: `Semantic-copy ${bufferType} rows exceed the replay buffer capacity.`,
+        });
+      }
+      for (const [index, row] of rows.entries()) {
+        if (row.row >= rowLimit) {
+          context.addIssue({
+            code: "custom",
+            path: ["semanticCopy", bufferType, index, "row"],
+            message: `Semantic-copy ${bufferType} row is outside the replay buffer.`,
+          });
+        }
+        if (row.leadingColumns > replay.initialCols) {
+          context.addIssue({
+            code: "custom",
+            path: ["semanticCopy", bufferType, index, "leadingColumns"],
+            message: "Semantic-copy leading columns exceed the replay width.",
+          });
+        }
+      }
     }
   });
 
 /**
  * Verbatim history, exact semantic restoration, or a control-only degraded
- * reset captured at the Host's semantic boundary. Exact semantic recovery ends
- * with one content-free semantic-copy sidecar after serialized VT; raw replay
- * carries the original OSC bytes and must not duplicate that sidecar. Live reset
- * never carries historical events, and its reset data must begin with RIS.
+ * reset captured at the Host's semantic boundary. Exact semantic recovery carries
+ * one serialized VT payload and one content-free sidecar; consumers must parse the
+ * VT to idle before restoring that sidecar. Raw replay carries the original OSC
+ * bytes, while live reset carries no historical data and must begin with RIS.
  */
 export const HostReplaySchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("raw-complete"),
-      initialCols: z.number().int().positive(),
-      initialRows: z.number().int().positive(),
-      events: z.array(HostRawReplayEventSchema),
+      initialCols: terminalColumnsSchema,
+      initialRows: terminalRowsSchema,
+      events: z.array(HostReplayEventSchema),
     })
     .strict(),
-  z
-    .object({
-      kind: z.literal("semantic-truncation-recovery"),
-      initialCols: z.number().int().positive(),
-      initialRows: z.number().int().positive(),
-      events: HostSemanticRecoveryEventsSchema,
-    })
-    .strict(),
+  HostSemanticRecoveryReplaySchema,
   z
     .object({
       kind: z.literal("live-reset-recovery"),
-      initialCols: z.number().int().positive(),
-      initialRows: z.number().int().positive(),
-      events: z.array(HostReplayEventSchema).length(0),
+      initialCols: terminalColumnsSchema,
+      initialRows: terminalRowsSchema,
       resetData: z.string().startsWith(RIS),
     })
     .strict(),
 ]);
-export type HostReplay = z.infer<typeof HostReplaySchema>;
 
 /**
  * Attach acknowledgement captured atomically with the live listener. Raw replay
@@ -268,8 +271,8 @@ export const HostAttachAckSchema = z
     subscribed: z.literal(true),
     ptyId: idSchema,
     pid: z.number().int(),
-    cols: z.number().int(),
-    rows: z.number().int(),
+    cols: terminalColumnsSchema,
+    rows: terminalRowsSchema,
     exited: z.boolean(),
     replay: HostReplaySchema,
   })
@@ -277,10 +280,12 @@ export const HostAttachAckSchema = z
   .superRefine((ack, context) => {
     let replayCols = ack.replay.initialCols;
     let replayRows = ack.replay.initialRows;
-    for (const event of ack.replay.events) {
-      if (event.type === "resize") {
-        replayCols = event.cols;
-        replayRows = event.rows;
+    if (ack.replay.kind === "raw-complete") {
+      for (const event of ack.replay.events) {
+        if (event.type === "resize") {
+          replayCols = event.cols;
+          replayRows = event.rows;
+        }
       }
     }
     if (replayCols !== ack.cols || replayRows !== ack.rows) {
@@ -300,8 +305,8 @@ export const HostFrameSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("resize"),
       ptyId: idSchema,
-      cols: z.number().int().positive(),
-      rows: z.number().int().positive(),
+      cols: terminalColumnsSchema,
+      rows: terminalRowsSchema,
     })
     .strict(),
   z

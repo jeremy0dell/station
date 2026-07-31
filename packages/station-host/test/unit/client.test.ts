@@ -1,3 +1,4 @@
+import { STATION_TERMINAL_MAX_COLUMNS, STATION_TERMINAL_MAX_ROWS } from "@station/contracts";
 import {
   createStationHostClient,
   HOST_PROTOCOL_VERSION,
@@ -82,9 +83,18 @@ describe("createStationHostClient", () => {
     expect(HostFrameSchema.safeParse({ ...frame, unexpected: true }).success).toBe(false);
     expect(HostFrameSchema.safeParse({ ...frame, cols: 5.5 }).success).toBe(false);
     expect(HostFrameSchema.safeParse({ ...frame, rows: 0 }).success).toBe(false);
+    expect(
+      HostFrameSchema.safeParse({
+        ...frame,
+        cols: STATION_TERMINAL_MAX_COLUMNS + 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      HostFrameSchema.safeParse({ ...frame, rows: STATION_TERMINAL_MAX_ROWS + 1 }).success,
+    ).toBe(false);
   });
 
-  it("accepts only strict ordered replay events", () => {
+  it("accepts only strict variant-specific replay payloads", () => {
     const ack = {
       subscribed: true,
       ptyId: "pty-1",
@@ -128,7 +138,6 @@ describe("createStationHostClient", () => {
         kind: "live-reset-recovery",
         initialCols: 5,
         initialRows: 4,
-        events: [],
         resetData: "\x1bc\x1b[?2004h",
       },
     };
@@ -140,7 +149,6 @@ describe("createStationHostClient", () => {
           kind: "live-reset-recovery",
           initialCols: 5,
           initialRows: 4,
-          events: [],
         },
       }).success,
     ).toBe(false);

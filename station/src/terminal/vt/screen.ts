@@ -11,7 +11,12 @@ import {
   type TerminalCorruptionKind,
   writePaneEvidenceDump,
 } from "../diagnostics.js";
-import { CsiFinal, EraseInDisplayMode } from "../protocol/controlBytes.js";
+import {
+  CsiFinal,
+  CsiIdentifier,
+  EraseInDisplayMode,
+  EscIdentifier,
+} from "../protocol/controlBytes.js";
 import { DecMode } from "../protocol/decset.js";
 import { KittyKeyboard } from "../protocol/kitty.js";
 import {
@@ -475,7 +480,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // RIS and DECSTR both restore a visible cursor; without these a `reset`
   // after a cursor-hiding app leaves the pane cursorless forever. RIS also
   // clears mouse modes (xterm resets the flavor; clear our SGR bit to match).
-  terminal.parser.registerEscHandler({ final: "c" }, () => {
+  terminal.parser.registerEscHandler(EscIdentifier.ResetToInitialState, () => {
     cursorVisible = true;
     sgrMouse = false;
     normalBufferIsSynchronizedFrame = false;
@@ -491,7 +496,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
-  terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+  terminal.parser.registerCsiHandler(CsiIdentifier.SoftTerminalReset, () => {
     cursorVisible = true;
     normalBufferIsSynchronizedFrame = false;
     return false;
@@ -507,10 +512,10 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   });
   terminal.parser.registerCsiHandler({ prefix: "=", final: "u" }, (params) => {
     const state = activeKittyKeyboard();
-    const [flags = 0, mode = 1] = primaryParams(params);
-    if (mode === 2) {
+    const [flags = 0, mode = KittyKeyboard.FlagMode.Replace] = primaryParams(params);
+    if (mode === KittyKeyboard.FlagMode.Add) {
       state.flags |= flags;
-    } else if (mode === 3) {
+    } else if (mode === KittyKeyboard.FlagMode.Remove) {
       state.flags &= ~flags;
     } else {
       state.flags = flags;

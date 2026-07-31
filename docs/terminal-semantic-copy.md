@@ -76,21 +76,25 @@ line deletion, resize reflow, and eviction. Row erase, display erase, DECSTR, RI
 and buffer clearing remove stale state.
 
 Complete Host replay contains the original OSC bytes, so it carries no separate
-sidecar. When raw history has been evicted, Host protocol 6 sends exact serialized
-VT followed by exactly one `semantic-copy` event containing only bounded normal- and
-alternate-buffer row numbers, prefix columns, and separator counts. An explicit empty
-sidecar clears stale state. Station applies the sidecar after VT reaches idle and
-before queued live frames or pane-geometry recovery.
+sidecar. When raw history has been evicted, Host protocol 6 carries one
+`serializedVt` payload and one `semanticCopy` sidecar containing only bounded normal-
+and alternate-buffer row numbers, prefix columns, and separator counts. This
+variant-specific shape cannot represent a missing, duplicated, or out-of-order
+sidecar. An explicit empty sidecar clears stale state. Station parses the VT to idle
+before restoring the sidecar and before queued live frames or pane-geometry recovery.
 
 A sidecar row that no longer maps to the restored buffer is dropped with a
 content-free terminal diagnostic; the live PTY remains attached. Control-only live
-reset recovery uses RIS and contains no history or semantic-copy event.
+reset recovery uses RIS and contains neither history nor a semantic-copy sidecar.
 
 ## Privacy and security
 
 - Selected text never enters Observer, Station Host metadata, provider integrations,
   or lifecycle events.
-- Semantic snapshots contain bounded integers only.
+- Semantic snapshots contain bounded integers only. Host geometry is constrained to
+  2–1000 columns and 1–1000 rows; normal-buffer rows are additionally bounded by the
+  shared 10,000-line scrollback policy, while alternate rows and prefix columns must
+  fit the replay geometry.
 - Core and Station UI code never branch on harness or provider identity.
 - The Pi lifecycle extension continues carrying correlation and lifecycle metadata
   only; it does not read session files or send transcript bodies.

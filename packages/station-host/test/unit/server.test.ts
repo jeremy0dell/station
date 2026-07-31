@@ -1,3 +1,4 @@
+import { STATION_TERMINAL_MAX_SCROLLBACK_ROWS } from "@station/contracts";
 import {
   createStationHostClient,
   HOST_PROTOCOL_VERSION,
@@ -198,6 +199,10 @@ describe("serveHostConnection", () => {
       },
     );
     const attachment = await client.attach("p1");
+    expect(attachment.ack.replay.kind).toBe("raw-complete");
+    if (attachment.ack.replay.kind !== "raw-complete") {
+      throw new Error("Expected complete raw replay.");
+    }
     expect(attachment.ack.replay.events).toEqual([
       { type: "data", data: "snap" },
       { type: "resize", cols: 100, rows: 30 },
@@ -237,6 +242,13 @@ describe("serveHostConnection", () => {
       rows: 30,
       exited: false,
     };
+    const semanticReplay = {
+      kind: "semantic-truncation-recovery",
+      initialCols: 100,
+      initialRows: 30,
+      serializedVt: "\x1bcsemantic",
+      semanticCopy: { normal: [], alternate: [] },
+    };
 
     expect(
       HostAttachAckSchema.safeParse({
@@ -249,20 +261,42 @@ describe("serveHostConnection", () => {
         },
       }).success,
     ).toBe(true);
+    expect(HostAttachAckSchema.safeParse({ ...ack, replay: semanticReplay }).success).toBe(true);
     expect(
       HostAttachAckSchema.safeParse({
         ...ack,
-        replay: {
-          kind: "semantic-truncation-recovery",
-          initialCols: 100,
-          initialRows: 30,
-          events: [
-            { type: "data", data: "\x1bcsemantic" },
-            { type: "semantic-copy", normal: [], alternate: [] },
-          ],
-        },
+        replay: { ...semanticReplay, serializedVt: "missing-ris" },
       }).success,
-    ).toBe(true);
+    ).toBe(false);
+    for (const semanticCopy of [
+      { normal: [{ row: 0, leadingColumns: 101, separatorSpaces: 0 }], alternate: [] },
+      {
+        normal: [
+          {
+            row: STATION_TERMINAL_MAX_SCROLLBACK_ROWS + semanticReplay.initialRows,
+            leadingColumns: 0,
+            separatorSpaces: 0,
+          },
+        ],
+        alternate: [],
+      },
+      { normal: [], alternate: [{ row: 30, leadingColumns: 0, separatorSpaces: 0 }] },
+      { normal: [{ row: 0, leadingColumns: 0, separatorSpaces: 1025 }], alternate: [] },
+      {
+        normal: [
+          { row: 0, leadingColumns: 0, separatorSpaces: 0 },
+          { row: 0, leadingColumns: 1, separatorSpaces: 1 },
+        ],
+        alternate: [],
+      },
+    ]) {
+      expect(
+        HostAttachAckSchema.safeParse({
+          ...ack,
+          replay: { ...semanticReplay, semanticCopy },
+        }).success,
+      ).toBe(false);
+    }
     expect(
       HostAttachAckSchema.safeParse({
         ...ack,
@@ -274,50 +308,6 @@ describe("serveHostConnection", () => {
         },
       }).success,
     ).toBe(false);
-    for (const events of [
-      [{ type: "resize", cols: 100, rows: 30 }],
-      [{ type: "data", data: "missing-sidecar" }],
-      [
-        { type: "semantic-copy", normal: [], alternate: [] },
-        { type: "data", data: "out-of-order" },
-      ],
-      [
-        { type: "data", data: "duplicate" },
-        { type: "semantic-copy", normal: [], alternate: [] },
-        { type: "semantic-copy", normal: [], alternate: [] },
-      ],
-      [
-        { type: "data", data: "bad-count" },
-        {
-          type: "semantic-copy",
-          normal: [{ row: 0, leadingColumns: 0, separatorSpaces: 1025 }],
-          alternate: [],
-        },
-      ],
-      [
-        { type: "data", data: "duplicate-row" },
-        {
-          type: "semantic-copy",
-          normal: [
-            { row: 0, leadingColumns: 0, separatorSpaces: 0 },
-            { row: 0, leadingColumns: 1, separatorSpaces: 1 },
-          ],
-          alternate: [],
-        },
-      ],
-    ]) {
-      expect(
-        HostAttachAckSchema.safeParse({
-          ...ack,
-          replay: {
-            kind: "semantic-truncation-recovery",
-            initialCols: 100,
-            initialRows: 30,
-            events,
-          },
-        }).success,
-      ).toBe(false);
-    }
     expect(
       HostAttachAckSchema.safeParse({
         ...ack,
@@ -325,7 +315,6 @@ describe("serveHostConnection", () => {
           kind: "live-reset-recovery",
           initialCols: 100,
           initialRows: 30,
-          events: [],
           resetData: "\x1bc\x1b[?1h",
         },
       }).success,
@@ -337,7 +326,6 @@ describe("serveHostConnection", () => {
           kind: "live-reset-recovery",
           initialCols: 100,
           initialRows: 30,
-          events: [],
           resetData: "not-ris",
         },
       }).success,
@@ -349,20 +337,8 @@ describe("serveHostConnection", () => {
           kind: "live-reset-recovery",
           initialCols: 100,
           initialRows: 30,
-          events: [{ type: "data", data: "incomplete" }],
-          resetData: "\x1bc",
-        },
-      }).success,
-    ).toBe(false);
-    expect(
-      HostAttachAckSchema.safeParse({
-        ...ack,
-        replay: {
-          kind: "raw-complete",
-          initialCols: 100,
-          initialRows: 30,
           events: [],
-          chunks: [],
+          resetData: "\x1bc",
         },
       }).success,
     ).toBe(false);
@@ -397,6 +373,9 @@ describe("serveHostConnection", () => {
 
     const first = await client.attach("p1");
     const second = await client.attach("p2");
+    if (first.ack.replay.kind !== "raw-complete" || second.ack.replay.kind !== "raw-complete") {
+      throw new Error("Expected complete raw replay for both attachments.");
+    }
     expect(first.ack.replay.events).toEqual([{ type: "data", data: "snap-p1" }]);
     expect(second.ack.replay.events).toEqual([{ type: "data", data: "snap-p2" }]);
 

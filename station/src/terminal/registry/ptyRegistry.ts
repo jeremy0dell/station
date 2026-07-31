@@ -13,6 +13,7 @@ import type {
   StationTerminalSpawnOptions,
 } from "../types.js";
 import { createStationVtScreen, type StationVtScreen } from "../vt/screen.js";
+import { applyTerminalReplay } from "./terminalReplay.js";
 
 const DEFAULT_RESIZE_DEBOUNCE_MS = 75;
 // Grace for the async resize path (debounce, bridge hop, host ack) before a
@@ -196,23 +197,23 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   // First-resize lazy spawn: create the screen at the laid-out size, then start
   // the PTY at that same size so there is no corrective resize/SIGWINCH during
   // shell startup, and so panes that are never laid out never spawn a shell.
-  const startSession = (entry: InternalEntry, size: StationTerminalSize): void => {
+  const createEntryScreen = (
+    entry: InternalEntry,
+    size: StationTerminalSize,
+  ): StationVtScreen => {
     const screen = createStationVtScreen({
       size,
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
       ...(scrollbackLines === undefined ? {} : { scrollback: scrollbackLines }),
       diagnosticsLabel: entry.paneId,
       onResponse: (data) => {
-        // A replayed snapshot re-parses queries the child issued long ago
-        // (startup probes recorded in the ring); answering those would inject
-        // stale replies into the child's stdin, so drop replies until the
-        // replay settles.
+        // A replayed snapshot re-parses queries the child issued long ago;
+        // replying would inject stale startup-probe answers into the live PTY.
         if (entry.replayingSnapshot) {
           return;
         }
-        // Query replies (DA1/DSR/OSC...) go straight to the PTY: routing them
-        // through the keyboard path would tangle them with chord filtering,
-        // and TUIs block on these at startup.
+        // Query replies bypass keyboard chord filtering because TUIs can block
+        // waiting for terminal capability responses during startup.
         const current = entries.get(entry.paneId);
         if (current?.terminal && !current.exited) {
           current.terminal.write(data);
@@ -221,12 +222,16 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     });
     entry.screen = screen;
     entry.appliedSize = size;
-    // The pane border reads the title off the registry's structural notify, not
-    // the screen's per-frame channel (only the renderable consumes that). Bridge
-    // the screen's title-only signal onto notify so the border refreshes when the
-    // title changes, without re-notifying every pane on each output frame.
+    // Pane borders consume structural notifications rather than screen frames.
     entry.subscriptions.push({ dispose: screen.onTitleChange(notify) });
+    return screen;
+  };
 
+  const spawnEntryTerminal = (
+    entry: InternalEntry,
+    screen: StationVtScreen,
+    size: StationTerminalSize,
+  ): StationTerminalProcess | undefined => {
     let terminal: StationTerminalProcess;
     try {
       const make = entry.createTerminal ?? createTerminal;
@@ -236,67 +241,55 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       entry.status = "failed to start shell";
       screen.feed(error instanceof Error ? error.message : "Failed to start shell.");
       notify();
-      return;
+      return undefined;
     }
     entry.terminal = terminal;
     entry.status = `pid ${terminal.pid}`;
-    // Covers PTYs diverged from birth (e.g. a host PTY spawned at a default
-    // size); later resizes re-schedule their own checks.
+    // Covers PTYs diverged from birth; later resizes schedule their own checks.
     scheduleGeometryCheck(entry);
+    return terminal;
+  };
+
+  const subscribeToTerminalReplay = (
+    entry: InternalEntry,
+    terminal: StationTerminalProcess,
+    fallbackSize: StationTerminalSize,
+  ): void => {
     if (terminal.onReplay !== undefined) {
       entry.subscriptions.push(
-        terminal.onReplay(async ({ initialSize, events }) => {
+        terminal.onReplay(async (replay) => {
           const current = entry.screen;
           if (current === null) {
             return;
           }
-          // Parse each retained segment at its production geometry; erase,
-          // cursor, and wrapping semantics cannot be reconstructed at one width.
           // The terminal holds live frames until VT and copy metadata both settle.
           entry.replayingSnapshot = true;
           try {
-            current.resize(initialSize);
-            for (const event of events) {
-              if (event.type === "data") {
-                current.feed(event.data);
-                continue;
-              }
-              await current.whenIdle();
-              if (event.type === "resize") {
-                current.resize({ cols: event.cols, rows: event.rows });
-                continue;
-              }
-              try {
-                const result = current.restoreSemanticCopySnapshot({
-                  normal: event.normal,
-                  alternate: event.alternate,
+            await applyTerminalReplay(current, replay, {
+              semanticCopyDropped: (dropped) => {
+                reportTerminalCorruption({
+                  kind: "terminal_diagnostic",
+                  pane: entry.paneId,
+                  key: "semantic_copy_restore_dropped",
+                  detail: { dropped },
                 });
-                if (result.dropped > 0) {
-                  reportTerminalCorruption({
-                    kind: "terminal_diagnostic",
-                    pane: entry.paneId,
-                    key: "semantic_copy_restore_dropped",
-                    detail: { dropped: result.dropped },
-                  });
-                }
-              } catch {
-                current.restoreSemanticCopySnapshot({ normal: [], alternate: [] });
+              },
+              semanticCopyInvalid: () => {
                 reportTerminalCorruption({
                   kind: "terminal_diagnostic",
                   pane: entry.paneId,
                   key: "semantic_copy_restore_invalid",
                 });
-              }
-            }
-            await current.whenIdle();
+              },
+            });
           } finally {
             entry.replayingSnapshot = false;
           }
           if (terminal.onGeometry === undefined) {
-            current.resize(entry.appliedSize ?? size);
+            current.resize(entry.appliedSize ?? fallbackSize);
           }
           // Local replay returns to pane size above; ordered Host replay stays at
-          // its final geometry until the queued live barrier is consumed.
+          // final replay geometry until its queued live barrier is consumed.
           scheduleGeometryCheck(entry);
         }),
       );
@@ -308,14 +301,19 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
           if (current === null) {
             return;
           }
-          // Complete older writes before applying the ordered barrier; the Host
-          // awaits this callback before it emits data for the new geometry.
+          // Host waits for this callback before emitting data at the new geometry.
           await current.whenIdle();
           current.resize(nextSize);
           scheduleGeometryCheck(entry);
         }),
       );
     }
+  };
+
+  const subscribeToTerminalLifecycle = (
+    entry: InternalEntry,
+    terminal: StationTerminalProcess,
+  ): void => {
     if (terminal.onUnavailable !== undefined) {
       entry.subscriptions.push(
         terminal.onUnavailable((event) => {
@@ -331,9 +329,8 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       );
     }
     entry.subscriptions.push(
-      // Transport faults (failed host resizes, reconnects) feed the divergence
-      // detector; without a subscriber they would be dropped silently.
       terminal.onDiagnostic((message) => {
+        // Transport faults feed the divergence detector rather than disappearing.
         reportTerminalCorruption({
           kind: "terminal_diagnostic",
           pane: entry.paneId,
@@ -345,9 +342,11 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         if (current === null) {
           return;
         }
-        current.feed(
-          entry.outputCompatibility.transform(data, current.bufferStats().rows).data,
+        const transformed = entry.outputCompatibility.transform(
+          data,
+          current.bufferStats().rows,
         );
+        current.feed(transformed.data);
       }),
       terminal.onExit((event) => {
         entry.screen?.feed(entry.outputCompatibility.flush());
@@ -357,6 +356,16 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         onPaneExit?.(entry.paneId);
       }),
     );
+  };
+
+  const startSession = (entry: InternalEntry, size: StationTerminalSize): void => {
+    const screen = createEntryScreen(entry, size);
+    const terminal = spawnEntryTerminal(entry, screen, size);
+    if (terminal === undefined) {
+      return;
+    }
+    subscribeToTerminalReplay(entry, terminal, size);
+    subscribeToTerminalLifecycle(entry, terminal);
     notify();
   };
 

@@ -1,5 +1,10 @@
 import type { IBuffer, IBufferLine, Terminal } from "@xterm/headless";
-import { ControlByte, CsiFinal } from "../terminal/protocol/controlBytes.js";
+import {
+  ControlByte,
+  CsiFinal,
+  CsiIdentifier,
+  EscIdentifier,
+} from "../terminal/protocol/controlBytes.js";
 import { AnsiMode, DecMode } from "../terminal/protocol/decset.js";
 import { KittyKeyboard } from "../terminal/protocol/kitty.js";
 import {
@@ -16,6 +21,14 @@ import {
 const ALT_BUFFER_PREFIX =
   `${ControlByte.Csi}?${DecMode.SaveCursorAndAlternate}h${ControlByte.Csi}H`;
 const RIS = `${ControlByte.Esc}c`;
+const CursorPresentationStyle = {
+  BlinkingBlock: 1,
+  SteadyBlock: 2,
+  BlinkingUnderline: 3,
+  SteadyUnderline: 4,
+  BlinkingBar: 5,
+  SteadyBar: 6,
+} as const;
 
 type BufferType = "normal" | "alternate";
 type AlternateMode =
@@ -111,7 +124,7 @@ export class TerminalSupplementalState {
         this.#applyPrivateModes(params, false);
         return false;
       }),
-      terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+      terminal.parser.registerCsiHandler(CsiIdentifier.SoftTerminalReset, () => {
         this.#cursorVisible = true;
         this.#savedBuffers.add(this.#bufferType);
         return false;
@@ -124,7 +137,7 @@ export class TerminalSupplementalState {
         this.#savedBuffers.add(this.#bufferType);
         return false;
       }),
-      terminal.parser.registerEscHandler({ final: "c" }, () => {
+      terminal.parser.registerEscHandler(EscIdentifier.ResetToInitialState, () => {
         this.#reset();
         return false;
       }),
@@ -598,10 +611,10 @@ export class TerminalSupplementalState {
       return;
     }
     const flags = first ?? 0;
-    const mode = second ?? 1;
-    if (mode === 2) {
+    const mode = second ?? KittyKeyboard.FlagMode.Replace;
+    if (mode === KittyKeyboard.FlagMode.Add) {
       state.flags |= flags;
-    } else if (mode === 3) {
+    } else if (mode === KittyKeyboard.FlagMode.Remove) {
       state.flags &= ~flags;
     } else {
       state.flags = flags;
@@ -691,6 +704,8 @@ function mouseTrackingDecMode(
       return DecMode.MouseButtonEvent;
     case "any":
       return DecMode.MouseAnyEvent;
+    default:
+      return undefined;
   }
 }
 
@@ -703,8 +718,22 @@ function cursorPresentationSequence(terminal: PinnedXtermTerminal): string {
   if (cursorBlink === undefined && cursorStyle === undefined) {
     return "";
   }
-  const base = cursorStyle === "underline" ? 3 : cursorStyle === "bar" ? 5 : 1;
-  return `${ControlByte.Csi}${base + (cursorBlink === false ? 1 : 0)} q`;
+  let style: (typeof CursorPresentationStyle)[keyof typeof CursorPresentationStyle] =
+    CursorPresentationStyle.BlinkingBlock;
+  if (cursorStyle === "underline") {
+    style = CursorPresentationStyle.BlinkingUnderline;
+    if (cursorBlink === false) {
+      style = CursorPresentationStyle.SteadyUnderline;
+    }
+  } else if (cursorStyle === "bar") {
+    style = CursorPresentationStyle.BlinkingBar;
+    if (cursorBlink === false) {
+      style = CursorPresentationStyle.SteadyBar;
+    }
+  } else if (cursorBlink === false) {
+    style = CursorPresentationStyle.SteadyBlock;
+  }
+  return `${ControlByte.Csi}${style} q`;
 }
 
 function hasNaturallySerializableWrap(

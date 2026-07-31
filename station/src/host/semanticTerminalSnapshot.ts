@@ -1,15 +1,19 @@
+import {
+  STATION_TERMINAL_MAX_SCROLLBACK_ROWS,
+  type SemanticCopySnapshot,
+} from "@station/contracts";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
-import { MAX_SCROLLBACK_LINES } from "../config/stationConfig.js";
 import {
   ControlByte,
   CsiFinal,
+  CsiIdentifier,
   EraseInDisplayMode,
+  EscIdentifier,
 } from "../terminal/protocol/controlBytes.js";
 import {
   createSemanticCopyState,
-  type SemanticCopySnapshot,
   type SemanticCopyState,
 } from "../terminal/protocol/semanticCopy.js";
 import {
@@ -33,7 +37,7 @@ type PinnedXtermParserState = {
 };
 
 export type SemanticTerminalCapture = {
-  events: string[];
+  serializedVt: string;
   semanticCopy: SemanticCopySnapshot;
 };
 
@@ -108,7 +112,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     this.#terminal = new Terminal({
       cols,
       rows,
-      scrollback: MAX_SCROLLBACK_LINES,
+      scrollback: STATION_TERMINAL_MAX_SCROLLBACK_ROWS,
       allowProposedApi: true,
       logLevel: "off",
     });
@@ -137,12 +141,12 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
         }
         return false;
       }),
-      this.#terminal.parser.registerEscHandler({ final: "c" }, () => {
+      this.#terminal.parser.registerEscHandler(EscIdentifier.ResetToInitialState, () => {
         this.#title = "";
         normalBufferIsSynchronizedFrame = false;
         return false;
       }),
-      this.#terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+      this.#terminal.parser.registerCsiHandler(CsiIdentifier.SoftTerminalReset, () => {
         normalBufferIsSynchronizedFrame = false;
         return false;
       }),
@@ -190,7 +194,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
       }
       try {
         return {
-          events: [RIS + this.#supplementalState.restoreSerialization(serialized, title)],
+          serializedVt: RIS + this.#supplementalState.restoreSerialization(serialized, title),
           semanticCopy: this.#semanticCopy.snapshot(),
         };
       } catch (error) {

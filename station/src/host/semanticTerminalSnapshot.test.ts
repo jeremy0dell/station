@@ -49,12 +49,7 @@ function margins(terminal: Terminal): [number, number] {
 }
 
 async function captureData(source: SemanticTerminalSnapshot): Promise<string> {
-  const capture = await source.capture();
-  const data = capture.events[0];
-  if (data === undefined) {
-    throw new Error("Expected semantic capture data.");
-  }
-  return data;
+  return (await source.capture()).serializedVt;
 }
 
 async function captureError(source: SemanticTerminalSnapshot): Promise<Error> {
@@ -126,7 +121,7 @@ describe("SemanticTerminalSnapshot", () => {
         alternate: [],
       });
 
-      restored.feed(capture.events.join(""));
+      restored.feed(capture.serializedVt);
       await restored.whenIdle();
       expect(restored.restoreSemanticCopySnapshot(capture.semanticCopy)).toEqual({
         applied: 1,
