@@ -992,12 +992,12 @@ describe("guided setup command", () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const homeDir = join(root, "home");
-    await mkdir(repo, { recursive: true });
-    const fs = fakeFs({
-      [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock("/old/stn-tmux-popup", {
-        bindingKey: "C-s",
-      }),
+    const tmuxConfigPath = join(homeDir, ".tmux.conf");
+    const originalTmuxConfig = tmuxPopupBindingBlock("/old/stn-tmux-popup", {
+      bindingKey: "C-s",
     });
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [tmuxConfigPath]: originalTmuxConfig });
     const chunks: string[] = [];
 
     const result = await runSetupCommand(
@@ -1027,18 +1027,107 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: popupInstallPrompt,
+        now: () => new Date("2026-06-08T12:00:00.000Z"),
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
       },
     );
 
-    const tmuxConfig = fs.files[join(homeDir, ".tmux.conf")];
+    const tmuxConfig = fs.files[tmuxConfigPath];
     expect(result.code).toBe(0);
+    expect(fs.files[`${tmuxConfigPath}.2026-06-08T12-00-00-000Z.bak`]).toBe(originalTmuxConfig);
     expect(tmuxConfig).toContain("bind-key C-s run-shell -b");
     expect(tmuxConfig).toContain("'/fake/bin/stn-tmux-popup'");
     expect(tmuxConfig).not.toContain("/old/stn-tmux-popup");
     expect(chunks.join("")).toContain("Tmux popup binding: tmux prefix + C-s is persisted");
+  });
+
+  it.each([
+    ["the existing file is unreadable", "read"],
+    ["the backup cannot be created", "backup"],
+  ] as const)("does not replace tmux config when %s", async (_description, failure) => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const tmuxConfigPath = join(homeDir, ".tmux.conf");
+    const originalTmuxConfig = "set -g mouse on\n";
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [tmuxConfigPath]: originalTmuxConfig });
+    const readFile = fs.readFile.bind(fs);
+    const writeFile = fs.writeFile.bind(fs);
+    let rejectTmuxPersistence = false;
+    fs.readFile = async (path) => {
+      if (rejectTmuxPersistence && failure === "read" && path === tmuxConfigPath) {
+        throw Object.assign(new Error("tmux config denied"), { code: "EACCES" });
+      }
+      return readFile(path);
+    };
+    fs.writeFile = async (path, content) => {
+      if (
+        rejectTmuxPersistence &&
+        failure === "backup" &&
+        path.startsWith(`${tmuxConfigPath}.`) &&
+        path.endsWith(".bak")
+      ) {
+        throw Object.assign(new Error("tmux backup denied"), { code: "EACCES" });
+      }
+      return writeFile(path, content);
+    };
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            if (message === "Install or load tmux popup binding?") {
+              rejectTmuxPersistence = true;
+              return true;
+            }
+            return message === "Write core STATION config?";
+          },
+          async selectMany() {
+            return ["codex"];
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(fs.files[tmuxConfigPath]).toBe(originalTmuxConfig);
+    expect(
+      Object.keys(fs.files).some(
+        (path) => path.startsWith(`${tmuxConfigPath}.`) && path.endsWith(".bak"),
+      ),
+    ).toBe(false);
+    expect(chunks.join("")).toContain("Failed: Install tmux popup binding");
   });
 
   it("does not report a rebound tmux launcher as loaded when startup still fails", async () => {
@@ -1313,15 +1402,7 @@ describe("guided setup command", () => {
         if (operation.harnessId === "codex") {
           codexHookAttempts += 1;
           if (codexHookAttempts === 1) {
-            return {
-              status: "failed",
-              operationId: operation.id,
-              error: {
-                tag: "SyntheticTrackingError",
-                code: "SYNTHETIC_CODEX_TRACKING_FAILED",
-                message: "synthetic Codex hook failure",
-              },
-            };
+            throw new Error("synthetic Codex hook failure");
           }
         }
         if (operation.harnessId === "opencode") openCodeHookAttempts += 1;
@@ -1639,6 +1720,46 @@ describe("guided setup command", () => {
       "Command Line Tools installation started in a separate window.",
     );
     expect(Object.keys(fs.files)).toEqual([]);
+  });
+
+  it("does not claim the Command Line Tools installer started when launch fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          const key = `${input.command} ${(input.args ?? []).join(" ")}`;
+          if (key === "xcode-select -p") {
+            throw Object.assign(new Error("no developer tools"), { code: "ENOENT" });
+          }
+          if (key === "xcode-select --install") {
+            throw new Error("installer launch denied");
+          }
+          return commandResult(input, "");
+        },
+        access: fakeAccess([]),
+        fs: fakeFs({}),
+        prompt: prompt({ confirms: [true] }),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(output).toContain("Failed: Install Command Line Tools");
+    expect(output).toContain("Command Line Tools installation did not start.");
+    expect(output).not.toContain("installation started in a separate window");
   });
 
   it("prints Command Line Tools guidance on macOS when declined", async () => {

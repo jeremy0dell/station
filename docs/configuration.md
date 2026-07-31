@@ -13,9 +13,9 @@ existing empty-state UI. They do not create a config file; `stn setup` remains
 the writer. Setup writes `projects = []` and never infers a project from its
 working directory; use the empty dashboard's **Add your first project** flow to
 choose an existing Git repository explicitly. Setup validates generated or
-source-preserving edited TOML before writing, requires the planned source bytes
-to remain current, writes a timestamped backup
-for updates, and atomically replaces the target through a private mode-`0600`
+source-preserving edited TOML before writing, revalidates the planned source bytes
+at the serialized commit boundary, refuses concurrent creates, writes a timestamped
+backup for updates, and atomically replaces the target through a private mode-`0600`
 temporary file. After every successful guided or non-interactive setup config
 write, setup starts or restarts the observer and waits for it to become healthy
 with the updated configuration. Only after activation succeeds does setup

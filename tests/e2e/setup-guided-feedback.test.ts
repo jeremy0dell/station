@@ -469,6 +469,9 @@ describe("setup guided feedback e2e", () => {
 
   it("runs the persisted absolute popup launcher in a fresh minimal-PATH tmux context", async () => {
     const fixture = await createFixture({ harness: "codex", launchers: "complex" });
+    const tmuxConfigPath = join(fixture.home, ".tmux.conf");
+    const originalTmuxConfig = "# user tmux config\n";
+    await writeFile(tmuxConfigPath, originalTmuxConfig, "utf8");
     try {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
@@ -487,9 +490,16 @@ describe("setup guided feedback e2e", () => {
         `Direct fallback: ${join(process.cwd(), "bin", "stn")} popup`,
       );
 
-      const tmuxConfigPath = join(fixture.home, ".tmux.conf");
       const tmuxConfig = await readFile(tmuxConfigPath, "utf8");
+      expect(tmuxConfig).toContain(originalTmuxConfig.trim());
       expect(tmuxConfig).toContain("bind-key Space run-shell -b");
+      const tmuxBackups = (await readdir(fixture.home)).filter(
+        (name) => name.startsWith(".tmux.conf.") && name.endsWith(".bak"),
+      );
+      expect(tmuxBackups).toHaveLength(1);
+      await expect(readFile(join(fixture.home, tmuxBackups[0] ?? ""), "utf8")).resolves.toBe(
+        originalTmuxConfig,
+      );
       expect(tmuxConfig).not.toContain("STATION_FOCUS_CLIENT_ID=#{q:client_name} stn-tmux-popup");
 
       const freshTmux = spawnSync(

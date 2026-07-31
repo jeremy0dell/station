@@ -16,6 +16,7 @@ export type SetupApplyFileSystem = {
   mkdir(path: string, options: { recursive: true }): Promise<void>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  writeFileExclusive?(path: string, content: string): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   access(path: string): Promise<void>;
   rm?(path: string, options: { force: true }): Promise<void>;
@@ -354,6 +355,9 @@ function nodeApplyFs(): SetupApplyFileSystem {
     },
     async writeFile(path, content) {
       await writeFile(path, content, "utf8");
+    },
+    async writeFileExclusive(path, content) {
+      await writeFile(path, content, { encoding: "utf8", flag: "wx", mode: 0o600 });
     },
     rename,
     access,

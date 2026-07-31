@@ -111,7 +111,13 @@ export function createSetupOperationAdapter(
       );
     },
   };
-  return (operation) => performSetupOperation(operation, ports);
+  return async (operation) => {
+    try {
+      return await performSetupOperation(operation, ports);
+    } catch (error) {
+      return failedOutcome(operation, error, unexpectedOperationFallback(operation));
+    }
+  };
 }
 
 function createPackageInstallationAdapter(
@@ -249,11 +255,27 @@ async function configureTmux(
       block,
     );
     const changed = content !== existing;
-    if (changed) await replaceWithSetupFileSystem(fs, facts.tmuxBinding.path, content);
+    if (!changed) {
+      return {
+        status: "completed",
+        operationId: operation.id,
+        commit: { kind: "tmux-popup", scope: "persisted", changed: false },
+      };
+    }
+
+    // A failed backup must leave the user-authored tmux file untouched.
+    const backupPath =
+      existing === undefined
+        ? undefined
+        : await writeTmuxBackup(fs, facts.tmuxBinding.path, existing, deps.now);
+    await replaceWithSetupFileSystem(fs, facts.tmuxBinding.path, content);
     return {
       status: "completed",
       operationId: operation.id,
-      commit: { kind: "tmux-popup", scope: "persisted", changed },
+      commit:
+        backupPath === undefined
+          ? { kind: "tmux-popup", scope: "persisted", changed: true }
+          : { kind: "tmux-popup", scope: "persisted", changed: true, backupPath },
     };
   } catch (error) {
     return failedOutcome(operation, error, tmuxWriteFallback);
@@ -302,7 +324,13 @@ function configPersistenceFileSystem(
   return {
     readTextFile: (path) => readFileIfPresent(fs, path),
     writeBackup: (path, content) => fs.writeFile(path, content),
-    replaceText: (path, content) => replaceWithSetupFileSystem(fs, path, content),
+    replaceTextIfCurrent: async (path, expectedContent, content) => {
+      const current = await readFileIfPresent(fs, path);
+      if (current === content) return "unchanged";
+      if (current !== expectedContent) return "stale";
+      await replaceWithSetupFileSystem(fs, path, content);
+      return "replaced";
+    },
   };
 }
 
@@ -311,11 +339,33 @@ async function readFileIfPresent(
   path: string,
 ): Promise<string | undefined> {
   try {
-    await fs.access(path);
     return await fs.readFile(path);
-  } catch {
-    return undefined;
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException | null | undefined)?.code === "ENOENT") return undefined;
+    throw cause;
   }
+}
+
+async function writeTmuxBackup(
+  fs: SetupApplyFileSystem,
+  path: string,
+  content: string,
+  now: (() => Date) | undefined,
+): Promise<string> {
+  const stamp = (now ?? (() => new Date()))().toISOString().replaceAll(/[:.]/g, "-");
+  const backupPath = `${path}.${stamp}.bak`;
+  if (fs.writeFileExclusive !== undefined) {
+    await fs.writeFileExclusive(backupPath, content);
+    return backupPath;
+  }
+  try {
+    await fs.access(backupPath);
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException | null | undefined)?.code !== "ENOENT") throw cause;
+    await fs.writeFile(backupPath, content);
+    return backupPath;
+  }
+  throw Object.assign(new Error(`Backup already exists: ${backupPath}`), { code: "EEXIST" });
 }
 
 async function replaceWithSetupFileSystem(
@@ -341,6 +391,9 @@ function nodeSetupFileSystem(): SetupApplyFileSystem {
     },
     readFile: (path) => readFile(path, "utf8"),
     writeFile: (path, content) => writeFile(path, content, "utf8"),
+    writeFileExclusive: async (path, content) => {
+      await writeFile(path, content, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    },
     rename,
     access,
     rm,
@@ -384,6 +437,25 @@ function toolFormula(tool: Extract<SetupOperation, { kind: "install-tool" }>["to
     case "git-delta":
       return "git-delta";
   }
+}
+
+function unexpectedOperationFallback(operation: SetupOperation): {
+  tag: string;
+  code: string;
+  message: string;
+  provider?: string;
+} {
+  if (operation.kind === "prepare-harness-tracking") {
+    return {
+      tag: "SetupProviderTrackingError",
+      code: "SETUP_PROVIDER_TRACKING_FAILED",
+      message: `Station tracking could not be prepared for ${operation.harnessId}.`,
+      provider: operation.harnessId,
+    };
+  }
+  if (operation.kind === "prepare-worktrunk-tracking") return worktrunkTrackingFallback;
+  if (operation.kind === "configure-tmux-popup") return tmuxWriteFallback;
+  return externalOperationFallback;
 }
 
 const externalOperationFallback = {

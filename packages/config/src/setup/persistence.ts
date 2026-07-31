@@ -1,5 +1,7 @@
-import { writeFile } from "node:fs/promises";
-import { readTextFileIfPresent, replaceTextFile } from "@station/runtime";
+import { randomUUID } from "node:crypto";
+import { chmod, link, mkdir, open, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+import { readTextFileIfPresent } from "@station/runtime";
 import { loadConfigFromToml } from "../load/index.js";
 import type { SetupConfigMutationPlan } from "./mutations.js";
 
@@ -9,10 +11,16 @@ type SetupConfigPersistenceResult = {
   readonly backupPath?: string;
 };
 
+type SetupConfigCommitStatus = "replaced" | "unchanged" | "stale";
+
 type SetupConfigPersistenceFileSystem = {
   readTextFile(path: string): Promise<string | undefined>;
   writeBackup(path: string, content: string): Promise<void>;
-  replaceText(path: string, content: string): Promise<void>;
+  replaceTextIfCurrent(
+    path: string,
+    expectedContent: string | undefined,
+    content: string,
+  ): Promise<SetupConfigCommitStatus>;
 };
 
 export type PersistSetupConfigMutationOptions = {
@@ -67,8 +75,13 @@ export async function persistSetupConfigMutation(
     }
   }
 
+  let commitStatus: SetupConfigCommitStatus;
   try {
-    await fs.replaceText(plan.path, plan.content);
+    commitStatus = await fs.replaceTextIfCurrent(
+      plan.path,
+      plan.operation === "create" ? undefined : plan.before,
+      plan.content,
+    );
   } catch (cause) {
     throw setupConfigPersistenceError(
       "CONFIG_WRITE_FAILED",
@@ -77,11 +90,26 @@ export async function persistSetupConfigMutation(
       cause,
     );
   }
+  if (commitStatus === "stale") {
+    throw setupConfigPersistenceError(
+      "SETUP_CONFIG_PRECONDITION_FAILED",
+      "Station config changed during setup persistence; no newer config was replaced.",
+      plan.path,
+    );
+  }
 
-  const status = plan.operation === "create" ? "created" : "updated";
+  const status = setupConfigPersistenceStatus(commitStatus, plan.operation);
   return backupPath === undefined
     ? { status, configPath: plan.path }
     : { status, configPath: plan.path, backupPath };
+}
+
+function setupConfigPersistenceStatus(
+  commitStatus: SetupConfigCommitStatus,
+  operation: "create" | "update",
+): SetupConfigPersistenceResult["status"] {
+  if (commitStatus === "unchanged") return "unchanged";
+  return operation === "create" ? "created" : "updated";
 }
 
 function nodePersistenceFileSystem(): SetupConfigPersistenceFileSystem {
@@ -90,11 +118,111 @@ function nodePersistenceFileSystem(): SetupConfigPersistenceFileSystem {
     writeBackup: async (path, content) => {
       await writeFile(path, content, { encoding: "utf8", flag: "wx", mode: 0o600 });
     },
-    replaceText: async (path, content) => {
-      await replaceTextFile({ path, contents: content, mode: 0o600, directoryMode: 0o700 });
-    },
+    replaceTextIfCurrent: commitSetupConfigText,
   };
 }
+
+async function commitSetupConfigText(
+  path: string,
+  expectedContent: string | undefined,
+  content: string,
+): Promise<SetupConfigCommitStatus> {
+  const directory = dirname(path);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  // Serialize Station writers, then revalidate staged commits to reject edits from non-cooperating tools.
+  const lock = await acquireSetupConfigLock(`${path}.station-setup.lock`);
+  if (lock === undefined) return "stale";
+
+  try {
+    const targetPath = await setupConfigCommitTarget(path, expectedContent);
+    if (targetPath === undefined) return "stale";
+    const targetDirectory = dirname(targetPath);
+    await mkdir(targetDirectory, { recursive: true, mode: 0o700 });
+    const temporaryPath = join(targetDirectory, `.${basename(targetPath)}.${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporaryPath, content, {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      });
+      await chmod(temporaryPath, 0o600);
+
+      const current = await readTextFileIfPresent(path);
+      if (current === content) return "unchanged";
+      if (current !== expectedContent) return "stale";
+
+      if (expectedContent === undefined) {
+        try {
+          // A hard link commits the staged create without replacing a path that appeared after planning.
+          await link(temporaryPath, path);
+          return "replaced";
+        } catch (cause) {
+          if (errorCode(cause) !== "EEXIST") throw cause;
+          return (await readTextFileIfPresent(path)) === content ? "unchanged" : "stale";
+        }
+      }
+
+      const revalidatedTarget = await resolvedPathIfPresent(path);
+      if (revalidatedTarget !== targetPath) return "stale";
+      const revalidatedContent = await readTextFileIfPresent(targetPath);
+      if (revalidatedContent === content) return "unchanged";
+      if (revalidatedContent !== expectedContent) return "stale";
+      await rename(temporaryPath, targetPath);
+      return "replaced";
+    } finally {
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+    }
+  } finally {
+    await lock.close().catch(() => undefined);
+    await rm(lock.path, { force: true }).catch(() => undefined);
+  }
+}
+
+async function setupConfigCommitTarget(
+  path: string,
+  expectedContent: string | undefined,
+): Promise<string | undefined> {
+  if (expectedContent === undefined) return path;
+  return resolvedPathIfPresent(path);
+}
+
+async function resolvedPathIfPresent(path: string): Promise<string | undefined> {
+  try {
+    return await realpath(path);
+  } catch (cause) {
+    if (errorCode(cause) === "ENOENT") return undefined;
+    throw cause;
+  }
+}
+
+async function acquireSetupConfigLock(
+  path: string,
+): Promise<{ close(): Promise<void>; path: string } | undefined> {
+  try {
+    const handle = await open(path, "wx", 0o600);
+    return { close: () => handle.close(), path };
+  } catch (cause) {
+    if (errorCode(cause) !== "EEXIST") throw cause;
+    const metadata = await stat(path).catch(() => undefined);
+    if (metadata === undefined || Date.now() - metadata.mtimeMs <= setupConfigLockStaleMs) {
+      return undefined;
+    }
+    await rm(path, { force: true });
+    try {
+      const handle = await open(path, "wx", 0o600);
+      return { close: () => handle.close(), path };
+    } catch (retryCause) {
+      if (errorCode(retryCause) === "EEXIST") return undefined;
+      throw retryCause;
+    }
+  }
+}
+
+function errorCode(cause: unknown): string | undefined {
+  return (cause as NodeJS.ErrnoException | null | undefined)?.code;
+}
+
+const setupConfigLockStaleMs = 5 * 60 * 1_000;
 
 function setupConfigPersistenceError(
   code: "SETUP_CONFIG_PRECONDITION_FAILED" | "SETUP_CONFIG_BACKUP_FAILED" | "CONFIG_WRITE_FAILED",

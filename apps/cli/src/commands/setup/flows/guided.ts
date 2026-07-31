@@ -519,7 +519,7 @@ async function ensureBootstrapTools(
       "Install Xcode Command Line Tools now? (runs xcode-select --install)",
     );
     if (accepted) {
-      await withPromptPaused(prompt, () =>
+      const installResult = await withPromptPaused(prompt, () =>
         applySetupPlan(
           harnessInstallPlan(facts, [commandLineToolsInstallAction()]),
           applyOptions(deps, {
@@ -534,12 +534,18 @@ async function ensureBootstrapTools(
           }),
         ),
       );
-      // The CLT installer runs asynchronously in its own window; we cannot continue
-      // until it finishes, so stop here and have the user re-run.
-      await write(
-        deps,
-        "Command Line Tools installation started in a separate window. Finish it, then run: stn setup\n",
-      );
+      if (installResult.failedAction === undefined) {
+        // The CLT installer runs asynchronously in its own window; setup cannot continue until it finishes.
+        await write(
+          deps,
+          "Command Line Tools installation started in a separate window. Finish it, then run: stn setup\n",
+        );
+      } else {
+        await write(
+          deps,
+          "Command Line Tools installation did not start. Run: xcode-select --install, then rerun: stn setup\n",
+        );
+      }
     } else {
       await write(
         deps,

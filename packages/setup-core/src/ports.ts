@@ -37,6 +37,7 @@ export type SetupOperationCommit =
       readonly kind: "tmux-popup";
       readonly scope: "persisted" | "live";
       readonly changed: boolean;
+      readonly backupPath?: string;
     };
 
 export type SetupOperationOutcome =
