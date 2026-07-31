@@ -24,7 +24,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │qs] [▾] 
         ╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -52,7 +52,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 search: apiject  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -164,7 +164,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -192,7 +192,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ e│ ←/esc back                                                             │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -220,7 +220,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ e│ ↑↓ move   →/enter edit   esc close                                     │▾] 
    └────────────────────────────────────────────────────────────────────────┘   
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -248,7 +248,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
-└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
 `;
 
@@ -276,7 +276,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │  Yes (y)     No (n)                        │                    [sh] [qs] [▾] 
 │ Esc/Enter:cancel                           │                                  
 │                                            │───────────────────────────────── 
-└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
 `;
 
@@ -304,7 +304,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Stop or remove it from its original terminal or external tooling.│h] [qs] [▾]
 │                                                                  │
 │ Esc/Enter:close                                                  │───────────
-└──────────────────────────────────────────────────────────────────┘/esc:close
+└──────────────────────────────────────────────────────────────────┘
 "
 `;
 
@@ -332,7 +332,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 Rename: ↑↓ move · ↵ choose · 1-9/a-z or click                     [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close  
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -388,7 +388,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ ↑↓ move · ↵ choose · slot or click         │                    [sh] [qs] [▾] 
 │ Esc:cancel                                 │                                  
 │                                            │───────────────────────────────── 
-└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
 `;
 
@@ -416,7 +416,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │                                            │                    [sh] [qs] [▾] 
 │  Fork (enter)                              │                                  
 │ ↑↓:field space:toggle enter:fork esc:back  │───────────────────────────────── 
-└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
 `;
 
@@ -444,7 +444,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │                                            │                    [sh] [qs] [▾] 
 │▸ Fork (enter)                              │                                  
 │ ↑↓:field space:toggle enter:fork esc:back  │───────────────────────────────── 
-└────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
+└────────────────────────────────────────────┘ ? help  Q/esc:close              
 "
 `;
 
@@ -1100,7 +1100,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾]
 
 ───────────────────────────────────────────────────────────────────────────────
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close
 "
 `;
 
@@ -1128,6 +1128,6 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾]
 
 ───────────────────────────────────────────────────────────────────────────────
-↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close
+↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close
 "
 `;

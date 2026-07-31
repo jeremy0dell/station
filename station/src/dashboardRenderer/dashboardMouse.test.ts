@@ -171,6 +171,11 @@ describe("routeDashboardMouse", () => {
     routeDashboardMouse({ kind: "projectHeader", projectId: "station" }, LEFT_UP, store);
 
     expect([...store.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "primary",
+    });
     expect(store.getState().scrollOffset).toBeLessThan(99);
   });
 
@@ -364,6 +369,11 @@ describe("routeDashboardMouse", () => {
       "/Users/example/Developer/station",
       "/Users/example/.worktrees/station/pty-buffer",
     ]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
+    });
 
     routeDashboardMouse(
       { kind: "quickSessionForProject", projectId: "station" },
@@ -374,6 +384,11 @@ describe("routeDashboardMouse", () => {
     await waitFor(() =>
       fixture.service.dispatched.some((command) => command.type === "session.create"),
     );
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
     expect(
       fixture.service.dispatched.find((command) => command.type === "session.create"),
     ).toMatchObject({
@@ -393,6 +408,11 @@ describe("routeDashboardMouse", () => {
     expect(store.getState().screen).toMatchObject({
       name: "projectDefaultAgent",
       projectId: "station",
+    });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "defaultAgent",
     });
   });
 

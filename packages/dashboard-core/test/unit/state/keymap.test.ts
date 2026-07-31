@@ -15,6 +15,8 @@ describe("dashboard key bindings", () => {
   it("matches dashboard navigation and actions", () => {
     expect(matchDashboardBinding({ input: "", upArrow: true })?.action).toBe("tui.focus.up");
     expect(matchDashboardBinding({ input: "", downArrow: true })?.action).toBe("tui.focus.down");
+    expect(matchDashboardBinding({ input: "", leftArrow: true })?.action).toBe("tui.focus.left");
+    expect(matchDashboardBinding({ input: "", rightArrow: true })?.action).toBe("tui.focus.right");
     expect(matchDashboardBinding({ input: "\r", return: true })?.action).toBe("tui.focus.activate");
     expect(matchDashboardBinding({ input: "N" })?.action).toBe("tui.newSession.open");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
@@ -89,6 +91,14 @@ describe("dashboard footer", () => {
       expect(label).not.toContain("open");
       expect(label).not.toContain("N new");
       expect(label).not.toContain("delete");
+    }
+  });
+
+  it("labels focused Enter as activate at wide and compact widths", () => {
+    for (const columns of [120, 80]) {
+      const label = dashboardFooterLabel({ columns, quitHint: "Q/esc:close" });
+      expect(label).toContain("↵ activate");
+      expect(label).not.toContain("↵ open");
     }
   });
 

@@ -24,20 +24,16 @@ import {
   dispatchStationAction,
   dispatchStationKey,
   focusProjectSettingsItem,
-  openDefaultAgentPickerForProject,
   openWidgetSettingsPanel,
   openWidgetSettingsPicker,
   removeWidgetSettingsRow,
   toggleWidgetSettingsRow,
   resolveForkSessionSubmit,
   resolveNewSessionSubmit,
-  resolveProjectPaneTarget,
-  resolveQuickSessionSubmit,
   resolveRowAgentTarget,
   resolveRowPaneTarget,
   scrollStationView,
   selectAddProjectRow,
-  toggleProjectCollapsed,
   type OpenPaneTarget,
   type RowAgentTarget,
   type StationKeyOutcome,
@@ -206,32 +202,50 @@ export function routeStationMouse(
       }
       return { kind: "open-url", url: target.url };
     case "projectHeader":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      toggleProjectCollapsed(store, target.projectId);
-      return { kind: "handled" };
+      return mode === "dashboard"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "dashboard.projectHeader.activate",
+              projectId: target.projectId,
+              actionId: "primary",
+            }),
+          )
+        : { kind: "handled" };
     case "openShellForRow":
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
       return fromPaneTarget(resolveRowPaneTarget(store, target.rowId));
     case "openShellForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      return fromPaneTarget(resolveProjectPaneTarget(store, target.projectId));
+      return mode === "dashboard"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "dashboard.projectHeader.activate",
+              projectId: target.projectId,
+              actionId: "shell",
+            }),
+          )
+        : { kind: "handled" };
     case "quickSessionForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      return fromQuickSessionSubmit(resolveQuickSessionSubmit(store, target.projectId));
+      return mode === "dashboard"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "dashboard.projectHeader.activate",
+              projectId: target.projectId,
+              actionId: "quickSession",
+            }),
+          )
+        : { kind: "handled" };
     case "showDefaultAgentPickerForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      openDefaultAgentPickerForProject(store, target.projectId);
-      return { kind: "handled" };
+      return mode === "dashboard"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "dashboard.projectHeader.activate",
+              projectId: target.projectId,
+              actionId: "defaultAgent",
+            }),
+          )
+        : { kind: "handled" };
     case "firstProjectAdd":
       return mode === "dashboard"
         ? fromKeyOutcome(dispatchStationAction(store, { type: "dashboard.addProject" }))
@@ -415,7 +429,23 @@ function routeStationWheel(
 }
 
 function fromKeyOutcome(outcome: StationKeyOutcome): StationMouseOutcome {
-  return outcome.kind === "close-overlay" ? { kind: "close-overlay" } : { kind: "handled" };
+  switch (outcome.kind) {
+    case "close-overlay":
+      return { kind: "close-overlay" };
+    case "open-pane":
+      return fromPaneTarget(outcome.target);
+    case "launch-new-session":
+      return {
+        kind: "launch-new-session",
+        projectId: outcome.target.projectId,
+        title: outcome.target.title,
+        branch: outcome.target.branch,
+        harness: outcome.target.harness,
+      };
+    case "handled":
+    case "unmapped":
+      return { kind: "handled" };
+  }
 }
 
 /** An unresolvable target (stale row, missing project) is an inert click. */
@@ -441,27 +471,6 @@ function fromPaneTarget(target: OpenPaneTarget | undefined): StationMouseOutcome
     outcome.worktreeId = target.worktreeId;
   }
   return outcome;
-}
-
-/**
- * Map a quick-session submit to an outcome: `submit` surfaces a
- * `launch-new-session` router outcome (the executor creates the worktree and
- * hosts the agent). Blocked projects have already emitted an error toast;
- * `none` means only a stale or missing target and remains inert.
- */
-function fromQuickSessionSubmit(
-  result: ReturnType<typeof resolveQuickSessionSubmit>,
-): StationMouseOutcome {
-  if (result.kind === "submit") {
-    return {
-      kind: "launch-new-session",
-      projectId: result.projectId,
-      title: result.title,
-      branch: result.branch,
-      harness: result.harness,
-    };
-  }
-  return { kind: "handled" };
 }
 
 /**

@@ -1,11 +1,9 @@
 import type { TuiStore } from "@station/dashboard-core";
 import {
-  clampDashboardStateScroll,
   deriveTuiInputMode,
   focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
-  openProjectDefaultAgentPicker,
   openWidgetSettings,
   scrollDashboard,
   selectAddProjectRow,
@@ -16,6 +14,8 @@ import {
   widgetSettingsOpenPicker,
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
+  type ProjectHeaderControl,
+  type TuiControlIntent,
   type TuiInputMode,
 } from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
@@ -41,6 +41,22 @@ const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
 ]);
 const SCROLL_PAGE_ROWS = 5;
 const STALE_TARGET_MESSAGE = "That dashboard item is no longer available.";
+
+/** Consumes a one-shot core control intent at the standalone/tmux renderer boundary. */
+export function executeDashboardControlIntent(
+  intent: TuiControlIntent,
+  store: StoreApi<TuiStore>,
+  effects: DashboardMouseEffects,
+): void {
+  switch (intent.type) {
+    case "projectShell.open":
+      openProjectShell(store, intent.projectId, effects);
+      return;
+    case "quickSession.create":
+      store.getState().createQuickSession(intent.projectId);
+      return;
+  }
+}
 
 /** Translates standalone semantic targets into shared dashboard actions and renderer effects. */
 export function routeDashboardMouse(
@@ -85,7 +101,7 @@ function routeSurfaceClick(
       activateRowInMode(store, target.rowId, mode);
       return true;
     case "projectHeader":
-      toggleProjectInMode(store, target.projectId, mode);
+      activateProjectHeaderInMode(store, target.projectId, "primary", mode, effects);
       return true;
     case "link":
       openLinkInMode(target.url, mode, effects);
@@ -94,17 +110,13 @@ function routeSurfaceClick(
       openRowShellInMode(store, target.rowId, mode, effects);
       return true;
     case "openShellForProject":
-      openProjectShellInMode(store, target.projectId, mode, effects);
+      activateProjectHeaderInMode(store, target.projectId, "shell", mode, effects);
       return true;
     case "quickSessionForProject":
-      if (mode === "dashboard") {
-        store.getState().createQuickSession(target.projectId);
-      }
+      activateProjectHeaderInMode(store, target.projectId, "quickSession", mode, effects);
       return true;
     case "showDefaultAgentPickerForProject":
-      if (mode === "dashboard") {
-        store.setState(openProjectDefaultAgentPicker(store.getState(), target.projectId));
-      }
+      activateProjectHeaderInMode(store, target.projectId, "defaultAgent", mode, effects);
       return true;
     case "firstProjectAdd":
       if (mode === "dashboard") {
@@ -130,13 +142,23 @@ function activateRowInMode(store: StoreApi<TuiStore>, rowId: string, mode: TuiIn
   }
 }
 
-function toggleProjectInMode(
+function activateProjectHeaderInMode(
   store: StoreApi<TuiStore>,
   projectId: string,
+  actionId: ProjectHeaderControl,
   mode: TuiInputMode,
+  effects: DashboardMouseEffects,
 ): void {
-  if (mode === "dashboard") {
-    toggleCurrentProject(store, projectId);
+  if (mode !== "dashboard") {
+    return;
+  }
+  const result = store.getState().handleAction({
+    type: "dashboard.projectHeader.activate",
+    projectId,
+    actionId,
+  });
+  if (result.controlIntent !== undefined) {
+    executeDashboardControlIntent(result.controlIntent, store, effects);
   }
 }
 
@@ -163,13 +185,11 @@ function openRowShellInMode(
   effects.openShell({ cwd: sessionRow.worktree.path });
 }
 
-function openProjectShellInMode(
+function openProjectShell(
   store: StoreApi<TuiStore>,
   projectId: string,
-  mode: TuiInputMode,
   effects: DashboardMouseEffects,
 ): void {
-  if (mode !== "dashboard") return;
   const project = store
     .getState()
     .snapshot?.projects.find((candidate) => candidate.id === projectId);
@@ -320,21 +340,6 @@ function activateCurrentRow(store: StoreApi<TuiStore>, rowId: string): void {
     return;
   }
   store.getState().handleKey({ input: choice.key });
-}
-
-function toggleCurrentProject(store: StoreApi<TuiStore>, projectId: string): void {
-  const state = store.getState();
-  if (state.snapshot?.projects.some((project) => project.id === projectId) !== true) {
-    showNotice(store, STALE_TARGET_MESSAGE);
-    return;
-  }
-  // Validate the exact id before mutating, then reuse shared clamping after the item count changes.
-  const collapsedProjectIds = new Set(state.collapsedProjectIds);
-  const wasCollapsed = collapsedProjectIds.delete(projectId);
-  if (!wasCollapsed) {
-    collapsedProjectIds.add(projectId);
-  }
-  store.setState(clampDashboardStateScroll({ ...state, collapsedProjectIds }));
 }
 
 function showNotice(store: StoreApi<TuiStore>, message: string): void {

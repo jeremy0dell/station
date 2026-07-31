@@ -342,6 +342,11 @@ describe("routeStationMouse", () => {
 
     routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
     expect([...store.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "primary",
+    });
 
     routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
     expect([...store.getState().collapsedProjectIds]).toEqual([]);
@@ -514,6 +519,11 @@ describe("routeStationMouse", () => {
       cwd: projectRoot("station"),
       role: "shell",
     });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
+    });
   });
 
   it("keeps [+sh] live on a worktree that has a pending agent start", () => {
@@ -580,6 +590,11 @@ describe("routeStationMouse", () => {
       expect(outcome.branch).toMatch(/^station-[0-9a-f]+$/);
       expect(outcome.title).toBe(outcome.branch);
     }
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
   });
 
   it("shows the blocked Quick Session error without emitting a launch outcome", () => {
@@ -595,6 +610,11 @@ describe("routeStationMouse", () => {
       message: "Project checkout is configured as a bare repository.",
     });
     expect(toast?.hint).toContain("config --local core.bare false");
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
   });
 
   it("gates quick-session and default-agent picker to dashboard mode", () => {
@@ -635,6 +655,11 @@ describe("routeStationMouse", () => {
     if (screen?.name === "projectDefaultAgent") {
       expect(screen.projectId).toBe("station");
     }
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "defaultAgent",
+    });
   });
 
   it("selects a project default agent by clicking an agent picker row", async () => {

@@ -1,4 +1,4 @@
-import type { TuiStore } from "@station/dashboard-core";
+import type { TuiControlIntent, TuiStore } from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
 // Import the specific modules, not ../terminal/index.js — that barrel also
 // re-exports node-pty-backed PTY/VT/pane machinery the dashboard never uses,
@@ -16,6 +16,7 @@ import { sequenceToTuiKey } from "../station/input/sequenceToTuiKey.js";
  */
 export function createDashboardSequenceHandler(
   store: StoreApi<TuiStore>,
+  consumeControlIntent: (intent: TuiControlIntent) => void,
 ): (sequence: string) => boolean {
   return (sequence: string) => {
     const stripped = stripTerminalReplies(sequence);
@@ -30,7 +31,11 @@ export function createDashboardSequenceHandler(
     if (key === undefined) {
       return true; // a sequence the dashboard has no vocabulary for
     }
-    store.getState().handleKey(key);
+    // State lands before a one-shot renderer effect is consumed, matching the mouse adapter.
+    const result = store.getState().handleKey(key);
+    if (result.controlIntent !== undefined) {
+      consumeControlIntent(result.controlIntent);
+    }
     return true;
   };
 }

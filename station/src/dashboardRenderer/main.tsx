@@ -18,7 +18,10 @@ import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
-import type { DashboardMouseEffects } from "./dashboardMouse.js";
+import {
+  executeDashboardControlIntent,
+  type DashboardMouseEffects,
+} from "./dashboardMouse.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
 import {
@@ -162,7 +165,12 @@ export async function runDashboardMain(): Promise<void> {
     const nextRenderer = await createCliRenderer({
       enableMouseMovement,
       exitOnCtrlC: false,
-      prependInputHandlers: [copySelectedText, createDashboardSequenceHandler(store)],
+      prependInputHandlers: [
+        copySelectedText,
+        createDashboardSequenceHandler(store, (intent) => {
+          executeDashboardControlIntent(intent, store, mouseEffects);
+        }),
+      ],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
     renderer = nextRenderer;

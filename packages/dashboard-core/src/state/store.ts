@@ -17,6 +17,7 @@ import { buildFocusCommand } from "./commandBuilders.js";
 import {
   clearDashboardFocus as clearDashboardFocusState,
   focusDashboardSession as focusDashboardSessionState,
+  reconcileDashboardFocus,
 } from "./dashboardFocus.js";
 import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
@@ -34,18 +35,20 @@ import { createInitialTuiState, replaceSnapshot } from "./screen.js";
 import { submitQuickSession } from "./screens/quickSession.js";
 import { attachTuiSnapshotSource, type TuiSnapshotSource } from "./sourceBridge.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
-import { handleTuiKey, type TuiTransition } from "./transition.js";
+import { handleTuiKey, type TuiControlIntent, type TuiTransition } from "./transition.js";
 import type { CreateInitialTuiStateOptions, TuiState } from "./types.js";
 
 export type TuiHandleKeyResult = {
   dismissPopup: boolean;
   exitCode?: number;
+  controlIntent?: TuiControlIntent;
 };
 
 export type TuiStore = TuiState & {
   start(): () => void;
+  /** Applies a key transition and returns any one-shot renderer-owned control intent. */
   handleKey(key: TuiKey): TuiHandleKeyResult;
-  /** Applies a renderer-neutral action through the store's shared transition/effect executor. */
+  /** Applies a semantic transition and returns any one-shot renderer-owned control intent. */
   handleAction(action: TuiSemanticAction): TuiHandleKeyResult;
   /** Create a project session immediately with its configured default harness. */
   createQuickSession(projectId: string): void;
@@ -178,7 +181,9 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
       );
     },
     setTerminalRows: (rows): void => {
-      set(clampDashboardStateScroll({ ...get(), terminalRows: rows }));
+      const current = get();
+      const resized = clampDashboardStateScroll({ ...current, terminalRows: rows });
+      set(reconcileDashboardFocus(current, resized));
     },
     focusDashboardSession: (sessionId): void => {
       set(
@@ -211,7 +216,7 @@ function applyDashboardFocusState(current: TuiStore, next: TuiState): TuiStore {
   // Full replacement propagates an absent optional cursor; seeding from the
   // concrete store retains its action methods.
   const replacement = { ...current };
-  delete replacement.focusedRowId;
+  delete replacement.dashboardFocus;
   return { ...replacement, ...next };
 }
 
@@ -263,6 +268,9 @@ function applyTransition(
   const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
   if (transition.exitCode !== undefined) {
     result.exitCode = transition.exitCode;
+  }
+  if (transition.controlIntent !== undefined) {
+    result.controlIntent = transition.controlIntent;
   }
   return result;
 }

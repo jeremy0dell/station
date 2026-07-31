@@ -75,7 +75,7 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
 
 type DashboardKeyPattern =
   | { kind: "char"; char: string; ctrl?: true }
-  | { kind: "named"; named: "return" | "escape" | "up" | "down" }
+  | { kind: "named"; named: "return" | "escape" | "up" | "down" | "left" | "right" }
   | { kind: "slot" };
 
 type DashboardBindingSpec = {
@@ -104,11 +104,23 @@ export const TUI_DASHBOARD_BINDINGS = [
     outcome: "handled",
   },
   {
+    id: "tui.dashboard.focusLeft",
+    pattern: { kind: "named", named: "left" },
+    action: "tui.focus.left",
+    outcome: "handled",
+  },
+  {
+    id: "tui.dashboard.focusRight",
+    pattern: { kind: "named", named: "right" },
+    action: "tui.focus.right",
+    outcome: "handled",
+  },
+  {
     id: "tui.dashboard.focusActivate",
     pattern: { kind: "named", named: "return" },
     action: "tui.focus.activate",
     outcome: "handled",
-    help: { keys: "↵", label: "open focused session" },
+    help: { keys: "↵", label: "activate focus" },
   },
   {
     // Tab reaches the dashboard as legacy \t, which the byte path folds to
@@ -258,9 +270,9 @@ export function dashboardFooterLabel({
 }): string {
   const full = firstRun
     ? `↵ add first project  A add project  ${quitHint}`
-    : `↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
+    : `↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
   const compactFirstRun = `↵ add first project  ${quitHint}`;
-  const compact = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${quitHint}`;
+  const compact = `↵ activate  N new  ⇥ next  / search  X delete  ? help  ${quitHint}`;
   if (firstRun && full.length > columns) {
     return quitHint === QUIT_HINT_DISMISS_ERROR && compactFirstRun.length > columns
       ? quitHint
@@ -305,7 +317,13 @@ function matchesPattern(pattern: DashboardKeyPattern, key: TuiKey): boolean {
       if (pattern.named === "up") {
         return key.upArrow === true;
       }
-      return key.downArrow === true;
+      if (pattern.named === "down") {
+        return key.downArrow === true;
+      }
+      if (pattern.named === "left") {
+        return key.leftArrow === true;
+      }
+      return key.rightArrow === true;
     case "slot":
       return isSlotKey(key);
   }

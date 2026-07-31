@@ -60,9 +60,32 @@ export function createStationOverlayLayer(
       if (fork.kind === "submit") {
         return paneLaunchForkSessionOutcome(fork);
       }
+      // Renderer-owned project-header effects return through the key outcome so
+      // native keyboard activation enters the same pane/launch executor as mouse.
       const outcome = handleStationSequence(stationViewStore, key);
       if (outcome.kind === "close-overlay") {
         return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
+      }
+      if (outcome.kind === "open-pane") {
+        const paneOpen: Extract<RouteOutcome, { kind: "pane-open" }> = {
+          kind: "pane-open",
+          paneId: outcome.target.paneId,
+          cwd: outcome.target.cwd,
+          role: outcome.target.role,
+        };
+        if (outcome.target.command !== undefined) {
+          paneOpen.command = outcome.target.command;
+        }
+        if (outcome.target.args !== undefined) {
+          paneOpen.args = outcome.target.args;
+        }
+        if (outcome.target.worktreeId !== undefined) {
+          paneOpen.worktreeId = outcome.target.worktreeId;
+        }
+        return paneOpen;
+      }
+      if (outcome.kind === "launch-new-session") {
+        return paneLaunchNewSessionOutcome(outcome.target);
       }
       return { kind: "swallowed" };
     },

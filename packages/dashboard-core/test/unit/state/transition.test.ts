@@ -5,8 +5,10 @@ import {
   handleTuiKey,
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
+  replaceSnapshot,
   selectDashboardViewport,
   type TuiKey,
+  tuiScreenBehavior,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
@@ -78,7 +80,7 @@ describe("TUI screen transitions", () => {
 
     // Arrows now move the dashboard cursor (was: scroll the viewport).
     const moved = handleTuiKey(opened, { input: "", downArrow: true }).state;
-    expect(moved.focusedRowId).toBeDefined();
+    expect(moved.dashboardFocus).toBeDefined();
 
     const committed = handleTuiKey(moved, { input: "\r", return: true }).state;
     expect(committed.screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
@@ -88,7 +90,7 @@ describe("TUI screen transitions", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const withPending: typeof base = {
       ...base,
-      focusedRowId: "ses_wt_api_working",
+      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
       localRows: {
         ...base.localRows,
         pendingRemove: [
@@ -113,7 +115,10 @@ describe("TUI screen transitions", () => {
       initialSnapshot: createDashboardSnapshot(),
       collapsedProjectIds: ["api"],
     });
-    const state: typeof base = { ...base, focusedRowId: "ses_wt_api_working" };
+    const state: typeof base = {
+      ...base,
+      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
+    };
     const opened = handleTuiKey(state, { input: "X" }).state;
     const committed = handleTuiKey(opened, { input: "\r", return: true }).state;
     // The row is filtered out of view; ↵ must not act on a row the user cannot see.
@@ -882,6 +887,65 @@ describe("TUI screen transitions", () => {
     expect(opened.screen).toEqual({ name: "projectDefaultAgent", projectId: "web" });
     expect(handleTuiKey(opened, { input: "", escape: true }).state.screen).toEqual({
       name: "dashboard",
+    });
+  });
+
+  it("preserves default-agent header focus through every safe picker return", () => {
+    const base = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      dashboardFocus: {
+        kind: "projectHeader",
+        projectId: "web",
+        control: "defaultAgent",
+      },
+    });
+    const expectedFocus = base.dashboardFocus;
+
+    const escaped = handleTuiKey(openProjectDefaultAgentPicker(base, "web"), {
+      input: "",
+      escape: true,
+    }).state;
+    expect(escaped.dashboardFocus).toEqual(expectedFocus);
+
+    const openedForClickAway = openProjectDefaultAgentPicker(base, "web");
+    const clickAway = tuiScreenBehavior(openedForClickAway.screen).clickAway;
+    expect(clickAway?.(openedForClickAway).dashboardFocus).toEqual(expectedFocus);
+
+    const unchanged = handleTuiKey(openProjectDefaultAgentPicker(base, "web"), {
+      input: "1",
+    }).state;
+    expect(unchanged.dashboardFocus).toEqual(expectedFocus);
+
+    const changed = handleTuiKey(openProjectDefaultAgentPicker(base, "web"), {
+      input: "2",
+    }).state;
+    expect(changed.dashboardFocus).toEqual(expectedFocus);
+  });
+
+  it("reconciles picker return focus when its project disappears", () => {
+    const snapshot = createDashboardSnapshot();
+    const base = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: {
+        kind: "projectHeader",
+        projectId: "web",
+        control: "defaultAgent",
+      },
+    });
+    const opened = openProjectDefaultAgentPicker(base, "web");
+    const withoutWeb = {
+      ...snapshot,
+      projects: snapshot.projects.filter((project) => project.id !== "web"),
+      rows: snapshot.rows.filter((row) => row.projectId !== "web"),
+      sessions: snapshot.sessions.filter((session) => session.projectId !== "web"),
+    };
+    const replaced = replaceSnapshot(opened, withoutWeb);
+    const returned = handleTuiKey(replaced, { input: "", escape: true }).state;
+
+    expect(returned.dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "api",
+      control: "primary",
     });
   });
 

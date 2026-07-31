@@ -41,6 +41,28 @@ describe("TUI store", () => {
     expect(actionStore.getState().screen).toEqual(keyStore.getState().screen);
   });
 
+  it("applies focus before returning each project-header control intent exactly once", () => {
+    const snapshot = createDashboardSnapshot();
+    const store = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+    });
+
+    const result = store.getState().handleAction({
+      type: "dashboard.projectHeader.activate",
+      projectId: "web",
+      actionId: "shell",
+    });
+
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "web",
+      control: "shell",
+    });
+    expect(result.controlIntent).toEqual({ type: "projectShell.open", projectId: "web" });
+    expect(store.getState().handleKey({ input: "" }).controlIntent).toBeUndefined();
+  });
+
   it("loads initial snapshots and cleans up event subscriptions", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);

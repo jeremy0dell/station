@@ -4,12 +4,15 @@ import { choiceValueByKey } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import {
   activateFocusedDashboardRow,
+  focusedProjectHeaderControl,
   focusNextNeedsMe,
   moveDashboardFocus,
+  moveDashboardFocusHorizontal,
 } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
+import { activateProjectHeaderControl } from "../projectHeaderActions.js";
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiKeyRuntimeContext, TuiTransition } from "../transition.js";
@@ -55,10 +58,23 @@ export function handleDashboardAction(
       return {
         state: moveDashboardFocus(state, 1),
       };
-    case "tui.focus.activate":
-      return hasNoProjects(state)
-        ? handleDashboardAddProjectAction(state, context)
-        : activateFocusedDashboardRow(state);
+    case "tui.focus.left":
+      return {
+        state: moveDashboardFocusHorizontal(state, -1),
+      };
+    case "tui.focus.right":
+      return {
+        state: moveDashboardFocusHorizontal(state, 1),
+      };
+    case "tui.focus.activate": {
+      if (hasNoProjects(state)) {
+        return handleDashboardAddProjectAction(state, context);
+      }
+      const header = focusedProjectHeaderControl(state);
+      return header === undefined
+        ? activateFocusedDashboardRow(state)
+        : activateProjectHeaderControl(state, header.projectId, header.control);
+    }
     case "tui.focus.nextNeedsMe":
       return {
         state: focusNextNeedsMe(state),

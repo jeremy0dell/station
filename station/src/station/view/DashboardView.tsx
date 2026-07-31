@@ -2,7 +2,7 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes } from "@opentui/core";
-import type { ProjectView, SessionId, StationSnapshot } from "@station/contracts";
+import type { ProjectView, StationSnapshot } from "@station/contracts";
 import {
   fleetCountsLabel,
   emptyProjectLabel,
@@ -25,7 +25,11 @@ import {
   type DashboardViewportItem,
   type FleetSummary,
 } from "@station/dashboard-core";
-import type { TuiViewState } from "@station/dashboard-core";
+import type {
+  DashboardFocus,
+  ProjectHeaderControl,
+  TuiViewState,
+} from "@station/dashboard-core";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
@@ -42,17 +46,14 @@ const HOVER_BG = STATION_COLORS.hoverBackground;
 // cell so stopPropagation can never also toggle the header.
 const SHELL_AFFORDANCE_LABEL = "[shell]";
 const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
-const SHELL_AFFORDANCE_WIDTH = SHELL_AFFORDANCE_LABEL.length + 1;
-const SHELL_AFFORDANCE_WIDTH_COMPACT = SHELL_AFFORDANCE_LABEL_COMPACT.length + 1;
+const DEFAULT_AGENT_AFFORDANCE_LABEL = "[▾]";
 
 // The per-project-header quick-session affordance sits after [shell] on project
 // rows: "[quick session]" creates a session (default harness), "[▾]" opens the
 // project default-agent picker. Compact mode uses "[qs]" when columns are limited.
 const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
 const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
-// Reserved width: leading space + session label + space + [▾]
-const QUICK_SESSION_AFFORDANCE_WIDTH = ` ${QUICK_SESSION_AFFORDANCE_LABEL} [▾]`.length;
-const QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT = ` ${QUICK_SESSION_AFFORDANCE_LABEL_COMPACT} [▾]`.length;
+const PROJECT_HEADER_SEPARATOR_COUNT = 3;
 
 // Below this terminal width the header affordances switch to compact labels.
 const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
@@ -72,7 +73,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
   const keyByRow = new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]));
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
-    : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.focusedRowId);
+    : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.dashboardFocus);
   return (
     <box
       width="100%"
@@ -101,7 +102,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
           columns={contentColumns}
           items={viewport.visibleItems}
           layoutByItem={layoutByItem}
-          focusedRowId={viewState.focusedRowId}
+          dashboardFocus={viewState.dashboardFocus}
         />
       )}
       <ScrollIndicatorRow direction="below" overflow={viewport.sessionOverflow} />
@@ -228,10 +229,10 @@ function dashboardRowLayouts(
   items: readonly DashboardViewportItem[],
   keyByRow: ReadonlyMap<string, string>,
   columns: number,
-  focusedRowId?: SessionId,
+  dashboardFocus?: DashboardFocus,
 ): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
   const rowInputs = items.flatMap((item) => {
-    const input = rowGridInputForViewportItem(item, keyByRow, focusedRowId);
+    const input = rowGridInputForViewportItem(item, keyByRow, dashboardFocus);
     return input === undefined ? [] : [input];
   });
   const layouts = layoutWorktreeRowGrid({
@@ -251,12 +252,12 @@ function DashboardBody({
   columns,
   items,
   layoutByItem,
-  focusedRowId,
+  dashboardFocus,
 }: {
   columns: number;
   items: readonly DashboardViewportItem[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  focusedRowId?: SessionId | undefined;
+  dashboardFocus?: DashboardFocus | undefined;
 }) {
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -266,7 +267,7 @@ function DashboardBody({
           columns={columns}
           item={item}
           layout={layoutByItem.get(item.id)}
-          focusedRowId={focusedRowId}
+          dashboardFocus={dashboardFocus}
         />
       ))}
     </box>
@@ -277,18 +278,30 @@ function DashboardViewportRow({
   columns,
   item,
   layout,
-  focusedRowId,
+  dashboardFocus,
 }: {
   columns: number;
   item: DashboardViewportItem;
   layout: RowGridLayout | undefined;
-  focusedRowId?: SessionId | undefined;
+  dashboardFocus?: DashboardFocus | undefined;
 }) {
   switch (item.type) {
     case "projectGap":
       return <box height={1} />;
     case "projectHeader":
-      return <ProjectHeaderLine columns={columns} project={item.project} collapsed={item.collapsed} />;
+      return (
+        <ProjectHeaderLine
+          columns={columns}
+          project={item.project}
+          collapsed={item.collapsed}
+          focus={
+            dashboardFocus?.kind === "projectHeader" &&
+            dashboardFocus.projectId === item.project.id
+              ? dashboardFocus.control
+              : undefined
+          }
+        />
+      );
     case "emptyProject":
       return (
         <box flexDirection="row" height={1}>
@@ -298,7 +311,13 @@ function DashboardViewportRow({
       );
     case "session":
       return layout === undefined ? null : (
-        <SessionRowLine rowId={item.row.id} layout={layout} focused={item.row.id === focusedRowId} />
+        <SessionRowLine
+          rowId={item.row.id}
+          layout={layout}
+          focused={
+            dashboardFocus?.kind === "session" && dashboardFocus.sessionId === item.row.id
+          }
+        />
       );
     case "createLocalRow":
       // Local create rows have no slot and no activation target.
@@ -362,89 +381,10 @@ function FirstProjectButton({ columns }: { columns: number }) {
   );
 }
 
-/**
- * The project-header shell click target. Its own <text> (not a span) so it carries
- * its own mouse target and stopPropagation; the leading space keeps it off the
- * line content. Color-only hover, so golden frames stay layout-stable.
- */
-function ShellAffordance({
-  target,
-  onHoverChange,
-  compact,
-}: {
-  target: StationMouseTarget;
-  onHoverChange?: ((hover: boolean) => void) | undefined;
-  compact?: boolean;
-}) {
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const label = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
-  return (
-    // flexShrink={0}: content grows/clips first, affordance width is never clipped.
-    <text
-      flexShrink={0}
-      fg={hover ? STATION_COLORS.green : STATION_COLORS.gray}
-      {...stationMouseProps(dispatch, target)}
-      onMouseOver={() => {
-        setHover(true);
-        onHoverChange?.(true);
-      }}
-      onMouseOut={() => {
-        setHover(false);
-        onHoverChange?.(false);
-      }}
-    >
-      {` ${label}`}
-    </text>
-  );
-}
-
-/**
- * The trailing `[quick session] [▾]` (or `[qs] [▾]` in compact mode)
- * quick-session affordance on project headers. Two separate `<text>` elements
- * so each click target fires independently: the session label immediately
- * creates a session (default harness), `[▾]` opens the default-agent picker
- * for this project.
- */
-function QuickSessionAffordance({
-  projectId,
-  compact,
-}: {
-  projectId: string;
-  compact?: boolean;
-}) {
-  const dispatch = useStationMouse();
-  const [quickHover, setQuickHover] = useStationHoverState();
-  const [pickerHover, setPickerHover] = useStationHoverState();
-  const sessionLabel = compact ? QUICK_SESSION_AFFORDANCE_LABEL_COMPACT : QUICK_SESSION_AFFORDANCE_LABEL;
-  return (
-    <>
-      <text
-        flexShrink={0}
-        fg={quickHover ? STATION_COLORS.green : STATION_COLORS.gray}
-        {...stationMouseProps(dispatch, { kind: "quickSessionForProject", projectId })}
-        onMouseOver={() => setQuickHover(true)}
-        onMouseOut={() => setQuickHover(false)}
-      >
-        {` ${sessionLabel}`}
-      </text>
-      <text
-        flexShrink={0}
-        fg={pickerHover ? STATION_COLORS.green : STATION_COLORS.gray}
-        {...stationMouseProps(dispatch, { kind: "showDefaultAgentPickerForProject", projectId })}
-        onMouseOver={() => setPickerHover(true)}
-        onMouseOut={() => setPickerHover(false)}
-      >
-        {" [▾]"}
-      </text>
-    </>
-  );
-}
-
 const EMPTY_SESSION_BUTTON_LABEL = "[ + add session ]";
 
 // Mouse-native empty-state action: one click creates a session (default agent)
-// for the project — the same command as the project header's [quick session].
+// for the project — the same semantic action as the project header segment.
 function EmptySessionButton({ projectId }: { projectId: string }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
@@ -466,43 +406,121 @@ function ProjectHeaderLine({
   columns,
   project,
   collapsed,
+  focus,
 }: {
   columns: number;
   project: ProjectView;
   collapsed: boolean;
+  focus?: ProjectHeaderControl | undefined;
+}) {
+  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
+  const shellLabel = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
+  const quickSessionLabel = compact
+    ? QUICK_SESSION_AFFORDANCE_LABEL_COMPACT
+    : QUICK_SESSION_AFFORDANCE_LABEL;
+  const controlsWidth =
+    shellLabel.length +
+    quickSessionLabel.length +
+    DEFAULT_AGENT_AFFORDANCE_LABEL.length +
+    PROJECT_HEADER_SEPARATOR_COUNT;
+  return (
+    <box flexDirection="row" width="100%" height={1} overflow="hidden">
+      <ProjectHeaderPrimary
+        project={project}
+        collapsed={collapsed}
+        width={Math.max(1, columns - controlsWidth)}
+        focused={focus === "primary"}
+      />
+      <box flexGrow={1} height={1} />
+      <ProjectHeaderSeparator />
+      <ProjectHeaderActionSegment
+        label={shellLabel}
+        target={{ kind: "openShellForProject", projectId: project.id }}
+        focused={focus === "shell"}
+      />
+      <ProjectHeaderSeparator />
+      <ProjectHeaderActionSegment
+        label={quickSessionLabel}
+        target={{ kind: "quickSessionForProject", projectId: project.id }}
+        focused={focus === "quickSession"}
+      />
+      <ProjectHeaderSeparator />
+      <ProjectHeaderActionSegment
+        label={DEFAULT_AGENT_AFFORDANCE_LABEL}
+        target={{ kind: "showDefaultAgentPickerForProject", projectId: project.id }}
+        focused={focus === "defaultAgent"}
+      />
+    </box>
+  );
+}
+
+function ProjectHeaderPrimary({
+  project,
+  collapsed,
+  width,
+  focused,
+}: {
+  project: ProjectView;
+  collapsed: boolean;
+  width: number;
+  focused: boolean;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
-  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
-  const shellWidth = compact ? SHELL_AFFORDANCE_WIDTH_COMPACT : SHELL_AFFORDANCE_WIDTH;
-  const quickSessionWidth = compact ? QUICK_SESSION_AFFORDANCE_WIDTH_COMPACT : QUICK_SESSION_AFFORDANCE_WIDTH;
+  const background = hover
+    ? { bg: HOVER_BG }
+    : focused
+      ? { bg: STATION_COLORS.focusBackground }
+      : {};
   return (
-    <box
-      flexDirection="row"
-      width="100%"
-      height={1}
-      {...(hover ? { backgroundColor: HOVER_BG } : {})}
+    <text
+      flexShrink={0}
+      fg={STATION_COLORS.foreground}
+      {...background}
+      {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
     >
-      <text
-        flexGrow={1}
-        fg={STATION_COLORS.foreground}
-        {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
-        onMouseOver={() => setHover(true)}
-        onMouseOut={() => setHover(false)}
-      >
-        <ProjectHeaderLabel
-          project={project}
-          collapsed={collapsed}
-          width={Math.max(1, columns - shellWidth - quickSessionWidth)}
-        />
-      </text>
-      <ShellAffordance
-        target={{ kind: "openShellForProject", projectId: project.id }}
-        onHoverChange={setHover}
-        compact={compact}
-      />
-      <QuickSessionAffordance projectId={project.id} compact={compact} />
-    </box>
+      <ProjectHeaderLabel project={project} collapsed={collapsed} width={width} />
+    </text>
+  );
+}
+
+function ProjectHeaderActionSegment({
+  label,
+  target,
+  focused,
+}: {
+  label: string;
+  target: StationMouseTarget;
+  focused: boolean;
+}) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useStationHoverState();
+  const background = hover
+    ? { bg: HOVER_BG }
+    : focused
+      ? { bg: STATION_COLORS.focusBackground }
+      : {};
+  return (
+    <text
+      flexShrink={0}
+      fg={hover ? STATION_COLORS.green : STATION_COLORS.gray}
+      {...background}
+      {...stationMouseProps(dispatch, target)}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      {label}
+    </text>
+  );
+}
+
+function ProjectHeaderSeparator() {
+  return (
+    <text flexShrink={0} fg={STATION_COLORS.gray}>
+      {" "}
+    </text>
   );
 }
 

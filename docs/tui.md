@@ -238,9 +238,32 @@ Dashboard-core owns action availability and resolution, while native Station and
 retain their terminal-specific effects after shared resolution. Session rows are resolved by their
 exact current row ID before their visible slot key is dispatched, so
 observer-backed focus, start, resume, and picker behavior stays on the existing command path.
-Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header clicks
-toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
-modal surfaces intercept background clicks and scrolling.
+Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header
+segments dispatch one `dashboard.projectHeader.activate` action, so a click first focuses the exact
+segment and then follows the same activation path as focused Enter. Wheel events over child rows use
+dashboard scrolling, and active modal surfaces intercept background clicks and scrolling.
+
+Dashboard focus follows rendered order through each project header and its visible session rows.
+Entering a header vertically always selects `primary`; Left/Right then moves, without wrapping,
+through `primary` → `shell` → `quickSession` → `defaultAgent`. Up/Down leaves any header segment
+immediately, and Left/Right on a session row is inert. Remove, rename, and fork row choosers retain
+a separate session-only traversal, as do slot keys and next-needs-me. Gaps, empty placeholders, and
+optimistic create rows remain non-focusable.
+
+Only the focused header segment receives `STATION_COLORS.focusBackground`: primary covers the
+rendered disclosure/name/summary text without painting flexible trailing whitespace, while each
+trailing control owns exactly its label cells and separator spaces remain inert. Wide and compact
+labels preserve the same control identity. Hover stays component-local, temporarily supersedes the
+focus background, and reveals persistent keyboard focus again when the pointer leaves; no focus
+glyph is added.
+
+Collapse keeps primary focus and clamps scrolling. Snapshot replacement and accepted search changes
+preserve stable focus identity, otherwise choose the next focusable item at the old position before
+the preceding item; resize preserves identity and scrolls it into view. The Default Agent picker
+retains its header focus beneath the screen, so Escape, click-away, unchanged selection, and a
+successful change return to `defaultAgent`; project removal while open uses the same deterministic
+focus fallback. The dashboard footer describes Enter as `activate` because it may activate either a
+session row or a project-header control.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
