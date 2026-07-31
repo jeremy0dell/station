@@ -128,10 +128,12 @@ cannot infer an authored newline from an unmarked CRLF row without risking comma
 corruption.
 
 Codex rich-output mode is one current example: it emits pre-wrapped rows and a two-column
-visual gutter without semantic markers. Codex 0.146.0's `Alt-R` raw-output mode is an
-independent workaround when enabled before the response is rendered. Raw mode omits the rich
-gutter and leaves wrapping to the terminal, so Station can reconstruct it from native wrap
-metadata; switching modes after output was rendered cannot restore boundary provenance.
+visual gutter without semantic markers. Codex 0.146.0's `Alt-R` raw-output mode can avoid that
+specific rich-renderer path when enabled before the response is rendered. Rows it leaves to the
+terminal remain copyable through native wrap metadata, but raw mode is not semantic-protocol
+support and is not a general copy-fidelity guarantee; switching modes after output was rendered
+cannot restore boundary provenance. Remaining Codex raw and rich copy failures are tracked in
+[openai/codex#12200](https://github.com/openai/codex/issues/12200).
 
 ## Manual verification
 
@@ -145,7 +147,8 @@ pbpaste | python3 -c 'import sys; s=sys.stdin.read(); print("line breaks:", s.co
 The wrapped command should report zero line breaks and no renderer gutter. A
 two-source-line block should report exactly one. Repeat at narrow and wide pane widths,
 after scrolling into history, after resizing, after complete Host reattach, and after
-semantic recovery once the 256 KiB raw replay budget is exceeded. For the current Codex
-workaround, press `Alt-R` before requesting the command and compare it with the same response
-rendered in rich mode. Use an ordinary pane drag; global `Ctrl-C` and Shift/Ctrl
-outer-terminal selection do not exercise Station extraction.
+semantic recovery once the 256 KiB raw replay budget is exceeded. To evaluate Codex raw mode
+separately, press `Alt-R` before requesting the command and compare it with the same response
+rendered in rich mode; this tests a Codex workaround, not adoption of this protocol. Use an
+ordinary pane drag; global `Ctrl-C` and Shift/Ctrl outer-terminal selection do not exercise
+Station extraction.
