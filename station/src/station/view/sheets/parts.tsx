@@ -175,7 +175,7 @@ const BUTTON_TONE_COLORS: Record<SheetButtonTone, string> = {
   danger: STATION_COLORS.red,
 };
 
-export function SheetButton({
+function SheetButton({
   label,
   shortcut,
   tone,
@@ -252,15 +252,15 @@ export type SheetButtonSpec = {
   shortcut: string;
   tone: SheetButtonTone;
   mouseTarget: StationMouseTarget;
-  focused?: boolean;
-  disabled?: boolean;
+  focused: boolean;
+  disabled: boolean;
 };
 
 function naturalSheetButtonWidth(button: SheetButtonSpec): number {
   return button.label.length + button.shortcut.length + 5;
 }
 
-/** Compact button group that expands controls only when the available width requires it. */
+/** Natural-width action group that uses compact equal-width controls only when content cannot fit. */
 export function SheetButtonRow({
   width,
   buttons,
@@ -289,8 +289,8 @@ export function SheetButtonRow({
             tone={button.tone}
             fixedWidth={naturalLayout ? (naturalWidths[index] ?? fallbackWidth) : fallbackWidth}
             mouseTarget={button.mouseTarget}
-            focused={button.focused ?? false}
-            disabled={button.disabled ?? false}
+            focused={button.focused}
+            disabled={button.disabled}
           />
         </box>
       ))}

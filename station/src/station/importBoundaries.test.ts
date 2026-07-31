@@ -95,6 +95,34 @@ describe("station view import boundaries", () => {
     }
     expect(failures).toEqual([]);
   });
+
+  it("keeps sheet action sizing and pointer wiring in shared controls", () => {
+    const frame = "view/sheets/BottomSheetFrameView.tsx";
+    const primitives = "view/sheets/parts.tsx";
+    const failures: string[] = [];
+    for (const file of files) {
+      const rel = relative(STATION_ROOT, file);
+      if (
+        !rel.startsWith("view/sheets/") ||
+        !file.endsWith(".tsx") ||
+        file.includes(".test.") ||
+        rel === primitives
+      ) {
+        continue;
+      }
+      const source = readFileSync(file, "utf8");
+      const reasons: string[] = [];
+      if (/<SheetButton(?:\s|\/?>)/.test(source)) reasons.push("uses low-level SheetButton");
+      if (rel !== frame && /\bstationMouseProps\s*\(/.test(source)) {
+        reasons.push("calls stationMouseProps");
+      }
+      if (rel !== frame && /\bonMouse(?:Over|Out|Down|Up|Move|Drag)\s*=/.test(source)) {
+        reasons.push("declares mouse handlers");
+      }
+      if (reasons.length > 0) failures.push(`${rel}: ${reasons.join(", ")}`);
+    }
+    expect(failures).toEqual([]);
+  });
 });
 
 describe("context menu import boundaries", () => {

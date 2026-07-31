@@ -208,6 +208,16 @@ const CASES: ModalCase[] = [
     reject: ["Branch"],
   },
   {
+    name: "fork details submit focus",
+    keys: [
+      { input: "F" },
+      { input: "1" },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+    ],
+    expect: ["Fork Session", "▸ Fork (enter)"],
+  },
+  {
     name: "new session review",
     keys: [{ input: "N" }],
     expect: [

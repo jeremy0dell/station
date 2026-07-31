@@ -276,6 +276,10 @@ prefers a pasted absolute or home-relative path and otherwise commits the regist
 cursor used by keyboard Enter; Open is enabled only for a navigable child or search row.
 Review, id editing, success, and failure use a visible action focus cursor. Their actions
 render through shared compact sheet buttons instead of stretching each control across the sheet.
+Ordinary sheet commands must use `SheetButtonRow`: fitting controls keep their natural width and
+leave trailing cells inert, while compact equal-width controls are reserved for constrained-width
+overflow. The low-level fixed-width button remains private to shared sheet compositions such as
+confirm controls; full-width interaction styling belongs to selectable list rows, not commands.
 Horizontal review and failure groups move with Left/Right; the id editor keeps Save and Back
 vertically stacked so Up/Down does not conflict with text-cursor movement. Missing Git-root review
 keeps submit disabled and stale disabled targets inert; these interaction paths do not weaken
