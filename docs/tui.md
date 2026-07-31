@@ -274,21 +274,24 @@ action IDs; core resolves those IDs to the same intents used by direct commands
 and focused activation. Folder rows remain single-click selection targets. Choose
 prefers a pasted absolute or home-relative path and otherwise commits the registered-list
 cursor used by keyboard Enter; Open is enabled only for a navigable child or search row.
-Review, id editing, success, and failure use a visible action focus cursor. Missing
-Git-root review keeps submit disabled and stale disabled targets inert; these interaction
-paths do not weaken project admission policy.
+Review, id editing, success, and failure use a visible action focus cursor. Their actions
+render through the shared compact sheet-button group instead of stretching each control across
+the sheet. Missing Git-root review keeps submit disabled and stale disabled targets inert; these
+interaction paths do not weaken project admission policy.
 
-Create Session review renders Project, Name, Agent, and Create as full-width
-interactive rows with visible `P`, `N`, `A`, and `C` commands. Arrow focus has a
-non-color marker and contextual Enter helper; agent identity and its glyph plus
-health text are separate spans. The name editor gives Name, Save, and Back
-independent semantic controls, hides the text cursor while an action owns focus,
-and reserves Left/Right for text-cursor movement while Name owns focus. Selecting
-Name sets focus directly and never generates arrow input. Native pointer Create,
-focused Enter, and direct `C` pass through one semantic Create resolver and shared
-validation before producing the managed-pane effect; when validation disables Create,
-all three activation paths remain inert. Standalone creation applies the same action
-through its existing observer operation path.
+Create Session review renders Project, Name, and Agent as compact field controls, followed by a
+compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, and `C`), values, and inline
+health status use separate spans so their roles and associations remain visible. Arrow focus uses
+a non-color marker and contextual Enter helper without painting the full row as selected. The name
+editor gives Name, Save, and Back independent semantic controls, hides the text cursor while an
+action owns focus, and reserves Left/Right for text-cursor movement while Name owns focus. Selecting
+Name sets focus directly and never generates arrow input. Native pointer Create, focused Enter, and
+direct `C` pass through one semantic Create resolver and shared validation before producing the
+managed-pane effect; when validation disables Create, all three activation paths remain inert.
+Standalone creation applies the same action through its existing observer operation path.
+
+All bottom-sheet text uses the shared non-selectable sheet text primitive. Dragging inside any sheet
+therefore remains pointer interaction and never starts OpenTUI terminal text selection.
 
 Real native mouse acceptance lives in
 `tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`

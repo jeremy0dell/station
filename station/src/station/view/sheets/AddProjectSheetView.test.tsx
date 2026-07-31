@@ -64,6 +64,14 @@ describe("AddProjectSheetView", () => {
     expect(row).toBeGreaterThan(0);
     expect(col).toBeGreaterThan(0);
     expect(lines[row]).toContain("▸");
+    expect(lines[row]).toContain("Edit id (N)");
+    expect(lines[row]).toContain("Choose folder (B)");
+    expect(lines[row]).toContain("Cancel (Esc)");
+    const shortcutCol = lines[row]?.indexOf("A)") ?? -1;
+    const shortcutSpan = spanAtFrameCell(setup.captureSpans(), row, shortcutCol);
+    expect(shortcutSpan?.fg === undefined ? undefined : rgbToHex(shortcutSpan.fg)).toBe(
+      STATION_COLORS.yellow,
+    );
 
     await act(async () => {
       await setup.mockMouse.moveTo(col, row);
@@ -73,6 +81,11 @@ describe("AddProjectSheetView", () => {
     const span = spanAtFrameCell(setup.captureSpans(), row, col);
     expect(span?.fg === undefined ? undefined : rgbToHex(span.fg)).toBe(STATION_COLORS.background);
     expect(span?.bg === undefined ? undefined : rgbToHex(span.bg)).toBe(STATION_COLORS.cyan);
+    const gapCol = (lines[row]?.indexOf("Edit id") ?? 0) - 1;
+    const gapSpan = spanAtFrameCell(setup.captureSpans(), row, gapCol);
+    expect(gapSpan?.bg === undefined ? undefined : rgbToHex(gapSpan.bg)).not.toBe(
+      STATION_COLORS.cyan,
+    );
 
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
     expect(targets.at(-1)).toEqual({ kind: "addProjectAction", actionId: "review.submit" });

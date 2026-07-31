@@ -273,7 +273,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Session  cli-help-man                      │code  idle           +14 -6 #5 x1 
 │ Removes agent, worktree, and panes.        │code  unknown           +3 -1 #10 
 │                                            │                                  
-│ Yes (y)     No (n)                         │                    [sh] [qs] [▾] 
+│  Yes (y)     No (n)                        │                    [sh] [qs] [▾] 
 │ Esc/Enter:cancel                           │                                  
 │                                            │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
@@ -414,7 +414,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │   Copy   [x] uncommitted changes           │code  unknown           +3 -1 #10 
 │ Source keeps running — copy is read-only.  │                                  
 │                                            │                    [sh] [qs] [▾] 
-│ Fork (enter)                               │                                  
+│  Fork (enter)                              │                                  
 │ ↑↓:field space:toggle enter:fork esc:back  │───────────────────────────────── 
 └────────────────────────────────────────────┘h  X delete  ? help  Q/esc:close  
 "
@@ -440,9 +440,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
-│  Name (N) station-XXXXXX                                                     │
-│  Agent (A) codex                                                    ● unknown│
-│▸ [ Create session (C) ]                                                      │
+│  Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● unknown                                                 │
+│▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -468,9 +468,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │▸ Project (P) station                                                         │
-│  Name (N) station-XXXXXX                                                     │
-│  Agent (A) codex                                                    ● unknown│
-│  [ Create session (C) ]                                                      │
+│  Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● unknown                                                 │
+│  Create session (C)                                                          │
 │ ↑↓ focus · Enter choose project · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -496,9 +496,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
-│▸ Name (N) station-XXXXXX                                                     │
-│  Agent (A) codex                                                    ● unknown│
-│  [ Create session (C) ]                                                      │
+│▸ Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● unknown                                                 │
+│  Create session (C)                                                          │
 │ ↑↓ focus · Enter edit name · Esc cancel                                      │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -524,9 +524,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
-│  Name (N) station-XXXXXX                                                     │
-│▸ Agent (A) codex                                                    ● unknown│
-│  [ Create session (C) ]                                                      │
+│  Name (N)    station-XXXXXX                                                  │
+│▸ Agent (A)   codex ● unknown                                                 │
+│  Create session (C)                                                          │
 │ ↑↓ focus · Enter choose agent · Esc cancel                                   │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -552,9 +552,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
-│  Name (N) station-XXXXXX                                                     │
-│  Agent (A) codex                                                    ● healthy│
-│▸ [ Create session (C) ]                                                      │
+│  Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● healthy                                                 │
+│▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -580,9 +580,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
-│  Name (N) station-XXXXXX                                                     │
-│  Agent (A) codex                                                   ● degraded│
-│▸ [ Create session (C) ]                                                      │
+│  Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● degraded                                                │
+│▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -608,9 +608,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Create Session                                                               │
 │  Project (P) station                                                         │
-│  Name (N) station-XXXXXX                                                     │
-│  Agent (A) codex                                                ● unavailable│
-│▸ [ Create session (C) ]                                                      │
+│  Name (N)    station-XXXXXX                                                  │
+│  Agent (A)   codex ● unavailable                                             │
+│▸ Create session (C)                                                          │
 │ ↑↓ focus · Enter create session · Esc cancel                                 │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -636,10 +636,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Set Session Name                                                             │
 │ Project      station                                                         │
-│▸ Name |station-XXXXXX                                                        │
-│  [ Save (Ctrl-S) ]                                                           │
-│  Back (Esc)                                                                  │
+│▸ Name        |station-XXXXXX                                                 │
+│  Save (Ctrl-S)    Back (Esc)                                                 │
 │ Type name · Left/Right cursor · Enter save · ↑↓ focus                        │
+│                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
@@ -664,10 +664,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Set Session Name                                                             │
 │ Project      station                                                         │
-│  Name station-XXXXXX                                                         │
-│▸ [ Save (Ctrl-S) ]                                                           │
-│  Back (Esc)                                                                  │
+│  Name        station-XXXXXX                                                  │
+│▸ Save (Ctrl-S)    Back (Esc)                                                 │
 │ Enter save name · ↑↓ focus · Esc back                                        │
+│                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
@@ -692,10 +692,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Set Session Name                                                             │
 │ Project      station                                                         │
-│  Name station-XXXXXX                                                         │
-│  [ Save (Ctrl-S) ]                                                           │
-│▸ Back (Esc)                                                                  │
+│  Name        station-XXXXXX                                                  │
+│  Save (Ctrl-S)  ▸ Back (Esc)                                                 │
 │ Enter back without saving · ↑↓ focus                                         │
+│                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
 `;
@@ -712,9 +712,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ┌──────────────────────────────────────┐
 │ Create Session                       │
 │  Project (P) station                 │
-│  Name (N) station-XXXXXX             │
-│  Agent (A) codex           ● degraded│
-│▸ [ Create session (C) ]              │
+│  Name (N)    station-XXXXXX          │
+│  Agent (A)   codex ● degraded        │
+│▸ Create session (C)                  │
 │ ↑↓ focus · Enter create session · Esc│
 └──────────────────────────────────────┘
 "
@@ -826,7 +826,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│ Open (→/↵)                             Cancel (Esc)                          │
+│  Open (→/↵)    Cancel (Esc)                                                  │
 │ Click selects · Open enters · ↑↓ + Enter supported                           │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -854,7 +854,7 @@ exports[`modal flow golden frames renders the first project sheet 1`] = `
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│ Open (→/↵)                             Cancel (Esc)                          │
+│  Open (→/↵)    Cancel (Esc)                                                  │
 │ Click selects · Open enters · ↑↓ + Enter supported                           │
 └──────────────────────────────────────────────────────────────────────────────┘
 "
@@ -881,7 +881,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│ Choose (↵)     Open (→)       Parent (←)     Search (/)     Cancel (Esc)     │
+│  Choose (↵)    Open (→)    Parent (←)    Search (/)    Cancel (Esc)          │
 │ Single-click selects · actions complete navigation                           │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -902,11 +902,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project id      station                                                      │
 │ Display name    Station                                                      │
 │                                                                              │
-│▸ [ Add project (A) ]                                                         │
-│  Edit id (N)                                                                 │
-│  Choose folder (B)                                                           │
-│  Cancel (Esc)                                                                │
+│▸ Add project (A)    Edit id (N)    Choose folder (B)    Cancel (Esc)         │
 │ Enter add project                                                            │
+│                                                                              │
+│                                                                              │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -930,11 +930,11 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project id      station                                                      │
 │ Display name    Station                                                      │
 │ Choose a folder inside an existing Git repository.                           │
-│  [ Add project (A) ]                                                         │
-│  Edit id (N)                                                                 │
-│▸ Choose folder (B)                                                           │
-│  Cancel (Esc)                                                                │
+│  Add project (A)    Edit id (N)  ▸ Choose folder (B)    Cancel (Esc)         │
 │ Enter choose another folder                                                  │
+│                                                                              │
+│                                                                              │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -958,9 +958,9 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project id      station|                                                     │
 │ Display name    Station                                                      │
 │                                                                              │
-│▸ [ Save id (Ctrl-S) ]                                                        │
-│  Back (Esc)                                                                  │
+│▸ Save id (Ctrl-S)    Back (Esc)                                              │
 │ Enter save project id                                                        │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -984,7 +984,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Project         Station                                                      │
 │ Root            /Users/example/Developer/station                             │
 │ Config updated. Reconciled successfully.                                     │
-│▸ [ Dashboard (D) ]                                                           │
+│▸ Dashboard (D)                                                               │
 │ Enter or D returns to dashboard                                              │
 │                                                                              │
 │                                                                              │
@@ -1012,10 +1012,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │ Could not add this project.                                                  │
 │ The TUI could not complete the observer operation.                           │
 │ Code    CLIENT_OBSERVER_OPERATION_FAILED                                     │
-│▸ [ Retry (R) ]                                                               │
-│  Choose folder (B)                                                           │
-│  Cancel (Esc)                                                                │
+│▸ Retry (R)    Choose folder (B)    Cancel (Esc)                              │
 │ ↑↓ action · Enter activates focused action                                   │
+│                                                                              │
+│                                                                              │
 │                                                                              │
 │                                                                              │
 │                                                                              │
@@ -1042,7 +1042,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 │                                      │
 │                                      │
 │                                      │
-│ Open (→/↵)         Cancel (Esc)      │
+│  Open (→/↵)    Cancel (Esc)          │
 │ Click selects · Open enters · ↑↓ + En│
 └──────────────────────────────────────┘
 "

@@ -5,7 +5,7 @@ import type { TuiScreen } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { STATION_COLORS } from "../theme.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
-import { SheetFooter, SheetLabelValue, SheetLine } from "./parts.js";
+import { SheetFooter, SheetLabelValue, SheetLine, SheetText } from "./parts.js";
 
 export type RenameSessionSheetViewProps = {
   state: Extract<TuiScreen, { name: "renameSession"; step: "editName" }>;
@@ -32,7 +32,9 @@ export function RenameSessionSheetView({ state, columns, rows }: RenameSessionSh
         value={<EditableTextInputView {...state.draftTitle} placeholder={state.currentTitle} />}
       />
       {state.validationError === undefined ? null : (
-        <text fg={STATION_COLORS.red}>{truncateCells(` ${state.validationError}`, contentWidth)}</text>
+        <SheetText fg={STATION_COLORS.red}>
+          {truncateCells(` ${state.validationError}`, contentWidth)}
+        </SheetText>
       )}
       <SheetFooter width={contentWidth}>{footer}</SheetFooter>
     </BottomSheetFrameView>

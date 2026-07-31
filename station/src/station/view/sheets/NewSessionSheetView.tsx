@@ -15,8 +15,9 @@ import { providerHealthStatusColor } from "../theme.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
-  SheetActionRow,
+  SheetButtonRow,
   SheetChoiceLine,
+  SheetControlRow,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
@@ -116,12 +117,12 @@ function Review({
       {content.fields.map((field) => {
         const status = field.status;
         return (
-          <SheetActionRow
+          <SheetControlRow
             key={field.id}
             width={width}
             label={field.label}
             shortcut={field.accelerator}
-            detail={field.value}
+            value={field.value}
             focused={state.reviewFocus === field.focusId}
             disabled={!field.enabled}
             mouseTarget={{ kind: "newSessionAction", actionId: field.actionId }}
@@ -137,14 +138,20 @@ function Review({
           />
         );
       })}
-      <SheetActionRow
+      <SheetButtonRow
         width={width}
-        label={content.create.label}
-        shortcut={content.create.accelerator}
-        tone="primary"
-        focused={state.reviewFocus === content.create.focusId}
-        disabled={!content.create.enabled}
-        mouseTarget={{ kind: "newSessionAction", actionId: content.create.actionId }}
+        buttons={[
+          {
+            id: content.create.actionId,
+            label: content.create.label,
+            compactLabel: "Create",
+            shortcut: content.create.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.reviewFocus === content.create.focusId,
+            disabled: !content.create.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.create.actionId },
+          },
+        ]}
       />
       <SheetFooter width={width}>{`↑↓ focus · ${content.helper} · Esc cancel`}</SheetFooter>
     </>
@@ -165,10 +172,10 @@ function EditName({
   return (
     <>
       <SheetLabelValue width={width} label="Project" labelWidth={12} value={project?.label ?? "-"} />
-      <SheetActionRow
+      <SheetControlRow
         width={width}
         label={content.controls.name.label}
-        detail={
+        value={
           <EditableTextInputView
             value={state.draftName.value}
             cursor={state.draftName.cursor}
@@ -176,27 +183,39 @@ function EditName({
             active={state.editNameFocus === "name"}
           />
         }
-        detailCells={nameValue.length + Number(state.editNameFocus === "name")}
+        valueCells={nameValue.length + Number(state.editNameFocus === "name")}
         focused={state.editNameFocus === content.controls.name.focusId}
         disabled={!content.controls.name.enabled}
         mouseTarget={{ kind: "newSessionAction", actionId: content.controls.name.actionId }}
       />
-      <SheetActionRow
+      <SheetButtonRow
         width={width}
-        label={content.controls.save.label}
-        shortcut={content.controls.save.accelerator}
-        tone="primary"
-        focused={state.editNameFocus === content.controls.save.focusId}
-        disabled={!content.controls.save.enabled}
-        mouseTarget={{ kind: "newSessionAction", actionId: content.controls.save.actionId }}
-      />
-      <SheetActionRow
-        width={width}
-        label={content.controls.back.label}
-        shortcut={content.controls.back.accelerator}
-        focused={state.editNameFocus === content.controls.back.focusId}
-        disabled={!content.controls.back.enabled}
-        mouseTarget={{ kind: "newSessionAction", actionId: content.controls.back.actionId }}
+        buttons={[
+          {
+            id: content.controls.save.actionId,
+            label: content.controls.save.label,
+            shortcut: content.controls.save.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.editNameFocus === content.controls.save.focusId,
+            disabled: !content.controls.save.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.save.actionId,
+            },
+          },
+          {
+            id: content.controls.back.actionId,
+            label: content.controls.back.label,
+            shortcut: content.controls.back.accelerator ?? "Esc",
+            tone: "neutral",
+            focused: state.editNameFocus === content.controls.back.focusId,
+            disabled: !content.controls.back.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.back.actionId,
+            },
+          },
+        ]}
       />
       <SheetFooter width={width}>{content.helper}</SheetFooter>
     </>

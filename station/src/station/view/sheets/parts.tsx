@@ -3,6 +3,7 @@
 // single-line rows. Ink's dimColor becomes the DIM attribute; named colors
 // come from the theme.
 import { TextAttributes } from "@opentui/core";
+import type { TextProps } from "@opentui/react";
 import { isValidElement, type ReactNode } from "react";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import {
@@ -19,6 +20,15 @@ export function fit(value: string, width: number): string {
 
 export function spaces(width: number): string {
   return " ".repeat(Math.max(0, width));
+}
+
+/** Text inside a sheet is never eligible for terminal drag selection. */
+export function SheetText({ children, ...props }: Omit<TextProps, "selectable">) {
+  return (
+    <text {...props} selectable={false}>
+      {children}
+    </text>
+  );
 }
 
 export function SheetLabelValue({
@@ -45,27 +55,27 @@ export function SheetLabelValue({
   );
   if (isValidElement(value)) {
     return (
-      <text fg={STATION_COLORS.foreground}>
+      <SheetText fg={STATION_COLORS.foreground}>
         {labelSpan}
         {value}
-      </text>
+      </SheetText>
     );
   }
   return (
-    <text fg={STATION_COLORS.foreground}>
+    <SheetText fg={STATION_COLORS.foreground}>
       {labelSpan}
       <span {...(valueColor === undefined ? {} : { fg: valueColor })}>
         {fit(String(value), Math.max(1, width - labelText.length))}
       </span>
-    </text>
+    </SheetText>
   );
 }
 
 export function SheetLine({ width, children }: { width: number; children: string | ReactNode }) {
   if (isValidElement(children)) {
-    return <text fg={STATION_COLORS.foreground}>{children}</text>;
+    return <SheetText fg={STATION_COLORS.foreground}>{children}</SheetText>;
   }
-  return <text fg={STATION_COLORS.foreground}>{fit(String(children), width)}</text>;
+  return <SheetText fg={STATION_COLORS.foreground}>{fit(String(children), width)}</SheetText>;
 }
 
 export function SheetFill({ count, width }: { count: number; width: number }) {
@@ -82,9 +92,9 @@ export function SheetFill({ count, width }: { count: number; width: number }) {
 
 export function SheetFooter({ width, children }: { width: number; children: string }) {
   return (
-    <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>
+    <SheetText fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>
       {fit(` ${children}`, width)}
-    </text>
+    </SheetText>
   );
 }
 
@@ -126,7 +136,7 @@ export function SheetChoiceLine({
   const visibleNote = (note ?? "").slice(0, free);
   const gap = spaces(free - visibleNote.length);
   return (
-    <text
+    <SheetText
       fg={focused ? STATION_COLORS.green : STATION_COLORS.foreground}
       {...(focused ? { bg: STATION_COLORS.hoverBackground } : {})}
       {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
@@ -139,7 +149,7 @@ export function SheetChoiceLine({
       <span {...(color === undefined ? {} : { fg: color })}>{visibleDetail}</span>
       {gap}
       <span attributes={TextAttributes.DIM}>{visibleNote}</span>
-    </text>
+    </SheetText>
   );
 }
 
@@ -148,11 +158,11 @@ export function SheetProgressFooter({ width, children }: { width: number; childr
   const labelText = ` ${children}`.slice(0, Math.max(0, width - throbberWidth));
   const fillWidth = Math.max(0, width - labelText.length - throbberWidth);
   return (
-    <text fg={STATION_COLORS.foreground}>
+    <SheetText fg={STATION_COLORS.foreground}>
       <span attributes={TextAttributes.DIM}>{labelText}</span>
       <Throbber variant="dots" />
       {fillWidth > 0 ? <span attributes={TextAttributes.DIM}>{spaces(fillWidth)}</span> : null}
-    </text>
+    </SheetText>
   );
 }
 
@@ -192,8 +202,21 @@ export function SheetButton({
     emphasized: focused,
   });
   const background = interactiveBackground(active, focused, color);
+  const marker = focused ? "▸ " : "  ";
+  const shortcutText = `(${shortcut})`;
+  const available = Math.max(0, fixedWidth - marker.length);
+  const showShortcut = available > shortcutText.length + 1;
+  const labelWidth = Math.max(0, available - (showShortcut ? shortcutText.length + 1 : 0));
+  const visibleLabel = label.slice(0, labelWidth);
+  const renderedShortcut = showShortcut ? ` ${shortcutText}` : "";
+  const trailing = spaces(fixedWidth - marker.length - visibleLabel.length - renderedShortcut.length);
+  const shortcutColor = active
+    ? STATION_COLORS.background
+    : disabled
+      ? STATION_COLORS.gray
+      : STATION_COLORS.yellow;
   return (
-    <text
+    <SheetText
       width={fixedWidth}
       fg={active ? STATION_COLORS.background : color}
       attributes={attributes}
@@ -204,90 +227,155 @@ export function SheetButton({
       }}
       onMouseOut={() => setHover(false)}
     >
-      {fit(`${focused ? "▸" : " "}${label} (${shortcut})`, fixedWidth)}
-    </text>
+      {marker}
+      {visibleLabel}
+      {showShortcut ? (
+        <>
+          {" "}
+          <span
+            fg={shortcutColor}
+            attributes={disabled ? TextAttributes.DIM : TextAttributes.BOLD}
+          >
+            {shortcutText}
+          </span>
+        </>
+      ) : null}
+      {trailing}
+    </SheetText>
   );
 }
 
-export type SheetActionTone = "neutral" | "primary" | "secondary" | "danger";
+export type SheetButtonSpec = {
+  id: string;
+  label: string;
+  compactLabel?: string;
+  shortcut: string;
+  tone: SheetButtonTone;
+  mouseTarget: StationMouseTarget;
+  focused?: boolean;
+  disabled?: boolean;
+};
 
-export function SheetActionRow({
+function naturalSheetButtonWidth(button: SheetButtonSpec): number {
+  return button.label.length + button.shortcut.length + 5;
+}
+
+/** Compact button group that expands controls only when the available width requires it. */
+export function SheetButtonRow({
+  width,
+  buttons,
+}: {
+  width: number;
+  buttons: readonly SheetButtonSpec[];
+}) {
+  if (buttons.length === 0) return null;
+  const naturalWidths = buttons.map(naturalSheetButtonWidth);
+  const roomyGap = 2;
+  const naturalTotal =
+    naturalWidths.reduce((total, buttonWidth) => total + buttonWidth, 0) +
+    roomyGap * (buttons.length - 1);
+  const naturalLayout = naturalTotal <= width;
+  const gap = naturalLayout ? roomyGap : width >= buttons.length * 8 ? 1 : 0;
+  const fallbackWidth = Math.max(1, Math.floor((width - gap * (buttons.length - 1)) / buttons.length));
+
+  return (
+    <box flexDirection="row" width={width} height={1}>
+      {buttons.map((button, index) => (
+        <box key={button.id} flexDirection="row" height={1}>
+          {index === 0 || gap === 0 ? null : <SheetText>{spaces(gap)}</SheetText>}
+          <SheetButton
+            label={naturalLayout ? button.label : button.compactLabel ?? button.label}
+            shortcut={button.shortcut}
+            tone={button.tone}
+            fixedWidth={naturalLayout ? (naturalWidths[index] ?? fallbackWidth) : fallbackWidth}
+            mouseTarget={button.mouseTarget}
+            focused={button.focused ?? false}
+            disabled={button.disabled ?? false}
+          />
+        </box>
+      ))}
+    </box>
+  );
+}
+
+/** Interactive field whose label, accelerator, value, and status remain visually associated. */
+export function SheetControlRow({
   width,
   label,
+  labelWidth = 11,
   shortcut,
-  detail,
-  detailCells,
+  value,
+  valueCells,
   status,
-  tone = "secondary",
   focused = false,
   disabled = false,
   mouseTarget,
 }: {
   width: number;
   label: string;
+  labelWidth?: number;
   shortcut?: string;
-  detail?: string | ReactNode;
-  detailCells?: number;
+  value: string | ReactNode;
+  valueCells?: number;
   status?: { glyph: string; text: string; color?: string };
-  tone?: SheetActionTone;
   focused?: boolean;
   disabled?: boolean;
   mouseTarget: StationMouseTarget;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
-  const active = !disabled && hover;
-  const foreground = sheetActionForeground(tone, disabled);
-  const attributes = interactiveAttributes({
-    active,
-    disabled,
-    emphasized: focused || tone === "primary",
-  });
-  const background = interactiveBackground(active, focused, foreground);
-  const shortcutLabel = shortcut === undefined ? "" : ` (${shortcut})`;
-  const actionLabel = `${label}${shortcutLabel}`;
-  const visibleLabel = tone === "primary" ? `[ ${actionLabel} ]` : actionLabel;
-  const prefix = `${focused ? "▸" : " "} ${visibleLabel}`;
+  const marker = focused ? "▸ " : "  ";
+  const shortcutText = shortcut === undefined ? "" : ` (${shortcut})`;
+  const labelPadding = spaces(Math.max(0, labelWidth - label.length - shortcutText.length));
   const statusText = status === undefined ? "" : ` ${status.glyph} ${status.text}`;
-  const detailBudget = Math.max(0, width - prefix.length - statusText.length - 1);
-  const detailElement = isValidElement(detail) ? detail : undefined;
-  const visibleDetail = typeof detail === "string" ? fit(detail, detailBudget) : "";
-  const renderedDetailCells =
-    detailElement === undefined ? visibleDetail.length : Math.min(detailBudget, detailCells ?? 0);
-  const trailing = Math.max(0, width - prefix.length - renderedDetailCells - statusText.length);
+  const prefixCells = marker.length + label.length + shortcutText.length + labelPadding.length + 1;
+  const valueBudget = Math.max(0, width - prefixCells - statusText.length);
+  const valueElement = isValidElement(value) ? value : undefined;
+  const visibleValue = typeof value === "string" ? value.slice(0, valueBudget) : "";
+  const renderedValueCells =
+    valueElement === undefined ? visibleValue.length : Math.min(valueBudget, valueCells ?? 0);
+  const rowWidth = Math.max(
+    1,
+    Math.min(width, prefixCells + renderedValueCells + statusText.length),
+  );
+  const foreground = disabled ? STATION_COLORS.gray : STATION_COLORS.foreground;
+
   return (
-    <text
-      width={width}
-      fg={active ? STATION_COLORS.background : foreground}
-      attributes={attributes}
-      {...background}
+    <SheetText
+      width={rowWidth}
+      wrapMode="none"
+      fg={foreground}
+      attributes={disabled ? TextAttributes.DIM : TextAttributes.NONE}
+      {...(hover && !disabled ? { bg: STATION_COLORS.hoverBackground } : {})}
       {...(disabled ? {} : stationMouseProps(dispatch, mouseTarget))}
       onMouseOver={() => {
         if (!disabled) setHover(true);
       }}
       onMouseOut={() => setHover(false)}
     >
-      {prefix}
-      {visibleDetail.length > 0 ? ` ${visibleDetail}` : null}
-      {detailElement === undefined ? null : (
-        <>
-          {" "}
-          {detailElement}
-        </>
+      <span fg={focused ? STATION_COLORS.cyan : foreground}>{marker}</span>
+      <span
+        fg={focused ? STATION_COLORS.cyan : foreground}
+        attributes={focused ? TextAttributes.BOLD : TextAttributes.DIM}
+      >
+        {label}
+      </span>
+      {shortcut === undefined ? null : (
+        <span
+          fg={disabled ? STATION_COLORS.gray : STATION_COLORS.yellow}
+          attributes={disabled ? TextAttributes.DIM : TextAttributes.BOLD}
+        >
+          {shortcutText}
+        </span>
       )}
-      {spaces(Math.max(0, trailing - Number(detail !== undefined)))}
+      {labelPadding}
+      {" "}
+      {valueElement ?? visibleValue}
       {status === undefined ? null : (
         <span fg={status.color ?? foreground}>{statusText}</span>
       )}
-    </text>
+    </SheetText>
   );
-}
-
-function sheetActionForeground(tone: SheetActionTone, disabled: boolean): string {
-  if (disabled) return STATION_COLORS.gray;
-  if (tone === "primary") return STATION_COLORS.cyan;
-  if (tone === "danger") return STATION_COLORS.red;
-  return STATION_COLORS.foreground;
 }
 
 function interactiveAttributes({
@@ -336,12 +424,12 @@ export function SheetMessageLine({
   const text = fit(` ${children}`, width);
   const color = TONE_COLORS[tone];
   return (
-    <text
+    <SheetText
       fg={color ?? STATION_COLORS.foreground}
       attributes={tone === "muted" ? TextAttributes.DIM : TextAttributes.NONE}
     >
       {text}
-    </text>
+    </SheetText>
   );
 }
 
@@ -356,10 +444,10 @@ export function SheetMetaLine({
 }) {
   const labelText = ` ${label.padEnd(7)} `;
   return (
-    <text fg={STATION_COLORS.foreground}>
+    <SheetText fg={STATION_COLORS.foreground}>
       <span attributes={TextAttributes.DIM}>{labelText}</span>
       {fit(value, Math.max(1, width - labelText.length))}
-    </text>
+    </SheetText>
   );
 }
 
@@ -384,7 +472,7 @@ export function SheetConfirmButtons({ width }: { width: number }) {
         fixedWidth={buttonWidth}
         mouseTarget={{ kind: "sheetButton", key: "y" }}
       />
-      {gap > 0 ? <text>{spaces(gap)}</text> : null}
+      {gap > 0 ? <SheetText>{spaces(gap)}</SheetText> : null}
       <SheetButton
         label="No"
         shortcut="n"
@@ -425,7 +513,7 @@ export function SheetPickerLine({
   const labelWidth = Math.max(1, width - prefix.length - visibleDetail.length);
   const color = selected || hover ? STATION_COLORS.cyan : STATION_COLORS.foreground;
   return (
-    <text
+    <SheetText
       fg={STATION_COLORS.foreground}
       {...(mouseTarget === undefined
         ? {}
@@ -440,6 +528,6 @@ export function SheetPickerLine({
       {visibleDetail.length > 0 ? (
         <span attributes={TextAttributes.DIM}>{visibleDetail}</span>
       ) : null}
-    </text>
+    </SheetText>
   );
 }

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { type BaseRenderable, rgbToHex, TextRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { act } from "react";
 import {
   createNewSessionFlow,
   transitionNewSessionFlow,
@@ -70,10 +71,16 @@ describe("NewSessionSheetView", () => {
     if (state === undefined) throw new Error("expected new-session flow");
     const { setup, targets } = await render(snapshot, state);
     const lines = setup.captureCharFrame().split("\n");
+    const projectRow = lines.findIndex((line) => line.includes("Project (P)"));
+    const shortcutCol = lines[projectRow]?.indexOf("P)") ?? -1;
+    const shortcutSpan = spanAtFrameCell(setup.captureSpans(), projectRow, shortcutCol);
+    expect(shortcutSpan?.fg === undefined ? undefined : rgbToHex(shortcutSpan.fg)).toBe(
+      STATION_COLORS.yellow,
+    );
+
     const agentRow = lines.findIndex((line) => line.includes("Agent (A)"));
     const healthCol = lines[agentRow]?.indexOf("healthy") ?? -1;
-    expect(lines[agentRow]).toContain("codex");
-    expect(lines[agentRow]).toContain("● healthy");
+    expect(lines[agentRow]).toContain("codex ● healthy");
     const healthSpan = spanAtFrameCell(setup.captureSpans(), agentRow, healthCol);
     expect(healthSpan?.fg === undefined ? undefined : rgbToHex(healthSpan.fg)).toBe(
       STATION_COLORS.green,
@@ -96,9 +103,9 @@ describe("NewSessionSheetView", () => {
 
     const { setup } = await render(snapshot, save);
     const frame = setup.captureCharFrame();
-    expect(frame).toContain("▸ [ Save (Ctrl-S) ]");
+    expect(frame).toContain("▸ Save (Ctrl-S)");
     expect(frame).not.toContain("|station-aaaaaa");
-    expect(frame).toContain("Name station-aaaaaa");
+    expect(frame).toMatch(/Name\s+station-aaaaaa/);
   });
 
   it("keeps fields, status, and the primary action readable when narrow", async () => {
@@ -112,6 +119,25 @@ describe("NewSessionSheetView", () => {
     expect(frame).toContain("Agent (A)");
     expect(frame).toContain("● degraded");
     expect(frame).toContain("Create session (C)");
+  });
+
+  it("prevents terminal text selection across the sheet", async () => {
+    const snapshot = snapshotWithCodexStatus();
+    const state = createNewSessionFlow(snapshot, "aaaaaa");
+    if (state === undefined) throw new Error("expected new-session flow");
+    const { setup } = await render(snapshot, state);
+    const lines = setup.captureCharFrame().split("\n");
+    const titleRow = lines.findIndex((line) => line.includes("Create Session"));
+    const agentRow = lines.findIndex((line) => line.includes("Agent (A)"));
+
+    await act(async () => {
+      await setup.mockMouse.drag(3, titleRow, 30, agentRow, MouseButtons.LEFT);
+    });
+
+    expect(setup.renderer.hasSelection).toBe(false);
+    const textRenderables = collectTextRenderables(setup.renderer.root);
+    expect(textRenderables.length).toBeGreaterThan(0);
+    expect(textRenderables.every((renderable) => renderable.selectable === false)).toBe(true);
   });
 
   it("renders unavailable Create as disabled", async () => {
@@ -131,3 +157,11 @@ describe("NewSessionSheetView", () => {
     ).toBe(false);
   });
 });
+
+function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
+  const collected = renderable instanceof TextRenderable ? [renderable] : [];
+  for (const child of renderable.getChildren()) {
+    collected.push(...collectTextRenderables(child));
+  }
+  return collected;
+}

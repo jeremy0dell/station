@@ -9,8 +9,7 @@ import {
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
-  SheetActionRow,
-  SheetButton,
+  SheetButtonRow,
   SheetFill,
   SheetFooter,
   SheetLabelValue,
@@ -20,7 +19,6 @@ import {
   SheetPickerLine,
   SheetProgressFooter,
   SheetSectionLine,
-  spaces,
 } from "./parts.js";
 
 export type AddProjectSheetViewProps = {
@@ -223,7 +221,6 @@ function Review({
   state: Extract<AddProjectFlowState, { mode: "review" }>;
   width: number;
 }) {
-  const editing = state.editingId !== undefined;
   return (
     <>
       <SheetLabelValue width={width} label="Selected folder" value={state.selectedPath} />
@@ -247,22 +244,7 @@ function Review({
       ) : (
         <SheetLine width={width}> </SheetLine>
       )}
-      {addProjectActions(state).map((action) => (
-        <SheetActionRow
-          key={action.id}
-          width={width}
-          label={action.label}
-          shortcut={action.accelerator}
-          tone={action.intent}
-          focused={
-            editing
-              ? state.editIdActionFocus === action.focus
-              : state.actionFocus === action.focus
-          }
-          disabled={!action.enabled}
-          mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
-        />
-      ))}
+      <AddProjectActionBar width={width} state={state} />
       {state.submitting ? (
         <SheetProgressFooter width={width}>Adding project</SheetProgressFooter>
       ) : (
@@ -286,18 +268,7 @@ function Success({
       <SheetMessageLine width={width} tone="success">
         Config updated. Reconciled successfully.
       </SheetMessageLine>
-      {addProjectActions(state).map((action) => (
-        <SheetActionRow
-          key={action.id}
-          width={width}
-          label={action.label}
-          shortcut={action.accelerator}
-          tone={action.intent}
-          focused={state.actionFocus === action.focus}
-          disabled={!action.enabled}
-          mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
-        />
-      ))}
+      <AddProjectActionBar width={width} state={state} />
       <SheetFooter width={width}>Enter or D returns to dashboard</SheetFooter>
     </>
   );
@@ -331,18 +302,7 @@ function Failure({
       {metadataRows.map((row) => (
         <SheetMetaLine key={row.label} width={width} label={row.label} value={row.value} />
       ))}
-      {addProjectActions(state).map((action) => (
-        <SheetActionRow
-          key={action.id}
-          width={width}
-          label={action.label}
-          shortcut={action.accelerator}
-          tone={action.intent}
-          focused={state.actionFocus === action.focus}
-          disabled={!action.enabled}
-          mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
-        />
-      ))}
+      <AddProjectActionBar width={width} state={state} />
       <SheetFooter width={width}>↑↓ action · Enter activates focused action</SheetFooter>
     </>
   );
@@ -393,27 +353,30 @@ function AddProjectActionBar({
 }: {
   width: number;
   state: AddProjectFlowState;
-  selectedIndex: number | undefined;
+  selectedIndex?: number;
 }) {
   const actions = addProjectActions(state, selectedIndex);
-  const gap = width >= actions.length * 10 ? 1 : 0;
-  const buttonWidth = Math.max(1, Math.floor((width - gap * (actions.length - 1)) / actions.length));
-  const compact = buttonWidth < 11;
+  const focusedAction =
+    state.mode === "review"
+      ? state.editingId === undefined
+        ? state.actionFocus
+        : state.editIdActionFocus
+      : state.mode === "success" || state.mode === "failed"
+        ? state.actionFocus
+        : undefined;
   return (
-    <box flexDirection="row" width={width} height={1}>
-      {actions.map((action, index) => (
-        <box key={action.id} flexDirection="row" height={1}>
-          {index === 0 || gap === 0 ? null : <text>{spaces(gap)}</text>}
-          <SheetButton
-            label={compact ? action.compactLabel : action.label}
-            shortcut={action.accelerator}
-            tone={action.intent === "primary" ? "primary" : "neutral"}
-            fixedWidth={buttonWidth}
-            disabled={!action.enabled}
-            mouseTarget={{ kind: "addProjectAction", actionId: action.id }}
-          />
-        </box>
-      ))}
-    </box>
+    <SheetButtonRow
+      width={width}
+      buttons={actions.map((action) => ({
+        id: action.id,
+        label: action.label,
+        compactLabel: action.compactLabel,
+        shortcut: action.accelerator,
+        tone: action.intent === "primary" ? "primary" : "neutral",
+        mouseTarget: { kind: "addProjectAction", actionId: action.id },
+        focused: action.focus !== undefined && action.focus === focusedAction,
+        disabled: !action.enabled,
+      }))}
+    />
   );
 }

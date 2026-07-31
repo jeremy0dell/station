@@ -242,19 +242,19 @@ const CASES: ModalCase[] = [
     name: "new session healthy agent",
     keys: [{ input: "N" }],
     snapshot: () => snapshotWithCodexHealth("healthy"),
-    expect: ["codex", "● healthy", "[ Create session (C) ]"],
+    expect: ["codex ● healthy", "Create session (C)"],
   },
   {
     name: "new session degraded agent",
     keys: [{ input: "N" }],
     snapshot: () => snapshotWithCodexHealth("degraded"),
-    expect: ["codex", "● degraded", "[ Create session (C) ]"],
+    expect: ["codex ● degraded", "Create session (C)"],
   },
   {
     name: "new session unavailable agent",
     keys: [{ input: "N" }],
     snapshot: () => snapshotWithCodexHealth("unavailable"),
-    expect: ["codex", "● unavailable", "[ Create session (C) ]"],
+    expect: ["codex ● unavailable", "Create session (C)"],
   },
   {
     name: "new session edit name",
@@ -264,7 +264,7 @@ const CASES: ModalCase[] = [
   {
     name: "new session edit name save focus",
     keys: [{ input: "N" }, { input: "N" }, { input: "", downArrow: true }],
-    expect: ["▸ [ Save (Ctrl-S) ]", "Enter save name"],
+    expect: ["▸ Save (Ctrl-S)", "Enter save name"],
     reject: ["|station-"],
   },
   {
@@ -342,7 +342,7 @@ const CASES: ModalCase[] = [
     name: "add project review actions",
     keys: [],
     prepare: (store) => openAddProjectReview(store, true),
-    expect: ["Add Project: Review", "[ Add project (A) ]", "Edit id (N)", "Choose folder (B)"],
+    expect: ["Add Project: Review", "▸ Add project (A)", "Edit id (N)", "Choose folder (B)"],
   },
   {
     name: "add project Git recovery",
@@ -357,7 +357,7 @@ const CASES: ModalCase[] = [
       openAddProjectReview(store, true);
       store.getState().handleKey({ input: "N" });
     },
-    expect: ["Project id", "[ Save id (Ctrl-S) ]", "Back (Esc)"],
+    expect: ["Project id", "▸ Save id (Ctrl-S)", "Back (Esc)"],
   },
   {
     name: "add project success action",
@@ -371,7 +371,7 @@ const CASES: ModalCase[] = [
         }),
       );
     },
-    expect: ["Project Added", "Reconciled successfully", "[ Dashboard (D) ]"],
+    expect: ["Project Added", "Reconciled successfully", "▸ Dashboard (D)"],
   },
   {
     name: "add project failure actions",
@@ -386,7 +386,7 @@ const CASES: ModalCase[] = [
         ),
       );
     },
-    expect: ["Add Project Failed", "Could not add this project", "[ Retry (R) ]", "Choose folder (B)"],
+    expect: ["Add Project Failed", "Could not add this project", "▸ Retry (R)", "Choose folder (B)"],
   },
   {
     name: "add project narrow actions",
