@@ -13,6 +13,7 @@ import {
 } from "./semanticTerminalSnapshot.js";
 
 const CSI = "\x1b[";
+const HARD_BOUNDARY_MARKER = "\x1b]6973;station-copy;1;hard\x1b\\";
 
 async function write(terminal: Terminal, data: string): Promise<void> {
   await new Promise<void>((resolve) => terminal.write(data, resolve));
@@ -114,20 +115,29 @@ describe("SemanticTerminalSnapshot", () => {
     const source = new SemanticTerminalSnapshot(20, 4);
     const restored = createStationVtScreen({ size: { cols: 20, rows: 4 } });
     try {
-      source.write(`first\r\n│ ${semanticCopyContinuationMarker(2)}second`);
+      source.write(
+        `  ${HARD_BOUNDARY_MARKER}first\r\n│ ${semanticCopyContinuationMarker(2)}second`,
+      );
       const capture = await source.capture();
       expect(capture.semanticCopy).toEqual({
-        normal: [{ row: 1, leadingColumns: 2, separatorSpaces: 2 }],
+        normal: [
+          { kind: "hard", row: 0, leadingColumns: 2 },
+          { kind: "soft", row: 1, leadingColumns: 2, separatorSpaces: 2 },
+        ],
         alternate: [],
       });
 
       restored.feed(capture.serializedVt);
       await restored.whenIdle();
       expect(restored.restoreSemanticCopySnapshot(capture.semanticCopy)).toEqual({
-        applied: 1,
+        applied: 2,
         dropped: 0,
       });
-      expect(restored.viewRowCopyContinuation(1)).toEqual({
+      expect(restored.viewRowCopyBoundary(0)).toEqual({
+        kind: "application-hard",
+        leadingColumns: 2,
+      });
+      expect(restored.viewRowCopyBoundary(1)).toEqual({
         kind: "application-soft",
         leadingColumns: 2,
         separatorSpaces: 2,

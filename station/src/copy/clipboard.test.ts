@@ -33,6 +33,19 @@ describe("copyToClipboard", () => {
     expect(calls).toEqual(["internal:hello", "osc52:hello", "platform:hello"]);
   });
 
+  it("delivers shell-sensitive spaces and newlines without rewriting", () => {
+    const { effects, calls } = recordingEffects();
+    const text = "printf 'quick brown fox\\n'; uname -s\necho done";
+
+    copyToClipboard(text, DEFAULT_COPY_SINKS, effects);
+
+    expect(calls).toEqual([
+      `internal:${text}`,
+      `osc52:${text}`,
+      `platform:${text}`,
+    ]);
+  });
+
   it("skips the platform sink on a remote session but keeps the others", () => {
     const { effects, calls } = recordingEffects({ isRemoteSession: () => true });
     const result = copyToClipboard("hello", DEFAULT_COPY_SINKS, effects);

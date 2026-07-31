@@ -493,8 +493,8 @@ describe("createStationVtScreen", () => {
     const screen = track(createStationVtScreen({ size: { cols: 20, rows: 6 } }));
     screen.feed("abcdefghijklmnopqrstuvwxyz0123"); // 30 chars -> wraps at col 20
     await screen.whenIdle();
-    expect(screen.viewRowCopyContinuation(0)).toBeUndefined();
-    expect(screen.viewRowCopyContinuation(1)).toEqual({ kind: "terminal-soft" });
+    expect(screen.viewRowCopyBoundary(0)).toBeUndefined();
+    expect(screen.viewRowCopyBoundary(1)).toEqual({ kind: "terminal-soft" });
   });
 
   it("maps char indices to cell columns across wide chars", async () => {

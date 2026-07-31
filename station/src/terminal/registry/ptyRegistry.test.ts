@@ -385,14 +385,21 @@ describe("createPtyRegistry", () => {
     await replay({
       kind: "semantic-truncation-recovery",
       initialSize: { cols: 10, rows: 4 },
-      serializedVt: "first\r\n│ second",
+      serializedVt: "  first\r\n│ second",
       semanticCopy: {
-        normal: [{ row: 1, leadingColumns: 2, separatorSpaces: 1 }],
+        normal: [
+          { kind: "hard", row: 0, leadingColumns: 2 },
+          { kind: "soft", row: 1, leadingColumns: 2, separatorSpaces: 1 },
+        ],
         alternate: [],
       },
     });
 
-    expect(screen?.viewRowCopyContinuation(1)).toEqual({
+    expect(screen?.viewRowCopyBoundary(0)).toEqual({
+      kind: "application-hard",
+      leadingColumns: 2,
+    });
+    expect(screen?.viewRowCopyBoundary(1)).toEqual({
       kind: "application-soft",
       leadingColumns: 2,
       separatorSpaces: 1,
@@ -404,7 +411,7 @@ describe("createPtyRegistry", () => {
     const screen = registry.get(PANE_A)?.screen;
     screen?.feed("first\r\n\x1b]6973;station-copy;1;0\x1b\\stale");
     await screen?.whenIdle();
-    expect(screen?.viewRowCopyContinuation(1)?.kind).toBe("application-soft");
+    expect(screen?.viewRowCopyBoundary(1)?.kind).toBe("application-soft");
 
     await replay({
       kind: "semantic-truncation-recovery",
@@ -413,7 +420,7 @@ describe("createPtyRegistry", () => {
       semanticCopy: { normal: [], alternate: [] },
     });
 
-    expect(screen?.viewRowCopyContinuation(1)).toBeUndefined();
+    expect(screen?.viewRowCopyBoundary(1)).toBeUndefined();
   });
 
   it("reports semantic-copy rows that do not map to the restored buffer", async () => {
@@ -425,7 +432,7 @@ describe("createPtyRegistry", () => {
         initialSize: { cols: 10, rows: 4 },
         serializedVt: "restored",
         semanticCopy: {
-          normal: [{ row: 99, leadingColumns: 0, separatorSpaces: 0 }],
+          normal: [{ kind: "soft", row: 99, leadingColumns: 0, separatorSpaces: 0 }],
           alternate: [],
         },
       });
@@ -452,12 +459,12 @@ describe("createPtyRegistry", () => {
         initialSize: { cols: 10, rows: 4 },
         serializedVt: "hard",
         semanticCopy: {
-          normal: [{ row: 1, leadingColumns: 0, separatorSpaces: 1025 }],
+          normal: [{ kind: "soft", row: 1, leadingColumns: 0, separatorSpaces: 1025 }],
           alternate: [],
         },
       } as unknown as StationTerminalReplay);
 
-      expect(screen?.viewRowCopyContinuation(1)).toBeUndefined();
+      expect(screen?.viewRowCopyBoundary(1)).toBeUndefined();
       expect(terminalCorruptionCounters()).toMatchObject({
         "terminal_diagnostic:semantic_copy_restore_invalid": 1,
       });

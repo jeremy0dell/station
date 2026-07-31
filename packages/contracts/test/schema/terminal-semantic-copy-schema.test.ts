@@ -12,7 +12,9 @@ describe("SemanticCopySnapshotSchema", () => {
     expect(
       SemanticCopySnapshotSchema.parse({
         normal: [
+          { kind: "hard", row: 0, leadingColumns: 0 },
           {
+            kind: "soft",
             row: STATION_TERMINAL_MAX_SCROLLBACK_ROWS + STATION_TERMINAL_MAX_ROWS - 1,
             leadingColumns: STATION_TERMINAL_MAX_COLUMNS,
             separatorSpaces: SEMANTIC_COPY_MAX_SEPARATOR_SPACES,
@@ -27,8 +29,8 @@ describe("SemanticCopySnapshotSchema", () => {
     expect(
       SemanticCopySnapshotSchema.safeParse({
         normal: [
-          { row: 0, leadingColumns: 0, separatorSpaces: 0 },
-          { row: 0, leadingColumns: 1, separatorSpaces: 1 },
+          { kind: "soft", row: 0, leadingColumns: 0, separatorSpaces: 0 },
+          { kind: "soft", row: 0, leadingColumns: 1, separatorSpaces: 1 },
         ],
         alternate: [],
       }).success,
@@ -37,11 +39,18 @@ describe("SemanticCopySnapshotSchema", () => {
       SemanticCopySnapshotSchema.safeParse({
         normal: [
           {
+            kind: "soft",
             row: STATION_TERMINAL_MAX_SCROLLBACK_ROWS + STATION_TERMINAL_MAX_ROWS,
             leadingColumns: STATION_TERMINAL_MAX_COLUMNS + 1,
             separatorSpaces: SEMANTIC_COPY_MAX_SEPARATOR_SPACES + 1,
           },
         ],
+        alternate: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      SemanticCopySnapshotSchema.safeParse({
+        normal: [{ kind: "hard", row: 0, leadingColumns: 0, separatorSpaces: 1 }],
         alternate: [],
       }).success,
     ).toBe(false);

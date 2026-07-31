@@ -116,8 +116,8 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     const screen = createStationVtScreen({ size: { cols: 20, rows: 4 } });
     terminal.onData((data) => screen.feed(data));
     try {
-      await waitFor(() => screen.viewRowCopyContinuation(1)?.kind === "application-soft");
-      expect(screen.viewRowCopyContinuation(1)).toEqual({
+      await waitFor(() => screen.viewRowCopyBoundary(1)?.kind === "application-soft");
+      expect(screen.viewRowCopyBoundary(1)).toEqual({
         kind: "application-soft",
         leadingColumns: 2,
         separatorSpaces: 1,
@@ -158,8 +158,8 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
       throw new Error("semantic-copy registry screen was not created");
     }
     try {
-      await waitFor(() => screen.viewRowCopyContinuation(1)?.kind === "application-soft");
-      expect(screen.viewRowCopyContinuation(1)).toEqual({
+      await waitFor(() => screen.viewRowCopyBoundary(1)?.kind === "application-soft");
+      expect(screen.viewRowCopyBoundary(1)).toEqual({
         kind: "application-soft",
         leadingColumns: 2,
         separatorSpaces: 2,

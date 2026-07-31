@@ -16,7 +16,7 @@ export const SEMANTIC_COPY_MAX_SEPARATOR_SPACES = 1_024;
 const SEMANTIC_COPY_MAX_BUFFER_ROWS =
   STATION_TERMINAL_MAX_SCROLLBACK_ROWS + STATION_TERMINAL_MAX_ROWS;
 
-const SemanticCopySnapshotEntrySchema = z
+const SemanticCopySnapshotRowSchema = z
   .object({
     row: z
       .number()
@@ -24,9 +24,16 @@ const SemanticCopySnapshotEntrySchema = z
       .min(0)
       .max(SEMANTIC_COPY_MAX_BUFFER_ROWS - 1),
     leadingColumns: z.number().int().min(0).max(STATION_TERMINAL_MAX_COLUMNS),
-    separatorSpaces: z.number().int().min(0).max(SEMANTIC_COPY_MAX_SEPARATOR_SPACES),
   })
   .strict();
+
+const SemanticCopySnapshotEntrySchema = z.discriminatedUnion("kind", [
+  SemanticCopySnapshotRowSchema.extend({ kind: z.literal("hard") }).strict(),
+  SemanticCopySnapshotRowSchema.extend({
+    kind: z.literal("soft"),
+    separatorSpaces: z.number().int().min(0).max(SEMANTIC_COPY_MAX_SEPARATOR_SPACES),
+  }).strict(),
+]);
 
 const SemanticCopySnapshotRowsSchema = z
   .array(SemanticCopySnapshotEntrySchema)
@@ -45,7 +52,7 @@ const SemanticCopySnapshotRowsSchema = z
     }
   });
 
-/** Strict, content-free semantic-copy state shared by Station and Station Host. */
+/** Strict, content-free semantic row-boundary state shared by Station and Station Host. */
 export const SemanticCopySnapshotSchema = z
   .object({
     normal: SemanticCopySnapshotRowsSchema,

@@ -116,8 +116,9 @@ export type VtBufferStats = {
   length: number;
 };
 
-export type RowCopyContinuation =
+export type RowCopyBoundary =
   | { kind: "terminal-soft" }
+  | { kind: "application-hard"; leadingColumns: number }
   | {
       kind: "application-soft";
       leadingColumns: number;
@@ -155,13 +156,13 @@ export type StationVtScreen = {
    */
   viewRowText(viewRow: number, startCol?: number, endCol?: number): string;
   /**
-   * Copy semantics for the boundary before an in-view row. Native xterm wraps
-   * are authoritative; an application continuation contributes only its
-   * cursor-derived visual prefix and bounded separator-space count.
+   * Copy semantics for an in-view row. Native xterm wraps are authoritative;
+   * an application boundary contributes a cursor-derived non-semantic prefix,
+   * plus a bounded separator-space count only when it continues the prior row.
    */
-  viewRowCopyContinuation(viewRow: number): RowCopyContinuation | undefined;
+  viewRowCopyBoundary(viewRow: number): RowCopyBoundary | undefined;
   /**
-   * Clears existing application continuation state and restores a validated
+   * Clears existing application row-boundary state and restores a validated
    * sidecar, reporting entries that no longer map to the restored buffers.
    */
   restoreSemanticCopySnapshot(snapshot: SemanticCopySnapshot): SemanticCopyRestoreResult;
@@ -699,19 +700,26 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
       return line?.translateToString(false, startCol, endCol) ?? "";
     },
-    viewRowCopyContinuation: (viewRow) => {
+    viewRowCopyBoundary: (viewRow) => {
       const buffer = terminal.buffer.active;
       const bufferRow = buffer.baseY - scrollOffset + viewRow;
       if (buffer.getLine(bufferRow)?.isWrapped === true) {
         return { kind: "terminal-soft" };
       }
-      const continuation = semanticCopy.continuationForBufferRow(
+      const boundary = semanticCopy.boundaryForBufferRow(
         buffer.type === "alternate" ? "alternate" : "normal",
         bufferRow,
       );
-      return continuation === undefined
-        ? undefined
-        : { kind: "application-soft", ...continuation };
+      if (boundary === undefined) {
+        return undefined;
+      }
+      return boundary.kind === "hard"
+        ? { kind: "application-hard", leadingColumns: boundary.leadingColumns }
+        : {
+            kind: "application-soft",
+            leadingColumns: boundary.leadingColumns,
+            separatorSpaces: boundary.separatorSpaces,
+          };
     },
     restoreSemanticCopySnapshot: (snapshot) => semanticCopy.restore(snapshot),
     cellColumnForCharIndex: (viewRow, charIndex) => {

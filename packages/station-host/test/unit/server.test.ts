@@ -269,10 +269,14 @@ describe("serveHostConnection", () => {
       }).success,
     ).toBe(false);
     for (const semanticCopy of [
-      { normal: [{ row: 0, leadingColumns: 101, separatorSpaces: 0 }], alternate: [] },
+      {
+        normal: [{ kind: "soft", row: 0, leadingColumns: 101, separatorSpaces: 0 }],
+        alternate: [],
+      },
       {
         normal: [
           {
+            kind: "soft",
             row: STATION_TERMINAL_MAX_SCROLLBACK_ROWS + semanticReplay.initialRows,
             leadingColumns: 0,
             separatorSpaces: 0,
@@ -280,12 +284,15 @@ describe("serveHostConnection", () => {
         ],
         alternate: [],
       },
-      { normal: [], alternate: [{ row: 30, leadingColumns: 0, separatorSpaces: 0 }] },
-      { normal: [{ row: 0, leadingColumns: 0, separatorSpaces: 1025 }], alternate: [] },
+      { normal: [], alternate: [{ kind: "soft", row: 30, leadingColumns: 0, separatorSpaces: 0 }] },
+      {
+        normal: [{ kind: "soft", row: 0, leadingColumns: 0, separatorSpaces: 1025 }],
+        alternate: [],
+      },
       {
         normal: [
-          { row: 0, leadingColumns: 0, separatorSpaces: 0 },
-          { row: 0, leadingColumns: 1, separatorSpaces: 1 },
+          { kind: "soft", row: 0, leadingColumns: 0, separatorSpaces: 0 },
+          { kind: "soft", row: 0, leadingColumns: 1, separatorSpaces: 1 },
         ],
         alternate: [],
       },

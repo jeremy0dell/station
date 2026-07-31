@@ -392,11 +392,10 @@ export class TerminalScreenRenderable extends Renderable {
   }
 
   /**
-   * Reconstructs selected logical text from native wraps, cooperating-application
-   * continuations, and hard rows. Native wraps retain full cells (apart from the
-   * wide-glyph phantom cell); application continuations trim renderer padding,
-   * restore bounded separator spaces, and omit their visible prefix only when the
-   * preceding row is selected. Hard rows remain newline-delimited.
+   * Reconstructs selected logical text from native wraps and cooperating-application
+   * row boundaries. Native wraps retain full cells (apart from the wide-glyph phantom
+   * cell); application boundaries omit renderer prefixes, soft boundaries restore
+   * bounded separator spaces, and hard boundaries remain newline-delimited.
    */
   getSelectedText(): string {
     const screen = this.#screen;
@@ -414,26 +413,29 @@ export class TerminalScreenRenderable extends Renderable {
       if (cols === null) {
         continue;
       }
-      const continuation = row === first ? undefined : screen.viewRowCopyContinuation(row);
+      const boundary = screen.viewRowCopyBoundary(row);
       let startColumn = cols.start;
-      if (continuation?.kind === "application-soft") {
-        startColumn = Math.max(startColumn, continuation.leadingColumns);
+      if (boundary?.kind === "application-hard" || boundary?.kind === "application-soft") {
+        startColumn = Math.max(startColumn, boundary.leadingColumns);
       }
-      const text = screen.viewRowText(row, startColumn, cols.end);
+      const text = startColumn < cols.end ? screen.viewRowText(row, startColumn, cols.end) : "";
       current ??= "";
-      if (continuation?.kind === "terminal-soft") {
+      if (row > first && boundary?.kind === "terminal-soft") {
         if (screen.firstGlyphWidth(row) === 2) {
           // xterm leaves one phantom blank when a wide glyph cannot fit at the
           // prior row's edge; that cell is geometry, not selected text.
           current = current.replace(/ $/, "");
         }
-      } else if (continuation?.kind === "application-soft") {
+      } else if (row > first && boundary?.kind === "application-soft") {
         current = current.replace(/\s+$/, "");
-        current += " ".repeat(continuation.separatorSpaces);
+        current += " ".repeat(boundary.separatorSpaces);
       }
       current += text;
 
-      if (row === last || screen.viewRowCopyContinuation(row + 1) === undefined) {
+      const nextBoundary = row === last ? undefined : screen.viewRowCopyBoundary(row + 1);
+      const nextContinues =
+        nextBoundary?.kind === "terminal-soft" || nextBoundary?.kind === "application-soft";
+      if (row === last || !nextContinues) {
         lines.push(current.replace(/\s+$/, ""));
         current = null;
       }

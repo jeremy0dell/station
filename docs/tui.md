@@ -134,13 +134,16 @@ not have.
 ## Semantic Pane Copy
 
 Native panes implement the versioned [Station Semantic Copy Protocol](terminal-semantic-copy.md):
-native and marked child-renderer wraps copy without a newline, while unmarked rows
-remain hard boundaries. Host protocol 6 preserves its bounded row metadata through
-semantic recovery before queued live frames.
+native and marked child-renderer wraps copy without a newline, marked hard rows retain
+their newline without renderer gutters, and unmarked rows remain hard boundaries. Host
+protocol 6 preserves the bounded hard/soft row sidecar through semantic recovery before
+queued live frames.
 
-This affects only plain pane drag selection. OpenTUI global selection, application
-copy commands, and Station's Pi lifecycle extension remain unchanged. Pi renderer
-support belongs in `@earendil-works/pi-tui`; pinned Pi 0.80.10 emits no markers.
+This affects only plain pane drag selection, shared by every harness in a Station pane.
+OpenTUI global `Ctrl-C`, outer-terminal Shift/Ctrl selection, application copy commands,
+and Station's Pi lifecycle extension remain unchanged. Pi producer support belongs in
+`@earendil-works/pi-tui`; pinned Pi 0.80.10 emits no markers, and other child renderers
+must independently adopt the provider-neutral protocol.
 
 ## Native OSC 8 Hyperlinks
 

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { getLinkId } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { semanticCopyContinuationMarker } from "./protocol/semanticCopy.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
 
-async function renderPane(feed: string) {
-  const screen = createStationVtScreen({ size: { cols: 20, rows: 6 } });
+const HARD_BOUNDARY_MARKER = "\x1b]6973;station-copy;1;hard\x1b\\";
+
+async function renderPane(feed: string, width = 20, height = 6) {
+  const screen = createStationVtScreen({ size: { cols: width, rows: height } });
   screen.feed(feed);
   await screen.whenIdle();
   const copied: string[] = [];
@@ -20,7 +23,7 @@ async function renderPane(feed: string) {
       onCopySelection={(text: string) => copied.push(text)}
       onForwardInput={(bytes: string) => forwarded.push(bytes)}
     />,
-    { width: 20, height: 6 },
+    { width, height },
   );
   await setup.flush();
   return { setup, screen, copied, forwarded };
@@ -197,12 +200,23 @@ describe("TerminalScreenRenderable selection", () => {
     }
   });
 
-  it("preserves the visible prefix when selection starts on a continuation row", async () => {
+  it("omits the visible prefix when selection starts on a continuation row", async () => {
     const marker = semanticCopyContinuationMarker(1);
     const { setup, screen, copied } = await renderPane(`first\r\n│ ${marker}second`);
     try {
       await setup.mockMouse.drag(0, 1, 19, 1);
-      expect(copied).toEqual(["│ second"]);
+      expect(copied).toEqual(["second"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("joins through the selected prefix of a final continuation row", async () => {
+    const marker = semanticCopyContinuationMarker(1);
+    const { setup, screen, copied } = await renderPane(`first\r\n│ ${marker}second tail`);
+    try {
+      await setup.mockMouse.drag(0, 0, 7, 1);
+      expect(copied).toEqual(["first second"]);
     } finally {
       await teardown(setup, screen);
     }
@@ -215,6 +229,94 @@ describe("TerminalScreenRenderable selection", () => {
     try {
       await setup.mockMouse.drag(0, 0, 19, 2);
       expect(copied).toEqual(["one  two three"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("removes hard-row gutters while preserving intentional newlines", async () => {
+    const content = HARD_BOUNDARY_MARKER;
+    const { setup, screen, copied } = await renderPane(
+      `  ${content}echo one\r\n  ${content}echo two`,
+    );
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual(["echo one\necho two"]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("copies quoted and unquoted shell text exactly across multiple application wraps", async () => {
+    const content = HARD_BOUNDARY_MARKER;
+    const continuation = semanticCopyContinuationMarker(1);
+    const expected = "printf 'quick brown fox'; uname -s";
+    const { setup, screen, copied } = await renderPane(
+      `  ${content}printf 'quick\r\n  ${continuation}brown fox'; uname\r\n  ${continuation}-s`,
+    );
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 2);
+      expect(copied).toEqual([expected]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("preserves Unicode graphemes across marked application wraps", async () => {
+    const content = HARD_BOUNDARY_MARKER;
+    const continuation = semanticCopyContinuationMarker(1);
+    const expected = "café naïve résumé 中文 é 😀 end";
+    const { setup, screen, copied } = await renderPane(
+      `  ${content}café naïve\r\n│ ${continuation}résumé 中文\r\n│ ${continuation}é 😀 end`,
+    );
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 2);
+      expect(copied).toEqual([expected]);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("produces width-independent clipboard text from marked renderer layouts", async () => {
+    const content = HARD_BOUNDARY_MARKER;
+    const continuation = semanticCopyContinuationMarker(1);
+    const expected = "echo alpha beta gamma";
+    const wide = await renderPane(`  ${content}${expected}`, 40, 3);
+    const narrow = await renderPane(
+      `  ${content}echo alpha\r\n  ${continuation}beta gamma`,
+      14,
+      3,
+    );
+    try {
+      await wide.setup.mockMouse.drag(0, 0, 39, 0);
+      await narrow.setup.mockMouse.drag(0, 0, 13, 1);
+      expect(wide.copied).toEqual([expected]);
+      expect(narrow.copied).toEqual([expected]);
+    } finally {
+      await teardown(wide.setup, wide.screen);
+      await teardown(narrow.setup, narrow.screen);
+    }
+  });
+
+  it("copies terminal selection on drag release and lets OpenTUI Ctrl-C fall through", async () => {
+    const content = HARD_BOUNDARY_MARKER;
+    const continuation = semanticCopyContinuationMarker(1);
+    const expected = "alpha beta";
+    const { setup, screen, copied } = await renderPane(
+      `  ${content}alpha\r\n  ${continuation}beta`,
+    );
+    const keyboardCopies: string[] = [];
+    const handleCopy = createOpenTuiSelectionCopyHandler(() => setup.renderer, {
+      setInternal: (text) => keyboardCopies.push(text),
+      writeOsc52: (text) => keyboardCopies.push(text),
+      copyToPlatform: (text) => keyboardCopies.push(text),
+      isRemoteSession: () => false,
+    });
+    try {
+      await setup.mockMouse.drag(0, 0, 19, 1);
+      expect(copied).toEqual([expected]);
+      expect(handleCopy("\x03")).toBe(false);
+      expect(keyboardCopies).toEqual([]);
     } finally {
       await teardown(setup, screen);
     }

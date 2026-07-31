@@ -16,19 +16,25 @@ export type { SemanticCopySnapshot } from "@station/contracts";
 
 const STATION_SEMANTIC_COPY_OSC = 6973;
 const STATION_SEMANTIC_COPY_VERSION = 1;
+const SEMANTIC_COPY_HARD_BOUNDARY = "hard";
 const SEMANTIC_COPY_OSC_PREFIX = `station-copy;${STATION_SEMANTIC_COPY_VERSION};`;
 const MAX_SEMANTIC_COPY_OSC_PAYLOAD_LENGTH =
-  SEMANTIC_COPY_OSC_PREFIX.length + String(SEMANTIC_COPY_MAX_SEPARATOR_SPACES).length;
+  SEMANTIC_COPY_OSC_PREFIX.length +
+  Math.max(
+    SEMANTIC_COPY_HARD_BOUNDARY.length,
+    String(SEMANTIC_COPY_MAX_SEPARATOR_SPACES).length,
+  );
 
-type SemanticCopyApplicationContinuation = Omit<SemanticCopySnapshotEntry, "row">;
+type WithoutBufferRow<T> = T extends { row: number } ? Omit<T, "row"> : never;
+type SemanticCopyApplicationBoundary = WithoutBufferRow<SemanticCopySnapshotEntry>;
 type SemanticCopyBufferType = "normal" | "alternate";
 export type SemanticCopyRestoreResult = { applied: number; dropped: number };
 
 export type SemanticCopyState = {
-  continuationForBufferRow(
+  boundaryForBufferRow(
     bufferType: SemanticCopyBufferType,
     bufferRow: number,
-  ): SemanticCopyApplicationContinuation | undefined;
+  ): SemanticCopyApplicationBoundary | undefined;
   snapshot(): SemanticCopySnapshot;
   restore(snapshot: SemanticCopySnapshot): SemanticCopyRestoreResult;
   clear(): void;
@@ -50,14 +56,12 @@ type PinnedXtermTerminal = {
   };
 };
 
-type ContinuationEntry = SemanticCopyApplicationContinuation & {
+type BoundaryEntry = SemanticCopyApplicationBoundary & {
   bufferType: SemanticCopyBufferType;
   marker: IMarker;
 };
 
-/**
- * Encodes a cooperating renderer's bounded v1 continuation claim as a zero-width OSC.
- */
+/** Encodes a cooperating renderer's bounded v1 soft-boundary claim as a zero-width OSC. */
 export function semanticCopyContinuationMarker(separatorSpaces: number): string {
   if (
     !Number.isInteger(separatorSpaces) ||
@@ -74,9 +78,10 @@ export function semanticCopyContinuationMarker(separatorSpaces: number): string 
 /**
  * Owns Station's untrusted semantic-copy OSC parser and row sidecar for one xterm model.
  *
- * Claims can only join a row, omit the cursor-derived visible prefix, and restore a bounded
- * count of ASCII separator spaces. Erase, buffer, reset, scrollback-eviction, and resize
- * behavior follows xterm markers; malformed and unsupported payloads are consumed and ignored.
+ * Claims can only identify hard or soft row boundaries, omit a cursor-derived visible prefix,
+ * and restore a bounded count of ASCII separator spaces. Erase, buffer, reset,
+ * scrollback-eviction, and resize behavior follows xterm markers; malformed and unsupported
+ * payloads are consumed and ignored.
  */
 export function createSemanticCopyState(terminal: Terminal): SemanticCopyState {
   return new XtermSemanticCopyState(terminal);
@@ -85,12 +90,12 @@ export function createSemanticCopyState(terminal: Terminal): SemanticCopyState {
 class XtermSemanticCopyState implements SemanticCopyState {
   readonly #terminal: Terminal;
   readonly #markerBuffers: PinnedXtermTerminal["_core"]["_bufferService"]["buffers"];
-  readonly #entries = new Set<ContinuationEntry>();
+  readonly #entries = new Set<BoundaryEntry>();
   readonly #subscriptions: Array<{ dispose(): void }>;
   #disposed = false;
   #indexDirty = true;
-  #normalIndex = new Map<number, SemanticCopyApplicationContinuation>();
-  #alternateIndex = new Map<number, SemanticCopyApplicationContinuation>();
+  #normalIndex = new Map<number, SemanticCopyApplicationBoundary>();
+  #alternateIndex = new Map<number, SemanticCopyApplicationBoundary>();
 
   constructor(terminal: Terminal) {
     this.#terminal = terminal;
@@ -127,10 +132,10 @@ class XtermSemanticCopyState implements SemanticCopyState {
     ];
   }
 
-  continuationForBufferRow(
+  boundaryForBufferRow(
     bufferType: SemanticCopyBufferType,
     bufferRow: number,
-  ): SemanticCopyApplicationContinuation | undefined {
+  ): SemanticCopyApplicationBoundary | undefined {
     this.#rebuildIndex();
     return (bufferType === "normal" ? this.#normalIndex : this.#alternateIndex).get(
       bufferRow,
@@ -152,8 +157,9 @@ class XtermSemanticCopyState implements SemanticCopyState {
       let applied = 0;
       let dropped = 0;
       for (const bufferType of ["normal", "alternate"] as const) {
-        for (const { row, leadingColumns, separatorSpaces } of parsed[bufferType]) {
-          if (this.#addEntry(bufferType, row, { leadingColumns, separatorSpaces })) {
+        for (const entry of parsed[bufferType]) {
+          const { row, ...boundary } = entry;
+          if (this.#addEntry(bufferType, row, boundary)) {
             applied += 1;
           } else {
             dropped += 1;
@@ -191,20 +197,26 @@ class XtermSemanticCopyState implements SemanticCopyState {
     if (data.length > MAX_SEMANTIC_COPY_OSC_PAYLOAD_LENGTH) {
       return true;
     }
-    const match = /^station-copy;1;(0|[1-9]\d{0,3})$/.exec(data);
+    const match = /^station-copy;1;(hard|0|[1-9]\d{0,3})$/.exec(data);
     if (match === null) {
       return true;
     }
-    const separatorSpaces = Number(match[1]);
-    if (separatorSpaces > SEMANTIC_COPY_MAX_SEPARATOR_SPACES) {
+    const value = match[1];
+    const separatorSpaces = value === SEMANTIC_COPY_HARD_BOUNDARY ? undefined : Number(value);
+    if (
+      separatorSpaces !== undefined &&
+      separatorSpaces > SEMANTIC_COPY_MAX_SEPARATOR_SPACES
+    ) {
       return true;
     }
     const bufferType = this.#activeBufferType();
     const buffer = this.#terminal.buffer.active;
-    this.#addEntry(bufferType, buffer.baseY + buffer.cursorY, {
-      leadingColumns: buffer.cursorX,
-      separatorSpaces,
-    });
+    const leadingColumns = buffer.cursorX;
+    const boundary: SemanticCopyApplicationBoundary =
+      separatorSpaces === undefined
+        ? { kind: "hard", leadingColumns }
+        : { kind: "soft", leadingColumns, separatorSpaces };
+    this.#addEntry(bufferType, buffer.baseY + buffer.cursorY, boundary);
     return true;
   }
 
@@ -238,11 +250,11 @@ class XtermSemanticCopyState implements SemanticCopyState {
         break;
       case EraseInDisplayMode.SavedLines:
         // ED3 renumbers saved-line markers when xterm clears scrollback, so all
-        // application continuations in that buffer must fail closed beforehand.
+        // application row boundaries in that buffer must fail closed beforehand.
         this.#clearBuffer(bufferType);
         break;
       default:
-        // Unknown erase modes must not leave a stale continuation on content
+        // Unknown erase modes must not leave a stale row boundary on content
         // whose mutation semantics this observer cannot prove.
         this.#clearBuffer(bufferType);
     }
@@ -257,19 +269,19 @@ class XtermSemanticCopyState implements SemanticCopyState {
   #addEntry(
     bufferType: SemanticCopyBufferType,
     row: number,
-    continuation: SemanticCopyApplicationContinuation,
+    boundary: SemanticCopyApplicationBoundary,
   ): boolean {
     const buffer = this.#publicBuffer(bufferType);
     if (
       row < 0 ||
       row >= buffer.length ||
-      continuation.leadingColumns > this.#terminal.cols
+      boundary.leadingColumns > this.#terminal.cols
     ) {
       return false;
     }
     this.#clearRange(bufferType, row, row);
     const marker = this.#markerBuffer(bufferType).addMarker(row);
-    const entry: ContinuationEntry = { bufferType, marker, ...continuation };
+    const entry: BoundaryEntry = { bufferType, marker, ...boundary };
     this.#entries.add(entry);
     this.#invalidateIndex();
     marker.onDispose(() => {
@@ -280,7 +292,7 @@ class XtermSemanticCopyState implements SemanticCopyState {
     return true;
   }
 
-  #removeEntry(entry: ContinuationEntry): void {
+  #removeEntry(entry: BoundaryEntry): void {
     if (!this.#entries.delete(entry)) {
       return;
     }
@@ -324,10 +336,14 @@ class XtermSemanticCopyState implements SemanticCopyState {
       if (entry.marker.isDisposed || entry.marker.line < 0) {
         continue;
       }
-      const value = {
-        leadingColumns: entry.leadingColumns,
-        separatorSpaces: entry.separatorSpaces,
-      };
+      const value: SemanticCopyApplicationBoundary =
+        entry.kind === "hard"
+          ? { kind: "hard", leadingColumns: entry.leadingColumns }
+          : {
+              kind: "soft",
+              leadingColumns: entry.leadingColumns,
+              separatorSpaces: entry.separatorSpaces,
+            };
       (entry.bufferType === "normal" ? this.#normalIndex : this.#alternateIndex).set(
         entry.marker.line,
         value,
@@ -337,10 +353,10 @@ class XtermSemanticCopyState implements SemanticCopyState {
   }
 
   #snapshotRows(
-    index: ReadonlyMap<number, SemanticCopyApplicationContinuation>,
+    index: ReadonlyMap<number, SemanticCopyApplicationBoundary>,
   ): SemanticCopySnapshotEntry[] {
     return [...index.entries()]
-      .map(([row, continuation]) => ({ row, ...continuation }))
+      .map(([row, boundary]) => ({ row, ...boundary }))
       .sort((left, right) => left.row - right.row);
   }
 
