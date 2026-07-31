@@ -11,6 +11,8 @@ import { STATION_COLORS } from "./theme.js";
 export type EditableTextInputViewProps = EditableTextInputState & {
   placeholder?: string;
   placeholderColor?: string;
+  /** False keeps the value readable while another editor action owns focus. */
+  active?: boolean;
 };
 
 export function EditableTextInputView({
@@ -18,14 +20,22 @@ export function EditableTextInputView({
   cursor,
   placeholder,
   placeholderColor = STATION_COLORS.gray,
+  active = true,
 }: EditableTextInputViewProps) {
   if (value.length === 0 && placeholder !== undefined) {
+    if (!active) {
+      return <span fg={placeholderColor}>{placeholder}</span>;
+    }
     return (
       <span>
         <BlinkingCursor />
         <span fg={placeholderColor}>{placeholder}</span>
       </span>
     );
+  }
+
+  if (!active) {
+    return <span>{value}</span>;
   }
 
   const clampedCursor = clampEditableTextCursor(cursor, value);

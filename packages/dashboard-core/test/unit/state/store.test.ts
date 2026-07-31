@@ -6,7 +6,7 @@ import type {
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
-import type { TuiFolderService, TuiObserverService } from "@station/dashboard-core";
+import type { TuiFolderService } from "@station/dashboard-core";
 import {
   createTuiStore,
   openProjectDefaultAgentPicker,
@@ -23,6 +23,24 @@ import {
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 describe("TUI store", () => {
+  it("applies semantic actions through the same transition executor as keys", () => {
+    const snapshot = createNoProjectsSnapshot();
+    const keyStore = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+    });
+    const actionStore = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+    });
+
+    const keyResult = keyStore.getState().handleKey({ input: "A" });
+    const actionResult = actionStore.getState().handleAction({ type: "dashboard.addProject" });
+
+    expect(actionResult).toEqual(keyResult);
+    expect(actionStore.getState().screen).toEqual(keyStore.getState().screen);
+  });
+
   it("loads initial snapshots and cleans up event subscriptions", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
@@ -896,19 +914,13 @@ class SnapshotConnectFailingService extends FakeTuiObserverService {
   }
 }
 
-class ColdStartConnectFailingService implements TuiObserverService {
-  readonly dispatched = [];
-  loadCount = 0;
-  subscribeCount = 0;
-
-  constructor(private readonly snapshot: StationSnapshot) {}
-
-  async loadSnapshot(): Promise<StationSnapshot> {
+class ColdStartConnectFailingService extends FakeTuiObserverService {
+  override async loadSnapshot(): Promise<StationSnapshot> {
     this.loadCount += 1;
     throw wrappedConnectError();
   }
 
-  subscribeEvents(): AsyncIterable<StationEvent> {
+  override subscribeEvents(): AsyncIterable<StationEvent> {
     this.subscribeCount += 1;
     return {
       [Symbol.asyncIterator]: () => ({
@@ -918,25 +930,6 @@ class ColdStartConnectFailingService implements TuiObserverService {
         return: async () => ({ done: true, value: undefined }),
       }),
     };
-  }
-
-  async dispatch() {
-    return {
-      commandId: "cmd_tui_1",
-      accepted: true,
-      status: "accepted" as const,
-    };
-  }
-
-  async waitForCommandCompletion(commandId: string) {
-    return {
-      status: "succeeded" as const,
-      commandId,
-    };
-  }
-
-  async reconcile(): Promise<StationSnapshot> {
-    return this.snapshot;
   }
 }
 

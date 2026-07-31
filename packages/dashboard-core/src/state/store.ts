@@ -12,6 +12,7 @@ import { sessionForWorktreeRow } from "../selectors/selectors.js";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
 import type { TuiObserverService, TuiToast } from "../services/types.js";
+import { handleTuiAction, type TuiSemanticAction } from "./actions.js";
 import { buildFocusCommand } from "./commandBuilders.js";
 import {
   clearDashboardFocus as clearDashboardFocusState,
@@ -44,6 +45,8 @@ export type TuiHandleKeyResult = {
 export type TuiStore = TuiState & {
   start(): () => void;
   handleKey(key: TuiKey): TuiHandleKeyResult;
+  /** Applies a renderer-neutral action through the store's shared transition/effect executor. */
+  handleAction(action: TuiSemanticAction): TuiHandleKeyResult;
   /** Create a project session immediately with its configured default harness. */
   createQuickSession(projectId: string): void;
   setTerminalRows(rows: number): void;
@@ -140,36 +143,38 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
         void clientRuntime.stop();
       };
     },
-    handleKey: (key): TuiHandleKeyResult => {
-      const transition = handleTuiKey(get(), key, {
-        cwd: folderService.cwd(),
-        homeDir: folderService.homeDir(),
-      });
-      set(transition.state);
-      void applyTransitionEffects(
+    handleKey: (key): TuiHandleKeyResult =>
+      applyTransition(
         store,
         options.service,
         clientRuntime,
         runtime,
         operations,
-        transition,
-      );
-      const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
-      if (transition.exitCode !== undefined) {
-        result.exitCode = transition.exitCode;
-      }
-      return result;
-    },
+        handleTuiKey(get(), key, {
+          cwd: folderService.cwd(),
+          homeDir: folderService.homeDir(),
+        }),
+      ),
+    handleAction: (action): TuiHandleKeyResult =>
+      applyTransition(
+        store,
+        options.service,
+        clientRuntime,
+        runtime,
+        operations,
+        handleTuiAction(get(), action, {
+          cwd: folderService.cwd(),
+          homeDir: folderService.homeDir(),
+        }),
+      ),
     createQuickSession: (projectId): void => {
-      const transition = submitQuickSession(get(), projectId);
-      set(transition.state);
-      void applyTransitionEffects(
+      applyTransition(
         store,
         options.service,
         clientRuntime,
         runtime,
         operations,
-        transition,
+        submitQuickSession(get(), projectId),
       );
     },
     setTerminalRows: (rows): void => {
@@ -243,6 +248,23 @@ function createRuntimeOptions(options: TuiStoreOptions): RuntimeOptions {
     runtime.onExit = options.onExit;
   }
   return runtime;
+}
+
+function applyTransition(
+  store: StoreApi<TuiStore>,
+  service: TuiObserverService,
+  clientRuntime: StationClientRuntime | undefined,
+  runtime: RuntimeOptions,
+  operations: TuiLocalOperationRunner,
+  transition: TuiTransition,
+): TuiHandleKeyResult {
+  store.setState(transition.state);
+  void applyTransitionEffects(store, service, clientRuntime, runtime, operations, transition);
+  const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
+  if (transition.exitCode !== undefined) {
+    result.exitCode = transition.exitCode;
+  }
+  return result;
 }
 
 async function applyTransitionEffects(

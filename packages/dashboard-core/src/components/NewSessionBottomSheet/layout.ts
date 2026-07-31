@@ -8,8 +8,9 @@ export function newSessionContentRowCount(state: NewSessionFlowState, optionCoun
     return Math.min(optionCount, MAX_PICKER_OPTIONS) + 4;
   }
   if (state.mode === "editName") {
+    // Project context + Name input + Save + Back + contextual helper.
     return 6;
   }
-  // review: leading blank + Project/Name/Agent + blank + Create row + footer.
-  return 8;
+  // Project/Name/Agent interactive rows + primary Create action + contextual helper.
+  return 6;
 }

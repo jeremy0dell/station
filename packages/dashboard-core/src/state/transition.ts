@@ -27,15 +27,18 @@ export type TuiTransition = {
   dismissPopup?: true;
 };
 
-export type TuiKeyRuntimeContext = {
+export type TuiRuntimeContext = {
   cwd: string;
   homeDir: string;
 };
 
+/** @deprecated Use TuiRuntimeContext for input-modality-neutral runtime context. */
+export type TuiKeyRuntimeContext = TuiRuntimeContext;
+
 export function handleTuiKey(
   state: TuiState,
   key: TuiKey,
-  context: TuiKeyRuntimeContext = { cwd: process.cwd(), homeDir: process.env.HOME ?? "" },
+  context: TuiRuntimeContext = { cwd: process.cwd(), homeDir: process.env.HOME ?? "" },
 ): TuiTransition {
   if (key.ctrl === true && key.input === "c") {
     return {

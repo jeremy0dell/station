@@ -7,6 +7,7 @@ import {
   applyAddProjectSubmitted,
   createInitialTuiState,
   deriveTuiInputMode,
+  handleTuiAction,
   handleTuiKey,
   openAddProject,
   selectAddProjectRow,
@@ -78,9 +79,16 @@ describe("add-project shared selection", () => {
 
     const moved = handleTuiKey(choosing, { input: "", downArrow: true }, KEY_CONTEXT).state;
     expect(addProjectSelectedIndex(moved)).toBe(1);
-    expect(handleTuiKey(moved, { input: "\r", return: true }, KEY_CONTEXT).operations).toEqual([
+    const keyboardCommit = handleTuiKey(moved, { input: "\r", return: true }, KEY_CONTEXT);
+    const semanticCommit = handleTuiAction(
+      moved,
+      { type: "addProject.activate", actionId: "choose.choose" },
+      KEY_CONTEXT,
+    );
+    expect(keyboardCommit.operations).toEqual([
       { type: "reviewProjectFolder", path: "/workspace/station" },
     ]);
+    expect(semanticCommit).toEqual(keyboardCommit);
 
     const filtering = handleTuiKey(choosing, { input: "/" }, KEY_CONTEXT).state;
     expect(deriveTuiInputMode(filtering)).toBe("addProjectFilter");
@@ -130,31 +138,63 @@ describe("add-project shared selection", () => {
     });
   });
 
-  it("falls through to pasted-path review when filtering has no rows", () => {
+  it("uses the same pasted-path review for Enter and semantic Choose", () => {
     let state = chooseState([]);
     state = handleTuiKey(state, { input: "/" }, KEY_CONTEXT).state;
     state = handleTuiKey(state, { input: "/missing/project" }, KEY_CONTEXT).state;
 
-    const submitted = handleTuiKey(state, { input: "\r", return: true }, KEY_CONTEXT);
-    expect(submitted.operations).toEqual([
+    const keyboard = handleTuiKey(state, { input: "\r", return: true }, KEY_CONTEXT);
+    const semantic = handleTuiAction(
+      state,
+      { type: "addProject.activate", actionId: "choose.choose" },
+      KEY_CONTEXT,
+    );
+    expect(keyboard.operations).toEqual([
       { type: "reviewProjectFolder", path: "/missing/project" },
     ]);
+    expect(semantic).toEqual(keyboard);
   });
 });
 
 describe("add-project mode intents", () => {
-  it("maps review, id editing, and back actions", () => {
+  it("maps review focus, direct commands, id editing, and back actions", () => {
     const reviewing = reviewState();
     expect(deriveTuiInputMode(reviewing)).toBe("addProjectReview");
+    expect(reviewing.screen).toMatchObject({
+      name: "addProject",
+      flow: { actionFocus: "submit" },
+    });
 
-    const editing = handleTuiKey(reviewing, { input: "N" }, KEY_CONTEXT).state;
+    const editFocused = handleTuiKey(reviewing, { input: "", rightArrow: true }, KEY_CONTEXT).state;
+    expect(editFocused.screen).toMatchObject({
+      name: "addProject",
+      flow: { actionFocus: "editId" },
+    });
+    const editing = handleTuiKey(editFocused, { input: "\r", return: true }, KEY_CONTEXT).state;
     expect(deriveTuiInputMode(editing)).toBe("addProjectEditId");
+    expect(editing.screen).toMatchObject({
+      name: "addProject",
+      flow: { editIdActionFocus: "save" },
+    });
 
     const changed = handleTuiKey(editing, { input: "-custom" }, KEY_CONTEXT).state;
-    const committed = handleTuiKey(changed, { input: "\r", return: true }, KEY_CONTEXT).state;
+    const backFocused = handleTuiKey(changed, { input: "", downArrow: true }, KEY_CONTEXT).state;
+    expect(backFocused.screen).toMatchObject({
+      name: "addProject",
+      flow: { editIdActionFocus: "back" },
+    });
+    const restored = handleTuiKey(backFocused, { input: "\r", return: true }, KEY_CONTEXT).state;
+    expect(restored.screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "review", id: "station" },
+    });
+
+    const editingDirect = handleTuiKey(restored, { input: "N" }, KEY_CONTEXT).state;
+    const changedDirect = handleTuiKey(editingDirect, { input: "-custom" }, KEY_CONTEXT).state;
+    const committed = handleTuiKey(changedDirect, { input: "s", ctrl: true }, KEY_CONTEXT).state;
     expect(committed.screen).toMatchObject({
       name: "addProject",
-      flow: { mode: "review", id: "station-custom" },
+      flow: { mode: "review", id: "station-custom", actionFocus: "submit" },
     });
 
     expect(handleTuiKey(committed, { input: "B" }, KEY_CONTEXT).operations).toEqual([
@@ -174,9 +214,24 @@ describe("add-project mode intents", () => {
     });
   });
 
+  it("focuses Git recovery when submit is disabled", () => {
+    const reviewing = applyAddProjectFolderReviewed(startState(), {
+      selectedPath: "/workspace/notes",
+      id: "notes",
+      label: "Notes",
+    });
+    expect(reviewing.screen).toMatchObject({
+      name: "addProject",
+      flow: { actionFocus: "chooseFolder" },
+    });
+    expect(handleTuiKey(reviewing, { input: "\r", return: true }, KEY_CONTEXT).operations).toEqual([
+      { type: "loadProjectDirectory", path: "/workspace/notes" },
+    ]);
+  });
+
   it("submits review, closes success, and retries failure", () => {
     const reviewing = reviewState();
-    expect(handleTuiKey(reviewing, { input: "\r", return: true }, KEY_CONTEXT).operations).toEqual([
+    expect(handleTuiKey(reviewing, { input: "A" }, KEY_CONTEXT).operations).toEqual([
       {
         type: "addProject",
         command: {
@@ -191,7 +246,11 @@ describe("add-project mode intents", () => {
       root: "/workspace/station",
     });
     expect(deriveTuiInputMode(success)).toBe("addProjectSuccess");
-    expect(handleTuiKey(success, { input: "\r", return: true }, KEY_CONTEXT).state.screen).toEqual({
+    expect(success.screen).toMatchObject({
+      name: "addProject",
+      flow: { actionFocus: "dashboard" },
+    });
+    expect(handleTuiKey(success, { input: "D" }, KEY_CONTEXT).state.screen).toEqual({
       name: "dashboard",
     });
 

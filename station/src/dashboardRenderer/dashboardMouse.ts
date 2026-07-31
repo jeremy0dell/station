@@ -106,6 +106,11 @@ function routeSurfaceClick(
         store.setState(openProjectDefaultAgentPicker(store.getState(), target.projectId));
       }
       return true;
+    case "firstProjectAdd":
+      if (mode === "dashboard") {
+        store.getState().handleAction({ type: "dashboard.addProject" });
+      }
+      return true;
     case "scrollIndicator":
       pageInMode(store, target.direction, mode);
       return true;
@@ -223,6 +228,18 @@ function routeModalClick(
       if (ADD_PROJECT_ROW_MODES.has(mode)) {
         store.setState(selectAddProjectRow(store.getState(), target.index));
       }
+      return true;
+    case "addProjectAction":
+      store.getState().handleAction({
+        type: "addProject.activate",
+        actionId: target.actionId,
+      });
+      return true;
+    case "newSessionAction":
+      store.getState().handleAction({
+        type: "newSession.activate",
+        actionId: target.actionId,
+      });
       return true;
     case "sheetSubmit":
       if (mode === "forkDetails") {

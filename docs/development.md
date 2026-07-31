@@ -731,11 +731,16 @@ stn doctor
 stn tui
 ```
 
-On the welcome screen, press `Enter` or `Space`. On the empty dashboard, press
-`Enter` or `A` on **Add your first project** and select the disposable Git
-repository. Then press `N`, create a session with the authenticated agent, and
-ask it to edit the disposable README. Confirm the transcript and diff appear,
-then quit and reopen `stn tui` and confirm the session remains.
+On the welcome screen, press `Enter` or `Space`. On the empty dashboard, run
+first-project onboarding from **Add your first project** three independent ways:
+pointer-only through the visible CTA and folder/action controls, direct commands
+beginning with `A`, and arrows plus `Enter`. Each pass must select the disposable
+Git repository and must refuse an ordinary non-Git folder. Then press `N` and run
+Create Session pointer-only, with `P/N/A/C`, and with arrows plus `Enter`; verify
+focus remains visible, agent health remains readable without color, and Save/Back
+work in the name editor. Ask the authenticated agent to edit
+the disposable README, confirm the transcript and diff appear, then quit and
+reopen `stn tui` and confirm the session remains.
 
 If the compiled tmux binding was enabled, use `tmux prefix + Space` for the cold
 open, close the popup with the same chord, and use it again for a warm reopen.
@@ -924,6 +929,22 @@ Use `pnpm setup:system:check` before real lanes. Real lanes may require `STATION
 ## TUI Work
 
 TUI work has additional OpenTUI/React and terminal-layout expectations. The terminal UI is the OpenTUI renderer in `station/` (package `@station/workspace`, built on `@opentui/core` + `@opentui/react` + `react`). Use [TUI development](tui.md) before changing `station/` components, hooks, sources, keymaps, selectors, popup behavior, or renderer tests.
+
+### Primary-workflow interaction acceptance
+
+For dashboard interaction changes, manually verify native Station and the tmux
+popup with three independent passes:
+
+1. Pointer: complete first-project onboarding and create a named session using
+   only visible controls (typing text is allowed).
+2. Direct commands: use `A`, the displayed Add Project commands, then `N` and
+   `P/N/A/C` for Create Session.
+3. Focus: use arrows plus `Enter` for folder lists, review actions, and name
+   editor actions at both wide and minimum supported widths.
+
+Git-invalid Add Project submit must stay disabled, native Create Session must
+open a Station-managed pane, and the popup must continue through its configured
+terminal adapter.
 
 ## TypeScript And Data Rules
 

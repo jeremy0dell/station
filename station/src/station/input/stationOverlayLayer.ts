@@ -47,9 +47,8 @@ export function createStationOverlayLayer(
       if (focusedTarget.kind === "launch-managed") {
         return paneLaunchManagedOutcome(focusedTarget);
       }
-      // Enter on the New Session review screen hosts the agent in Station
-      // (create worktree + managed launch) rather than the machine's tmux
-      // session.create — which Station can't render as a pane.
+      // Focused Enter and direct C on New Session host the agent in Station;
+      // every successful native create must bypass the standalone session.create effect.
       const submit = resolveKeyNewSessionSubmit(stationViewStore, key);
       if (submit.kind === "submit") {
         return paneLaunchNewSessionOutcome(submit);

@@ -38,11 +38,8 @@ import {
 
 const HOVER_BG = STATION_COLORS.hoverBackground;
 
-// The per-row/header "open a shell here" click target. Rendered as its own
-// trailing <text> so stationMouseProps' stopPropagation fires only this action,
-// never the row-activate / collapse-toggle on the line it sits beside. The
-// reserved width (label + a leading space) is subtracted from the row grid and
-// header truncation so the affordance is never clipped at small viewports.
+// The project-header "open a shell here" click target stays in its own trailing
+// cell so stopPropagation can never also toggle the header.
 const SHELL_AFFORDANCE_LABEL = "[shell]";
 const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
 const SHELL_AFFORDANCE_WIDTH = SHELL_AFFORDANCE_LABEL.length + 1;
@@ -97,7 +94,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
       )}
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
-          <text fg={STATION_COLORS.foreground}>{truncateCells(FIRST_RUN_BODY_LABEL, contentColumns)}</text>
+          <FirstProjectButton columns={contentColumns} />
         </box>
       ) : (
         <DashboardBody
@@ -346,8 +343,27 @@ function SessionRowLine({
   );
 }
 
+function FirstProjectButton({ columns }: { columns: number }) {
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useStationHoverState();
+  const label = `[ + ${FIRST_RUN_BODY_LABEL} (A) ]`;
+  return (
+    <text
+      flexShrink={0}
+      fg={hover ? STATION_COLORS.background : STATION_COLORS.cyan}
+      attributes={TextAttributes.BOLD}
+      {...(hover ? { bg: STATION_COLORS.cyan } : {})}
+      {...stationMouseProps(dispatch, { kind: "firstProjectAdd" })}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      {truncateCells(label, columns)}
+    </text>
+  );
+}
+
 /**
- * The trailing `[+sh]` click target. Its own <text> (not a span) so it carries
+ * The project-header shell click target. Its own <text> (not a span) so it carries
  * its own mouse target and stopPropagation; the leading space keeps it off the
  * line content. Color-only hover, so golden frames stay layout-stable.
  */

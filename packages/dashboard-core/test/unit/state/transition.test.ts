@@ -800,7 +800,7 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("surfaces the unavailable project's exact error on New Session submit", () => {
+  it("keeps unavailable project submission inert in New Session", () => {
     const snapshot = createDashboardSnapshot();
     const project = snapshot.projects.find((candidate) => candidate.id === "web");
     if (project === undefined) throw new Error("project fixture missing");
@@ -829,13 +829,7 @@ describe("TUI screen transitions", () => {
 
     const submitted = handleTuiKey(opened.state, { input: "\r", return: true });
 
-    expect(submitted.operations).toBeUndefined();
-    expect(submitted.state.localRows.pendingCreate).toEqual([]);
-    expect(submitted.state.toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: error.message,
-      hint: error.hint,
-    });
+    expect(submitted).toEqual({ state: opened.state });
   });
 
   it("seeds and moves the new-session project cursor, committing the choice on enter", () => {

@@ -9,6 +9,7 @@ import {
 } from "@station/dashboard-core";
 import { STATION_COLORS } from "../theme.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
+import { SheetText } from "./parts.js";
 
 export type BottomSheetFrameViewProps = {
   columns: number;
@@ -51,7 +52,7 @@ export function BottomSheetFrameView({
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{` ${title}`}</text>
+      <SheetText fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{` ${title}`}</SheetText>
       <box
         flexDirection="column"
         width={bottomSheetContentWidth(layout.width)}

@@ -1,32 +1,26 @@
-// OpenTUI port of apps/tui's NewSessionBottomSheet (review / editName /
-// pickProject / pickAgent). Picker lines are click targets dispatching their
-// slot key through the station mouse router.
 import type { ProjectView, ProviderId, StationSnapshot } from "@station/contracts";
-import {
-  type NewSessionFlowState,
-  selectedProject,
-  type TuiSelectionState,
-} from "@station/dashboard-core";
 import {
   bottomSheetContentWidth,
   newSessionContentRowCount,
-} from "@station/dashboard-core";
-import {
+  newSessionEditNameContent,
+  newSessionReviewContent,
+  selectedProject,
   selectNewSessionHarnessChoices,
-  selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
+  type NewSessionFlowState,
+  type TuiSelectionState,
 } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { providerHealthStatusColor, STATION_COLORS } from "../theme.js";
-import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
+import { providerHealthStatusColor } from "../theme.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
-  fit,
+  SheetButtonRow,
   SheetChoiceLine,
+  SheetControlRow,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
-  spaces,
 } from "./parts.js";
 
 export type NewSessionSheetViewProps = {
@@ -76,7 +70,10 @@ function renderMode(
       />
     );
   }
-  if (state.mode === "pickAgent" && project !== undefined) {
+  if (state.mode === "pickAgent") {
+    if (project === undefined) {
+      return <SheetFooter width={contentWidth}>No project is available · Esc back</SheetFooter>;
+    }
     return (
       <AgentPicker
         snapshot={snapshot}
@@ -89,7 +86,7 @@ function renderMode(
   if (state.mode === "editName") {
     return <EditName state={state} project={project} width={contentWidth} />;
   }
-  return <Review snapshot={snapshot} state={state} project={project} width={contentWidth} />;
+  return <Review snapshot={snapshot} state={state} width={contentWidth} />;
 }
 
 function titleForState(state: NewSessionFlowState): string {
@@ -108,48 +105,55 @@ function titleForState(state: NewSessionFlowState): string {
 function Review({
   snapshot,
   state,
-  project,
   width,
 }: {
   snapshot: StationSnapshot;
-  state: NewSessionFlowState;
-  project: ProjectView | undefined;
+  state: Extract<NewSessionFlowState, { mode: "review" }>;
   width: number;
 }) {
-  const harness =
-    project === undefined ? undefined : selectedHarnessOption(snapshot, project, state);
-  const focus = state.mode === "review" ? state.reviewFocus : "create";
+  const content = newSessionReviewContent(snapshot, state);
   return (
     <>
-      <SheetLine width={width}> </SheetLine>
-      <SheetLabelValue
+      {content.fields.map((field) => {
+        const status = field.status;
+        return (
+          <SheetControlRow
+            key={field.id}
+            width={width}
+            label={field.label}
+            shortcut={field.accelerator}
+            value={field.value}
+            focused={state.reviewFocus === field.focusId}
+            disabled={!field.enabled}
+            mouseTarget={{ kind: "newSessionAction", actionId: field.actionId }}
+            {...(status === undefined
+              ? {}
+              : {
+                  status: {
+                    glyph: status.glyph,
+                    text: status.text,
+                    color: providerHealthStatusColor(status.tone),
+                  },
+                })}
+          />
+        );
+      })}
+      <SheetButtonRow
         width={width}
-        label="Project"
-        labelWidth={10}
-        value={project?.label ?? "-"}
-        focused={focus === "project"}
+        buttons={[
+          {
+            id: content.create.actionId,
+            label: content.create.label,
+            compactLabel: "Create",
+            shortcut: content.create.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.reviewFocus === content.create.focusId,
+            disabled: !content.create.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.create.actionId },
+          },
+        ]}
       />
-      <SheetLabelValue
-        width={width}
-        label="Name"
-        labelWidth={10}
-        value={state.title}
-        focused={focus === "name"}
-        {...(state.titleSource === "generated" ? { valueColor: STATION_COLORS.gray } : {})}
-      />
-      <SheetLabelValue
-        width={width}
-        label="Agent"
-        labelWidth={10}
-        value={harness === undefined ? state.selectedHarness : `${harness.label} ${harness.status}`}
-        focused={focus === "agent"}
-        {...colorProp(providerHealthStatusColor(harness?.status))}
-      />
-      <SheetLine width={width}> </SheetLine>
-      <text fg={focus === "create" ? STATION_COLORS.cyan : STATION_COLORS.foreground}>
-        {fit(`${focus === "create" ? "▸" : " "} Create session`, width)}
-      </text>
-      <SheetFooter width={width}>{"↑↓ field  ↵ choose  N/P/A  Esc:cancel"}</SheetFooter>
+      <SheetFooter width={width}>{`↑↓ focus · ${content.helper} · Esc cancel`}</SheetFooter>
     </>
   );
 }
@@ -163,27 +167,57 @@ function EditName({
   project: ProjectView | undefined;
   width: number;
 }) {
-  const labelText = ` ${"Name".padEnd(10)} `;
-  const inputLength =
-    (state.draftName.value.length === 0 ? state.title.length : state.draftName.value.length) + 1;
-  const padding = spaces(Math.max(0, width - labelText.length - inputLength));
+  const nameValue = state.draftName.value.length === 0 ? state.title : state.draftName.value;
+  const content = newSessionEditNameContent(state);
   return (
     <>
-      <SheetLine width={width}> </SheetLine>
-      <SheetLabelValue width={width} label="Project" labelWidth={10} value={project?.label ?? "-"} />
-      <SheetLabelValue
+      <SheetLabelValue width={width} label="Project" labelWidth={12} value={project?.label ?? "-"} />
+      <SheetControlRow
         width={width}
-        label="Name"
-        labelWidth={10}
+        label={content.controls.name.label}
         value={
-          <span>
-            <EditableTextInputView {...state.draftName} placeholder={state.title} />
-            {padding}
-          </span>
+          <EditableTextInputView
+            value={state.draftName.value}
+            cursor={state.draftName.cursor}
+            placeholder={state.title}
+            active={state.editNameFocus === "name"}
+          />
         }
+        valueCells={nameValue.length + Number(state.editNameFocus === "name")}
+        focused={state.editNameFocus === content.controls.name.focusId}
+        disabled={!content.controls.name.enabled}
+        mouseTarget={{ kind: "newSessionAction", actionId: content.controls.name.actionId }}
       />
-      <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"Enter:save   Esc:back"}</SheetFooter>
+      <SheetButtonRow
+        width={width}
+        buttons={[
+          {
+            id: content.controls.save.actionId,
+            label: content.controls.save.label,
+            shortcut: content.controls.save.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.editNameFocus === content.controls.save.focusId,
+            disabled: !content.controls.save.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.save.actionId,
+            },
+          },
+          {
+            id: content.controls.back.actionId,
+            label: content.controls.back.label,
+            shortcut: content.controls.back.accelerator ?? "Esc",
+            tone: "neutral",
+            focused: state.editNameFocus === content.controls.back.focusId,
+            disabled: !content.controls.back.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.back.actionId,
+            },
+          },
+        ]}
+      />
+      <SheetFooter width={width}>{content.helper}</SheetFooter>
     </>
   );
 }
@@ -240,16 +274,6 @@ function AgentPicker({
   );
 }
 
-function selectedHarnessOption(
-  snapshot: StationSnapshot,
-  project: ProjectView,
-  state: NewSessionFlowState,
-) {
-  return selectNewSessionHarnessOptions(snapshot, project).find(
-    (option) => option.id === state.selectedHarness,
-  );
-}
-
 function optionCountForState(
   snapshot: StationSnapshot,
   state: NewSessionFlowState,
@@ -262,8 +286,4 @@ function optionCountForState(
     return selectNewSessionHarnessChoices(snapshot, project).length;
   }
   return 0;
-}
-
-function colorProp(color: string | undefined): { valueColor?: string } {
-  return color === undefined ? {} : { valueColor: color };
 }
