@@ -2,11 +2,12 @@ import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import {
   activeTuiToast,
-  dashboardFooterLabel,
+  dashboardFooterModel,
   isTuiToastHiddenByScreen,
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
   truncateCells,
+  type DashboardFooterModel,
   type TuiState,
   type TuiStore,
 } from "@station/dashboard-core";
@@ -21,20 +22,31 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
   const snapshot = useStore(store, (state) => state.snapshot);
   const quitHint = useStore(store, selectFooterQuitHint);
   const contentColumns = Math.max(1, Math.floor(columns));
-  const label =
-    snapshot === undefined
-      ? quitHint
-      : dashboardFooterLabel({
-          columns: contentColumns,
-          quitHint,
-          firstRun: snapshot.projects.length === 0,
-        });
+  const model = dashboardFooterModel({
+    columns: contentColumns,
+    quitHint,
+    hasSnapshot: snapshot !== undefined,
+    firstRun: snapshot !== undefined && snapshot.projects.length === 0,
+  });
 
   return (
-    <text fg={snapshot === undefined ? STATION_COLORS.gray : STATION_COLORS.foreground}>
-      {truncateCells(label, contentColumns)}
-    </text>
+    <text fg={dashboardFooterColor(model)}>{truncateCells(model.text, contentColumns)}</text>
   );
+}
+
+function dashboardFooterColor(model: DashboardFooterModel): string {
+  switch (model.kind) {
+    case "loading":
+      return STATION_COLORS.gray;
+    case "dashboard":
+      return STATION_COLORS.foreground;
+    default:
+      return assertNeverDashboardFooterModel(model);
+  }
+}
+
+function assertNeverDashboardFooterModel(_model: never): never {
+  throw new Error("Unhandled dashboard footer model.");
 }
 
 function selectFooterQuitHint(state: Pick<TuiState, "screen" | "toasts">): string {

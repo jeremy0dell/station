@@ -4,12 +4,12 @@
 import { TextAttributes } from "@opentui/core";
 import type { ProjectView, StationSnapshot } from "@station/contracts";
 import {
+  dashboardTableHeaderModel,
   fleetCountsLabel,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
   projectHeaderLabelParts,
   rowGridInputForViewportItem,
-  scrollIndicatorLabel,
 } from "@station/dashboard-core";
 import {
   layoutWorktreeRowGrid,
@@ -21,7 +21,6 @@ import {
 import {
   selectDashboardViewport,
   selectFleetSummary,
-  type DashboardSessionOverflow,
   type DashboardViewportItem,
   type FleetSummary,
 } from "@station/dashboard-core";
@@ -31,6 +30,10 @@ import type {
   TuiViewState,
 } from "@station/dashboard-core";
 import type { StationMouseTarget } from "../input/stationMouse.js";
+import {
+  DashboardScrollIndicatorView,
+  DashboardTableHeaderView,
+} from "./DashboardTableHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { STATION_COLORS } from "./theme.js";
@@ -74,6 +77,10 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
     : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.dashboardFocus);
+  const tableHeader = dashboardTableHeaderModel({
+    layout: headerLayout,
+    overflow: viewport.sessionOverflow,
+  });
   return (
     <box
       width="100%"
@@ -87,12 +94,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
         <FleetBar summary={fleet} counts={snapshot.counts} columns={contentColumns} />
       )}
       <Divider columns={contentColumns} />
-      {/* One shared row: column headers at rest, the above-overflow count while scrolled. */}
-      {viewport.sessionOverflow.above > 0 || headerLayout === undefined ? (
-        <ScrollIndicatorRow direction="above" overflow={viewport.sessionOverflow} />
-      ) : (
-        <ColumnHeaderRow layout={headerLayout} />
-      )}
+      <DashboardTableHeaderView model={tableHeader} />
       {firstRun ? (
         <box flexDirection="column" flexGrow={1}>
           <FirstProjectButton columns={contentColumns} />
@@ -105,7 +107,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
           dashboardFocus={viewState.dashboardFocus}
         />
       )}
-      <ScrollIndicatorRow direction="below" overflow={viewport.sessionOverflow} />
+      <DashboardScrollIndicatorView direction="below" overflow={viewport.sessionOverflow} />
       <Divider columns={contentColumns} />
     </box>
   );
@@ -167,42 +169,6 @@ function FleetBar({
         ))}
       </text>
       {totals.length > 0 ? <text fg={STATION_COLORS.gray}>{totals}</text> : null}
-    </box>
-  );
-}
-
-function ColumnHeaderRow({ layout }: { layout: RowGridLayout }) {
-  return (
-    <box height={1} width="100%" overflow="hidden">
-      <text fg={STATION_COLORS.gray}>
-        <Segments segments={layout.segments} />
-      </text>
-    </box>
-  );
-}
-
-function ScrollIndicatorRow({
-  direction,
-  overflow,
-}: {
-  direction: "above" | "below";
-  overflow: DashboardSessionOverflow;
-}) {
-  const dispatch = useStationMouse();
-  const hiddenSessions = direction === "above" ? overflow.above : overflow.below;
-  return (
-    <box height={1}>
-      {hiddenSessions > 0 ? (
-        <text
-          fg={STATION_COLORS.gray}
-          {...stationMouseProps(dispatch, {
-            kind: "scrollIndicator",
-            direction: direction === "above" ? "up" : "down",
-          })}
-        >
-          {scrollIndicatorLabel(direction, overflow)}
-        </text>
-      ) : null}
     </box>
   );
 }
