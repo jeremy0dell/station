@@ -22,6 +22,18 @@ describe("setup plan projection", () => {
     expect(source).not.toContain("ProjectSetupView");
   });
 
+  it("keeps the session JSON presenter independent from legacy and human projectors", () => {
+    const source = readFileSync(
+      new URL("../../src/commands/setup/presenters/json.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("CliSetupPlanSchema");
+    expect(source).not.toContain("@station/setup-messages");
+    expect(source).not.toContain("ProjectSetupView");
+    expect(source).not.toContain("projectCliSetupPlan");
+  });
+
   it("binds every projected production mutation to semantic execution authority", () => {
     const currentFacts = facts({
       config: {
