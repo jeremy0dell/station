@@ -40,6 +40,7 @@ export async function runGuidedSetupSession(
 ): Promise<SetupCommandResult> {
   const prompt = deps.prompt ?? createLinePromptSetupPresenter();
   const initialIntent = guidedIntent();
+  // Progress cannot fire during construction; callbacks resolve the composition after the factory assigns it.
   let composition: SetupComposition | undefined;
   try {
     composition = createComposition(
@@ -89,6 +90,7 @@ async function driveGuidedSession(
     intent = { ...intent, installBootstrap: true };
     state = await composition.session.application.replaceIntent(intent);
     if (state.status !== "editing") return renderUnavailableState(composition, state);
+    // The command-line-tools operation starts Apple's installer but cannot observe completion, so setup must be rerun.
     await withPromptPaused(prompt, () => composition.session.application.prepare());
     return { code: 1 };
   }
@@ -105,10 +107,10 @@ async function driveGuidedSession(
       intent = { ...intent, installBootstrap: true };
       state = await composition.session.application.replaceIntent(intent);
       if (state.status !== "editing") return renderUnavailableState(composition, state);
-      const before = state.operationOutcomes.length;
+      const outcomesBeforePreparation = state.operationOutcomes.length;
       state = await withPromptPaused(prompt, () => composition.session.application.prepare());
       const homebrewFailed = state.operationOutcomes
-        .slice(before)
+        .slice(outcomesBeforePreparation)
         .some(
           (outcome) => outcome.operation.kind === "install-homebrew" && outcome.status === "failed",
         );
@@ -269,6 +271,7 @@ async function driveGuidedSession(
     return { code: 1 };
   }
 
+  // Required tracking operations stay unselected until each harness receives explicit consent.
   const installHarnessTracking: SupportedHarnessId[] = [];
   for (const issue of projection.session.plan?.issues ?? []) {
     if (issue.code !== "harness-tracking-unprepared" || issue.tier !== "required") continue;
@@ -331,6 +334,7 @@ async function driveGuidedSession(
   state = await withPromptPaused(prompt, () => composition.session.application.apply());
   projection = await requireProjection(composition, state);
   if (projection === undefined) return { code: 1 };
+  // Fresh inspection owns readiness; outcomes are overlaid only for mutation failures it cannot reconstruct.
   const finalView = overlaySetupOperationOutcomes(
     projection.view,
     projection.session.operationOutcomes,
@@ -609,6 +613,7 @@ async function renderTmuxFeedback(
   );
 }
 
+// External installers own stdio while prompts are paused; always restore prompt ownership after failure.
 async function withPromptPaused<T>(prompt: SetupPromptAdapter, task: () => Promise<T>): Promise<T> {
   prompt.pause?.();
   try {
