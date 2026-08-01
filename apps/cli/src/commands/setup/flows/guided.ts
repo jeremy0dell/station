@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises";
-import type { SetupOperation } from "@station/setup-core";
+import type { SetupIssue, SetupOperation } from "@station/setup-core";
+import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
 import { createSetupOperationAdapter } from "../adapters/operations.js";
 import { applySetupPlan } from "../apply.js";
 import { checkSetupTmuxBinding } from "../checks/tmuxBinding.js";
@@ -23,10 +24,11 @@ import {
   missingHarnessInstallActions,
 } from "../harnessInstall.js";
 import { isSupportedHarnessId, type SetupHarnessSelection } from "../harnessSelection.js";
-import { defaultPrompt, renderOptions, write } from "../io.js";
+import { defaultPrompt, setupPresenter } from "../io.js";
 import type { SetupAction, SetupFacts, SetupPlan, SupportedHarnessId } from "../model.js";
-import { buildSetupPlan } from "../planner.js";
-import { formatCommand, renderSetupApplyResult, renderSetupPlan } from "../render.js";
+import { buildSetupPlans } from "../planner.js";
+import { overlaySetupActionStatuses } from "../presentation/projectSetupResult.js";
+import { formatCommand } from "../render.js";
 import type {
   SetupCommandDeps,
   SetupCommandOptions,
@@ -51,11 +53,19 @@ async function runGuidedSetupWithPrompt(
   deps: SetupCommandDeps,
   prompt: SetupPromptAdapter,
 ): Promise<SetupCommandResult> {
-  await write(
-    deps,
-    "Core setup: required tools and one or more agents. Add your first project in STATION.\n\n",
-  );
+  const presenter = setupPresenter(deps);
+  await presenter.writeMessage(setupMessageRef("setup.introduction"));
+  await presenter.write("\n");
   const initialFacts = await collectForCommand("apply", options, deps, {});
+  const initialPlan = buildSetupPlans(initialFacts);
+  if (
+    initialPlan.semanticPlan.issues.some((issue) =>
+      mustHaltBeforePrerequisiteMutation(issue, initialPlan.semanticPlan.issues),
+    )
+  ) {
+    await presenter.write(presenter.renderApplyResult(initialPlan.presentationView));
+    return { code: 1 };
+  }
 
   // Bootstrap layer (macOS): Command Line Tools, then Homebrew — the prerequisites
   // for git and every brew-installed tool below. Resolving these can change what is
@@ -86,7 +96,7 @@ async function runGuidedSetupWithPrompt(
     reprobeDeps,
     prompt,
   );
-  const hookPreferences = await promptHookPreferences(linkedFacts, prompt);
+  const hookPreferences = await promptHookPreferences(linkedFacts, prompt, deps);
   const preflight = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
     ...(selectedHarnessIds === undefined ? {} : { selectedHarnessIds }),
     planConfigWrite: true,
@@ -94,15 +104,16 @@ async function runGuidedSetupWithPrompt(
   });
   const unavailableHarnessIds = findUnavailableRequiredHarnesses(preflight.harnessSelection);
   if (unavailableHarnessIds.length > 0) {
-    await write(
-      deps,
-      `Required agent CLIs are unavailable: ${unavailableHarnessIds.join(", ")}.\n`,
+    await presenter.writeMessage(
+      setupMessageRef("guided.required-harnesses-unavailable", {
+        harnesses: unavailableHarnessIds.join(", "),
+      }),
     );
     return { code: 1 };
   }
   if (!(await confirmRequiredHarnessTracking(preflight.plan, prompt, deps))) return { code: 1 };
   if (!coreReadyForConfigWrite(preflight.plan)) {
-    await write(deps, renderSetupApplyResult(preflight.plan, renderOptions(deps)));
+    await presenter.write(presenter.renderApplyResult(preflight.presentationView));
     return { code: 1 };
   }
 
@@ -129,11 +140,37 @@ async function runGuidedSetupWithPrompt(
     reprobeDeps,
     selectedHarnessPlanInput(selectedHarnessIds),
   );
-  await write(deps, renderSetupApplyResult(finalState.plan, renderOptions(deps)));
+  await presenter.write(presenter.renderApplyResult(finalState.presentationView));
   return { code: trackingSucceeded && finalState.plan.summary.requiredOk ? 0 : 1 };
 }
 
 type GuidedFactsResult = { status: "continue"; facts: SetupFacts } | { status: "halt" };
+
+function isGuidedPrerequisiteIssue(issue: SetupIssue): boolean {
+  switch (issue.code) {
+    case "state-directory-unwritable":
+    case "xcode-tools-missing":
+    case "git-unavailable":
+      return true;
+    case "tool-missing":
+      return issue.tier === "required";
+    default:
+      return false;
+  }
+}
+
+function mustHaltBeforePrerequisiteMutation(
+  issue: SetupIssue,
+  issues: readonly SetupIssue[],
+): boolean {
+  if (!isGuidedPrerequisiteIssue(issue)) return false;
+  // Missing Command Line Tools and required tools continue into guided repair; state-dir or unrecoverable Git failure stops before mutation.
+  if (issue.code === "state-directory-unwritable") return true;
+  return (
+    issue.code === "git-unavailable" &&
+    !issues.some((candidate) => candidate.code === "xcode-tools-missing")
+  );
+}
 
 type GuidedHarnessChoice =
   | { status: "continue"; selectedHarnessIds: readonly SupportedHarnessId[] | undefined }
@@ -154,14 +191,24 @@ async function ensureRequiredTools(
     planConfigWrite: true,
   });
   const plan = initialState.plan;
-  await write(deps, renderSetupPlan(plan, renderOptions(deps)));
+  const presenter = setupPresenter(deps);
   const installActions = plan.actions.filter(
     (action) => isInstallAction(action) && action.selected,
   );
-  if (installActions.length === 0) return { status: "continue", facts: initialState.facts };
+  if (installActions.length === 0) {
+    if (
+      initialState.semanticPlan.issues.some(
+        (issue) => isGuidedPrerequisiteIssue(issue) && issue.code === "tool-missing",
+      )
+    ) {
+      await presenter.write(presenter.renderPlan(initialState.presentationView));
+    }
+    return { status: "continue", facts: initialState.facts };
+  }
+  await presenter.write(presenter.renderPlan(initialState.presentationView));
 
-  if (!(await prompt.confirm("Install missing required tools?"))) {
-    await write(deps, "No changes made.\n");
+  if (!(await prompt.confirm(presenter.prompt(setupMessageRef("guided.tools-prompt"))))) {
+    await presenter.writeMessage(setupMessageRef("guided.no-changes"));
     return { status: "halt" };
   }
   const installResult = await withPromptPaused(prompt, () =>
@@ -179,7 +226,7 @@ async function ensureRequiredTools(
   if (installResult.failedAction !== undefined) {
     const finalFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
     const finalState = await collectSetupPlanFromFacts(finalFacts, deps, {});
-    await write(deps, renderSetupApplyResult(finalState.plan, renderOptions(deps)));
+    await presenter.write(presenter.renderApplyResult(finalState.presentationView));
     return { status: "halt" };
   }
   const refreshedFacts = await collectForCommand("apply", options, depsWithBrewBinPath(deps), {});
@@ -193,7 +240,9 @@ async function selectGuidedHarnesses(
 ): Promise<GuidedHarnessChoice> {
   const availableHarnesses = facts.harnesses.filter((harness) => harness.status === "ok");
   if (availableHarnesses.length === 0) {
-    await write(deps, renderSetupApplyResult(buildSetupPlan(facts), renderOptions(deps)));
+    const view = buildSetupPlans(facts).presentationView;
+    const presenter = setupPresenter(deps);
+    await presenter.write(presenter.renderApplyResult(view));
     return { status: "halt" };
   }
   if (!shouldPromptHarnessSelection(facts, availableHarnesses.length)) {
@@ -213,14 +262,14 @@ async function selectGuidedHarnesses(
   }));
   while (true) {
     const selectedValues = await prompt.selectMany(
-      "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
+      setupPresenter(deps).prompt(setupMessageRef("guided.harness-select-prompt")),
       choices,
     );
     const selectedHarnessIds = selectedValues.filter(isSupportedHarnessId);
     if (selectedHarnessIds.length > 0) {
       return { status: "continue", selectedHarnessIds };
     }
-    await write(deps, "Select at least one available agent CLI.\n");
+    await setupPresenter(deps).writeMessage(setupMessageRef("guided.harness-select-required"));
   }
 }
 
@@ -253,8 +302,9 @@ async function writeAndActivateConfig(
   );
   if (!configWriteSelected) return { status: "continue", writtenPlan: undefined };
 
-  if (!(await prompt.confirm("Write core STATION config?"))) {
-    await write(deps, "Config was not written.\n");
+  const presenter = setupPresenter(deps);
+  if (!(await prompt.confirm(presenter.prompt(setupMessageRef("guided.config-write-prompt"))))) {
+    await presenter.writeMessage(setupMessageRef("guided.config-not-written"));
     return { status: "halt" };
   }
   const writeResult = await applySetupPlan(
@@ -266,7 +316,11 @@ async function writeAndActivateConfig(
     }),
   );
   if (writeResult.failedAction !== undefined) {
-    await write(deps, "Config write failed. Run: stn setup plan\n");
+    const failedView = overlaySetupActionStatuses(
+      collected.presentationView,
+      writeResult.plan.actions,
+    );
+    await presenter.write(presenter.renderApplyResult(failedView));
     return { status: "halt" };
   }
   const activationError = await activateCompletedConfigWrite(collected, deps);
@@ -295,7 +349,7 @@ async function installSelectedHooks(
     if (hookResult.failedAction !== undefined) failed = true;
   }
   if (failed) {
-    await write(deps, "Hook install failed. Fix the install error, then run: stn setup\n");
+    await setupPresenter(deps).writeMessage(setupMessageRef("guided.hook-install-failed"));
   }
   return !failed;
 }
@@ -333,7 +387,11 @@ async function offerWorktrunkShellIntegration(
     (candidate) => candidate.id === "worktrunk-shell-integration",
   );
   if (action === undefined) return;
-  if (await prompt.confirm("Install Worktrunk shell integration?")) {
+  if (
+    await prompt.confirm(
+      setupPresenter(deps).prompt(setupMessageRef("guided.worktrunk-shell-prompt")),
+    )
+  ) {
     await installWorktrunkShellIntegration(action, collected, deps);
   }
 }
@@ -344,30 +402,43 @@ async function offerTmuxPopupBinding(input: TmuxPopupInput): Promise<void> {
   const popupCommand = formatCommand([facts.launchers.station.command, "popup"]);
   const bindingKey =
     facts.tmuxBinding.status === "conflict" ? undefined : facts.tmuxBinding.bindingKey;
-  const currentFeedback = currentTmuxPopupFeedback(facts, popupCommand);
+  const currentFeedback = currentTmuxPopupFeedback(facts, popupCommand, deps);
 
   let feedback = currentFeedback;
   if (bindingActions.length > 0 && bindingKey !== undefined) {
-    const accepted = await prompt.confirm("Install or load tmux popup binding?");
+    const accepted = await prompt.confirm(
+      setupPresenter(deps).prompt(setupMessageRef("guided.tmux-popup-prompt")),
+    );
     if (accepted) {
       feedback = await applyTmuxPopupBinding(input, bindingActions, bindingKey, popupCommand);
     } else {
+      const presenter = setupPresenter(deps);
       feedback =
-        currentFeedback ?? `Tmux popup binding was not changed. Direct fallback: ${popupCommand}\n`;
+        currentFeedback ??
+        `${presenter.text(setupMessageRef("guided.tmux-not-changed"))}\n${presenter.text(
+          setupMessageRef("guided.direct-fallback", { command: popupCommand }),
+        )}\n`;
     }
   }
-  if (feedback !== undefined) await write(deps, feedback);
+  if (feedback !== undefined) await setupPresenter(deps).write(feedback);
 }
 
-function currentTmuxPopupFeedback(facts: SetupFacts, popupCommand: string): string | undefined {
+function currentTmuxPopupFeedback(
+  facts: SetupFacts,
+  popupCommand: string,
+  deps: SetupCommandDeps,
+): string | undefined {
   if (facts.tmuxBinding.status !== "ok") return undefined;
-  return renderTmuxPopupFeedback({
-    persisted: true,
-    liveLoaded: facts.tmuxBinding.liveStatus === "loaded",
-    bindingKey: facts.tmuxBinding.bindingKey,
-    popupCommand,
-    repairIncomplete: false,
-  });
+  return renderTmuxPopupFeedback(
+    {
+      persisted: true,
+      liveLoaded: facts.tmuxBinding.liveStatus === "loaded",
+      bindingKey: facts.tmuxBinding.bindingKey,
+      popupCommand,
+      repairIncomplete: false,
+    },
+    deps,
+  );
 }
 
 async function applyTmuxPopupBinding(
@@ -392,13 +463,16 @@ async function applyTmuxPopupBinding(
     result.plan.actions.flatMap((action) => (action.status === "completed" ? [action.id] : [])),
   );
   const liveLoaded = await recheckTmuxPopupBinding(input, completedIds);
-  return renderTmuxPopupFeedback({
-    persisted: facts.tmuxBinding.status === "ok" || completedIds.has("tmux-popup-binding"),
-    liveLoaded,
-    bindingKey,
-    popupCommand,
-    repairIncomplete: result.failedAction !== undefined,
-  });
+  return renderTmuxPopupFeedback(
+    {
+      persisted: facts.tmuxBinding.status === "ok" || completedIds.has("tmux-popup-binding"),
+      liveLoaded,
+      bindingKey,
+      popupCommand,
+      repairIncomplete: result.failedAction !== undefined,
+    },
+    deps,
+  );
 }
 
 async function recheckTmuxPopupBinding(
@@ -435,13 +509,19 @@ async function installWorktrunkShellIntegration(
   const integration = facts.worktrunkShellIntegration;
   const command =
     integration.shell === undefined ? baseCommand : [...baseCommand, integration.shell];
+  const presenter = setupPresenter(deps);
   if (integration.rcPath !== undefined && !(await pathExists(integration.rcPath, deps))) {
-    await write(
-      deps,
+    const recoveryCommand = `${formatCommand(["touch", integration.rcPath])} && ${formatCommand(command)}`;
+    await presenter.write(
       [
-        "Optional Worktrunk shell integration was not installed; core setup is complete.",
-        `Active ${integration.shell} rc file not found: ${integration.rcPath}`,
-        `Run: ${formatCommand(["touch", integration.rcPath])} && ${formatCommand(command)}`,
+        presenter.text(setupMessageRef("guided.worktrunk-shell-missing")),
+        presenter.text(
+          setupMessageRef("guided.active-rc-missing", {
+            shell: integration.shell ?? "shell",
+            path: integration.rcPath,
+          }),
+        ),
+        presenter.text(setupMessageRef("recovery.run-command", { command: recoveryCommand })),
         "",
       ].join("\n"),
     );
@@ -454,15 +534,17 @@ async function installWorktrunkShellIntegration(
       showCommandOutput: true,
       execution: collected,
     }) ?? {};
+  // Suppress the generic failure line because this optional path emits one tailored recovery block below.
   shellApplyOptions.onActionFailed = () => undefined;
   const result = await applySetupPlan(
     { ...plan, actions: [{ ...action, command, selected: true }] },
     shellApplyOptions,
   );
   if (result.failedAction !== undefined) {
-    await write(
-      deps,
-      `Optional Worktrunk shell integration was not installed; core setup is complete.\nRun: ${formatCommand(command)}\n`,
+    await presenter.write(
+      `${presenter.text(setupMessageRef("guided.worktrunk-shell-missing"))}\n${presenter.text(
+        setupMessageRef("recovery.run-command", { command: formatCommand(command) }),
+      )}\n`,
     );
   }
 }
@@ -478,26 +560,29 @@ async function pathExists(path: string, deps: SetupCommandDeps): Promise<boolean
   }
 }
 
-function renderTmuxPopupFeedback(input: {
-  persisted: boolean;
-  liveLoaded: boolean;
-  bindingKey: string;
-  popupCommand: string;
-  repairIncomplete: boolean;
-}): string {
-  let status: string;
-  if (!input.persisted) {
-    status = "Tmux popup binding was not persisted. Run stn setup to retry.";
-  } else if (input.liveLoaded) {
-    status = `Tmux popup binding: tmux prefix + ${input.bindingKey} is persisted and loaded in the current tmux server.`;
-  } else {
-    status = `Tmux popup binding: tmux prefix + ${input.bindingKey} is persisted for future tmux servers; no current server was live-loaded.`;
-  }
+function renderTmuxPopupFeedback(
+  input: {
+    persisted: boolean;
+    liveLoaded: boolean;
+    bindingKey: string;
+    popupCommand: string;
+    repairIncomplete: boolean;
+  },
+  deps: SetupCommandDeps,
+): string {
+  const presenter = setupPresenter(deps);
+  const status = !input.persisted
+    ? presenter.text(setupMessageRef("guided.tmux-not-persisted"))
+    : input.liveLoaded
+      ? presenter.text(setupMessageRef("guided.tmux-loaded", { key: input.bindingKey }))
+      : presenter.text(setupMessageRef("guided.tmux-future", { key: input.bindingKey }));
   const lines = [status];
   if (input.repairIncomplete) {
-    lines.push("Tmux popup binding repair was incomplete; run stn setup to retry.");
+    lines.push(presenter.text(setupMessageRef("guided.tmux-repair-incomplete")));
   }
-  lines.push(`Direct fallback: ${input.popupCommand}`);
+  lines.push(
+    presenter.text(setupMessageRef("guided.direct-fallback", { command: input.popupCommand })),
+  );
   return `${lines.join("\n")}\n`;
 }
 
@@ -514,9 +599,10 @@ async function ensureBootstrapTools(
   deps: SetupCommandDeps,
   prompt: SetupPromptAdapter,
 ): Promise<{ halt?: boolean; facts?: SetupFacts }> {
+  const presenter = setupPresenter(deps);
   if (facts.xcode.status === "missing") {
     const accepted = await prompt.confirm(
-      "Install Xcode Command Line Tools now? (runs xcode-select --install)",
+      presenter.prompt(setupMessageRef("guided.command-line-tools-prompt")),
     );
     if (accepted) {
       const installResult = await withPromptPaused(prompt, () =>
@@ -536,21 +622,12 @@ async function ensureBootstrapTools(
       );
       if (installResult.failedAction === undefined) {
         // The CLT installer runs asynchronously in its own window; setup cannot continue until it finishes.
-        await write(
-          deps,
-          "Command Line Tools installation started in a separate window. Finish it, then run: stn setup\n",
-        );
+        await presenter.writeMessage(setupMessageRef("guided.command-line-tools-started"));
       } else {
-        await write(
-          deps,
-          "Command Line Tools installation did not start. Run: xcode-select --install, then rerun: stn setup\n",
-        );
+        await presenter.writeMessage(setupMessageRef("guided.command-line-tools-failed"));
       }
     } else {
-      await write(
-        deps,
-        "Install the Command Line Tools (xcode-select --install), then run: stn setup\n",
-      );
+      await presenter.writeMessage(setupMessageRef("guided.command-line-tools-declined"));
     }
     return { halt: true };
   }
@@ -558,15 +635,16 @@ async function ensureBootstrapTools(
   if (facts.brew.status === "missing" && setupShouldOfferBrew(facts)) {
     const requiredForCoreTools = coreToolsNeedBrew(facts);
     const accepted = await prompt.confirm(
-      "Install Homebrew now? (runs the official Homebrew installer)",
+      presenter.prompt(setupMessageRef("guided.homebrew-prompt")),
     );
     if (!accepted) {
-      await write(deps, brewMissingCallout(facts));
+      await presenter.write(brewMissingCallout(facts));
       return {};
     }
-    await write(
-      deps,
-      "\nInstalling Homebrew...\nLive installer output is shown below. Station will continue when this installer exits.\n\n",
+    await presenter.write(
+      `\n${presenter.text(setupMessageRef("guided.homebrew-installing"))}\n${presenter.text(
+        setupMessageRef("guided.external-output"),
+      )}\n\n`,
     );
     const result = await withPromptPaused(prompt, () =>
       applySetupPlan(
@@ -583,15 +661,15 @@ async function ensureBootstrapTools(
       ),
     );
     if (result.failedAction !== undefined) {
-      await write(deps, "\nHomebrew install failed.\n");
+      await presenter.write(`\n${presenter.text(setupMessageRef("guided.homebrew-failed"))}\n`);
       if (requiredForCoreTools) {
-        await write(deps, "Install it from https://brew.sh, then run: stn setup\n");
+        await presenter.writeMessage(setupMessageRef("guided.homebrew-manual"));
         return { halt: true };
       }
-      await write(deps, "Continuing with non-Homebrew agent installers where supported.\n");
+      await presenter.writeMessage(setupMessageRef("guided.homebrew-continue"));
       return {};
     }
-    await write(deps, "\nHomebrew install completed.\n");
+    await presenter.write(`\n${presenter.text(setupMessageRef("guided.homebrew-complete"))}\n`);
     // Re-probe with the brew prefix on PATH so the just-installed brew (and the
     // core tools it can now install) are detected in the main plan.
     return { facts: await collectForCommand("apply", options, depsWithBrewBinPath(deps), {}) };
@@ -606,8 +684,10 @@ function commandLineToolsInstallAction(): SetupAction {
     kind: "run-command",
     tier: "required",
     selected: true,
-    label: "Install Command Line Tools",
-    message: "Trigger the macOS Command Line Tools installer.",
+    label: resolveSetupMessage(
+      setupMessageRef("action.install-label", { label: "Command Line Tools" }),
+    ),
+    message: resolveSetupMessage(setupMessageRef("installer.command-line-tools")),
     command: ["xcode-select", "--install"],
   };
 }
@@ -618,8 +698,8 @@ export function homebrewInstallAction(): SetupAction {
     kind: "run-command",
     tier: "required",
     selected: true,
-    label: "Install Homebrew",
-    message: "Run the official Homebrew installer.",
+    label: resolveSetupMessage(setupMessageRef("action.install-label", { label: "Homebrew" })),
+    message: resolveSetupMessage(setupMessageRef("installer.homebrew")),
     command: [
       "/bin/bash",
       "-c",
@@ -653,15 +733,15 @@ function setupShouldOfferBrew(facts: SetupFacts): boolean {
 
 function brewMissingCallout(facts: SetupFacts): string {
   if (!coreToolsNeedBrew(facts)) {
-    return "Homebrew was not installed. Setup will offer non-Homebrew agent installers where supported.\n\n";
+    return `${resolveSetupMessage(setupMessageRef("guided.homebrew-agents-only"))}\n\n`;
   }
   const lines = [
-    "Homebrew is required to install the missing core tools.",
-    "  Install Homebrew first: https://brew.sh",
+    resolveSetupMessage(setupMessageRef("guided.homebrew-core-required")),
+    `  ${resolveSetupMessage(setupMessageRef("guided.homebrew-url"))}`,
   ];
   // facts.xcode.applicable is true only on macOS, where brew itself needs the CLT.
   if (facts.xcode.applicable) {
-    lines.push("  Command Line Tools: xcode-select --install");
+    lines.push(`  ${resolveSetupMessage(setupMessageRef("guided.command-line-tools-hint"))}`);
   }
   return `${lines.join("\n")}\n\n`;
 }
@@ -678,7 +758,10 @@ async function maybeLinkStationLaunchers(
   );
   if (action === undefined || !shouldPromptLauncherLink(facts)) return facts;
 
-  const accepted = await prompt.confirm("Link STATION launchers globally?");
+  const presenter = setupPresenter(deps);
+  const accepted = await prompt.confirm(
+    presenter.prompt(setupMessageRef("guided.launcher-link-prompt")),
+  );
   if (!accepted) return facts;
 
   const result = await applySetupPlan(
@@ -690,7 +773,7 @@ async function maybeLinkStationLaunchers(
     }),
   );
   if (result.failedAction !== undefined) {
-    await write(deps, "STATION launcher link failed. Continuing with checkout launcher paths.\n");
+    await presenter.writeMessage(setupMessageRef("guided.launcher-link-failed"));
     return facts;
   }
 
@@ -702,6 +785,7 @@ async function maybeLinkStationLaunchers(
 async function promptHookPreferences(
   facts: SetupFacts,
   prompt: SetupPromptAdapter,
+  deps: SetupCommandDeps,
 ): Promise<HookPreferences> {
   const preferences: HookPreferences = {};
   if (
@@ -709,7 +793,9 @@ async function promptHookPreferences(
     (facts.config.status === "missing" ||
       (facts.config.status === "valid" && facts.config.worktrunkUseLifecycleHooks === true))
   ) {
-    preferences.installWorktrunkHooks = await prompt.confirm("Install Worktrunk lifecycle hooks?");
+    preferences.installWorktrunkHooks = await prompt.confirm(
+      setupPresenter(deps).prompt(setupMessageRef("guided.worktrunk-hooks-prompt")),
+    );
   }
   return preferences;
 }
@@ -722,15 +808,13 @@ async function confirmRequiredHarnessTracking(
   const trackingActions = plan.actions.filter(
     (action) => action.selected && action.tier === "required" && action.data?.setupRole === "hook",
   );
+  const presenter = setupPresenter(deps);
   for (const action of trackingActions) {
     const accepted = await prompt.confirm(
-      `${action.label}? Station requires tracking to observe the selected agent's activity.`,
+      presenter.prompt(setupMessageRef("guided.tracking-consent-prompt", { label: action.label })),
     );
     if (!accepted) {
-      await write(
-        deps,
-        "Required agent tracking was declined; config and provider tracking artifacts were not changed.\n",
-      );
+      await presenter.writeMessage(setupMessageRef("guided.tracking-declined"));
       return false;
     }
   }
@@ -753,12 +837,12 @@ async function ensureHarnessAvailable(
     return facts;
   }
 
-  await write(
-    deps,
+  const presenter = setupPresenter(deps);
+  await presenter.write(
     [
       "",
-      "No supported agent CLI is available.",
-      "STATION needs one agent CLI. You can install one or more now.",
+      presenter.text(setupMessageRef("guided.no-agent-title")),
+      presenter.text(setupMessageRef("guided.no-agent-explanation")),
       "",
     ].join("\n"),
   );
@@ -769,18 +853,24 @@ async function ensureHarnessAvailable(
     homeDir: facts.homeDir,
     macos: facts.xcode.applicable,
   })) {
-    const accepted = await prompt.confirm(`${action.label}? (${action.message})`);
+    const accepted = await prompt.confirm(
+      presenter.prompt(
+        setupMessageRef("guided.installer-prompt", {
+          label: action.label,
+          description: action.message,
+        }),
+      ),
+    );
     if (accepted) {
       selectedActions.push({ ...action, selected: true });
     }
   }
 
   if (selectedActions.length === 0) {
-    await write(
-      deps,
+    await presenter.write(
       [
-        "No agent CLI was installed.",
-        "Install one supported agent CLI, then run:",
+        presenter.text(setupMessageRef("guided.no-agent-installed")),
+        presenter.text(setupMessageRef("guided.install-one-agent")),
         "  stn setup",
         "",
       ].join("\n"),
@@ -794,9 +884,10 @@ async function ensureHarnessAvailable(
     const harnessId = action.data?.harness;
     const harness = facts.harnesses.find((candidate) => candidate.id === harnessId);
     const label = harness?.label ?? action.label;
-    await write(
-      deps,
-      `\nInstalling ${label}...\nLive installer output is shown below. Station will continue when this installer exits.\n\n`,
+    await presenter.write(
+      `\n${presenter.text(setupMessageRef("guided.installing-agent", { label }))}\n${presenter.text(
+        setupMessageRef("guided.external-output"),
+      )}\n\n`,
     );
     const result = await withPromptPaused(prompt, () =>
       applySetupPlan(
@@ -814,9 +905,13 @@ async function ensureHarnessAvailable(
       ),
     );
     if (result.failedAction === undefined) {
-      await write(deps, `\n${label} install completed.\n`);
+      await presenter.write(
+        `\n${presenter.text(setupMessageRef("guided.agent-install-complete", { label }))}\n`,
+      );
     } else {
-      await write(deps, `\n${label} install failed. Continuing to the next selected agent.\n`);
+      await presenter.write(
+        `\n${presenter.text(setupMessageRef("guided.agent-install-failed", { label }))}\n`,
+      );
     }
     if (
       result.failedAction !== undefined &&
@@ -839,12 +934,11 @@ async function ensureHarnessAvailable(
   for (const harnessId of stillMissing) failedHarnessIds.add(harnessId);
 
   if (failedHarnessIds.size > 0) {
-    const labels = refreshedFacts.harnesses
-      .filter((harness) => failedHarnessIds.has(harness.id))
-      .map((harness) => `  - ${harness.label}`);
-    await write(
-      deps,
-      ["These selected agent CLIs are still unavailable:", ...labels, ""].join("\n"),
+    const labels = refreshedFacts.harnesses.flatMap((harness) =>
+      failedHarnessIds.has(harness.id) ? [`  - ${harness.label}`] : [],
+    );
+    await presenter.write(
+      [presenter.text(setupMessageRef("guided.agents-unavailable")), ...labels, ""].join("\n"),
     );
   }
 
@@ -852,11 +946,10 @@ async function ensureHarnessAvailable(
     return refreshedFacts;
   }
 
-  await write(
-    deps,
+  await presenter.write(
     [
-      "No supported agent CLI was detected after install.",
-      "Make sure the installed CLI is on PATH, then run:",
+      presenter.text(setupMessageRef("guided.no-agent-detected")),
+      presenter.text(setupMessageRef("guided.agent-path-hint")),
       "  stn setup",
       "",
     ].join("\n"),
