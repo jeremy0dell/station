@@ -7,8 +7,8 @@ import { resolveForkSessionSubmit, resolveKeyForkSessionSubmit } from "./station
 
 // Station hosts a fork in a pane (worktree.fork + managed launch) rather than
 // the shared machine's tmux session.fork. These resolvers are the interception
-// point: Enter on the details screen becomes a hosted-launch submit; everything
-// else (including an invalid title) falls through to the machine.
+// point: Enter on Name or Submit becomes a hosted launch, while Copy-focused
+// Enter and invalid input fall through to the shared screen transition.
 function newStore() {
   const snapshot = manyProjectsSnapshot();
   return createTuiStore({
@@ -75,10 +75,25 @@ describe("resolveForkSessionSubmit", () => {
 });
 
 describe("resolveKeyForkSessionSubmit", () => {
-  it("submits only on Enter", () => {
+  it("submits Enter from Name or Submit focus", () => {
     const store = storeOnForkDetails();
     expect(resolveKeyForkSessionSubmit(store, "\r").kind).toBe("submit");
-    // A navigation/edit key on the details screen stays with the shared machine.
+
+    store.getState().handleKey({ input: "", downArrow: true });
+    store.getState().handleKey({ input: "", downArrow: true });
+    expect(store.getState().screen).toMatchObject({ focus: "submit" });
+    expect(resolveKeyForkSessionSubmit(store, "\r").kind).toBe("submit");
     expect(resolveKeyForkSessionSubmit(store, "x").kind).toBe("none");
+  });
+
+  it("leaves Copy-focused Enter to the shared toggle transition", () => {
+    const store = storeOnForkDetails();
+    store.getState().handleKey({ input: "", downArrow: true });
+
+    expect(store.getState().screen).toMatchObject({ focus: "copyDirty", copyDirty: true });
+    expect(resolveKeyForkSessionSubmit(store, "\r")).toEqual({ kind: "none" });
+
+    store.getState().handleKey({ input: "\r", return: true });
+    expect(store.getState().screen).toMatchObject({ focus: "copyDirty", copyDirty: false });
   });
 });

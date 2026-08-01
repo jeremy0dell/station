@@ -16,6 +16,8 @@ import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
 type RemoveWorktreeScreen = Extract<TuiState["screen"], { name: "removeWorktree" }>;
 
+export type RemoveWorktreeActionId = "confirm.delete" | "confirm.keep";
+
 const removeWorktreeChooseSlotBehavior = {};
 const removeWorktreeDismissBehavior = { clickAway: cancelRemoveWorktree };
 
@@ -36,7 +38,9 @@ export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransi
   }
 
   if (key.escape === true) {
-    return { state: cancelRemoveWorktree(state) };
+    return state.screen.step === "confirm"
+      ? handleRemoveWorktreeAction(state, "confirm.keep")
+      : { state: cancelRemoveWorktree(state) };
   }
 
   if (state.screen.step === "chooseSlot") {
@@ -100,6 +104,7 @@ export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: SessionI
       rowId: sessionRow.id,
       forceRequired: removeWorktreeForceRequired(sessionRow, snapshot),
       label,
+      actionFocus: "keep",
     },
   };
 }
@@ -109,17 +114,47 @@ function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
     return { state };
   }
 
-  const input = key.input.toLowerCase();
-
-  if (input === "n" || key.escape === true || isReturnKey(key)) {
-    return { state: cancelRemoveWorktree(state) };
+  if (key.leftArrow === true || key.rightArrow === true) {
+    const actionFocus = key.leftArrow === true ? "delete" : "keep";
+    return { state: { ...state, screen: { ...state.screen, actionFocus } } };
   }
 
-  if (input !== "y") {
+  const input = key.input.toLowerCase();
+  if (input === "n") {
+    return handleRemoveWorktreeAction(state, "confirm.keep");
+  }
+  if (input === "y") {
+    return handleRemoveWorktreeAction(state, "confirm.delete");
+  }
+  if (isReturnKey(key)) {
+    return handleRemoveWorktreeAction(
+      state,
+      state.screen.actionFocus === "delete" ? "confirm.delete" : "confirm.keep",
+    );
+  }
+  return { state };
+}
+
+/** Applies a visible Remove confirmation action after validating the active screen. */
+export function handleRemoveWorktreeAction(
+  state: TuiState,
+  actionId: RemoveWorktreeActionId,
+): TuiTransition {
+  if (state.screen.name !== "removeWorktree" || state.screen.step !== "confirm") {
     return { state };
   }
+  switch (actionId) {
+    case "confirm.keep":
+      return { state: cancelRemoveWorktree(state) };
+    case "confirm.delete":
+      return deleteRemoveWorktree(state, state.screen);
+  }
+}
 
-  const screen = state.screen;
+function deleteRemoveWorktree(
+  state: TuiState,
+  screen: Extract<RemoveWorktreeScreen, { step: "confirm" }>,
+): TuiTransition {
   const snapshot = state.snapshot;
   if (snapshot === undefined) {
     return { state: { ...state, screen: { name: "dashboard" } } };

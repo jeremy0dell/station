@@ -36,7 +36,7 @@ const addFailed = failedStateForError(addReview, addReview.selectedPath, {
   message: "Project review failed.",
 });
 const newReview = requiredNewSessionFlow();
-const newEdit = requiredNewSessionTransition(newReview, { type: "editName" });
+const newEdit = requiredNewSessionEdit(newReview);
 const newPickProject = requiredNewSessionTransition(newReview, { type: "pickProject" });
 const newPickAgent = requiredNewSessionTransition(newReview, { type: "pickAgent" });
 
@@ -84,6 +84,7 @@ const screenBehaviorCases: readonly [
       rowId: "ses_wt_web_idle",
       forceRequired: false,
       label: "web",
+      actionFocus: "keep",
     },
     "present",
   ],
@@ -300,6 +301,16 @@ function requiredNewSessionFlow(): Extract<NewSessionFlowState, { mode: "review"
     throw new Error("Expected the dashboard fixture to support New Session.");
   }
   return flow;
+}
+
+function requiredNewSessionEdit(
+  flow: NewSessionFlowState,
+): Extract<NewSessionFlowState, { mode: "editName" }> {
+  const transitioned = transitionNewSessionFlow(flow, { type: "editName" });
+  if (transitioned?.mode !== "editName") {
+    throw new Error("Expected the New Session name editor.");
+  }
+  return transitioned;
 }
 
 function requiredNewSessionTransition(

@@ -47,6 +47,7 @@ const DASHBOARD_MOUSE_TARGET_KINDS = {
   openShellForRow: true,
   projectHeader: true,
   projectSettingsConfirmRemove: true,
+  removeWorktreeAction: true,
   projectSettingsItem: true,
   quickSessionForProject: true,
   renameSessionSubmit: true,
@@ -54,9 +55,8 @@ const DASHBOARD_MOUSE_TARGET_KINDS = {
   screenBackdrop: true,
   scrollIndicator: true,
   sheetBackdrop: true,
-  sheetButton: true,
   sheetChoice: true,
-  sheetSubmit: true,
+  forkSessionAction: true,
   showDefaultAgentPickerForProject: true,
   toast: true,
   widgetSettingsAdd: true,
@@ -226,7 +226,11 @@ describe("routeDashboardMouse", () => {
     store.getState().handleKey({ input: "X" });
     routeDashboardMouse({ kind: "row", rowId }, LEFT_DOWN, store);
     expect(store.getState().screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
-    routeDashboardMouse({ kind: "sheetButton", key: "n" }, LEFT_DOWN, store);
+    routeDashboardMouse(
+      { kind: "removeWorktreeAction", actionId: "confirm.keep" },
+      LEFT_DOWN,
+      store,
+    );
     expect(store.getState().screen).toEqual({ name: "dashboard" });
 
     store.getState().handleKey({ input: "N" });
@@ -237,7 +241,32 @@ describe("routeDashboardMouse", () => {
 
     store.getState().handleKey({ input: "F" });
     routeDashboardMouse({ kind: "row", rowId }, LEFT_DOWN, store);
-    routeDashboardMouse({ kind: "sheetSubmit" }, LEFT_DOWN, store);
+    routeDashboardMouse(
+      { kind: "forkSessionAction", actionId: "details.copyDirty" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: false,
+    });
+    routeDashboardMouse(
+      { kind: "forkSessionAction", actionId: "details.name" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "name",
+    });
+    routeDashboardMouse(
+      { kind: "forkSessionAction", actionId: "details.submit" },
+      LEFT_DOWN,
+      store,
+    );
     await waitFor(() => store.getState().screen.name === "dashboard");
   });
 

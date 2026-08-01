@@ -193,14 +193,18 @@ describe("routeStationMouse", () => {
     expect(clicked.getState().screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
   });
 
-  it("confirms remove with the sheet yes button", () => {
+  it("confirms remove with the semantic Delete action", () => {
     const store = makeStore();
     const worktreeId = "wt_station_working";
     const rowId = `ses_${worktreeId}`;
     store.getState().handleKey({ input: "X" });
     store.getState().handleKey({ input: slotForRow(store, rowId) });
 
-    const outcome = routeStationMouse({ kind: "sheetButton", key: "y" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "removeWorktreeAction", actionId: "confirm.delete" },
+      LEFT_DOWN,
+      store,
+    );
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.getState().screen).toEqual({ name: "dashboard" });
@@ -209,31 +213,39 @@ describe("routeStationMouse", () => {
     ]);
   });
 
-  it("cancels remove with the sheet no button", () => {
+  it("cancels remove with the semantic Keep action", () => {
     const store = makeStore();
     const rowId = "ses_wt_station_working";
     store.getState().handleKey({ input: "X" });
     store.getState().handleKey({ input: slotForRow(store, rowId) });
 
-    const outcome = routeStationMouse({ kind: "sheetButton", key: "n" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "removeWorktreeAction", actionId: "confirm.keep" },
+      LEFT_DOWN,
+      store,
+    );
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.getState().screen).toEqual({ name: "dashboard" });
     expect(store.getState().localRows.pendingRemove).toEqual([]);
   });
 
-  it("ignores sheet buttons outside remove confirm mode", () => {
+  it("keeps stale Remove actions inert", () => {
     const store = makeStore();
     const before = store.getState().screen;
+    const target = {
+      kind: "removeWorktreeAction",
+      actionId: "confirm.delete",
+    } as const;
 
-    const outcome = routeStationMouse({ kind: "sheetButton", key: "y" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(target, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.getState().screen).toEqual(before);
     expect(store.getState().localRows.pendingRemove).toEqual([]);
 
     store.getState().handleKey({ input: "X" });
-    routeStationMouse({ kind: "sheetButton", key: "y" }, LEFT_DOWN, store);
+    routeStationMouse(target, LEFT_DOWN, store);
     expect(store.getState().screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
     expect(store.getState().localRows.pendingRemove).toEqual([]);
   });
@@ -266,7 +278,42 @@ describe("routeStationMouse", () => {
     expect(keyedBranch).toContain("-fork-");
   });
 
-  it("launches a fork from the sheet submit button", () => {
+  it("focuses Fork Name and toggles Copy through semantic field actions", () => {
+    const store = makeStore();
+    const rowId = "ses_wt_station_working";
+    store.getState().handleKey({ input: "F" });
+    store.getState().handleKey({ input: slotForRow(store, rowId) });
+    store.getState().handleKey({ input: "", downArrow: true });
+    store.getState().handleKey({ input: "", downArrow: true });
+
+    expect(
+      routeStationMouse(
+        { kind: "forkSessionAction", actionId: "details.name" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "name",
+      copyDirty: true,
+    });
+
+    routeStationMouse(
+      { kind: "forkSessionAction", actionId: "details.copyDirty" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: false,
+    });
+  });
+
+  it("launches a fork from the semantic submit action", () => {
     const store = makeStore();
     const worktreeId = "wt_station_working";
     const rowId = `ses_${worktreeId}`;
@@ -274,7 +321,11 @@ describe("routeStationMouse", () => {
     store.getState().handleKey({ input: slotForRow(store, rowId) });
     expect(store.getState().screen).toMatchObject({ name: "fork", step: "details" });
 
-    const outcome = routeStationMouse({ kind: "sheetSubmit" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "forkSessionAction", actionId: "details.submit" },
+      LEFT_DOWN,
+      store,
+    );
 
     expect(outcome.kind).toBe("launch-fork");
     if (outcome.kind === "launch-fork") {
@@ -290,9 +341,13 @@ describe("routeStationMouse", () => {
     expect(store.getState().screen).toMatchObject({ name: "fork", step: "details" });
   });
 
-  it("ignores sheet submit outside fork details mode", () => {
+  it("keeps stale Fork actions inert", () => {
     const store = makeStore();
-    const outcome = routeStationMouse({ kind: "sheetSubmit" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      { kind: "forkSessionAction", actionId: "details.submit" },
+      LEFT_DOWN,
+      store,
+    );
     expect(outcome).toEqual({ kind: "handled" });
   });
 

@@ -352,6 +352,10 @@ export function resolveKeyForkSessionSubmit(
   if (sequenceToTuiKey(sequence)?.return !== true) {
     return { kind: "none" };
   }
+  const { screen } = store.getState();
+  if (screen.name !== "fork" || screen.step !== "details" || screen.focus === "copyDirty") {
+    return { kind: "none" };
+  }
   return resolveForkSessionSubmit(store);
 }
 

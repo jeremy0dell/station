@@ -1015,6 +1015,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       rowId: "ses_wt_station_idle",
       forceRequired: true,
       label: "pty-buffer",
+      actionFocus: "keep",
     });
   });
 
@@ -2273,9 +2274,8 @@ describe("createStationInputRuntime New Session hosted launch", () => {
 });
 
 describe("createStationInputRuntime Fork hosted launch", () => {
-  // Driven end to end through the public runtime: open the overlay, "F" + a slot
-  // open the fork details, Enter submits as a Station-hosted launch (worktree.fork
-  // + a background managed launch) instead of the machine's tmux session.fork.
+  // Driven end to end through the public runtime: Name/Submit Enter hosts the
+  // fork in Station, while Copy-focused Enter remains a shared toggle.
   function forkPlan(worktreeId: string): AgentPrepareExternalLaunchResult {
     return {
       kind: "prepared",
@@ -2369,6 +2369,31 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     delete fresh.terminal;
     return { ...base, rows: [...base.rows, fresh] };
   }
+
+  it("toggles Copy-focused Enter without dispatching a fork", () => {
+    const harness = forkHarness();
+    harness.store.actions.openOverlay(STATION_OVERLAY_ID);
+    harness.pressKey("F");
+    harness.pressKey("1");
+    harness.pressKey("\u001b[B");
+
+    expect(harness.stationViewStore.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: true,
+    });
+    expect(harness.pressKey("\r")).toBe(true);
+    expect(harness.stationViewStore.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: false,
+    });
+    expect(
+      harness.observerService.dispatched.some((command) => command.type === "worktree.fork"),
+    ).toBe(false);
+  });
 
   it("forks the worktree, shows an optimistic row, and launches the inherited agent in the background", async () => {
     const harness = forkHarness();

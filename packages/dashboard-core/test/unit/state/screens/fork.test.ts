@@ -2,6 +2,7 @@ import type { StationSnapshot } from "@station/contracts";
 import type { TuiKey, TuiState, TuiTransition } from "@station/dashboard-core";
 import {
   createInitialTuiState,
+  handleTuiAction,
   handleTuiKey,
   openForkDetailsForRow,
 } from "@station/dashboard-core";
@@ -106,10 +107,66 @@ describe("fork screen", () => {
     expect(detailsScreen(toggled).copyDirty).toBe(false);
     expect(detailsScreen(toggled).focus).toBe("copyDirty");
 
-    const transition = step(toggled, ENTER);
+    const submitFocused = step(toggled, DOWN).state;
+    const transition = step(submitFocused, ENTER);
     const operation = transition.operations?.[0];
     if (operation?.type !== "forkSession") throw new Error("expected fork operation");
     expect(operation.command.payload.copyDirty).toBe(false);
+  });
+
+  it("uses semantic field actions for pointer focus and Copy toggling", () => {
+    const opened = openDetails();
+    const copy = handleTuiAction(
+      opened,
+      { type: "forkSession.activate", actionId: "details.copyDirty" },
+      CTX,
+    );
+
+    expect(detailsScreen(copy.state).focus).toBe("copyDirty");
+    expect(detailsScreen(copy.state).copyDirty).toBe(false);
+    expect(copy.operations).toBeUndefined();
+
+    const name = handleTuiAction(
+      copy.state,
+      { type: "forkSession.activate", actionId: "details.name" },
+      CTX,
+    );
+    expect(detailsScreen(name.state).focus).toBe("name");
+    expect(detailsScreen(name.state).draftTitle).toEqual(detailsScreen(opened).draftTitle);
+  });
+
+  it("toggles Copy on focused Enter without submitting", () => {
+    const copyFocused = step(openDetails(), DOWN).state;
+
+    const transition = step(copyFocused, ENTER);
+
+    expect(detailsScreen(transition.state).focus).toBe("copyDirty");
+    expect(detailsScreen(transition.state).copyDirty).toBe(false);
+    expect(transition.operations).toBeUndefined();
+  });
+
+  it("submits through the semantic Fork action", () => {
+    const opened = openDetails();
+
+    const transition = handleTuiAction(
+      opened,
+      { type: "forkSession.activate", actionId: "details.submit" },
+      CTX,
+    );
+
+    expect(transition.state.screen).toEqual({ name: "dashboard" });
+    expect(transition.operations?.[0]).toMatchObject({
+      type: "forkSession",
+      sourceWorktreeId: detailsScreen(opened).sourceWorktreeId,
+    });
+  });
+
+  it("keeps stale semantic Fork actions inert", () => {
+    const state = base();
+
+    expect(
+      handleTuiAction(state, { type: "forkSession.activate", actionId: "details.copyDirty" }, CTX),
+    ).toEqual({ state });
   });
 
   it("allows a custom title without changing the hidden branch", () => {
