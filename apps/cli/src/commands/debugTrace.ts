@@ -21,6 +21,15 @@ import {
 } from "@station/contracts";
 import { z } from "zod";
 import { resolveObserverPaths } from "../paths.js";
+import {
+  assessCauseEvidence,
+  type CauseAssessment,
+  type DiagnosticEvidenceRoles,
+  diagnosticEvidenceRoles,
+  type OperationalBoundaryEvidence,
+  projectOperationalBoundaryEvidence,
+  retainedFailureSignal,
+} from "./diagnosticEvidence.js";
 
 export type DebugTraceCommandOptions = {
   config?: StationConfig;
@@ -51,6 +60,9 @@ export type DebugTraceResult = {
     diagnostics?: DiagnosticDetail[];
   };
   rootCauseCodes: string[];
+  causeAssessment: CauseAssessment;
+  evidenceRoles: DiagnosticEvidenceRoles;
+  operationalBoundaryEvidence?: OperationalBoundaryEvidence;
   evidence: {
     filesSearched: string[];
     matchedFiles: string[];
@@ -60,6 +72,10 @@ export type DebugTraceResult = {
 
 type DebugTraceCommandSummary = NonNullable<DebugTraceResult["command"]>;
 type DebugTraceErrorSummary = NonNullable<DebugTraceResult["error"]>;
+type DebugTraceReportingProvenance = {
+  component: LogRecord["component"];
+  operation?: string;
+};
 
 type DebugTraceArgs = {
   query?: string;
@@ -75,6 +91,12 @@ type DebugTraceMatch = {
   traceId?: string;
   spanId?: string;
   rootCauseCodes: string[];
+  explicitRootCauseCodes: string[];
+  observedFailureCodes: string[];
+  observedFailureRecord?: boolean;
+  reportedBy?: DebugTraceReportingProvenance;
+  recordSummary?: string;
+  signalKind?: string;
   matchedFiles: string[];
   createdAt?: string;
 };
@@ -84,6 +106,8 @@ type ParsedDebugTraceLogAttributes = {
   traceId?: string;
   spanId?: string;
   commandType?: string;
+  operation?: string;
+  kind?: string;
   error?: DebugTraceErrorSummary;
 };
 
@@ -93,6 +117,8 @@ const DebugTraceLogAttributesSchema = z
     traceId: TraceIdSchema.optional(),
     spanId: SpanIdSchema.optional(),
     commandType: z.string().min(1).optional(),
+    operation: z.string().min(1).optional(),
+    kind: z.string().min(1).optional(),
     error: z.unknown().optional(),
   })
   .passthrough();
@@ -111,6 +137,18 @@ export async function runDebugTraceCommand(
     latestFailure: parsed.latestFailure,
     matched: match !== undefined,
     rootCauseCodes: match?.rootCauseCodes ?? [],
+    causeAssessment: assessCauseEvidence({
+      explicitRootCauseCodes: match?.explicitRootCauseCodes ?? [],
+      observedFailureCodes: match?.observedFailureCodes ?? [],
+      observedFailureSignals: match?.signalKind === undefined ? [] : [match.signalKind],
+      observedFailureRecord: match?.observedFailureRecord ?? false,
+      matched: match !== undefined,
+      ...(match?.command?.status === undefined ? {} : { commandStatus: match.command.status }),
+      searchComplete: true,
+      invalidLines: 0,
+      reportingBoundaryOnly: match?.reportedBy?.component === "cli",
+    }),
+    evidenceRoles: diagnosticEvidenceRoles(),
     evidence: {
       filesSearched,
       matchedFiles: match?.matchedFiles ?? [],
@@ -125,6 +163,19 @@ export async function runDebugTraceCommand(
   if (match?.spanId !== undefined) result.spanId = match.spanId;
   if (match?.command !== undefined) result.command = match.command;
   if (match?.error !== undefined) result.error = match.error;
+  const operationalInput: OperationalBoundaryEvidence = {};
+  if (result.command?.type !== undefined) operationalInput.commandType = result.command.type;
+  if (match?.reportedBy?.operation !== undefined) {
+    operationalInput.operation = match.reportedBy.operation;
+  }
+  if (match?.signalKind !== undefined) operationalInput.signalKind = match.signalKind;
+  if (match?.recordSummary !== undefined) operationalInput.recordSummary = match.recordSummary;
+  if (result.error?.code !== undefined) operationalInput.errorCode = result.error.code;
+  if (result.error?.message !== undefined) operationalInput.errorMessage = result.error.message;
+  const operationalBoundaryEvidence = projectOperationalBoundaryEvidence(operationalInput);
+  if (operationalBoundaryEvidence !== undefined) {
+    result.operationalBoundaryEvidence = operationalBoundaryEvidence;
+  }
   return result;
 }
 
@@ -257,6 +308,8 @@ function matchBundle(input: {
     matchedIdType: matchedIdType(input.args.query, command, error),
     bundlePath: input.bundlePath,
     rootCauseCodes: rootCauseCodes(input.index, command, error),
+    explicitRootCauseCodes: explicitRootCauseCodes(input.index, command, error),
+    observedFailureCodes: observedFailureCodes(command, error),
     matchedFiles,
   };
   const commandResult = commandSummary(command);
@@ -362,6 +415,8 @@ function matchFromLog(log: LogRecord, path: string, query: string | undefined): 
   const traceId = attributes.traceId ?? log.traceId;
   const spanId = attributes.spanId ?? log.spanId;
   const commandType = attributes.commandType;
+  const reportedBy: DebugTraceReportingProvenance = { component: log.component };
+  if (attributes.operation !== undefined) reportedBy.operation = attributes.operation;
   const command =
     commandId === undefined
       ? undefined
@@ -380,9 +435,16 @@ function matchFromLog(log: LogRecord, path: string, query: string | undefined): 
     ...(traceId === undefined ? {} : { traceId }),
     ...(spanId === undefined ? {} : { spanId }),
     rootCauseCodes: errorResult?.code === undefined ? [] : [errorResult.code],
+    explicitRootCauseCodes: [],
+    observedFailureCodes: errorResult?.code === undefined ? [] : [errorResult.code],
+    observedFailureRecord: log.level === "warn" || log.level === "error",
+    reportedBy,
+    recordSummary: log.message,
     matchedFiles: [path],
     createdAt: log.timestamp,
   };
+  const signalKind = retainedFailureSignal(attributes.kind);
+  if (signalKind !== undefined) match.signalKind = signalKind;
   if (errorResult !== undefined) match.error = errorResult;
   return match;
 }
@@ -472,6 +534,47 @@ function commandErrorSummary(command: CommandRecord | undefined): DebugTraceResu
   return Object.keys(summary).length === 0 ? undefined : summary;
 }
 
+function explicitRootCauseCodes(
+  index: DiagnosticEvidenceIndex | undefined,
+  command: CommandRecord | undefined,
+  error: ErrorEnvelope | undefined,
+): string[] {
+  const codes = new Set<string>();
+  const correlatedItemIds = new Set(
+    index?.items
+      .filter(
+        (item) =>
+          (command?.id !== undefined && item.commandId === command.id) ||
+          (command?.traceId !== undefined && item.traceId === command.traceId) ||
+          (error?.id !== undefined && item.diagnosticId === error.id),
+      )
+      .map((item) => item.id) ?? [],
+  );
+  for (const rootCause of index?.rootCauses ?? []) {
+    if (
+      (command?.id !== undefined && rootCause.commandId === command.id) ||
+      (error?.id !== undefined && rootCause.diagnosticId === error.id) ||
+      rootCause.itemIds.some((itemId) => correlatedItemIds.has(itemId))
+    ) {
+      codes.add(rootCause.code);
+    }
+  }
+  if (command === undefined && error === undefined) {
+    for (const code of index?.summary.rootCauseCodes ?? []) codes.add(code);
+  }
+  return [...codes].sort();
+}
+
+function observedFailureCodes(
+  command: CommandRecord | undefined,
+  error: ErrorEnvelope | undefined,
+): string[] {
+  const codes = new Set<string>();
+  if (command?.error?.code !== undefined) codes.add(command.error.code);
+  if (error?.code !== undefined) codes.add(error.code);
+  return [...codes].sort();
+}
+
 function rootCauseCodes(
   index: DiagnosticEvidenceIndex | undefined,
   command: CommandRecord | undefined,
@@ -505,6 +608,8 @@ function parseDebugTraceLogAttributes(
   if (parsed.data.traceId !== undefined) result.traceId = parsed.data.traceId;
   if (parsed.data.spanId !== undefined) result.spanId = parsed.data.spanId;
   if (parsed.data.commandType !== undefined) result.commandType = parsed.data.commandType;
+  if (parsed.data.operation !== undefined) result.operation = parsed.data.operation;
+  if (parsed.data.kind !== undefined) result.kind = parsed.data.kind;
   const error = parseLogAttributeError(parsed.data.error);
   if (error !== undefined) result.error = error;
   return result;

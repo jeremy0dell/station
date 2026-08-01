@@ -4,6 +4,19 @@ import type { LogRecord, SafeError } from "@station/contracts";
 import { LogRecordSchema, SafeErrorSchema } from "@station/contracts";
 import { componentLogPath } from "@station/observability";
 import { resolveObserverPaths } from "../paths.js";
+import {
+  assessCauseEvidence,
+  type CauseAssessment,
+  type DiagnosticContextEntry,
+  type DiagnosticEvidenceRoles,
+  type DiagnosticMatchEvidence,
+  diagnosticEvidenceRoles,
+  extractDiagnosticMatchEvidence,
+  type OperationalBoundaryEvidence,
+  projectDiagnosticContext,
+  projectOperationalBoundaryEvidence,
+  retainedFailureSignal,
+} from "./diagnosticEvidence.js";
 
 export type DebugLogsCommandOptions = {
   config?: StationConfig;
@@ -20,6 +33,11 @@ export type DebugLogsResult = {
     filesSearched: string[];
     matchedFiles: string[];
   };
+  causeAssessment: Pick<
+    CauseAssessment,
+    "status" | "observedFailureCodes" | "observedFailureSignals"
+  >;
+  evidenceRoles: DiagnosticEvidenceRoles;
   records: DebugLogRecordSummary[];
 };
 
@@ -27,6 +45,7 @@ type DebugLogRecordSummary = {
   timestamp: string;
   level: DebugLogLevel;
   component: DebugLogComponent;
+  componentRole: "logging_location";
   message: string;
   traceId?: string;
   spanId?: string;
@@ -35,6 +54,9 @@ type DebugLogRecordSummary = {
   worktreeId?: string;
   sessionId?: string;
   provider?: string;
+  operationalBoundaryEvidence?: OperationalBoundaryEvidence;
+  context?: DiagnosticContextEntry[];
+  matchEvidence?: DiagnosticMatchEvidence[];
   error?: DebugLogErrorSummary;
 };
 
@@ -98,6 +120,33 @@ export async function runDebugLogsCommand(
     .flatMap((match) => match.records)
     .sort((left, right) => timestamp(left) - timestamp(right))
     .slice(-parsed.limit);
+  const includeOperationalBoundaryEvidence = parsed.query !== undefined || selected.length === 1;
+  const records = selected.map((record) =>
+    logSummary(record, parsed.query, includeOperationalBoundaryEvidence),
+  );
+  const observedFailureCodes = records.flatMap((record) =>
+    record.error?.code === undefined ? [] : [record.error.code],
+  );
+  const observedFailureSignals = records.flatMap((record) => {
+    const signal = retainedFailureSignal(contextString(record.context ?? [], "/attributes/kind"));
+    return signal === undefined ? [] : [signal];
+  });
+  const assessedCause = assessCauseEvidence({
+    explicitRootCauseCodes: [],
+    observedFailureCodes,
+    observedFailureSignals,
+    matched: selected.length > 0,
+    searchComplete: true,
+    invalidLines: 0,
+    reportingBoundaryOnly: selected.length > 0,
+  });
+  const causeAssessment: DebugLogsResult["causeAssessment"] = {
+    status: assessedCause.status,
+    observedFailureCodes: assessedCause.observedFailureCodes,
+  };
+  if (assessedCause.observedFailureSignals !== undefined) {
+    causeAssessment.observedFailureSignals = assessedCause.observedFailureSignals;
+  }
   const result: DebugLogsResult = {
     components: parsed.components,
     minLevel: parsed.minLevel,
@@ -107,7 +156,9 @@ export async function runDebugLogsCommand(
       filesSearched,
       matchedFiles: matches.map((match) => match.path),
     },
-    records: selected.map(logSummary),
+    causeAssessment,
+    evidenceRoles: diagnosticEvidenceRoles(),
+    records,
   };
   if (parsed.query !== undefined) result.query = parsed.query;
   if (parsed.since !== undefined) result.since = parsed.since;
@@ -207,13 +258,35 @@ function logMatches(record: LogRecord, args: DebugLogsArgs): boolean {
   );
 }
 
-function logSummary(record: LogRecord): DebugLogRecordSummary {
+function logSummary(
+  record: LogRecord,
+  query: string | undefined,
+  includeOperationalBoundaryEvidence: boolean,
+): DebugLogRecordSummary {
+  const context = projectDiagnosticContext(record);
+  const error = errorSummary(record.attributes?.error);
   const summary: DebugLogRecordSummary = {
     timestamp: record.timestamp,
     level: record.level,
     component: record.component,
+    componentRole: "logging_location",
     message: record.message,
   };
+  if (includeOperationalBoundaryEvidence) {
+    const operationalInput: OperationalBoundaryEvidence = { recordSummary: record.message };
+    const operation = contextString(context, "/attributes/operation");
+    if (operation !== undefined) operationalInput.operation = operation;
+    const commandType = contextString(context, "/attributes/commandType");
+    if (commandType !== undefined) operationalInput.commandType = commandType;
+    const signalKind = retainedFailureSignal(contextString(context, "/attributes/kind"));
+    if (signalKind !== undefined) operationalInput.signalKind = signalKind;
+    if (error?.code !== undefined) operationalInput.errorCode = error.code;
+    if (error?.message !== undefined) operationalInput.errorMessage = error.message;
+    const operationalBoundaryEvidence = projectOperationalBoundaryEvidence(operationalInput);
+    if (operationalBoundaryEvidence !== undefined) {
+      summary.operationalBoundaryEvidence = operationalBoundaryEvidence;
+    }
+  }
   if (record.traceId !== undefined) summary.traceId = record.traceId;
   if (record.spanId !== undefined) summary.spanId = record.spanId;
   if (record.commandId !== undefined) summary.commandId = record.commandId;
@@ -221,12 +294,21 @@ function logSummary(record: LogRecord): DebugLogRecordSummary {
   if (record.worktreeId !== undefined) summary.worktreeId = record.worktreeId;
   if (record.sessionId !== undefined) summary.sessionId = record.sessionId;
   if (record.provider !== undefined) summary.provider = record.provider;
-
-  const error = errorSummary(record.attributes?.error);
-  if (error !== undefined) {
-    summary.error = error;
+  if (context.length > 0) summary.context = context;
+  if (query !== undefined) {
+    const matchEvidence = extractDiagnosticMatchEvidence(record, query);
+    if (matchEvidence.length > 0) summary.matchEvidence = matchEvidence;
   }
+  if (error !== undefined) summary.error = error;
   return summary;
+}
+
+function contextString(
+  context: readonly DiagnosticContextEntry[],
+  path: string,
+): string | undefined {
+  const value = context.find((entry) => entry.path === path)?.value;
+  return typeof value === "string" ? value : undefined;
 }
 
 function errorSummary(value: unknown): DebugLogErrorSummary | undefined {

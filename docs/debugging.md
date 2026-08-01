@@ -63,6 +63,16 @@ were ignored before Observer delivery because Station ownership was missing or
 cwd did not match configured roots. Unsupported provider events intentionally
 produce no per-occurrence log.
 
+Each returned log record marks its `componentRole` as `logging_location`. The
+component says where Station retained the record, not which subsystem owns the
+failure. For a query or a single selected record, `operationalBoundaryEvidence`
+groups only retained operation, command type, signal, record summary, error
+code, and error message facts. `evidenceRoles` identifies that projection as
+failure-and-ownership evidence while keeping the component as logging
+provenance. Queried records also include bounded `matchEvidence` and scalar
+`context` so a caller can cite why the record matched without treating those
+facts as proof of an unrecorded mechanism.
+
 Current-truth tools interact with the live observer. `doctor`, `snapshot`,
 `observe`, `command get`, `reconcile`, and `debug bundle` all contact the
 observer or start it when needed. `debug bundle` also writes a
@@ -83,8 +93,13 @@ stn command get <commandId>
 `stn debug trace` searches existing bundles and structured logs. When a command
 error envelope includes diagnostics, the trace summary can include redacted
 external-command details: command, cwd, exit code, duration, and bounded
-stdout/stderr snippets. It also derives `rootCauseCodes` from command records,
-error envelopes, diagnostic indexes, and matching log errors.
+stdout/stderr snippets. The compatibility `rootCauseCodes` field retains command, envelope, index, and
+matching-log codes. Use `causeAssessment` for causal interpretation: only a
+correlated diagnostic-index root-cause declaration produces
+`explicit_root_cause`; an error code, retained signal, or exactly matched
+warning/error record produces `observed_failure` and does not establish the
+deeper mechanism. Trace output uses the same `evidenceRoles` and
+`operationalBoundaryEvidence` semantics as `debug logs`.
 
 `stn command get <commandId>` asks the live observer for the command lifecycle
 record. Failed provider commands may include the same redacted diagnostics when
