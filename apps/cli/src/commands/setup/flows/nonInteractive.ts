@@ -10,6 +10,7 @@ import {
   isInstallAction,
 } from "../flowUtils.js";
 import { setupPresenter } from "../io.js";
+import { overlaySetupActionStatuses } from "../presentation/projectSetupResult.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "../types.js";
 
 export async function runNonInteractiveApply(
@@ -24,15 +25,20 @@ export async function runNonInteractiveApply(
   const presenter = setupPresenter(deps);
 
   if (flags.dryRun) {
-    await applySetupPlan(initial.plan, applyOptions(deps, { dryRun: true, execution: initial }));
-    await presenter.write(presenter.renderPlan(initial.presentationView));
+    const result = await applySetupPlan(
+      initial.plan,
+      applyOptions(deps, { dryRun: true, execution: initial }),
+    );
+    await presenter.write(
+      presenter.renderPlan(
+        overlaySetupActionStatuses(initial.presentationView, result.plan.actions),
+      ),
+    );
     return { code: initial.harnessSelection.source === "unresolved" ? 1 : 0 };
   }
 
   if (initial.harnessSelection.source === "unresolved") {
-    await presenter.write(
-      presenter.renderApplyResult(initial.presentationView, { selectionRequired: true }),
-    );
+    await presenter.write(presenter.renderApplyResult(initial.presentationView));
     return { code: 1 };
   }
 
@@ -72,7 +78,11 @@ export async function runNonInteractiveApply(
     }),
   );
   if (writeResult.failedAction !== undefined) {
-    await presenter.write(presenter.renderApplyResult(refreshed.presentationView));
+    const failedView = overlaySetupActionStatuses(
+      refreshed.presentationView,
+      writeResult.plan.actions,
+    );
+    await presenter.write(presenter.renderApplyResult(failedView));
     return { code: 1 };
   }
 

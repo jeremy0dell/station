@@ -12,7 +12,7 @@ export function renderSetupApplyResult(
   view: ProjectSetupView,
   options: SetupRenderOptions & { selectionRequired?: boolean } = {},
 ): string {
-  return createTextSetupPresenter(options).renderApplyResult(view, options);
+  return createTextSetupPresenter(options).renderApplyResult(view);
 }
 
 export const formatCommand = formatSetupCommand;

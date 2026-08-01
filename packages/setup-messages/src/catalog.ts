@@ -1,4 +1,4 @@
-import type { SetupMessageCatalog, SetupMessageId } from "./types.js";
+import type { SetupMessageCatalog } from "./types.js";
 
 export const setupMessageCatalog = {
   "setup.heading": { terminal: "stn setup {mode}" },
@@ -40,6 +40,26 @@ export const setupMessageCatalog = {
   "label.homebrew": { terminal: "Homebrew" },
   "label.node": { terminal: "Node.js" },
   "label.pnpm": { terminal: "pnpm" },
+  "detail.version": { terminal: "Version" },
+  "detail.path": { terminal: "Path" },
+  "detail.repository": { terminal: "Repository" },
+  "detail.default-branch": { terminal: "Default branch" },
+  "detail.station-launcher": { terminal: "Station" },
+  "detail.ingress-launcher": { terminal: "Ingress" },
+  "detail.tmux-popup-launcher": { terminal: "tmux popup" },
+  "detail.resolved-executable": { terminal: "Found at" },
+  "detail.worktrunk-policy": { terminal: "Worktrunk automation" },
+  "detail.worktrunk-flag": { terminal: "Worktrunk option" },
+  "detail.missing-subcommands": { terminal: "Unavailable Worktrunk operations" },
+  "detail.tmux-binding-key": { terminal: "Binding" },
+  "detail.shell": { terminal: "Shell" },
+  "detail.shell-config-path": { terminal: "Shell config" },
+  "detail.tracking-owner-status": { terminal: "Tracking ownership" },
+  "detail.current-launcher": { terminal: "Current tracking launcher" },
+  "detail.requested-launcher": { terminal: "Requested tracking launcher" },
+  "detail.default-agent": { terminal: "Default agent" },
+  "detail.enabled-agents": { terminal: "Enabled agents" },
+  "detail.unavailable-agents": { terminal: "Unavailable agents" },
   "check.evidence": { terminal: "{message}" },
   "check.available": { terminal: "{label} is available." },
   "check.state-directory-ready": { terminal: "Station’s state directory is writable." },
@@ -212,8 +232,6 @@ export const setupMessageCatalog = {
     terminal: "Update selected agents and append safe missing setup blocks.",
   },
   "action.config-blocked-label": { terminal: "Update STATION config" },
-  "next.doctor": { terminal: "stn doctor" },
-  "next.launch": { terminal: "stn" },
   "next.install-worktrunk": { terminal: "Install Worktrunk." },
   "next.install-tmux": { terminal: "Install tmux." },
   "next.install-bun": { terminal: "Install Bun (brew install bun)." },
@@ -273,13 +291,11 @@ export const setupMessageCatalog = {
     terminal:
       "Future login shell launcher resolution remains unverified until those checks pass in a new login shell.",
   },
-  "recovery.selection-required": { terminal: "Agent CLI selection is required." },
   "recovery.selection-command": { terminal: "Run guided setup and choose an agent CLI:" },
   "recovery.command-line-tools": { terminal: "Finish installing the Command Line Tools." },
   "recovery.worktrunk": { terminal: "Worktrunk is still missing." },
   "recovery.tmux": { terminal: "tmux is still missing." },
   "recovery.bun": { terminal: "Bun is still missing; bare stn needs it to render the TUI." },
-  "recovery.harness": { terminal: "Resolve the agent selection." },
   "recovery.tracking": { terminal: "Prepare the selected agent’s tracking." },
   "recovery.diffnav": { terminal: "diffnav is still missing." },
   "recovery.git-delta": { terminal: "git-delta is still missing; diffnav renders through it." },
@@ -433,5 +449,3 @@ export const setupMessageCatalog = {
     terminal: "STATION setup does not change Node or pnpm automatically.",
   },
 } satisfies SetupMessageCatalog;
-
-export const setupMessageIds = Object.freeze(Object.keys(setupMessageCatalog) as SetupMessageId[]);

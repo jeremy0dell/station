@@ -31,6 +31,7 @@ export type SetupCommandDeps = {
   homeDir?: string;
   activateObserverConfig?: (input: { configPath: string; homeDir: string }) => Promise<void>;
   now?: () => Date;
+  nodeVersion?: string;
   // Defaults to process.platform; injected by machine-state tests to drive the
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;

@@ -626,6 +626,7 @@ describe("CLI setup command", () => {
     await mkdir(repo, { recursive: true });
     const calls: ExternalCommandInput[] = [];
     const fs = fakeFs({});
+    const chunks: string[] = [];
     let activationCount = 0;
 
     const result = await runCli(
@@ -654,17 +655,56 @@ describe("CLI setup command", () => {
           activateObserverConfig: async () => {
             activationCount += 1;
           },
-          writeStdout: () => undefined,
+          writeStdout: (chunk) => {
+            chunks.push(chunk);
+          },
         },
       },
     );
 
     expect(result.code).toBe(0);
+    expect(chunks.join("")).toContain("SKIP      Write STATION config");
     expect(Object.keys(fs.files)).toEqual([]);
     expect(calls.some((call) => call.command === "brew" && call.args?.[0] === "install")).toBe(
       false,
     );
     expect(activationCount).toBe(0);
+  });
+
+  it("renders the failed apply result when config persistence fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    fs.rename = async () => {
+      throw new Error("synthetic config rename failure");
+    };
+    const chunks: string[] = [];
+    let activationCount = 0;
+
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs,
+        activateObserverConfig: async () => {
+          activationCount += 1;
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(activationCount).toBe(0);
+    expect(fs.files[configPath]).toBeUndefined();
+    expect(chunks.join("")).toContain("Failed: Write STATION config");
+    expect(chunks.join("")).toContain("Config write failed. Run: stn setup plan");
   });
 
   it("blocks ambiguous noninteractive setup without mutation", async () => {
@@ -965,6 +1005,7 @@ describe("CLI setup command", () => {
       setupDeps: {
         cwd: root,
         env: { PATH: "/fake/bin" },
+        nodeVersion: "v22.14.0",
         runner: fakeRunner([], {
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
@@ -989,6 +1030,8 @@ describe("CLI setup command", () => {
     expect(output).toContain("expected >=24.2 <25");
     expect(output).toContain("WARN pnpm incompatible 8.15.0 (expected 11.x)");
     expect(output).toContain("After Node.js 24.2+ (and below 25) is active");
+    expect(output).toContain("fnm install 24 && fnm use 24");
+    expect(output).toContain("nvm install 24 && nvm use 24");
     expect(output).toContain("corepack prepare pnpm@11.0.0 --activate");
     expect(output).toContain("STATION setup does not change Node or pnpm automatically.");
   });

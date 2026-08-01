@@ -1,4 +1,4 @@
-export { setupMessageCatalog, setupMessageIds } from "./catalog.js";
+export { setupMessageCatalog } from "./catalog.js";
 export { resolveSetupMessage, setupMessageRef } from "./resolve.js";
 export type {
   SetupMessageArguments,

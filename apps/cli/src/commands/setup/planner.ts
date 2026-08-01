@@ -52,12 +52,12 @@ export function buildSetupPlans(
     installWorktrunkHooks: options.installWorktrunkHooks === true,
   };
   const semanticPlan = planSetup(evidence, intent);
-  const presentationView = projectSetupView(
+  const projectionInput =
     options.configWrite === undefined
       ? { plan: semanticPlan, facts }
-      : { plan: semanticPlan, facts, configWrite: options.configWrite },
-  );
-  const compatibilityPlan = projectCliSetupPlan(presentationView);
+      : { plan: semanticPlan, facts, configWrite: options.configWrite };
+  const presentationView = projectSetupView(projectionInput);
+  const compatibilityPlan = projectCliSetupPlan(projectionInput);
   return {
     semanticPlan,
     presentationView,

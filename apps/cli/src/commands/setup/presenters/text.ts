@@ -1,10 +1,11 @@
 import type { SafeError } from "@station/contracts";
+import { shellQuote } from "@station/runtime";
 import {
   resolveSetupMessage,
   type SetupMessageRef,
   setupMessageRef,
 } from "@station/setup-messages";
-import type { SetupAction, SetupCheck } from "../model.js";
+import type { SetupAction } from "../model.js";
 import type {
   ProjectSetupView,
   SetupDisplayDetail,
@@ -19,7 +20,7 @@ export type TextSetupPresenterOptions = SetupRenderOptions & {
 };
 
 export type TextSetupSystemRow = {
-  readonly status: "ok" | "missing" | "warning" | "skipped";
+  readonly status: SetupViewCheck["status"];
   readonly label: SetupMessageRef;
   readonly detail?: string;
 };
@@ -27,6 +28,7 @@ export type TextSetupSystemRow = {
 export type TextSetupSystemHint = {
   readonly message: SetupMessageRef;
   readonly commands?: readonly (readonly string[])[];
+  readonly commandSequences?: readonly (readonly (readonly string[])[])[];
 };
 
 export type TextSetupSystemView = {
@@ -41,10 +43,7 @@ export type TextSetupPresenter = {
   readonly write: (chunk: string) => Promise<void>;
   readonly writeMessage: (ref: SetupMessageRef) => Promise<void>;
   readonly renderPlan: (view: ProjectSetupView) => string;
-  readonly renderApplyResult: (
-    view: ProjectSetupView,
-    options?: { readonly selectionRequired?: boolean },
-  ) => string;
+  readonly renderApplyResult: (view: ProjectSetupView) => string;
   readonly renderProgressStart: (action: Pick<SetupAction, "label">) => string;
   readonly renderProgressComplete: (action: Pick<SetupAction, "label">) => string;
   readonly renderProgressFailure: (action: Pick<SetupAction, "label">, error?: SafeError) => string;
@@ -78,7 +77,7 @@ export function createTextSetupPresenter(
       await writer(`${text(ref)}\n`);
     },
     renderPlan: (view) => renderPlan(view, theme),
-    renderApplyResult: (view, renderOptions) => renderApplyResult(view, theme, renderOptions),
+    renderApplyResult: (view) => renderApplyResult(view, theme),
     renderProgressStart: (action) =>
       theme.bold(text(setupMessageRef("progress.start", { label: action.label }))),
     renderProgressComplete: (action) =>
@@ -116,218 +115,111 @@ function renderPlan(view: ProjectSetupView, theme: SetupTheme): string {
   }
   if (view.recovery.length > 0) {
     lines.push(sectionHeading(resolveSetupMessage(setupMessageRef("section.next")), theme), "");
-    for (const instruction of view.recovery) {
+    for (const instruction of view.recovery)
       lines.push(...renderRecoveryInstruction(instruction, theme));
-    }
   }
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-function renderApplyResult(
-  view: ProjectSetupView,
-  theme: SetupTheme,
-  options: { readonly selectionRequired?: boolean } = {},
-): string {
-  if (options.selectionRequired === true) {
-    const harnessCheck = view.checks.find((check) => check.id === "harness");
-    return renderRecoveryBlock(
-      harnessCheck?.explanation ?? setupMessageRef("recovery.selection-required"),
-      setupMessageRef("recovery.selection-command"),
-      [["stn", "--config", view.configPath, "setup"]],
-      theme,
-    );
+function renderApplyResult(view: ProjectSetupView, theme: SetupTheme): string {
+  const presentation = view.result.apply;
+  switch (presentation.kind) {
+    case "complete":
+      return renderSuccessfulApply(presentation, theme);
+    case "blocked":
+      return renderRecoveryBlock(
+        presentation.title,
+        presentation.detail,
+        presentation.commands,
+        theme,
+      );
+    case "message":
+      return `${theme.bold(theme.red(resolveSetupMessage(presentation.message)))}\n`;
+    case "config-write-failed":
+      return `${theme.bold(theme.red(resolveSetupMessage(presentation.message)))}\n`;
   }
-  if (view.result.readiness.workflowReady) return renderSuccessfulApply(view, theme);
-
-  const missing = view.checks.find(
-    (check) => check.tier === "required" && check.status === "missing",
-  );
-  if (missing === undefined) {
-    return renderRecoveryBlock(
-      setupMessageRef("recovery.core-incomplete"),
-      setupMessageRef("recovery.then-run"),
-      [["stn", "setup", "check"]],
-      theme,
-    );
-  }
-  if (missing.id === "git-project") {
-    return `${theme.bold(theme.red(resolveSetupMessage(missing.explanation)))}\n`;
-  }
-  if (missing.id.startsWith("harness-tracking:")) {
-    const recoveryAction = view.actions.find(
-      (action) => action.id === `${missing.id.slice("harness-tracking:".length)}-hooks`,
-    );
-    const commands =
-      recoveryAction === undefined ? [["stn", "setup", "check"]] : actionCommands(recoveryAction);
-    return renderRecoveryBlock(
-      missing.explanation,
-      setupMessageRef("recovery.tracking"),
-      commands,
-      theme,
-    );
-  }
-  const title = missingRecoveryTitle(missing);
-  const commands = view.recovery.flatMap(recoveryCommands);
-  return renderRecoveryBlock(
-    title,
-    setupMessageRef("recovery.then-run"),
-    commands.length === 0 ? [["stn", "setup", "check"]] : commands,
-    theme,
-  );
 }
 
-function renderSuccessfulApply(view: ProjectSetupView, theme: SetupTheme): string {
-  const prepared = preparedHarnesses(view);
-  const completion =
-    prepared.length === 0
-      ? resolveSetupMessage(setupMessageRef("completion.core"))
-      : `${resolveSetupMessage(setupMessageRef("completion.core"))} ${resolveSetupMessage(
+function renderSuccessfulApply(
+  presentation: Extract<ProjectSetupView["result"]["apply"], { kind: "complete" }>,
+  theme: SetupTheme,
+): string {
+  const tracking =
+    presentation.preparedHarnesses.length === 0
+      ? ""
+      : ` ${resolveSetupMessage(
           setupMessageRef("completion.tracking", {
-            harnesses: joinHumanList(prepared.map((harness) => harness.label)),
+            harnesses: joinHumanList(
+              presentation.preparedHarnesses.map((harness) => harness.label),
+            ),
           }),
         )}`;
-  const lines = [theme.bold(theme.green(completion))];
-  if (prepared.some((harness) => harness.id === "codex")) {
+  const lines = [
+    theme.bold(
+      theme.green(`${resolveSetupMessage(setupMessageRef("completion.core"))}${tracking}`),
+    ),
+  ];
+  if (presentation.showCodexReview) {
     lines.push("", resolveSetupMessage(setupMessageRef("completion.codex-review")));
   }
-
-  const launcherWarning = view.checks.find(
-    (check) => check.id === "station-launchers" && check.status === "warning",
-  );
-  if (launcherWarning !== undefined) {
+  const warning = presentation.launcherWarning;
+  if (warning !== undefined) {
     lines.push(
       "",
       sectionHeading(resolveSetupMessage(setupMessageRef("section.remaining")), theme),
       "",
-      ...renderCheck(launcherWarning, theme),
+      ...renderCheck(warning.check, theme),
     );
-    const launcherLink = view.actions.find((action) => action.id === "link-station-launchers");
-    if (launcherLink !== undefined) {
-      lines.push(...renderAction(launcherLink, theme));
-      for (const command of actionCommands(launcherLink)) {
-        lines.push(`           ${theme.cyan(`Run: ${formatCommand(command)}`)}`);
-      }
+    if (warning.linkAction !== undefined && warning.linkCommand !== undefined) {
+      lines.push(...renderAction(warning.linkAction, theme));
+      lines.push(`           ${theme.cyan(`Run: ${formatSetupCommand(warning.linkCommand)}`)}`);
     }
-    const pathDirectory = detailValue(launcherWarning.details, "launcher-directory");
-    if (pathDirectory !== undefined) {
+    if (warning.pathDirectory !== undefined) {
       lines.push(
         "",
         theme.bold(resolveSetupMessage(setupMessageRef("completion.current-shell-path-title"))),
-        `  ${theme.cyan(`PATH=${quoteShellPart(pathDirectory)}\${PATH:+":$PATH"}`)}`,
+        `  ${theme.cyan(`PATH=${shellQuote(warning.pathDirectory)}\${PATH:+":$PATH"}`)}`,
         `  ${theme.cyan("export PATH")}`,
         `  ${theme.cyan("hash -r")}`,
       );
     }
-    lines.push(...bareLauncherConvenience(pathDirectory, launcherLink, theme));
+    lines.push(...bareLauncherConvenience(warning.pathDirectory, warning.linkCommand, theme));
   }
-
   lines.push("", sectionHeading(resolveSetupMessage(setupMessageRef("section.next")), theme), "");
-  const stationExecutable =
-    launcherWarning === undefined
-      ? undefined
-      : detailValue(launcherWarning.details, "station-launcher");
-  const commands =
-    stationExecutable === undefined
-      ? [formatCommand(["stn", "doctor"]), formatCommand(["stn"])]
-      : [
-          formatSelectedLauncherCommand(stationExecutable, ["doctor"]),
-          formatSelectedLauncherCommand(stationExecutable),
-        ];
-  lines.push(...commands.map((command) => `  ${theme.cyan(command)}`), "");
+  lines.push(
+    ...presentation.nextCommands.map((command) => {
+      const formatted =
+        warning === undefined
+          ? formatSetupCommand(command)
+          : formatSelectedLauncherCommand(command);
+      return `  ${theme.cyan(formatted)}`;
+    }),
+    "",
+  );
   return lines.join("\n");
 }
 
 function renderCheck(check: SetupViewCheck, theme: SetupTheme): string[] {
   const status = colorStatus(statusLabel(check.status), check.status, theme);
-  const label = resolveSetupMessage(check.label);
-  const lines = [
-    `  ${pad(status, statusColumnWidth)} ${pad(label, labelColumnWidth)} ${resolveSetupMessage(check.explanation)}`,
+  return [
+    `  ${pad(status, statusColumnWidth)} ${pad(resolveSetupMessage(check.label), labelColumnWidth)} ${resolveSetupMessage(check.explanation)}`,
+    ...renderDetails(check.details, theme),
   ];
-  lines.push(...renderDetails(check.details, theme));
-  return lines;
 }
 
 function renderDetails(details: readonly SetupDisplayDetail[], theme: SetupTheme): string[] {
-  const lines: string[] = [];
-  for (const detail of details) {
-    const label = displayDetailLabel(detail.kind);
-    if (label === undefined || detail.value.length === 0) continue;
-    lines.push(`           ${theme.dim(`${label}: ${detail.value}`)}`);
-  }
-  return lines;
-}
-
-function displayDetailLabel(kind: SetupDisplayDetail["kind"]): string | undefined {
-  switch (kind) {
-    case "version":
-      return "Version";
-    case "path":
-      return "Path";
-    case "repository-root":
-      return "Repository";
-    case "default-branch":
-      return "Default branch";
-    case "station-launcher":
-      return "Station";
-    case "ingress-launcher":
-      return "Ingress";
-    case "tmux-popup-launcher":
-      return "tmux popup";
-    case "launcher-directory":
-      return undefined;
-    case "resolved-executable":
-      return "Found at";
-    case "worktrunk-policy":
-      return "Worktrunk automation";
-    case "worktrunk-flag":
-      return "Worktrunk option";
-    case "missing-subcommands":
-      return "Unavailable Worktrunk operations";
-    case "tmux-binding-key":
-      return "Binding";
-    case "shell":
-      return "Shell";
-    case "shell-config-path":
-      return "Shell config";
-    case "tracking-owner-status":
-      return "Tracking ownership";
-    case "current-launcher":
-      return "Current tracking launcher";
-    case "requested-launcher":
-      return "Requested tracking launcher";
-    case "executable":
-    case "reason":
-    case "selection-origin":
-    case "available-harnesses":
-    case "default-harness":
-    case "enabled-harnesses":
-    case "unavailable-harnesses":
-    case "default-harness-status":
-    case "tracking-state":
-    case "harness-identity":
-    case "tracking-capability":
-    case "tracking-requested":
-    case "tracking-installed":
-    case "requested-runtime-kind":
-    case "requested-runtime-version":
-    case "requested-build-identity":
-    case "current-runtime-kind":
-    case "current-runtime-version":
-    case "current-build-identity":
-    case "tmux-binding-launcher":
-    case "tmux-live-status":
-    case "configured-harnesses":
-    case "project":
-    case "worktree-provider":
-    case "terminal":
-      return undefined;
-  }
+  return details.flatMap((detail) =>
+    detail.value.length === 0
+      ? []
+      : [`           ${theme.dim(`${resolveSetupMessage(detail.label)}: ${detail.value}`)}`],
+  );
 }
 
 function renderAction(action: SetupViewAction, theme: SetupTheme): string[] {
-  const status = action.selected
-    ? theme.cyan(resolveSetupMessage(setupMessageRef("action.selected")))
-    : theme.dim(resolveSetupMessage(setupMessageRef("action.skipped")));
+  const skipped = action.status === "skipped" || (action.status === undefined && !action.selected);
+  const status = skipped
+    ? theme.dim(resolveSetupMessage(setupMessageRef("action.skipped")))
+    : theme.cyan(resolveSetupMessage(setupMessageRef("action.selected")));
   return [
     `  ${pad(status, statusColumnWidth)} ${pad(resolveSetupMessage(action.label), labelColumnWidth)} ${resolveSetupMessage(action.explanation)}`,
   ];
@@ -338,11 +230,11 @@ function renderRecoveryInstruction(
   theme: SetupTheme,
 ): string[] {
   if (instruction.kind === "command") {
-    return [`  ${theme.cyan(formatCommand(instruction.command))}`];
+    return [`  ${theme.cyan(formatSetupCommand(instruction.command))}`];
   }
   const lines = [`  ${resolveSetupMessage(instruction.message)}`];
   if (instruction.command !== undefined) {
-    lines.push(`    ${theme.cyan(formatCommand(instruction.command))}`);
+    lines.push(`    ${theme.cyan(formatSetupCommand(instruction.command))}`);
   }
   return lines;
 }
@@ -353,52 +245,12 @@ function renderRecoveryBlock(
   commands: readonly (readonly string[])[],
   theme: SetupTheme,
 ): string {
-  const lines = [
+  return [
     theme.bold(theme.red(resolveSetupMessage(title))),
     resolveSetupMessage(detail),
-    ...commands.map((command) => `  ${theme.cyan(formatCommand(command))}`),
+    ...commands.map((command) => `  ${theme.cyan(formatSetupCommand(command))}`),
     "",
-  ];
-  return lines.join("\n");
-}
-
-function missingRecoveryTitle(check: SetupViewCheck): SetupMessageRef {
-  switch (check.id) {
-    case "command-line-tools":
-      return setupMessageRef("recovery.command-line-tools");
-    case "worktrunk":
-      return setupMessageRef("recovery.worktrunk");
-    case "tmux":
-      return setupMessageRef("recovery.tmux");
-    case "bun":
-      return setupMessageRef("recovery.bun");
-    case "harness":
-      return check.explanation;
-    case "diffnav":
-      return setupMessageRef("recovery.diffnav");
-    case "git-delta":
-      return setupMessageRef("recovery.git-delta");
-    default:
-      return check.explanation;
-  }
-}
-
-function actionCommands(action: SetupViewAction): readonly (readonly string[])[] {
-  switch (action.execution.kind) {
-    case "package-install":
-    case "command":
-      return [action.execution.command];
-    case "directory":
-    case "config-write":
-    case "file-append":
-    case "none":
-      return [];
-  }
-}
-
-function recoveryCommands(instruction: SetupRecoveryInstruction): readonly (readonly string[])[] {
-  if (instruction.kind === "command") return [instruction.command];
-  return instruction.command === undefined ? [] : [instruction.command];
+  ].join("\n");
 }
 
 function renderProgressFailure(
@@ -441,11 +293,11 @@ function renderActivationFailure(
     resolveSetupMessage(setupMessageRef("activation.recovery-introduction")),
     resolveSetupMessage(
       setupMessageRef("activation.restart-command", {
-        command: formatCommand(commands.restart),
+        command: formatSetupCommand(commands.restart),
       }),
     ),
     resolveSetupMessage(
-      setupMessageRef("activation.setup-command", { command: formatCommand(commands.setup) }),
+      setupMessageRef("activation.setup-command", { command: formatSetupCommand(commands.setup) }),
     ),
     "",
   );
@@ -456,15 +308,25 @@ function renderSystemStatus(view: TextSetupSystemView, theme: SetupTheme): strin
   const lines = [theme.bold(resolveSetupMessage(view.title)), ""];
   for (const row of view.rows) {
     const status = colorStatus(statusLabel(row.status), row.status, theme);
-    const detail = row.detail === undefined ? "" : ` ${row.detail}`;
-    lines.push(`  ${status} ${resolveSetupMessage(row.label)}${detail}`);
+    lines.push(
+      `  ${status} ${resolveSetupMessage(row.label)}${row.detail === undefined ? "" : ` ${row.detail}`}`,
+    );
   }
   if (view.hints.length > 0) {
     lines.push("", theme.bold(resolveSetupMessage(setupMessageRef("system.development-runtime"))));
     for (const hint of view.hints) {
       lines.push(`  ${resolveSetupMessage(hint.message)}`);
       if (hint.commands !== undefined) {
-        lines.push(...hint.commands.map((command) => `    ${theme.cyan(formatCommand(command))}`));
+        lines.push(
+          ...hint.commands.map((command) => `    ${theme.cyan(formatSetupCommand(command))}`),
+        );
+      }
+      if (hint.commandSequences !== undefined) {
+        lines.push(
+          ...hint.commandSequences.map(
+            (sequence) => `    ${theme.cyan(sequence.map(formatSetupCommand).join(" && "))}`,
+          ),
+        );
       }
     }
   }
@@ -474,10 +336,10 @@ function renderSystemStatus(view: TextSetupSystemView, theme: SetupTheme): strin
 
 function bareLauncherConvenience(
   pathDirectory: string | undefined,
-  launcherLink: SetupViewAction | undefined,
+  linkCommand: readonly string[] | undefined,
   theme: SetupTheme,
 ): string[] {
-  if (pathDirectory === undefined && launcherLink === undefined) {
+  if (pathDirectory === undefined && linkCommand === undefined) {
     return [
       "",
       `  ${theme.dim(resolveSetupMessage(setupMessageRef("completion.future-shell-unverified")))}`,
@@ -493,13 +355,13 @@ function bareLauncherConvenience(
       `  ${resolveSetupMessage(setupMessageRef("completion.current-shell-path-step"))}`,
       `  ${resolveSetupMessage(
         setupMessageRef("completion.future-shell-path-step", {
-          directory: quoteShellPart(pathDirectory),
+          directory: shellQuote(pathDirectory),
         }),
       )}`,
       `  ${resolveSetupMessage(setupMessageRef("completion.prefer-path"))}`,
     );
   }
-  if (launcherLink !== undefined) {
+  if (linkCommand !== undefined) {
     lines.push(`  ${resolveSetupMessage(setupMessageRef("completion.checkout-link-step"))}`);
   }
   lines.push(
@@ -512,36 +374,13 @@ function bareLauncherConvenience(
   return lines;
 }
 
-function preparedHarnesses(view: ProjectSetupView): Array<{ id: string; label: string }> {
-  const labels: Record<string, string> = {
-    claude: "Claude",
-    codex: "Codex",
-    cursor: "Cursor",
-    opencode: "OpenCode",
-    pi: "Pi",
-  };
-  return view.checks.flatMap((check) => {
-    if (!check.id.startsWith("harness-tracking:")) return [];
-    if (detailValue(check.details, "tracking-state") !== "prepared") return [];
-    const id = check.id.slice("harness-tracking:".length);
-    return [{ id, label: labels[id] ?? id }];
-  });
-}
-
-function detailValue(
-  details: readonly SetupDisplayDetail[],
-  kind: SetupDisplayDetail["kind"],
-): string | undefined {
-  return details.find((detail) => detail.kind === kind)?.value;
-}
-
 function joinHumanList(values: readonly string[]): string {
   if (values.length < 2) return values[0] ?? "";
   if (values.length === 2) return `${values[0]} and ${values[1]}`;
   return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
-function statusLabel(status: SetupCheck["status"]): string {
+function statusLabel(status: SetupViewCheck["status"]): string {
   switch (status) {
     case "ok":
       return resolveSetupMessage(setupMessageRef("status.ok"));
@@ -554,7 +393,7 @@ function statusLabel(status: SetupCheck["status"]): string {
   }
 }
 
-function colorStatus(label: string, status: SetupCheck["status"], theme: SetupTheme): string {
+function colorStatus(label: string, status: SetupViewCheck["status"], theme: SetupTheme): string {
   switch (status) {
     case "ok":
       return theme.green(label);
@@ -568,24 +407,13 @@ function colorStatus(label: string, status: SetupCheck["status"], theme: SetupTh
 }
 
 export function formatSetupCommand(command: readonly string[]): string {
-  return formatCommand(command);
+  return command.map((part) => shellQuote(part)).join(" ");
 }
 
-function formatCommand(command: readonly string[]): string {
-  return command.map(quoteCommandPart).join(" ");
-}
-
-function formatSelectedLauncherCommand(executable: string, args: readonly string[] = []): string {
-  return [quoteShellPart(executable), ...args.map(quoteCommandPart)].join(" ");
-}
-
-function quoteCommandPart(part: string): string {
-  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(part)) return part;
-  return quoteShellPart(part);
-}
-
-function quoteShellPart(part: string): string {
-  return `'${part.replaceAll("'", "'\\''")}'`;
+function formatSelectedLauncherCommand(command: readonly string[]): string {
+  const [executable, ...args] = command;
+  if (executable === undefined) return "";
+  return [shellQuote(executable, true), ...args.map((arg) => shellQuote(arg))].join(" ");
 }
 
 function sectionHeading(label: string, theme: SetupTheme): string {

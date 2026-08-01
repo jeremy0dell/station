@@ -206,7 +206,8 @@ export function applyOptions(
     actionFilter?: (action: SetupAction) => boolean;
     showCommandOutput?: boolean;
     announceActions?: boolean;
-    execution?: Pick<CollectedSetupPlan, "operationBindings" | "executeOperation">;
+    execution?: Pick<CollectedSetupPlan, "operationBindings" | "executeOperation"> &
+      Partial<Pick<CollectedSetupPlan, "presentationView">>;
   },
 ): Parameters<typeof applySetupPlan>[1] {
   const options: Parameters<typeof applySetupPlan>[1] = {};
@@ -225,17 +226,23 @@ export function applyOptions(
   }
   if (input.announceActions === true) {
     const presenter = setupPresenter(deps);
+    const progressAction = (action: SetupAction): Pick<SetupAction, "label"> => {
+      const projected = input.execution?.presentationView?.actions.find(
+        (candidate) => candidate.id === action.id,
+      );
+      return projected === undefined ? action : { label: presenter.text(projected.label) };
+    };
     if (input.showCommandOutput === true) {
       options.onActionStart = async (action) => {
-        await presenter.write(`${presenter.renderProgressStart(action)}\n`);
+        await presenter.write(`${presenter.renderProgressStart(progressAction(action))}\n`);
       };
     }
     options.onActionComplete = async (action) => {
-      if (action.id === "mkdir-config-dir") return;
-      await presenter.write(`${presenter.renderProgressComplete(action)}\n`);
+      if (action.kind === "mkdir") return;
+      await presenter.write(`${presenter.renderProgressComplete(progressAction(action))}\n`);
     };
     options.onActionFailed = async (action, error) => {
-      await presenter.write(`${presenter.renderProgressFailure(action, error)}\n`);
+      await presenter.write(`${presenter.renderProgressFailure(progressAction(action), error)}\n`);
     };
   }
   return options;

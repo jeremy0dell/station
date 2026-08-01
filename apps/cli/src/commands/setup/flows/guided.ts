@@ -1,5 +1,5 @@
 import { access } from "node:fs/promises";
-import type { SetupOperation } from "@station/setup-core";
+import type { SetupIssue, SetupOperation } from "@station/setup-core";
 import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
 import { createSetupOperationAdapter } from "../adapters/operations.js";
 import { applySetupPlan } from "../apply.js";
@@ -27,6 +27,7 @@ import { isSupportedHarnessId, type SetupHarnessSelection } from "../harnessSele
 import { defaultPrompt, setupPresenter } from "../io.js";
 import type { SetupAction, SetupFacts, SetupPlan, SupportedHarnessId } from "../model.js";
 import { buildSetupPlans } from "../planner.js";
+import { overlaySetupActionStatuses } from "../presentation/projectSetupResult.js";
 import { formatCommand } from "../render.js";
 import type {
   SetupCommandDeps,
@@ -56,6 +57,15 @@ async function runGuidedSetupWithPrompt(
   await presenter.writeMessage(setupMessageRef("setup.introduction"));
   await presenter.write("\n");
   const initialFacts = await collectForCommand("apply", options, deps, {});
+  const initialPlan = buildSetupPlans(initialFacts);
+  if (
+    initialPlan.semanticPlan.issues.some((issue) =>
+      mustHaltBeforePrerequisiteMutation(issue, initialPlan.semanticPlan.issues),
+    )
+  ) {
+    await presenter.write(presenter.renderApplyResult(initialPlan.presentationView));
+    return { code: 1 };
+  }
 
   // Bootstrap layer (macOS): Command Line Tools, then Homebrew — the prerequisites
   // for git and every brew-installed tool below. Resolving these can change what is
@@ -136,6 +146,31 @@ async function runGuidedSetupWithPrompt(
 
 type GuidedFactsResult = { status: "continue"; facts: SetupFacts } | { status: "halt" };
 
+function isGuidedPrerequisiteIssue(issue: SetupIssue): boolean {
+  switch (issue.code) {
+    case "state-directory-unwritable":
+    case "xcode-tools-missing":
+    case "git-unavailable":
+      return true;
+    case "tool-missing":
+      return issue.tier === "required";
+    default:
+      return false;
+  }
+}
+
+function mustHaltBeforePrerequisiteMutation(
+  issue: SetupIssue,
+  issues: readonly SetupIssue[],
+): boolean {
+  if (!isGuidedPrerequisiteIssue(issue)) return false;
+  if (issue.code === "state-directory-unwritable") return true;
+  return (
+    issue.code === "git-unavailable" &&
+    !issues.some((candidate) => candidate.code === "xcode-tools-missing")
+  );
+}
+
 type GuidedHarnessChoice =
   | { status: "continue"; selectedHarnessIds: readonly SupportedHarnessId[] | undefined }
   | { status: "halt" };
@@ -160,8 +195,11 @@ async function ensureRequiredTools(
     (action) => isInstallAction(action) && action.selected,
   );
   if (installActions.length === 0) {
-    const missingToolIds = new Set(["worktrunk", "tmux", "bun", "diffnav", "git-delta"]);
-    if (plan.checks.some((check) => missingToolIds.has(check.id) && check.status === "missing")) {
+    if (
+      initialState.semanticPlan.issues.some(
+        (issue) => isGuidedPrerequisiteIssue(issue) && issue.code === "tool-missing",
+      )
+    ) {
       await presenter.write(presenter.renderPlan(initialState.presentationView));
     }
     return { status: "continue", facts: initialState.facts };
@@ -277,7 +315,11 @@ async function writeAndActivateConfig(
     }),
   );
   if (writeResult.failedAction !== undefined) {
-    await presenter.writeMessage(setupMessageRef("guided.config-write-failed"));
+    const failedView = overlaySetupActionStatuses(
+      collected.presentationView,
+      writeResult.plan.actions,
+    );
+    await presenter.write(presenter.renderApplyResult(failedView));
     return { status: "halt" };
   }
   const activationError = await activateCompletedConfigWrite(collected, deps);

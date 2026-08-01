@@ -100,6 +100,69 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain("Core setup complete.");
   });
 
+  it("shows an unusable Git blocker before harness prompts without mutation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+    let promptCount = 0;
+    let activationCount = 0;
+    const baseRunner = fakeRunner(calls, {
+      "wt --version": "worktrunk 1.2.3\n",
+      "tmux -V": "tmux 3.5a\n",
+      "codex --version": "codex 0.1.0\n",
+    });
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: async (input) => {
+          if (input.command === "git" && input.args?.[0] === "--version") {
+            throw Object.assign(new Error("Git execution denied"), { code: "EACCES" });
+          }
+          return baseRunner(input);
+        },
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        activateObserverConfig: async () => {
+          activationCount += 1;
+        },
+        prompt: {
+          async confirm() {
+            promptCount += 1;
+            return true;
+          },
+          async selectMany() {
+            promptCount += 1;
+            return ["codex"];
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(chunks.join("")).toContain("Git is installed but unusable.");
+    expect(promptCount).toBe(0);
+    expect(activationCount).toBe(0);
+    expect(fs.files).toEqual({});
+    expect(calls.some((call) => call.stdio === "inherit")).toBe(false);
+  });
+
   it("continues with checkout launchers and prints a usable popup fallback when linking fails", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

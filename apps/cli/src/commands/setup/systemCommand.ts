@@ -113,6 +113,7 @@ async function collectSystemFacts(
       ...(deps.runner === undefined ? {} : { runner: deps.runner }),
       ...(env === undefined ? {} : { env }),
       ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
+      ...(deps.nodeVersion === undefined ? {} : { nodeVersion: deps.nodeVersion }),
     }),
   ]);
   return { compiled, worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain };
@@ -237,11 +238,15 @@ function runtimeToolchainHints(toolchain: {
   if (toolchain.node.status !== "ok") {
     hints.push({
       message: setupMessageRef("system.node-hint"),
-      commands: [
-        ["fnm", "install", "24"],
-        ["fnm", "use", "24"],
-        ["nvm", "install", "24"],
-        ["nvm", "use", "24"],
+      commandSequences: [
+        [
+          ["fnm", "install", "24"],
+          ["fnm", "use", "24"],
+        ],
+        [
+          ["nvm", "install", "24"],
+          ["nvm", "use", "24"],
+        ],
       ],
     });
   }
