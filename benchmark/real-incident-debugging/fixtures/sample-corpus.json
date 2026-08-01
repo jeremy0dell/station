@@ -1,0 +1,63 @@
+{
+  "incident": {
+    "id": "sample-invalid-config",
+    "cohort": "held-out",
+    "area": "configuration-startup",
+    "replayKind": "invalid-config",
+    "hasExactId": false,
+    "hasRetainedId": false,
+    "hasOldOrTruncatedEvidence": false,
+    "correctDisposition": "abstain",
+    "symptom": "Station failed before startup after a configuration edit. Diagnose only from the copied invalid configuration and local diagnostic evidence.",
+    "replay": {
+      "schemaVersion": 1,
+      "kind": "invalid-config",
+      "evidencePaths": ["config.toml", "state"],
+      "stationCommands": [
+        { "executable": "stn", "arguments": ["debug", "logs", "{query}"] },
+        { "executable": "stn", "arguments": ["debug", "trace", "{id}"] }
+      ],
+      "rawCommands": [
+        { "executable": "rg", "arguments": ["{query}", "state"] },
+        { "executable": "find", "arguments": ["state", "-type", "f"] },
+        { "executable": "sed", "arguments": ["-n", "1,20p", "state/logs/observer.jsonl"] },
+        { "executable": "tail", "arguments": ["-n", "20", "state/logs/observer.jsonl"] },
+        { "executable": "sqlite3", "arguments": ["-readonly", "state/observer.sqlite", "{sql}"] }
+      ]
+    },
+    "files": {
+      "config.toml": "schema_version = 1\nprojects = []\n[defaults]\nworktree_provider = \"noop-worktree\"\nterminal = \"noop-terminal\"\nharness = \"noop-harness\"\nlayout = \"agent-shell\"\nunknown_key = true\n",
+      "state/logs/observer.jsonl": "{\"level\":\"error\",\"code\":\"CONFIG_VALIDATION_FAILED\",\"message\":\"Unknown key unknown_key\"}\n",
+      "state/observer.sqlite": "sample sqlite placeholder"
+    },
+    "gold": {
+      "schemaVersion": 2,
+      "acceptedProximateFailures": ["The strict runtime config contains an unknown key."],
+      "underlyingCauseDisposition": "unknown",
+      "acceptedUnderlyingCauses": [],
+      "responsibleSubsystems": ["configuration loader"],
+      "proximateEvidenceAdequacy": "sufficient",
+      "acceptableNextActions": ["Inspect the copied configuration and validation record."],
+      "prohibitedClaimsOrActions": ["Do not start an Observer or claim a repair occurred."],
+      "independentlyValidatedBy": ["reviewer-one", "reviewer-two"]
+    },
+    "provenance": {
+      "schemaVersion": 1,
+      "occurredOutsideExperiment": true,
+      "originalSymptomAvailable": true,
+      "independentResolutionAvailable": true,
+      "evidenceAvailable": true,
+      "candidateFrozenBeforeSelection": true,
+      "notPreviouslyUsed": true,
+      "recordedBy": "fixture-author",
+      "reviewedBy": "fixture-reviewer"
+    },
+    "redactionReport": {
+      "schemaVersion": 1,
+      "reviewedAt": "2026-07-30T00:00:00.000Z",
+      "reviewedBy": "fixture-reviewer",
+      "secretScan": "clean",
+      "redactions": []
+    }
+  }
+}
