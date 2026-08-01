@@ -29,6 +29,7 @@ export function overlaySetupActionStatuses(
   view: ProjectSetupView,
   actions: readonly SetupAction[],
 ): ProjectSetupView {
+  // Apply records statuses on its copied compatibility plan; overlay them without projecting human copy through that schema.
   const statuses = new Map(actions.map((action) => [action.id, action.status] as const));
   const updatedActions = view.actions.map((action) => {
     const status = statuses.get(action.id);

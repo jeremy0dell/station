@@ -1,3 +1,4 @@
+// Compatibility facade: preserve existing setup rendering imports while presenters own terminal output.
 import type { SafeError } from "@station/contracts";
 import type { SetupAction } from "./model.js";
 import type { ProjectSetupView } from "./presentation/projectSetupView.js";

@@ -226,6 +226,7 @@ export function applyOptions(
   }
   if (input.announceActions === true) {
     const presenter = setupPresenter(deps);
+    // Execution uses compatibility actions, so borrow catalog labels from the independent human view by stable action ID.
     const progressAction = (action: SetupAction): Pick<SetupAction, "label"> => {
       const projected = input.execution?.presentationView?.actions.find(
         (candidate) => candidate.id === action.id,

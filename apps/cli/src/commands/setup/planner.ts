@@ -56,6 +56,7 @@ export function buildSetupPlans(
     options.configWrite === undefined
       ? { plan: semanticPlan, facts }
       : { plan: semanticPlan, facts, configWrite: options.configWrite };
+  // Keep the frozen JSON adapter independent from catalog-backed human projection until #358 removes it.
   const presentationView = projectSetupView(projectionInput);
   const compatibilityPlan = projectCliSetupPlan(projectionInput);
   return {

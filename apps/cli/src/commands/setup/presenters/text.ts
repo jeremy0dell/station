@@ -413,6 +413,7 @@ export function formatSetupCommand(command: readonly string[]): string {
 function formatSelectedLauncherCommand(command: readonly string[]): string {
   const [executable, ...args] = command;
   if (executable === undefined) return "";
+  // Keep selected absolute launchers visibly delimited even when their path happens to be shell-safe.
   return [shellQuote(executable, true), ...args.map((arg) => shellQuote(arg))].join(" ");
 }
 
@@ -425,6 +426,7 @@ function pad(value: string, width: number): string {
 }
 
 function visibleLength(value: string): number {
+  // The setup theme emits only SGR styling, so skipping through "m" is sufficient for column alignment.
   let length = 0;
   for (let index = 0; index < value.length; index += 1) {
     if (value.charCodeAt(index) === 0x1b && value[index + 1] === "[") {

@@ -164,6 +164,7 @@ function mustHaltBeforePrerequisiteMutation(
   issues: readonly SetupIssue[],
 ): boolean {
   if (!isGuidedPrerequisiteIssue(issue)) return false;
+  // Missing Command Line Tools and required tools continue into guided repair; state-dir or unrecoverable Git failure stops before mutation.
   if (issue.code === "state-directory-unwritable") return true;
   return (
     issue.code === "git-unavailable" &&
@@ -533,6 +534,7 @@ async function installWorktrunkShellIntegration(
       showCommandOutput: true,
       execution: collected,
     }) ?? {};
+  // Suppress the generic failure line because this optional path emits one tailored recovery block below.
   shellApplyOptions.onActionFailed = () => undefined;
   const result = await applySetupPlan(
     { ...plan, actions: [{ ...action, command, selected: true }] },
