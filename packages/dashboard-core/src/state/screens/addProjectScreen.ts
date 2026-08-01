@@ -314,6 +314,41 @@ export function applyAddProjectFolderLoaded(
   return applyAddProjectAction(state, { type: "folderLoaded", result }).state;
 }
 
+export function applyAddProjectFolderRefreshed(
+  state: TuiState,
+  result: TuiFolderReadResult,
+): TuiState {
+  if (
+    state.screen.name !== "addProject" ||
+    state.screen.flow.mode !== "choose" ||
+    state.screen.flow.currentPath !== result.path
+  ) {
+    return state;
+  }
+  const flow = state.screen.flow;
+  if (sameFolderEntries(flow.entries, result.entries)) {
+    return state;
+  }
+  const selectedIndex = addProjectSelectedIndexForFlow(flow, state.selection);
+  const selectedPath = selectedAddProjectFolderRow(state)?.path;
+  const refreshed = reconcileAddProjectSelection(
+    {
+      ...state,
+      screen: { name: "addProject", flow: { ...flow, entries: result.entries } },
+    },
+    flow,
+    false,
+  );
+  if (
+    selectedIndex === undefined ||
+    selectedPath === undefined ||
+    selectedAddProjectFolderRow(refreshed)?.path === selectedPath
+  ) {
+    return refreshed;
+  }
+  return selectAddProjectRowByIndex(refreshed, selectedIndex);
+}
+
 export function applyAddProjectFolderLoadFailed(
   state: TuiState,
   path: string,
@@ -380,4 +415,23 @@ export function applyAddProjectSubmitFailed(
     type: "submitFailed",
     error: toSafeError(error, { clientLabel }),
   }).state;
+}
+
+function sameFolderEntries(
+  left: TuiFolderReadResult["entries"],
+  right: TuiFolderReadResult["entries"],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((entry, index) => {
+      const other = right[index];
+      return (
+        other !== undefined &&
+        entry.name === other.name &&
+        entry.path === other.path &&
+        entry.kind === other.kind &&
+        entry.displayPath === other.displayPath
+      );
+    })
+  );
 }
