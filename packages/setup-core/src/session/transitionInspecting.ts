@@ -31,7 +31,7 @@ export function transitionInspecting(
   if (event.type !== "inspection-completed") return { state, effects: [] };
 
   const plan = planSetup(event.facts, state.intent);
-  if (state.inspectionPhase === "initial") {
+  if (state.inspectionPhase === "initial" || state.inspectionPhase === "after-preparation") {
     return {
       state: {
         revision: state.revision + 1,

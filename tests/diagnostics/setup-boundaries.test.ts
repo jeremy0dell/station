@@ -15,7 +15,9 @@ const controlledRoles = [
   "POLICY",
   "COMPOSITION ROOT",
 ] as const;
+const drivingPortNames = ["SetupSessionApplication"] as const;
 const policyNames = [
+  "assessSetupPlan",
   "resolveHarnessSelection",
   "assessHarnessTracking",
   "selectHarnessTrackingRepairTargets",
@@ -33,6 +35,7 @@ const drivenPortNames = [
   "SetupPackageInstallationPort",
   "SetupLauncherLinkPort",
   "SetupOperationExecutor",
+  "SetupOperationProgress",
   "SetupInspection",
 ] as const;
 
@@ -69,6 +72,7 @@ describe("setup core boundaries", () => {
   });
 
   it("marks the setup policies and driven ports used by the session runtime", async () => {
+    const drivingPorts: string[] = [];
     const policies: string[] = [];
     const drivenPorts: string[] = [];
     let markerCount = 0;
@@ -78,6 +82,12 @@ describe("setup core boundaries", () => {
         (count, role) => count + (source.match(new RegExp(`\\* ${role}`, "g"))?.length ?? 0),
         0,
       );
+      const drivingPortPattern =
+        /\/\*\*\s*\n\s*\* DRIVING PORT\s*\n\s*\*\s*\n(?:\s*\* .+\n)+?\s*\*\/\s*\nexport type (\w+)/g;
+      for (const match of source.matchAll(drivingPortPattern)) {
+        const name = match[1];
+        if (name !== undefined) drivingPorts.push(name);
+      }
       const policyPattern =
         /\/\*\*\s*\n\s*\* POLICY\s*\n\s*\*\s*\n(?:\s*\* .+\n)+?\s*\*\/\s*\nexport function (\w+)/g;
       for (const match of source.matchAll(policyPattern)) {
@@ -92,9 +102,22 @@ describe("setup core boundaries", () => {
       }
     }
 
-    expect(markerCount).toBe(18);
+    expect(markerCount).toBe(20);
+    expect(drivingPorts.sort()).toEqual([...drivingPortNames].sort());
     expect(policies.sort()).toEqual([...policyNames].sort());
     expect(drivenPorts.sort()).toEqual([...drivenPortNames].sort());
+  });
+
+  it("keeps the guided session driver on the composition-owned application boundary", async () => {
+    const source = await readFile(
+      "apps/cli/src/commands/setup/session/runGuidedSetupSession.ts",
+      "utf8",
+    );
+
+    expect(source).not.toMatch(/from ["'][^"']*\/(?:apply|flowUtils)\.js["']/);
+    expect(source).not.toContain("createSetupOperationAdapter");
+    expect(source).not.toContain("createSetupComposition");
+    expect(source).toMatch(/createComposition\(\s*options,/);
   });
 });
 

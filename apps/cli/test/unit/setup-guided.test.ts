@@ -1033,7 +1033,7 @@ describe("guided setup command", () => {
       },
     );
 
-    expect(result.code).toBe(0);
+    expect(result.code, chunks.join("")).toBe(0);
     const tmuxConfig = fs.files[join(root, "home/.tmux.conf")];
     expect(tmuxConfig).toContain(
       tmuxPopupBindingBlock("/fake/bin/stn-tmux-popup", {
@@ -1266,9 +1266,10 @@ describe("guided setup command", () => {
       "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",
     );
     expect(output).not.toContain("persisted and loaded in the current tmux server");
+    // Intent-bound replanning adds two read-only probes before the complete apply sequence.
     expect(
       calls.filter((call) => basename(call.command) === "tmux" && call.args?.[0] === "run-shell"),
-    ).toHaveLength(5);
+    ).toHaveLength(7);
   });
 
   it("delegates Worktrunk launcher composition while resolving the agent ingress launcher", async () => {
@@ -1342,7 +1343,7 @@ describe("guided setup command", () => {
     expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
-  it("keeps the activated config when a later hook install fails", async () => {
+  it("uses fresh tracking evidence after a later hook installer reports failure", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const configPath = join(root, "home/.config/station/config.toml");
@@ -1401,7 +1402,7 @@ describe("guided setup command", () => {
     );
 
     const output = chunks.join("");
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(0);
     expect(activations).toBe(1);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(output).toContain("Hook install failed.");

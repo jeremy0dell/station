@@ -11953,7 +11953,7 @@
       "declaration": "createSetupInspectionAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Collects CLI machine facts and provider-hook status, retaining representation-specific evidence locally while exposing normalized setup evidence to core.",
+      "purpose": "Collects CLI machine and provider evidence for the requested intent while retaining TOML, paths, commands, and provider representations locally.",
       "dependencies": [
         {
           "path": "packages/setup-core/src/ports.ts",
@@ -12036,7 +12036,7 @@
       "declaration": "createSetupComposition",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires one CLI invocation's inspection, operation, session, and presentation adapters.",
+      "purpose": "Wires one CLI invocation's inspection, operation, session, guided progress, and presentation adapters.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
@@ -12084,12 +12084,50 @@
       "dependencies": []
     },
     {
+      "path": "apps/cli/src/commands/setup/presenters/linePrompt.ts",
+      "declaration": "createLinePromptSetupPresenter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates Enter-submitted line input into setup confirmations and validated multiple selections while coordinating terminal ownership.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/setup/presenters/text.ts",
       "declaration": "createTextSetupPresenter",
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Resolves typed setup views and message references into terminal prompts and output.",
       "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/commands/setup/session/runGuidedSetupSession.ts",
+      "declaration": "runGuidedSetupSession",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Drives guided line-oriented setup through one injected composition while keeping prompts, progress, and terminal ownership outside setup core.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/setup/presenters/linePrompt.ts",
+          "declaration": "createLinePromptSetupPresenter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/policy/assessSetupPlan.ts",
+          "declaration": "assessSetupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationProgress",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "apps/cli/src/commands/snapshot.ts",
@@ -14486,6 +14524,14 @@
       "dependencies": []
     },
     {
+      "path": "packages/setup-core/src/policy/assessSetupPlan.ts",
+      "declaration": "assessSetupPlan",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Classifies whether a semantic setup plan can prepare prerequisites, continue collecting intent, or begin mutation.",
+      "dependencies": []
+    },
+    {
       "path": "packages/setup-core/src/policy/deriveReadiness.ts",
       "declaration": "deriveSetupReadiness",
       "kind": "function",
@@ -14561,7 +14607,7 @@
       "declaration": "SetupInspection",
       "kind": "type",
       "role": "DRIVEN PORT",
-      "purpose": "Reads and normalizes current setup evidence while keeping filesystem, TOML, and provider representations outside core.",
+      "purpose": "Reads intent-bound setup evidence so every plan reflects the current desired harnesses and integrations while boundary representations remain outside core.",
       "dependencies": []
     },
     {
@@ -14586,6 +14632,14 @@
       "kind": "type",
       "role": "DRIVEN PORT",
       "purpose": "Executes one semantic setup operation through its assigned outward capability.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupOperationProgress",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Reports semantic operation starts and recorded outcomes without participating in mutation truth.",
       "dependencies": []
     },
     {
@@ -14617,13 +14671,34 @@
       "declaration": "createSetupSessionApplication",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Drives one setup session through serialized inspection and mutation effects without adding transport or restart recovery.",
+      "purpose": "Coordinates one setup session's intent-bound inspections, staged prerequisite effects, and complete apply sequence without transport or restart recovery.",
       "dependencies": [
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupInspection",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationExecutor",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationProgress",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
         {
           "path": "packages/setup-core/src/session/application.ts",
           "declaration": "SetupSessionApplication",
           "kind": "type",
-          "role": "USE CASE",
+          "role": "DRIVING PORT",
           "edgeKind": "type-only"
         },
         {
@@ -14639,8 +14714,8 @@
       "path": "packages/setup-core/src/session/application.ts",
       "declaration": "SetupSessionApplication",
       "kind": "type",
-      "role": "USE CASE",
-      "purpose": "Offers one isolated setup run to a driving adapter without defining transport or persistence.",
+      "role": "DRIVING PORT",
+      "purpose": "Accepts serialized setup intent editing, staged preparation, review, apply, and cancellation commands for one invocation-local session.",
       "dependencies": []
     },
     {
@@ -14648,7 +14723,7 @@
       "declaration": "transitionSetupSession",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Advances one in-memory setup session from normalized evidence and typed operation outcomes without I/O.",
+      "purpose": "Advances intent editing, staged preparation, complete apply, and cancellation from normalized evidence and typed outcomes without I/O.",
       "dependencies": []
     }
   ]

@@ -5,6 +5,7 @@ import {
   type ExternalCommandInput,
   publicSafeErrorFromUnknown,
   runExternalCommand,
+  shellQuote,
 } from "@station/runtime";
 import {
   performSetupOperation,
@@ -91,17 +92,7 @@ export function createSetupOperationAdapter(
     worktrunk: (operation) => {
       const currentDeps = deps();
       if (operation.kind === "configure-worktrunk-shell") {
-        const currentFacts = requireFacts(facts());
-        const base = [
-          currentFacts.worktrunk.resolvedPath ?? currentFacts.worktrunk.command,
-          "-y",
-          "config",
-          "shell",
-          "install",
-        ];
-        const shell = currentFacts.worktrunkShellIntegration.shell;
-        const command = shell === undefined ? base : [...base, shell];
-        return runExternalOperation(operation, command, { kind: "worktrunk-shell" }, currentDeps);
+        return configureWorktrunkShell(operation, requireFacts(facts()), currentDeps);
       }
       const currentFacts = requireFacts(facts());
       return (
@@ -195,6 +186,52 @@ function packageTarget(
     default:
       return assertNever(operation);
   }
+}
+
+async function configureWorktrunkShell(
+  operation: Extract<SetupOperation, { kind: "configure-worktrunk-shell" }>,
+  facts: SetupFacts,
+  deps: SetupCommandDeps,
+): Promise<SetupOperationOutcome> {
+  const base = [
+    facts.worktrunk.resolvedPath ?? facts.worktrunk.command,
+    "-y",
+    "config",
+    "shell",
+    "install",
+  ];
+  const integration = facts.worktrunkShellIntegration;
+  const command = integration.shell === undefined ? base : [...base, integration.shell];
+  if (integration.rcPath !== undefined) {
+    try {
+      await (deps.fs?.access ?? access)(integration.rcPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | null | undefined)?.code === "ENOENT") {
+        const recovery = [["touch", integration.rcPath], command]
+          .map((part) => part.map((value) => shellQuote(value)).join(" "))
+          .join(" && ");
+        return {
+          status: "failed",
+          operationId: operation.id,
+          error: {
+            tag: "SetupWorktrunkShellError",
+            code: "SETUP_WORKTRUNK_SHELL_RC_MISSING",
+            message: `Active ${integration.shell ?? "shell"} rc file not found: ${integration.rcPath}`,
+            hint: `Run: ${recovery}`,
+          },
+        };
+      }
+    }
+  }
+  const outcome = await runExternalOperation(operation, command, { kind: "worktrunk-shell" }, deps);
+  if (outcome.status === "completed") return outcome;
+  return {
+    ...outcome,
+    error: {
+      ...outcome.error,
+      hint: `Run: ${command.map((value) => shellQuote(value)).join(" ")}`,
+    },
+  };
 }
 
 async function prepareWorktrunkTracking(

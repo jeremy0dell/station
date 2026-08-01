@@ -8,16 +8,21 @@ import type {
   SetupSessionApplyingState,
   SetupSessionApplyPhase,
   SetupSessionBlockReason,
+  SetupSessionEditingState,
   SetupSessionEffect,
   SetupSessionEvent,
   SetupSessionInspectingState,
   SetupSessionReviewingState,
   SetupSessionTransition,
 } from "../model/session.js";
+import { assessSetupPlan } from "../policy/assessSetupPlan.js";
 import { hasCompletedSetupOperation, recordCompletedSetupOperation } from "./checkpoints.js";
 
-export function beginPreflight(state: SetupSessionReviewingState): SetupSessionTransition {
-  return continueApplying({ ...state, status: "applying", applyPhase: "preflight" });
+export function beginPreflight(
+  state: SetupSessionReviewingState | SetupSessionEditingState,
+  request: "prepare" | "apply" = "apply",
+): SetupSessionTransition {
+  return continueApplying({ ...state, status: "applying", applyPhase: "preflight", request });
 }
 
 export function beginConfigWrite(
@@ -32,8 +37,9 @@ export function beginConfigWrite(
     plan,
     status: "applying" as const,
     applyPhase: "config-write" as const,
+    request: "apply" as const,
   };
-  if (hasBlockingPreflightIssue(plan)) {
+  if (!assessSetupPlan(plan).canApply) {
     return {
       state: {
         ...withPlan,
@@ -74,6 +80,7 @@ export function beginTracking(
     plan,
     status: "applying",
     applyPhase: "tracking",
+    request: "apply",
   });
 }
 
@@ -100,7 +107,14 @@ export function transitionApplying(
       operationOutcomes: [...state.operationOutcomes, event.outcome],
       revision: state.revision + 1,
     };
-    if (state.applyPhase === "tracking") return continueApplying(withFailure);
+    if (
+      state.request === "prepare" ||
+      state.applyPhase === "tracking" ||
+      state.applyPhase === "optional-integrations" ||
+      event.outcome.operation.kind === "install-harness"
+    ) {
+      return continueApplying(withFailure);
+    }
     return {
       state: {
         ...withFailure,
@@ -121,16 +135,18 @@ function continueApplying(state: SetupSessionApplyingState): SetupSessionTransit
     return { state, effects: [effect] };
   }
   switch (state.applyPhase) {
-    case "preflight":
+    case "preflight": {
+      const inspectionPhase = state.request === "prepare" ? "after-preparation" : "after-preflight";
       return {
         state: {
           ...state,
           status: "inspecting",
-          inspectionPhase: "after-preflight",
+          inspectionPhase,
           revision: state.revision + 1,
         },
-        effects: [{ kind: "inspect", phase: "after-preflight" }],
+        effects: [{ kind: "inspect", phase: inspectionPhase }],
       };
+    }
     case "config-write": {
       const activation = state.plan.operations.find(
         (operation): operation is SetupObserverActivationOperation =>
@@ -166,6 +182,12 @@ function continueApplying(state: SetupSessionApplyingState): SetupSessionTransit
         effects: [{ kind: "inspect", phase: "after-activation" }],
       };
     case "tracking":
+      return continueApplying({
+        ...state,
+        applyPhase: "optional-integrations",
+        revision: state.revision + 1,
+      });
+    case "optional-integrations":
       return {
         state: { ...state, status: "verifying", revision: state.revision + 1 },
         effects: [{ kind: "inspect", phase: "final" }],
@@ -189,7 +211,8 @@ function blockReasonForPhase(
     case "observer-activation":
       return "observer-activation-failed";
     case "tracking":
-      throw new Error("Tracking failures do not block the setup session.");
+    case "optional-integrations":
+      throw new Error("Independent setup operation failures do not block the session.");
     default:
       return assertNeverApplyPhase(phase);
   }
@@ -229,37 +252,10 @@ function isOperationInPhase(operation: SetupOperation, phase: SetupSessionApplyP
     case "link-launchers":
     case "configure-worktrunk-shell":
     case "configure-tmux-popup":
-      return false;
+      return phase === "optional-integrations";
     default:
       return assertNeverOperation(operation);
   }
-}
-
-function hasBlockingPreflightIssue(plan: SetupPlan): boolean {
-  return plan.issues.some((issue) => {
-    if (issue.tier !== "required") return false;
-    if (issue.code === "station-ui-missing") return false;
-    if (issue.code === "config-unready") {
-      if (issue.state === "write-blocked" && plan.evidence.config.state === "valid") return false;
-      if (issue.state !== "missing") return true;
-      return !plan.operations.some(
-        (operation) => operation.kind === "write-config" && operation.selected,
-      );
-    }
-    if (issue.code === "harness-tracking-unprepared") {
-      return !plan.operations.some((operation) => {
-        if (!operation.selected) return false;
-        if (operation.kind === "prepare-harness-tracking") {
-          return operation.harnessId === issue.harnessId;
-        }
-        return (
-          operation.kind === "write-config" &&
-          operation.trackingHarnessIds.includes(issue.harnessId)
-        );
-      });
-    }
-    return true;
-  });
 }
 
 function assertNeverOperation(operation: never): never {

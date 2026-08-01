@@ -12,12 +12,19 @@ export {
   type SupportedHarnessId,
   supportedHarnessIds,
 } from "./model/facts.js";
-export type { HarnessSelectionIntent, SetupPlanningIntent } from "./model/intent.js";
+export type {
+  HarnessSelectionIntent,
+  HarnessTrackingSelectionIntent,
+  SetupEditableIntent,
+  SetupPlanningIntent,
+} from "./model/intent.js";
 export type { SetupIssue } from "./model/issues.js";
 export type {
   SetupConfigWriteOperation,
   SetupHarnessInstallOperation,
   SetupHomebrewInstallOperation,
+  SetupLauncherLinkOperation,
+  SetupObserverActivationOperation,
   SetupOperation,
   SetupOperationCommit,
   SetupOperationFailedOutcome,
@@ -27,6 +34,7 @@ export type {
   SetupPackageTarget,
   SetupTmuxPopupOperation,
   SetupToolInstallOperation,
+  SetupWorktrunkShellOperation,
   SetupWorktrunkTrackingOperation,
   SetupXcodeToolsInstallOperation,
 } from "./model/operations.js";
@@ -50,6 +58,7 @@ export type {
   SetupSessionTransition,
 } from "./model/session.js";
 export { assessHarnessTracking } from "./policy/assessHarnessTracking.js";
+export { assessSetupPlan, type SetupPlanAssessment } from "./policy/assessSetupPlan.js";
 export { deriveSetupReadiness } from "./policy/deriveReadiness.js";
 export { type DeriveSetupResultInput, deriveSetupResult } from "./policy/deriveSetupResult.js";
 export { planSetup } from "./policy/planSetup.js";
@@ -65,6 +74,7 @@ export type {
   SetupObserverActivationPort,
   SetupOperationExecutor,
   SetupOperationPorts,
+  SetupOperationProgress,
   SetupPackageInstallationPort,
   SetupTmuxConfigurationPort,
   SetupWorktrunkIntegrationPort,
