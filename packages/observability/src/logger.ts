@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { type FileHandle, mkdir, open, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type LogRecord, LogRecordSchema } from "@station/contracts";
 import { redact } from "./redaction.js";
@@ -19,6 +19,25 @@ export type CreateJsonlLoggerOptions = {
   path: string;
   clock?: { now(): Date };
 };
+
+type JsonlSchema<T> = {
+  safeParse(value: unknown): { success: true; data: T } | { success: false };
+};
+
+export type ReverseJsonlReadOptions<T> = {
+  maxBytes?: number;
+  maxRecords?: number;
+  matches?: (record: T) => boolean;
+};
+
+export type ReverseJsonlReadResult<T> = {
+  records: T[];
+  bytesRead: number;
+  complete: boolean;
+  invalidLines: number;
+};
+
+const jsonlChunkBytes = 64 * 1024;
 
 export function componentLogPath(stateDir: string, component: LogRecord["component"]): string {
   const fileName = component === "hook" ? "hooks.jsonl" : `${component}.jsonl`;
@@ -74,17 +93,95 @@ export async function appendJsonl(path: string, record: LogRecord): Promise<void
 }
 
 export async function readJsonlLog(path: string, maxRecords = 500): Promise<LogRecord[]> {
-  let source: string;
+  const result = await readJsonlReverse(path, LogRecordSchema, { maxRecords });
+  if (result.invalidLines > 0) throw new Error("Invalid JSONL log record.");
+  return result.records;
+}
+
+export async function readJsonlReverse<T>(
+  path: string,
+  schema: JsonlSchema<T>,
+  options: ReverseJsonlReadOptions<T> = {},
+): Promise<ReverseJsonlReadResult<T>> {
+  let file: FileHandle;
   try {
-    source = await readFile(path, "utf8");
+    file = await open(path, "r");
   } catch {
-    return [];
+    return { records: [], bytesRead: 0, complete: true, invalidLines: 0 };
   }
 
-  const records = source
-    .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .map((line) => LogRecordSchema.parse(JSON.parse(line)));
+  const records: T[] = [];
+  let bytesRead = 0;
+  let invalidLines = 0;
+  let stopped = false;
+  let pending = Buffer.alloc(0);
+  let hasRightBoundary = false;
+  const maxBytes = options.maxBytes ?? Number.POSITIVE_INFINITY;
+  const maxRecords = options.maxRecords ?? Number.POSITIVE_INFINITY;
 
-  return records.slice(Math.max(0, records.length - maxRecords));
+  try {
+    // Positional reads stop at the opened file's high-water mark, so concurrent appends wait for the next call.
+    const highWater = (await file.stat()).size;
+    let position = highWater;
+
+    while (position > 0 && bytesRead < maxBytes && !stopped) {
+      const length = Math.min(jsonlChunkBytes, position, maxBytes - bytesRead);
+      const start = position - length;
+      const chunk = Buffer.allocUnsafe(length);
+      const read = await file.read(chunk, 0, length, start);
+      position = start;
+      bytesRead += read.bytesRead;
+      const data = Buffer.concat([chunk.subarray(0, read.bytesRead), pending]);
+      let right = data.length;
+
+      let index = data.lastIndexOf(0x0a);
+      while (index >= 0) {
+        if (!hasRightBoundary) {
+          hasRightBoundary = true;
+          right = index;
+        } else {
+          const parsed = parseJsonlLine(data.subarray(index + 1, right), schema);
+          if (parsed.invalid) invalidLines += 1;
+          if (parsed.record !== undefined && (options.matches?.(parsed.record) ?? true)) {
+            records.push(parsed.record);
+            if (records.length >= maxRecords) {
+              stopped = true;
+              break;
+            }
+          }
+          right = index;
+        }
+        index = index === 0 ? -1 : data.lastIndexOf(0x0a, index - 1);
+      }
+
+      pending = data.subarray(0, right);
+      if (position === 0 && !stopped && hasRightBoundary) {
+        const parsed = parseJsonlLine(pending, schema);
+        if (parsed.invalid) invalidLines += 1;
+        if (parsed.record !== undefined && (options.matches?.(parsed.record) ?? true)) {
+          records.push(parsed.record);
+        }
+      }
+    }
+
+    return {
+      records: records.slice(0, maxRecords).reverse(),
+      bytesRead,
+      complete: position === 0 && !stopped,
+      invalidLines,
+    };
+  } finally {
+    await file.close();
+  }
+}
+
+function parseJsonlLine<T>(line: Buffer, schema: JsonlSchema<T>): { record?: T; invalid: boolean } {
+  const source = line.toString("utf8");
+  if (source.trim().length === 0) return { invalid: false };
+  try {
+    const parsed = schema.safeParse(JSON.parse(source));
+    return parsed.success ? { record: parsed.data, invalid: false } : { invalid: true };
+  } catch {
+    return { invalid: true };
+  }
 }

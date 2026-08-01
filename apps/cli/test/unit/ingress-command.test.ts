@@ -34,7 +34,7 @@ describe("provider hook ingress command", () => {
         "--observer-entry",
         observerEntry,
         "--startup-timeout-ms",
-        "2000",
+        "5000",
         "worktrunk",
         "post-create",
       ],

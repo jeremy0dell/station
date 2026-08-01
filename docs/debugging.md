@@ -44,6 +44,26 @@ Use the narrowest tool that can answer the question:
 | Observer event hook setup | `stn event-hooks doctor` |
 | Setup and tool readiness | `stn setup check --json`, `stn setup system --check`, or `pnpm setup:system:check` |
 
+## Concise-first contract
+
+The diagnostic commands answer one narrow question by default. Use `--full`
+only when the concise result reports incomplete coverage or truncation, or when
+complete detail is explicitly required.
+
+| Question | Command | Effect | Default bound | Escalation |
+| --- | --- | --- | --- | --- |
+| Which process and exact build owns Station? | `stn observer status` | Live, read-only health probe | Process status, socket, health, PID, start time, build version, and uptime only | `stn observer status --full` |
+| Is current health actionable? | `stn doctor [--project <id>]` | May auto-start the observer; performs one doctor RPC | Five current findings; messages and hints are 240 Unicode code points | Use the returned `detailsCommand` |
+| Why did the latest command fail? | `stn debug trace --latest-failure` | Reads existing bundles and logs only | Recent-first reverse scan, at most 8 MiB per log component | Use the returned exact `--full` retry only when unresolved |
+| What evidence matches a known ID? | `stn debug trace <id>` | Reads existing bundles and logs only | Exhaustive in one call; output stays concise | Add `--full` only for complete diagnostic details and paths |
+| Which recent warning or error explains a symptom? | `stn debug logs [query]` | Reads existing logs only | Five records and at most 8 MiB per selected component; text is 240 code points | Use the returned exact `--full` retry when coverage is incomplete |
+
+`--full` removes the log byte ceiling. For `debug logs`, it restores the prior
+50-record default unless `--limit` is explicit and preserves complete messages
+and evidence paths. A conclusive trace with a root-cause code recommends no
+follow-up command. Bundle creation remains an explicit capture operation and is
+never an automatic escalation.
+
 Use `stn debug logs [query]` for bounded historical log inspection when there is no
 trace, command, or diagnostic ID yet. It reads structured JSONL logs from the
 configured state directory without contacting the observer. By default it searches

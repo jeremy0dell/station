@@ -22,6 +22,10 @@ describe("CLI diagnostic commands", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const providerHookIngressLauncher = "/checkout/requester/bin/stn-ingress";
     let requestedDoctorOptions: DoctorOptions;
+    const runDoctor = vi.fn(async (options?: DoctorOptions) => {
+      requestedDoctorOptions = options;
+      return doctorReport(fixture.stateDir);
+    });
     const deps = {
       buildVersion: observerBuildVersion,
       clientFactory: () =>
@@ -33,10 +37,7 @@ describe("CLI diagnostic commands", () => {
             startedAt: now,
             version: observerBuildVersion,
           }),
-          runDoctor: async (options?: DoctorOptions) => {
-            requestedDoctorOptions = options;
-            return doctorReport(fixture.stateDir);
-          },
+          runDoctor,
         }) as never,
       sleep: async () => undefined,
     };
@@ -51,11 +52,16 @@ describe("CLI diagnostic commands", () => {
       output: {
         schemaVersion: "0.9.0",
         status: "healthy",
-        debugBundle: {
-          available: true,
+        findings: [],
+        counts: {
+          historicalErrors: 0,
+          projects: 0,
+          sessions: 0,
         },
+        detailsCommand: "stn doctor --full",
       },
     });
+    expect(runDoctor).toHaveBeenCalledTimes(1);
     expect(requestedDoctorOptions).toEqual({
       providerHookRuntime: {
         ingressLauncher: providerHookIngressLauncher,
@@ -66,6 +72,90 @@ describe("CLI diagnostic commands", () => {
         stationConfigPath: configPath,
       },
     });
+
+    await expect(
+      runCli(["--config", configPath, "doctor", "--full"], {
+        observerDeps: deps,
+        providerHookIngressLauncher,
+      }),
+    ).resolves.toMatchObject({
+      code: 0,
+      output: {
+        debugBundle: { available: true },
+        snapshot: { counts: { projects: 0, sessions: 0 } },
+      },
+    });
+    expect(runDoctor).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns deterministic current findings while counting historical errors only", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    const report = doctorReport(fixture.stateDir);
+    report.status = "degraded";
+    report.checks.push(
+      {
+        name: "provider-current",
+        status: "warn",
+        message: "generic",
+        error: {
+          tag: "ProviderError",
+          code: "PROVIDER_CURRENT",
+          message: `${"🧭".repeat(260)} current`,
+          traceId: "trc_current",
+          commandId: "cmd_current",
+          diagnosticId: "diag_current",
+        },
+      },
+      { name: "secondary", status: "error", message: "Immediate failure." },
+    );
+    report.recentErrors.push({
+      tag: "HistoricalError",
+      code: "HISTORICAL_ONLY",
+      message: "Old failure.",
+      traceId: "trc_old",
+    });
+    const runDoctor = vi.fn(async () => report);
+
+    const result = await runCli(["--config", configPath, "doctor", "--project", "demo"], {
+      observerDeps: {
+        buildVersion: observerBuildVersion,
+        clientFactory: () =>
+          ({
+            health: async () => report.observer,
+            runDoctor,
+          }) as never,
+        sleep: async () => undefined,
+      },
+    });
+
+    expect(runDoctor).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      code: 0,
+      output: {
+        status: "degraded",
+        findings: [
+          { name: "secondary", severity: "error", message: "Immediate failure." },
+          {
+            name: "provider-current",
+            severity: "warn",
+            code: "PROVIDER_CURRENT",
+            traceId: "trc_current",
+            commandId: "cmd_current",
+            diagnosticId: "diag_current",
+          },
+        ],
+        counts: { historicalErrors: 1 },
+        nextCommands: ["stn debug trace trc_current"],
+        truncation: { text: true },
+        detailsCommand: "stn doctor --project demo --full",
+      },
+    });
+    const output = result.output as { findings: Array<{ message: string }> };
+    expect([...(output.findings[1]?.message ?? "")]).toHaveLength(240);
+    expect(JSON.stringify(result.output)).not.toContain("HISTORICAL_ONLY");
+    expect(result.output).not.toHaveProperty("snapshot");
+    expect(result.output).not.toHaveProperty("logs");
   });
 
   it("reports stale local observer runtime evidence without restarting anything", async () => {
@@ -356,13 +446,16 @@ describe("CLI diagnostic commands", () => {
     await runCli(["--config", configPath, "debug", "bundle"], {
       observerDeps: deps,
     });
-    const traced = await runCli(["--config", configPath, "debug", "trace", "cmd_worktrunk"], {
-      observerDeps: {
-        clientFactory: () => {
-          throw new Error("debug trace should not contact observer");
+    const traced = await runCli(
+      ["--config", configPath, "debug", "trace", "cmd_worktrunk", "--full"],
+      {
+        observerDeps: {
+          clientFactory: () => {
+            throw new Error("debug trace should not contact observer");
+          },
         },
       },
-    });
+    );
 
     expect(traced).toMatchObject({
       code: 0,
@@ -502,7 +595,7 @@ describe("CLI diagnostic commands", () => {
         error: {
           code: "OBSERVER_START_FAILED",
         },
-        suggestedCommands: expect.arrayContaining(["stn debug bundle --trace trc_lifecycle"]),
+        suggestedCommands: [],
       },
     });
   });
@@ -571,9 +664,7 @@ describe("CLI diagnostic commands", () => {
         ],
       },
     });
-    const filesSearched = (result.output as { evidence: { filesSearched: string[] } }).evidence
-      .filesSearched;
-    expect(filesSearched).not.toContain(join(fixture.stateDir, "logs", "hooks.jsonl"));
+    expect(result.output).not.toHaveProperty("evidence");
   });
 
   it("can opt into hook log filtering", async () => {
@@ -608,6 +699,97 @@ describe("CLI diagnostic commands", () => {
     });
   });
 
+  it("reports incomplete bounded log coverage and finds old evidence with --full", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
+    const old = {
+      timestamp: "2026-05-20T11:00:00.000Z",
+      level: "warn",
+      component: "observer",
+      message: "old-window-marker",
+    };
+    const padding = {
+      timestamp: "2026-05-20T12:00:00.000Z",
+      level: "info",
+      component: "observer",
+      message: "x".repeat(8 * 1024 * 1024 + 1024),
+    };
+    await writeFile(
+      join(fixture.stateDir, "logs", "observer.jsonl"),
+      `${JSON.stringify(old)}\n${JSON.stringify(padding)}\n`,
+    );
+
+    const bounded = await runCli(["--config", configPath, "debug", "logs", "old-window-marker"]);
+    expect(bounded).toMatchObject({
+      code: 1,
+      output: {
+        matched: 0,
+        search: {
+          complete: false,
+          bytesRead: 8 * 1024 * 1024,
+          incompleteComponents: ["observer"],
+        },
+        retryCommand: "stn debug logs old-window-marker --full",
+      },
+    });
+
+    const exhaustive = await runCli([
+      "--config",
+      configPath,
+      "debug",
+      "logs",
+      "old-window-marker",
+      "--full",
+    ]);
+    expect(exhaustive).toMatchObject({
+      code: 0,
+      output: {
+        matched: 1,
+        search: { complete: true },
+        records: [{ message: "old-window-marker" }],
+        evidence: { matchedFiles: [join(fixture.stateDir, "logs", "observer.jsonl")] },
+      },
+    });
+  });
+
+  it("caps default log text and keeps complete text with --full", async () => {
+    const fixture = await createTempState();
+    const configPath = await writeConfigToml(fixture.root, fixture.config);
+    await mkdir(join(fixture.stateDir, "logs"), { recursive: true });
+    const message = "🧭".repeat(300);
+    await writeFile(
+      join(fixture.stateDir, "logs", "observer.jsonl"),
+      `${JSON.stringify({
+        timestamp: now,
+        level: "warn",
+        component: "observer",
+        message,
+        attributes: {
+          error: { code: "LONG_ERROR", message },
+        },
+      })}\n`,
+    );
+
+    const concise = await runCli(["--config", configPath, "debug", "logs", "LONG_ERROR"]);
+    const conciseOutput = concise.output as {
+      records: Array<{ message: string; error?: { message?: string } }>;
+      truncation: { text: boolean };
+    };
+    expect(conciseOutput.truncation.text).toBe(true);
+    expect([...(conciseOutput.records[0]?.message ?? "")]).toHaveLength(240);
+    expect([...(conciseOutput.records[0]?.error?.message ?? "")]).toHaveLength(240);
+
+    const full = await runCli(["--config", configPath, "debug", "logs", "LONG_ERROR", "--full"]);
+    expect(full).toMatchObject({
+      code: 0,
+      output: {
+        truncation: { text: false },
+        records: [{ message, error: { message } }],
+      },
+    });
+  });
+
   it("returns doctor diagnostics for an invalid config without starting the observer", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-invalid-config-"));
     const configPath = join(root, "config.toml");
@@ -638,15 +820,14 @@ describe("CLI diagnostic commands", () => {
       code: 1,
       output: {
         status: "unavailable",
-        config: {
-          configPath,
-          diagnostics: [
-            expect.objectContaining({
-              code: "CONFIG_VALIDATION_FAILED",
-              diagnosticId: "config-load",
-            }),
-          ],
-        },
+        findings: [
+          expect.objectContaining({
+            source: "config",
+            code: "CONFIG_VALIDATION_FAILED",
+            diagnosticId: "config-load",
+          }),
+        ],
+        detailsCommand: "stn doctor --full",
       },
     });
   });

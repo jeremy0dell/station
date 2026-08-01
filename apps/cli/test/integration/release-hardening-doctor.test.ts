@@ -28,10 +28,26 @@ describe("CLI release doctor", () => {
     const configPath = await writeReleaseDoctorConfig(root);
 
     const result = await runCli(["--config", configPath, "doctor"]);
-    const report = result.output as DoctorReport;
+    const summary = result.output as {
+      status: string;
+      findings: Array<{ name: string; code?: string }>;
+      detailsCommand: string;
+    };
 
     expect(result.code).toBe(0);
-    expect(report.status).toBe("degraded");
+    expect(summary.status).toBe("degraded");
+    expect(summary.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "CONFIG_LOCAL_CONFIG_PARSE_FAILED" }),
+        expect.objectContaining({ code: "WORKTRUNK_UNAVAILABLE" }),
+        expect.objectContaining({ code: "WORKTRUNK_HOOKS_MISSING" }),
+      ]),
+    );
+    expect(summary.detailsCommand).toBe("stn doctor --full");
+    expect(result.output).not.toHaveProperty("snapshot");
+
+    const fullResult = await runCli(["--config", configPath, "doctor", "--full"]);
+    const report = fullResult.output as DoctorReport;
     expect(report.config.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -86,15 +102,17 @@ describe("CLI release doctor", () => {
     delete process.env.STATION_DASHBOARD_COMMAND;
     try {
       const result = await runCli(["--config", configPath, "doctor"]);
-      const report = result.output as DoctorReport;
+      const summary = result.output as {
+        status: string;
+        findings: Array<{ name: string; code?: string }>;
+      };
 
-      expect(report.status).toBe("degraded");
-      expect(report.checks).toEqual(
+      expect(summary.status).toBe("degraded");
+      expect(summary.findings).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             name: "renderer-runtime",
-            status: "warn",
-            error: expect.objectContaining({ code: "BUN_RUNTIME_MISSING" }),
+            code: "BUN_RUNTIME_MISSING",
           }),
         ]),
       );

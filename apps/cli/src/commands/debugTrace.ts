@@ -19,6 +19,7 @@ import {
   SpanIdSchema,
   TraceIdSchema,
 } from "@station/contracts";
+import { readJsonlReverse } from "@station/observability";
 import { z } from "zod";
 import { resolveObserverPaths } from "../paths.js";
 
@@ -51,7 +52,11 @@ export type DebugTraceResult = {
     diagnostics?: DiagnosticDetail[];
   };
   rootCauseCodes: string[];
-  evidence: {
+  search: {
+    complete: boolean;
+    bytesRead: number;
+  };
+  evidence?: {
     filesSearched: string[];
     matchedFiles: string[];
   };
@@ -64,6 +69,12 @@ type DebugTraceErrorSummary = NonNullable<DebugTraceResult["error"]>;
 type DebugTraceArgs = {
   query?: string;
   latestFailure: boolean;
+  full: boolean;
+};
+
+type DebugTraceSearch = {
+  bytesRead: number;
+  complete: boolean;
 };
 
 type DebugTraceMatch = {
@@ -97,6 +108,9 @@ const DebugTraceLogAttributesSchema = z
   })
   .passthrough();
 
+const defaultSearchBytes = 8 * 1024 * 1024;
+const conciseTextCodePoints = 240;
+
 export async function runDebugTraceCommand(
   args: string[],
   options: DebugTraceCommandOptions = {},
@@ -104,33 +118,39 @@ export async function runDebugTraceCommand(
   const parsed = parseDebugTraceArgs(args);
   const paths = resolveObserverPaths(options.config);
   const filesSearched: string[] = [];
-  const bundleMatches = await searchBundles(paths.diagnosticsDir, parsed, filesSearched);
-  const logMatches = await searchLogs(paths.logDir, parsed, filesSearched);
+  const search: DebugTraceSearch = { bytesRead: 0, complete: true };
+  const bundleMatches = await searchBundles(paths.diagnosticsDir, parsed, filesSearched, search);
+  const logMatches = await searchLogs(paths.logDir, parsed, filesSearched, search);
   const match = chooseMatch([...bundleMatches, ...logMatches], parsed);
   const result: DebugTraceResult = {
     latestFailure: parsed.latestFailure,
     matched: match !== undefined,
     rootCauseCodes: match?.rootCauseCodes ?? [],
-    evidence: {
-      filesSearched,
-      matchedFiles: match?.matchedFiles ?? [],
-    },
-    suggestedCommands: suggestedCommands(parsed.query, match),
+    search,
+    suggestedCommands: suggestedCommands(parsed, match, search),
   };
   if (parsed.query !== undefined) result.query = parsed.query;
   if (match?.matchedIdType !== undefined) result.matchedIdType = match.matchedIdType;
   if (match?.source !== undefined) result.source = match.source;
-  if (match?.bundlePath !== undefined) result.bundlePath = match.bundlePath;
+  if (parsed.full && match?.bundlePath !== undefined) result.bundlePath = match.bundlePath;
   if (match?.traceId !== undefined) result.traceId = match.traceId;
   if (match?.spanId !== undefined) result.spanId = match.spanId;
   if (match?.command !== undefined) result.command = match.command;
-  if (match?.error !== undefined) result.error = match.error;
+  if (match?.error !== undefined)
+    result.error = parsed.full ? match.error : conciseError(match.error);
+  if (parsed.full) {
+    result.evidence = {
+      filesSearched,
+      matchedFiles: match?.matchedFiles ?? [],
+    };
+  }
   return result;
 }
 
 function parseDebugTraceArgs(args: string[]): DebugTraceArgs {
   let query: string | undefined;
-  let latestFailure = args.length === 0;
+  let latestFailure = false;
+  let full = false;
   for (const arg of args) {
     if (arg === "--json") {
       continue;
@@ -139,6 +159,13 @@ function parseDebugTraceArgs(args: string[]): DebugTraceArgs {
       latestFailure = true;
       continue;
     }
+    if (arg === "--full") {
+      full = true;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown debug trace option: ${arg}`);
+    }
     if (query === undefined) {
       query = arg;
       continue;
@@ -146,7 +173,8 @@ function parseDebugTraceArgs(args: string[]): DebugTraceArgs {
     throw new Error(`Unknown debug trace option: ${arg}`);
   }
   return {
-    latestFailure,
+    latestFailure: latestFailure || query === undefined,
+    full,
     ...(query === undefined ? {} : { query }),
   };
 }
@@ -155,6 +183,7 @@ async function searchBundles(
   diagnosticsDir: string,
   args: DebugTraceArgs,
   filesSearched: string[],
+  search: DebugTraceSearch,
 ): Promise<DebugTraceMatch[]> {
   const bundleDirs = await listBundleDirs(diagnosticsDir);
   const matches: DebugTraceMatch[] = [];
@@ -166,9 +195,26 @@ async function searchBundles(
     filesSearched.push(indexPath, commandsPath, errorsPath, logsPath);
 
     const index = await readJson(indexPath, DiagnosticEvidenceIndexSchema);
-    const commands = await readJsonl(commandsPath, CommandRecordSchema);
-    const errors = await readJsonl(errorsPath, ErrorEnvelopeSchema);
-    const logs = await readJsonl(logsPath, LogRecordSchema);
+    const commands = await readTraceJsonl(commandsPath, CommandRecordSchema, args, search, {
+      ...(args.latestFailure && !args.full
+        ? { maxRecords: 1, matches: (command: CommandRecord) => command.status === "failed" }
+        : {}),
+    });
+    const newestCommand = args.latestFailure ? latestFailedCommand(commands) : undefined;
+    const errors = await readTraceJsonl(errorsPath, ErrorEnvelopeSchema, args, search, {
+      ...(args.latestFailure && !args.full
+        ? {
+            maxRecords: 1,
+            matches: (error: ErrorEnvelope) =>
+              newestCommand === undefined || error.commandId === newestCommand.id,
+          }
+        : {}),
+    });
+    const logs = await readTraceJsonl(logsPath, LogRecordSchema, args, search, {
+      ...(args.latestFailure && !args.full
+        ? { maxRecords: 1, matches: (record: LogRecord) => isFailedCommandLog(record) }
+        : {}),
+    });
     const match = matchBundle({
       args,
       bundlePath,
@@ -181,6 +227,16 @@ async function searchBundles(
     if (match !== undefined) {
       matches.push(match);
     }
+    if (args.latestFailure) {
+      const failedLog = [...logs].reverse().find(isFailedCommandLog);
+      if (failedLog !== undefined) {
+        matches.push({
+          ...matchFromLog(failedLog, logsPath, undefined),
+          source: "bundle",
+          bundlePath,
+        });
+      }
+    }
   }
   return matches;
 }
@@ -189,6 +245,7 @@ async function searchLogs(
   logDir: string,
   args: DebugTraceArgs,
   filesSearched: string[],
+  search: DebugTraceSearch,
 ): Promise<DebugTraceMatch[]> {
   const paths = ["observer.jsonl", "hooks.jsonl", "cli.jsonl", "tui.jsonl"].map((name) =>
     join(logDir, name),
@@ -196,7 +253,11 @@ async function searchLogs(
   const matches: DebugTraceMatch[] = [];
   for (const path of paths) {
     filesSearched.push(path);
-    const logs = await readJsonl(path, LogRecordSchema);
+    const logs = await readTraceJsonl(path, LogRecordSchema, args, search, {
+      ...(args.latestFailure && !args.full
+        ? { maxRecords: 1, matches: (record: LogRecord) => isFailedCommandLog(record) }
+        : {}),
+    });
     const log = args.latestFailure
       ? [...logs].reverse().find(isFailedCommandLog)
       : logs.find((record) => args.query !== undefined && recordContains(record, args.query));
@@ -304,29 +365,21 @@ async function readJson<T>(
   }
 }
 
-async function readJsonl<T>(
+async function readTraceJsonl<T>(
   path: string,
   schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
+  args: DebugTraceArgs,
+  search: DebugTraceSearch,
+  options: { maxRecords?: number; matches?: (record: T) => boolean } = {},
 ): Promise<T[]> {
-  let source: string;
-  try {
-    source = await readFile(path, "utf8");
-  } catch {
-    return [];
-  }
-  const records: T[] = [];
-  for (const line of source.split("\n")) {
-    if (line.trim().length === 0) {
-      continue;
-    }
-    try {
-      const result = schema.safeParse(JSON.parse(line));
-      if (result.success) {
-        records.push(result.data);
-      }
-    } catch {}
-  }
-  return records;
+  const result = await readJsonlReverse(path, schema, {
+    ...(args.latestFailure && !args.full ? { maxBytes: defaultSearchBytes } : {}),
+    ...(options.maxRecords === undefined ? {} : { maxRecords: options.maxRecords }),
+    ...(options.matches === undefined ? {} : { matches: options.matches }),
+  });
+  search.bytesRead += result.bytesRead;
+  search.complete &&= result.complete;
+  return result.records;
 }
 
 function latestFailedCommand(commands: readonly CommandRecord[]): CommandRecord | undefined {
@@ -523,25 +576,47 @@ function parseLogAttributeError(error: unknown): DebugTraceResult["error"] {
 }
 
 function suggestedCommands(
-  query: string | undefined,
+  args: DebugTraceArgs,
   match: DebugTraceMatch | undefined,
+  search: DebugTraceSearch,
 ): string[] {
+  if ((match?.rootCauseCodes.length ?? 0) > 0) return [];
+  const query = args.query;
   const traceId =
     match?.command?.traceId ??
     match?.traceId ??
     (query?.startsWith("trc_") === true ? query : undefined);
   const commandId = match?.command?.id ?? (query?.startsWith("cmd_") === true ? query : undefined);
-  const commands = ["stn doctor"];
-  if (traceId !== undefined) {
-    commands.push(`stn debug bundle --trace ${traceId}`);
+  const correlation = traceId ?? commandId ?? query;
+  if (match !== undefined && correlation !== undefined) {
+    return [`stn debug logs ${shellArg(correlation)} --full`];
   }
-  if (commandId !== undefined) {
-    commands.push(`stn debug bundle --command ${commandId}`);
+  if (args.latestFailure && !args.full && !search.complete) {
+    return ["stn debug trace --latest-failure --full"];
   }
-  if (traceId === undefined && commandId === undefined) {
-    commands.push("stn debug bundle --latest-failure");
-  }
-  return commands;
+  if (query !== undefined) return [`stn debug logs ${shellArg(query)} --full`];
+  return ["stn debug logs --min-level error --full"];
+}
+
+function conciseError(error: DebugTraceErrorSummary): DebugTraceErrorSummary {
+  const result: DebugTraceErrorSummary = {};
+  if (error.id !== undefined) result.id = error.id;
+  if (error.code !== undefined) result.code = error.code;
+  if (error.message !== undefined) result.message = boundedText(error.message);
+  if (error.provider !== undefined) result.provider = error.provider;
+  if (error.diagnosticId !== undefined) result.diagnosticId = error.diagnosticId;
+  return result;
+}
+
+function boundedText(value: string): string {
+  const codePoints = [...value];
+  return codePoints.length <= conciseTextCodePoints
+    ? value
+    : `${codePoints.slice(0, conciseTextCodePoints - 1).join("")}…`;
+}
+
+function shellArg(value: string): string {
+  return /^[A-Za-z0-9_./:@=-]+$/u.test(value) ? value : `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 function timestamp(match: DebugTraceMatch): number {

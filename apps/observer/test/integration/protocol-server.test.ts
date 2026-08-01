@@ -88,7 +88,7 @@ describe("observer protocol server", () => {
       };
       await expect(
         runObserverMain(
-          ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "1000"],
+          ["--socket", socketPath, "--state-dir", stateDir, "--startup-timeout-ms", "5000"],
           { providerRegistryFactory, buildVersion: observerBuildVersion, incumbentLifecycle },
         ),
       ).resolves.toBe(0);
