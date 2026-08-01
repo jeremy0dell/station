@@ -156,7 +156,7 @@ export function reconcileDashboardFocus(previous: TuiState, next: TuiState): Tui
   }
   const nextItems = selectDashboardItems(next.snapshot, next);
   const nextFocusable = focusableIndexes(nextItems, "dashboard");
-  if (nextFocusable.length === 0) {
+  if (!hasFocusableIndexes(nextFocusable)) {
     return clearDashboardFocus(withClampedScroll(next, nextItems.length));
   }
 
@@ -176,7 +176,7 @@ export function reconcileDashboardFocus(previous: TuiState, next: TuiState): Tui
     return clearDashboardFocus(withClampedScroll(next, nextItems.length));
   }
   const following = nextFocusable.find((index) => index >= previousIndex);
-  return focusItem(next, nextItems, following ?? Math.max(...nextFocusable));
+  return focusItem(next, nextItems, following ?? lastFocusableIndex(nextFocusable));
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {
@@ -189,7 +189,7 @@ function moveFocus(state: TuiState, delta: -1 | 1, mode: "dashboard" | "session"
   }
   const items = selectDashboardItems(state.snapshot, state);
   const focusable = focusableIndexes(items, mode);
-  if (focusable.length === 0) {
+  if (!hasFocusableIndexes(focusable)) {
     return scrollDashboard(state, delta);
   }
   const current = focusedItemIndex(items, state.dashboardFocus);
@@ -240,14 +240,28 @@ function focusMatchesItem(focus: DashboardFocus, item: DashboardViewportItem): b
 function enterFocusIndex(
   state: TuiState,
   items: readonly DashboardViewportItem[],
-  focusable: readonly number[],
+  focusable: readonly [number, ...number[]],
   delta: -1 | 1,
 ): number {
   const { bodyRows, offset } = viewportWindow(state, items.length);
   const visible = focusable.filter((index) => index >= offset && index < offset + bodyRows);
-  const fallback = delta > 0 ? focusable[0] : focusable[focusable.length - 1];
-  const entered = delta > 0 ? visible[0] : visible[visible.length - 1];
-  return entered ?? fallback ?? 0;
+  const fallback = delta > 0 ? focusable[0] : lastFocusableIndex(focusable);
+  const entered = delta > 0 ? visible[0] : visible.at(-1);
+  return entered ?? fallback;
+}
+
+function hasFocusableIndexes(
+  indexes: readonly number[],
+): indexes is readonly [number, ...number[]] {
+  return indexes.length > 0;
+}
+
+function lastFocusableIndex(indexes: readonly [number, ...number[]]): number {
+  let last = indexes[0];
+  for (const index of indexes) {
+    last = index;
+  }
+  return last;
 }
 
 function focusItem(

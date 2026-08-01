@@ -78,6 +78,8 @@ type DashboardKeyPattern =
   | { kind: "named"; named: "return" | "escape" | "up" | "down" | "left" | "right" }
   | { kind: "slot" };
 
+type DashboardNamedKey = Extract<DashboardKeyPattern, { kind: "named" }>["named"];
+
 type DashboardBindingSpec = {
   id: string;
   pattern: DashboardKeyPattern;
@@ -308,25 +310,39 @@ function matchesPattern(pattern: DashboardKeyPattern, key: TuiKey): boolean {
         key.escape !== true
       );
     case "named":
-      if (pattern.named === "return") {
-        return key.return === true || key.input === "\r" || key.input === "\n";
-      }
-      if (pattern.named === "escape") {
-        return key.escape === true;
-      }
-      if (pattern.named === "up") {
-        return key.upArrow === true;
-      }
-      if (pattern.named === "down") {
-        return key.downArrow === true;
-      }
-      if (pattern.named === "left") {
-        return key.leftArrow === true;
-      }
-      return key.rightArrow === true;
+      return matchesNamedKey(pattern.named, key);
     case "slot":
       return isSlotKey(key);
+    default:
+      return assertNeverDashboardPattern(pattern);
   }
+}
+
+function matchesNamedKey(named: DashboardNamedKey, key: TuiKey): boolean {
+  switch (named) {
+    case "return":
+      return key.return === true || key.input === "\r" || key.input === "\n";
+    case "escape":
+      return key.escape === true;
+    case "up":
+      return key.upArrow === true;
+    case "down":
+      return key.downArrow === true;
+    case "left":
+      return key.leftArrow === true;
+    case "right":
+      return key.rightArrow === true;
+    default:
+      return assertNeverNamedKey(named);
+  }
+}
+
+function assertNeverDashboardPattern(pattern: never): never {
+  throw new Error(`Unhandled dashboard key pattern: ${JSON.stringify(pattern)}`);
+}
+
+function assertNeverNamedKey(named: never): never {
+  throw new Error(`Unhandled dashboard named key: ${named}`);
 }
 
 export function matchDashboardBinding(key: TuiKey): TuiDashboardBinding | undefined {

@@ -19,7 +19,6 @@ import {
   focusDashboardSession as focusDashboardSessionState,
   reconcileDashboardFocus,
 } from "./dashboardFocus.js";
-import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
 import {
@@ -320,7 +319,7 @@ async function reconcileSnapshot(
   try {
     if (clientRuntime === undefined) {
       const snapshot = await service.reconcile(reason);
-      store.setState(clampDashboardStateScroll(replaceSnapshot(store.getState(), snapshot)));
+      store.setState(replaceSnapshot(store.getState(), snapshot));
     } else {
       await clientRuntime.reconcile(reason);
       // The reconciled snapshot, connected transition, and recovery toast land

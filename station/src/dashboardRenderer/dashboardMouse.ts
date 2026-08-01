@@ -7,7 +7,6 @@ import {
   openWidgetSettings,
   scrollDashboard,
   selectAddProjectRow,
-  selectDashboardSessionRow,
   selectDashboardViewport,
   tuiScreenBehavior,
   widgetSettingsAddFromPicker,
@@ -15,17 +14,17 @@ import {
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
   type ProjectHeaderControl,
-  type TuiControlIntent,
   type TuiInputMode,
 } from "@station/dashboard-core";
 import type { StoreApi } from "zustand/vanilla";
 import { isPrimaryMouseEvent, wheelDirection, type StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
-
-export type DashboardMouseEffects = {
-  openShell(target: { cwd: string }): void;
-  openUrl(url: string): void;
-};
+import {
+  executeDashboardControlIntent,
+  openDashboardRowShell,
+  showStaleDashboardTargetNotice,
+  type DashboardRendererEffects,
+} from "./dashboardEffects.js";
 
 const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "dashboard",
@@ -40,36 +39,13 @@ const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
   "addProjectFilter",
 ]);
 const SCROLL_PAGE_ROWS = 5;
-const STALE_TARGET_MESSAGE = "That dashboard item is no longer available.";
-
-/** Consumes a one-shot core control intent at the standalone/tmux renderer boundary. */
-export function executeDashboardControlIntent(
-  intent: TuiControlIntent,
-  store: StoreApi<TuiStore>,
-  effects: DashboardMouseEffects,
-): void {
-  switch (intent.type) {
-    case "projectShell.open":
-      openProjectShell(store, intent.projectId, effects);
-      return;
-    case "quickSession.create":
-      store.getState().createQuickSession(intent.projectId);
-      return;
-    default:
-      return assertNeverControlIntent(intent);
-  }
-}
-
-function assertNeverControlIntent(intent: never): never {
-  throw new Error(`Unhandled dashboard control intent: ${JSON.stringify(intent)}`);
-}
 
 /** Translates standalone semantic targets into shared dashboard actions and renderer effects. */
 export function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
   store: StoreApi<TuiStore>,
-  effects: DashboardMouseEffects,
+  effects: DashboardRendererEffects,
 ): void {
   const mode = deriveTuiInputMode(store.getState());
   const scrollDirection = wheelDirection(event);
@@ -100,7 +76,7 @@ function routeSurfaceClick(
   target: StationMouseTarget,
   store: StoreApi<TuiStore>,
   mode: TuiInputMode,
-  effects: DashboardMouseEffects,
+  effects: DashboardRendererEffects,
 ): boolean {
   switch (target.kind) {
     case "row":
@@ -153,7 +129,7 @@ function activateProjectHeaderInMode(
   projectId: string,
   actionId: ProjectHeaderControl,
   mode: TuiInputMode,
-  effects: DashboardMouseEffects,
+  effects: DashboardRendererEffects,
 ): void {
   if (mode !== "dashboard") {
     return;
@@ -168,7 +144,7 @@ function activateProjectHeaderInMode(
   }
 }
 
-function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardMouseEffects): void {
+function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardRendererEffects): void {
   if (mode === "dashboard") {
     effects.openUrl(url);
   }
@@ -178,32 +154,11 @@ function openRowShellInMode(
   store: StoreApi<TuiStore>,
   rowId: string,
   mode: TuiInputMode,
-  effects: DashboardMouseEffects,
+  effects: DashboardRendererEffects,
 ): void {
-  if (mode !== "dashboard") return;
-  const snapshot = store.getState().snapshot;
-  if (snapshot === undefined) return;
-  const sessionRow = selectDashboardSessionRow(snapshot, rowId);
-  if (sessionRow === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
-    return;
+  if (mode === "dashboard") {
+    openDashboardRowShell(store, rowId, effects);
   }
-  effects.openShell({ cwd: sessionRow.worktree.path });
-}
-
-function openProjectShell(
-  store: StoreApi<TuiStore>,
-  projectId: string,
-  effects: DashboardMouseEffects,
-): void {
-  const project = store
-    .getState()
-    .snapshot?.projects.find((candidate) => candidate.id === projectId);
-  if (project === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
-    return;
-  }
-  effects.openShell({ cwd: project.root });
 }
 
 function pageInMode(store: StoreApi<TuiStore>, direction: "up" | "down", mode: TuiInputMode): void {
@@ -327,7 +282,7 @@ function routeWidgetClick(
 function activateCurrentRow(store: StoreApi<TuiStore>, rowId: string): void {
   const state = store.getState();
   if (state.snapshot === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
+    showStaleDashboardTargetNotice(store);
     return;
   }
   const viewport = selectDashboardViewport(state.snapshot, state);
@@ -342,12 +297,8 @@ function activateCurrentRow(store: StoreApi<TuiStore>, rowId: string): void {
   }
   const choice = viewport.rowChoices.find((candidate) => candidate.value.id === rowId);
   if (choice === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
+    showStaleDashboardTargetNotice(store);
     return;
   }
   store.getState().handleKey({ input: choice.key });
-}
-
-function showNotice(store: StoreApi<TuiStore>, message: string): void {
-  store.getState().pushToast({ kind: "info", message });
 }

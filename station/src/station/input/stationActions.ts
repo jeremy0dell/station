@@ -355,7 +355,7 @@ export function resolveKeyForkSessionSubmit(
 }
 
 /**
- * Resolve a project header's quick-session click to its create target. Uses
+ * Resolve a project header's quick-session activation to its create target. Uses
  * the project's default harness and a generated branch name — no wizard, no
  * review screen. Blocked projects preserve their provider error as a toast;
  * only a missing or stale project is an inert miss.
@@ -386,7 +386,7 @@ export function resolveQuickSessionSubmit(
 /**
  * Station mouse extension: clicking a left-list item selects it and drops into
  * its detail pane. No single keyboard key maps to this (the keyboard path is
- * arrow-move then enter), so it lives here like the header-collapse toggle.
+ * arrow-move then enter), so the pointer adapter owns this direct-focus helper.
  */
 export function focusProjectSettingsItem(
   store: StoreApi<TuiStore>,

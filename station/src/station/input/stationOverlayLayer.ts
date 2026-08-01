@@ -14,6 +14,7 @@ import {
   paneLaunchForkSessionOutcome,
   paneLaunchManagedOutcome,
   paneLaunchNewSessionOutcome,
+  paneOpenOutcome,
   type RouteOutcome,
 } from "../../input/router.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";
@@ -67,22 +68,7 @@ export function createStationOverlayLayer(
         return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
       }
       if (outcome.kind === "open-pane") {
-        const paneOpen: Extract<RouteOutcome, { kind: "pane-open" }> = {
-          kind: "pane-open",
-          paneId: outcome.target.paneId,
-          cwd: outcome.target.cwd,
-          role: outcome.target.role,
-        };
-        if (outcome.target.command !== undefined) {
-          paneOpen.command = outcome.target.command;
-        }
-        if (outcome.target.args !== undefined) {
-          paneOpen.args = outcome.target.args;
-        }
-        if (outcome.target.worktreeId !== undefined) {
-          paneOpen.worktreeId = outcome.target.worktreeId;
-        }
-        return paneOpen;
+        return paneOpenOutcome(outcome.target);
       }
       if (outcome.kind === "launch-new-session") {
         return paneLaunchNewSessionOutcome(outcome.target);

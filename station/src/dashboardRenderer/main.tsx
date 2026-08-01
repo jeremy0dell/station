@@ -20,8 +20,8 @@ import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import {
   executeDashboardControlIntent,
-  type DashboardMouseEffects,
-} from "./dashboardMouse.js";
+  type DashboardRendererEffects,
+} from "./dashboardEffects.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
 import {
@@ -101,7 +101,7 @@ export async function runDashboardMain(): Promise<void> {
   const copyNoticeText = (text: string): void => {
     copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
   };
-  const mouseEffects: DashboardMouseEffects = {
+  const rendererEffects: DashboardRendererEffects = {
     openShell: ({ cwd }) => {
       const openShell = popupRuntime.openShell;
       if (openShell === undefined) {
@@ -168,7 +168,7 @@ export async function runDashboardMain(): Promise<void> {
       prependInputHandlers: [
         copySelectedText,
         createDashboardSequenceHandler(store, (intent) => {
-          executeDashboardControlIntent(intent, store, mouseEffects);
+          executeDashboardControlIntent(intent, store, rendererEffects);
         }),
       ],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
@@ -193,7 +193,7 @@ export async function runDashboardMain(): Promise<void> {
     nextRoot.render(
       <FullscreenDashboard
         store={store}
-        effects={mouseEffects}
+        effects={rendererEffects}
         onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}
       />,

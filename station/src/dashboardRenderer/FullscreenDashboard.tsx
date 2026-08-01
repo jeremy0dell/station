@@ -13,7 +13,8 @@ import {
   StationMouseProvider,
   type StationMouseDispatch,
 } from "../station/view/stationMouseContext.js";
-import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMouse.js";
+import type { DashboardRendererEffects } from "./dashboardEffects.js";
+import { routeDashboardMouse } from "./dashboardMouse.js";
 
 /**
  * The standalone dashboard, rendered to fill the terminal. This is the
@@ -32,7 +33,7 @@ export function FullscreenDashboard({
   hoverEnabled = true,
 }: {
   store: StoreApi<TuiStore>;
-  effects: DashboardMouseEffects;
+  effects: DashboardRendererEffects;
   onCopyNotice: (text: string) => void;
   hoverEnabled?: boolean;
 }) {

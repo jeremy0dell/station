@@ -3,7 +3,6 @@ export * from "./commandBuilders.js";
 export * from "./dashboardFocus.js";
 export * from "./dashboardScroll.js";
 export * from "./keys.js";
-export * from "./projectHeaderActions.js";
 export * from "./screen.js";
 export * from "./screenBehavior.js";
 export * from "./selection/index.js";

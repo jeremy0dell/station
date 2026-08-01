@@ -17,10 +17,8 @@ import {
   noProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import {
-  type DashboardMouseEffects,
-  routeDashboardMouse as routeDashboardMouseWithEffects,
-} from "./dashboardMouse.js";
+import type { DashboardRendererEffects } from "./dashboardEffects.js";
+import { routeDashboardMouse as routeDashboardMouseWithEffects } from "./dashboardMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -33,7 +31,7 @@ const LEFT_DOWN: StationMouseEvent = {
 const LEFT_UP: StationMouseEvent = { ...LEFT_DOWN, type: "up" };
 const RIGHT_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "right", rawButton: 2 };
 const MIDDLE_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "middle", rawButton: 1 };
-const TEST_EFFECTS: DashboardMouseEffects = {
+const TEST_EFFECTS: DashboardRendererEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
@@ -79,7 +77,7 @@ function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
   store: StoreApi<TuiStore>,
-  effects: DashboardMouseEffects = TEST_EFFECTS,
+  effects: DashboardRendererEffects = TEST_EFFECTS,
 ): void {
   routeDashboardMouseWithEffects(target, event, store, effects);
 }
@@ -448,7 +446,7 @@ describe("routeDashboardMouse", () => {
 
   it("retains shell focus when the renderer effect reports a recoverable failure", () => {
     const store = makeStore();
-    const effects: DashboardMouseEffects = {
+    const effects: DashboardRendererEffects = {
       openShell: () => {
         throw new Error("shell unavailable");
       },

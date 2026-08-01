@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import type { StoreApi } from "zustand/vanilla";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import { executeDashboardControlIntent } from "./dashboardMouse.js";
+import { executeDashboardControlIntent } from "./dashboardEffects.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
 
 function harness(resultIntent?: TuiControlIntent): {

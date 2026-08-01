@@ -11,6 +11,7 @@ import {
   isRemoveProjectArmed,
   LIST_REGISTRY,
   tuiScreenBehavior,
+  type ProjectHeaderControl,
   type ProjectSettingsItemId,
   type TuiInputMode,
   type TuiStore,
@@ -202,50 +203,18 @@ export function routeStationMouse(
       }
       return { kind: "open-url", url: target.url };
     case "projectHeader":
-      return mode === "dashboard"
-        ? fromKeyOutcome(
-            dispatchStationAction(store, {
-              type: "dashboard.projectHeader.activate",
-              projectId: target.projectId,
-              actionId: "primary",
-            }),
-          )
-        : { kind: "handled" };
+      return routeProjectHeaderActivation(store, mode, target.projectId, "primary");
     case "openShellForRow":
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
       return fromPaneTarget(resolveRowPaneTarget(store, target.rowId));
     case "openShellForProject":
-      return mode === "dashboard"
-        ? fromKeyOutcome(
-            dispatchStationAction(store, {
-              type: "dashboard.projectHeader.activate",
-              projectId: target.projectId,
-              actionId: "shell",
-            }),
-          )
-        : { kind: "handled" };
+      return routeProjectHeaderActivation(store, mode, target.projectId, "shell");
     case "quickSessionForProject":
-      return mode === "dashboard"
-        ? fromKeyOutcome(
-            dispatchStationAction(store, {
-              type: "dashboard.projectHeader.activate",
-              projectId: target.projectId,
-              actionId: "quickSession",
-            }),
-          )
-        : { kind: "handled" };
+      return routeProjectHeaderActivation(store, mode, target.projectId, "quickSession");
     case "showDefaultAgentPickerForProject":
-      return mode === "dashboard"
-        ? fromKeyOutcome(
-            dispatchStationAction(store, {
-              type: "dashboard.projectHeader.activate",
-              projectId: target.projectId,
-              actionId: "defaultAgent",
-            }),
-          )
-        : { kind: "handled" };
+      return routeProjectHeaderActivation(store, mode, target.projectId, "defaultAgent");
     case "firstProjectAdd":
       return mode === "dashboard"
         ? fromKeyOutcome(dispatchStationAction(store, { type: "dashboard.addProject" }))
@@ -379,6 +348,24 @@ export function routeStationMouse(
     case "sheetBackdrop":
       return { kind: "handled" };
   }
+}
+
+function routeProjectHeaderActivation(
+  store: StoreApi<TuiStore>,
+  mode: TuiInputMode,
+  projectId: string,
+  actionId: ProjectHeaderControl,
+): StationMouseOutcome {
+  if (mode !== "dashboard") {
+    return { kind: "handled" };
+  }
+  return fromKeyOutcome(
+    dispatchStationAction(store, {
+      type: "dashboard.projectHeader.activate",
+      projectId,
+      actionId,
+    }),
+  );
 }
 
 function routeDashboardRow(store: StoreApi<TuiStore>, rowId: string): StationMouseOutcome {
