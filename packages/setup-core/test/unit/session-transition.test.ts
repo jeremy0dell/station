@@ -1,6 +1,7 @@
 import {
   createSetupSessionState,
   type SetupPlanningFacts,
+  type SetupPlanningIntent,
   transitionSetupSession,
 } from "@station/setup-core";
 import { describe, expect, it } from "vitest";
@@ -40,6 +41,70 @@ describe("transitionSetupSession", () => {
       inspectionPhase: "after-preflight",
     });
     expect(applying.effects).toEqual([{ kind: "inspect", phase: "after-preflight" }]);
+  });
+
+  it("replaces intent revision-safely and returns staged preparation to editing", () => {
+    const initial = createSetupSessionState(intent());
+    const inspecting = transitionSetupSession(initial, {
+      type: "inspection-requested",
+      revision: initial.revision,
+    });
+    const editing = transitionSetupSession(inspecting.state, {
+      type: "inspection-completed",
+      revision: inspecting.state.revision,
+      facts: missingWorktrunkFacts(),
+    });
+    const desired = { ...intent(), linkStationLaunchers: true };
+
+    const stale = transitionSetupSession(editing.state, {
+      type: "intent-replaced",
+      revision: editing.state.revision - 1,
+      intent: desired,
+    });
+    expect(stale).toEqual({ state: editing.state, effects: [] });
+
+    const replacing = transitionSetupSession(editing.state, {
+      type: "intent-replaced",
+      revision: editing.state.revision,
+      intent: desired,
+    });
+    expect(replacing.effects).toEqual([{ kind: "inspect", phase: "initial" }]);
+    const refreshed = transitionSetupSession(replacing.state, {
+      type: "inspection-completed",
+      revision: replacing.state.revision,
+      facts: missingWorktrunkFacts(),
+    });
+    expect(refreshed.state).toMatchObject({ status: "editing", intent: desired });
+
+    const preparing = transitionSetupSession(refreshed.state, {
+      type: "prepare-requested",
+      revision: refreshed.state.revision,
+    });
+    const effect = preparing.effects[0];
+    if (effect?.kind !== "perform-operation") throw new Error("expected preparation effect");
+    const completed = transitionSetupSession(preparing.state, {
+      type: "operation-completed",
+      revision: preparing.state.revision,
+      outcome: {
+        status: "completed",
+        operationId: effect.operation.id,
+        operation: effect.operation,
+        commit: { kind: "package-installer", target: { kind: "tool", id: "worktrunk" } },
+      },
+    });
+    expect(completed.state).toMatchObject({
+      status: "inspecting",
+      inspectionPhase: "after-preparation",
+    });
+    const prepared = transitionSetupSession(completed.state, {
+      type: "inspection-completed",
+      revision: completed.state.revision,
+      facts: facts(),
+    });
+    expect(prepared.state).toMatchObject({
+      status: "editing",
+      checkpoints: [{ operationId: "install:worktrunk" }],
+    });
   });
 
   it("rejects stale asynchronous operation outcomes without recording a checkpoint", () => {
@@ -111,11 +176,17 @@ describe("transitionSetupSession", () => {
   });
 });
 
-function intent() {
+function intent(): SetupPlanningIntent {
   return {
     mode: "apply" as const,
     harnessSelection: { kind: "automatic" as const },
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
     installWorktrunkHooks: false,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
   };
 }
 
@@ -136,6 +207,7 @@ function facts(): SetupPlanningFacts {
     stateDirectoryWritable: true,
     socketEvidenceAvailable: true,
     xcodeTools: "not-applicable",
+    homebrew: "available",
     tools: [
       { id: "worktrunk", available: true, installerAvailable: true },
       { id: "tmux", available: true, installerAvailable: true },
@@ -149,6 +221,7 @@ function facts(): SetupPlanningFacts {
       config: { status: "valid", defaultHarness: "codex" },
       harnesses: [{ id: "codex", availability: "available" }],
     },
+    installableHarnessIds: ["codex"],
     config: { state: "valid", write: "none", diagnostics: [] },
     launchers: { station: "available", ingress: "available", tmuxPopup: "available" },
     worktrunkAutomation: "ready",

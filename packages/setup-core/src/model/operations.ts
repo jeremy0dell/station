@@ -49,21 +49,21 @@ export type SetupLauncherLinkOperation = SetupOperationBase<
   "link-station-launchers",
   "link-launchers",
   "recommended",
-  false
+  boolean
 >;
 
 export type SetupWorktrunkShellOperation = SetupOperationBase<
   "configure-worktrunk-shell",
   "configure-worktrunk-shell",
   "recommended",
-  false
+  boolean
 >;
 
 export type SetupTmuxPopupOperation = SetupOperationBase<
   "persist-tmux-popup" | "load-tmux-popup",
   "configure-tmux-popup",
   "recommended",
-  false
+  boolean
 > & {
   readonly scope: "persisted" | "live";
 };
@@ -79,7 +79,7 @@ export type SetupHarnessTrackingOperation = SetupOperationBase<
   `prepare-harness-tracking:${SupportedHarnessId}`,
   "prepare-harness-tracking",
   "required" | "recommended",
-  true
+  boolean
 > & {
   readonly harnessId: SupportedHarnessId;
 };

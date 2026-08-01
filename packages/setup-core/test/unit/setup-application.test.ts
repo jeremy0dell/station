@@ -3,6 +3,7 @@ import {
   type SetupInspection,
   type SetupOperationExecutor,
   type SetupPlanningFacts,
+  type SetupPlanningIntent,
 } from "@station/setup-core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -26,7 +27,13 @@ describe("createSetupSessionApplication", () => {
       intent: {
         mode: "apply",
         harnessSelection: { kind: "automatic" },
+        installBootstrap: false,
+        installHarnesses: [],
+        linkStationLaunchers: false,
+        harnessTrackingSelection: { kind: "automatic" },
         installWorktrunkHooks: false,
+        installWorktrunkShell: false,
+        configureTmuxPopup: false,
       },
       inspection,
       executeOperation,
@@ -50,6 +57,48 @@ describe("createSetupSessionApplication", () => {
     expect(state.checkpoints.map((checkpoint) => checkpoint.operationId)).toEqual([
       "write-config",
       "activate-observer-config",
+    ]);
+  });
+
+  it("keeps the session mode fixed, passes replaced intent to inspection, and does not replay preparation", async () => {
+    const inspections = [
+      missingWorktrunkFacts(),
+      missingWorktrunkFacts(),
+      readyFacts(),
+      readyFacts(),
+      readyFacts(),
+      readyFacts(),
+    ];
+    const inspection = vi.fn<SetupInspection>(async () => {
+      const next = inspections.shift();
+      if (next === undefined) throw new Error("unexpected inspection");
+      return { status: "completed", facts: next };
+    });
+    const executeOperation = vi.fn<SetupOperationExecutor>(async (operation) => ({
+      status: "completed",
+      operationId: operation.id,
+      commit: { kind: "package-installer", target: { kind: "tool", id: "worktrunk" } },
+    }));
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection,
+      executeOperation,
+    });
+    const desired = { ...intent(), mode: "check" as const, linkStationLaunchers: true };
+    const appliedDesired = { ...desired, mode: "apply" as const };
+
+    await application.start();
+    await application.replaceIntent(desired);
+    const prepared = await application.prepare();
+    const completed = await application.apply();
+
+    expect(prepared.status).toBe("editing");
+    expect(completed.status).toBe("completed");
+    expect(inspection.mock.calls.slice(1).map(([request]) => request.intent)).toEqual(
+      Array.from({ length: inspection.mock.calls.length - 1 }, () => appliedDesired),
+    );
+    expect(executeOperation.mock.calls.map(([operation]) => operation.id)).toEqual([
+      "install:worktrunk",
     ]);
   });
 
@@ -192,6 +241,44 @@ describe("createSetupSessionApplication", () => {
     expect(executeOperation).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    "started",
+    "finished",
+  ] as const)("records committed operation truth before surfacing a %s progress failure", async (callback) => {
+    const inspections = [missingConfigFacts(), missingConfigFacts(), readyFacts(), readyFacts()];
+    const inspection = vi.fn<SetupInspection>(async () => {
+      const facts = inspections.shift();
+      if (facts === undefined) throw new Error("unexpected inspection");
+      return { status: "completed", facts };
+    });
+    const executeOperation = vi.fn<SetupOperationExecutor>(async (operation) => ({
+      status: "completed",
+      operationId: operation.id,
+      commit:
+        operation.kind === "write-config"
+          ? { kind: "config", configPath: "/tmp/config.toml", change: "created" }
+          : { kind: "observer-activation", configPath: "/tmp/config.toml" },
+    }));
+    const report = vi.fn(async () => {
+      throw new Error(`synthetic ${callback} progress failure`);
+    });
+    const application = createSetupSessionApplication({
+      intent: intent(),
+      inspection,
+      executeOperation,
+      operationProgress: callback === "started" ? { started: report } : { finished: report },
+    });
+
+    await expect(application.apply()).rejects.toThrow(`synthetic ${callback} progress failure`);
+
+    expect(application.getState()).toMatchObject({
+      status: "completed",
+      checkpoints: [{ operationId: "write-config" }, { operationId: "activate-observer-config" }],
+    });
+    expect(executeOperation).toHaveBeenCalledTimes(2);
+    expect(report).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects an outcome whose operation identity does not match the requested effect", async () => {
     const application = createSetupSessionApplication({
       intent: intent(),
@@ -213,11 +300,17 @@ describe("createSetupSessionApplication", () => {
   });
 });
 
-function intent() {
+function intent(): SetupPlanningIntent {
   return {
     mode: "apply" as const,
     harnessSelection: { kind: "automatic" as const },
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
     installWorktrunkHooks: false,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
   };
 }
 
@@ -272,6 +365,7 @@ function facts(
     stateDirectoryWritable: true,
     socketEvidenceAvailable: true,
     xcodeTools: "not-applicable",
+    homebrew: "available",
     tools: [
       { id: "worktrunk", available: true, installerAvailable: true },
       { id: "tmux", available: true, installerAvailable: true },
@@ -285,6 +379,7 @@ function facts(
       config: { status: config.state === "missing" ? "missing" : "valid", defaultHarness: "codex" },
       harnesses: [{ id: "codex", availability: "available" }],
     },
+    installableHarnessIds: ["codex"],
     config,
     launchers: { station: "available", ingress: "available", tmuxPopup: "available" },
     worktrunkAutomation: "ready",

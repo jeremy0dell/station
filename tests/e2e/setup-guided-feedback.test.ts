@@ -487,7 +487,7 @@ describe("setup guided feedback e2e", () => {
         answers: ["n", "n", "y", "y", "y"],
       });
 
-      expect(result.timedOut).toBe(false);
+      expect(result.timedOut, `${result.stdout}\n${result.stderr}`).toBe(false);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
         "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",

@@ -1,5 +1,5 @@
 import type { SafeError } from "@station/contracts";
-import type { SetupPlanningIntent } from "./intent.js";
+import type { SetupEditableIntent, SetupPlanningIntent } from "./intent.js";
 import type { SetupIssue } from "./issues.js";
 import type {
   SetupOperation,
@@ -23,6 +23,7 @@ export type SetupSessionStatus =
 /** Inspection points at which setup evidence is refreshed during one application cascade. */
 export type SetupSessionInspectionPhase =
   | "initial"
+  | "after-preparation"
   | "after-preflight"
   | "after-activation"
   | "final";
@@ -34,7 +35,8 @@ export type SetupSessionApplyPhase =
   | "preflight"
   | "config-write"
   | "observer-activation"
-  | "tracking";
+  | "tracking"
+  | "optional-integrations";
 
 /** Stable reason categories for setup sessions that cannot continue automatically. */
 export type SetupSessionBlockReason =
@@ -100,6 +102,7 @@ export type SetupSessionReviewingState = SetupSessionWithPlan & {
 export type SetupSessionApplyingState = SetupSessionWithPlan & {
   readonly status: "applying";
   readonly applyPhase: SetupSessionApplyPhase;
+  readonly request: "prepare" | "apply";
 };
 
 export type SetupSessionVerifyingState = SetupSessionWithPlan & {
@@ -152,6 +155,17 @@ export type SetupSessionInspectionFailedEvent = {
   readonly error: SafeError;
 };
 
+export type SetupSessionIntentReplacedEvent = {
+  readonly type: "intent-replaced";
+  readonly revision: number;
+  readonly intent: SetupEditableIntent;
+};
+
+export type SetupSessionPrepareRequestedEvent = {
+  readonly type: "prepare-requested";
+  readonly revision: number;
+};
+
 export type SetupSessionReviewRequestedEvent = {
   readonly type: "review-requested";
   readonly revision: number;
@@ -188,6 +202,8 @@ export type SetupSessionEvent =
   | SetupSessionInspectionRequestedEvent
   | SetupSessionInspectionCompletedEvent
   | SetupSessionInspectionFailedEvent
+  | SetupSessionIntentReplacedEvent
+  | SetupSessionPrepareRequestedEvent
   | SetupSessionReviewRequestedEvent
   | SetupSessionPreviewRequestedEvent
   | SetupSessionApplyRequestedEvent

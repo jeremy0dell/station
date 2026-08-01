@@ -278,6 +278,59 @@ export function forbiddenCliAdapter(): void { runFixtureUseCase(); }
     ]);
   });
 
+  it("allows a use-case factory to declare its same-module driving-port return contract", async () => {
+    const root = await createFixture({
+      "apps/observer/src/application.ts": `
+/**
+ * DRIVING PORT
+ *
+ * Offers the fixture application behavior to its caller.
+ */
+export type FixtureApplication = { run(): void };
+
+/**
+ * USE CASE
+ *
+ * Constructs the fixture application behavior behind its driving contract.
+ */
+export function createFixtureApplication(): FixtureApplication {
+  return { run() {} };
+}
+
+/**
+ * USE CASE
+ *
+ * Deliberately consumes a driving port instead of implementing it.
+ */
+export function forbiddenDrivingPortConsumer(application: FixtureApplication): void {
+  application.run();
+}
+`,
+    });
+
+    const result = analyzeObserverArchitecture({ rootDir: root });
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        declaration: "forbiddenDrivingPortConsumer",
+        targetDeclaration: "FixtureApplication",
+        ruleId: "CONTROLLED_ROLE_DIRECTION",
+      }),
+    ]);
+    expect(
+      result.manifest.controlledDeclarations.find(
+        (declaration) => declaration.declaration === "createFixtureApplication",
+      ),
+    ).toMatchObject({
+      dependencies: [
+        expect.objectContaining({
+          declaration: "FixtureApplication",
+          role: "DRIVING PORT",
+          edgeKind: "type-only",
+        }),
+      ],
+    });
+  });
+
   it("detects runtime and type-only source cycles with every participating edge", async () => {
     const root = await createFixture({
       "apps/observer/src/runtimeA.ts": `import { runtimeB } from "./runtimeB.js"; export const runtimeA = runtimeB;`,

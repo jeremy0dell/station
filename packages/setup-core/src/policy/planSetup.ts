@@ -180,23 +180,25 @@ function deriveOperations(
   issues: readonly SetupIssue[],
 ): SetupOperation[] {
   const operations: SetupOperation[] = [];
+  addBootstrapOperation(operations, facts, intent);
   for (const tool of facts.tools) {
     if (!tool.available && toolApplies(tool.id, facts.compiled)) {
       operations.push({
         id: `install:${tool.id}`,
         kind: "install-tool",
         tier: "required",
-        selected: tool.installerAvailable,
+        selected: tool.installerAvailable && facts.xcodeTools !== "missing",
         tool: tool.id,
       });
     }
   }
+  addHarnessInstallOperations(operations, facts, intent);
   if (Object.values(facts.launchers).some((launcher) => launcher === "checkout")) {
     operations.push({
       id: "link-station-launchers",
       kind: "link-launchers",
       tier: "recommended",
-      selected: false,
+      selected: intent.linkStationLaunchers,
     });
   }
   if (facts.worktrunkShell === "missing") {
@@ -204,7 +206,7 @@ function deriveOperations(
       id: "configure-worktrunk-shell",
       kind: "configure-worktrunk-shell",
       tier: "recommended",
-      selected: false,
+      selected: intent.installWorktrunkShell,
     });
   }
   const tmuxReady = toolAvailable(facts, "tmux") && facts.launchers.tmuxPopup !== "missing";
@@ -213,7 +215,7 @@ function deriveOperations(
       id: "persist-tmux-popup",
       kind: "configure-tmux-popup",
       tier: "recommended",
-      selected: false,
+      selected: intent.configureTmuxPopup,
       scope: "persisted",
     });
   }
@@ -226,7 +228,7 @@ function deriveOperations(
       id: "load-tmux-popup",
       kind: "configure-tmux-popup",
       tier: "recommended",
-      selected: false,
+      selected: intent.configureTmuxPopup,
       scope: "live",
     });
   }
@@ -241,23 +243,7 @@ function deriveOperations(
       selected: intent.installWorktrunkHooks,
     });
   }
-  if (hookLaunchersReady) {
-    for (const issue of issues) {
-      if (issue.code !== "harness-tracking-unprepared") continue;
-      if (!harnessAvailable(facts, issue.harnessId)) continue;
-      const tracking = facts.harnessTracking.find(
-        (candidate) => candidate.harnessId === issue.harnessId,
-      );
-      if (tracking === undefined || !trackingNeedsRepair(tracking)) continue;
-      operations.push({
-        id: `prepare-harness-tracking:${issue.harnessId}`,
-        kind: "prepare-harness-tracking",
-        tier: issue.tier,
-        selected: true,
-        harnessId: issue.harnessId,
-      });
-    }
-  }
+  if (hookLaunchersReady) addHarnessTrackingOperations(operations, facts, intent, issues);
   if (
     selection.outcome === "selected" &&
     selection.requiredHarnessIds.some((harnessId) => harnessAvailable(facts, harnessId)) &&
@@ -288,6 +274,96 @@ function deriveOperations(
     });
   }
   return operations;
+}
+
+function addBootstrapOperation(
+  operations: SetupOperation[],
+  facts: SetupPlanningFacts,
+  intent: SetupPlanningIntent,
+): void {
+  if (!intent.installBootstrap) return;
+  if (facts.xcodeTools === "missing") {
+    operations.push({
+      id: "install:xcode-command-line-tools",
+      kind: "install-xcode-command-line-tools",
+      tier: "required",
+      selected: true,
+    });
+  } else if (facts.homebrew === "missing") {
+    operations.push({
+      id: "install:homebrew",
+      kind: "install-homebrew",
+      tier: "required",
+      selected: true,
+    });
+  }
+}
+
+function addHarnessInstallOperations(
+  operations: SetupOperation[],
+  facts: SetupPlanningFacts,
+  intent: SetupPlanningIntent,
+): void {
+  for (const harnessId of facts.installableHarnessIds) {
+    if (harnessAvailable(facts, harnessId)) continue;
+    operations.push({
+      id: `install-harness:${harnessId}`,
+      kind: "install-harness",
+      tier: "required",
+      selected: intent.installHarnesses.includes(harnessId),
+      harnessId,
+    });
+  }
+}
+
+function addHarnessTrackingOperations(
+  operations: SetupOperation[],
+  facts: SetupPlanningFacts,
+  intent: SetupPlanningIntent,
+  issues: readonly SetupIssue[],
+): void {
+  for (const issue of issues) {
+    if (issue.code !== "harness-tracking-unprepared") continue;
+    if (!harnessAvailable(facts, issue.harnessId)) continue;
+    const tracking = facts.harnessTracking.find(
+      (candidate) => candidate.harnessId === issue.harnessId,
+    );
+    if (tracking === undefined || !trackingNeedsRepair(tracking)) continue;
+    operations.push({
+      id: `prepare-harness-tracking:${issue.harnessId}`,
+      kind: "prepare-harness-tracking",
+      tier: issue.tier,
+      selected:
+        intent.harnessTrackingSelection.kind === "automatic" ||
+        intent.harnessTrackingSelection.harnessIds.includes(issue.harnessId),
+      harnessId: issue.harnessId,
+    });
+  }
+  if (intent.harnessTrackingSelection.kind !== "explicit") return;
+  for (const harnessId of intent.harnessTrackingSelection.harnessIds) {
+    if (!harnessAvailable(facts, harnessId) || hasHarnessTrackingOperation(operations, harnessId)) {
+      continue;
+    }
+    const tracking = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
+    if (tracking === undefined || tracking.assessment.state === "not-applicable") continue;
+    operations.push({
+      id: `prepare-harness-tracking:${harnessId}`,
+      kind: "prepare-harness-tracking",
+      tier: "required",
+      selected: true,
+      harnessId,
+    });
+  }
+}
+
+function hasHarnessTrackingOperation(
+  operations: readonly SetupOperation[],
+  harnessId: SetupPlanningFacts["harnessTracking"][number]["harnessId"],
+): boolean {
+  return operations.some(
+    (operation) =>
+      operation.kind === "prepare-harness-tracking" && operation.harnessId === harnessId,
+  );
 }
 
 function trackingNeedsRepair(tracking: SetupPlanningFacts["harnessTracking"][number]): boolean {

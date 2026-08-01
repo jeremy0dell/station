@@ -1,7 +1,9 @@
-import { createInterface } from "node:readline/promises";
+import { createLinePromptSetupPresenter } from "./presenters/linePrompt.js";
 import { createTextSetupPresenter, type TextSetupPresenter } from "./presenters/text.js";
 import type { SetupRenderOptions } from "./theme.js";
-import type { SetupCommandDeps, SetupPromptAdapter, SetupPromptChoice } from "./types.js";
+import type { SetupCommandDeps, SetupPromptAdapter } from "./types.js";
+
+export { parseMultiSelectAnswer } from "./presenters/linePrompt.js";
 
 export async function write(deps: SetupCommandDeps, chunk: string): Promise<void> {
   const writer = deps.writeStdout ?? defaultWriteStdout;
@@ -32,39 +34,5 @@ export function setupPresenter(deps: SetupCommandDeps): TextSetupPresenter {
 }
 
 export function defaultPrompt(): SetupPromptAdapter {
-  const readline = createInterface({ input: process.stdin, output: process.stdout });
-  return {
-    async confirm(message) {
-      const answer = await readline.question(`${message} [y/N] `);
-      return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
-    },
-    async selectMany(message, choices) {
-      const labels = choices.map((choice, index) => `${index + 1}. ${choice.label}`).join("\n");
-      const answer = await readline.question(`${message}\n${labels}\n> `);
-      return parseMultiSelectAnswer(answer, choices);
-    },
-    pause() {
-      readline.pause();
-    },
-    resume() {
-      readline.resume();
-    },
-    close() {
-      readline.close();
-    },
-  };
-}
-
-export function parseMultiSelectAnswer(
-  answer: string,
-  choices: readonly SetupPromptChoice[],
-): string[] {
-  const selected: string[] = [];
-  for (const token of answer.split(",")) {
-    const trimmed = token.trim();
-    const index = /^\d+$/.test(trimmed) ? Number(trimmed) - 1 : -1;
-    const value = Number.isInteger(index) ? choices[index]?.value : undefined;
-    if (value !== undefined && !selected.includes(value)) selected.push(value);
-  }
-  return selected;
+  return createLinePromptSetupPresenter();
 }

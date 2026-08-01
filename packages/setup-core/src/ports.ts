@@ -1,5 +1,6 @@
 import type { SafeError } from "@station/contracts";
 import type { SetupPlanningFacts } from "./model/facts.js";
+import type { SetupPlanningIntent } from "./model/intent.js";
 import type {
   SetupConfigWriteOperation,
   SetupHarnessTrackingOperation,
@@ -19,10 +20,11 @@ export type {
   SetupPackageTarget,
 } from "./model/operations.js";
 
-/** Requests normalized evidence for one revision and lifecycle inspection point. */
+/** Requests normalized evidence for one revision, lifecycle point, and current desired setup state. */
 export type SetupInspectionRequest = {
   readonly phase: SetupSessionInspectionPhase;
   readonly revision: number;
+  readonly intent: SetupPlanningIntent;
 };
 
 /** Typed inspection result that keeps boundary failures available to the driving adapter. */
@@ -33,7 +35,7 @@ export type SetupInspectionOutcome =
 /**
  * DRIVEN PORT
  *
- * Reads and normalizes current setup evidence while keeping filesystem, TOML, and provider representations outside core.
+ * Reads intent-bound setup evidence so every plan reflects the current desired harnesses and integrations while boundary representations remain outside core.
  */
 export type SetupInspection = (request: SetupInspectionRequest) => Promise<SetupInspectionOutcome>;
 
@@ -106,6 +108,19 @@ export type SetupLauncherLinkPort = (
  * Executes one semantic setup operation through its assigned outward capability.
  */
 export type SetupOperationExecutor = (operation: SetupOperation) => Promise<SetupOperationOutcome>;
+
+/**
+ * DRIVEN PORT
+ *
+ * Reports semantic operation starts and recorded outcomes without participating in mutation truth.
+ */
+export type SetupOperationProgress = {
+  readonly started?: (operation: SetupOperation) => void | Promise<void>;
+  readonly finished?: (
+    operation: SetupOperation,
+    outcome: SetupOperationOutcome,
+  ) => void | Promise<void>;
+};
 
 /** Outward capabilities used by the operation dispatcher, grouped for adapter composition. */
 export type SetupOperationPorts = {

@@ -17,6 +17,8 @@ describe("setup inspection adapter", () => {
     });
 
     expect(planning.config).toEqual({ state: "valid", write: "update", diagnostics: [] });
+    expect(planning.homebrew).toBe("available");
+    expect(planning.installableHarnessIds).toEqual(["codex"]);
     expect(JSON.stringify(planning)).not.toContain("private TOML");
     expect(JSON.stringify(planning)).not.toContain("/tmp/config.toml");
     expect(planning.harnessTracking).toEqual([

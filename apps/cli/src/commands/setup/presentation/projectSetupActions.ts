@@ -34,7 +34,7 @@ export function projectSetupOperationActions(
           operationId: operation.id,
           kind: operation.kind,
           tier: "recommended",
-          selected: false,
+          selected: operation.selected,
           label: setupMessageRef("action.link-launchers-label"),
           explanation: setupMessageRef("action.link-launchers-message"),
         },
@@ -48,7 +48,7 @@ export function projectSetupOperationActions(
               operationId: operation.id,
               kind: operation.kind,
               tier: "recommended",
-              selected: false,
+              selected: operation.selected,
               label: setupMessageRef("action.worktrunk-shell-label"),
               explanation: setupMessageRef("action.worktrunk-shell-message"),
             },
@@ -60,7 +60,7 @@ export function projectSetupOperationActions(
           operationId: operation.id,
           kind: operation.kind,
           tier: "recommended",
-          selected: false,
+          selected: operation.selected,
           label: setupMessageRef(
             operation.scope === "persisted"
               ? "action.tmux-persist-label"
@@ -98,7 +98,7 @@ export function projectSetupOperationActions(
           operationId: operation.id,
           kind: operation.kind,
           tier: operation.tier,
-          selected: true,
+          selected: operation.selected,
           label: setupMessageRef("action.harness-tracking-label", { harness: label }),
           explanation: setupMessageRef("action.harness-tracking-message", { harness: label }),
         },
@@ -106,13 +106,73 @@ export function projectSetupOperationActions(
     }
     case "write-config":
       return projectConfigWriteActions(configWrite, true, operation.id);
-    case "activate-observer-config":
-    case "install-harness":
+    case "install-harness": {
+      const label =
+        facts.harnesses.find((harness) => harness.id === operation.harnessId)?.label ??
+        operation.harnessId;
+      return [
+        {
+          id: `install-harness-${operation.harnessId}`,
+          operationId: operation.id,
+          kind: operation.kind,
+          tier: "required",
+          selected: operation.selected,
+          label: setupMessageRef("action.install-label", { label }),
+          explanation: harnessInstallerMessage(operation.harnessId, facts),
+        },
+      ];
+    }
     case "install-homebrew":
+      return [
+        {
+          id: "install-homebrew",
+          operationId: operation.id,
+          kind: operation.kind,
+          tier: "required",
+          selected: operation.selected,
+          label: setupMessageRef("action.install-label", { label: "Homebrew" }),
+          explanation: setupMessageRef("installer.homebrew"),
+        },
+      ];
     case "install-xcode-command-line-tools":
+      return [
+        {
+          id: "install-command-line-tools",
+          operationId: operation.id,
+          kind: operation.kind,
+          tier: "required",
+          selected: operation.selected,
+          label: setupMessageRef("action.install-label", { label: "Command Line Tools" }),
+          explanation: setupMessageRef("installer.command-line-tools"),
+        },
+      ];
+    case "activate-observer-config":
       return [];
     default:
       return assertNeverOperation(operation);
+  }
+}
+
+function harnessInstallerMessage(
+  harnessId: Extract<SetupOperation, { kind: "install-harness" }>["harnessId"],
+  facts: SetupFacts,
+) {
+  const macBrewAvailable = facts.xcode.applicable && facts.brew.status === "ok";
+  switch (harnessId) {
+    case "codex":
+      return setupMessageRef(macBrewAvailable ? "installer.codex-brew" : "installer.codex-script");
+    case "cursor":
+      return setupMessageRef("installer.cursor-script");
+    case "opencode":
+      return setupMessageRef(
+        facts.brew.status === "ok" ? "installer.opencode-brew" : "installer.opencode-script",
+      );
+    case "pi":
+      return setupMessageRef(facts.brew.status === "ok" ? "installer.pi-brew" : "installer.pi-npm");
+    case "claude":
+      return setupMessageRef(macBrewAvailable ? "installer.claude-brew" : "installer.claude-npm");
+    default:
+      return assertNeverHarness(harnessId);
   }
 }
 
@@ -127,7 +187,7 @@ function projectInstallToolAction(
     operationId: operation.id,
     kind: operation.kind,
     tier: "required",
-    selected: installerAvailable,
+    selected: operation.selected,
     label: setupMessageRef("action.install-label", { label: presentation.label }),
     explanation: installerAvailable
       ? setupMessageRef("action.install-homebrew", { label: presentation.label })
@@ -214,4 +274,8 @@ function assertNeverOperation(operation: never): never {
 
 function assertNeverTool(tool: never): never {
   throw new Error(`Unsupported setup tool: ${String(tool)}`);
+}
+
+function assertNeverHarness(harness: never): never {
+  throw new Error(`Unsupported setup harness: ${String(harness)}`);
 }
