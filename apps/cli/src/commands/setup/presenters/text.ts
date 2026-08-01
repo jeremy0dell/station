@@ -178,7 +178,7 @@ function renderSuccessfulApply(
       lines.push(
         "",
         theme.bold(resolveSetupMessage(setupMessageRef("completion.current-shell-path-title"))),
-        `  ${theme.cyan(`PATH=${shellQuote(warning.pathDirectory)}\${PATH:+":$PATH"}`)}`,
+        `  ${theme.cyan(`PATH=${shellQuote(warning.pathDirectory, true)}\${PATH:+":$PATH"}`)}`,
         `  ${theme.cyan("export PATH")}`,
         `  ${theme.cyan("hash -r")}`,
       );
@@ -355,7 +355,7 @@ function bareLauncherConvenience(
       `  ${resolveSetupMessage(setupMessageRef("completion.current-shell-path-step"))}`,
       `  ${resolveSetupMessage(
         setupMessageRef("completion.future-shell-path-step", {
-          directory: shellQuote(pathDirectory),
+          directory: shellQuote(pathDirectory, true),
         }),
       )}`,
       `  ${resolveSetupMessage(setupMessageRef("completion.prefer-path"))}`,

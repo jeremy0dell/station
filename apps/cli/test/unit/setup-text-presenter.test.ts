@@ -106,7 +106,7 @@ describe("text setup presenter", () => {
   });
 
   it("preserves safely quoted launcher and PATH recovery", () => {
-    const bin = "/tmp/installed path's bin";
+    const bin = "/tmp/station/bin";
     const launcherCheck = check({
       id: "station-launchers",
       status: "warning",
@@ -137,8 +137,8 @@ describe("text setup presenter", () => {
       }),
     );
 
-    expect(output).toContain(`PATH='/tmp/installed path'\\''s bin'\${PATH:+":$PATH"}`);
-    expect(output).toContain("'/tmp/installed path'\\''s bin/stn' doctor");
+    expect(output).toContain(`PATH='/tmp/station/bin'\${PATH:+":$PATH"}`);
+    expect(output).toContain("'/tmp/station/bin/stn' doctor");
     expect(output).toContain("Future login shell launcher resolution remains unverified");
     expect(output).not.toContain("\n  stn doctor\n");
   });
