@@ -17,8 +17,8 @@ import { buildFocusCommand } from "./commandBuilders.js";
 import {
   clearDashboardFocus as clearDashboardFocusState,
   focusDashboardSession as focusDashboardSessionState,
+  reconcileDashboardFocus,
 } from "./dashboardFocus.js";
-import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
 import {
@@ -36,18 +36,20 @@ import { submitQuickSession } from "./screens/quickSession.js";
 import { attachTuiSnapshotSource, type TuiSnapshotSource } from "./sourceBridge.js";
 import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
-import { handleTuiKey, type TuiTransition } from "./transition.js";
+import { handleTuiKey, type TuiControlIntent, type TuiTransition } from "./transition.js";
 import type { CreateInitialTuiStateOptions, TuiState } from "./types.js";
 
 export type TuiHandleKeyResult = {
   dismissPopup: boolean;
   exitCode?: number;
+  controlIntent?: TuiControlIntent;
 };
 
 export type TuiStore = TuiState & {
   start(): () => void;
+  /** Applies a key transition and returns any one-shot renderer-owned control intent. */
   handleKey(key: TuiKey): TuiHandleKeyResult;
-  /** Applies a renderer-neutral action through the store's shared transition/effect executor. */
+  /** Applies a semantic transition and returns any one-shot renderer-owned control intent. */
   handleAction(action: TuiSemanticAction): TuiHandleKeyResult;
   /** Create a project session immediately with its configured default harness. */
   createQuickSession(projectId: string): void;
@@ -186,7 +188,8 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
       );
     },
     setTerminalRows: (rows): void => {
-      set(clampDashboardStateScroll({ ...get(), terminalRows: rows }));
+      const current = get();
+      set(reconcileDashboardFocus(current, { ...current, terminalRows: rows }));
     },
     focusDashboardSession: (sessionId): void => {
       set(
@@ -291,7 +294,7 @@ function applyDashboardFocusState(current: TuiStore, next: TuiState): TuiStore {
   // Full replacement propagates an absent optional cursor; seeding from the
   // concrete store retains its action methods.
   const replacement = { ...current };
-  delete replacement.focusedRowId;
+  delete replacement.dashboardFocus;
   return { ...replacement, ...next };
 }
 
@@ -344,6 +347,9 @@ function applyTransition(
   if (transition.exitCode !== undefined) {
     result.exitCode = transition.exitCode;
   }
+  if (transition.controlIntent !== undefined) {
+    result.controlIntent = transition.controlIntent;
+  }
   return result;
 }
 
@@ -393,7 +399,7 @@ async function reconcileSnapshot(
   try {
     if (clientRuntime === undefined) {
       const snapshot = await service.reconcile(reason);
-      store.setState(clampDashboardStateScroll(replaceSnapshot(store.getState(), snapshot)));
+      store.setState(replaceSnapshot(store.getState(), snapshot));
     } else {
       await clientRuntime.reconcile(reason);
       // The reconciled snapshot, connected transition, and recovery toast land

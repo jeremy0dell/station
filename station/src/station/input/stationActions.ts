@@ -13,7 +13,6 @@ import {
   newSessionActionForInput,
   newSessionIntentForAction,
   focusProjectSettingsItem as focusProjectSettingsItemState,
-  openProjectDefaultAgentPicker,
   openWidgetSettings as openWidgetSettingsState,
   resolveQuickSessionIntent,
   safeErrorToToast,
@@ -28,10 +27,14 @@ import {
   type ProjectSettingsItemId,
   type TuiSemanticAction,
 } from "@station/dashboard-core";
-import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
+import { scrollDashboard } from "@station/dashboard-core";
 import { validateForkSessionCreate, validateNewSessionCreate } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
-import type { TuiHandleKeyResult, TuiStore } from "@station/dashboard-core";
+import type {
+  TuiControlIntent,
+  TuiHandleKeyResult,
+  TuiStore,
+} from "@station/dashboard-core";
 import {
   agentWorktreePaneId,
   projectPaneId,
@@ -46,6 +49,10 @@ export type StationKeyOutcome =
   | { kind: "handled" }
   /** The machine reported dismiss/exit intent; the router closes STATION mode. */
   | { kind: "close-overlay" }
+  /** A project-shell intent resolved to Station's native pane outcome. */
+  | { kind: "open-pane"; target: OpenPaneTarget }
+  /** A Quick Session intent resolved to Station's managed create outcome. */
+  | { kind: "launch-new-session"; target: Extract<QuickSessionSubmitTarget, { kind: "submit" }> }
   /** No dashboard vocabulary for this sequence; swallowed, never dispatched. */
   | { kind: "unmapped" };
 
@@ -60,25 +67,54 @@ export function handleStationSequence(store: StoreApi<TuiStore>, sequence: strin
   if (key === undefined) {
     return { kind: "unmapped" };
   }
-  return outcomeForResult(store.getState().handleKey(key));
+  return outcomeForResult(store, store.getState().handleKey(key));
 }
 
 export function dispatchStationKey(store: StoreApi<TuiStore>, key: TuiKey): StationKeyOutcome {
-  return outcomeForResult(store.getState().handleKey(key));
+  return outcomeForResult(store, store.getState().handleKey(key));
 }
 
 export function dispatchStationAction(
   store: StoreApi<TuiStore>,
   action: TuiSemanticAction,
 ): StationKeyOutcome {
-  return outcomeForResult(store.getState().handleAction(action));
+  return outcomeForResult(store, store.getState().handleAction(action));
 }
 
-function outcomeForResult(result: TuiHandleKeyResult): StationKeyOutcome {
+function outcomeForResult(
+  store: StoreApi<TuiStore>,
+  result: TuiHandleKeyResult,
+): StationKeyOutcome {
   if (result.dismissPopup || result.exitCode !== undefined) {
     return { kind: "close-overlay" };
   }
-  return { kind: "handled" };
+  return result.controlIntent === undefined
+    ? { kind: "handled" }
+    : outcomeForControlIntent(store, result.controlIntent);
+}
+
+function outcomeForControlIntent(
+  store: StoreApi<TuiStore>,
+  intent: TuiControlIntent,
+): StationKeyOutcome {
+  switch (intent.type) {
+    case "projectShell.open": {
+      const target = resolveProjectPaneTarget(store, intent.projectId);
+      return target === undefined ? { kind: "handled" } : { kind: "open-pane", target };
+    }
+    case "quickSession.create": {
+      const target = resolveQuickSessionSubmit(store, intent.projectId);
+      return target.kind === "submit"
+        ? { kind: "launch-new-session", target }
+        : { kind: "handled" };
+    }
+    default:
+      return assertNeverControlIntent(intent);
+  }
+}
+
+function assertNeverControlIntent(intent: never): never {
+  throw new Error(`Unhandled Station control intent: ${JSON.stringify(intent)}`);
 }
 
 /**
@@ -191,12 +227,12 @@ export function resolveKeyFocusedRowAgentTarget(
   if (state.snapshot === undefined || deriveTuiInputMode(state) !== "dashboard") {
     return { kind: "none" };
   }
-  const focusedRowId = state.focusedRowId;
-  if (focusedRowId === undefined) {
+  const focus = state.dashboardFocus;
+  if (focus?.kind !== "session") {
     return { kind: "none" };
   }
   const item = selectDashboardItems(state.snapshot, state).find(
-    (candidate) => candidate.type === "session" && candidate.row.id === focusedRowId,
+    (candidate) => candidate.type === "session" && candidate.row.id === focus.sessionId,
   );
   if (
     item === undefined ||
@@ -206,7 +242,7 @@ export function resolveKeyFocusedRowAgentTarget(
   ) {
     return { kind: "none" };
   }
-  return resolveRowAgentTarget(store, focusedRowId);
+  return resolveRowAgentTarget(store, focus.sessionId);
 }
 
 /**
@@ -226,7 +262,7 @@ export type NewSessionSubmitTarget =
  */
 export function resolveNewSessionSubmit(
   store: StoreApi<TuiStore>,
-  action: TuiSemanticAction = { type: "newSession.activate", actionId: "review.create" },
+  action: TuiSemanticAction,
 ): NewSessionSubmitTarget {
   const state = store.getState();
   if (state.screen.name !== "newSession" || action.type !== "newSession.activate") {
@@ -319,7 +355,7 @@ export function resolveKeyForkSessionSubmit(
 }
 
 /**
- * Resolve a project header's quick-session click to its create target. Uses
+ * Resolve a project header's quick-session activation to its create target. Uses
  * the project's default harness and a generated branch name — no wizard, no
  * review screen. Blocked projects preserve their provider error as a toast;
  * only a missing or stale project is an inert miss.
@@ -348,20 +384,9 @@ export function resolveQuickSessionSubmit(
 }
 
 /**
- * Open the project default-agent picker. Pure store mutation — no router
- * outcome. Absent or unavailable projects are silently ignored.
- */
-export function openDefaultAgentPickerForProject(
-  store: StoreApi<TuiStore>,
-  projectId: string,
-): void {
-  store.setState(openProjectDefaultAgentPicker(store.getState(), projectId));
-}
-
-/**
  * Station mouse extension: clicking a left-list item selects it and drops into
  * its detail pane. No single keyboard key maps to this (the keyboard path is
- * arrow-move then enter), so it lives here like the header-collapse toggle.
+ * arrow-move then enter), so the pointer adapter owns this direct-focus helper.
  */
 export function focusProjectSettingsItem(
   store: StoreApi<TuiStore>,
@@ -432,22 +457,6 @@ export function resolveProjectPaneTarget(
     return undefined;
   }
   return { paneId: projectPaneId(project.id), cwd: project.root, role: "shell" };
-}
-
-/**
- * Station mouse extension: direct project collapse toggle (apps/tui's
- * keyboard path goes through the C prompt; the visual notes specify
- * header-click toggle). Same state mutation the collapse screen performs.
- */
-export function toggleProjectCollapsed(store: StoreApi<TuiStore>, projectId: string): void {
-  const state = store.getState();
-  const collapsedProjectIds = new Set(state.collapsedProjectIds);
-  if (collapsedProjectIds.has(projectId)) {
-    collapsedProjectIds.delete(projectId);
-  } else {
-    collapsedProjectIds.add(projectId);
-  }
-  store.setState(clampDashboardStateScroll({ ...state, collapsedProjectIds }));
 }
 
 /** Wheel/indicator scrolling via the shared scroll math. */

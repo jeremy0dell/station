@@ -182,6 +182,75 @@ describe("primary workflow interaction parity", () => {
       expect(newSessionIntentForAction(edit, id).type, id).not.toBe("none");
     }
   });
+
+  it.each([
+    ["primary", 0],
+    ["shell", 1],
+    ["quickSession", 2],
+    ["defaultAgent", 3],
+  ] as const)("converges project-header %s pointer semantics with focused Enter", (actionId, rights) => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const semantic = handleTuiAction(
+      base,
+      { type: "dashboard.projectHeader.activate", projectId: "web", actionId },
+      context,
+    );
+
+    let keyboardState = handleTuiKey(base, { input: "", downArrow: true }, context).state;
+    for (let index = 0; index < rights; index += 1) {
+      keyboardState = handleTuiKey(keyboardState, { input: "", rightArrow: true }, context).state;
+    }
+    const keyboard = handleTuiKey(keyboardState, { input: "\r", return: true }, context);
+
+    expect(semantic.state.dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "web",
+      control: actionId,
+    });
+    expect(semantic.state.screen).toEqual(keyboard.state.screen);
+    expect(semantic.state.collapsedProjectIds).toEqual(keyboard.state.collapsedProjectIds);
+    expect(semantic.controlIntent).toEqual(keyboard.controlIntent);
+  });
+
+  it("defers Quick Session availability to the renderer consumer and keeps stale targets inert", () => {
+    const snapshot = createDashboardSnapshot();
+    const unavailable = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "web"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const state = createInitialTuiState({ initialSnapshot: unavailable });
+    const blocked = handleTuiAction(
+      state,
+      {
+        type: "dashboard.projectHeader.activate",
+        projectId: "web",
+        actionId: "quickSession",
+      },
+      context,
+    );
+    expect(blocked.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(blocked.state.dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "web",
+      control: "quickSession",
+    });
+    expect(blocked.state.toasts).toEqual([]);
+
+    const stale = handleTuiAction(
+      state,
+      {
+        type: "dashboard.projectHeader.activate",
+        projectId: "ghost",
+        actionId: "shell",
+      },
+      context,
+    );
+    expect(stale).toEqual({ state });
+  });
 });
 
 function addProjectFocus(state: ReturnType<typeof createInitialTuiState>): string | undefined {

@@ -10,6 +10,7 @@ import {
   paneLaunchForkSessionOutcome,
   paneLaunchManagedOutcome,
   paneLaunchNewSessionOutcome,
+  paneOpenOutcome,
   type MouseBindings,
   type RouteOutcome,
   type StationCommandId,
@@ -331,24 +332,7 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
         return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
       }
       if (outcome.kind === "open-pane") {
-        // Explicit assignments keep command/args/worktreeId absent (not set to
-        // undefined) on the shell path — exactOptionalPropertyTypes.
-        const paneOpen: Extract<RouteOutcome, { kind: "pane-open" }> = {
-          kind: "pane-open",
-          paneId: outcome.paneId,
-          cwd: outcome.cwd,
-          role: outcome.role,
-        };
-        if (outcome.command !== undefined) {
-          paneOpen.command = outcome.command;
-        }
-        if (outcome.args !== undefined) {
-          paneOpen.args = outcome.args;
-        }
-        if (outcome.worktreeId !== undefined) {
-          paneOpen.worktreeId = outcome.worktreeId;
-        }
-        return paneOpen;
+        return paneOpenOutcome(outcome);
       }
       if (outcome.kind === "launch-managed") {
         return paneLaunchManagedOutcome(outcome);

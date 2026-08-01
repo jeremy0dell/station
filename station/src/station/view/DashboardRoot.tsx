@@ -41,7 +41,7 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
   const searchQuery = useStore(store, (state) => state.searchQuery);
   const collapsedProjectIds = useStore(store, (state) => state.collapsedProjectIds);
   const scrollOffset = useStore(store, (state) => state.scrollOffset);
-  const focusedRowId = useStore(store, (state) => state.focusedRowId);
+  const dashboardFocus = useStore(store, (state) => state.dashboardFocus);
   const selection = useStore(store, (state) => state.selection);
   const localRows = useStore(store, (state) => state.localRows);
   const liveWidgets = useStore(store, (state) => state.widgets);
@@ -125,7 +125,7 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
             terminalRows: rows,
             localRows,
             selection,
-            ...(focusedRowId === undefined ? {} : { focusedRowId }),
+            ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
           }}
           columns={columns}
         />

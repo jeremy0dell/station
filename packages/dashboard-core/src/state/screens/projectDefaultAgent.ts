@@ -35,6 +35,7 @@ export function handleProjectDefaultAgentKey(state: TuiState, key: TuiKey): TuiT
   return { state };
 }
 
-function closeProjectDefaultAgent(state: TuiState): TuiState {
+export function closeProjectDefaultAgent(state: TuiState): TuiState {
+  // Preserve dashboardFocus beneath the picker so every safe return restores the exact header segment.
   return { ...state, screen: { name: "dashboard" } };
 }

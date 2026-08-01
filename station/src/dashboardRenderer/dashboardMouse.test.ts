@@ -17,10 +17,8 @@ import {
   noProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import {
-  type DashboardMouseEffects,
-  routeDashboardMouse as routeDashboardMouseWithEffects,
-} from "./dashboardMouse.js";
+import type { DashboardRendererEffects } from "./dashboardEffects.js";
+import { routeDashboardMouse as routeDashboardMouseWithEffects } from "./dashboardMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -33,7 +31,7 @@ const LEFT_DOWN: StationMouseEvent = {
 const LEFT_UP: StationMouseEvent = { ...LEFT_DOWN, type: "up" };
 const RIGHT_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "right", rawButton: 2 };
 const MIDDLE_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "middle", rawButton: 1 };
-const TEST_EFFECTS: DashboardMouseEffects = {
+const TEST_EFFECTS: DashboardRendererEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
@@ -79,7 +77,7 @@ function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
   store: StoreApi<TuiStore>,
-  effects: DashboardMouseEffects = TEST_EFFECTS,
+  effects: DashboardRendererEffects = TEST_EFFECTS,
 ): void {
   routeDashboardMouseWithEffects(target, event, store, effects);
 }
@@ -171,6 +169,11 @@ describe("routeDashboardMouse", () => {
     routeDashboardMouse({ kind: "projectHeader", projectId: "station" }, LEFT_UP, store);
 
     expect([...store.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "primary",
+    });
     expect(store.getState().scrollOffset).toBeLessThan(99);
   });
 
@@ -364,6 +367,11 @@ describe("routeDashboardMouse", () => {
       "/Users/example/Developer/station",
       "/Users/example/.worktrees/station/pty-buffer",
     ]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
+    });
 
     routeDashboardMouse(
       { kind: "quickSessionForProject", projectId: "station" },
@@ -374,6 +382,11 @@ describe("routeDashboardMouse", () => {
     await waitFor(() =>
       fixture.service.dispatched.some((command) => command.type === "session.create"),
     );
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
     expect(
       fixture.service.dispatched.find((command) => command.type === "session.create"),
     ).toMatchObject({
@@ -393,6 +406,65 @@ describe("routeDashboardMouse", () => {
     expect(store.getState().screen).toMatchObject({
       name: "projectDefaultAgent",
       projectId: "station",
+    });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "defaultAgent",
+    });
+  });
+
+  it("resolves blocked Quick Session availability once at the standalone consumer", () => {
+    const snapshot = manyProjectsSnapshot();
+    const unavailable: StationSnapshot = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "station"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const store = makeStore(unavailable);
+
+    routeDashboardMouse(
+      { kind: "quickSessionForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+    );
+
+    expect(store.getState().localRows.pendingCreate).toEqual([]);
+    expect(store.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "The worktree provider is unavailable.",
+    });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
+  });
+
+  it("retains shell focus when the renderer effect reports a recoverable failure", () => {
+    const store = makeStore();
+    const effects: DashboardRendererEffects = {
+      openShell: () => {
+        throw new Error("shell unavailable");
+      },
+      openUrl: () => {},
+    };
+
+    expect(() =>
+      routeDashboardMouse(
+        { kind: "openShellForProject", projectId: "station" },
+        LEFT_DOWN,
+        store,
+        effects,
+      ),
+    ).toThrow(/shell unavailable/);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
     });
   });
 

@@ -1,4 +1,4 @@
-import type { SessionId } from "@station/contracts";
+import type { ProjectId, SessionId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import {
   type DashboardViewportItem,
@@ -8,9 +8,18 @@ import type { DashboardSessionRow } from "../selectors/selectors.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import type { TuiTransition } from "./transition.js";
-import type { TuiState } from "./types.js";
+import type { DashboardFocus, ProjectHeaderControl, TuiState } from "./types.js";
 
 type SessionItem = Extract<DashboardViewportItem, { type: "session" }>;
+type ProjectHeaderItem = Extract<DashboardViewportItem, { type: "projectHeader" }>;
+type FocusableItem = SessionItem | ProjectHeaderItem;
+
+const PROJECT_HEADER_CONTROLS: readonly ProjectHeaderControl[] = [
+  "primary",
+  "shell",
+  "quickSession",
+  "defaultAgent",
+];
 
 /** Focuses the visible dashboard row for a canonical session identity. */
 export function focusDashboardSession(state: TuiState, sessionId: SessionId): TuiState {
@@ -19,35 +28,65 @@ export function focusDashboardSession(state: TuiState, sessionId: SessionId): Tu
   }
   const items = selectDashboardItems(state.snapshot, state);
   const index = items.findIndex((item) => item.type === "session" && item.row.id === sessionId);
-  return index === -1 ? clearDashboardFocus(state) : focusItem(state, items, index);
+  return index === -1
+    ? clearDashboardFocus(state)
+    : focusItem(state, items, index, { kind: "session", sessionId });
 }
 
-/** Removes transient dashboard row focus without disturbing other view state. */
+/** Focuses one control on a currently visible project header. */
+export function focusDashboardProjectHeader(
+  state: TuiState,
+  projectId: ProjectId,
+  control: ProjectHeaderControl,
+): TuiState {
+  if (state.snapshot === undefined) {
+    return state;
+  }
+  const items = selectDashboardItems(state.snapshot, state);
+  const index = items.findIndex(
+    (item) => item.type === "projectHeader" && item.project.id === projectId,
+  );
+  return index === -1
+    ? state
+    : focusItem(state, items, index, { kind: "projectHeader", projectId, control });
+}
+
+/** Removes transient dashboard focus without disturbing other view state. */
 export function clearDashboardFocus(state: TuiState): TuiState {
   const cleared = { ...state };
-  delete cleared.focusedRowId;
+  delete cleared.dashboardFocus;
   return cleared;
 }
 
-// Cursor rule (D9): the cursor is where you are — ↑↓/⇥ move it and the viewport
-// follows; jump keys and mouse clicks still teleport-and-activate directly.
+// Vertical dashboard traversal includes project headers, while row chooser
+// traversal deliberately uses moveDashboardSessionFocus to remain session-only.
 export function moveDashboardFocus(state: TuiState, delta: -1 | 1): TuiState {
-  if (state.snapshot === undefined) {
-    return scrollDashboard(state, delta);
+  return moveFocus(state, delta, "dashboard");
+}
+
+/** Moves remove/rename/fork choice focus across sessions without visiting headers. */
+export function moveDashboardSessionFocus(state: TuiState, delta: -1 | 1): TuiState {
+  return moveFocus(state, delta, "session");
+}
+
+/** Moves within a focused project header, clamping at both ends without wrapping. */
+export function moveDashboardFocusHorizontal(state: TuiState, delta: -1 | 1): TuiState {
+  const focus = state.dashboardFocus;
+  if (focus?.kind !== "projectHeader" || state.snapshot === undefined) {
+    return state;
   }
   const items = selectDashboardItems(state.snapshot, state);
-  const focusable = focusableIndexes(items);
-  if (focusable.length === 0) {
-    // No session rows (e.g. all projects empty) — arrows fall back to scrolling.
-    return scrollDashboard(state, delta);
+  const index = focusedItemIndex(items, focus);
+  if (index === undefined) {
+    return state;
   }
-  const current = focusedItemIndex(items, state);
-  if (current === undefined) {
-    return focusItem(state, items, enterFocusIndex(state, items, focusable, delta));
+  const position = PROJECT_HEADER_CONTROLS.indexOf(focus.control);
+  const nextPosition = Math.min(PROJECT_HEADER_CONTROLS.length - 1, Math.max(0, position + delta));
+  const control = PROJECT_HEADER_CONTROLS[nextPosition];
+  if (control === undefined || control === focus.control) {
+    return state;
   }
-  const position = focusable.indexOf(current);
-  const next = focusable[position + delta] ?? current;
-  return focusItem(state, items, next);
+  return focusItem(state, items, index, { ...focus, control });
 }
 
 export function focusNextNeedsMe(state: TuiState): TuiState {
@@ -55,14 +94,14 @@ export function focusNextNeedsMe(state: TuiState): TuiState {
     return state;
   }
   const items = selectDashboardItems(state.snapshot, state);
-  const candidates = focusableIndexes(items).filter((index) => {
+  const candidates = focusableIndexes(items, "session").filter((index) => {
     const item = items[index] as SessionItem;
     return rowNeedsYou(item.row);
   });
   if (candidates.length === 0) {
     return state;
   }
-  const current = focusedItemIndex(items, state) ?? -1;
+  const current = focusedItemIndex(items, state.dashboardFocus) ?? -1;
   const next = candidates.find((index) => index > current) ?? candidates[0];
   return next === undefined ? state : focusItem(state, items, next);
 }
@@ -72,70 +111,168 @@ export function activateFocusedDashboardRow(state: TuiState): TuiTransition {
   return row === undefined ? { state } : activateDashboardRow(state, row);
 }
 
+/** Returns the focused visible project-header identity for activation. */
+export function focusedProjectHeaderControl(
+  state: TuiState,
+): Extract<DashboardFocus, { kind: "projectHeader" }> | undefined {
+  const focus = state.dashboardFocus;
+  if (focus?.kind !== "projectHeader" || state.snapshot === undefined) {
+    return undefined;
+  }
+  const items = selectDashboardItems(state.snapshot, state);
+  return focusedItemIndex(items, focus) === undefined ? undefined : focus;
+}
+
 /**
  * The focused row only when it is currently committable: present in the filtered
  * view (not collapsed or searched away) and not mid-operation. The choose-row
  * trio's ↵ resolves through this so it cannot act on a row the slot path and
- * dashboard activation both refuse — a pending row, or one filtered out of the
- * view (viewport scroll does not unfocus; the cursor rule keeps it committable).
+ * dashboard activation both refuse.
  */
 export function focusedSelectableRow(state: TuiState): DashboardSessionRow | undefined {
-  if (state.snapshot === undefined) {
+  if (state.snapshot === undefined || state.dashboardFocus?.kind !== "session") {
     return undefined;
   }
   const items = selectDashboardItems(state.snapshot, state);
-  const index = focusedItemIndex(items, state);
-  const item = index === undefined ? undefined : (items[index] as SessionItem);
-  if (item === undefined || item.pendingRemove !== undefined || item.pendingStart !== undefined) {
+  const index = focusedItemIndex(items, state.dashboardFocus);
+  const item = index === undefined ? undefined : items[index];
+  if (
+    item?.type !== "session" ||
+    item.pendingRemove !== undefined ||
+    item.pendingStart !== undefined
+  ) {
     return undefined;
   }
   return item.row;
+}
+
+/**
+ * Preserves stable focus across dashboard list-shape changes, then falls forward
+ * from the old item position before falling back to the preceding focusable item.
+ */
+export function reconcileDashboardFocus(previous: TuiState, next: TuiState): TuiState {
+  if (next.snapshot === undefined) {
+    return clearDashboardFocus(withClampedScroll(next, 0));
+  }
+  const nextItems = selectDashboardItems(next.snapshot, next);
+  const nextFocusable = focusableIndexes(nextItems, "dashboard");
+  if (!hasFocusableIndexes(nextFocusable)) {
+    return clearDashboardFocus(withClampedScroll(next, nextItems.length));
+  }
+
+  const focus = previous.dashboardFocus;
+  if (focus === undefined) {
+    return withClampedScroll(next, nextItems.length);
+  }
+  const retainedIndex = focusedItemIndex(nextItems, focus);
+  if (retainedIndex !== undefined) {
+    return focusItem(next, nextItems, retainedIndex, focus);
+  }
+
+  const previousItems =
+    previous.snapshot === undefined ? [] : selectDashboardItems(previous.snapshot, previous);
+  const previousIndex = focusedItemIndex(previousItems, focus);
+  if (previousIndex === undefined) {
+    return clearDashboardFocus(withClampedScroll(next, nextItems.length));
+  }
+  const following = nextFocusable.find((index) => index >= previousIndex);
+  return focusItem(next, nextItems, following ?? lastFocusableIndex(nextFocusable));
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {
   return row.session.status.value === "needs_attention" || row.session.status.value === "stuck";
 }
 
-function focusableIndexes(items: readonly DashboardViewportItem[]): number[] {
-  return items.flatMap((item, index) => (item.type === "session" ? [index] : []));
+function moveFocus(state: TuiState, delta: -1 | 1, mode: "dashboard" | "session"): TuiState {
+  if (state.snapshot === undefined) {
+    return scrollDashboard(state, delta);
+  }
+  const items = selectDashboardItems(state.snapshot, state);
+  const focusable = focusableIndexes(items, mode);
+  if (!hasFocusableIndexes(focusable)) {
+    return scrollDashboard(state, delta);
+  }
+  const current = focusedItemIndex(items, state.dashboardFocus);
+  if (current === undefined) {
+    return focusItem(state, items, enterFocusIndex(state, items, focusable, delta));
+  }
+  const currentPosition = focusable.indexOf(current);
+  if (currentPosition === -1) {
+    return focusItem(state, items, enterFocusIndex(state, items, focusable, delta));
+  }
+  const next = focusable[currentPosition + delta] ?? current;
+  return next === current ? state : focusItem(state, items, next);
+}
+
+function focusableIndexes(
+  items: readonly DashboardViewportItem[],
+  mode: "dashboard" | "session",
+): number[] {
+  return items.flatMap((item, index) =>
+    item.type === "session" || (mode === "dashboard" && item.type === "projectHeader")
+      ? [index]
+      : [],
+  );
 }
 
 function focusedItemIndex(
   items: readonly DashboardViewportItem[],
-  state: TuiState,
+  focus: DashboardFocus | undefined,
 ): number | undefined {
-  if (state.focusedRowId === undefined) {
+  if (focus === undefined) {
     return undefined;
   }
-  const index = items.findIndex(
-    (item) => item.type === "session" && item.row.id === state.focusedRowId,
-  );
+  const index = items.findIndex((item) => focusMatchesItem(focus, item));
   return index === -1 ? undefined : index;
 }
 
-// With no cursor yet (or a stale one), enter the list where the user is
-// looking: the first/last session row inside the current viewport.
+function focusMatchesItem(focus: DashboardFocus, item: DashboardViewportItem): boolean {
+  switch (focus.kind) {
+    case "session":
+      return item.type === "session" && item.row.id === focus.sessionId;
+    case "projectHeader":
+      return item.type === "projectHeader" && item.project.id === focus.projectId;
+  }
+}
+
+// With no cursor yet (or a stale one), enter where the user is looking: the
+// first/last focusable item inside the current viewport.
 function enterFocusIndex(
   state: TuiState,
   items: readonly DashboardViewportItem[],
-  focusable: readonly number[],
+  focusable: readonly [number, ...number[]],
   delta: -1 | 1,
 ): number {
   const { bodyRows, offset } = viewportWindow(state, items.length);
   const visible = focusable.filter((index) => index >= offset && index < offset + bodyRows);
-  const fallback = delta > 0 ? focusable[0] : focusable[focusable.length - 1];
-  const entered = delta > 0 ? visible[0] : visible[visible.length - 1];
-  return entered ?? fallback ?? 0;
+  const fallback = delta > 0 ? focusable[0] : lastFocusableIndex(focusable);
+  const entered = delta > 0 ? visible[0] : visible.at(-1);
+  return entered ?? fallback;
+}
+
+function hasFocusableIndexes(
+  indexes: readonly number[],
+): indexes is readonly [number, ...number[]] {
+  return indexes.length > 0;
+}
+
+function lastFocusableIndex(indexes: readonly [number, ...number[]]): number {
+  let last = indexes[0];
+  for (const index of indexes) {
+    last = index;
+  }
+  return last;
 }
 
 function focusItem(
   state: TuiState,
   items: readonly DashboardViewportItem[],
   index: number,
+  focus?: DashboardFocus,
 ): TuiState {
   const item = items[index];
-  if (item === undefined || item.type !== "session") {
-    return { ...state };
+  if (item === undefined || (item.type !== "session" && item.type !== "projectHeader")) {
+    return state;
   }
   const { bodyRows, offset } = viewportWindow(state, items.length);
   let scrollOffset = offset;
@@ -144,7 +281,22 @@ function focusItem(
   } else if (index >= offset + bodyRows) {
     scrollOffset = index - bodyRows + 1;
   }
-  return { ...state, focusedRowId: item.row.id, scrollOffset };
+  return {
+    ...state,
+    dashboardFocus: focus ?? focusForItem(item),
+    scrollOffset,
+  };
+}
+
+function focusForItem(item: FocusableItem): DashboardFocus {
+  return item.type === "session"
+    ? { kind: "session", sessionId: item.row.id }
+    : { kind: "projectHeader", projectId: item.project.id, control: "primary" };
+}
+
+function withClampedScroll(state: TuiState, itemCount: number): TuiState {
+  const { offset } = viewportWindow(state, itemCount);
+  return offset === state.scrollOffset ? state : { ...state, scrollOffset: offset };
 }
 
 function viewportWindow(state: TuiState, itemCount: number): { bodyRows: number; offset: number } {
