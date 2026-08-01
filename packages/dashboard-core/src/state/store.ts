@@ -31,8 +31,10 @@ import {
   type TuiFocusTarget,
 } from "./operations/runtimeCommands.js";
 import { createInitialTuiState, replaceSnapshot } from "./screen.js";
+import { applyAddProjectFolderRefreshed } from "./screens/addProjectScreen.js";
 import { submitQuickSession } from "./screens/quickSession.js";
 import { attachTuiSnapshotSource, type TuiSnapshotSource } from "./sourceBridge.js";
+import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
 import { handleTuiKey, type TuiControlIntent, type TuiTransition } from "./transition.js";
 import type { CreateInitialTuiStateOptions, TuiState } from "./types.js";
@@ -134,15 +136,21 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
       },
     }),
     start: (): (() => void) => {
+      let stopSnapshotUpdates: () => void;
       if (source !== undefined) {
-        return attachTuiSnapshotSource(store, source);
-      }
-      if (clientRuntime === undefined) {
+        stopSnapshotUpdates = attachTuiSnapshotSource(store, source);
+      } else if (clientRuntime === undefined) {
         throw new Error("createTuiStore requires a runtime when no source is provided.");
+      } else {
+        clientRuntime.start();
+        stopSnapshotUpdates = () => {
+          void clientRuntime.stop();
+        };
       }
-      clientRuntime.start();
+      const stopDirectoryPolling = attachAddProjectDirectoryPolling(store, folderService);
       return () => {
-        void clientRuntime.stop();
+        stopDirectoryPolling();
+        stopSnapshotUpdates();
       };
     },
     handleKey: (key): TuiHandleKeyResult =>
@@ -208,6 +216,78 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
   }));
 
   return store;
+}
+
+function attachAddProjectDirectoryPolling(
+  store: StoreApi<TuiStore>,
+  folderService: TuiFolderService,
+): () => void {
+  let activePath: string | undefined;
+  let generation = 0;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const clearTimer = (): void => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+  };
+
+  const schedule = (path: string, token: number): void => {
+    timer = setTimeout(() => {
+      timer = undefined;
+      void poll(path, token);
+    }, ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+  };
+
+  const poll = async (path: string, token: number): Promise<void> => {
+    try {
+      const result = await folderService.readDirectory(path);
+      // Navigation and teardown invalidate in-flight reads before they can update the chooser.
+      if (!stopped && token === generation) {
+        store.setState(applyAddProjectFolderRefreshed(store.getState(), result));
+      }
+    } catch {
+      // A transient filesystem failure leaves the current listing intact and retries normally.
+    } finally {
+      if (
+        !stopped &&
+        token === generation &&
+        activeAddProjectDirectory(store.getState()) === path
+      ) {
+        schedule(path, token);
+      }
+    }
+  };
+
+  const sync = (): void => {
+    const nextPath = activeAddProjectDirectory(store.getState());
+    if (nextPath === activePath) {
+      return;
+    }
+    activePath = nextPath;
+    generation += 1;
+    clearTimer();
+    if (nextPath !== undefined) {
+      schedule(nextPath, generation);
+    }
+  };
+
+  const unsubscribe = store.subscribe(sync);
+  sync();
+  return () => {
+    stopped = true;
+    generation += 1;
+    clearTimer();
+    unsubscribe();
+  };
+}
+
+function activeAddProjectDirectory(state: TuiState): string | undefined {
+  return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
+    ? state.screen.flow.currentPath
+    : undefined;
 }
 
 function applyDashboardFocusState(current: TuiStore, next: TuiState): TuiStore {

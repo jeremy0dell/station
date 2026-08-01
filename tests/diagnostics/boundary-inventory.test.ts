@@ -53,6 +53,10 @@ const setTimeoutAllowlist = new Map([
     "Short failed-create row expiry is local TUI operation feedback, isolated from observer command timeout plumbing.",
   ],
   [
+    "packages/dashboard-core/src/state/store.ts",
+    "Visible Add Project directory polling is a TUI-local filesystem refresh, not observer command timeout or retry plumbing.",
+  ],
+  [
     "apps/cli/src/commands/tui.ts",
     "Short popup-mode startup defer lets the TUI render a cached snapshot before requesting a nonblocking reconcile.",
   ],

@@ -54,19 +54,14 @@ const IGNORED_DIRECTORY_NAMES = new Set([
 ]);
 
 export function createNodeFolderService(): TuiFolderService {
-  const cache = new Map<string, TuiFolderReadResult>();
   const home = homedir();
   return {
     cwd: () => process.cwd(),
     homeDir: () => home,
     readDirectory: async (path) => {
       const resolvedPath = resolvePath(path, home);
-      const cached = cache.get(resolvedPath);
-      if (cached !== undefined) {
-        return cached;
-      }
       const entries = await visibleDirectoryEntries(resolvedPath);
-      const result: TuiFolderReadResult = {
+      return {
         path: resolvedPath,
         entries: entries
           .map((entry) => ({
@@ -76,11 +71,6 @@ export function createNodeFolderService(): TuiFolderService {
           }))
           .sort((left, right) => left.name.localeCompare(right.name)),
       };
-      cache.set(resolvedPath, result);
-      if (cache.size > 50) {
-        cache.delete(cache.keys().next().value as string);
-      }
-      return result;
     },
     searchDirectories: async (query) => searchDirectories(query, { cwd: process.cwd(), home }),
     reviewFolder: async (path) => {

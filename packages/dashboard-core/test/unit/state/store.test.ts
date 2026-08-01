@@ -6,13 +6,20 @@ import type {
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
-import type { TuiFolderService } from "@station/dashboard-core";
+import type {
+  TuiFolderEntry,
+  TuiFolderReadResult,
+  TuiFolderService,
+  TuiSnapshotSource,
+} from "@station/dashboard-core";
 import {
+  ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS,
   createTuiStore,
   openProjectDefaultAgentPicker,
+  selectedAddProjectFolderRow,
   type TuiStore,
 } from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
@@ -23,6 +30,10 @@ import {
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 describe("TUI store", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("applies semantic actions through the same transition executor as keys", () => {
     const snapshot = createNoProjectsSnapshot();
     const keyStore = createTuiStore({
@@ -490,6 +501,117 @@ describe("TUI store", () => {
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
 
+  it("refreshes only the visible project directory and preserves selection by path", async () => {
+    const snapshot = createNoProjectsSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    let entries = folderEntries("alpha", "station");
+    let failNextRead = false;
+    const reads: string[] = [];
+    const folderService = mutableFolderService(
+      reads,
+      (path) => {
+        if (failNextRead) {
+          failNextRead = false;
+          throw new Error("transient directory read failure");
+        }
+        return { path, entries };
+      },
+      "/Users/example/Developer",
+    );
+    const store = createTuiStore({
+      service,
+      source: staticSnapshotSource(snapshot),
+      initialSnapshot: snapshot,
+      folderService,
+    });
+
+    store.getState().handleKey({ input: "A" });
+    store.getState().handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.getState()) === "choose");
+    store.getState().handleKey({ input: "", downArrow: true });
+    store.getState().handleKey({ input: "", downArrow: true });
+    expect(selectedAddProjectPath(store.getState())).toBe("/Users/example/Developer/station");
+
+    vi.useFakeTimers();
+    const stop = store.getState().start();
+    entries = folderEntries("aardvark", "alpha", "station");
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+
+    expect(addProjectEntryNames(store.getState())).toEqual(["aardvark", "alpha", "station"]);
+    expect(selectedAddProjectPath(store.getState())).toBe("/Users/example/Developer/station");
+
+    let notifications = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1;
+    });
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+    expect(notifications).toBe(0);
+
+    entries = folderEntries("aardvark", "renamed");
+    failNextRead = true;
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+    expect(addProjectEntryNames(store.getState())).toEqual(["aardvark", "alpha", "station"]);
+    expect(notifications).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+    expect(addProjectEntryNames(store.getState())).toEqual(["aardvark", "renamed"]);
+    expect(selectedAddProjectPath(store.getState())).toBe("/Users/example/Developer/renamed");
+
+    store.getState().handleKey({ input: "", escape: true });
+    const readsAfterClose = reads.length;
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS * 2);
+    expect(reads).toHaveLength(readsAfterClose);
+
+    unsubscribe();
+    stop();
+  });
+
+  it("does not overlap polls or apply a late result after directory navigation", async () => {
+    const snapshot = createNoProjectsSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    const rootPath = "/Users/example/Developer/station";
+    const childPath = `${rootPath}/child`;
+    const latePoll = deferred<TuiFolderReadResult>();
+    const reads: string[] = [];
+    const folderService = mutableFolderService(reads, (path) => {
+      if (path === rootPath && reads.filter((read) => read === rootPath).length > 1) {
+        return latePoll.promise;
+      }
+      return {
+        path,
+        entries: path === rootPath ? [folderEntry("child", childPath)] : [],
+      };
+    });
+    const store = createTuiStore({
+      service,
+      source: staticSnapshotSource(snapshot),
+      initialSnapshot: snapshot,
+      folderService,
+    });
+
+    store.getState().handleKey({ input: "A" });
+    store.getState().handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.getState()) === "choose");
+
+    vi.useFakeTimers();
+    const stop = store.getState().start();
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS * 4);
+    expect(reads.filter((path) => path === rootPath)).toHaveLength(2);
+
+    store.getState().handleKey({ input: "", downArrow: true });
+    store.getState().handleKey({ input: "", rightArrow: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(activeAddProjectPath(store.getState())).toBe(childPath);
+
+    latePoll.resolve({ path: rootPath, entries: folderEntries("stale") });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(activeAddProjectPath(store.getState())).toBe(childPath);
+    expect(addProjectEntryNames(store.getState())).toEqual([]);
+
+    stop();
+  });
+
   it("opens the explicit first-project flow with Enter on an empty dashboard", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
@@ -751,6 +873,69 @@ function withTurnReadiness(snapshot: StationSnapshot): StationSnapshot {
         },
       };
     }),
+  };
+}
+
+function staticSnapshotSource(snapshot: StationSnapshot): TuiSnapshotSource {
+  return {
+    getState: () => ({ snapshot, connection: { state: "connected", since: Date.now() } }),
+    subscribe: () => () => {},
+  };
+}
+
+function mutableFolderService(
+  reads: string[],
+  readDirectory: (path: string) => TuiFolderReadResult | Promise<TuiFolderReadResult>,
+  cwd = "/Users/example/Developer/station",
+): TuiFolderService {
+  return {
+    cwd: () => cwd,
+    homeDir: () => "/Users/example",
+    parent: (path) => path.split("/").slice(0, -1).join("/") || "/",
+    readDirectory: async (path) => {
+      reads.push(path);
+      return readDirectory(path);
+    },
+    searchDirectories: async (query) => ({ query, entries: [], truncated: false }),
+    reviewFolder: async (path) => ({ selectedPath: path, id: "project", label: "project" }),
+  };
+}
+
+function folderEntries(...names: string[]): TuiFolderEntry[] {
+  return names.map((name) => folderEntry(name, `/Users/example/Developer/${name}`));
+}
+
+function folderEntry(name: string, path: string): TuiFolderEntry {
+  return { name, path, kind: "directory" };
+}
+
+function selectedAddProjectPath(state: TuiStore): string | undefined {
+  return selectedAddProjectFolderRow(state)?.path;
+}
+
+function activeAddProjectPath(state: TuiStore): string | undefined {
+  return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
+    ? state.screen.flow.currentPath
+    : undefined;
+}
+
+function addProjectEntryNames(state: TuiStore): string[] {
+  return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
+    ? state.screen.flow.entries.map((entry) => entry.name)
+    : [];
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve: (value) => resolvePromise?.(value),
   };
 }
 
