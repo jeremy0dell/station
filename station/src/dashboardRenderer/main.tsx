@@ -5,7 +5,7 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { createTuiStore } from "@station/dashboard-core";
+import { createTuiStore, legacySearchExperience } from "@station/dashboard-core";
 import {
   loadStationTuiConfig,
   startWidgetConfigWrites,
@@ -91,6 +91,7 @@ export async function runDashboardMain(): Promise<void> {
     source: client.state,
     service: client.service,
     clientLabel: "station",
+    dashboardSearchExperience: legacySearchExperience,
     onExit: exit,
     initialState: {
       widgets: tuiConfig.config?.widgets ?? [],

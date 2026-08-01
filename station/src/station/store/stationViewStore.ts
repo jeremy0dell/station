@@ -9,7 +9,11 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { StationClient } from "../../sources/types.js";
 import type { TuiFolderService } from "@station/dashboard-core";
-import { createTuiStore, type TuiStore } from "@station/dashboard-core";
+import {
+  createTuiStore,
+  legacySearchExperience,
+  type TuiStore,
+} from "@station/dashboard-core";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 
 export type CreateStationViewStoreOptions = {
@@ -28,6 +32,7 @@ export function createStationViewStore(
     source: client.state,
     service: client.service,
     clientLabel: "Station",
+    dashboardSearchExperience: legacySearchExperience,
     persistentPopup: true,
     onDismiss: async () => {
       // Dismiss is the router's job: the overlay layer maps the transition's

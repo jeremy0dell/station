@@ -11,6 +11,7 @@ import {
   moveDashboardFocusHorizontal,
 } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
+import type { DashboardSearchExperience } from "../experiences/dashboardSearch.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import {
@@ -31,6 +32,7 @@ export function handleDashboardKey(
   state: TuiState,
   key: TuiKey,
   context: TuiRuntimeContext,
+  dashboardSearchExperience: DashboardSearchExperience,
 ): TuiTransition {
   const mouseScrollDelta = mouseScrollDeltaForKey(key);
   if (mouseScrollDelta !== 0) {
@@ -44,7 +46,7 @@ export function handleDashboardKey(
     return { state };
   }
 
-  return handleDashboardAction(state, binding.action, context, key);
+  return handleDashboardAction(state, binding.action, context, key, dashboardSearchExperience);
 }
 
 function handleDashboardAction(
@@ -52,6 +54,7 @@ function handleDashboardAction(
   action: TuiDashboardAction,
   context: TuiRuntimeContext,
   key: TuiKey,
+  dashboardSearchExperience: DashboardSearchExperience,
 ): TuiTransition {
   switch (action) {
     case "tui.focus.up":
@@ -101,12 +104,7 @@ function handleDashboardAction(
         ? { state, dismissPopup: true }
         : { state };
     case "tui.search.open":
-      return {
-        state: {
-          ...state,
-          screen: { name: "search", value: "" },
-        },
-      };
+      return dashboardSearchExperience.open(state);
     case "tui.rename.open":
       return {
         state: {

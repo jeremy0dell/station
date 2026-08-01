@@ -19,6 +19,10 @@ import {
   focusDashboardSession as focusDashboardSessionState,
   reconcileDashboardFocus,
 } from "./dashboardFocus.js";
+import {
+  type DashboardSearchExperience,
+  legacySearchExperience,
+} from "./experiences/dashboardSearch.js";
 import type { TuiKey } from "./keys.js";
 import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
 import {
@@ -79,11 +83,13 @@ export type TuiStoreOptions = {
   onExit?: (code: number) => void;
   folderService?: TuiFolderService;
   clientLabel?: string;
+  dashboardSearchExperience?: DashboardSearchExperience;
 };
 
 export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
   const runtime = createRuntimeOptions(options);
   const folderService = options.folderService ?? createNodeFolderService();
+  const dashboardSearchExperience = options.dashboardSearchExperience ?? legacySearchExperience;
   const source = options.source;
   let store: StoreApi<TuiStore>;
   let operations: TuiLocalOperationRunner;
@@ -160,10 +166,15 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
         clientRuntime,
         runtime,
         operations,
-        handleTuiKey(get(), key, {
-          cwd: folderService.cwd(),
-          homeDir: folderService.homeDir(),
-        }),
+        handleTuiKey(
+          get(),
+          key,
+          {
+            cwd: folderService.cwd(),
+            homeDir: folderService.homeDir(),
+          },
+          dashboardSearchExperience,
+        ),
       ),
     handleAction: (action): TuiHandleKeyResult =>
       applyTransition(

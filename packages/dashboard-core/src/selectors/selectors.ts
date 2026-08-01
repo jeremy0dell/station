@@ -15,6 +15,7 @@ import {
   type TuiLocalRows,
 } from "../state/localRows.js";
 import type { TuiViewState } from "../state/types.js";
+import { matchesDashboardSessionSearch } from "./dashboardSearchProjection.js";
 
 export const SELECTION_KEYS = [
   "1",
@@ -101,14 +102,24 @@ export function isSelectionKey(input: string): input is SelectionKey {
 }
 
 export function selectProjectGroups(snapshot: StationSnapshot, state: TuiViewState) {
-  const query = normalizeSearch(state.searchQuery);
   const sessionRows = selectDashboardSessionRows(snapshot);
   return snapshot.projects.map((project) => {
     const collapsed = state.collapsedProjectIds.has(project.id);
     const matchingRows = sessionRows
       .filter((row) => row.worktree.projectId === project.id)
       .filter((row) =>
-        rowMatchesSearch(row, project, query, sessionRowDisplayTitle(row, state.localRows)),
+        matchesDashboardSessionSearch(
+          {
+            displayTitle: sessionRowDisplayTitle(row, state.localRows),
+            branch: row.worktree.branch,
+            projectLabel: project.label,
+            statusValue: row.session.status.value,
+            statusReason: row.session.status.reason,
+            harnessProvider: row.session.harness.provider,
+            terminalProvider: row.session.terminal?.provider,
+          },
+          state.searchQuery,
+        ),
       )
       .sort((left, right) => compareRows(left, right, state.localRows));
     return {
@@ -272,26 +283,6 @@ function compareRows(
   );
 }
 
-function rowMatchesSearch(
-  row: DashboardSessionRow,
-  project: ProjectView,
-  query: string,
-  displayTitle: string,
-): boolean {
-  if (query.length === 0) {
-    return true;
-  }
-  return [
-    displayTitle,
-    row.worktree.branch,
-    row.session.status.value,
-    row.session.status.reason,
-    row.session.harness.provider,
-    row.session.terminal?.provider,
-    project.label,
-  ].some((value) => normalizeSearch(value ?? "").includes(query));
-}
-
 function dashboardSessionRow(session: SessionView, source: WorktreeRow): DashboardSessionRow {
   return {
     id: session.id,
@@ -378,10 +369,6 @@ function sessionStatusPriority(value: SessionView["status"]["value"]): number {
     case "none":
       return 70;
   }
-}
-
-function normalizeSearch(value: string): string {
-  return value.trim().toLocaleLowerCase();
 }
 
 function configuredHarnesses(snapshot: StationSnapshot): readonly SnapshotHarness[] {
