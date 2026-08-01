@@ -7,6 +7,7 @@ import {
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
   truncateCells,
+  type DashboardFooterModel,
   type TuiState,
   type TuiStore,
 } from "@station/dashboard-core";
@@ -29,10 +30,23 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
   });
 
   return (
-    <text fg={model.kind === "loading" ? STATION_COLORS.gray : STATION_COLORS.foreground}>
-      {truncateCells(model.text, contentColumns)}
-    </text>
+    <text fg={dashboardFooterColor(model)}>{truncateCells(model.text, contentColumns)}</text>
   );
+}
+
+function dashboardFooterColor(model: DashboardFooterModel): string {
+  switch (model.kind) {
+    case "loading":
+      return STATION_COLORS.gray;
+    case "dashboard":
+      return STATION_COLORS.foreground;
+    default:
+      return assertNeverDashboardFooterModel(model);
+  }
+}
+
+function assertNeverDashboardFooterModel(_model: never): never {
+  throw new Error("Unhandled dashboard footer model.");
 }
 
 function selectFooterQuitHint(state: Pick<TuiState, "screen" | "toasts">): string {

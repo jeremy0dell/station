@@ -16,7 +16,13 @@ export function DashboardTableHeaderView({ model }: { model: DashboardTableHeade
       return <DashboardScrollIndicatorView direction="above" overflow={model.overflow} />;
     case "empty":
       return <box height={1} />;
+    default:
+      return assertNeverDashboardTableHeaderModel(model);
   }
+}
+
+function assertNeverDashboardTableHeaderModel(_model: never): never {
+  throw new Error("Unhandled dashboard table header model.");
 }
 
 export function DashboardScrollIndicatorView({
