@@ -243,28 +243,31 @@ segments dispatch one `dashboard.projectHeader.activate` action, so a click firs
 segment and then follows the same activation path as focused Enter. Wheel events over child rows use
 dashboard scrolling, and active modal surfaces intercept background clicks and scrolling.
 
-Dashboard focus follows rendered order through each project header and its visible session rows.
-Entering a header vertically always selects `primary`; Left/Right then moves, without wrapping,
-through `primary` → `shell` → `quickSession` → `defaultAgent`. Up/Down leaves any header segment
-immediately, and Left/Right on a session row is inert. Remove, rename, and fork row choosers retain
-a separate session-only traversal, as do slot keys and next-needs-me. Gaps, empty placeholders, and
-optimistic create rows remain non-focusable.
+Dashboard focus follows rendered order through each project header, its visible session rows, or the
+stable Add Session action rendered when that project is empty. Entering a header vertically always
+selects `primary`; Left/Right then moves, without wrapping, through `primary` → `shell` →
+`quickSession` → `defaultAgent`. Up/Down leaves any header segment immediately, and Left/Right on a
+session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
+session-only traversal, as do slot keys and next-needs-me. `N` continues to open the session flow
+without changing dashboard focus. Gaps and optimistic create rows remain non-focusable.
 
-Only the focused header segment receives the stronger bounded fill from
-`STATION_COLORS.projectHeaderFocusBackground`: primary covers the rendered
+Focused compact controls use the stronger bounded fill from
+`STATION_COLORS.compactFocusBackground`. A project header's primary segment covers the rendered
 disclosure/name/summary text without painting flexible trailing whitespace, while each trailing
-control owns exactly its label cells and separator spaces remain inert. Wide and compact
-labels preserve the same control identity. Hover stays component-local, temporarily supersedes the
-focus background, and reveals persistent keyboard focus again when the pointer leaves; no focus
-glyph is added.
+control owns exactly its label cells and separator spaces remain inert. An empty project's fill and
+pointer target cover only `[ + add session ]`; its explanatory text and surrounding whitespace
+remain inert and unpainted. Wide and compact labels preserve the same control identity. Hover stays
+component-local, temporarily supersedes the focus background, and reveals persistent keyboard focus
+again when the pointer leaves; no focus glyph is added.
 
-Collapse keeps primary focus and clamps scrolling. Snapshot replacement and accepted search changes
-preserve stable focus identity, otherwise choose the next focusable item at the old position before
-the preceding item; resize preserves identity and scrolls it into view. The Default Agent picker
-retains its header focus beneath the screen, so Escape, click-away, unchanged selection, and a
-successful change return to `defaultAgent`; project removal while open uses the same deterministic
-focus fallback. The dashboard footer describes Enter as `activate` because it may activate either a
-session row or a project-header control.
+Collapse moves focus from a hidden session or empty-project action to that project's header
+`primary` and clamps scrolling; expanding and moving Down reaches the first visible child again.
+Snapshot replacement and accepted search changes preserve stable focus identity, otherwise choose
+the next focusable item at the old position before the preceding item; resize preserves identity
+and scrolls it into view. The Default Agent picker retains its header focus beneath the screen, so
+Escape, click-away, unchanged selection, and a successful change return to `defaultAgent`; project
+removal while open uses the same deterministic focus fallback. The dashboard footer describes Enter
+as `activate` because it may activate a session row, project-header control, or empty-project action.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
@@ -278,12 +281,15 @@ and hover keep selecting; search and the dashboard likewise remain unchanged. In
 the inner screen receives the click before the outer popup backdrop, so one click closes only the
 topmost safe surface.
 
-Native and standalone rendering expose the same project actions. Quick-session
-intent resolves the same project and default harness before terminal-specific
-execution: native Station hosts the session in a Station pane, while the
-standalone dashboard dispatches the configured terminal default. The
-empty-project button uses that same quick-session intent, and the agent-picker
-uses the shared project-default screen transition. Link cells use the same
+Native and standalone rendering expose the same project actions. Header Quick Session and the
+empty-project button emit the same core quick-session intent, then resolve availability at their
+terminal-specific acceptance boundary: native Station hosts the session in a Station pane, while the
+standalone dashboard dispatches the configured terminal default. Pointer clicks use
+`dashboard.emptyProject.activate`; focused Enter routes through the same core activation helper.
+Blocked activation keeps Add Session focused while showing the existing error; stale targets are
+inert. Successful activation transfers focus to that project's header `quickSession` segment before
+an optimistic create row replaces the empty row. The agent-picker uses the shared
+project-default screen transition. Link cells use the same
 validated platform opener. The project-header shell control delegates only its
 terminal effect: native Station opens or focuses a Station pane, while a tmux
 popup sends a strict renderer-control request to its CLI parent. The tmux adapter

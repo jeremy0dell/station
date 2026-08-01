@@ -17,10 +17,11 @@ import type { TuiSelectionState } from "./selection/types.js";
 /** Stable control identities for the four project-header action segments. */
 export type ProjectHeaderControl = "primary" | "shell" | "quickSession" | "defaultAgent";
 
-/** Renderer-neutral dashboard focus over session rows and project-header controls. */
+/** Renderer-neutral focus over session rows, project headers, and empty-project actions. */
 export type DashboardFocus =
   | { kind: "session"; sessionId: SessionId }
-  | { kind: "projectHeader"; projectId: ProjectId; control: ProjectHeaderControl };
+  | { kind: "projectHeader"; projectId: ProjectId; control: ProjectHeaderControl }
+  | { kind: "emptyProjectAction"; projectId: ProjectId };
 
 export type TuiRuntimeState = {
   persistentPopup: boolean;

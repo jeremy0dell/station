@@ -1,6 +1,10 @@
 import type { ProjectId } from "@station/contracts";
 import { selectDashboardItems } from "../selectors/dashboardViewport.js";
-import { focusDashboardProjectHeader, reconcileDashboardFocus } from "./dashboardFocus.js";
+import {
+  focusDashboardEmptyProjectAction,
+  focusDashboardProjectHeader,
+  reconcileDashboardFocus,
+} from "./dashboardFocus.js";
 import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
 import type { TuiTransition } from "./transition.js";
 import type { ProjectHeaderControl, TuiState } from "./types.js";
@@ -34,6 +38,20 @@ export function activateProjectHeaderControl(
 }
 
 /**
+ * Focuses the rendered empty-project action and emits its Quick Session intent.
+ * Renderer consumers alone resolve project availability and move accepted focus.
+ */
+export function activateEmptyProjectAction(state: TuiState, projectId: ProjectId): TuiTransition {
+  if (state.screen.name !== "dashboard" || !hasVisibleEmptyProject(state, projectId)) {
+    return { state };
+  }
+  return {
+    state: focusDashboardEmptyProjectAction(state, projectId),
+    controlIntent: { type: "quickSession.create", projectId },
+  };
+}
+
+/**
  * Toggles one current project and normalizes focus/scroll for both header
  * activation and the existing C project picker.
  */
@@ -49,21 +67,35 @@ export function toggleDashboardProjectCollapsed(state: TuiState, projectId: Proj
   }
   const next: TuiState = { ...state, collapsedProjectIds };
   const focus = state.dashboardFocus;
-  const focusedSessionProjectId =
+  const focusedChildProjectId =
     focus?.kind === "session"
       ? state.snapshot?.sessions.find((session) => session.id === focus.sessionId)?.projectId
-      : undefined;
-  if (collapsing && focusedSessionProjectId === project.id) {
+      : focus?.kind === "emptyProjectAction"
+        ? focus.projectId
+        : undefined;
+  if (collapsing && focusedChildProjectId === project.id) {
     return focusDashboardProjectHeader(next, project.id, "primary");
   }
   return reconcileDashboardFocus(state, next);
 }
 
 function hasVisibleProjectHeader(state: TuiState, projectId: ProjectId): boolean {
+  return hasVisibleItem(state, projectId, "projectHeader");
+}
+
+function hasVisibleEmptyProject(state: TuiState, projectId: ProjectId): boolean {
+  return hasVisibleItem(state, projectId, "emptyProject");
+}
+
+function hasVisibleItem(
+  state: TuiState,
+  projectId: ProjectId,
+  type: "projectHeader" | "emptyProject",
+): boolean {
   return (
     state.snapshot !== undefined &&
     selectDashboardItems(state.snapshot, state).some(
-      (item) => item.type === "projectHeader" && item.project.id === projectId,
+      (item) => item.type === type && item.project.id === projectId,
     )
   );
 }

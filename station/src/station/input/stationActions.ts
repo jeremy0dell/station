@@ -10,6 +10,7 @@ import {
   addTuiToast,
   choiceValueByKey,
   deriveTuiInputMode,
+  focusDashboardProjectHeader,
   newSessionActionForInput,
   newSessionIntentForAction,
   focusProjectSettingsItem as focusProjectSettingsItemState,
@@ -355,10 +356,10 @@ export function resolveKeyForkSessionSubmit(
 }
 
 /**
- * Resolve a project header's quick-session activation to its create target. Uses
- * the project's default harness and a generated branch name — no wizard, no
- * review screen. Blocked projects preserve their provider error as a toast;
- * only a missing or stale project is an inert miss.
+ * Resolves native Quick Session availability to its managed create target. Uses
+ * the project's default harness and a generated branch name — no wizard or
+ * review screen. Blocked projects preserve their provider error and retain any
+ * inline action focus; accepted targets move focus to the header Quick Session.
  */
 export type QuickSessionSubmitTarget =
   | { kind: "submit"; projectId: string; title: string; branch: string; harness: ProviderId }
@@ -374,6 +375,7 @@ export function resolveQuickSessionSubmit(
     store.setState(addTuiToast(store.getState(), safeErrorToToast(intent.error)));
     return { kind: "none" };
   }
+  store.setState(focusDashboardProjectHeader(store.getState(), intent.projectId, "quickSession"));
   return {
     kind: "submit",
     projectId: intent.projectId,

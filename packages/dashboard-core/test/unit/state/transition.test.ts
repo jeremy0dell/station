@@ -1052,6 +1052,63 @@ describe("TUI screen transitions", () => {
     expect(up.selection.get("projectDefaultAgent")).toBe("codex");
   });
 
+  it("emits focused empty-project Quick Session intents without resolving availability", () => {
+    const transition = handleTuiKey(
+      createInitialTuiState({
+        initialSnapshot: createZeroWorktreeSnapshot(),
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+      }),
+      { input: "\r", return: true },
+    );
+
+    expect(transition.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(transition.state.dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: "web",
+    });
+  });
+
+  it("leaves focused empty-project availability to the Quick Session consumer", () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const unavailable = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "web"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const transition = handleTuiKey(
+      createInitialTuiState({
+        initialSnapshot: unavailable,
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+      }),
+      { input: "\r", return: true },
+    );
+
+    expect(transition.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(transition.state.dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: "web",
+    });
+    expect(transition.state.toasts).toEqual([]);
+  });
+
+  it("keeps stale projects and no-longer-empty actions inert", () => {
+    for (const state of [
+      createInitialTuiState({
+        initialSnapshot: createZeroWorktreeSnapshot(),
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "ghost" },
+      }),
+      createInitialTuiState({
+        initialSnapshot: createDashboardSnapshot(),
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+      }),
+    ]) {
+      expect(handleTuiKey(state, { input: "\r", return: true })).toEqual({ state });
+    }
+  });
+
   it("adds a safe error toast when no project exists for a new session", () => {
     const snapshot = {
       ...createZeroWorktreeSnapshot(),

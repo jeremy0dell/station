@@ -392,42 +392,68 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("[ + add session ]");
   });
 
-  it("keeps the empty-project add-session action readable on hover", async () => {
-    const setup = await renderDashboard({ width: 120, height: 40, snapshot: manyProjectsSnapshot() });
-    const lines = setup.captureCharFrame().split("\n");
-    const row = lines.findIndex((line) => line.includes("[ + add session ]"));
-    const col = lines[row]?.indexOf("[ + add session ]") ?? -1;
-    expect(row).toBeGreaterThan(0);
-    expect(col).toBeGreaterThan(0);
+  it("bounds empty-project focus, hover, and hit testing to Add Session cells", async () => {
+    for (const width of [120, 80]) {
+      const targets: StationMouseTarget[] = [];
+      const setup = await renderDashboard({
+        width,
+        height: 40,
+        snapshot: manyProjectsSnapshot(),
+        dispatchMouse: (target) => targets.push(target),
+      });
+      await act(async () => {
+        setup.store.setState({
+          dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+        });
+      });
+      await setup.flush();
 
-    const ordinarySpan = spanAtFrameCell(setup.captureSpans(), row, col);
-    const ordinaryForeground = spanHex(ordinarySpan);
-    const ordinaryBackground = spanBgHex(ordinarySpan);
-    expect(ordinaryForeground).toBe(STATION_COLORS.cyan);
-    expect(ordinaryForeground).not.toBe(ordinaryBackground);
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes("[ + add session ]"));
+      const col = lines[row]?.indexOf("[ + add session ]") ?? -1;
+      const after = col + "[ + add session ]".length;
+      expect(row).toBeGreaterThan(0);
+      expect(col).toBeGreaterThan(0);
 
-    await act(async () => {
-      await setup.mockMouse.moveTo(col, row);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    await setup.flush();
+      let spans = setup.captureSpans();
+      expect(spanBgHex(spanAtFrameCell(spans, row, col))).toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
+      expect(spanBgHex(spanAtFrameCell(spans, row, after - 1))).toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
+      expect(spanBgHex(spanAtFrameCell(spans, row, col - 1))).not.toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
+      expect(spanBgHex(spanAtFrameCell(spans, row, after))).not.toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
 
-    const hoveredSpan = spanAtFrameCell(setup.captureSpans(), row, col);
-    const hoveredForeground = spanHex(hoveredSpan);
-    const hoveredBackground = spanBgHex(hoveredSpan);
-    expect(hoveredForeground).toBe(STATION_COLORS.background);
-    expect(hoveredBackground).toBe(STATION_COLORS.cyan);
-    expect(hoveredForeground).not.toBe(hoveredBackground);
+      await act(async () => {
+        await setup.mockMouse.moveTo(col, row);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await setup.flush();
+      spans = setup.captureSpans();
+      expect(spanHex(spanAtFrameCell(spans, row, col))).toBe(STATION_COLORS.background);
+      expect(spanBgHex(spanAtFrameCell(spans, row, col))).toBe(STATION_COLORS.cyan);
 
-    await act(async () => {
-      await setup.mockMouse.moveTo(0, 0);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    await setup.flush();
+      await act(async () => {
+        await setup.mockMouse.moveTo(0, 0);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await setup.flush();
+      expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, col))).toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
 
-    const restoredSpan = spanAtFrameCell(setup.captureSpans(), row, col);
-    expect(spanHex(restoredSpan)).toBe(ordinaryForeground);
-    expect(spanBgHex(restoredSpan)).toBe(ordinaryBackground);
+      await setup.mockMouse.click(col - 1, row, MouseButtons.LEFT);
+      await setup.mockMouse.click(col, row, MouseButtons.LEFT);
+      await setup.mockMouse.click(after, row, MouseButtons.LEFT);
+      expect(targets).toEqual([
+        { kind: "emptyProjectAction", projectId: "empty-project" },
+      ]);
+    }
   });
 
   it("renders the focus cursor and jumps it to the next session needing you", async () => {
@@ -504,22 +530,22 @@ describe("dashboard golden frames", () => {
         for (const [control, column] of Object.entries(samples)) {
           const background = spanBgHex(spanAtFrameCell(spans, row, column));
           if (control === controls[index]) {
-            expect(background).toBe(STATION_COLORS.projectHeaderFocusBackground);
+            expect(background).toBe(STATION_COLORS.compactFocusBackground);
           } else {
-            expect(background).not.toBe(STATION_COLORS.projectHeaderFocusBackground);
+            expect(background).not.toBe(STATION_COLORS.compactFocusBackground);
           }
         }
         expect(spanBgHex(spanAtFrameCell(spans, row, primaryEnd))).not.toBe(
-          STATION_COLORS.projectHeaderFocusBackground,
+          STATION_COLORS.compactFocusBackground,
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, shellStart - 1))).not.toBe(
-          STATION_COLORS.projectHeaderFocusBackground,
+          STATION_COLORS.compactFocusBackground,
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, quickStart - 1))).not.toBe(
-          STATION_COLORS.projectHeaderFocusBackground,
+          STATION_COLORS.compactFocusBackground,
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, defaultStart - 1))).not.toBe(
-          STATION_COLORS.projectHeaderFocusBackground,
+          STATION_COLORS.compactFocusBackground,
         );
       }
     }
@@ -578,7 +604,7 @@ describe("dashboard golden frames", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     await setup.flush();
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, shell))).toBe(
-      STATION_COLORS.projectHeaderFocusBackground,
+      STATION_COLORS.compactFocusBackground,
     );
   });
 

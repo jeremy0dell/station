@@ -4,6 +4,7 @@ import { choiceValueByKey } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import {
   activateFocusedDashboardRow,
+  focusedEmptyProjectAction,
   focusedProjectHeaderControl,
   focusNextNeedsMe,
   moveDashboardFocus,
@@ -12,7 +13,10 @@ import {
 import { scrollDashboard } from "../dashboardScroll.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
-import { activateProjectHeaderControl } from "../projectHeaderActions.js";
+import {
+  activateEmptyProjectAction,
+  activateProjectHeaderControl,
+} from "../projectHeaderActions.js";
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
@@ -69,6 +73,10 @@ function handleDashboardAction(
     case "tui.focus.activate": {
       if (hasNoProjects(state)) {
         return handleDashboardAddProjectAction(state, context);
+      }
+      const emptyProject = focusedEmptyProjectAction(state);
+      if (emptyProject !== undefined) {
+        return activateEmptyProjectAction(state, emptyProject.projectId);
       }
       const header = focusedProjectHeaderControl(state);
       return header === undefined

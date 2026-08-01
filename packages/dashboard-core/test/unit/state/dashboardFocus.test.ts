@@ -4,6 +4,7 @@ import {
   clearDashboardFocus,
   createInitialTuiState,
   createTuiStore,
+  focusDashboardEmptyProjectAction,
   focusDashboardSession,
   handleTuiKey,
   replaceSnapshot,
@@ -34,6 +35,10 @@ function session(sessionId: string): DashboardFocus {
 
 function header(projectId: string, control: ProjectHeaderControl): DashboardFocus {
   return { kind: "projectHeader", projectId, control };
+}
+
+function emptyAction(projectId: string): DashboardFocus {
+  return { kind: "emptyProjectAction", projectId };
 }
 
 describe("dashboard focus", () => {
@@ -187,15 +192,135 @@ describe("dashboard focus", () => {
     expect(collapsed.dashboardFocus).toEqual(header("web", "primary"));
   });
 
-  it("keeps empty projects focusable only through their headers", () => {
-    const empty = createInitialTuiState({
+  it("walks empty-project actions between their headers in rendered order", () => {
+    let current = createInitialTuiState({
       initialSnapshot: createZeroWorktreeSnapshot(),
       terminalRows: 40,
     });
-    const web = handleTuiKey(empty, DOWN).state;
-    const api = handleTuiKey(web, DOWN).state;
-    expect(web.dashboardFocus).toEqual(header("web", "primary"));
-    expect(api.dashboardFocus).toEqual(header("api", "primary"));
+    for (const focus of [
+      header("web", "primary"),
+      emptyAction("web"),
+      header("api", "primary"),
+      emptyAction("api"),
+    ]) {
+      current = handleTuiKey(current, DOWN).state;
+      expect(current.dashboardFocus).toEqual(focus);
+    }
+  });
+
+  it("focuses a stable empty-project action and leaves horizontal movement inert", () => {
+    const initial = createInitialTuiState({
+      initialSnapshot: createZeroWorktreeSnapshot(),
+      terminalRows: 40,
+    });
+    const focused = focusDashboardEmptyProjectAction(initial, "api");
+
+    expect(focused.dashboardFocus).toEqual(emptyAction("api"));
+    expect(handleTuiKey(focused, LEFT).state).toBe(focused);
+    expect(handleTuiKey(focused, RIGHT).state).toBe(focused);
+  });
+
+  it("enters and scrolls empty-project focus from the current viewport", () => {
+    const base = createInitialTuiState({
+      initialSnapshot: createZeroWorktreeSnapshot(),
+      terminalRows: 10,
+      scrollOffset: 2,
+    });
+    expect(handleTuiKey(base, DOWN).state.dashboardFocus).toEqual(header("api", "primary"));
+    expect(handleTuiKey(base, UP).state.dashboardFocus).toEqual(emptyAction("api"));
+
+    let current = createInitialTuiState({
+      initialSnapshot: createZeroWorktreeSnapshot(),
+      terminalRows: 10,
+    });
+    for (let presses = 0; presses < 4; presses += 1) {
+      current = handleTuiKey(current, DOWN).state;
+    }
+    expect(current.dashboardFocus).toEqual(emptyAction("api"));
+    expect(current.scrollOffset).toBe(2);
+  });
+
+  it("moves a collapsed empty action to primary and returns to it after expansion", () => {
+    const focused = focusDashboardEmptyProjectAction(
+      createInitialTuiState({
+        initialSnapshot: createZeroWorktreeSnapshot(),
+        terminalRows: 40,
+      }),
+      "web",
+    );
+    const collapsed = handleTuiKey(handleTuiKey(focused, { input: "C" }).state, {
+      input: "1",
+    }).state;
+    expect(collapsed.dashboardFocus).toEqual(header("web", "primary"));
+
+    const expanded = handleTuiKey(handleTuiKey(collapsed, { input: "C" }).state, {
+      input: "1",
+    }).state;
+    expect(handleTuiKey(expanded, DOWN).state.dashboardFocus).toEqual(emptyAction("web"));
+  });
+
+  it("preserves empty-action identity through accepted search and resize", () => {
+    let current = focusDashboardEmptyProjectAction(
+      createInitialTuiState({
+        initialSnapshot: createZeroWorktreeSnapshot(),
+        terminalRows: 40,
+      }),
+      "api",
+    );
+    current = handleTuiKey(current, { input: "/" }).state;
+    current = handleTuiKey(current, { input: "no-match" }).state;
+    current = handleTuiKey(current, RETURN).state;
+    expect(current.dashboardFocus).toEqual(emptyAction("api"));
+
+    const snapshot = createZeroWorktreeSnapshot();
+    const store = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      initialState: {
+        terminalRows: 40,
+        dashboardFocus: emptyAction("api"),
+      },
+    });
+    store.getState().setTerminalRows(10);
+    expect(store.getState().dashboardFocus).toEqual(emptyAction("api"));
+    expect(store.getState().scrollOffset).toBe(2);
+  });
+
+  it("reconciles removed empty actions by their old rendered position", () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const initial = createInitialTuiState({
+      initialSnapshot: snapshot,
+      terminalRows: 40,
+      dashboardFocus: emptyAction("web"),
+    });
+    const withoutWeb: StationSnapshot = {
+      ...snapshot,
+      projects: snapshot.projects.filter((project) => project.id !== "web"),
+      counts: { ...snapshot.counts, projects: 1 },
+    };
+
+    expect(replaceSnapshot(initial, withoutWeb).dashboardFocus).toEqual(emptyAction("api"));
+  });
+
+  it("keeps session-only traversal away from empty actions", () => {
+    const snapshot = createDashboardSnapshot();
+    const withoutApiSessions: StationSnapshot = {
+      ...snapshot,
+      rows: snapshot.rows.filter((row) => row.projectId !== "api"),
+      sessions: snapshot.sessions.filter((candidate) => candidate.projectId !== "api"),
+    };
+    const focused = createInitialTuiState({
+      initialSnapshot: withoutApiSessions,
+      terminalRows: 40,
+      dashboardFocus: emptyAction("api"),
+    });
+
+    expect(handleTuiKey(focused, NEXT_NEEDS_ME).state.dashboardFocus).toEqual(
+      session("ses_wt_web_attention"),
+    );
+    const choosing = handleTuiKey(focused, { input: "X" }).state;
+    expect(handleTuiKey(choosing, DOWN).state.dashboardFocus?.kind).toBe("session");
+    expect(handleTuiKey(focused, { input: "N" }).state.dashboardFocus).toEqual(emptyAction("api"));
   });
 
   it("scrolls to keep project-header and session focus visible", () => {

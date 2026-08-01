@@ -306,7 +306,13 @@ function DashboardViewportRow({
       return (
         <box flexDirection="row" height={1}>
           <text fg={STATION_COLORS.gray}>{emptyProjectLabel()}</text>
-          <EmptySessionButton projectId={item.project.id} />
+          <EmptySessionButton
+            projectId={item.project.id}
+            focused={
+              dashboardFocus?.kind === "emptyProjectAction" &&
+              dashboardFocus.projectId === item.project.id
+            }
+          />
         </box>
       );
     case "session":
@@ -383,17 +389,21 @@ function FirstProjectButton({ columns }: { columns: number }) {
 
 const EMPTY_SESSION_BUTTON_LABEL = "[ + add session ]";
 
-// Mouse-native empty-state action: one click creates a session (default agent)
-// for the project — the same semantic action as the project header segment.
-function EmptySessionButton({ projectId }: { projectId: string }) {
+/** Paints and activates only the empty project's bounded Add Session cells. */
+function EmptySessionButton({ projectId, focused }: { projectId: string; focused: boolean }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
+  const background = hover
+    ? { bg: STATION_COLORS.cyan }
+    : focused
+      ? { bg: STATION_COLORS.compactFocusBackground }
+      : {};
   return (
     <text
       flexShrink={0}
       fg={hover ? STATION_COLORS.background : STATION_COLORS.cyan}
-      {...(hover ? { bg: STATION_COLORS.cyan } : {})}
-      {...stationMouseProps(dispatch, { kind: "quickSessionForProject", projectId })}
+      {...background}
+      {...stationMouseProps(dispatch, { kind: "emptyProjectAction", projectId })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
@@ -470,7 +480,7 @@ function ProjectHeaderPrimary({
   const background = hover
     ? { bg: HOVER_BG }
     : focused
-      ? { bg: STATION_COLORS.projectHeaderFocusBackground }
+      ? { bg: STATION_COLORS.compactFocusBackground }
       : {};
   return (
     <text
@@ -500,7 +510,7 @@ function ProjectHeaderActionSegment({
   const background = hover
     ? { bg: HOVER_BG }
     : focused
-      ? { bg: STATION_COLORS.projectHeaderFocusBackground }
+      ? { bg: STATION_COLORS.compactFocusBackground }
       : {};
   return (
     <text

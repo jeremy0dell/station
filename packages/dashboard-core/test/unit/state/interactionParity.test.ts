@@ -12,7 +12,7 @@ import {
   transitionNewSessionFlow,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import { createDashboardSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
 
 const context = { cwd: "/workspace", homeDir: "/home/example" };
 
@@ -212,7 +212,30 @@ describe("primary workflow interaction parity", () => {
     expect(semantic.controlIntent).toEqual(keyboard.controlIntent);
   });
 
-  it("defers Quick Session availability to the renderer consumer and keeps stale targets inert", () => {
+  it("converges empty-project pointer semantics with focused Enter", () => {
+    const base = createInitialTuiState({ initialSnapshot: createZeroWorktreeSnapshot() });
+    const semantic = handleTuiAction(
+      base,
+      { type: "dashboard.emptyProject.activate", projectId: "web" },
+      context,
+    );
+    const focused = handleTuiKey(
+      handleTuiKey(base, { input: "", downArrow: true }, context).state,
+      { input: "", downArrow: true },
+      context,
+    ).state;
+    const keyboard = handleTuiKey(focused, { input: "\r", return: true }, context);
+
+    expect(semantic.state.dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: "web",
+    });
+    expect(semantic.state.dashboardFocus).toEqual(keyboard.state.dashboardFocus);
+    expect(semantic.controlIntent).toEqual(keyboard.controlIntent);
+    expect(semantic.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+  });
+
+  it("defers header and empty-project Quick Session availability to renderer consumers", () => {
     const snapshot = createDashboardSnapshot();
     const unavailable = {
       ...snapshot,
@@ -239,6 +262,24 @@ describe("primary workflow interaction parity", () => {
       control: "quickSession",
     });
     expect(blocked.state.toasts).toEqual([]);
+
+    const emptySnapshot = createZeroWorktreeSnapshot();
+    const unavailableEmpty = {
+      ...emptySnapshot,
+      projects: emptySnapshot.projects.map((project) =>
+        project.id === "web"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const empty = handleTuiAction(
+      createInitialTuiState({ initialSnapshot: unavailableEmpty }),
+      { type: "dashboard.emptyProject.activate", projectId: "web" },
+      context,
+    );
+    expect(empty.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(empty.state.dashboardFocus).toEqual({ kind: "emptyProjectAction", projectId: "web" });
+    expect(empty.state.toasts).toEqual([]);
 
     const stale = handleTuiAction(
       state,

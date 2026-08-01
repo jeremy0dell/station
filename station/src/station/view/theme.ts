@@ -19,7 +19,7 @@ export const STATION_COLORS = {
   hairline: "#20252c",
   frozenSurface: "#12161b",
   focusBackground: "#15222e",
-  projectHeaderFocusBackground: "#1b3448",
+  compactFocusBackground: "#1b3448",
 } as const;
 
 export function rowColorToHex(color: RowColor | undefined): string | undefined {
