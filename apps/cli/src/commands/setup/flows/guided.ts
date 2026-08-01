@@ -1,5 +1,11 @@
 import { access } from "node:fs/promises";
-import type { SetupIssue, SetupOperation } from "@station/setup-core";
+import type {
+  SetupHarnessInstallOperation,
+  SetupHomebrewInstallOperation,
+  SetupIssue,
+  SetupOperation,
+  SetupXcodeToolsInstallOperation,
+} from "@station/setup-core";
 import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
 import { createSetupOperationAdapter } from "../adapters/operations.js";
 import { applySetupPlan } from "../apply.js";
@@ -983,10 +989,7 @@ function standaloneOperationExecution(
   };
 }
 
-function commandLineToolsOperation(): Extract<
-  SetupOperation,
-  { kind: "install-xcode-command-line-tools" }
-> {
+function commandLineToolsOperation(): SetupXcodeToolsInstallOperation {
   return {
     id: "install:xcode-command-line-tools",
     kind: "install-xcode-command-line-tools",
@@ -995,7 +998,7 @@ function commandLineToolsOperation(): Extract<
   };
 }
 
-function homebrewOperation(): Extract<SetupOperation, { kind: "install-homebrew" }> {
+function homebrewOperation(): SetupHomebrewInstallOperation {
   return {
     id: "install:homebrew",
     kind: "install-homebrew",
@@ -1004,9 +1007,7 @@ function homebrewOperation(): Extract<SetupOperation, { kind: "install-homebrew"
   };
 }
 
-function harnessInstallOperation(
-  harnessId: string | undefined,
-): Extract<SetupOperation, { kind: "install-harness" }> {
+function harnessInstallOperation(harnessId: string | undefined): SetupHarnessInstallOperation {
   if (harnessId === undefined || !isSupportedHarnessId(harnessId)) {
     throw new Error("Harness install action requires a supported harness.");
   }

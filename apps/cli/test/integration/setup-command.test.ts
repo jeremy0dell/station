@@ -628,6 +628,7 @@ describe("CLI setup command", () => {
     const fs = fakeFs({});
     const chunks: string[] = [];
     let activationCount = 0;
+    let trackingCount = 0;
 
     const result = await runCli(
       ["--config", join(root, "config.toml"), "setup", "apply", "--dry-run"],
@@ -655,6 +656,14 @@ describe("CLI setup command", () => {
           activateObserverConfig: async () => {
             activationCount += 1;
           },
+          providerTrackingPort: async (operation) => {
+            trackingCount += 1;
+            return {
+              status: "completed",
+              operationId: operation.id,
+              commit: { kind: "provider-tracking", provider: "codex", changed: true },
+            };
+          },
           writeStdout: (chunk) => {
             chunks.push(chunk);
           },
@@ -669,6 +678,126 @@ describe("CLI setup command", () => {
       false,
     );
     expect(activationCount).toBe(0);
+    expect(trackingCount).toBe(0);
+  });
+
+  it("reinspects package installs with refreshed Homebrew paths and facts", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const worktrunkProbes: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+    let worktrunkInstalled = false;
+    let trackingInstalled = false;
+    let trackingOperationCount = 0;
+    const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
+      calls.push(input);
+      if (input.command === "brew" && input.args?.join(" ") === "install worktrunk") {
+        worktrunkInstalled = true;
+        return commandResult(input, "");
+      }
+      if (input.command.endsWith("/wt") || input.command === "wt") {
+        worktrunkProbes.push(input);
+      }
+      return fakeRunner([], {
+        "git rev-parse --show-toplevel": repo,
+        "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+        "/opt/homebrew/bin/wt --version": "worktrunk 1.2.3\n",
+        "tmux -V": "tmux 3.5a\n",
+        "brew --version": "Homebrew 4.0.0\n",
+        "codex --version": "codex 0.1.0\n",
+      })(input);
+    };
+    const available = new Set([
+      "/usr/bin/lsof",
+      "/fake/bin/tmux",
+      "/fake/bin/bun",
+      "/fake/bin/diffnav",
+      "/fake/bin/delta",
+      "/fake/bin/stn",
+      "/fake/bin/stn-ingress",
+      "/fake/bin/stn-tmux-popup",
+    ]);
+
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner,
+        access: async (path) => {
+          if (available.has(path)) return;
+          if (worktrunkInstalled && path === "/opt/homebrew/bin/wt") return;
+          throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
+        },
+        fs,
+        activateObserverConfig: async () => undefined,
+        probeHarnessHooksStatus: async (harnessId) => ({
+          provider: harnessId,
+          requested: true,
+          installed: trackingInstalled,
+          missing: trackingInstalled ? [] : ["tracking artifact"],
+          message: trackingInstalled ? "Tracking is installed." : "Tracking is missing.",
+        }),
+        providerTrackingPort: async (operation) => {
+          trackingOperationCount += 1;
+          trackingInstalled = true;
+          return {
+            status: "completed",
+            operationId: operation.id,
+            commit: { kind: "provider-tracking", provider: "codex", changed: true },
+          };
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    expect(result.code, chunks.join("")).toBe(0);
+    expect(trackingOperationCount).toBe(1);
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ command: "brew", args: ["install", "worktrunk"] }),
+        expect.objectContaining({ command: "/opt/homebrew/bin/wt", args: ["--version"] }),
+      ]),
+    );
+    expect(worktrunkProbes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ command: "/opt/homebrew/bin/wt", args: ["--version"] }),
+      ]),
+    );
+    expect(worktrunkProbes.some((probe) => probe.command === "/fake/bin/wt")).toBe(false);
+    expect(fs.files[configPath]).toContain("install_hooks = true");
+  });
+
+  it("renders typed inspection failures when no setup snapshot is available", async () => {
+    const chunks: string[] = [];
+    const inspectionError = {
+      tag: "SyntheticInspectionError",
+      code: "SYNTHETIC_INSPECTION_FAILED",
+      message: "Synthetic inspection failed before projection.",
+      hint: "Repair the synthetic inspection fixture.",
+    };
+
+    const result = await runCli(["setup", "check"], {
+      setupDeps: {
+        now: () => {
+          throw inspectionError;
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(chunks.join("")).toContain("Synthetic inspection failed before projection.");
+    expect(chunks.join("")).toContain("SYNTHETIC_INSPECTION_FAILED");
+    expect(chunks.join("")).toContain("Repair the synthetic inspection fixture.");
   });
 
   it("renders the failed apply result when config persistence fails", async () => {
@@ -795,6 +924,55 @@ describe("CLI setup command", () => {
       ]),
       summary: { requiredOk: false },
     });
+  });
+
+  it("preserves actionable provider tracking errors in noninteractive output", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const config = setupConfigToml(repo, { includeHarness: true }).replace(
+      'command = "codex"',
+      'command = "codex"\ninstall_hooks = true',
+    );
+    const chunks: string[] = [];
+
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs: fakeFs({ [configPath]: config }),
+        probeHarnessHooksStatus: async (harnessId) => ({
+          provider: harnessId,
+          requested: true,
+          installed: false,
+          missing: ["tracking artifact"],
+          message: "Tracking artifact is missing.",
+        }),
+        providerTrackingPort: async (operation) => ({
+          status: "failed",
+          operationId: operation.id,
+          error: {
+            tag: "HookOwnershipError",
+            code: "HOOK_OWNER_CONFLICT",
+            message: "Another Station runtime owns the hook.",
+            hint: "stn hooks install codex --yes --takeover",
+          },
+        }),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(output).toContain("Another Station runtime owns the hook.");
+    expect(output).toContain("HOOK_OWNER_CONFLICT");
+    expect(output).toContain("stn hooks install codex --yes --takeover");
   });
 
   it("keeps apply non-ready when the final artifact re-probe fails", async () => {

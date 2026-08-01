@@ -23,7 +23,6 @@ describe("planSetup", () => {
     expect(plan.result).toEqual({
       readiness: { launchReady: true, workflowReady: true, requiredMissing: 0 },
       requiredIssueCount: 0,
-      warningCount: 1,
       selectedOperationCount: 0,
     });
   });
@@ -294,7 +293,6 @@ describe("planSetup", () => {
     });
     expect(plan.result).toMatchObject({
       requiredIssueCount: 1,
-      warningCount: 2,
       selectedOperationCount: 2,
     });
   });

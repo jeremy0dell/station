@@ -50,10 +50,10 @@ import {
 import { createPiHarnessProvider, type PiHarnessProviderOptions, piHookAdapter } from "@station/pi";
 import { safeErrorFromUnknown, systemClock, toIsoTimestamp } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
+import type { SupportedHarnessId } from "@station/setup-core";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
 import { TmuxProvider } from "@station/tmux";
 import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
-import type { SupportedHarnessId } from "./commands/setup/model.js";
 import { selfExecArgv } from "./selfExec.js";
 import {
   createProviderHookRuntime,

@@ -3,7 +3,7 @@ import {
   renderSetupConfig,
   type SetupConfigDesiredState,
 } from "@station/config";
-import type { SetupOperation } from "@station/setup-core";
+import type { SetupConfigWriteOperation } from "@station/setup-core";
 import { setupConfigMutationInput } from "./adapters/config.js";
 import {
   harnessSupportsSetupHooks,
@@ -87,7 +87,7 @@ export function renderNewSetupConfig(
 function configOperation(
   selection: SetupHarnessSelection,
   options: PlanSetupConfigWriteOptions,
-): Extract<SetupOperation, { kind: "write-config" }> {
+): SetupConfigWriteOperation {
   const defaultHarnessId = selection.defaultHarness ?? selection.requiredHarnessIds[0];
   if (defaultHarnessId === undefined) throw new Error("Setup config requires a default harness.");
   const trackingHarnessIds = selection.requiredHarnessIds.filter(

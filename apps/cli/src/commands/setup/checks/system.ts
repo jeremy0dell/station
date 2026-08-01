@@ -20,7 +20,7 @@ import type {
   SetupLaunchersFact,
   SetupMode,
   SetupStationUiFact,
-} from "../model.js";
+} from "../adapters/inspectionTypes.js";
 import { checkBrewDependency } from "./brew.js";
 import { checkSetupBun } from "./bun.js";
 import {

@@ -19,6 +19,7 @@ export type SetupViewCheck = {
 
 export type SetupViewAction = {
   readonly id: string;
+  readonly operationId?: SetupOperation["id"];
   readonly kind: SetupOperation["kind"] | "mkdir";
   readonly tier: SetupAction["tier"];
   readonly selected: boolean;

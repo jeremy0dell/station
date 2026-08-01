@@ -4,7 +4,7 @@ import {
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupHarnessFact, SupportedHarnessId } from "../model.js";
+import type { SetupHarnessFact, SupportedHarnessId } from "../adapters/inspectionTypes.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
 
@@ -85,7 +85,10 @@ async function checkHarness(
       const version = parseHarnessVersion(rawVersion);
       if (version !== undefined) fact.version = version;
       return fact;
-    } catch {}
+    } catch (error) {
+      // A failed candidate is expected while checking provider-specific fallback locations.
+      void error;
+    }
   }
   return {
     id: definition.id,

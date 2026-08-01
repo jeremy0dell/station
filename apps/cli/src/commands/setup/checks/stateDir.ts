@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { SetupStateDirFact } from "../model.js";
+import type { SetupStateDirFact } from "../adapters/inspectionTypes.js";
 
 type SetupStateDirFileHandle = {
   close(): Promise<void>;

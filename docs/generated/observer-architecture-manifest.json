@@ -11949,6 +11949,22 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
+      "declaration": "createSetupInspectionAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Collects CLI machine facts and provider-hook status, retaining representation-specific evidence locally while exposing normalized setup evidence to core.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupInspection",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/setup/adapters/observerActivation.ts",
       "declaration": "createObserverActivationAdapter",
       "kind": "function",
@@ -12012,6 +12028,50 @@
           "kind": "type",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/composition.ts",
+      "declaration": "createSetupComposition",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Wires one CLI invocation's inspection, operation, session, and presentation adapters.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
+          "declaration": "createSetupInspectionAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/adapters/operations.ts",
+          "declaration": "createSetupOperationAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/presenters/json.ts",
+          "declaration": "createJsonSetupPresenter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationExecutor",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/session/application.ts",
+          "declaration": "createSetupSessionApplication",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
         }
       ]
     },
@@ -14438,7 +14498,7 @@
       "declaration": "deriveSetupResult",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Derives readiness and compatibility counts from current semantic evidence without trusting attempted mutations.",
+      "purpose": "Derives readiness from current semantic evidence without trusting attempted mutations.",
       "dependencies": []
     },
     {
@@ -14498,6 +14558,14 @@
     },
     {
       "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupInspection",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Reads and normalizes current setup evidence while keeping filesystem, TOML, and provider representations outside core.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
       "declaration": "SetupLauncherLinkPort",
       "kind": "type",
       "role": "DRIVEN PORT",
@@ -14542,6 +14610,45 @@
       "kind": "type",
       "role": "DRIVEN PORT",
       "purpose": "Applies Worktrunk tracking or shell integration requested by setup.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/session/application.ts",
+      "declaration": "createSetupSessionApplication",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Drives one setup session through serialized inspection and mutation effects without adding transport or restart recovery.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/session/application.ts",
+          "declaration": "SetupSessionApplication",
+          "kind": "type",
+          "role": "USE CASE",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/session/transition.ts",
+          "declaration": "transitionSetupSession",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "packages/setup-core/src/session/application.ts",
+      "declaration": "SetupSessionApplication",
+      "kind": "type",
+      "role": "USE CASE",
+      "purpose": "Offers one isolated setup run to a driving adapter without defining transport or persistence.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/session/transition.ts",
+      "declaration": "transitionSetupSession",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Advances one in-memory setup session from normalized evidence and typed operation outcomes without I/O.",
       "dependencies": []
     }
   ]

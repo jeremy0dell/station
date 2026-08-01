@@ -22,6 +22,7 @@ const policyNames = [
   "deriveSetupReadiness",
   "planSetup",
   "deriveSetupResult",
+  "transitionSetupSession",
 ] as const;
 const drivenPortNames = [
   "SetupConfigMutationPort",
@@ -32,6 +33,7 @@ const drivenPortNames = [
   "SetupPackageInstallationPort",
   "SetupLauncherLinkPort",
   "SetupOperationExecutor",
+  "SetupInspection",
 ] as const;
 
 describe("setup core boundaries", () => {
@@ -66,7 +68,7 @@ describe("setup core boundaries", () => {
     }
   });
 
-  it("marks exactly the six policies and eight driven ports", async () => {
+  it("marks the setup policies and driven ports used by the session runtime", async () => {
     const policies: string[] = [];
     const drivenPorts: string[] = [];
     let markerCount = 0;
@@ -90,7 +92,7 @@ describe("setup core boundaries", () => {
       }
     }
 
-    expect(markerCount).toBe(14);
+    expect(markerCount).toBe(18);
     expect(policies.sort()).toEqual([...policyNames].sort());
     expect(drivenPorts.sort()).toEqual([...drivenPortNames].sort());
   });
