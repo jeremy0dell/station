@@ -39,6 +39,7 @@ const DASHBOARD_MOUSE_TARGET_KINDS = {
   addProjectAction: true,
   addProjectRow: true,
   body: true,
+  emptyProjectAction: true,
   firstProjectAdd: true,
   link: true,
   newSessionAction: true,
@@ -340,6 +341,70 @@ describe("routeDashboardMouse", () => {
     expect(creates[0]).toMatchObject({
       payload: { title: "Standalone mouse", harness: { provider: "codex" } },
     });
+  });
+
+  it("routes an empty-project click through Quick Session and transfers successful focus", async () => {
+    const fixture = makeStationTestStore({ terminalRows: 40 });
+    const store = fixture.store;
+
+    routeDashboardMouse(
+      { kind: "emptyProjectAction", projectId: "empty-project" },
+      LEFT_DOWN,
+      store,
+    );
+
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "empty-project",
+      control: "quickSession",
+    });
+    const creates = fixture.service.dispatched.filter(
+      (command) => command.type === "session.create",
+    );
+    expect(creates).toHaveLength(1);
+    expect(creates[0]).toMatchObject({ payload: { projectId: "empty-project" } });
+  });
+
+  it("guards blocked, stale, and modal empty-project clicks", () => {
+    const snapshot = manyProjectsSnapshot();
+    const blockedSnapshot: StationSnapshot = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "empty-project"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const blockedFixture = makeStationTestStore({ snapshot: blockedSnapshot, terminalRows: 40 });
+    routeDashboardMouse(
+      { kind: "emptyProjectAction", projectId: "empty-project" },
+      LEFT_DOWN,
+      blockedFixture.store,
+    );
+    expect(blockedFixture.store.getState().dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: "empty-project",
+    });
+    expect(blockedFixture.store.getState().toasts.at(-1)?.toast.kind).toBe("error");
+    expect(blockedFixture.service.dispatched).toEqual([]);
+
+    const stale = makeStore();
+    routeDashboardMouse({ kind: "emptyProjectAction", projectId: "ghost" }, LEFT_DOWN, stale);
+    routeDashboardMouse({ kind: "emptyProjectAction", projectId: "station" }, LEFT_DOWN, stale);
+    expect(stale.getState().dashboardFocus).toBeUndefined();
+
+    const modal = makeStore();
+    modal.getState().handleKey({ input: "H" });
+    routeDashboardMouse(
+      { kind: "emptyProjectAction", projectId: "empty-project" },
+      LEFT_DOWN,
+      modal,
+    );
+    expect(modal.getState().screen).toEqual({ name: "help" });
+    expect(modal.getState().dashboardFocus).toBeUndefined();
   });
 
   it("routes project shell, quick-session, and agent-picker actions", async () => {

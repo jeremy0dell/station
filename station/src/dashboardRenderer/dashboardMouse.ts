@@ -97,6 +97,9 @@ function routeSurfaceClick(
     case "quickSessionForProject":
       activateProjectHeaderInMode(store, target.projectId, "quickSession", mode, effects);
       return true;
+    case "emptyProjectAction":
+      activateEmptyProjectInMode(store, target.projectId, mode, effects);
+      return true;
     case "showDefaultAgentPickerForProject":
       activateProjectHeaderInMode(store, target.projectId, "defaultAgent", mode, effects);
       return true;
@@ -138,6 +141,24 @@ function activateProjectHeaderInMode(
     type: "dashboard.projectHeader.activate",
     projectId,
     actionId,
+  });
+  if (result.controlIntent !== undefined) {
+    executeDashboardControlIntent(result.controlIntent, store, effects);
+  }
+}
+
+function activateEmptyProjectInMode(
+  store: StoreApi<TuiStore>,
+  projectId: string,
+  mode: TuiInputMode,
+  effects: DashboardRendererEffects,
+): void {
+  if (mode !== "dashboard") {
+    return;
+  }
+  const result = store.getState().handleAction({
+    type: "dashboard.emptyProject.activate",
+    projectId,
   });
   if (result.controlIntent !== undefined) {
     executeDashboardControlIntent(result.controlIntent, store, effects);

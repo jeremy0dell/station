@@ -1,7 +1,10 @@
 import type { ProjectId } from "@station/contracts";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
-import { activateProjectHeaderControl } from "./projectHeaderActions.js";
+import {
+  activateEmptyProjectAction,
+  activateProjectHeaderControl,
+} from "./projectHeaderActions.js";
 import { handleAddProjectAction } from "./screens/addProjectScreen.js";
 import { handleFirstProjectAddAction } from "./screens/dashboard.js";
 import { handleNewSessionAction } from "./screens/newSession.js";
@@ -17,6 +20,7 @@ export type TuiSemanticAction =
       projectId: ProjectId;
       actionId: ProjectHeaderControl;
     }
+  | { type: "dashboard.emptyProject.activate"; projectId: ProjectId }
   | { type: "addProject.activate"; actionId: AddProjectActionId }
   | { type: "newSession.activate"; actionId: NewSessionActionId }
   | { type: "renameSession.submit" };
@@ -32,6 +36,8 @@ export function handleTuiAction(
       return handleFirstProjectAddAction(state, context);
     case "dashboard.projectHeader.activate":
       return activateProjectHeaderControl(state, action.projectId, action.actionId);
+    case "dashboard.emptyProject.activate":
+      return activateEmptyProjectAction(state, action.projectId);
     case "addProject.activate":
       return handleAddProjectAction(state, action.actionId);
     case "newSession.activate":

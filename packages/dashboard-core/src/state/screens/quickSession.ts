@@ -6,6 +6,7 @@ import {
 } from "../../flows/newSession.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildCreateSessionCommand } from "../commandBuilders.js";
+import { focusDashboardProjectHeader } from "../dashboardFocus.js";
 import { addPendingCreateSessionRow } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
@@ -47,7 +48,10 @@ export function resolveQuickSessionIntent(
   };
 }
 
-/** Builds the immediate configured-terminal transition for a resolved quick-session intent. */
+/**
+ * Resolves standalone Quick Session availability and builds its immediate operation.
+ * Only an accepted operation moves focus to the header's Quick Session control.
+ */
 export function submitQuickSession(state: TuiState, projectId: string): TuiTransition {
   const resolution = resolveQuickSessionIntent(state, projectId);
   if (resolution.kind === "missing") return { state };
@@ -67,14 +71,17 @@ export function submitQuickSession(state: TuiState, projectId: string): TuiTrans
   }
 
   return {
-    state: addPendingCreateSessionRow(state, {
-      localId,
-      projectId: project.id,
-      title,
-      branch,
-      harnessProvider,
-      createdAt: new Date().toISOString(),
-    }),
+    state: addPendingCreateSessionRow(
+      focusDashboardProjectHeader(state, project.id, "quickSession"),
+      {
+        localId,
+        projectId: project.id,
+        title,
+        branch,
+        harnessProvider,
+        createdAt: new Date().toISOString(),
+      },
+    ),
     operations: [
       {
         type: "createSession",

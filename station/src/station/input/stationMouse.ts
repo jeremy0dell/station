@@ -51,6 +51,8 @@ export type StationMouseTarget =
   | { kind: "openShellForProject"; projectId: string }
   /** The `[+]` quick-session affordance on a project header. */
   | { kind: "quickSessionForProject"; projectId: string }
+  /** The Add Session control rendered for a project with no visible sessions. */
+  | { kind: "emptyProjectAction"; projectId: string }
   /** The `[▾]` default-agent affordance on a project header. */
   | { kind: "showDefaultAgentPickerForProject"; projectId: string }
   /** The zero-project dashboard CTA; guarded against stale non-empty snapshots. */
@@ -213,6 +215,15 @@ export function routeStationMouse(
       return routeProjectHeaderActivation(store, mode, target.projectId, "shell");
     case "quickSessionForProject":
       return routeProjectHeaderActivation(store, mode, target.projectId, "quickSession");
+    case "emptyProjectAction":
+      return mode === "dashboard"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "dashboard.emptyProject.activate",
+              projectId: target.projectId,
+            }),
+          )
+        : { kind: "handled" };
     case "showDefaultAgentPickerForProject":
       return routeProjectHeaderActivation(store, mode, target.projectId, "defaultAgent");
     case "firstProjectAdd":

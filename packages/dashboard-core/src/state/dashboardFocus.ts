@@ -12,7 +12,8 @@ import type { DashboardFocus, ProjectHeaderControl, TuiState } from "./types.js"
 
 type SessionItem = Extract<DashboardViewportItem, { type: "session" }>;
 type ProjectHeaderItem = Extract<DashboardViewportItem, { type: "projectHeader" }>;
-type FocusableItem = SessionItem | ProjectHeaderItem;
+type EmptyProjectItem = Extract<DashboardViewportItem, { type: "emptyProject" }>;
+type FocusableItem = SessionItem | ProjectHeaderItem | EmptyProjectItem;
 
 const PROJECT_HEADER_CONTROLS: readonly ProjectHeaderControl[] = [
   "primary",
@@ -51,6 +52,20 @@ export function focusDashboardProjectHeader(
     : focusItem(state, items, index, { kind: "projectHeader", projectId, control });
 }
 
+/** Focuses the stable action rendered for a currently empty project. */
+export function focusDashboardEmptyProjectAction(state: TuiState, projectId: ProjectId): TuiState {
+  if (state.snapshot === undefined) {
+    return state;
+  }
+  const items = selectDashboardItems(state.snapshot, state);
+  const index = items.findIndex(
+    (item) => item.type === "emptyProject" && item.project.id === projectId,
+  );
+  return index === -1
+    ? state
+    : focusItem(state, items, index, { kind: "emptyProjectAction", projectId });
+}
+
 /** Removes transient dashboard focus without disturbing other view state. */
 export function clearDashboardFocus(state: TuiState): TuiState {
   const cleared = { ...state };
@@ -58,8 +73,8 @@ export function clearDashboardFocus(state: TuiState): TuiState {
   return cleared;
 }
 
-// Vertical dashboard traversal includes project headers, while row chooser
-// traversal deliberately uses moveDashboardSessionFocus to remain session-only.
+// Vertical dashboard traversal includes project headers and empty-project actions, while row
+// chooser traversal deliberately uses moveDashboardSessionFocus to remain session-only.
 export function moveDashboardFocus(state: TuiState, delta: -1 | 1): TuiState {
   return moveFocus(state, delta, "dashboard");
 }
@@ -117,6 +132,18 @@ export function focusedProjectHeaderControl(
 ): Extract<DashboardFocus, { kind: "projectHeader" }> | undefined {
   const focus = state.dashboardFocus;
   if (focus?.kind !== "projectHeader" || state.snapshot === undefined) {
+    return undefined;
+  }
+  const items = selectDashboardItems(state.snapshot, state);
+  return focusedItemIndex(items, focus) === undefined ? undefined : focus;
+}
+
+/** Returns the focused empty-project action only while its row remains rendered. */
+export function focusedEmptyProjectAction(
+  state: TuiState,
+): Extract<DashboardFocus, { kind: "emptyProjectAction" }> | undefined {
+  const focus = state.dashboardFocus;
+  if (focus?.kind !== "emptyProjectAction" || state.snapshot === undefined) {
     return undefined;
   }
   const items = selectDashboardItems(state.snapshot, state);
@@ -209,7 +236,8 @@ function focusableIndexes(
   mode: "dashboard" | "session",
 ): number[] {
   return items.flatMap((item, index) =>
-    item.type === "session" || (mode === "dashboard" && item.type === "projectHeader")
+    item.type === "session" ||
+    (mode === "dashboard" && (item.type === "projectHeader" || item.type === "emptyProject"))
       ? [index]
       : [],
   );
@@ -232,6 +260,8 @@ function focusMatchesItem(focus: DashboardFocus, item: DashboardViewportItem): b
       return item.type === "session" && item.row.id === focus.sessionId;
     case "projectHeader":
       return item.type === "projectHeader" && item.project.id === focus.projectId;
+    case "emptyProjectAction":
+      return item.type === "emptyProject" && item.project.id === focus.projectId;
   }
 }
 
@@ -271,7 +301,10 @@ function focusItem(
   focus?: DashboardFocus,
 ): TuiState {
   const item = items[index];
-  if (item === undefined || (item.type !== "session" && item.type !== "projectHeader")) {
+  if (
+    item === undefined ||
+    (item.type !== "session" && item.type !== "projectHeader" && item.type !== "emptyProject")
+  ) {
     return state;
   }
   const { bodyRows, offset } = viewportWindow(state, items.length);
@@ -289,9 +322,14 @@ function focusItem(
 }
 
 function focusForItem(item: FocusableItem): DashboardFocus {
-  return item.type === "session"
-    ? { kind: "session", sessionId: item.row.id }
-    : { kind: "projectHeader", projectId: item.project.id, control: "primary" };
+  switch (item.type) {
+    case "session":
+      return { kind: "session", sessionId: item.row.id };
+    case "projectHeader":
+      return { kind: "projectHeader", projectId: item.project.id, control: "primary" };
+    case "emptyProject":
+      return { kind: "emptyProjectAction", projectId: item.project.id };
+  }
 }
 
 function withClampedScroll(state: TuiState, itemCount: number): TuiState {

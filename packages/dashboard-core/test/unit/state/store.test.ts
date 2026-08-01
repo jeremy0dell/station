@@ -74,6 +74,34 @@ describe("TUI store", () => {
     expect(store.getState().handleKey({ input: "" }).controlIntent).toBeUndefined();
   });
 
+  it("returns an empty-project Quick Session intent before standalone resolution transfers focus", () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const store = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+    });
+
+    const result = store.getState().handleAction({
+      type: "dashboard.emptyProject.activate",
+      projectId: "web",
+    });
+
+    expect(result.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: "web",
+    });
+    expect(store.getState().handleKey({ input: "" }).controlIntent).toBeUndefined();
+
+    store.getState().createQuickSession("web");
+    expect(store.getState().localRows.pendingCreate).toHaveLength(1);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "web",
+      control: "quickSession",
+    });
+  });
+
   it("loads initial snapshots and cleans up event subscriptions", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);

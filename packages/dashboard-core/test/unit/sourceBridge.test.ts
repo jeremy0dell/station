@@ -11,7 +11,7 @@ import {
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { createDashboardSnapshot } from "../fixtures/snapshots.js";
+import { createDashboardSnapshot, createZeroWorktreeSnapshot } from "../fixtures/snapshots.js";
 
 const NOW = 1_750_000_000_000;
 
@@ -85,6 +85,32 @@ describe("applySnapshotSourceState", () => {
       kind: "projectHeader",
       projectId: "api",
       control: "primary",
+    });
+  });
+
+  it("preserves or positionally reconciles empty-project focus across source snapshots", () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const initial = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+    });
+    const connected = { state: "connected" as const, since: NOW };
+
+    const preserved = applySnapshotSourceState(
+      initial,
+      { snapshot: { ...snapshot, generatedAt: "2026-05-20T12:01:00.000Z" }, connection: connected },
+      NOW,
+    );
+    expect(preserved.dashboardFocus).toEqual({ kind: "emptyProjectAction", projectId: "web" });
+
+    const reconciled = applySnapshotSourceState(
+      initial,
+      { snapshot: createDashboardSnapshot(), connection: connected },
+      NOW,
+    );
+    expect(reconciled.dashboardFocus).toEqual({
+      kind: "session",
+      sessionId: "ses_wt_web_working",
     });
   });
 

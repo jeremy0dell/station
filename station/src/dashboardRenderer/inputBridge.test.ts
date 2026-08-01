@@ -92,6 +92,31 @@ describe("createDashboardSequenceHandler", () => {
     ).toHaveLength(1);
   });
 
+  it("consumes focused empty-project Enter as one Quick Session intent", async () => {
+    const fixture = makeStationTestStore({ snapshot: manyProjectsSnapshot() });
+    fixture.store.setState({
+      dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+    });
+    const effects = { openShell: () => {}, openUrl: () => {} };
+    const handle = createDashboardSequenceHandler(fixture.store, (intent) => {
+      executeDashboardControlIntent(intent, fixture.store, effects);
+    });
+
+    handle("\r");
+
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    expect(
+      fixture.service.dispatched.filter((command) => command.type === "session.create"),
+    ).toHaveLength(1);
+    expect(fixture.store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "empty-project",
+      control: "quickSession",
+    });
+  });
+
   it("swallows terminal query replies without dispatching", () => {
     const { handle, keys } = harness();
     expect(handle("\x1b[1;1R")).toBe(true); // cursor position report

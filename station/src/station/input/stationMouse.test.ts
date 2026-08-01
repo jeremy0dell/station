@@ -597,6 +597,66 @@ describe("routeStationMouse", () => {
     });
   });
 
+  it("routes the empty-project action to the native managed launch outcome", () => {
+    const store = makeStore();
+    const outcome = routeStationMouse(
+      { kind: "emptyProjectAction", projectId: "empty-project" },
+      LEFT_DOWN,
+      store,
+    );
+
+    expect(outcome).toMatchObject({
+      kind: "launch-new-session",
+      projectId: "empty-project",
+      harness: "codex",
+    });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "empty-project",
+      control: "quickSession",
+    });
+  });
+
+  it("keeps blocked empty-project activation focused for retry", () => {
+    const store = makeStore(snapshotWithBareProject("empty-project"));
+
+    expect(
+      routeStationMouse(
+        { kind: "emptyProjectAction", projectId: "empty-project" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: "empty-project",
+    });
+    expect(store.getState().toasts.at(-1)?.toast.kind).toBe("error");
+  });
+
+  it("keeps stale and modal empty-project targets inert", () => {
+    const stale = makeStore();
+    expect(
+      routeStationMouse({ kind: "emptyProjectAction", projectId: "ghost" }, LEFT_DOWN, stale),
+    ).toEqual({ kind: "handled" });
+    expect(
+      routeStationMouse({ kind: "emptyProjectAction", projectId: "station" }, LEFT_DOWN, stale),
+    ).toEqual({ kind: "handled" });
+    expect(stale.getState().dashboardFocus).toBeUndefined();
+
+    const modal = makeStore();
+    modal.getState().handleKey({ input: "H" });
+    expect(
+      routeStationMouse(
+        { kind: "emptyProjectAction", projectId: "empty-project" },
+        LEFT_DOWN,
+        modal,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(modal.getState().screen).toEqual({ name: "help" });
+    expect(modal.getState().dashboardFocus).toBeUndefined();
+  });
+
   it("shows the blocked Quick Session error without emitting a launch outcome", () => {
     const store = makeStore(snapshotWithBareProject("station"));
 
