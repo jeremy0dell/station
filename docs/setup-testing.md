@@ -10,14 +10,16 @@ The setup engine is dependency-injected end to end (`runner`, `access`, `fs`,
 in-process. The few states that need a real OS (real `brew install`, a truly
 CLT-absent Mac) run in a VM.
 
-The non-interactive surfaces additionally drive a process-local semantic session. Its unit
-suite covers revision filtering, cancellation during in-flight effects, inspection and operation
-failures, completed-operation checkpoints, and the serialized inspection/effect loop. CLI tests
-also require dry runs to leave every operation port unused, preserve actionable boundary errors,
-and re-inspect package installs with refreshed Homebrew paths. Checkpoints prevent an operation
-completed during one invocation from being replayed during that invocation; they retain operation
-identity only, are not a session store, and do not recover a restart. The guided flow remains
-separately covered as the retained compatibility path.
+The guided and non-interactive surfaces drive one process-local semantic session per invocation.
+Its unit suite covers intent-bound inspection, staged prerequisite preparation, revision filtering,
+cancellation during in-flight effects, inspection and operation failures, completed-operation
+checkpoints, non-authoritative progress failures, and the serialized inspection/effect loop. CLI tests also require dry runs to leave
+every operation port unused, preserve actionable boundary errors, and re-inspect package and
+harness installs with refreshed executable paths. Checkpoints prevent an operation completed
+during one invocation from being replayed during that invocation; they retain operation identity
+only, are not a session store, and do not recover a restart. The guided line presenter remains
+separately covered for prompt ordering, invalid-selection reprompting, terminal ownership, and
+human-only progress output.
 
 ## The profile contract
 

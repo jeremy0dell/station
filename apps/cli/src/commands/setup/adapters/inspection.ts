@@ -6,6 +6,7 @@ import {
   type SetupInspection,
   type SetupOperationOutcome,
   type SetupPlanningFacts,
+  type SetupPlanningIntent,
   type SupportedHarnessId,
 } from "@station/setup-core";
 import { type CollectSetupFactsOptions, collectSetupFacts } from "../checks/system.js";
@@ -46,7 +47,7 @@ export type SetupInspectionAdapterOptions = {
 /**
  * ADAPTER
  *
- * Collects CLI machine facts and provider-hook status, retaining representation-specific evidence locally while exposing normalized setup evidence to core.
+ * Collects CLI machine and provider evidence for the requested intent while retaining TOML, paths, commands, and provider representations locally.
  */
 export function createSetupInspectionAdapter(
   options: SetupInspectionAdapterOptions,
@@ -54,7 +55,7 @@ export function createSetupInspectionAdapter(
   let snapshot: SetupInspectionSnapshot | undefined;
   let inspectionDeps = options.deps;
 
-  const inspect: SetupInspection = async () => {
+  const inspect: SetupInspection = async (request) => {
     try {
       const facts = await collectSetupFactsForCommand(
         options.mode,
@@ -62,7 +63,7 @@ export function createSetupInspectionAdapter(
         inspectionDeps,
         { noBrew: options.noBrew },
       );
-      const harnessSelection = resolveSetupHarnessSelection(facts);
+      const harnessSelection = resolveIntentHarnessSelection(facts, request.intent);
       const withTracking = await collectHarnessTrackingFacts(
         facts,
         harnessSelection,
@@ -75,6 +76,7 @@ export function createSetupInspectionAdapter(
         configWrite = await planSetupConfigWrite(withTracking, {
           harnessSelection,
           installHarnessHooks: trackedHarnessIds,
+          installWorktrunkHooks: request.intent.installWorktrunkHooks,
         });
       }
       const planningFacts = normalizeSetupPlanningFacts(
@@ -105,10 +107,30 @@ export function createSetupInspectionAdapter(
     currentDeps: () => inspectionDeps,
     recordOperationOutcome(outcome: SetupOperationOutcome) {
       if (outcome.status === "completed" && outcome.commit.kind === "package-installer") {
-        inspectionDeps = depsWithBrewBinPath(inspectionDeps, options.options.env);
+        inspectionDeps = depsWithPackageBinPaths(
+          inspectionDeps,
+          snapshot?.facts.homeDir ?? options.deps.homeDir,
+          options.options.env,
+        );
       }
     },
   });
+}
+
+function resolveIntentHarnessSelection(
+  facts: SetupFacts,
+  intent: SetupPlanningIntent,
+): SetupHarnessSelection {
+  switch (intent.harnessSelection.kind) {
+    case "automatic":
+      return resolveSetupHarnessSelection(facts);
+    case "explicit":
+      return resolveSetupHarnessSelection(facts, intent.harnessSelection.harnessIds);
+    case "cancelled":
+      return { selected: [], requiredHarnessIds: [], source: "unresolved" };
+    default:
+      return assertNever(intent.harnessSelection);
+  }
 }
 
 export async function collectSetupFactsForCommand(
@@ -210,9 +232,27 @@ export function depsWithBrewBinPath(
   return { ...deps, env };
 }
 
+function depsWithPackageBinPaths(
+  deps: SetupCommandDeps,
+  homeDir: string | undefined,
+  fallbackEnv: SetupCommandOptions["env"],
+): SetupCommandDeps {
+  const withBrew = depsWithBrewBinPath(deps, fallbackEnv);
+  if (homeDir === undefined) return withBrew;
+  const env = { ...(withBrew.env ?? fallbackEnv ?? process.env) };
+  env.PATH = prependPath(`${homeDir}/.opencode/bin`, env.PATH);
+  env.PATH = prependPath(`${homeDir}/.local/bin`, env.PATH);
+  return { ...withBrew, env };
+}
+
 function appendPath(existing: string | undefined, path: string): string {
   if (existing === undefined || existing.length === 0) return path;
   return existing.split(":").includes(path) ? existing : `${existing}:${path}`;
+}
+
+function prependPath(path: string, existing: string | undefined): string {
+  if (existing === undefined || existing.length === 0) return path;
+  return existing.split(":").includes(path) ? existing : `${path}:${existing}`;
 }
 
 const setupHarnessProbeUnavailable = {
@@ -238,6 +278,12 @@ export function normalizeSetupPlanningFacts(
     stateDirectoryWritable: facts.stateDir.status === "ok",
     socketEvidenceAvailable: facts.socketEvidence.status === "ok",
     xcodeTools: normalizeXcodeTools(facts),
+    homebrew:
+      facts.brew.status === "ok"
+        ? "available"
+        : facts.brew.status === "missing"
+          ? "missing"
+          : "skipped",
     tools: [
       normalizeTool("worktrunk", facts.worktrunk.status === "ok", facts),
       normalizeTool("tmux", facts.tmux.status === "ok", facts),
@@ -251,6 +297,7 @@ export function normalizeSetupPlanningFacts(
         ? { state: "unusable", reason: facts.git.reason }
         : { state: "usable", repository: facts.git.repository },
     harnessSelection: normalizeHarnessSelectionFacts(facts),
+    installableHarnessIds: facts.harnesses.map((harness) => harness.id),
     config: {
       state: normalizeConfigState(facts),
       write: configWrite?.operation ?? "none",

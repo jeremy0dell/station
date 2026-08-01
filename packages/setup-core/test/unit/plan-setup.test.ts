@@ -1,4 +1,9 @@
-import { planSetup, type SetupPlanningFacts, type SetupPlanningIntent } from "@station/setup-core";
+import {
+  assessSetupPlan,
+  planSetup,
+  type SetupPlanningFacts,
+  type SetupPlanningIntent,
+} from "@station/setup-core";
 import { describe, expect, it } from "vitest";
 
 describe("planSetup", () => {
@@ -25,6 +30,35 @@ describe("planSetup", () => {
       requiredIssueCount: 0,
       selectedOperationCount: 0,
     });
+  });
+
+  it("assesses preparation, intent editing, and apply from one semantic policy", () => {
+    const blockedPreparation = planSetup(facts({ stateDirectoryWritable: false }), intent());
+    const pendingConsent = planSetup(
+      facts({
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            assessment: { state: "artifact-missing-or-drifted" },
+            required: true,
+            persistedIntent: true,
+          },
+        ],
+      }),
+      intent({ harnessTrackingSelection: { kind: "explicit", harnessIds: [] } }),
+    );
+    const validConfigWithoutWrite = planSetup(
+      facts({ config: { state: "valid", write: "blocked", diagnostics: [] } }),
+      intent(),
+    );
+
+    expect(assessSetupPlan(blockedPreparation).canPrepare).toBe(false);
+    expect(assessSetupPlan(pendingConsent)).toMatchObject({
+      canPrepare: true,
+      canContinueEditing: true,
+      canApply: false,
+    });
+    expect(assessSetupPlan(validConfigWithoutWrite).canApply).toBe(true);
   });
 
   it("derives required tool issues and installer-aware operations", () => {
@@ -297,6 +331,41 @@ describe("planSetup", () => {
     });
   });
 
+  it("selects required tracking repairs only after explicit guided consent", () => {
+    const evidence = facts({
+      harnessTracking: [
+        {
+          harnessId: "codex",
+          assessment: {
+            state: "artifact-missing-or-drifted",
+            requested: true,
+            installed: false,
+          },
+          required: true,
+          persistedIntent: true,
+        },
+      ],
+    });
+
+    const withoutConsent = planSetup(
+      evidence,
+      intent({ harnessTrackingSelection: { kind: "explicit", harnessIds: [] } }),
+    );
+    const withConsent = planSetup(
+      evidence,
+      intent({
+        harnessTrackingSelection: { kind: "explicit", harnessIds: ["codex"] },
+      }),
+    );
+
+    expect(
+      withoutConsent.operations.find((operation) => operation.kind === "prepare-harness-tracking"),
+    ).toMatchObject({ harnessId: "codex", selected: false });
+    expect(
+      withConsent.operations.find((operation) => operation.kind === "prepare-harness-tracking"),
+    ).toMatchObject({ harnessId: "codex", selected: true });
+  });
+
   it("does not repair optional tracking without persisted intent", () => {
     const plan = planSetup(
       facts({
@@ -328,6 +397,90 @@ describe("planSetup", () => {
     expect(plan.operations.some((operation) => operation.kind === "prepare-harness-tracking")).toBe(
       false,
     );
+  });
+
+  it("selects one consented bootstrap wave at a time", () => {
+    const commandLineTools = planSetup(
+      facts({ xcodeTools: "missing", homebrew: "missing" }),
+      intent({ installBootstrap: true }),
+    );
+    const homebrew = planSetup(facts({ homebrew: "missing" }), intent({ installBootstrap: true }));
+
+    expect(commandLineTools.operations).toContainEqual({
+      id: "install:xcode-command-line-tools",
+      kind: "install-xcode-command-line-tools",
+      tier: "required",
+      selected: true,
+    });
+    expect(
+      commandLineTools.operations.some((operation) => operation.kind === "install-homebrew"),
+    ).toBe(false);
+    expect(homebrew.operations).toContainEqual({
+      id: "install:homebrew",
+      kind: "install-homebrew",
+      tier: "required",
+      selected: true,
+    });
+  });
+
+  it("exposes missing harness installers as typed candidates selected only by intent", () => {
+    const missingHarness = {
+      config: { status: "missing" as const },
+      harnesses: [
+        { id: "codex" as const, availability: "unavailable" as const },
+        { id: "opencode" as const, availability: "unavailable" as const },
+      ],
+    };
+    const plan = planSetup(
+      facts({
+        harnessSelection: missingHarness,
+        installableHarnessIds: ["codex", "opencode"],
+        harnessTracking: [],
+      }),
+      intent({ installHarnesses: ["opencode"] }),
+    );
+
+    expect(plan.operations.filter((operation) => operation.kind === "install-harness")).toEqual([
+      {
+        id: "install-harness:codex",
+        kind: "install-harness",
+        tier: "required",
+        selected: false,
+        harnessId: "codex",
+      },
+      {
+        id: "install-harness:opencode",
+        kind: "install-harness",
+        tier: "required",
+        selected: true,
+        harnessId: "opencode",
+      },
+    ]);
+  });
+
+  it("derives recommended integration selection only from the guided intent", () => {
+    const plan = planSetup(
+      facts({
+        launchers: { station: "checkout", ingress: "checkout", tmuxPopup: "checkout" },
+        worktrunkShell: "missing",
+        tmuxPopup: { persisted: "missing", live: "missing" },
+      }),
+      intent({
+        linkStationLaunchers: true,
+        installWorktrunkShell: true,
+        configureTmuxPopup: true,
+      }),
+    );
+
+    expect(
+      plan.operations
+        .filter((operation) =>
+          ["link-launchers", "configure-worktrunk-shell", "configure-tmux-popup"].includes(
+            operation.kind,
+          ),
+        )
+        .every((operation) => operation.selected),
+    ).toBe(true);
   });
 
   it("contains no presentation, command, config content, or serialized provider artifacts", () => {
@@ -382,6 +535,7 @@ function facts(overrides: Partial<SetupPlanningFacts> = {}): SetupPlanningFacts 
     stateDirectoryWritable: true,
     socketEvidenceAvailable: true,
     xcodeTools: "available",
+    homebrew: "available",
     tools: [
       tool("worktrunk", true, true),
       tool("tmux", true, true),
@@ -395,6 +549,7 @@ function facts(overrides: Partial<SetupPlanningFacts> = {}): SetupPlanningFacts 
       config: { status: "valid", defaultHarness: "codex" },
       harnesses: [{ id: "codex", availability: "available" }],
     },
+    installableHarnessIds: ["codex"],
     config: { state: "valid", write: "none", diagnostics: [] },
     launchers: { station: "available", ingress: "available", tmuxPopup: "available" },
     worktrunkAutomation: "ready",
@@ -417,7 +572,13 @@ function intent(overrides: Partial<SetupPlanningIntent> = {}): SetupPlanningInte
   return {
     mode: "plan",
     harnessSelection: { kind: "automatic" },
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
     installWorktrunkHooks: false,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
     ...overrides,
   };
 }

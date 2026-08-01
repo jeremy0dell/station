@@ -11,11 +11,16 @@ import type {
 export type ProjectSetupSessionProgress =
   | {
       readonly kind: "inspection";
-      readonly phase: "initial" | "after-preflight" | "after-activation";
+      readonly phase: "initial" | "after-preparation" | "after-preflight" | "after-activation";
     }
   | {
       readonly kind: "operation";
-      readonly phase: "preflight" | "config-write" | "observer-activation" | "tracking";
+      readonly phase:
+        | "preflight"
+        | "config-write"
+        | "observer-activation"
+        | "tracking"
+        | "optional-integrations";
     }
   | { readonly kind: "verification" }
   | { readonly kind: "idle" };

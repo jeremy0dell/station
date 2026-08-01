@@ -11,6 +11,7 @@ import {
   type SetupHarnessTrackingRunners,
 } from "../../src/commands/setup/adapters/harnessTracking.js";
 import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
+import type { SetupFacts } from "../../src/commands/setup/model.js";
 
 const trackedProviders = ["claude", "codex", "cursor", "opencode"] as const;
 
@@ -52,6 +53,47 @@ describe("setup operation adapters", () => {
         stdio: "inherit",
       }),
     ]);
+  });
+
+  it("keeps a missing shell rc precondition inside the Worktrunk adapter", async () => {
+    let runnerCalls = 0;
+    const execute = createSetupOperationAdapter({
+      facts: {
+        homeDir: "/tmp/station-shell-precondition",
+        worktrunk: { status: "ok", command: "wt" },
+        worktrunkShellIntegration: {
+          status: "warning",
+          message: "missing",
+          shell: "zsh",
+          rcPath: "/tmp/station-shell-precondition/does-not-exist/.zshrc",
+        },
+      } as SetupFacts,
+      deps: {
+        runner: async (input) => {
+          runnerCalls += 1;
+          return {
+            command: input.command,
+            args: input.args ?? [],
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+          };
+        },
+      },
+    });
+
+    const outcome = await execute({
+      id: "configure-worktrunk-shell",
+      kind: "configure-worktrunk-shell",
+      tier: "recommended",
+      selected: true,
+    });
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "SETUP_WORKTRUNK_SHELL_RC_MISSING" },
+    });
+    expect(runnerCalls).toBe(0);
   });
 
   it.each(

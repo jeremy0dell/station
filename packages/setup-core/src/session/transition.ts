@@ -28,7 +28,7 @@ export function createSetupSessionState(intent: SetupPlanningIntent): SetupSessi
 /**
  * POLICY
  *
- * Advances one in-memory setup session from normalized evidence and typed operation outcomes without I/O.
+ * Advances intent editing, staged preparation, complete apply, and cancellation from normalized evidence and typed outcomes without I/O.
  */
 export function transitionSetupSession(
   state: SetupSessionState,
@@ -81,6 +81,8 @@ function assertKnownSetupEvent(event: SetupSessionEvent): void {
     case "inspection-requested":
     case "inspection-completed":
     case "inspection-failed":
+    case "intent-replaced":
+    case "prepare-requested":
     case "review-requested":
     case "preview-requested":
     case "apply-requested":

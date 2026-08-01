@@ -832,6 +832,7 @@ function deriveDeclarationDependencies(input) {
                   found.set(key, {
                     target,
                     edgeKind,
+                    relationship: declarationDependencyRelationship(child, group),
                     symbol: child.text,
                     ...position,
                   });
@@ -856,6 +857,19 @@ function deriveDeclarationDependencies(input) {
     );
   }
   return dependencies;
+}
+
+function declarationDependencyRelationship(identifier, group) {
+  let current = identifier;
+  while (current.parent !== undefined && current.parent !== group.sourceFile) {
+    current = current.parent;
+    if (!ts.isFunctionDeclaration(current)) continue;
+    if (!group.nodes.includes(current) || current.type === undefined) return undefined;
+    return current.type.pos <= identifier.pos && identifier.end <= current.type.end
+      ? "declared-return"
+      : undefined;
+  }
+  return undefined;
 }
 
 function importedSymbolMetadata(sourceFile, checker) {
@@ -944,6 +958,14 @@ function evaluateRoleDirections(input) {
         continue;
       }
       if (originRole === undefined || originRole === "COMPOSITION ROOT") continue;
+      if (
+        originRole === "USE CASE" &&
+        targetRole === "DRIVING PORT" &&
+        dependency.relationship === "declared-return" &&
+        group.path === dependency.target.path
+      ) {
+        continue;
+      }
       if (!allowedRoleTargets.get(originRole)?.has(targetRole)) {
         input.diagnostics.push(
           directionDiagnostic({

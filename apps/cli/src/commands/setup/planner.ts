@@ -40,7 +40,13 @@ export function buildSetupPlans(
   const intent: SetupPlanningIntent = {
     mode: facts.mode,
     harnessSelection: normalizeHarnessSelectionIntent(options.harnessSelection),
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
     installWorktrunkHooks: options.installWorktrunkHooks === true,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
   };
   const semanticPlan = planSetup(evidence, intent);
   const projectionInput =

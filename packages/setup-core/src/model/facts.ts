@@ -93,6 +93,7 @@ export type SetupPlanningFacts = {
   readonly stateDirectoryWritable: boolean;
   readonly socketEvidenceAvailable: boolean;
   readonly xcodeTools: "available" | "missing" | "not-applicable";
+  readonly homebrew: "available" | "missing" | "skipped";
   readonly tools: readonly {
     readonly id: SetupToolId;
     readonly available: boolean;
@@ -110,6 +111,7 @@ export type SetupPlanningFacts = {
           | "dubious-ownership";
       };
   readonly harnessSelection: HarnessSelectionFacts;
+  readonly installableHarnessIds: readonly SupportedHarnessId[];
   readonly config: {
     readonly state: "missing" | "valid" | "invalid";
     readonly write: "none" | "create" | "update" | "blocked";

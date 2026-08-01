@@ -1,7 +1,9 @@
 import type { SafeError } from "@station/contracts";
 import {
   createSetupSessionApplication,
+  type SetupEditableIntent,
   type SetupOperationExecutor,
+  type SetupOperationProgress,
   type SetupSessionApplication,
   type SetupSessionState,
 } from "@station/setup-core";
@@ -55,12 +57,14 @@ export type CreateSetupCompositionOptions = {
   readonly deps: SetupCommandDeps;
   readonly noBrew: boolean;
   readonly planConfigWrite: boolean;
+  readonly initialIntent?: SetupEditableIntent;
+  readonly operationProgress?: SetupOperationProgress;
 };
 
 /**
  * COMPOSITION ROOT
  *
- * Wires one CLI invocation's inspection, operation, session, and presentation adapters.
+ * Wires one CLI invocation's inspection, operation, session, guided progress, and presentation adapters.
  */
 export function createSetupComposition(options: CreateSetupCompositionOptions): SetupComposition {
   const inspection = createSetupInspectionAdapter({
@@ -73,29 +77,41 @@ export function createSetupComposition(options: CreateSetupCompositionOptions): 
   let executor: SetupOperationExecutor | undefined;
   const executeOperation: SetupOperationExecutor = async (operation) => {
     const snapshot = inspection.current();
-    if (snapshot === undefined) {
-      return {
-        status: "failed",
-        operationId: operation.id,
-        error: setupInspectionRequired,
-      };
-    }
+    const outcome =
+      snapshot === undefined
+        ? {
+            status: "failed" as const,
+            operationId: operation.id,
+            error: setupInspectionRequired,
+          }
+        : await executeWithCurrentInspection(operation);
+    inspection.recordOperationOutcome(outcome);
+    return outcome;
+  };
+  const executeWithCurrentInspection: SetupOperationExecutor = async (operation) => {
     executor ??= createSetupOperationAdapter({
       facts: () => inspection.current()?.facts,
       deps: inspection.currentDeps,
     });
-    const outcome = await executor(operation);
-    inspection.recordOperationOutcome(outcome);
-    return outcome;
+    return executor(operation);
+  };
+  const initialIntent: SetupEditableIntent = options.initialIntent ?? {
+    harnessSelection: { kind: "automatic" },
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
+    installWorktrunkHooks: false,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
   };
   const application = createSetupSessionApplication({
-    intent: {
-      mode: options.mode,
-      harnessSelection: { kind: "automatic" },
-      installWorktrunkHooks: false,
-    },
+    intent: { ...initialIntent, mode: options.mode },
     inspection,
     executeOperation,
+    ...(options.operationProgress === undefined
+      ? {}
+      : { operationProgress: options.operationProgress }),
   });
   const session: CliSetupSession = {
     application,
