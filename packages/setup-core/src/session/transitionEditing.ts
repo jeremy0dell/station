@@ -1,7 +1,11 @@
-import type { SetupSessionEvent, SetupSessionTransition } from "../model/session.js";
+import type {
+  SetupSessionEditingState,
+  SetupSessionEvent,
+  SetupSessionTransition,
+} from "../model/session.js";
 
 export function transitionEditing(
-  state: Extract<SetupSessionTransition["state"], { readonly status: "editing" }>,
+  state: SetupSessionEditingState,
   event: SetupSessionEvent,
 ): SetupSessionTransition {
   if (event.type !== "review-requested") return { state, effects: [] };

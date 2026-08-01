@@ -1,13 +1,13 @@
 import type {
   SetupSessionEvent,
-  SetupSessionState,
+  SetupSessionInspectingState,
   SetupSessionTransition,
 } from "../model/session.js";
 import { planSetup } from "../policy/planSetup.js";
 import { beginConfigWrite, beginTracking } from "./transitionApplying.js";
 
 export function transitionInspecting(
-  state: Extract<SetupSessionState, { readonly status: "inspecting" }>,
+  state: SetupSessionInspectingState,
   event: SetupSessionEvent,
 ): SetupSessionTransition {
   if (event.type === "inspection-requested") {

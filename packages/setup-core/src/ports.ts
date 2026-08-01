@@ -1,6 +1,16 @@
 import type { SafeError } from "@station/contracts";
 import type { SetupPlanningFacts } from "./model/facts.js";
-import type { SetupOperation, SetupOperationOutcome } from "./model/operations.js";
+import type {
+  SetupConfigWriteOperation,
+  SetupHarnessTrackingOperation,
+  SetupLauncherLinkOperation,
+  SetupObserverActivationOperation,
+  SetupOperation,
+  SetupOperationOutcome,
+  SetupPackageInstallOperation,
+  SetupTmuxPopupOperation,
+  SetupWorktrunkIntegrationOperation,
+} from "./model/operations.js";
 import type { SetupSessionInspectionPhase } from "./model/session.js";
 
 export type {
@@ -33,7 +43,7 @@ export type SetupInspection = (request: SetupInspectionRequest) => Promise<Setup
  * Commits the desired Station setup configuration without exposing its representation to setup policy.
  */
 export type SetupConfigMutationPort = (
-  operation: Extract<SetupOperation, { kind: "write-config" }>,
+  operation: SetupConfigWriteOperation,
 ) => Promise<SetupOperationOutcome>;
 
 /**
@@ -42,7 +52,7 @@ export type SetupConfigMutationPort = (
  * Activates a committed setup configuration and confirms Observer health.
  */
 export type SetupObserverActivationPort = (
-  operation: Extract<SetupOperation, { kind: "activate-observer-config" }>,
+  operation: SetupObserverActivationOperation,
 ) => Promise<SetupOperationOutcome>;
 
 /**
@@ -51,7 +61,7 @@ export type SetupObserverActivationPort = (
  * Prepares one selected harness's Station-owned tracking artifacts.
  */
 export type SetupHarnessTrackingPort = (
-  operation: Extract<SetupOperation, { kind: "prepare-harness-tracking" }>,
+  operation: SetupHarnessTrackingOperation,
 ) => Promise<SetupOperationOutcome>;
 
 /**
@@ -60,10 +70,7 @@ export type SetupHarnessTrackingPort = (
  * Applies Worktrunk tracking or shell integration requested by setup.
  */
 export type SetupWorktrunkIntegrationPort = (
-  operation: Extract<
-    SetupOperation,
-    { kind: "prepare-worktrunk-tracking" | "configure-worktrunk-shell" }
-  >,
+  operation: SetupWorktrunkIntegrationOperation,
 ) => Promise<SetupOperationOutcome>;
 
 /**
@@ -72,7 +79,7 @@ export type SetupWorktrunkIntegrationPort = (
  * Persists or live-loads the selected tmux popup configuration.
  */
 export type SetupTmuxConfigurationPort = (
-  operation: Extract<SetupOperation, { kind: "configure-tmux-popup" }>,
+  operation: SetupTmuxPopupOperation,
 ) => Promise<SetupOperationOutcome>;
 
 /**
@@ -81,16 +88,7 @@ export type SetupTmuxConfigurationPort = (
  * Runs the installer selected for a setup package target.
  */
 export type SetupPackageInstallationPort = (
-  operation: Extract<
-    SetupOperation,
-    {
-      kind:
-        | "install-tool"
-        | "install-harness"
-        | "install-homebrew"
-        | "install-xcode-command-line-tools";
-    }
-  >,
+  operation: SetupPackageInstallOperation,
 ) => Promise<SetupOperationOutcome>;
 
 /**
@@ -99,7 +97,7 @@ export type SetupPackageInstallationPort = (
  * Links the Station launchers required for bare terminal commands.
  */
 export type SetupLauncherLinkPort = (
-  operation: Extract<SetupOperation, { kind: "link-launchers" }>,
+  operation: SetupLauncherLinkOperation,
 ) => Promise<SetupOperationOutcome>;
 
 /**

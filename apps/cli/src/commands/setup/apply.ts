@@ -11,6 +11,7 @@ import {
 import type {
   SetupOperation,
   SetupOperationExecutor,
+  SetupOperationFailedOutcome,
   SetupOperationOutcome,
 } from "@station/setup-core";
 import type { SetupAction, SetupPlan } from "./model.js";
@@ -51,7 +52,7 @@ export type ApplySetupPlanOptions = {
 export type ApplySetupPlanResult = {
   plan: SetupPlan;
   failedAction?: SetupAction;
-  failedOperation?: Extract<SetupOperationOutcome, { status: "failed" }>;
+  failedOperation?: SetupOperationFailedOutcome;
   operationOutcomes: readonly SetupOperationOutcome[];
 };
 
@@ -66,7 +67,7 @@ export async function applySetupPlan(
   );
   const fs = options.fs ?? nodeApplyFs();
   let failedAction: SetupAction | undefined;
-  let failedOperation: Extract<SetupOperationOutcome, { status: "failed" }> | undefined;
+  let failedOperation: SetupOperationFailedOutcome | undefined;
   for (const action of plan.actions) {
     if (!action.selected || options.actionFilter?.(action) === false) {
       actions.push({ ...action, status: "skipped" });
@@ -164,7 +165,7 @@ function applyResult(
   actions: readonly SetupAction[],
   operationOutcomes: readonly SetupOperationOutcome[],
   failedAction: SetupAction | undefined,
-  failedOperation: Extract<SetupOperationOutcome, { status: "failed" }> | undefined,
+  failedOperation: SetupOperationFailedOutcome | undefined,
   skipRemaining: boolean,
 ): ApplySetupPlanResult {
   const projectedActions = skipRemaining
@@ -174,7 +175,7 @@ function applyResult(
     plan: SetupPlan;
     operationOutcomes: readonly SetupOperationOutcome[];
     failedAction?: SetupAction;
-    failedOperation?: Extract<SetupOperationOutcome, { status: "failed" }>;
+    failedOperation?: SetupOperationFailedOutcome;
   } = {
     plan: { ...plan, actions: projectedActions },
     operationOutcomes,

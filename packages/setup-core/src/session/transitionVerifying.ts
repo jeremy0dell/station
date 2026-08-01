@@ -1,12 +1,12 @@
 import type {
   SetupSessionEvent,
-  SetupSessionState,
   SetupSessionTransition,
+  SetupSessionVerifyingState,
 } from "../model/session.js";
 import { planSetup } from "../policy/planSetup.js";
 
 export function transitionVerifying(
-  state: Extract<SetupSessionState, { readonly status: "verifying" }>,
+  state: SetupSessionVerifyingState,
   event: SetupSessionEvent,
 ): SetupSessionTransition {
   if (event.type === "inspection-failed") {

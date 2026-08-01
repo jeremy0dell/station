@@ -1,4 +1,4 @@
-import type { SetupOperation } from "@station/setup-core";
+import type { SetupOperation, SetupToolInstallOperation } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupHarnessSelection } from "../harnessSelection.js";
 import type { ConfigWritePlan, SetupFacts } from "../model.js";
@@ -117,7 +117,7 @@ export function projectSetupOperationActions(
 }
 
 function projectInstallToolAction(
-  operation: Extract<SetupOperation, { kind: "install-tool" }>,
+  operation: SetupToolInstallOperation,
   facts: SetupFacts,
 ): SetupViewAction {
   const presentation = toolPresentation(operation.tool);
@@ -138,7 +138,7 @@ function projectInstallToolAction(
   };
 }
 
-function toolPresentation(tool: Extract<SetupOperation, { kind: "install-tool" }>["tool"]): {
+function toolPresentation(tool: SetupToolInstallOperation["tool"]): {
   readonly label: string;
   readonly formula: string;
 } {

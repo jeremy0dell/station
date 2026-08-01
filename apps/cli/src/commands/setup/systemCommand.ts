@@ -1,5 +1,5 @@
 import { isCompiledBinary } from "@station/runtime";
-import type { SetupOperation, SetupToolId } from "@station/setup-core";
+import type { SetupToolId, SetupToolInstallOperation } from "@station/setup-core";
 import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
 import { createSetupOperationAdapter } from "./adapters/operations.js";
 import { applySetupPlan } from "./apply.js";
@@ -33,7 +33,7 @@ export async function runSetupSystemCommand(
 
   let operationFailed = false;
   if (args.yes && initial.brew.status === "ok") {
-    const operations: Array<Extract<SetupOperation, { kind: "install-tool" }>> = [];
+    const operations: SetupToolInstallOperation[] = [];
     if (initial.worktrunk.status === "missing")
       operations.push(systemInstallOperation("worktrunk"));
     if (initial.tmux.status === "missing") operations.push(systemInstallOperation("tmux"));
@@ -185,9 +185,7 @@ function systemInstallAction(tool: SetupToolId): SetupAction {
   };
 }
 
-function systemInstallOperation(
-  tool: SetupToolId,
-): Extract<SetupOperation, { kind: "install-tool" }> {
+function systemInstallOperation(tool: SetupToolId): SetupToolInstallOperation {
   return {
     id: `install:${tool}`,
     kind: "install-tool",

@@ -1,23 +1,28 @@
-import type { SetupOperation } from "../model/operations.js";
 import type {
+  SetupConfigWriteOperation,
+  SetupObserverActivationOperation,
+  SetupOperation,
+} from "../model/operations.js";
+import type { SetupPlan } from "../model/plan.js";
+import type {
+  SetupSessionApplyingState,
   SetupSessionApplyPhase,
   SetupSessionBlockReason,
   SetupSessionEffect,
   SetupSessionEvent,
-  SetupSessionState,
+  SetupSessionInspectingState,
+  SetupSessionReviewingState,
   SetupSessionTransition,
 } from "../model/session.js";
 import { hasCompletedSetupOperation, recordCompletedSetupOperation } from "./checkpoints.js";
 
-export function beginPreflight(
-  state: Extract<SetupSessionState, { readonly status: "reviewing" }>,
-): SetupSessionTransition {
+export function beginPreflight(state: SetupSessionReviewingState): SetupSessionTransition {
   return continueApplying({ ...state, status: "applying", applyPhase: "preflight" });
 }
 
 export function beginConfigWrite(
-  state: Extract<SetupSessionState, { readonly status: "inspecting" }>,
-  plan: Extract<SetupSessionState, { readonly status: "editing" }>["plan"],
+  state: SetupSessionInspectingState,
+  plan: SetupPlan,
 ): SetupSessionTransition {
   const withPlan = {
     revision: state.revision,
@@ -40,7 +45,7 @@ export function beginConfigWrite(
     };
   }
   const configOperation = plan.operations.find(
-    (operation): operation is Extract<SetupOperation, { readonly kind: "write-config" }> =>
+    (operation): operation is SetupConfigWriteOperation =>
       operation.kind === "write-config" && operation.selected,
   );
   if (configOperation === undefined) {
@@ -58,8 +63,8 @@ export function beginConfigWrite(
 }
 
 export function beginTracking(
-  state: Extract<SetupSessionState, { readonly status: "inspecting" }>,
-  plan: Extract<SetupSessionState, { readonly status: "editing" }>["plan"],
+  state: SetupSessionInspectingState,
+  plan: SetupPlan,
 ): SetupSessionTransition {
   return continueApplying({
     revision: state.revision,
@@ -73,7 +78,7 @@ export function beginTracking(
 }
 
 export function transitionApplying(
-  state: Extract<SetupSessionState, { readonly status: "applying" }>,
+  state: SetupSessionApplyingState,
   event: SetupSessionEvent,
 ): SetupSessionTransition {
   if (event.type === "operation-completed") {
@@ -109,9 +114,7 @@ export function transitionApplying(
   return { state, effects: [] };
 }
 
-function continueApplying(
-  state: Extract<SetupSessionState, { readonly status: "applying" }>,
-): SetupSessionTransition {
+function continueApplying(state: SetupSessionApplyingState): SetupSessionTransition {
   const operation = nextOperation(state);
   if (operation !== undefined) {
     const effect: SetupSessionEffect = { kind: "perform-operation", operation };
@@ -130,9 +133,7 @@ function continueApplying(
       };
     case "config-write": {
       const activation = state.plan.operations.find(
-        (
-          operation,
-        ): operation is Extract<SetupOperation, { readonly kind: "activate-observer-config" }> =>
+        (operation): operation is SetupObserverActivationOperation =>
           operation.kind === "activate-observer-config" && operation.selected,
       );
       if (
@@ -194,9 +195,7 @@ function blockReasonForPhase(
   }
 }
 
-function nextOperation(
-  state: Extract<SetupSessionState, { readonly status: "applying" }>,
-): SetupOperation | undefined {
+function nextOperation(state: SetupSessionApplyingState): SetupOperation | undefined {
   return state.plan.operations.find(
     (operation) =>
       operation.selected &&
@@ -207,7 +206,7 @@ function nextOperation(
 }
 
 function isExpectedOperation(
-  state: Extract<SetupSessionState, { readonly status: "applying" }>,
+  state: SetupSessionApplyingState,
   operationId: SetupOperation["id"],
 ): boolean {
   return nextOperation(state)?.id === operationId;
@@ -236,9 +235,7 @@ function isOperationInPhase(operation: SetupOperation, phase: SetupSessionApplyP
   }
 }
 
-function hasBlockingPreflightIssue(
-  plan: Extract<SetupSessionState, { readonly status: "editing" }>["plan"],
-): boolean {
+function hasBlockingPreflightIssue(plan: SetupPlan): boolean {
   return plan.issues.some((issue) => {
     if (issue.tier !== "required") return false;
     if (issue.code === "station-ui-missing") return false;

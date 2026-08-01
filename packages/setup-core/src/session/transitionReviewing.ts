@@ -1,8 +1,12 @@
-import type { SetupSessionEvent, SetupSessionTransition } from "../model/session.js";
+import type {
+  SetupSessionEvent,
+  SetupSessionReviewingState,
+  SetupSessionTransition,
+} from "../model/session.js";
 import { beginPreflight } from "./transitionApplying.js";
 
 export function transitionReviewing(
-  state: Extract<SetupSessionTransition["state"], { readonly status: "reviewing" }>,
+  state: SetupSessionReviewingState,
   event: SetupSessionEvent,
 ): SetupSessionTransition {
   if (event.type === "preview-requested") {

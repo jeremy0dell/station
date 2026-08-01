@@ -1,4 +1,7 @@
-import type { SetupSessionOperationOutcome } from "@station/setup-core";
+import type {
+  SetupSessionFailedOperationOutcome,
+  SetupSessionOperationOutcome,
+} from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import { createSetupComposition, type ProjectedSetupSession } from "../composition.js";
 import type { SetupFacts } from "../model.js";
@@ -99,8 +102,7 @@ async function renderOperationFailures(
   presenter: TextSetupPresenter,
 ): Promise<void> {
   const failures = projection.session.operationOutcomes.filter(
-    (outcome): outcome is Extract<SetupSessionOperationOutcome, { readonly status: "failed" }> =>
-      outcome.status === "failed",
+    (outcome): outcome is SetupSessionFailedOperationOutcome => outcome.status === "failed",
   );
   if (failures.length === 0 && projection.session.error !== undefined) {
     await presenter.write(`${presenter.renderInspectionFailure(projection.session.error)}\n`);

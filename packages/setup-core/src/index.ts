@@ -15,10 +15,20 @@ export {
 export type { HarnessSelectionIntent, SetupPlanningIntent } from "./model/intent.js";
 export type { SetupIssue } from "./model/issues.js";
 export type {
+  SetupConfigWriteOperation,
+  SetupHarnessInstallOperation,
+  SetupHomebrewInstallOperation,
   SetupOperation,
   SetupOperationCommit,
+  SetupOperationFailedOutcome,
   SetupOperationOutcome,
+  SetupPackageInstallerCommit,
+  SetupPackageInstallOperation,
   SetupPackageTarget,
+  SetupTmuxPopupOperation,
+  SetupToolInstallOperation,
+  SetupWorktrunkTrackingOperation,
+  SetupXcodeToolsInstallOperation,
 } from "./model/operations.js";
 export type { SetupPlan } from "./model/plan.js";
 export type { SetupResult } from "./model/result.js";
@@ -27,9 +37,11 @@ export type {
   SetupOperationCheckpoints,
   SetupSessionActiveInspectionPhase,
   SetupSessionApplyPhase,
+  SetupSessionBlockedState,
   SetupSessionBlockReason,
   SetupSessionEffect,
   SetupSessionEvent,
+  SetupSessionFailedOperationOutcome,
   SetupSessionInspectionPhase,
   SetupSessionOperationOutcome,
   SetupSessionResult,

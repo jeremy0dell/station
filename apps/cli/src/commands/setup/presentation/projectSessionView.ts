@@ -1,6 +1,7 @@
 import type { SafeError } from "@station/contracts";
 import type {
   SetupPlan,
+  SetupSessionBlockedState,
   SetupSessionOperationOutcome,
   SetupSessionResult,
   SetupSessionState,
@@ -26,7 +27,7 @@ export type ProjectSetupSessionView = {
   readonly plan?: SetupPlan;
   readonly result?: SetupSessionResult;
   readonly operationOutcomes: readonly SetupSessionOperationOutcome[];
-  readonly blockReason?: Extract<SetupSessionState, { readonly status: "blocked" }>["reason"];
+  readonly blockReason?: SetupSessionBlockedState["reason"];
   readonly error?: SafeError;
 };
 

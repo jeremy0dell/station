@@ -1,11 +1,11 @@
 import type {
+  SetupSessionBlockedState,
   SetupSessionEvent,
-  SetupSessionState,
   SetupSessionTransition,
 } from "../model/session.js";
 
 export function transitionBlocked(
-  state: Extract<SetupSessionState, { readonly status: "blocked" }>,
+  state: SetupSessionBlockedState,
   _event: SetupSessionEvent,
 ): SetupSessionTransition {
   return { state, effects: [] };

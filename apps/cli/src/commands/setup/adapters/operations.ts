@@ -14,6 +14,11 @@ import {
   type SetupOperationOutcome,
   type SetupOperationPorts,
   type SetupPackageInstallationPort,
+  type SetupPackageInstallerCommit,
+  type SetupPackageInstallOperation,
+  type SetupTmuxPopupOperation,
+  type SetupToolInstallOperation,
+  type SetupWorktrunkTrackingOperation,
 } from "@station/setup-core";
 import { runWorktrunkHooksCommand } from "../../providerHookAdapters.js";
 import type { SetupApplyFileSystem } from "../apply.js";
@@ -142,7 +147,7 @@ function createPackageInstallationAdapter(
 }
 
 function packageInstallCommand(
-  operation: Parameters<SetupPackageInstallationPort>[0],
+  operation: SetupPackageInstallOperation,
   facts: SetupFacts | undefined,
 ): readonly string[] {
   switch (operation.kind) {
@@ -176,8 +181,8 @@ function packageInstallCommand(
 }
 
 function packageTarget(
-  operation: Parameters<SetupPackageInstallationPort>[0],
-): Extract<SetupOperationCommit, { kind: "package-installer" }>["target"] {
+  operation: SetupPackageInstallOperation,
+): SetupPackageInstallerCommit["target"] {
   switch (operation.kind) {
     case "install-tool":
       return { kind: "tool", id: operation.tool };
@@ -193,7 +198,7 @@ function packageTarget(
 }
 
 async function prepareWorktrunkTracking(
-  operation: Extract<SetupOperation, { kind: "prepare-worktrunk-tracking" }>,
+  operation: SetupWorktrunkTrackingOperation,
   facts: SetupFacts,
   configPath: string,
   deps: SetupCommandDeps,
@@ -232,7 +237,7 @@ async function prepareWorktrunkTracking(
 }
 
 async function configureTmux(
-  operation: Extract<SetupOperation, { kind: "configure-tmux-popup" }>,
+  operation: SetupTmuxPopupOperation,
   facts: SetupFacts,
   deps: SetupCommandDeps,
 ): Promise<SetupOperationOutcome> {
@@ -438,7 +443,7 @@ function requireFacts(facts: SetupFacts | undefined): SetupFacts {
   return facts;
 }
 
-function toolFormula(tool: Extract<SetupOperation, { kind: "install-tool" }>["tool"]): string {
+function toolFormula(tool: SetupToolInstallOperation["tool"]): string {
   switch (tool) {
     case "worktrunk":
       return "worktrunk";

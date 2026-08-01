@@ -1,5 +1,6 @@
 import type { SetupPlanningIntent } from "../model/intent.js";
 import type {
+  SetupSessionCancelledState,
   SetupSessionEvent,
   SetupSessionState,
   SetupSessionTransition,
@@ -58,10 +59,7 @@ export function transitionSetupSession(
 }
 
 type SetupCancelledStateBuilder = {
-  -readonly [Key in keyof Extract<SetupSessionState, { readonly status: "cancelled" }>]: Extract<
-    SetupSessionState,
-    { readonly status: "cancelled" }
-  >[Key];
+  -readonly [Key in keyof SetupSessionCancelledState]: SetupSessionCancelledState[Key];
 };
 
 function cancelSetupSession(state: SetupSessionState): SetupSessionTransition {

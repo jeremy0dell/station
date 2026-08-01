@@ -4,6 +4,7 @@ import type { SetupOperation } from "../model/operations.js";
 import type {
   SetupSessionEffect,
   SetupSessionEvent,
+  SetupSessionFailedOperationOutcome,
   SetupSessionOperationOutcome,
   SetupSessionState,
 } from "../model/session.js";
@@ -157,7 +158,7 @@ export function createSetupSessionApplication(
 function failedSessionOutcome(
   operation: SetupOperation,
   error: SafeError,
-): Extract<SetupSessionOperationOutcome, { readonly status: "failed" }> {
+): SetupSessionFailedOperationOutcome {
   return { status: "failed", operationId: operation.id, operation, error };
 }
 

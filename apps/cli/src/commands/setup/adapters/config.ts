@@ -8,7 +8,7 @@ import {
 import { publicSafeErrorFromUnknown } from "@station/runtime";
 import type {
   SetupConfigMutationPort,
-  SetupOperation,
+  SetupConfigWriteOperation,
   SetupOperationOutcome,
 } from "@station/setup-core";
 import type { SetupFacts } from "../model.js";
@@ -73,7 +73,7 @@ export function createSetupConfigAdapter(
 }
 
 export function setupConfigMutationInput(
-  operation: Extract<SetupOperation, { kind: "write-config" }>,
+  operation: SetupConfigWriteOperation,
   facts: SetupFacts,
 ): SetupConfigMutationInput {
   const desired: {
@@ -126,7 +126,7 @@ export function setupConfigMutationInput(
 }
 
 function completedConfigOutcome(
-  operation: Extract<SetupOperation, { kind: "write-config" }>,
+  operation: SetupConfigWriteOperation,
   result: {
     readonly status: "created" | "updated" | "unchanged";
     readonly configPath: string;
