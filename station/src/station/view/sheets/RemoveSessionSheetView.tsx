@@ -2,7 +2,7 @@ import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
-  SheetConfirmButtons,
+  SheetButtonRow,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
@@ -80,8 +80,41 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         Removes agent, worktree, and panes.
       </SheetMessageLine>
       <SheetLine width={contentWidth}> </SheetLine>
-      <SheetConfirmButtons width={contentWidth} />
-      <SheetFooter width={contentWidth}>Esc/Enter:cancel</SheetFooter>
+      <SheetButtonRow
+        width={contentWidth}
+        buttons={[
+          {
+            id: "confirm.delete",
+            label: "Delete",
+            shortcut: "Y",
+            tone: "danger",
+            mouseTarget: {
+              kind: "removeWorktreeAction",
+              actionId: "confirm.delete",
+            },
+            focused: screen.actionFocus === "delete",
+            disabled: false,
+          },
+          {
+            id: "confirm.keep",
+            label: "Keep session",
+            compactLabel: "Keep",
+            shortcut: "N",
+            tone: "neutral",
+            mouseTarget: {
+              kind: "removeWorktreeAction",
+              actionId: "confirm.keep",
+            },
+            focused: screen.actionFocus === "keep",
+            disabled: false,
+          },
+        ]}
+      />
+      <SheetFooter width={contentWidth}>
+        {contentWidth >= 39
+          ? "←→ choose · Enter activate · Esc cancel"
+          : "←→ · Enter activate · Esc cancel"}
+      </SheetFooter>
     </BottomSheetFrameView>
   );
 }

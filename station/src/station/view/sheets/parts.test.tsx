@@ -24,7 +24,10 @@ function button(
     label: id,
     shortcut: key.toUpperCase(),
     tone: "primary",
-    mouseTarget: { kind: "sheetButton", key },
+    mouseTarget: {
+      kind: "removeWorktreeAction",
+      actionId: key === "y" ? "confirm.delete" : "confirm.keep",
+    },
     focused: options.focused ?? false,
     disabled: options.disabled ?? false,
     ...(options.compactLabel === undefined ? {} : { compactLabel: options.compactLabel }),
@@ -54,7 +57,9 @@ describe("SheetButtonRow", () => {
     expect(line.slice(10).trim()).toBe("");
 
     await setup.mockMouse.click(2, 0, MouseButtons.LEFT);
-    expect(targets).toEqual([{ kind: "sheetButton", key: "y" }]);
+    expect(targets).toEqual([
+      { kind: "removeWorktreeAction", actionId: "confirm.delete" },
+    ]);
     await setup.mockMouse.click(30, 0, MouseButtons.LEFT);
     expect(targets).toHaveLength(1);
   });
@@ -70,8 +75,8 @@ describe("SheetButtonRow", () => {
     await setup.mockMouse.click(backColumn, 0, MouseButtons.LEFT);
     await setup.mockMouse.click(35, 0, MouseButtons.LEFT);
     expect(targets).toEqual([
-      { kind: "sheetButton", key: "y" },
-      { kind: "sheetButton", key: "n" },
+      { kind: "removeWorktreeAction", actionId: "confirm.delete" },
+      { kind: "removeWorktreeAction", actionId: "confirm.keep" },
     ]);
   });
 
@@ -85,8 +90,8 @@ describe("SheetButtonRow", () => {
     await setup.mockMouse.click(2, 0, MouseButtons.LEFT);
     await setup.mockMouse.click(8, 0, MouseButtons.LEFT);
     expect(targets).toEqual([
-      { kind: "sheetButton", key: "y" },
-      { kind: "sheetButton", key: "n" },
+      { kind: "removeWorktreeAction", actionId: "confirm.delete" },
+      { kind: "removeWorktreeAction", actionId: "confirm.keep" },
     ]);
   });
 

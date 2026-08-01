@@ -213,10 +213,11 @@ function routeModalClick(
         store.getState().handleKey({ input: target.choiceKey });
       }
       return true;
-    case "sheetButton":
-      if (mode === "removeConfirm") {
-        store.getState().handleKey({ input: target.key });
-      }
+    case "removeWorktreeAction":
+      store.getState().handleAction({
+        type: "removeWorktree.activate",
+        actionId: target.actionId,
+      });
       return true;
     case "projectSettingsItem":
       if (mode === "projectSettings") {
@@ -243,10 +244,11 @@ function routeModalClick(
         actionId: target.actionId,
       });
       return true;
-    case "sheetSubmit":
-      if (mode === "forkDetails") {
-        store.getState().handleKey({ input: "\r", return: true });
-      }
+    case "forkSessionAction":
+      store.getState().handleAction({
+        type: "forkSession.activate",
+        actionId: target.actionId,
+      });
       return true;
     default:
       return false;

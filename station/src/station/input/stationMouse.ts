@@ -11,8 +11,12 @@ import {
   isRemoveProjectArmed,
   LIST_REGISTRY,
   tuiScreenBehavior,
+  type AddProjectActionId,
+  type ForkSessionActionId,
+  type NewSessionActionId,
   type ProjectHeaderControl,
   type ProjectSettingsItemId,
+  type RemoveWorktreeActionId,
   type TuiInputMode,
   type TuiStore,
 } from "@station/dashboard-core";
@@ -39,7 +43,6 @@ import {
   type RowAgentTarget,
   type StationKeyOutcome,
 } from "./stationActions.js";
-import type { AddProjectActionId, NewSessionActionId } from "@station/dashboard-core";
 
 export type StationMouseTarget =
   | { kind: "row"; rowId: string }
@@ -62,8 +65,8 @@ export type StationMouseTarget =
   | { kind: "toast" }
   /** A picker line inside a sheet; the key is the line's slot accelerator. */
   | { kind: "sheetChoice"; choiceKey: string }
-  /** A compact sheet button that dispatches its visible shortcut key. */
-  | { kind: "sheetButton"; key: "y" | "n" }
+  /** An explicit Remove confirmation control represented by its semantic action. */
+  | { kind: "removeWorktreeAction"; actionId: RemoveWorktreeActionId }
   /** A left-list row in the Project Settings panel; selecting opens its detail. */
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
   /** The armed "Remove project (R)" action in the panel's detail pane. */
@@ -86,8 +89,8 @@ export type StationMouseTarget =
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
   /** The Rename Session button represented by its semantic submit action. */
   | { kind: "renameSessionSubmit" }
-  /** A sheet's primary submit button (the fork details "Fork" action). */
-  | { kind: "sheetSubmit" }
+  /** A Fork details field or submit control represented by its semantic action. */
+  | { kind: "forkSessionAction"; actionId: ForkSessionActionId }
   /** The viewport outside a bounded screen; primary-down safely cancels that screen. */
   | { kind: "screenBackdrop" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
@@ -144,8 +147,7 @@ export type StationMouseOutcome =
     }
   /**
    * Consumed; the router should seed a worktree off a source and host its agent
-   * in a Station pane. The fork-button click counterpart of the keyboard Enter on
-   * the Fork details screen.
+   * in a Station pane. The semantic Fork submit counterpart of focused keyboard Enter.
    */
   | {
       kind: "launch-fork";
@@ -244,11 +246,13 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       return fromKeyOutcome(dispatchStationKey(store, { input: target.choiceKey }));
-    case "sheetButton":
-      if (mode !== "removeConfirm") {
-        return { kind: "handled" };
-      }
-      return fromKeyOutcome(dispatchStationKey(store, { input: target.key }));
+    case "removeWorktreeAction":
+      return fromKeyOutcome(
+        dispatchStationAction(store, {
+          type: "removeWorktree.activate",
+          actionId: target.actionId,
+        }),
+      );
     case "projectSettingsItem":
       if (mode !== "projectSettings") {
         return { kind: "handled" };
@@ -327,26 +331,8 @@ export function routeStationMouse(
       }
       return { kind: "handled" };
     }
-    case "sheetSubmit": {
-      // A click on the Fork details "Fork" button hosts the agent in Station,
-      // matching the keyboard Enter path (resolveKeyForkSessionSubmit) rather than
-      // dispatching the machine's tmux-bound session.fork.
-      if (mode !== "forkDetails") {
-        return { kind: "handled" };
-      }
-      const submit = resolveForkSessionSubmit(store);
-      if (submit.kind === "none") {
-        return { kind: "handled" };
-      }
-      return {
-        kind: "launch-fork",
-        projectId: submit.projectId,
-        sourceWorktreeId: submit.sourceWorktreeId,
-        title: submit.title,
-        branch: submit.branch,
-        copyDirty: submit.copyDirty,
-      };
-    }
+    case "forkSessionAction":
+      return routeForkSessionAction(store, target.actionId);
     case "screenBackdrop": {
       const state = store.getState();
       const clickAway = tuiScreenBehavior(state.screen).clickAway;
@@ -359,6 +345,27 @@ export function routeStationMouse(
     case "sheetBackdrop":
       return { kind: "handled" };
   }
+}
+
+function routeForkSessionAction(
+  store: StoreApi<TuiStore>,
+  actionId: ForkSessionActionId,
+): StationMouseOutcome {
+  const action = { type: "forkSession.activate", actionId } as const;
+  if (actionId === "details.submit") {
+    const submit = resolveForkSessionSubmit(store);
+    if (submit.kind === "submit") {
+      return {
+        kind: "launch-fork",
+        projectId: submit.projectId,
+        sourceWorktreeId: submit.sourceWorktreeId,
+        title: submit.title,
+        branch: submit.branch,
+        copyDirty: submit.copyDirty,
+      };
+    }
+  }
+  return fromKeyOutcome(dispatchStationAction(store, action));
 }
 
 function routeProjectHeaderActivation(

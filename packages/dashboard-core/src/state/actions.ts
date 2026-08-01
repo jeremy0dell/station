@@ -7,7 +7,12 @@ import {
 } from "./projectHeaderActions.js";
 import { handleAddProjectAction } from "./screens/addProjectScreen.js";
 import { handleFirstProjectAddAction } from "./screens/dashboard.js";
+import { type ForkSessionActionId, handleForkSessionAction } from "./screens/fork.js";
 import { handleNewSessionAction } from "./screens/newSession.js";
+import {
+  handleRemoveWorktreeAction,
+  type RemoveWorktreeActionId,
+} from "./screens/removeWorktree.js";
 import { submitRenameSession } from "./screens/renameSession.js";
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type { ProjectHeaderControl, TuiState } from "./types.js";
@@ -23,6 +28,8 @@ export type TuiSemanticAction =
   | { type: "dashboard.emptyProject.activate"; projectId: ProjectId }
   | { type: "addProject.activate"; actionId: AddProjectActionId }
   | { type: "newSession.activate"; actionId: NewSessionActionId }
+  | { type: "removeWorktree.activate"; actionId: RemoveWorktreeActionId }
+  | { type: "forkSession.activate"; actionId: ForkSessionActionId }
   | { type: "renameSession.submit" };
 
 /** Resolves a semantic TUI action into the same pure transition used by keyboard input. */
@@ -42,6 +49,10 @@ export function handleTuiAction(
       return handleAddProjectAction(state, action.actionId);
     case "newSession.activate":
       return handleNewSessionAction(state, action.actionId);
+    case "removeWorktree.activate":
+      return handleRemoveWorktreeAction(state, action.actionId);
+    case "forkSession.activate":
+      return handleForkSessionAction(state, action.actionId);
     case "renameSession.submit":
       return submitRenameSession(state);
   }

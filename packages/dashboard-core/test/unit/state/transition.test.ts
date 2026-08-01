@@ -359,6 +359,7 @@ describe("TUI screen transitions", () => {
       rowId: "ses_wt_web_idle",
       forceRequired: true,
       label: "fix-nav-mobile",
+      actionFocus: "keep",
     });
   });
 
