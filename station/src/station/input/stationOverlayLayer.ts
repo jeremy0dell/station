@@ -54,9 +54,8 @@ export function createStationOverlayLayer(
       if (submit.kind === "submit") {
         return paneLaunchNewSessionOutcome(submit);
       }
-      // Enter on the Fork details screen seeds a worktree (worktree.fork) and
-      // hosts the inherited harness in Station, bypassing the machine's
-      // tmux-bound session.fork the same way New Session bypasses session.create.
+      // Enter on Fork Name or Submit hosts the inherited harness in Station;
+      // Copy-focused Enter falls through to the shared toggle transition.
       const fork = resolveKeyForkSessionSubmit(stationViewStore, key);
       if (fork.kind === "submit") {
         return paneLaunchForkSessionOutcome(fork);

@@ -153,7 +153,29 @@ const CASES: ModalCase[] = [
   {
     name: "remove confirm sheet",
     keys: [{ input: "X" }, { input: "1" }],
-    expect: ["Delete session?", "Session", "cli-help-man", "Yes (y)", "No (n)"],
+    expect: [
+      "Delete session?",
+      "Session",
+      "cli-help-man",
+      "Delete (Y)",
+      "▸ Keep session (N)",
+      "←→ choose · Enter activate · Esc cancel",
+    ],
+  },
+  {
+    name: "remove confirm delete focus",
+    keys: [{ input: "X" }, { input: "1" }, { input: "", leftArrow: true }],
+    expect: ["Delete session?", "▸ Delete (Y)", "Keep session (N)"],
+  },
+  {
+    name: "remove confirm narrow",
+    keys: [{ input: "X" }, { input: "1" }],
+    size: { width: 40, height: 16 },
+    expect: [
+      "Delete (Y)",
+      "▸ Keep session (N)",
+      "←→ · Enter activate · Esc cancel",
+    ],
   },
   {
     name: "external agent removal information",
@@ -170,7 +192,7 @@ const CASES: ModalCase[] = [
       "Stop or remove it from its original terminal or external tooling.",
       "Esc/Enter:close",
     ],
-    reject: ["Yes (y)", "No (n)"],
+    reject: ["Delete (Y)", "Keep session (N)"],
   },
   {
     name: "rename slot prompt",
@@ -208,9 +230,14 @@ const CASES: ModalCase[] = [
       "Hexagonal PT 12",
       "uncommitted changes",
       "Fork (enter)",
-      "enter:fork",
+      "↑↓ focus · Enter fork · Esc back",
     ],
     reject: ["Branch"],
+  },
+  {
+    name: "fork details copy focus",
+    keys: [{ input: "F" }, { input: "1" }, { input: "", downArrow: true }],
+    expect: ["Fork Session", "▸ Copy", "Space/Enter toggle · ↑↓ focus · Esc back"],
   },
   {
     name: "fork details submit focus",
@@ -220,7 +247,19 @@ const CASES: ModalCase[] = [
       { input: "", downArrow: true },
       { input: "", downArrow: true },
     ],
-    expect: ["Fork Session", "▸ Fork (enter)"],
+    expect: ["Fork Session", "▸ Fork (enter)", "↑↓ focus · Enter fork · Esc back"],
+  },
+  {
+    name: "fork details narrow copy focus",
+    keys: [{ input: "F" }, { input: "1" }, { input: "", downArrow: true }],
+    size: { width: 40, height: 16 },
+    expect: [
+      "Name",
+      "▸ Copy",
+      "Fork (enter)",
+      "Source running; copy is read-only.",
+      "Space/↵ toggle · ↑↓ · Esc back",
+    ],
   },
   {
     name: "new session review",

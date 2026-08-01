@@ -943,6 +943,10 @@ popup with three independent passes:
 3. Focus: use arrows plus `Enter` for folder lists, review actions, and name
    editor actions at both wide and minimum supported widths.
 
+Also open Remove Session and Fork Session from a disposable row. Verify Delete/Keep with pointer,
+Y/N, and Left/Right plus Enter; then verify Fork Name/Copy/Fork with pointer and keyboard focus,
+including Copy-focused Enter toggling without submitting.
+
 Git-invalid Add Project submit must stay disabled, native Create Session must
 open a Station-managed pane, and the popup must continue through its configured
 terminal adapter.

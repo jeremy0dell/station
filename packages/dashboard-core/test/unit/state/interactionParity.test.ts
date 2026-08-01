@@ -9,6 +9,8 @@ import {
   handleTuiKey,
   newSessionIntentForAction,
   openAddProject,
+  openForkDetailsForRow,
+  openRemoveWorktreeConfirmForRow,
   transitionNewSessionFlow,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
@@ -181,6 +183,61 @@ describe("primary workflow interaction parity", () => {
     for (const id of ["editName.name", "editName.save", "editName.back"] as const) {
       expect(newSessionIntentForAction(edit, id).type, id).not.toBe("none");
     }
+  });
+
+  it("converges Remove pointer semantics with direct and focused activation", () => {
+    const base = openRemoveWorktreeConfirmForRow(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "ses_wt_web_idle",
+    );
+    const semantic = handleTuiAction(
+      base,
+      { type: "removeWorktree.activate", actionId: "confirm.delete" },
+      context,
+    );
+    const direct = handleTuiKey(base, { input: "y" }, context);
+    const focused = handleTuiKey(
+      handleTuiKey(base, { input: "", leftArrow: true }, context).state,
+      { input: "\r", return: true },
+      context,
+    );
+
+    const semanticOperation = semantic.operations?.[0];
+    const directOperation = direct.operations?.[0];
+    const focusedOperation = focused.operations?.[0];
+    if (
+      semanticOperation?.type !== "removeWorktree" ||
+      directOperation?.type !== "removeWorktree" ||
+      focusedOperation?.type !== "removeWorktree"
+    ) {
+      throw new Error("expected Remove Worktree operations");
+    }
+    expect(semanticOperation.command).toEqual(directOperation.command);
+    expect(focusedOperation.command).toEqual(directOperation.command);
+    expect(semantic.state.screen).toEqual({ name: "dashboard" });
+    expect(focused.state.screen).toEqual({ name: "dashboard" });
+  });
+
+  it("converges Fork Copy pointer semantics with focused Enter", () => {
+    const base = openForkDetailsForRow(
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
+      "ses_wt_web_idle",
+      { branchToken: "aaaaaa" },
+    );
+    const semantic = handleTuiAction(
+      base,
+      { type: "forkSession.activate", actionId: "details.copyDirty" },
+      context,
+    );
+    const keyboard = handleTuiKey(
+      handleTuiKey(base, { input: "", downArrow: true }, context).state,
+      { input: "\r", return: true },
+      context,
+    );
+
+    expect(semantic.state.screen).toEqual(keyboard.state.screen);
+    expect(semantic.operations).toBeUndefined();
+    expect(keyboard.operations).toBeUndefined();
   });
 
   it.each([

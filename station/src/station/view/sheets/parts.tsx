@@ -5,6 +5,7 @@
 import { TextAttributes } from "@opentui/core";
 import type { TextProps } from "@opentui/react";
 import { isValidElement, type ReactNode } from "react";
+import stringWidth from "string-width";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import {
   useStationHoverState,
@@ -20,6 +21,30 @@ export function fit(value: string, width: number): string {
 
 export function spaces(width: number): string {
   return " ".repeat(Math.max(0, width));
+}
+
+export type ResponsiveSheetText = Readonly<{
+  expanded: string;
+  compact: string;
+}>;
+
+const SHEET_FOOTER_PREFIX = " ";
+
+/** Selects the expanded copy only when every cell fits the available width. */
+export function responsiveSheetText(
+  width: number,
+  variants: ResponsiveSheetText,
+): string {
+  return stringWidth(variants.expanded) <= width ? variants.expanded : variants.compact;
+}
+
+/** Accounts for the footer's leading inset when selecting responsive copy. */
+export function responsiveSheetFooterText(
+  width: number,
+  variants: ResponsiveSheetText,
+): string {
+  const textWidth = Math.max(0, width - stringWidth(SHEET_FOOTER_PREFIX));
+  return responsiveSheetText(textWidth, variants);
 }
 
 /** Text inside a sheet is never eligible for terminal drag selection. */
@@ -93,7 +118,7 @@ export function SheetFill({ count, width }: { count: number; width: number }) {
 export function SheetFooter({ width, children }: { width: number; children: string }) {
   return (
     <SheetText fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>
-      {fit(` ${children}`, width)}
+      {fit(`${SHEET_FOOTER_PREFIX}${children}`, width)}
     </SheetText>
   );
 }
@@ -456,31 +481,6 @@ export function SheetSectionLine({ width, children }: { width: number; children:
     <SheetMessageLine width={width} tone="accent">
       {children}
     </SheetMessageLine>
-  );
-}
-
-/** The Yes/No confirm row shared by the bottom-sheet confirm dialogs. */
-export function SheetConfirmButtons({ width }: { width: number }) {
-  const gap = width >= 22 ? 2 : 0;
-  const buttonWidth = Math.max(1, Math.min(10, Math.floor((width - gap) / 2)));
-  return (
-    <box flexDirection="row" width={width}>
-      <SheetButton
-        label="Yes"
-        shortcut="y"
-        tone="success"
-        fixedWidth={buttonWidth}
-        mouseTarget={{ kind: "sheetButton", key: "y" }}
-      />
-      {gap > 0 ? <SheetText>{spaces(gap)}</SheetText> : null}
-      <SheetButton
-        label="No"
-        shortcut="n"
-        tone="danger"
-        fixedWidth={buttonWidth}
-        mouseTarget={{ kind: "sheetButton", key: "n" }}
-      />
-    </box>
   );
 }
 

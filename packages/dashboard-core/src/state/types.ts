@@ -88,6 +88,7 @@ export type TuiScreen =
       rowId: SessionId;
       forceRequired: boolean;
       label: string;
+      actionFocus: "delete" | "keep";
     }
   | { name: "renameSession"; step: "chooseSlot" }
   | {

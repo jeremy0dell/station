@@ -317,6 +317,17 @@ vertically stacked so Up/Down does not conflict with text-cursor movement. Missi
 keeps submit disabled and stale disabled targets inert; these interaction paths do not weaken
 project admission policy.
 
+Remove Session confirmation renders explicit Delete and Keep Session actions instead of generic
+Yes/No controls. Keep is the safe initial focus; Left/Right moves without wrapping, focused Enter
+activates the current choice, and Y/N retain their direct meanings. Both controls dispatch stable
+semantic actions, use the shared bounded button treatment, and keep trailing sheet cells inert.
+
+Fork Session renders Name and Copy through the same bounded field-control grammar as Create Session.
+Clicking Name focuses its editor, clicking Copy focuses and toggles it once, and the Fork button
+submits through a shared semantic action. Copy-focused Enter toggles rather than submitting; Enter
+on Name or Fork submits. Native Station intercepts only submit to host the fork in a managed pane,
+while standalone/tmux keeps the shared observer operation path.
+
 Create Session review renders Project, Name, and Agent as compact field controls, followed by a
 compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, and `C`), values, and inline
 health status use separate spans so their roles and associations remain visible. Arrow focus uses

@@ -180,6 +180,54 @@ describe("FullscreenDashboard mouse composition", () => {
     });
   });
 
+  it("routes rendered Remove actions without leaking to the dashboard", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "X" });
+      await setup.flush();
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+    const keep = cellFor(setup.captureCharFrame(), "Keep session");
+
+    await actOn(() => setup.mockMouse.click(keep.col, keep.row, MouseButtons.LEFT));
+
+    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.store.getState().localRows.pendingRemove).toEqual([]);
+  });
+
+  it("routes rendered Fork field clicks without submitting", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "F" });
+      await setup.flush();
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+    const copy = cellFor(setup.captureCharFrame(), "Copy");
+
+    await actOn(() => setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT));
+    expect(fixture.store.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: false,
+    });
+    const name = cellFor(setup.captureCharFrame(), "Name");
+
+    await actOn(() => setup.mockMouse.click(name.col, name.row, MouseButtons.LEFT));
+    expect(fixture.store.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "name",
+      copyDirty: false,
+    });
+  });
+
   it("scrolls when the wheel is used over a child row", async () => {
     const fixture = makeStationTestStore({ terminalRows: 12 });
     const setup = await render(fixture.store, { width: 80, height: 12 });

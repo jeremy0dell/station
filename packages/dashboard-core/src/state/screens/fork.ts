@@ -18,6 +18,8 @@ import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
 type ForkScreen = Extract<TuiState["screen"], { name: "fork" }>;
 
+export type ForkSessionActionId = "details.name" | "details.copyDirty" | "details.submit";
+
 const forkChooseSlotBehavior = {};
 const forkDetailsBehavior = { clickAway: backFromForkDetails };
 
@@ -84,6 +86,30 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
     }));
   }
   return handleDetailsKey(state, key, state.screen);
+}
+
+/** Applies a visible Fork details action after validating the active screen. */
+export function handleForkSessionAction(
+  state: TuiState,
+  actionId: ForkSessionActionId,
+): TuiTransition {
+  if (state.screen.name !== "fork" || state.screen.step !== "details") {
+    return { state };
+  }
+  const screen = state.screen;
+  switch (actionId) {
+    case "details.name":
+      return { state: { ...state, screen: { ...screen, focus: "name" } } };
+    case "details.copyDirty":
+      return {
+        state: {
+          ...state,
+          screen: { ...screen, focus: "copyDirty", copyDirty: !screen.copyDirty },
+        },
+      };
+    case "details.submit":
+      return submitFork(state, screen);
+  }
 }
 
 export type OpenForkDetailsOptions = {
@@ -172,7 +198,10 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
   }
 
   if (isReturnKey(key)) {
-    return submitFork(state, screen);
+    return handleForkSessionAction(
+      state,
+      screen.focus === "copyDirty" ? "details.copyDirty" : "details.submit",
+    );
   }
 
   if (key.upArrow === true || key.downArrow === true) {
@@ -186,7 +215,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
 
   if (screen.focus === "copyDirty") {
     if (key.input === " " || key.leftArrow === true || key.rightArrow === true) {
-      return { state: { ...state, screen: { ...screen, copyDirty: !screen.copyDirty } } };
+      return handleForkSessionAction(state, "details.copyDirty");
     }
     return { state };
   }
