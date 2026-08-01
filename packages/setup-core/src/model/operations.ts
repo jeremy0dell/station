@@ -1,5 +1,7 @@
+import type { SafeError } from "@station/contracts";
 import type { SetupToolId, SupportedHarnessId } from "./facts.js";
 
+/** A semantic setup mutation selected by policy and assigned a stable invocation-local identity. */
 export type SetupOperation =
   | {
       readonly id: `install:${SetupToolId}`;
@@ -75,4 +77,57 @@ export type SetupOperation =
       readonly kind: "activate-observer-config";
       readonly tier: "required";
       readonly selected: true;
+    };
+
+/** Identifies the tool, harness, or bootstrap dependency changed by a package installer. */
+export type SetupPackageTarget =
+  | { readonly kind: "tool"; readonly id: SetupToolId }
+  | { readonly kind: "harness"; readonly id: SupportedHarnessId }
+  | {
+      readonly kind: "bootstrap";
+      readonly id: "homebrew" | "xcode-command-line-tools";
+    };
+
+/** Typed evidence emitted after a setup operation commits its outward mutation. */
+export type SetupOperationCommit =
+  | {
+      readonly kind: "config";
+      readonly configPath: string;
+      readonly change: "created" | "updated" | "unchanged";
+      readonly backupPath?: string;
+    }
+  | {
+      readonly kind: "observer-activation";
+      readonly configPath: string;
+    }
+  | {
+      readonly kind: "package-installer";
+      readonly target: SetupPackageTarget;
+    }
+  | {
+      readonly kind: "provider-tracking";
+      readonly provider: "worktrunk" | SupportedHarnessId;
+      readonly changed: boolean;
+      readonly backupPaths?: readonly string[];
+    }
+  | { readonly kind: "launcher-link" }
+  | { readonly kind: "worktrunk-shell" }
+  | {
+      readonly kind: "tmux-popup";
+      readonly scope: "persisted" | "live";
+      readonly changed: boolean;
+      readonly backupPath?: string;
+    };
+
+/** Boundary result for one requested semantic operation, correlated by operation identity. */
+export type SetupOperationOutcome =
+  | {
+      readonly status: "completed";
+      readonly operationId: SetupOperation["id"];
+      readonly commit: SetupOperationCommit;
+    }
+  | {
+      readonly status: "failed";
+      readonly operationId: SetupOperation["id"];
+      readonly error: SafeError;
     };

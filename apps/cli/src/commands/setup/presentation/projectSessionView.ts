@@ -1,6 +1,7 @@
+import type { SafeError } from "@station/contracts";
 import type {
-  SetupOperationOutcome,
   SetupPlan,
+  SetupSessionOperationOutcome,
   SetupSessionResult,
   SetupSessionState,
   SetupSessionStatus,
@@ -24,8 +25,9 @@ export type ProjectSetupSessionView = {
   readonly progress: ProjectSetupSessionProgress;
   readonly plan?: SetupPlan;
   readonly result?: SetupSessionResult;
-  readonly operationOutcomes: readonly SetupOperationOutcome[];
+  readonly operationOutcomes: readonly SetupSessionOperationOutcome[];
   readonly blockReason?: Extract<SetupSessionState, { readonly status: "blocked" }>["reason"];
+  readonly error?: SafeError;
 };
 
 export function projectSessionView(state: SetupSessionState): ProjectSetupSessionView {
@@ -37,9 +39,12 @@ export function projectSessionView(state: SetupSessionState): ProjectSetupSessio
   } as const;
   switch (state.status) {
     case "blocked":
-      return state.plan === undefined
-        ? { ...base, blockReason: state.reason }
-        : { ...base, plan: state.plan, blockReason: state.reason };
+      return {
+        ...base,
+        blockReason: state.reason,
+        ...(state.plan === undefined ? {} : { plan: state.plan }),
+        ...(state.error === undefined ? {} : { error: state.error }),
+      };
     case "completed":
       return { ...base, plan: state.plan, result: state.result };
     case "editing":
@@ -48,17 +53,25 @@ export function projectSessionView(state: SetupSessionState): ProjectSetupSessio
     case "verifying":
       return { ...base, plan: state.plan };
     case "inspecting":
+      return {
+        ...base,
+        ...(state.plan === undefined ? {} : { plan: state.plan }),
+      };
     case "cancelled":
-      return base;
+      return {
+        ...base,
+        ...(state.plan === undefined ? {} : { plan: state.plan }),
+        ...(state.error === undefined ? {} : { error: state.error }),
+      };
+    default:
+      return assertNeverState(state);
   }
 }
 
 function projectProgress(state: SetupSessionState): ProjectSetupSessionProgress {
   switch (state.status) {
     case "inspecting":
-      return state.inspectionPhase === "final"
-        ? { kind: "verification" }
-        : { kind: "inspection", phase: state.inspectionPhase };
+      return { kind: "inspection", phase: state.inspectionPhase };
     case "applying":
       return { kind: "operation", phase: state.applyPhase };
     case "verifying":
@@ -69,5 +82,11 @@ function projectProgress(state: SetupSessionState): ProjectSetupSessionProgress 
     case "completed":
     case "cancelled":
       return { kind: "idle" };
+    default:
+      return assertNeverState(state);
   }
+}
+
+function assertNeverState(state: never): never {
+  throw new Error(`Unsupported setup session state: ${String(state)}`);
 }

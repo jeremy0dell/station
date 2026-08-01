@@ -11,10 +11,13 @@ in-process. The few states that need a real OS (real `brew install`, a truly
 CLT-absent Mac) run in a VM.
 
 The non-interactive surfaces additionally drive a process-local semantic session. Its unit
-suite covers pure revisions/transitions, completed-operation checkpoints, and the serialized
-inspection/effect loop. Checkpoints prevent an operation completed during one invocation from
-being replayed during that invocation; they are not a session store and do not recover a restart.
-The guided flow remains separately covered as the retained compatibility path.
+suite covers revision filtering, cancellation during in-flight effects, inspection and operation
+failures, completed-operation checkpoints, and the serialized inspection/effect loop. CLI tests
+also require dry runs to leave every operation port unused, preserve actionable boundary errors,
+and re-inspect package installs with refreshed Homebrew paths. Checkpoints prevent an operation
+completed during one invocation from being replayed during that invocation; they retain operation
+identity only, are not a session store, and do not recover a restart. The guided flow remains
+separately covered as the retained compatibility path.
 
 ## The profile contract
 

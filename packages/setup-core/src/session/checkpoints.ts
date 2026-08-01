@@ -1,18 +1,10 @@
-import type { SetupOperation } from "../model/operations.js";
-import type { SetupOperationCommit } from "../ports.js";
-
-export type SetupOperationCheckpoint = {
-  readonly operationId: SetupOperation["id"];
-  readonly commit: SetupOperationCommit;
-};
-
-export type SetupOperationCheckpoints = readonly SetupOperationCheckpoint[];
+import type { SetupOperationCheckpoint, SetupOperationCheckpoints } from "../model/session.js";
 
 export const emptySetupOperationCheckpoints: SetupOperationCheckpoints = [];
 
 export function hasCompletedSetupOperation(
   checkpoints: SetupOperationCheckpoints,
-  operationId: SetupOperation["id"],
+  operationId: SetupOperationCheckpoint["operationId"],
 ): boolean {
   return checkpoints.some((checkpoint) => checkpoint.operationId === operationId);
 }

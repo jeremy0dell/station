@@ -1,12 +1,11 @@
 import type { SafeError } from "@station/contracts";
-import type { SetupOperationOutcome } from "../ports.js";
-import type { SetupOperationCheckpoints } from "../session/checkpoints.js";
 import type { SetupPlanningIntent } from "./intent.js";
 import type { SetupIssue } from "./issues.js";
-import type { SetupOperation } from "./operations.js";
+import type { SetupOperation, SetupOperationOutcome } from "./operations.js";
 import type { SetupPlan } from "./plan.js";
 import type { SetupResult } from "./result.js";
 
+/** Lifecycle states visible to a driving setup adapter. */
 export type SetupSessionStatus =
   | "inspecting"
   | "editing"
@@ -17,18 +16,23 @@ export type SetupSessionStatus =
   | "completed"
   | "cancelled";
 
+/** Inspection points at which setup evidence is refreshed during one application cascade. */
 export type SetupSessionInspectionPhase =
   | "initial"
   | "after-preflight"
   | "after-activation"
   | "final";
 
+export type SetupSessionActiveInspectionPhase = Exclude<SetupSessionInspectionPhase, "final">;
+
+/** Ordered mutation groups enforced by the setup transition policy. */
 export type SetupSessionApplyPhase =
   | "preflight"
   | "config-write"
   | "observer-activation"
   | "tracking";
 
+/** Stable reason categories for setup sessions that cannot continue automatically. */
 export type SetupSessionBlockReason =
   | "inspection-failed"
   | "selection-unresolved"
@@ -37,26 +41,42 @@ export type SetupSessionBlockReason =
   | "config-write-failed"
   | "observer-activation-failed";
 
-export type SetupSessionResult = SetupResult & {
-  readonly issues: readonly SetupIssue[];
-  readonly operationOutcomes: readonly SetupOperationOutcome[];
+/** Operation outcome enriched with the semantic operation needed by presenters and diagnostics. */
+export type SetupSessionOperationOutcome = SetupOperationOutcome & {
+  readonly operation: SetupOperation;
 };
 
+/** Final semantic result plus all issue and operation evidence retained by the session. */
+export type SetupSessionResult = SetupResult & {
+  readonly issues: readonly SetupIssue[];
+  readonly operationOutcomes: readonly SetupSessionOperationOutcome[];
+};
+
+/** An invocation-local operation identity that prevents replay within the same run. */
+export type SetupOperationCheckpoint = {
+  readonly operationId: SetupOperation["id"];
+};
+
+export type SetupOperationCheckpoints = readonly SetupOperationCheckpoint[];
+
 type SetupSessionBase = {
+  /** Monotonically identifies the state revision that may accept an asynchronous result event. */
   readonly revision: number;
   readonly intent: SetupPlanningIntent;
   readonly checkpoints: SetupOperationCheckpoints;
-  readonly operationOutcomes: readonly SetupOperationOutcome[];
+  readonly operationOutcomes: readonly SetupSessionOperationOutcome[];
 };
 
 type SetupSessionWithPlan = SetupSessionBase & {
   readonly plan: SetupPlan;
 };
 
+/** Invocation-local setup state; no member is durable across CLI invocations. */
 export type SetupSessionState =
   | (SetupSessionBase & {
       readonly status: "inspecting";
-      readonly inspectionPhase: SetupSessionInspectionPhase;
+      readonly inspectionPhase: SetupSessionActiveInspectionPhase;
+      readonly plan?: SetupPlan;
     })
   | (SetupSessionWithPlan & { readonly status: "editing" })
   | (SetupSessionWithPlan & { readonly status: "reviewing" })
@@ -75,8 +95,13 @@ export type SetupSessionState =
       readonly status: "completed";
       readonly result: SetupSessionResult;
     })
-  | (SetupSessionBase & { readonly status: "cancelled" });
+  | (SetupSessionBase & {
+      readonly status: "cancelled";
+      readonly plan?: SetupPlan;
+      readonly error?: SafeError;
+    });
 
+/** A typed input to the pure setup transition policy; asynchronous results are revision-scoped. */
 export type SetupSessionEvent =
   | { readonly type: "inspection-requested"; readonly revision: number }
   | {
@@ -91,35 +116,22 @@ export type SetupSessionEvent =
   | {
       readonly type: "operation-completed";
       readonly revision: number;
-      readonly outcome: Extract<SetupOperationOutcome, { readonly status: "completed" }>;
+      readonly outcome: Extract<SetupSessionOperationOutcome, { readonly status: "completed" }>;
     }
   | {
       readonly type: "operation-failed";
       readonly revision: number;
-      readonly outcome: Extract<SetupOperationOutcome, { readonly status: "failed" }>;
+      readonly outcome: Extract<SetupSessionOperationOutcome, { readonly status: "failed" }>;
     }
-  | { readonly type: "cancel-requested"; readonly revision: number };
+  | { readonly type: "cancel-requested" };
 
+/** An outward request emitted by the transition policy and serialized by the session application. */
 export type SetupSessionEffect =
   | { readonly kind: "inspect"; readonly phase: SetupSessionInspectionPhase }
   | { readonly kind: "perform-operation"; readonly operation: SetupOperation };
 
+/** Pure transition output containing the next state and outward effects to serialize. */
 export type SetupSessionTransition = {
   readonly state: SetupSessionState;
   readonly effects: readonly SetupSessionEffect[];
-};
-
-/**
- * DRIVING PORT
- *
- * Offers one in-memory setup run to a driving CLI flow without defining transport or persistence.
- */
-export type SetupSessionApplication = {
-  readonly getState: () => SetupSessionState;
-  readonly start: () => Promise<SetupSessionState>;
-  readonly review: () => Promise<SetupSessionState>;
-  readonly previewApply: () => Promise<SetupSessionState>;
-  readonly apply: () => Promise<SetupSessionState>;
-  readonly cancel: () => Promise<SetupSessionState>;
-  readonly dispatch: (event: SetupSessionEvent) => Promise<SetupSessionState>;
 };

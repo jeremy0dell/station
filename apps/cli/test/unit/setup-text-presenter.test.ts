@@ -284,7 +284,6 @@ function readyResult(
   return {
     readiness: { launchReady: true, workflowReady: true, requiredMissing: 0 },
     requiredIssueCount: 0,
-    recommendations: ["doctor"],
     selectedOperationCount: 0,
     apply,
   };
@@ -294,7 +293,6 @@ function notReadyResult(): Omit<ProjectSetupView["result"], "apply"> {
   return {
     readiness: { launchReady: true, workflowReady: false, requiredMissing: 1 },
     requiredIssueCount: 1,
-    recommendations: ["doctor"],
     selectedOperationCount: 1,
   };
 }

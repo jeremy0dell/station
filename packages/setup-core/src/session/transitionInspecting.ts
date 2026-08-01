@@ -31,39 +31,20 @@ export function transitionInspecting(
   if (event.type !== "inspection-completed") return { state, effects: [] };
 
   const plan = planSetup(event.facts, state.intent);
-  switch (state.inspectionPhase) {
-    case "initial":
-      return {
-        state: {
-          revision: state.revision + 1,
-          intent: state.intent,
-          checkpoints: state.checkpoints,
-          operationOutcomes: state.operationOutcomes,
-          plan,
-          status: "editing",
-        },
-        effects: [],
-      };
-    case "after-preflight":
-      return beginConfigWrite(state, plan);
-    case "after-activation":
-      return beginTracking(state, plan);
-    case "final":
-      return {
-        state: {
-          revision: state.revision + 1,
-          intent: state.intent,
-          checkpoints: state.checkpoints,
-          operationOutcomes: state.operationOutcomes,
-          plan,
-          status: "completed",
-          result: {
-            ...plan.result,
-            issues: plan.issues,
-            operationOutcomes: state.operationOutcomes,
-          },
-        },
-        effects: [],
-      };
+  if (state.inspectionPhase === "initial") {
+    return {
+      state: {
+        revision: state.revision + 1,
+        intent: state.intent,
+        checkpoints: state.checkpoints,
+        operationOutcomes: state.operationOutcomes,
+        plan,
+        status: "editing",
+      },
+      effects: [],
+    };
   }
+  return state.inspectionPhase === "after-preflight"
+    ? beginConfigWrite(state, plan)
+    : beginTracking(state, plan);
 }

@@ -1,63 +1,21 @@
 import type { SafeError } from "@station/contracts";
-import type { SetupPlanningFacts, SetupToolId, SupportedHarnessId } from "./model/facts.js";
-import type { SetupOperation } from "./model/operations.js";
+import type { SetupPlanningFacts } from "./model/facts.js";
+import type { SetupOperation, SetupOperationOutcome } from "./model/operations.js";
 import type { SetupSessionInspectionPhase } from "./model/session.js";
 
-export type SetupPackageTarget =
-  | { readonly kind: "tool"; readonly id: SetupToolId }
-  | { readonly kind: "harness"; readonly id: SupportedHarnessId }
-  | {
-      readonly kind: "bootstrap";
-      readonly id: "homebrew" | "xcode-command-line-tools";
-    };
+export type {
+  SetupOperationCommit,
+  SetupOperationOutcome,
+  SetupPackageTarget,
+} from "./model/operations.js";
 
-export type SetupOperationCommit =
-  | {
-      readonly kind: "config";
-      readonly configPath: string;
-      readonly change: "created" | "updated" | "unchanged";
-      readonly backupPath?: string;
-    }
-  | {
-      readonly kind: "observer-activation";
-      readonly configPath: string;
-    }
-  | {
-      readonly kind: "package-installer";
-      readonly target: SetupPackageTarget;
-    }
-  | {
-      readonly kind: "provider-tracking";
-      readonly provider: "worktrunk" | SupportedHarnessId;
-      readonly changed: boolean;
-      readonly backupPaths?: readonly string[];
-    }
-  | { readonly kind: "launcher-link" }
-  | { readonly kind: "worktrunk-shell" }
-  | {
-      readonly kind: "tmux-popup";
-      readonly scope: "persisted" | "live";
-      readonly changed: boolean;
-      readonly backupPath?: string;
-    };
-
-export type SetupOperationOutcome =
-  | {
-      readonly status: "completed";
-      readonly operationId: SetupOperation["id"];
-      readonly commit: SetupOperationCommit;
-    }
-  | {
-      readonly status: "failed";
-      readonly operationId: SetupOperation["id"];
-      readonly error: SafeError;
-    };
-
+/** Requests normalized evidence for one revision and lifecycle inspection point. */
 export type SetupInspectionRequest = {
   readonly phase: SetupSessionInspectionPhase;
   readonly revision: number;
 };
 
+/** Typed inspection result that keeps boundary failures available to the driving adapter. */
 export type SetupInspectionOutcome =
   | { readonly status: "completed"; readonly facts: SetupPlanningFacts }
   | { readonly status: "failed"; readonly error: SafeError };
@@ -151,6 +109,7 @@ export type SetupLauncherLinkPort = (
  */
 export type SetupOperationExecutor = (operation: SetupOperation) => Promise<SetupOperationOutcome>;
 
+/** Outward capabilities used by the operation dispatcher, grouped for adapter composition. */
 export type SetupOperationPorts = {
   readonly config: SetupConfigMutationPort;
   readonly observer: SetupObserverActivationPort;

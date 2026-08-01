@@ -13,17 +13,25 @@ export {
   supportedHarnessIds,
 } from "./model/facts.js";
 export type { HarnessSelectionIntent, SetupPlanningIntent } from "./model/intent.js";
-export type { SetupIssue, SetupRecommendationCategory } from "./model/issues.js";
-export type { SetupOperation } from "./model/operations.js";
+export type { SetupIssue } from "./model/issues.js";
+export type {
+  SetupOperation,
+  SetupOperationCommit,
+  SetupOperationOutcome,
+  SetupPackageTarget,
+} from "./model/operations.js";
 export type { SetupPlan } from "./model/plan.js";
 export type { SetupResult } from "./model/result.js";
 export type {
-  SetupSessionApplication,
+  SetupOperationCheckpoint,
+  SetupOperationCheckpoints,
+  SetupSessionActiveInspectionPhase,
   SetupSessionApplyPhase,
   SetupSessionBlockReason,
   SetupSessionEffect,
   SetupSessionEvent,
   SetupSessionInspectionPhase,
+  SetupSessionOperationOutcome,
   SetupSessionResult,
   SetupSessionState,
   SetupSessionStatus,
@@ -43,21 +51,19 @@ export type {
   SetupInspectionRequest,
   SetupLauncherLinkPort,
   SetupObserverActivationPort,
-  SetupOperationCommit,
   SetupOperationExecutor,
-  SetupOperationOutcome,
   SetupOperationPorts,
   SetupPackageInstallationPort,
-  SetupPackageTarget,
   SetupTmuxConfigurationPort,
   SetupWorktrunkIntegrationPort,
 } from "./ports.js";
-export { createSetupSessionApplication } from "./session/application.js";
+export {
+  createSetupSessionApplication,
+  type SetupSessionApplication,
+} from "./session/application.js";
 export {
   emptySetupOperationCheckpoints,
   hasCompletedSetupOperation,
   recordCompletedSetupOperation,
-  type SetupOperationCheckpoint,
-  type SetupOperationCheckpoints,
 } from "./session/checkpoints.js";
 export { createSetupSessionState, transitionSetupSession } from "./session/transition.js";

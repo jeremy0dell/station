@@ -4,6 +4,7 @@ import {
   type HarnessSelectionFacts,
   type HarnessTrackingFacts,
   type SetupInspection,
+  type SetupOperationOutcome,
   type SetupPlanningFacts,
   type SupportedHarnessId,
 } from "@station/setup-core";
@@ -30,6 +31,8 @@ export type SetupInspectionSnapshot = {
 
 export type SetupInspectionAdapter = SetupInspection & {
   readonly current: () => SetupInspectionSnapshot | undefined;
+  readonly currentDeps: () => SetupCommandDeps;
+  readonly recordOperationOutcome: (outcome: SetupOperationOutcome) => void;
 };
 
 export type SetupInspectionAdapterOptions = {
@@ -49,12 +52,22 @@ export function createSetupInspectionAdapter(
   options: SetupInspectionAdapterOptions,
 ): SetupInspectionAdapter {
   let snapshot: SetupInspectionSnapshot | undefined;
+  let inspectionDeps = options.deps;
 
   const inspect: SetupInspection = async () => {
     try {
-      const facts = await collectFacts(options);
+      const facts = await collectSetupFactsForCommand(
+        options.mode,
+        options.options,
+        inspectionDeps,
+        { noBrew: options.noBrew },
+      );
       const harnessSelection = resolveSetupHarnessSelection(facts);
-      const withTracking = await collectHarnessTrackingFacts(facts, harnessSelection, options.deps);
+      const withTracking = await collectHarnessTrackingFacts(
+        facts,
+        harnessSelection,
+        inspectionDeps,
+      );
       const trackedHarnessIds =
         harnessSelection.requiredHarnessIds.filter(harnessSupportsSetupHooks);
       let configWrite: ConfigWritePlan | undefined;
@@ -87,12 +100,24 @@ export function createSetupInspectionAdapter(
     }
   };
 
-  return Object.assign(inspect, { current: () => snapshot });
+  return Object.assign(inspect, {
+    current: () => snapshot,
+    currentDeps: () => inspectionDeps,
+    recordOperationOutcome(outcome: SetupOperationOutcome) {
+      if (outcome.status === "completed" && outcome.commit.kind === "package-installer") {
+        inspectionDeps = depsWithBrewBinPath(inspectionDeps, options.options.env);
+      }
+    },
+  });
 }
 
-async function collectFacts(options: SetupInspectionAdapterOptions): Promise<SetupFacts> {
-  const collectOptions: CollectSetupFactsOptions = { mode: options.mode };
-  const { deps, options: commandOptions } = options;
+export async function collectSetupFactsForCommand(
+  mode: SetupMode,
+  commandOptions: SetupCommandOptions,
+  deps: SetupCommandDeps,
+  flags: { readonly noBrew?: boolean },
+): Promise<SetupFacts> {
+  const collectOptions: CollectSetupFactsOptions = { mode };
   if (commandOptions.configPath !== undefined)
     collectOptions.configPath = commandOptions.configPath;
   if (deps.cwd !== undefined) collectOptions.cwd = deps.cwd;
@@ -113,11 +138,11 @@ async function collectFacts(options: SetupInspectionAdapterOptions): Promise<Set
   }
   if (deps.stateDirExecute !== undefined) collectOptions.stateDirExecute = deps.stateDirExecute;
   if (deps.stateDirFs !== undefined) collectOptions.stateDirFs = deps.stateDirFs;
-  collectOptions.noBrew = options.noBrew;
+  if (flags.noBrew !== undefined) collectOptions.noBrew = flags.noBrew;
   return collectSetupFacts(collectOptions);
 }
 
-async function collectHarnessTrackingFacts(
+export async function collectHarnessTrackingFacts(
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
   deps: SetupCommandDeps,
@@ -174,6 +199,22 @@ async function probeHarnessTrackingFact(
   }
 }
 
+const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
+
+export function depsWithBrewBinPath(
+  deps: SetupCommandDeps,
+  fallbackEnv: SetupCommandOptions["env"] = process.env,
+): SetupCommandDeps {
+  const env = { ...(deps.env ?? fallbackEnv ?? process.env) };
+  env.PATH = brewBinDirs.reduce((path, directory) => appendPath(path, directory), env.PATH);
+  return { ...deps, env };
+}
+
+function appendPath(existing: string | undefined, path: string): string {
+  if (existing === undefined || existing.length === 0) return path;
+  return existing.split(":").includes(path) ? existing : `${existing}:${path}`;
+}
+
 const setupHarnessProbeUnavailable = {
   tag: "SetupHarnessTrackingError",
   code: "SETUP_HARNESS_TRACKING_PROBE_UNAVAILABLE",
@@ -228,12 +269,7 @@ export function normalizeSetupPlanningFacts(
     },
     worktrunkAutomation:
       facts.worktrunkAutomation.status === "ok" ? "ready" : facts.worktrunkAutomation.status,
-    worktrunkShell:
-      facts.worktrunkShellIntegration.status === "ok"
-        ? "ready"
-        : facts.worktrunkShellIntegration.status === "warning"
-          ? "missing"
-          : "skipped",
+    worktrunkShell: normalizeWorktrunkShell(facts),
     tmuxPopup: {
       persisted: facts.tmuxBinding.status === "ok" ? "ready" : facts.tmuxBinding.status,
       live: normalizeTmuxLive(facts),
@@ -255,6 +291,8 @@ function normalizeHarnessSelectionFacts(facts: SetupFacts): HarnessSelectionFact
     case "valid":
       config = { status: "valid", defaultHarness: facts.config.defaults.harness };
       break;
+    default:
+      return assertNever(facts.config);
   }
   return {
     config,
@@ -354,15 +392,32 @@ function normalizeLauncher(
   return launcher.status === "ok" ? "available" : "missing";
 }
 
+function normalizeWorktrunkShell(facts: SetupFacts): SetupPlanningFacts["worktrunkShell"] {
+  const status = facts.worktrunkShellIntegration.status;
+  switch (status) {
+    case "ok":
+      return "ready";
+    case "warning":
+      return "missing";
+    case "skipped":
+      return "skipped";
+    default:
+      return assertNever(status);
+  }
+}
+
 function normalizeTmuxLive(facts: SetupFacts): SetupPlanningFacts["tmuxPopup"]["live"] {
   if (!facts.tmuxBinding.insideTmux) return "not-applicable";
-  switch (facts.tmuxBinding.liveStatus) {
+  const liveStatus = facts.tmuxBinding.liveStatus;
+  switch (liveStatus) {
     case "loaded":
       return "ready";
     case "missing":
       return "missing";
     case "unknown":
       return "unknown";
+    default:
+      return assertNever(liveStatus);
   }
 }
 
@@ -372,4 +427,8 @@ function normalizeWorktrunkHooks(facts: SetupFacts): SetupPlanningFacts["worktru
     return "missing";
   }
   return "ready";
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported setup fact: ${String(value)}`);
 }

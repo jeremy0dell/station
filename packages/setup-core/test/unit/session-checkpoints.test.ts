@@ -6,14 +6,12 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("setup operation checkpoints", () => {
-  it("retains only completed operation ids and their typed commit evidence", () => {
+  it("retains each completed operation id only once", () => {
     const first = recordCompletedSetupOperation(emptySetupOperationCheckpoints, {
       operationId: "link-station-launchers",
-      commit: { kind: "launcher-link" },
     });
     const duplicate = recordCompletedSetupOperation(first, {
       operationId: "link-station-launchers",
-      commit: { kind: "launcher-link" },
     });
 
     expect(hasCompletedSetupOperation(first, "link-station-launchers")).toBe(true);

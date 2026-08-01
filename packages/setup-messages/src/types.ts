@@ -14,6 +14,9 @@ export type SetupMessageArguments = {
   "status.skipped": undefined;
   "action.selected": undefined;
   "action.skipped": undefined;
+  "label.observer-activation": undefined;
+  "label.setup-inspection": undefined;
+  "label.setup-operation": undefined;
   "label.state-directory": undefined;
   "label.socket-evidence": undefined;
   "label.worktrunk": undefined;

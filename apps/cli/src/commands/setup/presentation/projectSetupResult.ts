@@ -1,4 +1,4 @@
-import type { SetupPlan as CoreSetupPlan } from "@station/setup-core";
+import type { SetupPlan as CoreSetupPlan, SetupSessionOperationOutcome } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import { setupLauncherExecutable } from "../checks/launchers.js";
 import type { SetupHarnessSelection } from "../harnessSelection.js";
@@ -25,6 +25,20 @@ export function projectSetupResult(input: {
   };
 }
 
+export function overlaySetupOperationOutcomes(
+  view: ProjectSetupView,
+  outcomes: readonly SetupSessionOperationOutcome[],
+): ProjectSetupView {
+  const statuses = new Map(
+    outcomes.map((outcome) => [outcome.operationId, outcome.status] as const),
+  );
+  const updatedActions = view.actions.map((action) => {
+    const status = action.operationId === undefined ? undefined : statuses.get(action.operationId);
+    return status === undefined ? action : { ...action, status };
+  });
+  return withUpdatedActions(view, updatedActions);
+}
+
 export function overlaySetupActionStatuses(
   view: ProjectSetupView,
   actions: readonly SetupAction[],
@@ -35,12 +49,19 @@ export function overlaySetupActionStatuses(
     const status = statuses.get(action.id);
     return status === undefined ? action : { ...action, status };
   });
-  const failedConfigWrite = updatedActions.some(
+  return withUpdatedActions(view, updatedActions);
+}
+
+function withUpdatedActions(
+  view: ProjectSetupView,
+  actions: readonly SetupViewAction[],
+): ProjectSetupView {
+  const failedConfigWrite = actions.some(
     (action) => action.kind === "write-config" && action.status === "failed",
   );
   return {
     ...view,
-    actions: updatedActions,
+    actions,
     result: {
       ...view.result,
       apply: failedConfigWrite

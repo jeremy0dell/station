@@ -27,8 +27,8 @@ import { createHarnessTrackingAdapter } from "./harnessTracking.js";
 import { createObserverActivationAdapter } from "./observerActivation.js";
 
 export type SetupOperationAdapterOptions = {
-  readonly facts?: SetupFacts;
-  readonly deps: SetupCommandDeps;
+  readonly facts?: SetupFacts | (() => SetupFacts | undefined);
+  readonly deps: SetupCommandDeps | (() => SetupCommandDeps);
 };
 
 /**
@@ -39,44 +39,54 @@ export type SetupOperationAdapterOptions = {
 export function createSetupOperationAdapter(
   options: SetupOperationAdapterOptions,
 ): SetupOperationExecutor {
-  const { deps, facts } = options;
+  const facts = () => (typeof options.facts === "function" ? options.facts() : options.facts);
+  const deps = () => (typeof options.deps === "function" ? options.deps() : options.deps);
+  const initialFacts = facts();
+  const initialDeps = deps();
   let committedConfigPath: string | undefined;
-  const config: SetupOperationPorts["config"] = (operation) =>
-    createSetupConfigAdapter({
-      facts: requireFacts(facts),
-      ...(deps.now === undefined ? {} : { now: deps.now }),
-      ...(deps.fs === undefined ? {} : { fs: configPersistenceFileSystem(deps.fs) }),
+  const config: SetupOperationPorts["config"] = (operation) => {
+    const currentDeps = deps();
+    return createSetupConfigAdapter({
+      facts: requireFacts(facts()),
+      ...(currentDeps.now === undefined ? {} : { now: currentDeps.now }),
+      ...(currentDeps.fs === undefined ? {} : { fs: configPersistenceFileSystem(currentDeps.fs) }),
       onCommitted: (configPath) => {
         committedConfigPath = configPath;
       },
     })(operation);
+  };
   const observer = createObserverActivationAdapter({
     configPath: () => committedConfigPath,
-    homeDir: facts?.homeDir ?? deps.homeDir ?? process.env.HOME ?? "",
-    ...(deps.activateObserverConfig === undefined
+    homeDir: initialFacts?.homeDir ?? initialDeps.homeDir ?? process.env.HOME ?? "",
+    ...(initialDeps.activateObserverConfig === undefined
       ? {}
-      : { activateObserverConfig: deps.activateObserverConfig }),
-  });
-  const defaultHarnessTracking = createHarnessTrackingAdapter({
-    configPath: () => committedConfigPath ?? facts?.configPath,
-    homeDir: facts?.homeDir ?? deps.homeDir ?? process.env.HOME ?? "",
-    ...(deps.env === undefined ? {} : { env: deps.env }),
-    ...(deps.providerHookIngressLauncher === undefined
-      ? {}
-      : { providerHookIngressLauncher: deps.providerHookIngressLauncher }),
-    ...(deps.providerHookArtifactOwner === undefined
-      ? {}
-      : { providerHookArtifactOwner: deps.providerHookArtifactOwner }),
+      : { activateObserverConfig: initialDeps.activateObserverConfig }),
   });
 
   const ports: SetupOperationPorts = {
     config,
     observer,
-    harnessTracking: (operation) =>
-      deps.providerTrackingPort?.(operation) ?? defaultHarnessTracking(operation),
+    harnessTracking: (operation) => {
+      const currentDeps = deps();
+      if (currentDeps.providerTrackingPort !== undefined) {
+        return currentDeps.providerTrackingPort(operation);
+      }
+      return createHarnessTrackingAdapter({
+        configPath: () => committedConfigPath ?? facts()?.configPath,
+        homeDir: initialFacts?.homeDir ?? currentDeps.homeDir ?? process.env.HOME ?? "",
+        ...(currentDeps.env === undefined ? {} : { env: currentDeps.env }),
+        ...(currentDeps.providerHookIngressLauncher === undefined
+          ? {}
+          : { providerHookIngressLauncher: currentDeps.providerHookIngressLauncher }),
+        ...(currentDeps.providerHookArtifactOwner === undefined
+          ? {}
+          : { providerHookArtifactOwner: currentDeps.providerHookArtifactOwner }),
+      })(operation);
+    },
     worktrunk: (operation) => {
+      const currentDeps = deps();
       if (operation.kind === "configure-worktrunk-shell") {
-        const currentFacts = requireFacts(facts);
+        const currentFacts = requireFacts(facts());
         const base = [
           currentFacts.worktrunk.resolvedPath ?? currentFacts.worktrunk.command,
           "-y",
@@ -86,28 +96,28 @@ export function createSetupOperationAdapter(
         ];
         const shell = currentFacts.worktrunkShellIntegration.shell;
         const command = shell === undefined ? base : [...base, shell];
-        return runExternalOperation(operation, command, { kind: "worktrunk-shell" }, deps);
+        return runExternalOperation(operation, command, { kind: "worktrunk-shell" }, currentDeps);
       }
-      const currentFacts = requireFacts(facts);
+      const currentFacts = requireFacts(facts());
       return (
-        deps.providerTrackingPort?.(operation) ??
+        currentDeps.providerTrackingPort?.(operation) ??
         prepareWorktrunkTracking(
           operation,
           currentFacts,
           committedConfigPath ?? currentFacts.config.path,
-          deps,
+          currentDeps,
         )
       );
     },
-    tmux: (operation) => configureTmux(operation, requireFacts(facts), deps),
+    tmux: (operation) => configureTmux(operation, requireFacts(facts()), deps()),
     packages: createPackageInstallationAdapter(facts, deps),
     launchers: (operation) => {
-      const currentFacts = requireFacts(facts);
+      const currentFacts = requireFacts(facts());
       return runExternalOperation(
         operation,
         ["pnpm", "--dir", currentFacts.launchers.packageRoot, "station:link"],
         { kind: "launcher-link" },
-        deps,
+        deps(),
       );
     },
   };
@@ -121,13 +131,13 @@ export function createSetupOperationAdapter(
 }
 
 function createPackageInstallationAdapter(
-  facts: SetupFacts | undefined,
-  deps: SetupCommandDeps,
+  facts: () => SetupFacts | undefined,
+  deps: () => SetupCommandDeps,
 ): SetupPackageInstallationPort {
   return (operation) => {
-    const command = packageInstallCommand(operation, facts);
+    const command = packageInstallCommand(operation, facts());
     const target = packageTarget(operation);
-    return runExternalOperation(operation, command, { kind: "package-installer", target }, deps);
+    return runExternalOperation(operation, command, { kind: "package-installer", target }, deps());
   };
 }
 
@@ -160,6 +170,8 @@ function packageInstallCommand(
       ];
     case "install-xcode-command-line-tools":
       return ["xcode-select", "--install"];
+    default:
+      return assertNever(operation);
   }
 }
 
@@ -175,6 +187,8 @@ function packageTarget(
       return { kind: "bootstrap", id: "homebrew" };
     case "install-xcode-command-line-tools":
       return { kind: "bootstrap", id: "xcode-command-line-tools" };
+    default:
+      return assertNever(operation);
   }
 }
 
@@ -436,6 +450,8 @@ function toolFormula(tool: Extract<SetupOperation, { kind: "install-tool" }>["to
       return "diffnav";
     case "git-delta":
       return "git-delta";
+    default:
+      return assertNever(tool);
   }
 }
 
@@ -479,3 +495,7 @@ const tmuxWriteFallback = {
   code: "SETUP_TMUX_WRITE_FAILED",
   message: "The tmux popup binding could not be persisted.",
 };
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported setup operation value: ${String(value)}`);
+}

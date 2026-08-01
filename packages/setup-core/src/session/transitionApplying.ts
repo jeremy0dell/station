@@ -1,6 +1,7 @@
 import type { SetupOperation } from "../model/operations.js";
 import type {
   SetupSessionApplyPhase,
+  SetupSessionBlockReason,
   SetupSessionEffect,
   SetupSessionEvent,
   SetupSessionState,
@@ -79,7 +80,6 @@ export function transitionApplying(
     if (!isExpectedOperation(state, event.outcome.operationId)) return { state, effects: [] };
     const checkpoints = recordCompletedSetupOperation(state.checkpoints, {
       operationId: event.outcome.operationId,
-      commit: event.outcome.commit,
     });
     return continueApplying({
       ...state,
@@ -100,12 +100,7 @@ export function transitionApplying(
       state: {
         ...withFailure,
         status: "blocked",
-        reason:
-          state.applyPhase === "config-write"
-            ? "config-write-failed"
-            : state.applyPhase === "observer-activation"
-              ? "observer-activation-failed"
-              : "preflight-failed",
+        reason: blockReasonForPhase(state.applyPhase),
         error: event.outcome.error,
       },
       effects: [],
@@ -174,6 +169,28 @@ function continueApplying(
         state: { ...state, status: "verifying", revision: state.revision + 1 },
         effects: [{ kind: "inspect", phase: "final" }],
       };
+    default:
+      return assertNeverApplyPhase(state.applyPhase);
+  }
+}
+
+function blockReasonForPhase(
+  phase: SetupSessionApplyPhase,
+): Extract<
+  SetupSessionBlockReason,
+  "preflight-failed" | "config-write-failed" | "observer-activation-failed"
+> {
+  switch (phase) {
+    case "preflight":
+      return "preflight-failed";
+    case "config-write":
+      return "config-write-failed";
+    case "observer-activation":
+      return "observer-activation-failed";
+    case "tracking":
+      throw new Error("Tracking failures do not block the setup session.");
+    default:
+      return assertNeverApplyPhase(phase);
   }
 }
 
@@ -197,29 +214,61 @@ function isExpectedOperation(
 }
 
 function isOperationInPhase(operation: SetupOperation, phase: SetupSessionApplyPhase): boolean {
-  switch (phase) {
-    case "preflight":
-      return operation.kind.startsWith("install-");
-    case "config-write":
-      return operation.kind === "write-config";
-    case "observer-activation":
-      return operation.kind === "activate-observer-config";
-    case "tracking":
-      return (
-        operation.kind === "prepare-harness-tracking" ||
-        operation.kind === "prepare-worktrunk-tracking"
-      );
+  switch (operation.kind) {
+    case "install-tool":
+    case "install-harness":
+    case "install-homebrew":
+    case "install-xcode-command-line-tools":
+      return phase === "preflight";
+    case "write-config":
+      return phase === "config-write";
+    case "activate-observer-config":
+      return phase === "observer-activation";
+    case "prepare-harness-tracking":
+    case "prepare-worktrunk-tracking":
+      return phase === "tracking";
+    case "link-launchers":
+    case "configure-worktrunk-shell":
+    case "configure-tmux-popup":
+      return false;
+    default:
+      return assertNeverOperation(operation);
   }
 }
 
 function hasBlockingPreflightIssue(
   plan: Extract<SetupSessionState, { readonly status: "editing" }>["plan"],
 ): boolean {
-  return plan.issues.some(
-    (issue) =>
-      issue.tier === "required" &&
-      !(issue.code === "config-unready" && issue.state === "missing") &&
-      issue.code !== "harness-tracking-unprepared" &&
-      issue.code !== "station-ui-missing",
-  );
+  return plan.issues.some((issue) => {
+    if (issue.tier !== "required") return false;
+    if (issue.code === "station-ui-missing") return false;
+    if (issue.code === "config-unready") {
+      if (issue.state === "write-blocked" && plan.evidence.config.state === "valid") return false;
+      if (issue.state !== "missing") return true;
+      return !plan.operations.some(
+        (operation) => operation.kind === "write-config" && operation.selected,
+      );
+    }
+    if (issue.code === "harness-tracking-unprepared") {
+      return !plan.operations.some((operation) => {
+        if (!operation.selected) return false;
+        if (operation.kind === "prepare-harness-tracking") {
+          return operation.harnessId === issue.harnessId;
+        }
+        return (
+          operation.kind === "write-config" &&
+          operation.trackingHarnessIds.includes(issue.harnessId)
+        );
+      });
+    }
+    return true;
+  });
+}
+
+function assertNeverOperation(operation: never): never {
+  throw new Error(`Unsupported setup operation: ${String(operation)}`);
+}
+
+function assertNeverApplyPhase(phase: never): never {
+  throw new Error(`Unsupported setup apply phase: ${String(phase)}`);
 }

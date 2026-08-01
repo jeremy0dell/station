@@ -1,33 +1,23 @@
 import type { SafeError } from "@station/contracts";
-import { type RuntimeSafeError, safeErrorFromUnknown } from "@station/runtime";
 import type { SetupPlan as CoreSetupPlan, SetupOperationExecutor } from "@station/setup-core";
 import type { CliEnv } from "../../env.js";
+import { collectHarnessTrackingFacts, collectSetupFactsForCommand } from "./adapters/inspection.js";
+
+export { depsWithBrewBinPath } from "./adapters/inspection.js";
+
 import { createSetupOperationAdapter } from "./adapters/operations.js";
 import type { applySetupPlan, SetupOperationBinding } from "./apply.js";
 import { commandEnv } from "./checks/env.js";
-import {
-  type CollectSetupFactsOptions,
-  collectSetupFacts,
-  type SetupDependencyCheckOptions,
-} from "./checks/system.js";
+import type { SetupDependencyCheckOptions } from "./checks/system.js";
 import { planSetupConfigWrite } from "./configWriter.js";
 import {
   harnessSupportsSetupHooks,
   isSupportedHarnessId,
-  relevantHarnessTrackingIds,
   resolveSetupHarnessSelection,
   type SetupHarnessSelection,
 } from "./harnessSelection.js";
 import { setupPresenter } from "./io.js";
-import type {
-  SetupAction,
-  SetupFacts,
-  SetupHarnessTrackingFact,
-  SetupMode,
-  SetupPlan,
-  SupportedHarnessId,
-} from "./model.js";
-import { SetupHarnessTrackingFactSchema } from "./model.js";
+import type { SetupAction, SetupFacts, SetupMode, SetupPlan, SupportedHarnessId } from "./model.js";
 import { type buildSetupPlan, buildSetupPlans } from "./planner.js";
 import type { ProjectSetupView } from "./presentation/projectSetupView.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "./types.js";
@@ -38,28 +28,7 @@ export function collectForCommand(
   deps: SetupCommandDeps,
   flags: { noBrew?: boolean },
 ): Promise<SetupFacts> {
-  const collectOptions: CollectSetupFactsOptions = { mode };
-  if (options.configPath !== undefined) collectOptions.configPath = options.configPath;
-  if (deps.cwd !== undefined) collectOptions.cwd = deps.cwd;
-  if (deps.homeDir !== undefined) collectOptions.homeDir = deps.homeDir;
-  const env = deps.env ?? options.env;
-  if (env !== undefined) collectOptions.env = env;
-  if (deps.runner !== undefined) collectOptions.runner = deps.runner;
-  if (deps.access !== undefined) collectOptions.access = deps.access;
-  if (deps.fs !== undefined) collectOptions.fs = deps.fs;
-  if (deps.now !== undefined) collectOptions.now = deps.now;
-  if (deps.platform !== undefined) collectOptions.platform = deps.platform;
-  if (deps.compiled !== undefined) collectOptions.compiled = deps.compiled;
-  if (deps.providerHookIngressLauncher !== undefined) {
-    collectOptions.providerHookIngressLauncher = deps.providerHookIngressLauncher;
-  }
-  if (deps.tmuxPopupOwnerRoot !== undefined) {
-    collectOptions.tmuxPopupOwnerRoot = deps.tmuxPopupOwnerRoot;
-  }
-  if (deps.stateDirExecute !== undefined) collectOptions.stateDirExecute = deps.stateDirExecute;
-  if (deps.stateDirFs !== undefined) collectOptions.stateDirFs = deps.stateDirFs;
-  if (flags.noBrew !== undefined) collectOptions.noBrew = flags.noBrew;
-  return collectSetupFacts(collectOptions);
+  return collectSetupFactsForCommand(mode, options, deps, flags);
 }
 
 export type CollectedSetupPlan = {
@@ -126,78 +95,6 @@ export async function collectSetupPlanFromFacts(
     executeOperation: createSetupOperationAdapter({ facts, deps }),
   };
 }
-
-async function collectHarnessTrackingFacts(
-  facts: SetupFacts,
-  harnessSelection: SetupHarnessSelection,
-  deps: SetupCommandDeps,
-): Promise<SetupFacts> {
-  const harnessIds = relevantHarnessTrackingIds(facts, harnessSelection);
-  const harnessTracking = await Promise.all(
-    harnessIds.map((harnessId) => probeHarnessTrackingFact(facts, harnessId, deps)),
-  );
-  return { ...facts, harnessTracking };
-}
-
-async function probeHarnessTrackingFact(
-  facts: SetupFacts,
-  harnessId: SupportedHarnessId,
-  deps: SetupCommandDeps,
-): Promise<SetupHarnessTrackingFact> {
-  if (!harnessSupportsSetupHooks(harnessId)) {
-    return SetupHarnessTrackingFactSchema.parse({
-      harnessId,
-      capability: "unsupported",
-      detail: "This harness has no Station-managed external tracking artifact.",
-    });
-  }
-  if (facts.config.status !== "valid") {
-    return SetupHarnessTrackingFactSchema.parse({
-      harnessId,
-      capability: "supported",
-      requested: false,
-      detail: "Station config does not currently request tracking artifacts.",
-    });
-  }
-  try {
-    if (deps.probeHarnessHooksStatus === undefined) {
-      throw setupHarnessProbeUnavailable;
-    }
-    const status = await deps.probeHarnessHooksStatus(harnessId, facts.config.path);
-    if (status === undefined) {
-      throw setupHarnessProbeUnavailable;
-    }
-    const fact: SetupHarnessTrackingFact = {
-      harnessId,
-      capability: "supported",
-      requested: status.requested,
-      installed: status.installed,
-      detail: status.message,
-    };
-    if (status.ownership !== undefined) fact.ownership = status.ownership;
-    return SetupHarnessTrackingFactSchema.parse(fact);
-  } catch (error) {
-    const safeError = safeErrorFromUnknown(error, setupHarnessProbeFailed);
-    return SetupHarnessTrackingFactSchema.parse({
-      harnessId,
-      capability: "supported",
-      detail: `${safeError.message} (${safeError.code})`,
-      probeFailed: true,
-    });
-  }
-}
-
-const setupHarnessProbeUnavailable: RuntimeSafeError = {
-  tag: "SetupHarnessTrackingError",
-  code: "SETUP_HARNESS_TRACKING_PROBE_UNAVAILABLE",
-  message: "Harness tracking status probe is unavailable.",
-};
-
-const setupHarnessProbeFailed: RuntimeSafeError = {
-  tag: "SetupHarnessTrackingError",
-  code: "SETUP_HARNESS_TRACKING_PROBE_FAILED",
-  message: "Harness tracking status could not be inspected.",
-};
 
 export function applyOptions(
   deps: SetupCommandDeps,
@@ -273,21 +170,6 @@ export async function activateCompletedConfigWrite(
     }),
   );
   return outcome.error;
-}
-
-const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
-
-export function depsWithBrewBinPath(deps: SetupCommandDeps): SetupCommandDeps {
-  const env = { ...(deps.env ?? process.env) };
-  env.PATH = brewBinDirs.reduce((path, dir) => appendPath(path, dir), env.PATH);
-  return { ...deps, env };
-}
-
-function appendPath(existing: string | undefined, path: string): string {
-  if (existing === undefined || existing.length === 0) {
-    return path;
-  }
-  return existing.split(":").includes(path) ? existing : `${existing}:${path}`;
 }
 
 export function dependencyOptionsForCommand(

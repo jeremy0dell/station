@@ -23,7 +23,6 @@ describe("planSetup", () => {
     expect(plan.result).toEqual({
       readiness: { launchReady: true, workflowReady: true, requiredMissing: 0 },
       requiredIssueCount: 0,
-      recommendations: ["doctor"],
       selectedOperationCount: 0,
     });
   });
@@ -294,7 +293,6 @@ describe("planSetup", () => {
     });
     expect(plan.result).toMatchObject({
       requiredIssueCount: 1,
-      recommendations: ["doctor", "harness-tracking"],
       selectedOperationCount: 2,
     });
   });

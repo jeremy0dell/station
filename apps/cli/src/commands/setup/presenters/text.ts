@@ -47,6 +47,7 @@ export type TextSetupPresenter = {
   readonly renderProgressStart: (action: Pick<SetupAction, "label">) => string;
   readonly renderProgressComplete: (action: Pick<SetupAction, "label">) => string;
   readonly renderProgressFailure: (action: Pick<SetupAction, "label">, error?: SafeError) => string;
+  readonly renderInspectionFailure: (error: SafeError) => string;
   readonly renderActivationStart: () => string;
   readonly renderActivationComplete: () => string;
   readonly renderActivationFailure: (
@@ -83,6 +84,8 @@ export function createTextSetupPresenter(
     renderProgressComplete: (action) =>
       theme.green(text(setupMessageRef("progress.complete", { label: action.label }))),
     renderProgressFailure: (action, error) => renderProgressFailure(action.label, error, theme),
+    renderInspectionFailure: (error) =>
+      renderProgressFailure(text(setupMessageRef("label.setup-inspection")), error, theme),
     renderActivationStart: () => text(setupMessageRef("activation.start")),
     renderActivationComplete: () => theme.green(text(setupMessageRef("activation.complete"))),
     renderActivationFailure: (error, commands) => renderActivationFailure(error, commands, theme),

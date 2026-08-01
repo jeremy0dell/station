@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSetupPlanningFacts } from "../../src/commands/setup/adapters/inspection.js";
+import {
+  createSetupInspectionAdapter,
+  normalizeSetupPlanningFacts,
+} from "../../src/commands/setup/adapters/inspection.js";
 import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
+import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
 import type { SetupHarnessSelection } from "../../src/commands/setup/harnessSelection.js";
+import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 
 describe("setup inspection adapter", () => {
   it("normalizes machine facts without exposing config source or provider payloads to core", () => {
@@ -21,7 +26,80 @@ describe("setup inspection adapter", () => {
       }),
     ]);
   });
+
+  it("refreshes invocation dependencies after a completed package install", () => {
+    const deps = { env: { PATH: "/fake/bin" } };
+    const inspection = createSetupInspectionAdapter({
+      mode: "check",
+      options: {},
+      deps,
+      noBrew: false,
+      planConfigWrite: false,
+    });
+
+    inspection.recordOperationOutcome({
+      status: "completed",
+      operationId: "install:worktrunk",
+      commit: { kind: "package-installer", target: { kind: "tool", id: "worktrunk" } },
+    });
+
+    expect(deps.env.PATH).toBe("/fake/bin");
+    expect(inspection.currentDeps().env?.PATH).toContain("/opt/homebrew/bin");
+    expect(inspection.currentDeps().env?.PATH).toContain("/usr/local/bin");
+  });
+
+  it("resolves operation dependencies at execution time", async () => {
+    const calls: Array<{ readonly command: string; readonly path: string | undefined }> = [];
+    let currentDeps = operationDeps("/first/bin", calls);
+    const execute = createSetupOperationAdapter({
+      facts: facts(),
+      deps: () => currentDeps,
+    });
+
+    await execute({
+      id: "install:diffnav",
+      kind: "install-tool",
+      tier: "recommended",
+      selected: true,
+      tool: "diffnav",
+    });
+    currentDeps = operationDeps("/refreshed/bin", calls);
+    await execute({
+      id: "install:git-delta",
+      kind: "install-tool",
+      tier: "recommended",
+      selected: true,
+      tool: "git-delta",
+    });
+
+    expect(calls).toEqual([
+      { command: "brew install diffnav", path: "/first/bin" },
+      { command: "brew install git-delta", path: "/refreshed/bin" },
+    ]);
+  });
 });
+
+function operationDeps(
+  path: string,
+  calls: Array<{ readonly command: string; readonly path: string | undefined }>,
+): SetupCommandDeps {
+  return {
+    env: { PATH: path },
+    runner: async (input) => {
+      calls.push({
+        command: `${input.command} ${(input.args ?? []).join(" ")}`,
+        path: input.env?.PATH,
+      });
+      return {
+        command: input.command,
+        args: input.args ?? [],
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      };
+    },
+  };
+}
 
 function selection(): SetupHarnessSelection {
   return {

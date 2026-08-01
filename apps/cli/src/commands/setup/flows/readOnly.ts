@@ -1,8 +1,4 @@
-import type { SetupSessionState } from "@station/setup-core";
 import { createSetupComposition } from "../composition.js";
-import { setupPresenter } from "../io.js";
-import { projectSessionView } from "../presentation/projectSessionView.js";
-import { projectSetupView } from "../presentation/projectSetupView.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "../types.js";
 
 export async function runSetupCheckCommand(
@@ -18,15 +14,19 @@ export async function runSetupCheckCommand(
     planConfigWrite: false,
   });
   const state = await composition.session.application.review();
-  const projection = projectCurrentSession(composition, state);
+  const projection = composition.project(state);
+  if (projection.status === "unavailable") {
+    if (flags.json) throw projection.error;
+    await composition.text.write(`${composition.text.renderInspectionFailure(projection.error)}\n`);
+    return { code: 1 };
+  }
   if (flags.json) {
     return {
       code: projection.plan.summary.requiredOk ? 0 : 1,
       output: projection.plan,
     };
   }
-  const presenter = setupPresenter(deps);
-  await presenter.write(presenter.renderPlan(projection.view));
+  await composition.text.write(composition.text.renderPlan(projection.view));
   return { code: projection.plan.summary.requiredOk ? 0 : 1 };
 }
 
@@ -43,29 +43,13 @@ export async function runSetupPlanCommand(
     planConfigWrite: true,
   });
   const state = await composition.session.application.review();
-  const projection = projectCurrentSession(composition, state);
-  if (flags.json) return { code: 0, output: projection.plan };
-  const presenter = setupPresenter(deps);
-  await presenter.write(presenter.renderPlan(projection.view));
-  return { code: 0 };
-}
-
-function projectCurrentSession(
-  composition: ReturnType<typeof createSetupComposition>,
-  state: SetupSessionState,
-) {
-  const snapshot = composition.session.snapshot();
-  const sessionView = projectSessionView(state);
-  if (snapshot === undefined || sessionView.plan === undefined) {
-    const reason = state.status === "blocked" ? ` (${state.error?.code ?? state.reason})` : "";
-    throw new Error(`Setup session completed without inspectable semantic evidence${reason}.`);
+  const projection = composition.project(state);
+  if (projection.status === "unavailable") {
+    if (flags.json) throw projection.error;
+    await composition.text.write(`${composition.text.renderInspectionFailure(projection.error)}\n`);
+    return { code: 1 };
   }
-  const input =
-    snapshot.configWrite === undefined
-      ? { plan: sessionView.plan, facts: snapshot.facts }
-      : { plan: sessionView.plan, facts: snapshot.facts, configWrite: snapshot.configWrite };
-  return {
-    plan: composition.json.project(input),
-    view: projectSetupView(input),
-  };
+  if (flags.json) return { code: 0, output: projection.plan };
+  await composition.text.write(composition.text.renderPlan(projection.view));
+  return { code: 0 };
 }
