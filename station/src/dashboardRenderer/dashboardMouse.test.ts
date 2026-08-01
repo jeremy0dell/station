@@ -12,12 +12,13 @@ import {
 import type { StoreApi } from "zustand/vanilla";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
-import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 import {
-  type DashboardMouseEffects,
-  routeDashboardMouse as routeDashboardMouseWithEffects,
-} from "./dashboardMouse.js";
+  manyProjectsSnapshot,
+  noProjectsSnapshot,
+} from "../station/fixtures/scenarios.js";
+import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import type { DashboardRendererEffects } from "./dashboardEffects.js";
+import { routeDashboardMouse as routeDashboardMouseWithEffects } from "./dashboardMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -30,20 +31,25 @@ const LEFT_DOWN: StationMouseEvent = {
 const LEFT_UP: StationMouseEvent = { ...LEFT_DOWN, type: "up" };
 const RIGHT_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "right", rawButton: 2 };
 const MIDDLE_DOWN: StationMouseEvent = { ...LEFT_DOWN, button: "middle", rawButton: 1 };
-const TEST_EFFECTS: DashboardMouseEffects = {
+const TEST_EFFECTS: DashboardRendererEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
 const DASHBOARD_MOUSE_TARGET_KINDS = {
+  addProjectAction: true,
   addProjectRow: true,
   body: true,
+  emptyProjectAction: true,
+  firstProjectAdd: true,
   link: true,
+  newSessionAction: true,
   openShellForProject: true,
   openShellForRow: true,
   projectHeader: true,
   projectSettingsConfirmRemove: true,
   projectSettingsItem: true,
   quickSessionForProject: true,
+  renameSessionSubmit: true,
   row: true,
   screenBackdrop: true,
   scrollIndicator: true,
@@ -72,7 +78,7 @@ function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
   store: StoreApi<TuiStore>,
-  effects: DashboardMouseEffects = TEST_EFFECTS,
+  effects: DashboardRendererEffects = TEST_EFFECTS,
 ): void {
   routeDashboardMouseWithEffects(target, event, store, effects);
 }
@@ -164,6 +170,11 @@ describe("routeDashboardMouse", () => {
     routeDashboardMouse({ kind: "projectHeader", projectId: "station" }, LEFT_UP, store);
 
     expect([...store.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "primary",
+    });
     expect(store.getState().scrollOffset).toBeLessThan(99);
   });
 
@@ -193,6 +204,19 @@ describe("routeDashboardMouse", () => {
     routeDashboardMouse({ kind: "screenBackdrop" }, SCROLL_DOWN, store);
     routeDashboardMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
     expect(store.getState().scrollOffset).toBe(0);
+  });
+
+  it("opens first-project onboarding from the empty-dashboard CTA", () => {
+    const empty = makeStore(noProjectsSnapshot());
+    routeDashboardMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, empty);
+    expect(empty.getState().screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "start", firstProject: true },
+    });
+
+    const populated = makeStore();
+    routeDashboardMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, populated);
+    expect(populated.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("maps row pickers, sheet choices, confirmations, and fork submit to keyboard transitions", async () => {
@@ -245,7 +269,12 @@ describe("routeDashboardMouse", () => {
     const addProject = store.getState().screen;
     expect(addProject.name === "addProject" && addProject.flow.mode === "start").toBe(true);
     expect(addProjectSelectedIndex(store.getState())).toBe(1);
-    store.getState().handleKey({ input: "", escape: true });
+    routeDashboardMouse(
+      { kind: "addProjectAction", actionId: "start.cancel" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
 
     store.setState({ widgets: [{ type: "time" }, { type: "moon" }] });
     store.setState({ screen: { name: "dashboard" } });
@@ -263,6 +292,119 @@ describe("routeDashboardMouse", () => {
     store.setState(addTuiToast(store.getState(), { kind: "info", message: "hello" }));
     routeDashboardMouse({ kind: "toast" }, LEFT_DOWN, store);
     expect(store.getState().toasts).toEqual([]);
+  });
+
+  it("routes Create Session fields, editor controls, and standalone Create", async () => {
+    const fixture = makeStationTestStore({ terminalRows: 14 });
+    const store = fixture.store;
+    store.getState().handleKey({ input: "N" });
+
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "review.agent" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "pickAgent" },
+    });
+    store.getState().handleKey({ input: "", escape: true });
+
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "review.name" },
+      LEFT_DOWN,
+      store,
+    );
+    store.getState().handleKey({ input: "Standalone mouse" });
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "editName.save" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "review", title: "Standalone mouse" },
+    });
+
+    routeDashboardMouse(
+      { kind: "newSessionAction", actionId: "review.create" },
+      LEFT_DOWN,
+      store,
+    );
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    const creates = fixture.service.dispatched.filter(
+      (command) => command.type === "session.create",
+    );
+    expect(creates).toHaveLength(1);
+    expect(creates[0]).toMatchObject({
+      payload: { title: "Standalone mouse", harness: { provider: "codex" } },
+    });
+  });
+
+  it("routes an empty-project click through Quick Session and transfers successful focus", async () => {
+    const fixture = makeStationTestStore({ terminalRows: 40 });
+    const store = fixture.store;
+
+    routeDashboardMouse(
+      { kind: "emptyProjectAction", projectId: "empty-project" },
+      LEFT_DOWN,
+      store,
+    );
+
+    await waitFor(() =>
+      fixture.service.dispatched.some((command) => command.type === "session.create"),
+    );
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "empty-project",
+      control: "quickSession",
+    });
+    const creates = fixture.service.dispatched.filter(
+      (command) => command.type === "session.create",
+    );
+    expect(creates).toHaveLength(1);
+    expect(creates[0]).toMatchObject({ payload: { projectId: "empty-project" } });
+  });
+
+  it("guards blocked, stale, and modal empty-project clicks", () => {
+    const snapshot = manyProjectsSnapshot();
+    const blockedSnapshot: StationSnapshot = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "empty-project"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const blockedFixture = makeStationTestStore({ snapshot: blockedSnapshot, terminalRows: 40 });
+    routeDashboardMouse(
+      { kind: "emptyProjectAction", projectId: "empty-project" },
+      LEFT_DOWN,
+      blockedFixture.store,
+    );
+    expect(blockedFixture.store.getState().dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: "empty-project",
+    });
+    expect(blockedFixture.store.getState().toasts.at(-1)?.toast.kind).toBe("error");
+    expect(blockedFixture.service.dispatched).toEqual([]);
+
+    const stale = makeStore();
+    routeDashboardMouse({ kind: "emptyProjectAction", projectId: "ghost" }, LEFT_DOWN, stale);
+    routeDashboardMouse({ kind: "emptyProjectAction", projectId: "station" }, LEFT_DOWN, stale);
+    expect(stale.getState().dashboardFocus).toBeUndefined();
+
+    const modal = makeStore();
+    modal.getState().handleKey({ input: "H" });
+    routeDashboardMouse(
+      { kind: "emptyProjectAction", projectId: "empty-project" },
+      LEFT_DOWN,
+      modal,
+    );
+    expect(modal.getState().screen).toEqual({ name: "help" });
+    expect(modal.getState().dashboardFocus).toBeUndefined();
   });
 
   it("routes project shell, quick-session, and agent-picker actions", async () => {
@@ -290,6 +432,11 @@ describe("routeDashboardMouse", () => {
       "/Users/example/Developer/station",
       "/Users/example/.worktrees/station/pty-buffer",
     ]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
+    });
 
     routeDashboardMouse(
       { kind: "quickSessionForProject", projectId: "station" },
@@ -300,6 +447,11 @@ describe("routeDashboardMouse", () => {
     await waitFor(() =>
       fixture.service.dispatched.some((command) => command.type === "session.create"),
     );
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
     expect(
       fixture.service.dispatched.find((command) => command.type === "session.create"),
     ).toMatchObject({
@@ -319,6 +471,65 @@ describe("routeDashboardMouse", () => {
     expect(store.getState().screen).toMatchObject({
       name: "projectDefaultAgent",
       projectId: "station",
+    });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "defaultAgent",
+    });
+  });
+
+  it("resolves blocked Quick Session availability once at the standalone consumer", () => {
+    const snapshot = manyProjectsSnapshot();
+    const unavailable: StationSnapshot = {
+      ...snapshot,
+      projects: snapshot.projects.map((project) =>
+        project.id === "station"
+          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+          : project,
+      ),
+    };
+    const store = makeStore(unavailable);
+
+    routeDashboardMouse(
+      { kind: "quickSessionForProject", projectId: "station" },
+      LEFT_DOWN,
+      store,
+    );
+
+    expect(store.getState().localRows.pendingCreate).toEqual([]);
+    expect(store.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "error",
+      message: "The worktree provider is unavailable.",
+    });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "quickSession",
+    });
+  });
+
+  it("retains shell focus when the renderer effect reports a recoverable failure", () => {
+    const store = makeStore();
+    const effects: DashboardRendererEffects = {
+      openShell: () => {
+        throw new Error("shell unavailable");
+      },
+      openUrl: () => {},
+    };
+
+    expect(() =>
+      routeDashboardMouse(
+        { kind: "openShellForProject", projectId: "station" },
+        LEFT_DOWN,
+        store,
+        effects,
+      ),
+    ).toThrow(/shell unavailable/);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
     });
   });
 

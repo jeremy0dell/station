@@ -80,6 +80,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       canCaptureOutput: false,
       canSendInput: false,
       canPersistIdentityBinding: true,
+      canLaunchProcessPersistently: hostBacked,
       canDisplayPopup: false,
     };
   }

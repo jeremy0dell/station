@@ -154,6 +154,9 @@ async function routeSingleResponseRequest(
           params?.includeDebug === undefined ? undefined : { includeDebug: params.includeDebug },
         );
       }
+      case "session.recoveryReadiness": {
+        return await api.getSessionRecoveryReadiness();
+      }
       case "command.dispatch": {
         const params = CommandDispatchParamsSchema.parse(request.params);
         return await api.dispatch(params.command);

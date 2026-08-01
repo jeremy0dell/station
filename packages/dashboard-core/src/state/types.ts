@@ -14,6 +14,15 @@ import type { TuiToast } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
 import type { TuiSelectionState } from "./selection/types.js";
 
+/** Stable control identities for the four project-header action segments. */
+export type ProjectHeaderControl = "primary" | "shell" | "quickSession" | "defaultAgent";
+
+/** Renderer-neutral focus over session rows, project headers, and empty-project actions. */
+export type DashboardFocus =
+  | { kind: "session"; sessionId: SessionId }
+  | { kind: "projectHeader"; projectId: ProjectId; control: ProjectHeaderControl }
+  | { kind: "emptyProjectAction"; projectId: ProjectId };
+
 export type TuiRuntimeState = {
   persistentPopup: boolean;
   canDismissPopup: boolean;
@@ -29,8 +38,8 @@ export type TuiViewState = {
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
-  /** List cursor; native overlays synchronize it once per open and clear it on close. */
-  focusedRowId?: SessionId;
+  /** Dashboard cursor; native overlays synchronize session identity once per open. */
+  dashboardFocus?: DashboardFocus;
   /** Per-list cursor for screens migrated onto the shared selection engine. */
   selection: TuiSelectionState;
 };
@@ -135,7 +144,7 @@ export type CreateInitialTuiStateOptions = {
   scrollOffset?: number;
   terminalRows?: number;
   localRows?: TuiLocalRows;
-  focusedRowId?: SessionId;
+  dashboardFocus?: DashboardFocus;
   widgets?: readonly TuiWidgetConfig[];
   widgetsPersisted?: boolean;
   runtime?: Partial<TuiRuntimeState>;

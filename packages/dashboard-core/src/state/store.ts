@@ -12,12 +12,13 @@ import { sessionForWorktreeRow } from "../selectors/selectors.js";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
 import type { TuiObserverService, TuiToast } from "../services/types.js";
+import { handleTuiAction, type TuiSemanticAction } from "./actions.js";
 import { buildFocusCommand } from "./commandBuilders.js";
 import {
   clearDashboardFocus as clearDashboardFocusState,
   focusDashboardSession as focusDashboardSessionState,
+  reconcileDashboardFocus,
 } from "./dashboardFocus.js";
-import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
 import {
@@ -30,20 +31,26 @@ import {
   type TuiFocusTarget,
 } from "./operations/runtimeCommands.js";
 import { createInitialTuiState, replaceSnapshot } from "./screen.js";
+import { applyAddProjectFolderRefreshed } from "./screens/addProjectScreen.js";
 import { submitQuickSession } from "./screens/quickSession.js";
 import { attachTuiSnapshotSource, type TuiSnapshotSource } from "./sourceBridge.js";
+import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
-import { handleTuiKey, type TuiTransition } from "./transition.js";
+import { handleTuiKey, type TuiControlIntent, type TuiTransition } from "./transition.js";
 import type { CreateInitialTuiStateOptions, TuiState } from "./types.js";
 
 export type TuiHandleKeyResult = {
   dismissPopup: boolean;
   exitCode?: number;
+  controlIntent?: TuiControlIntent;
 };
 
 export type TuiStore = TuiState & {
   start(): () => void;
+  /** Applies a key transition and returns any one-shot renderer-owned control intent. */
   handleKey(key: TuiKey): TuiHandleKeyResult;
+  /** Applies a semantic transition and returns any one-shot renderer-owned control intent. */
+  handleAction(action: TuiSemanticAction): TuiHandleKeyResult;
   /** Create a project session immediately with its configured default harness. */
   createQuickSession(projectId: string): void;
   setTerminalRows(rows: number): void;
@@ -129,51 +136,60 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
       },
     }),
     start: (): (() => void) => {
+      let stopSnapshotUpdates: () => void;
       if (source !== undefined) {
-        return attachTuiSnapshotSource(store, source);
-      }
-      if (clientRuntime === undefined) {
+        stopSnapshotUpdates = attachTuiSnapshotSource(store, source);
+      } else if (clientRuntime === undefined) {
         throw new Error("createTuiStore requires a runtime when no source is provided.");
+      } else {
+        clientRuntime.start();
+        stopSnapshotUpdates = () => {
+          void clientRuntime.stop();
+        };
       }
-      clientRuntime.start();
+      const stopDirectoryPolling = attachAddProjectDirectoryPolling(store, folderService);
       return () => {
-        void clientRuntime.stop();
+        stopDirectoryPolling();
+        stopSnapshotUpdates();
       };
     },
-    handleKey: (key): TuiHandleKeyResult => {
-      const transition = handleTuiKey(get(), key, {
-        cwd: folderService.cwd(),
-        homeDir: folderService.homeDir(),
-      });
-      set(transition.state);
-      void applyTransitionEffects(
+    handleKey: (key): TuiHandleKeyResult =>
+      applyTransition(
         store,
         options.service,
         clientRuntime,
         runtime,
         operations,
-        transition,
-      );
-      const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
-      if (transition.exitCode !== undefined) {
-        result.exitCode = transition.exitCode;
-      }
-      return result;
-    },
+        handleTuiKey(get(), key, {
+          cwd: folderService.cwd(),
+          homeDir: folderService.homeDir(),
+        }),
+      ),
+    handleAction: (action): TuiHandleKeyResult =>
+      applyTransition(
+        store,
+        options.service,
+        clientRuntime,
+        runtime,
+        operations,
+        handleTuiAction(get(), action, {
+          cwd: folderService.cwd(),
+          homeDir: folderService.homeDir(),
+        }),
+      ),
     createQuickSession: (projectId): void => {
-      const transition = submitQuickSession(get(), projectId);
-      set(transition.state);
-      void applyTransitionEffects(
+      applyTransition(
         store,
         options.service,
         clientRuntime,
         runtime,
         operations,
-        transition,
+        submitQuickSession(get(), projectId),
       );
     },
     setTerminalRows: (rows): void => {
-      set(clampDashboardStateScroll({ ...get(), terminalRows: rows }));
+      const current = get();
+      set(reconcileDashboardFocus(current, { ...current, terminalRows: rows }));
     },
     focusDashboardSession: (sessionId): void => {
       set(
@@ -202,11 +218,83 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
   return store;
 }
 
+function attachAddProjectDirectoryPolling(
+  store: StoreApi<TuiStore>,
+  folderService: TuiFolderService,
+): () => void {
+  let activePath: string | undefined;
+  let generation = 0;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const clearTimer = (): void => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+  };
+
+  const schedule = (path: string, token: number): void => {
+    timer = setTimeout(() => {
+      timer = undefined;
+      void poll(path, token);
+    }, ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+  };
+
+  const poll = async (path: string, token: number): Promise<void> => {
+    try {
+      const result = await folderService.readDirectory(path);
+      // Navigation and teardown invalidate in-flight reads before they can update the chooser.
+      if (!stopped && token === generation) {
+        store.setState(applyAddProjectFolderRefreshed(store.getState(), result));
+      }
+    } catch {
+      // A transient filesystem failure leaves the current listing intact and retries normally.
+    } finally {
+      if (
+        !stopped &&
+        token === generation &&
+        activeAddProjectDirectory(store.getState()) === path
+      ) {
+        schedule(path, token);
+      }
+    }
+  };
+
+  const sync = (): void => {
+    const nextPath = activeAddProjectDirectory(store.getState());
+    if (nextPath === activePath) {
+      return;
+    }
+    activePath = nextPath;
+    generation += 1;
+    clearTimer();
+    if (nextPath !== undefined) {
+      schedule(nextPath, generation);
+    }
+  };
+
+  const unsubscribe = store.subscribe(sync);
+  sync();
+  return () => {
+    stopped = true;
+    generation += 1;
+    clearTimer();
+    unsubscribe();
+  };
+}
+
+function activeAddProjectDirectory(state: TuiState): string | undefined {
+  return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
+    ? state.screen.flow.currentPath
+    : undefined;
+}
+
 function applyDashboardFocusState(current: TuiStore, next: TuiState): TuiStore {
   // Full replacement propagates an absent optional cursor; seeding from the
   // concrete store retains its action methods.
   const replacement = { ...current };
-  delete replacement.focusedRowId;
+  delete replacement.dashboardFocus;
   return { ...replacement, ...next };
 }
 
@@ -243,6 +331,26 @@ function createRuntimeOptions(options: TuiStoreOptions): RuntimeOptions {
     runtime.onExit = options.onExit;
   }
   return runtime;
+}
+
+function applyTransition(
+  store: StoreApi<TuiStore>,
+  service: TuiObserverService,
+  clientRuntime: StationClientRuntime | undefined,
+  runtime: RuntimeOptions,
+  operations: TuiLocalOperationRunner,
+  transition: TuiTransition,
+): TuiHandleKeyResult {
+  store.setState(transition.state);
+  void applyTransitionEffects(store, service, clientRuntime, runtime, operations, transition);
+  const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
+  if (transition.exitCode !== undefined) {
+    result.exitCode = transition.exitCode;
+  }
+  if (transition.controlIntent !== undefined) {
+    result.controlIntent = transition.controlIntent;
+  }
+  return result;
 }
 
 async function applyTransitionEffects(
@@ -291,7 +399,7 @@ async function reconcileSnapshot(
   try {
     if (clientRuntime === undefined) {
       const snapshot = await service.reconcile(reason);
-      store.setState(clampDashboardStateScroll(replaceSnapshot(store.getState(), snapshot)));
+      store.setState(replaceSnapshot(store.getState(), snapshot));
     } else {
       await clientRuntime.reconcile(reason);
       // The reconciled snapshot, connected transition, and recovery toast land

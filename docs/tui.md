@@ -80,6 +80,30 @@ STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
 bun run dashboard                     # interactive dashboard renderer without native panes
 ```
 
+## Native TTY Ownership
+
+Before native Station starts its client, reads configuration, or creates an
+OpenTUI renderer, it identifies interactive stdin from the character device's
+typed `fstat(0)` metadata. The complete platform, device, terminal-device, and
+inode identity selects a private per-user rendezvous under
+`/tmp/station-tui-<uid>/`, independent of checkout and Station configuration.
+Piped stdin does not enter this ownership path.
+
+Ownership is an active `BEGIN IMMEDIATE` transaction in the identity's SQLite
+database, not the presence of that database file. A second current Station asks
+the transaction holder to shut down through the adjacent private Unix socket,
+then waits up to two seconds to acquire the released transaction. The incumbent
+disposes subscriptions and PTYs, unmounts React, destroys OpenTUI to release raw
+stdin, closes its control endpoint, and releases the transaction last. The
+successor cannot enter raw mode until that acquisition succeeds. Station never
+signals another process during this flow and never escalates a failed takeover.
+
+Bun HMR retains the transaction and control endpoint in process-global state
+while replacing the takeover handler with the newest Station composition. An
+already-running pre-protocol Station does not hold the transaction, so startup
+conservatively refuses when same-TTY process evidence could indicate a legacy
+owner; close that UI with `Ctrl-Q` before retrying.
+
 ## Child PTY Capability Environment
 
 The outer terminal environment belongs to OpenTUI and remains unchanged so the
@@ -207,13 +231,43 @@ OpenTUI `mockMouse` tests cover renderer composition, semantic hit targets, hove
 interception, and equivalence with keyboard transitions. They do not prove terminal mouse-mode
 negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
-The fullscreen and tmux-popup dashboard routes primary-button clicks through its own thin adapter
-into the same dashboard-core and keyboard transitions used by standalone keyboard input. Session
-rows are resolved by their exact current row ID before their visible slot key is dispatched, so
+The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
+Workflow controls dispatch renderer-neutral semantic actions through `TuiStore.handleAction(...)`;
+direct hotkeys and focused Enter decode to the same pure intents before transitions or effects run.
+Dashboard-core owns action availability and resolution, while native Station and standalone/tmux
+retain their terminal-specific effects after shared resolution. Session rows are resolved by their
+exact current row ID before their visible slot key is dispatched, so
 observer-backed focus, start, resume, and picker behavior stays on the existing command path.
-Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header clicks
-toggle collapse once on mouse-down, wheel events over child rows use dashboard scrolling, and active
-modal surfaces intercept background clicks and scrolling.
+Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header
+segments dispatch one `dashboard.projectHeader.activate` action, so a click first focuses the exact
+segment and then follows the same activation path as focused Enter. Wheel events over child rows use
+dashboard scrolling, and active modal surfaces intercept background clicks and scrolling.
+
+Dashboard focus follows rendered order through each project header, its visible session rows, or the
+stable Add Session action rendered when that project is empty. Entering a header vertically always
+selects `primary`; Left/Right then moves, without wrapping, through `primary` → `shell` →
+`quickSession` → `defaultAgent`. Up/Down leaves any header segment immediately, and Left/Right on a
+session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
+session-only traversal, as do slot keys and next-needs-me. `N` continues to open the session flow
+without changing dashboard focus. Gaps and optimistic create rows remain non-focusable.
+
+Focused compact controls use the stronger bounded fill from
+`STATION_COLORS.compactFocusBackground`. A project header's primary segment covers the rendered
+disclosure/name/summary text without painting flexible trailing whitespace, while each trailing
+control owns exactly its label cells and separator spaces remain inert. An empty project's fill and
+pointer target cover only `[ + add session ]`; its explanatory text and surrounding whitespace
+remain inert and unpainted. Wide and compact labels preserve the same control identity. Hover stays
+component-local, temporarily supersedes the focus background, and reveals persistent keyboard focus
+again when the pointer leaves; no focus glyph is added.
+
+Collapse moves focus from a hidden session or empty-project action to that project's header
+`primary` and clamps scrolling; expanding and moving Down reaches the first visible child again.
+Snapshot replacement and accepted search changes preserve stable focus identity, otherwise choose
+the next focusable item at the old position before the preceding item; resize preserves identity
+and scrolls it into view. The Default Agent picker retains its header focus beneath the screen, so
+Escape, click-away, unchanged selection, and a successful change return to `defaultAgent`; project
+removal while open uses the same deterministic focus fallback. The dashboard footer describes Enter
+as `activate` because it may activate a session row, project-header control, or empty-project action.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`
@@ -227,17 +281,56 @@ and hover keep selecting; search and the dashboard likewise remain unchanged. In
 the inner screen receives the click before the outer popup backdrop, so one click closes only the
 topmost safe surface.
 
-Native and standalone rendering expose the same project actions. Quick-session
-intent resolves the same project and default harness before terminal-specific
-execution: native Station hosts the session in a Station pane, while the
-standalone dashboard dispatches the configured terminal default. The
-empty-project button uses that same quick-session intent, and the agent-picker
-uses the shared project-default screen transition. Link cells use the same
-validated platform opener. Shell actions delegate only their terminal effect:
-native Station opens or focuses a Station pane, while a tmux popup sends a
-strict renderer-control request to its CLI parent. The tmux adapter opens or
-focuses one cwd-bound shell window in the exact invoking client session, then
-dismisses that popup claim.
+Native and standalone rendering expose the same project actions. Header Quick Session and the
+empty-project button emit the same core quick-session intent, then resolve availability at their
+terminal-specific acceptance boundary: native Station hosts the session in a Station pane, while the
+standalone dashboard dispatches the configured terminal default. Pointer clicks use
+`dashboard.emptyProject.activate`; focused Enter routes through the same core activation helper.
+Blocked activation keeps Add Session focused while showing the existing error; stale targets are
+inert. Successful activation transfers focus to that project's header `quickSession` segment before
+an optimistic create row replaces the empty row. The agent-picker uses the shared
+project-default screen transition. Link cells use the same
+validated platform opener. The project-header shell control delegates only its
+terminal effect: native Station opens or focuses a Station pane, while a tmux
+popup sends a strict renderer-control request to its CLI parent. The tmux adapter
+opens or focuses one cwd-bound shell window in the exact invoking client session,
+then dismisses that popup claim. Its separate propagation-stopping cell prevents
+it from also collapsing the project.
+
+The zero-project dashboard renders **Add your first project** as a pointer
+target that dispatches `dashboard.addProject`, producing the same Add Project
+transition as `A` and focused `Enter`. Add Project controls dispatch stable
+action IDs; core resolves those IDs to the same intents used by direct commands
+and focused activation. Folder rows remain single-click selection targets. Choose
+prefers a pasted absolute or home-relative path and otherwise commits the registered-list
+cursor used by keyboard Enter; Open is enabled only for a navigable child or search row.
+Review, id editing, success, and failure use a visible action focus cursor. Their actions
+render through shared compact sheet buttons instead of stretching each control across the sheet.
+Ordinary sheet commands must use `SheetButtonRow`: fitting controls keep their natural width and
+leave trailing cells inert, while compact equal-width controls are reserved for constrained-width
+overflow. The low-level fixed-width button remains private to shared sheet compositions such as
+confirm controls; full-width interaction styling belongs to selectable list rows, not commands.
+Rename Session exposes its primary command through the same semantic button path as keyboard Enter,
+so pointer submit and keyboard submit produce one dashboard-core rename operation.
+Horizontal review and failure groups move with Left/Right; the id editor keeps Save and Back
+vertically stacked so Up/Down does not conflict with text-cursor movement. Missing Git-root review
+keeps submit disabled and stale disabled targets inert; these interaction paths do not weaken
+project admission policy.
+
+Create Session review renders Project, Name, and Agent as compact field controls, followed by a
+compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, and `C`), values, and inline
+health status use separate spans so their roles and associations remain visible. Arrow focus uses
+a non-color marker and contextual Enter helper without painting the full row as selected. The name
+editor gives Name, Save, and Back independent semantic controls and hides the text cursor while an
+action owns focus. Down moves from the Name field into the button row, Left/Right moves between Save
+and Back, and Up returns to Name; Left/Right remains text-cursor movement while Name owns focus.
+Selecting Name sets focus directly and never generates arrow input. Native pointer Create, focused Enter, and
+direct `C` pass through one semantic Create resolver and shared validation before producing the
+managed-pane effect; when validation disables Create, all three activation paths remain inert.
+Standalone creation applies the same action through its existing observer operation path.
+
+All bottom-sheet text uses the shared non-selectable sheet text primitive. Dragging inside any sheet
+therefore remains pointer interaction and never starts OpenTUI terminal text selection.
 
 Real native mouse acceptance lives in
 `tests/e2e/real/real-native-tui-mouse.test.ts`. It launches bare `stn` with `TMUX` and `TMUX_PANE`
@@ -250,8 +343,8 @@ The real tmux-popup boundary remains an acceptance-test responsibility, not dash
 logic. `integrations/terminal/tmux/test/integration/popup-real.test.ts` sends outer-client SGR
 motion, primary down/up, repeated clicks, and wheel input through a centered popup and verifies
 hover, one action per complete click, deliberate repeated toggles, and
-scrolling. It also clicks the project shell action twice, proving exact popup
-dismissal and one reused cwd-bound window in the invoking client session.
+scrolling. It also clicks the project-header shell action twice, proving exact
+popup dismissal and one reused cwd-bound window in the invoking client session.
 Production tmux input forwarding remains unchanged unless that real
 characterization fails before input reaches the renderer.
 

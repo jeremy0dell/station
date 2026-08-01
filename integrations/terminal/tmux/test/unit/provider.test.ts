@@ -51,6 +51,7 @@ describe("TmuxProvider", () => {
       canCaptureOutput: true,
       canSendInput: true,
       canPersistIdentityBinding: true,
+      canLaunchProcessPersistently: true,
       canDisplayPopup: true,
     });
   });

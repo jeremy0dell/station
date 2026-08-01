@@ -59,7 +59,7 @@ function handleEditNameKey(state: TuiState, key: TuiKey): TuiTransition {
   }
 
   if (isReturnKey(key)) {
-    return submitRename(state);
+    return submitRenameSession(state);
   }
 
   const intent = editableTextInputIntentForInput({ input: key.input, key });
@@ -78,7 +78,8 @@ function handleEditNameKey(state: TuiState, key: TuiKey): TuiTransition {
   };
 }
 
-function submitRename(state: TuiState): TuiTransition {
+/** Submit the active rename editor through the path shared by Enter and semantic controls. */
+export function submitRenameSession(state: TuiState): TuiTransition {
   if (state.screen.name !== "renameSession" || state.screen.step !== "editName") {
     return { state };
   }

@@ -7,3 +7,4 @@ export * from "./ingressRules.js";
 export * from "./launch.js";
 export * from "./pluginInstall.js";
 export * from "./provider.js";
+export * from "./recoveryArtifacts.js";

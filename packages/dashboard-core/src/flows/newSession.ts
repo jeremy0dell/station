@@ -30,15 +30,14 @@ type NewSessionBaseState = StepWizardState<NewSessionStep> & {
 
 /** The review menu's focus ring — which field ↵ acts on. */
 export type NewSessionReviewFocus = "name" | "project" | "agent" | "create";
+export type NewSessionEditNameFocus = "name" | "save" | "back";
 
 // Traversal order matches the review's top-to-bottom render (Project, Name,
 // Agent, then the Create action).
 const REVIEW_FIELDS: readonly NewSessionReviewFocus[] = ["project", "name", "agent", "create"];
 
 function cycleReviewFocus(current: NewSessionReviewFocus, dir: -1 | 1): NewSessionReviewFocus {
-  const index = REVIEW_FIELDS.indexOf(current);
-  const next = (index + dir + REVIEW_FIELDS.length) % REVIEW_FIELDS.length;
-  return REVIEW_FIELDS[next] ?? current;
+  return cycleFocus(REVIEW_FIELDS, current, dir);
 }
 
 export type NewSessionReviewState = NewSessionBaseState & {
@@ -50,6 +49,7 @@ export type NewSessionReviewState = NewSessionBaseState & {
 export type NewSessionEditNameState = NewSessionBaseState & {
   mode: "editName";
   draftName: EditableTextInputState;
+  editNameFocus: NewSessionEditNameFocus;
 };
 
 export type NewSessionPickProjectState = NewSessionBaseState & {
@@ -73,6 +73,7 @@ export type NewSessionFlowAction =
   | { type: "pickProject" }
   | { type: "pickAgent" }
   | { type: "reviewFocus"; dir: -1 | 1 }
+  | { type: "editNameFocusSet"; focus: NewSessionEditNameFocus }
   | { type: "cancel" };
 
 export type NewSessionInputKey = {
@@ -104,6 +105,41 @@ export type NewSessionInputIntent =
   | {
       type: "none";
     };
+
+type NewSessionActionDefinition =
+  | { mode: "review" | "editName"; intent: "transition"; action: NewSessionFlowAction }
+  | { mode: "review"; intent: "submit" };
+
+const NEW_SESSION_ACTIONS = {
+  "review.project": { mode: "review", intent: "transition", action: { type: "pickProject" } },
+  "review.name": { mode: "review", intent: "transition", action: { type: "editName" } },
+  "review.agent": { mode: "review", intent: "transition", action: { type: "pickAgent" } },
+  "review.create": { mode: "review", intent: "submit" },
+  "editName.name": {
+    mode: "editName",
+    intent: "transition",
+    action: { type: "editNameFocusSet", focus: "name" },
+  },
+  "editName.save": { mode: "editName", intent: "transition", action: { type: "commitName" } },
+  "editName.back": { mode: "editName", intent: "transition", action: { type: "cancel" } },
+} as const satisfies Readonly<Record<string, NewSessionActionDefinition>>;
+
+export type NewSessionActionId = keyof typeof NEW_SESSION_ACTIONS;
+
+/** Returns whether a New Session control is visible and currently actionable. */
+export function newSessionActionEnabled(
+  snapshot: StationSnapshot | undefined,
+  state: NewSessionFlowState,
+  actionId: NewSessionActionId,
+): boolean {
+  if (NEW_SESSION_ACTIONS[actionId].mode !== state.mode) return false;
+  return (
+    actionId !== "review.create" ||
+    (snapshot !== undefined &&
+      state.mode === "review" &&
+      validateNewSessionCreate(snapshot, state).ok)
+  );
+}
 
 export type NewSessionCreateValidation =
   | {
@@ -170,6 +206,7 @@ export function transitionNewSessionFlow(
       return {
         ...enterWizardStep(baseState(state), "editName"),
         draftName: createEditableTextInputState(),
+        editNameFocus: "name",
       } satisfies NewSessionEditNameState;
     case "editNameInput":
       return state.mode === "editName"
@@ -192,6 +229,8 @@ export function transitionNewSessionFlow(
       return state.mode === "review"
         ? { ...state, reviewFocus: cycleReviewFocus(state.reviewFocus, action.dir) }
         : state;
+    case "editNameFocusSet":
+      return state.mode === "editName" ? { ...state, editNameFocus: action.focus } : state;
   }
 }
 
@@ -199,20 +238,53 @@ export function newSessionIntentForInput(
   state: NewSessionFlowState,
   input: NewSessionInput,
 ): NewSessionInputIntent {
+  const actionId = newSessionActionForInput(state, input);
+  if (actionId !== undefined) {
+    return newSessionIntentForAction(state, actionId);
+  }
   if (input.key.escape === true) {
     return transitionIntent({ type: "cancel" });
   }
   switch (state.mode) {
     case "review":
-      return reviewInputIntent(state, input);
+      return reviewInputIntent(input);
     case "editName":
-      return editNameInputIntent(input);
+      return editNameInputIntent(state, input);
     // Pick steps are registered lists: the shared selectionMiddleware resolves
     // ↑↓/↵/slot before this handler runs, so nothing is left for it to intent.
     case "pickProject":
     case "pickAgent":
       return { type: "none" };
   }
+}
+
+/** Resolves a visible New Session control into a renderer-neutral flow intent. */
+export function newSessionIntentForAction(
+  state: NewSessionFlowState,
+  actionId: NewSessionActionId,
+): NewSessionInputIntent {
+  const definition = NEW_SESSION_ACTIONS[actionId];
+  if (definition.mode !== state.mode) return { type: "none" };
+  return definition.intent === "submit" ? { type: "submit" } : transitionIntent(definition.action);
+}
+
+/** Decodes only semantic control activation; text editing and focus movement stay as input intents. */
+export function newSessionActionForInput(
+  state: NewSessionFlowState,
+  input: Pick<NewSessionInput, "input" | "key">,
+): NewSessionActionId | undefined {
+  if (state.mode === "review") {
+    if (isReturn(input)) return `review.${state.reviewFocus}`;
+    if (input.input === "P") return "review.project";
+    if (input.input === "N") return "review.name";
+    if (input.input === "A") return "review.agent";
+    return input.input === "C" ? "review.create" : undefined;
+  }
+  if (state.mode !== "editName") return undefined;
+  if (input.key.escape === true) return "editName.back";
+  if (input.key.ctrl === true && input.input === "s") return "editName.save";
+  if (!isReturn(input)) return undefined;
+  return state.editNameFocus === "back" ? "editName.back" : "editName.save";
 }
 
 export function selectedProject(snapshot: StationSnapshot, state: NewSessionFlowState) {
@@ -321,44 +393,44 @@ export function createNewSessionNameToken(unique: string = randomUUID()): string
   return stableNameHash(["new-session", unique], 6);
 }
 
-function reviewInputIntent(
-  state: NewSessionReviewState,
-  input: NewSessionInput,
-): NewSessionInputIntent {
+function reviewInputIntent(input: NewSessionInput): NewSessionInputIntent {
   if (input.key.upArrow === true) {
     return transitionIntent({ type: "reviewFocus", dir: -1 });
   }
-  if (input.key.downArrow === true) {
-    return transitionIntent({ type: "reviewFocus", dir: 1 });
-  }
-  if (isReturn(input)) {
-    return reviewFocusIntents[state.reviewFocus];
-  }
-  return reviewKeyIntents[input.input] ?? { type: "none" };
+  return input.key.downArrow === true
+    ? transitionIntent({ type: "reviewFocus", dir: 1 })
+    : { type: "none" };
 }
 
-// ↵ activates the focused field; "create" submits, the rest open their step.
-const reviewFocusIntents: Record<NewSessionReviewFocus, NewSessionInputIntent> = {
-  create: { type: "submit" },
-  name: transitionIntent({ type: "editName" }),
-  project: transitionIntent({ type: "pickProject" }),
-  agent: transitionIntent({ type: "pickAgent" }),
-};
-
-const reviewKeyIntents: Record<string, NewSessionInputIntent> = {
-  N: transitionIntent({ type: "editName" }),
-  P: transitionIntent({ type: "pickProject" }),
-  A: transitionIntent({ type: "pickAgent" }),
-};
-
-function editNameInputIntent(input: NewSessionInput): NewSessionInputIntent {
-  if (isReturn(input)) {
-    return transitionIntent({ type: "commitName" });
+function editNameInputIntent(
+  state: NewSessionEditNameState,
+  input: NewSessionInput,
+): NewSessionInputIntent {
+  if (state.editNameFocus === "name") {
+    if (input.key.downArrow === true) {
+      return transitionIntent({ type: "editNameFocusSet", focus: "save" });
+    }
+    const intent = editableTextInputIntentForInput(input);
+    return intent.type === "edit"
+      ? transitionIntent({ type: "editNameInput", action: intent.action })
+      : { type: "none" };
   }
-  const intent = editableTextInputIntentForInput(input);
-  return intent.type === "edit"
-    ? transitionIntent({ type: "editNameInput", action: intent.action })
-    : { type: "none" };
+  if (input.key.upArrow === true) {
+    return transitionIntent({ type: "editNameFocusSet", focus: "name" });
+  }
+  if (input.key.leftArrow === true || input.key.rightArrow === true) {
+    return transitionIntent({
+      type: "editNameFocusSet",
+      focus: state.editNameFocus === "save" ? "back" : "save",
+    });
+  }
+  return { type: "none" };
+}
+
+function cycleFocus<T extends string>(values: readonly T[], current: T, dir: -1 | 1): T {
+  const index = values.indexOf(current);
+  const next = (index + dir + values.length) % values.length;
+  return values[next] ?? current;
 }
 
 function transitionIntent(action: NewSessionFlowAction): NewSessionInputIntent {
@@ -368,7 +440,7 @@ function transitionIntent(action: NewSessionFlowAction): NewSessionInputIntent {
   };
 }
 
-function isReturn(input: NewSessionInput): boolean {
+function isReturn(input: Pick<NewSessionInput, "input" | "key">): boolean {
   return input.key.return === true || input.input === "\r" || input.input === "\n";
 }
 

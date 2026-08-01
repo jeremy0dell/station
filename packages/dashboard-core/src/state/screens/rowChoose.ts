@@ -1,7 +1,7 @@
 import type { SessionId } from "@station/contracts";
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
-import { focusedSelectableRow, moveDashboardFocus } from "../dashboardFocus.js";
+import { focusedSelectableRow, moveDashboardSessionFocus } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
@@ -10,7 +10,7 @@ import type { TuiState } from "../types.js";
 
 /**
  * The shared choose-a-dashboard-row step behind remove/rename/fork. Arrows move
- * the dashboard cursor (with follow-scroll), ↵ commits the focused row, and a
+ * the session-only cursor (with follow-scroll), ↵ commits the focused row, and a
  * slot key commits the viewport row — all three converge on `commit(state, id)`.
  * Esc is handled by each screen's own reducer. Reuses the dashboard's cursor
  * rather than the generic engine because these list the full dashboard row
@@ -22,10 +22,10 @@ export function handleDashboardRowChoiceKey(
   commit: (state: TuiState, rowId: SessionId) => TuiTransition,
 ): TuiTransition {
   if (key.upArrow === true) {
-    return { state: moveDashboardFocus(state, -1) };
+    return { state: moveDashboardSessionFocus(state, -1) };
   }
   if (key.downArrow === true) {
-    return { state: moveDashboardFocus(state, 1) };
+    return { state: moveDashboardSessionFocus(state, 1) };
   }
   // The wheel still pans the viewport without moving the cursor.
   if (key.mouseScroll !== undefined) {

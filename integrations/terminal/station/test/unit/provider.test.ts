@@ -72,6 +72,7 @@ describe("StationTerminalProvider", () => {
       canCaptureOutput: false,
       canSendInput: false,
       canPersistIdentityBinding: true,
+      canLaunchProcessPersistently: false,
     });
   });
 

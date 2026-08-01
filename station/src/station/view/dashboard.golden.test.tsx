@@ -172,7 +172,7 @@ describe("dashboard golden frames", () => {
     expect(liveLines[2]).toBe(divider);
     expect(liveLines[3]).toContain("SESSION");
     expect(liveLines[height - 2]).toBe(divider);
-    expect(liveLines[height - 1]).toMatch(/^↵ open/u);
+    expect(liveLines[height - 1]).toMatch(/^↵ activate/u);
     expect(liveLines.filter((line) => line === divider)).toHaveLength(2);
     expect(liveLines).not.toContain("─");
   });
@@ -354,6 +354,33 @@ describe("dashboard golden frames", () => {
     expect(pointerCalls.at(-1)).toBe("default");
   });
 
+  it("renders and routes the first-project CTA with readable hover contrast", async () => {
+    const targets: StationMouseTarget[] = [];
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: noProjectsSnapshot(),
+      dispatchMouse: (target) => targets.push(target),
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("Add your first project"));
+    const col = lines[row]?.indexOf("[") ?? -1;
+    expect(row).toBeGreaterThan(0);
+    expect(col).toBeGreaterThanOrEqual(0);
+
+    await act(async () => {
+      await setup.mockMouse.moveTo(col + 2, row);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await setup.flush();
+    const hovered = spanAtFrameCell(setup.captureSpans(), row, col + 2);
+    expect(spanHex(hovered)).toBe(STATION_COLORS.background);
+    expect(spanBgHex(hovered)).toBe(STATION_COLORS.cyan);
+
+    await setup.mockMouse.click(col + 2, row, MouseButtons.LEFT);
+    expect(targets.at(-1)).toEqual({ kind: "firstProjectAdd" });
+  });
+
   it("assigns slots only to visible actionable rows", async () => {
     const setup = await renderDashboard({ width: 80, height: 40, snapshot: manyProjectsSnapshot() });
     const frame = setup.captureCharFrame();
@@ -365,42 +392,68 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("[ + add session ]");
   });
 
-  it("keeps the empty-project add-session action readable on hover", async () => {
-    const setup = await renderDashboard({ width: 120, height: 40, snapshot: manyProjectsSnapshot() });
-    const lines = setup.captureCharFrame().split("\n");
-    const row = lines.findIndex((line) => line.includes("[ + add session ]"));
-    const col = lines[row]?.indexOf("[ + add session ]") ?? -1;
-    expect(row).toBeGreaterThan(0);
-    expect(col).toBeGreaterThan(0);
+  it("bounds empty-project focus, hover, and hit testing to Add Session cells", async () => {
+    for (const width of [120, 80]) {
+      const targets: StationMouseTarget[] = [];
+      const setup = await renderDashboard({
+        width,
+        height: 40,
+        snapshot: manyProjectsSnapshot(),
+        dispatchMouse: (target) => targets.push(target),
+      });
+      await act(async () => {
+        setup.store.setState({
+          dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+        });
+      });
+      await setup.flush();
 
-    const ordinarySpan = spanAtFrameCell(setup.captureSpans(), row, col);
-    const ordinaryForeground = spanHex(ordinarySpan);
-    const ordinaryBackground = spanBgHex(ordinarySpan);
-    expect(ordinaryForeground).toBe(STATION_COLORS.cyan);
-    expect(ordinaryForeground).not.toBe(ordinaryBackground);
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes("[ + add session ]"));
+      const col = lines[row]?.indexOf("[ + add session ]") ?? -1;
+      const after = col + "[ + add session ]".length;
+      expect(row).toBeGreaterThan(0);
+      expect(col).toBeGreaterThan(0);
 
-    await act(async () => {
-      await setup.mockMouse.moveTo(col, row);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    await setup.flush();
+      let spans = setup.captureSpans();
+      expect(spanBgHex(spanAtFrameCell(spans, row, col))).toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
+      expect(spanBgHex(spanAtFrameCell(spans, row, after - 1))).toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
+      expect(spanBgHex(spanAtFrameCell(spans, row, col - 1))).not.toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
+      expect(spanBgHex(spanAtFrameCell(spans, row, after))).not.toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
 
-    const hoveredSpan = spanAtFrameCell(setup.captureSpans(), row, col);
-    const hoveredForeground = spanHex(hoveredSpan);
-    const hoveredBackground = spanBgHex(hoveredSpan);
-    expect(hoveredForeground).toBe(STATION_COLORS.background);
-    expect(hoveredBackground).toBe(STATION_COLORS.cyan);
-    expect(hoveredForeground).not.toBe(hoveredBackground);
+      await act(async () => {
+        await setup.mockMouse.moveTo(col, row);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await setup.flush();
+      spans = setup.captureSpans();
+      expect(spanHex(spanAtFrameCell(spans, row, col))).toBe(STATION_COLORS.background);
+      expect(spanBgHex(spanAtFrameCell(spans, row, col))).toBe(STATION_COLORS.cyan);
 
-    await act(async () => {
-      await setup.mockMouse.moveTo(0, 0);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    await setup.flush();
+      await act(async () => {
+        await setup.mockMouse.moveTo(0, 0);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await setup.flush();
+      expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, col))).toBe(
+        STATION_COLORS.compactFocusBackground,
+      );
 
-    const restoredSpan = spanAtFrameCell(setup.captureSpans(), row, col);
-    expect(spanHex(restoredSpan)).toBe(ordinaryForeground);
-    expect(spanBgHex(restoredSpan)).toBe(ordinaryBackground);
+      await setup.mockMouse.click(col - 1, row, MouseButtons.LEFT);
+      await setup.mockMouse.click(col, row, MouseButtons.LEFT);
+      await setup.mockMouse.click(after, row, MouseButtons.LEFT);
+      expect(targets).toEqual([
+        { kind: "emptyProjectAction", projectId: "empty-project" },
+      ]);
+    }
   });
 
   it("renders the focus cursor and jumps it to the next session needing you", async () => {
@@ -421,6 +474,10 @@ describe("dashboard golden frames", () => {
 
     store.getState().handleKey({ input: "", downArrow: true });
     await setup.flush();
+    expect(setup.captureCharFrame()).not.toContain("▏");
+
+    store.getState().handleKey({ input: "", downArrow: true });
+    await setup.flush();
     let lines = setup.captureCharFrame().split("\n");
     const cursorRow = lines.findIndex((line) => line.startsWith("▏"));
     expect(lines[cursorRow]).toContain("hook-scope");
@@ -433,6 +490,122 @@ describe("dashboard golden frames", () => {
     await setup.flush();
     lines = setup.captureCharFrame().split("\n");
     expect(lines.find((line) => line.startsWith("▏"))).toContain("popup-latency");
+  });
+
+  it("paints only the focused project-header segment at wide and compact widths", async () => {
+    for (const width of [120, 80]) {
+      const setup = await renderDashboard({
+        width,
+        height: 24,
+        snapshot: manyProjectsSnapshot(),
+      });
+      const shellLabel = width < 90 ? "[sh]" : "[shell]";
+      const quickLabel = width < 90 ? "[qs]" : "[quick session]";
+      const controls = ["primary", "shell", "quickSession", "defaultAgent"] as const;
+
+      setup.store.getState().handleKey({ input: "", downArrow: true });
+      for (let index = 0; index < controls.length; index += 1) {
+        if (index > 0) {
+          setup.store.getState().handleKey({ input: "", rightArrow: true });
+        }
+        await setup.flush();
+        const lines = setup.captureCharFrame().split("\n");
+        const row = lines.findIndex((line) => line.includes("▼ station"));
+        const line = lines[row] ?? "";
+        const shellStart = line.indexOf(shellLabel);
+        const quickStart = line.indexOf(quickLabel);
+        const defaultStart = line.indexOf("[▾]");
+        const primaryEnd = line.slice(0, shellStart).trimEnd().length;
+        expect(row).toBeGreaterThan(0);
+        expect(line.trimStart().startsWith("▼ station")).toBe(true);
+        expect(line).not.toContain("▏");
+
+        const spans = setup.captureSpans();
+        const samples = {
+          primary: 0,
+          shell: shellStart,
+          quickSession: quickStart,
+          defaultAgent: defaultStart,
+        } as const;
+        for (const [control, column] of Object.entries(samples)) {
+          const background = spanBgHex(spanAtFrameCell(spans, row, column));
+          if (control === controls[index]) {
+            expect(background).toBe(STATION_COLORS.compactFocusBackground);
+          } else {
+            expect(background).not.toBe(STATION_COLORS.compactFocusBackground);
+          }
+        }
+        expect(spanBgHex(spanAtFrameCell(spans, row, primaryEnd))).not.toBe(
+          STATION_COLORS.compactFocusBackground,
+        );
+        expect(spanBgHex(spanAtFrameCell(spans, row, shellStart - 1))).not.toBe(
+          STATION_COLORS.compactFocusBackground,
+        );
+        expect(spanBgHex(spanAtFrameCell(spans, row, quickStart - 1))).not.toBe(
+          STATION_COLORS.compactFocusBackground,
+        );
+        expect(spanBgHex(spanAtFrameCell(spans, row, defaultStart - 1))).not.toBe(
+          STATION_COLORS.compactFocusBackground,
+        );
+      }
+    }
+  });
+
+  it("bounds project-header hit targets to segment cells and leaves whitespace inert", async () => {
+    const targets: StationMouseTarget[] = [];
+    const setup = await renderDashboard({
+      width: 120,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+      dispatchMouse: (target) => targets.push(target),
+    });
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("▼ station"));
+    const line = lines[row] ?? "";
+    const shell = line.indexOf("[shell]");
+    const quick = line.indexOf("[quick session]");
+    const picker = line.indexOf("[▾]");
+    const inert = line.slice(0, shell).trimEnd().length + 1;
+
+    await setup.mockMouse.click(1, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(inert, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(shell - 1, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(quick - 1, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(picker - 1, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(shell, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(quick, row, MouseButtons.LEFT);
+    await setup.mockMouse.click(picker, row, MouseButtons.LEFT);
+
+    expect(targets).toEqual([
+      { kind: "projectHeader", projectId: "station" },
+      { kind: "openShellForProject", projectId: "station" },
+      { kind: "quickSessionForProject", projectId: "station" },
+      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+    ]);
+  });
+
+  it("lets project-header hover supersede and then reveal keyboard focus", async () => {
+    const setup = await renderDashboard({ width: 120, height: 24, snapshot: manyProjectsSnapshot() });
+    setup.store.getState().handleKey({ input: "", downArrow: true });
+    setup.store.getState().handleKey({ input: "", rightArrow: true });
+    await setup.flush();
+    const lines = setup.captureCharFrame().split("\n");
+    const row = lines.findIndex((line) => line.includes("▼ station"));
+    const shell = lines[row]?.indexOf("[shell]") ?? -1;
+
+    await setup.mockMouse.moveTo(shell, row);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, shell))).toBe(
+      STATION_COLORS.hoverBackground,
+    );
+
+    await setup.mockMouse.moveTo(0, 0);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, shell))).toBe(
+      STATION_COLORS.compactFocusBackground,
+    );
   });
 
   it("paints hovered session rows through the trailing action column", async () => {

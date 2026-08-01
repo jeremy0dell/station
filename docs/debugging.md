@@ -213,6 +213,86 @@ attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
 `ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
 or conflicting evidence. Automatic handoff never uses SIGKILL.
 
+## Preserve Sessions Before Runtime Surgery
+
+When an Observer or Host handoff is blocked and live agent work must survive,
+make a private preservation archive before stopping, unlinking, resuming, or
+replacing anything:
+
+```bash
+pnpm station:sessions:save -- --devbox
+pnpm station:sessions:save -- --config ~/.config/station/config.toml
+pnpm station:sessions:verify -- ~/.local/state/station-session-rescues/<timestamp>
+```
+
+The save command is read-only with respect to Station, provider sessions, and
+worktrees. It captures pinned Observer health and snapshot evidence, an online
+SQLite backup, recovery handles, current-build Host inventory and replay,
+provider-native recovery data, and dirty or unpublished Git worktree state. It
+never stops, closes, resumes, writes to, resizes, or unlinks a live runtime.
+Archives contain terminal output, provider state, configuration, and untracked
+files, so they are created with owner-only permissions and must be handled as
+sensitive data.
+
+A `partial` result is preservation evidence, not permission to proceed. In
+particular, a build mismatch means the script deliberately skipped the
+incompatible Observer snapshot or Host replay. Reopen the checkout/build named
+by the health or handoff evidence and run the same command there; do not spoof
+the build selector. Only consider runtime surgery after `verify` returns
+`"ok": true` and every active session has provider-native recovery data.
+
+A complete archive can drive a fail-closed migration into a separate Station
+runtime. Plan first; planning verifies the archive, requires one exact recovery
+handle per active session, matches the same project/worktree identities in the
+target, and refuses any target worktree that already owns a session:
+
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station
+```
+
+The plan is read-only: it uses `snapshot --require-running`, checks the exact
+source Observer and Host census, verifies target worktree and Host identities,
+refuses live target sessions on providers being migrated, checks provider-file
+conflicts, and prints a SHA-256 digest. It never starts an Observer or
+edits configuration. Apply must bind confirmation to that evidence:
+
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station \
+  --yes --expect-plan <digest-from-plan>
+```
+
+Apply intentionally has downtime. It closes only the planned source sessions
+without force, proves the source Host owns no live PTY, captures stable final
+provider state into a hash-inventoried private directory, and stops the pinned source
+Observer before importing handles through the recorded
+`session.importRecoveryHandle` command. It then resumes each target and verifies
+its exact Host PTY and provider-native identity. Source and target agents never
+run concurrently, target TOML is never edited, target SQLite is never opened by
+the maintenance script, and an entire devbox is never stopped as a side effect.
+
+Only one apply process may own a digest at a time; a stale owner-private lock is
+reclaimed only after its recorded process is gone. `SIGINT`, `SIGTERM`, and
+`SIGHUP` stop the active child and write the last durable phase to `journal.jsonl`
+plus `report.json`. Before source quiescence, the source
+remains authoritative. An interruption during quiescence may leave only a subset
+of source sessions running; rerun with the same digest so the journal closes the
+remaining sessions. After `source-sealed`, source agents remain stopped and the
+sealed directory is authoritative; the same retry accepts already-resumed exact
+target sessions and continues from sealed evidence instead of rerunning live
+source planning checks.
+
+Codex and OpenCode migration accept each provider's shared source database, an
+absent target database, or a byte-identical target database. They refuse instead
+of merging different nonempty provider databases. Override provider locations with
+`--target-codex-home`, `--target-opencode-db`, and
+`--target-claude-projects` when the target uses isolated homes.
+
 After startup reconcile, the Observer performs one report-only duplicate
 inspection. `stn doctor` reports this as `observer-singleton`: an eligible
 candidate or evidence refusal is a warning, while a clear result is healthy.
@@ -262,7 +342,20 @@ Station (the OpenTUI terminal workspace under `station/`) adds a second runtime 
 
 When Station "does nothing" or panes read "exited", check the process topology before the code:
 
-- Exactly one Station UI should be running. Two `bun --hot src/main.tsx` instances on one TTY fight over the screen and mouse. `pgrep -f src/main.tsx` should return a single process.
+- Native Station coordinates one UI per input TTY with an active SQLite write
+  transaction and a cooperative Unix-socket endpoint under
+  `/tmp/station-tui-<uid>/<tty-hash>.{sqlite,sock}`. Database-file presence is
+  never evidence of ownership: process exit releases the transaction, and the
+  file should not be deleted as a stale lock. A second current UI asks the
+  incumbent to close and enters raw mode only after acquiring the transaction;
+  Station sends no process signal.
+- `TUI_TTY_LEGACY_OWNER_POSSIBLE` means same-TTY evidence may describe a
+  pre-protocol Station. `TUI_TTY_TAKEOVER_REFUSED` and
+  `TUI_TTY_TAKEOVER_TIMEOUT` mean a current endpoint did not cooperate or did
+  not release ownership within two seconds. Use `Ctrl-Q` in the incumbent. If
+  that is impossible, inspect candidates independently with
+  `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
+  `kill -TERM <independently-verified-station-pid>` yourself.
 - The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy or speaks another protocol. Both are deliberate preservation failures, not stale-socket evidence.
 - The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect live PTYs with `bun run host:list` in `station/`.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
@@ -281,6 +374,12 @@ run/station-host.sock
 logs/station-host.jsonl
 station/layout.json
 ```
+
+The per-TTY claim and endpoint live in the separate cross-config rendezvous
+directory `/tmp/station-tui-<uid>/`; they are intentionally not state-directory
+files. Inspect their owner, type, and mode when diagnosing
+`TUI_TTY_OWNERSHIP_UNAVAILABLE`, but do not infer a live owner from the SQLite
+file or remove it.
 
 ## Harness Event Census
 

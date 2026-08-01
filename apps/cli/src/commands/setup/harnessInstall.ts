@@ -1,3 +1,4 @@
+import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
 import { harnessDefinitions } from "./checks/harnesses.js";
 import type { SetupAction, SetupFacts, SetupHarnessFact, SetupPlan } from "./model.js";
 
@@ -7,7 +8,7 @@ export type HarnessInstallOptions = {
   macos: boolean;
 };
 
-type HarnessInstallDefinition = {
+export type HarnessInstallDefinition = {
   id: SetupHarnessFact["id"];
   command: readonly string[];
   message: string;
@@ -26,20 +27,20 @@ export function missingHarnessInstallActions(
   options: HarnessInstallOptions,
 ): SetupAction[] {
   const missing = new Set(
-    harnesses.filter((harness) => harness.status === "missing").map((harness) => harness.id),
+    harnesses.flatMap((harness) => (harness.status === "missing" ? [harness.id] : [])),
   );
   const actions: SetupAction[] = [];
   for (const id of harnessInstallOrder) {
     if (!missing.has(id)) continue;
     const harness = harnessDefinitions.find((candidate) => candidate.id === id);
     if (harness === undefined) continue;
-    const definition = harnessInstallDefinition(id, options);
+    const definition = resolveHarnessInstallDefinition(id, options);
     actions.push({
       id: `install-harness-${id}`,
       kind: "run-command",
       tier: "required",
       selected: false,
-      label: `Install ${harness.label}`,
+      label: resolveSetupMessage(setupMessageRef("action.install-label", { label: harness.label })),
       message: definition.message,
       command: [...definition.command],
       data: { harness: id },
@@ -48,7 +49,7 @@ export function missingHarnessInstallActions(
   return actions;
 }
 
-function harnessInstallDefinition(
+export function resolveHarnessInstallDefinition(
   id: SetupHarnessFact["id"],
   options: HarnessInstallOptions,
 ): HarnessInstallDefinition {
@@ -59,25 +60,25 @@ function harnessInstallDefinition(
         ? {
             id,
             command: ["brew", "install", "--cask", "homebrew/cask/codex"],
-            message: "Install Codex with the official Homebrew cask.",
+            message: resolveSetupMessage(setupMessageRef("installer.codex-brew")),
           }
         : {
             id,
             command: ["/bin/bash", "-c", codexInstallerCommand],
-            message: "Run OpenAI's unattended Codex installer without launching Codex.",
+            message: resolveSetupMessage(setupMessageRef("installer.codex-script")),
           };
     case "cursor":
       return {
         id,
         command: ["/bin/bash", "-c", downloadedInstallerCommand("https://cursor.com/install")],
-        message: "Run Cursor's unattended Agent CLI installer.",
+        message: resolveSetupMessage(setupMessageRef("installer.cursor-script")),
       };
     case "opencode":
       return options.brewAvailable
         ? {
             id,
             command: ["brew", "install", "homebrew/core/opencode"],
-            message: "Install OpenCode with the official Homebrew formula.",
+            message: resolveSetupMessage(setupMessageRef("installer.opencode-brew")),
           }
         : {
             id,
@@ -89,14 +90,14 @@ function harnessInstallDefinition(
                 '/bin/bash "$installer" --no-modify-path && mkdir -p "$HOME/.local/bin" && ln -s "$HOME/.opencode/bin/opencode" "$HOME/.local/bin/opencode"',
               ),
             ],
-            message: "Run OpenCode's installer without modifying shell startup files.",
+            message: resolveSetupMessage(setupMessageRef("installer.opencode-script")),
           };
     case "pi":
       return options.brewAvailable
         ? {
             id,
             command: ["brew", "install", "homebrew/core/pi-coding-agent"],
-            message: "Install Pi with the official Homebrew formula.",
+            message: resolveSetupMessage(setupMessageRef("installer.pi-brew")),
           }
         : {
             id,
@@ -111,14 +112,14 @@ function harnessInstallDefinition(
               "--no-audit",
               "@earendil-works/pi-coding-agent",
             ],
-            message: "Install Pi with npm without lifecycle scripts or prompts.",
+            message: resolveSetupMessage(setupMessageRef("installer.pi-npm")),
           };
     case "claude":
       return macBrewAvailable
         ? {
             id,
             command: ["brew", "install", "--cask", "homebrew/cask/claude-code"],
-            message: "Install Claude Code with the official Homebrew cask.",
+            message: resolveSetupMessage(setupMessageRef("installer.claude-brew")),
           }
         : {
             id,
@@ -132,7 +133,7 @@ function harnessInstallDefinition(
               "--no-audit",
               "@anthropic-ai/claude-code",
             ],
-            message: "Install Claude Code with npm without prompts.",
+            message: resolveSetupMessage(setupMessageRef("installer.claude-npm")),
           };
   }
 }

@@ -12,11 +12,15 @@ routes use in-memory first-run defaults, ensure the observer, and show the
 existing empty-state UI. They do not create a config file; `stn setup` remains
 the writer. Setup writes `projects = []` and never infers a project from its
 working directory; use the empty dashboard's **Add your first project** flow to
-choose an existing Git repository explicitly. After every successful guided or
-non-interactive setup config write, setup starts or restarts the observer and
-waits for it to become healthy with the updated configuration. Only after
-activation succeeds does setup install remaining tracking artifacts and perform
-a final read-only re-probe. If activation fails, setup retains the config, exits
+choose an existing Git repository explicitly. Setup validates generated or
+source-preserving edited TOML before writing, revalidates the planned source bytes
+at the serialized commit boundary, refuses concurrent creates, writes a timestamped
+backup for updates, and atomically replaces the target through a private mode-`0600`
+temporary file. After every successful guided or non-interactive setup config
+write, setup starts or restarts the observer and waits for it to become healthy
+with the updated configuration. Only after activation succeeds does setup
+install remaining tracking artifacts in-process and perform a final read-only
+re-probe. If activation fails, setup retains the config, exits
 nonzero, and prints both `stn observer restart` and the setup command that must
 follow it. This exception applies only to the implicit default
 path: a missing explicit `--config`, an unreadable file, malformed TOML, or
@@ -393,8 +397,8 @@ Strict boolean record. Unknown flag names are rejected.
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. |
-| `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. |
+| `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. Session migration requires this to already be enabled in the running target Observer; migration never edits the config. |
+| `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. Session migration requires the running target to report persistent native launch capability. |
 
 ---
 

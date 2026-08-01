@@ -1,8 +1,9 @@
-import { loadConfig, resolveObserverPaths } from "@station/config";
+import type { SafeError } from "@station/contracts";
 import { type RuntimeSafeError, safeErrorFromUnknown } from "@station/runtime";
+import type { SetupPlan as CoreSetupPlan, SetupOperationExecutor } from "@station/setup-core";
 import type { CliEnv } from "../../env.js";
-import { restartObserver } from "../../observerProcess.js";
-import type { applySetupPlan } from "./apply.js";
+import { createSetupOperationAdapter } from "./adapters/operations.js";
+import type { applySetupPlan, SetupOperationBinding } from "./apply.js";
 import { commandEnv } from "./checks/env.js";
 import {
   type CollectSetupFactsOptions,
@@ -17,7 +18,7 @@ import {
   resolveSetupHarnessSelection,
   type SetupHarnessSelection,
 } from "./harnessSelection.js";
-import { renderOptions, write } from "./io.js";
+import { setupPresenter } from "./io.js";
 import type {
   SetupAction,
   SetupFacts,
@@ -27,13 +28,8 @@ import type {
   SupportedHarnessId,
 } from "./model.js";
 import { SetupHarnessTrackingFactSchema } from "./model.js";
-import { buildSetupPlan } from "./planner.js";
-import {
-  formatCommand,
-  renderActionComplete,
-  renderActionFailed,
-  renderActionStart,
-} from "./render.js";
+import { type buildSetupPlan, buildSetupPlans } from "./planner.js";
+import type { ProjectSetupView } from "./presentation/projectSetupView.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "./types.js";
 
 export function collectForCommand(
@@ -70,6 +66,10 @@ export type CollectedSetupPlan = {
   facts: SetupFacts;
   harnessSelection: SetupHarnessSelection;
   plan: SetupPlan;
+  semanticPlan: CoreSetupPlan;
+  presentationView: ProjectSetupView;
+  operationBindings: readonly SetupOperationBinding[];
+  executeOperation: SetupOperationExecutor;
 };
 
 type SetupPlanCollectionOptions = {
@@ -115,10 +115,15 @@ export async function collectSetupPlanFromFacts(
         : { installWorktrunkHooks: input.installWorktrunkHooks }),
     });
   }
+  const built = buildSetupPlans(facts, plannerOptions);
   return {
     facts,
     harnessSelection,
-    plan: buildSetupPlan(facts, plannerOptions),
+    plan: built.compatibilityPlan,
+    semanticPlan: built.semanticPlan,
+    presentationView: built.presentationView,
+    operationBindings: built.operationBindings,
+    executeOperation: createSetupOperationAdapter({ facts, deps }),
   };
 }
 
@@ -201,6 +206,8 @@ export function applyOptions(
     actionFilter?: (action: SetupAction) => boolean;
     showCommandOutput?: boolean;
     announceActions?: boolean;
+    execution?: Pick<CollectedSetupPlan, "operationBindings" | "executeOperation"> &
+      Partial<Pick<CollectedSetupPlan, "presentationView">>;
   },
 ): Parameters<typeof applySetupPlan>[1] {
   const options: Parameters<typeof applySetupPlan>[1] = {};
@@ -213,104 +220,59 @@ export function applyOptions(
   if (input.dryRun !== undefined) options.dryRun = input.dryRun;
   if (input.actionFilter !== undefined) options.actionFilter = input.actionFilter;
   if (input.showCommandOutput !== undefined) options.showCommandOutput = input.showCommandOutput;
+  if (input.execution !== undefined) {
+    options.operationBindings = input.execution.operationBindings;
+    options.executeOperation = input.execution.executeOperation;
+  }
   if (input.announceActions === true) {
-    options.onActionStart = async (action) => {
-      await write(deps, `${renderActionStart(action, renderOptions(deps))}\n`);
+    const presenter = setupPresenter(deps);
+    // Execution uses compatibility actions, so borrow catalog labels from the independent human view by stable action ID.
+    const progressAction = (action: SetupAction): Pick<SetupAction, "label"> => {
+      const projected = input.execution?.presentationView?.actions.find(
+        (candidate) => candidate.id === action.id,
+      );
+      return projected === undefined ? action : { label: presenter.text(projected.label) };
     };
+    if (input.showCommandOutput === true) {
+      options.onActionStart = async (action) => {
+        await presenter.write(`${presenter.renderProgressStart(progressAction(action))}\n`);
+      };
+    }
     options.onActionComplete = async (action) => {
-      await write(deps, `${renderActionComplete(action, renderOptions(deps))}\n`);
+      if (action.kind === "mkdir") return;
+      await presenter.write(`${presenter.renderProgressComplete(progressAction(action))}\n`);
     };
-    options.onActionFailed = async (action) => {
-      await write(deps, `${renderActionFailed(action, renderOptions(deps))}\n`);
+    options.onActionFailed = async (action, error) => {
+      await presenter.write(`${presenter.renderProgressFailure(progressAction(action), error)}\n`);
     };
   }
   return options;
 }
 
 export async function activateCompletedConfigWrite(
-  plan: SetupPlan,
-  homeDir: string,
+  collected: Pick<CollectedSetupPlan, "semanticPlan" | "executeOperation" | "facts">,
   deps: SetupCommandDeps,
-): Promise<RuntimeSafeError | undefined> {
-  const completedWrite = plan.actions.find(
-    (action) => action.kind === "write-config" && action.status === "completed",
+): Promise<SafeError | undefined> {
+  const operation = collected.semanticPlan.operations.find(
+    (candidate) => candidate.kind === "activate-observer-config",
   );
-  if (completedWrite === undefined) {
+  if (operation === undefined) return undefined;
+
+  const presenter = setupPresenter(deps);
+  await presenter.write(`${presenter.renderActivationStart()}\n`);
+  const outcome = await collected.executeOperation(operation);
+  if (outcome.status === "completed") {
+    await presenter.write(`${presenter.renderActivationComplete()}\n`);
     return undefined;
   }
-
-  await write(deps, "Activating observer configuration...\n");
-  try {
-    if (completedWrite.path === undefined) {
-      throw observerActivationError;
-    }
-    await (deps.activateObserverConfig ?? activateObserverConfig)({
-      configPath: completedWrite.path,
-      homeDir,
-    });
-    await write(deps, "Observer configuration active.\n");
-    return undefined;
-  } catch (error) {
-    const safeError = safeErrorFromUnknown(error, observerActivationError);
-    await write(deps, renderObserverActivationFailure(safeError, completedWrite.path));
-    return safeError;
-  }
-}
-
-async function activateObserverConfig(input: {
-  configPath: string;
-  homeDir: string;
-}): Promise<void> {
-  try {
-    const loaded = await loadConfig({ configPath: input.configPath, homeDir: input.homeDir });
-    const paths = resolveObserverPaths(loaded.config, input.homeDir);
-    const status = await restartObserver({
-      config: loaded.config,
-      configPath: loaded.configPath,
-      paths,
-    });
-    if (status.status !== "running") {
-      throw safeErrorFromUnknown(status.error, observerActivationError);
-    }
-  } catch (error) {
-    throw safeErrorFromUnknown(error, observerActivationError);
-  }
-}
-
-const observerActivationError: RuntimeSafeError = {
-  tag: "ObserverActivationError",
-  code: "OBSERVER_ACTIVATION_FAILED",
-  message: "Observer configuration could not be activated.",
-};
-
-function renderObserverActivationFailure(
-  error: RuntimeSafeError,
-  configPath: string | undefined,
-): string {
-  const lines = [
-    "Config was written, but observer activation failed.",
-    error.message,
-    `Code: ${error.code}`,
-  ];
-  if (error.hint !== undefined) {
-    lines.push(`Hint: ${error.hint}`);
-  }
-  const restartCommand =
-    configPath === undefined
-      ? formatCommand(["stn", "observer", "restart"])
-      : formatCommand(["stn", "--config", configPath, "observer", "restart"]);
-  const setupCommand =
-    configPath === undefined
-      ? formatCommand(["stn", "setup", "apply", "--yes"])
-      : formatCommand(["stn", "--config", configPath, "setup", "apply", "--yes"]);
-  lines.push(
-    "The config is saved; remaining setup actions were not applied.",
-    "Resolve the error above, then activate it with:",
-    `Run: ${restartCommand}`,
-    `Then rerun: ${setupCommand}`,
-    "",
+  const configPath = collected.facts.configPath;
+  await presenter.write(
+    presenter.renderActivationFailure(outcome.error, {
+      restart: ["stn", "--config", configPath, "observer", "restart"],
+      setup: ["stn", "--config", configPath, "setup", "apply", "--yes"],
+    }),
   );
-  return lines.join("\n");
+  return outcome.error;
 }
 
 const brewBinDirs = ["/opt/homebrew/bin", "/usr/local/bin", "/home/linuxbrew/.linuxbrew/bin"];
@@ -353,18 +315,6 @@ export function isHookSetupAction(action: SetupAction): boolean {
 
 export function isTmuxPopupBindingAction(action: SetupAction): boolean {
   return action.id === "tmux-popup-binding" || action.id === "tmux-live-popup-binding";
-}
-
-export function markRequiredIncomplete(plan: SetupPlan): SetupPlan {
-  return {
-    ...plan,
-    summary: {
-      ...plan.summary,
-      workflowReady: false,
-      requiredOk: false,
-      requiredMissing: Math.max(1, plan.summary.requiredMissing),
-    },
-  };
 }
 
 export function coreReadyForConfigWrite(plan: SetupPlan): boolean {

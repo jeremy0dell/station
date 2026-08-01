@@ -9,7 +9,6 @@ import {
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
 import type { TuiObserverService } from "../../services/types.js";
-import { clampDashboardStateScroll } from "../dashboardScroll.js";
 import { bindPendingStartAgentRow } from "../localRows.js";
 import { replaceSnapshot } from "../screen.js";
 import type { TuiStore } from "../store.js";
@@ -96,7 +95,7 @@ async function focusStartedAgentAfterSnapshotCatchup(
   }
 
   const loaded = await service.loadSnapshot();
-  store.setState(clampDashboardStateScroll(replaceSnapshot(store.getState(), loaded)));
+  store.setState(replaceSnapshot(store.getState(), loaded));
 
   const refreshed = startedRowForSnapshot(store.getState().snapshot, operation.worktreeId);
   if (refreshed === undefined) {

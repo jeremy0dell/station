@@ -205,6 +205,16 @@ describe("planSetup", () => {
       tier: "required",
       selected: true,
       change,
+      defaultHarnessId: "codex",
+      harnessIds: ["codex"],
+      trackingHarnessIds: ["codex"],
+      installWorktrunkTracking: false,
+    });
+    expect(plan.operations).toContainEqual({
+      id: "activate-observer-config",
+      kind: "activate-observer-config",
+      tier: "required",
+      selected: true,
     });
   });
 

@@ -39,14 +39,6 @@ export function addProjectSelectedIndexForFlow(
   return undefined;
 }
 
-export function selectedAddProjectStartPath(state: TuiState): string | undefined {
-  if (state.screen.name !== "addProject" || state.screen.flow.mode !== "start") {
-    return undefined;
-  }
-  const index = addProjectSelectedIndex(state);
-  return index === undefined ? undefined : state.screen.flow.choices[index]?.path;
-}
-
 export function selectedAddProjectFolderRow(state: TuiState) {
   if (state.screen.name !== "addProject" || state.screen.flow.mode !== "choose") {
     return undefined;
@@ -55,7 +47,9 @@ export function selectedAddProjectFolderRow(state: TuiState) {
   return index === undefined ? undefined : addProjectRows(state.screen.flow)[index];
 }
 
-/** Reconcile the canonical list cursor whenever the wizard changes its visible rows. */
+/**
+ * Reconcile only start/folder list selection; review and terminal-state action focus is flow-owned.
+ */
 export function reconcileAddProjectSelection(
   state: TuiState,
   previousFlow: AddProjectFlowState | undefined,

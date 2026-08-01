@@ -1,5 +1,6 @@
-import type { HarnessHooksStatus } from "@station/contracts";
+import type { HarnessHooksStatus, ProviderHookArtifactOwner } from "@station/contracts";
 import type { ExternalCommandRunner } from "@station/runtime";
+import type { SetupOperation, SetupOperationOutcome } from "@station/setup-core";
 import type { CliEnv } from "../../env.js";
 import type { SetupApplyFileSystem } from "./apply.js";
 import type { SetupFileSystemReader } from "./checks/config.js";
@@ -30,11 +31,19 @@ export type SetupCommandDeps = {
   homeDir?: string;
   activateObserverConfig?: (input: { configPath: string; homeDir: string }) => Promise<void>;
   now?: () => Date;
+  nodeVersion?: string;
   // Defaults to process.platform; injected by machine-state tests to drive the
   // macOS Command Line Tools check on any host.
   platform?: NodeJS.Platform;
   compiled?: boolean;
   providerHookIngressLauncher?: string;
+  providerHookArtifactOwner?: ProviderHookArtifactOwner;
+  providerTrackingPort?: (
+    operation: Extract<
+      SetupOperation,
+      { kind: "prepare-harness-tracking" | "prepare-worktrunk-tracking" }
+    >,
+  ) => Promise<SetupOperationOutcome>;
   /**
    * Inspects Station-owned tracking artifacts without contacting the Observer.
    * An absent result is valid only for a harness with no external tracking artifact.

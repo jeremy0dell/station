@@ -4,6 +4,8 @@ import {
   createNewSessionFlow,
   createNewSessionNameToken,
   harnessOptions,
+  newSessionActionEnabled,
+  newSessionIntentForAction,
   newSessionIntentForInput,
   transitionNewSessionFlow,
   validateNewSessionCreate,
@@ -68,11 +70,12 @@ describe("new session flow", () => {
       action: { type: "editName" },
     });
 
-    // Letter accelerators still work regardless of focus.
+    // Letter accelerators still work regardless of focus, including direct create.
     expect(newSessionIntentForInput(onName, input("A"))).toEqual({
       type: "transition",
       action: { type: "pickAgent" },
     });
+    expect(newSessionIntentForInput(onName, input("C"))).toEqual({ type: "submit" });
   });
 
   it("trims custom titles without changing the generated branch", () => {
@@ -244,6 +247,107 @@ describe("new session flow", () => {
     expect(chooseNewSessionAgentById(picker, snapshot, "ghost")).toBe(picker);
   });
 
+  it("uses vertical movement into the action row and horizontal movement within it", () => {
+    const snapshot = createHarnessSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
+    if (editing?.mode !== "editName") throw new Error("expected edit mode");
+    expect(editing.editNameFocus).toBe("name");
+
+    const saveIntent = newSessionIntentForInput(editing, input("", { downArrow: true }));
+    expect(saveIntent).toEqual({
+      type: "transition",
+      action: { type: "editNameFocusSet", focus: "save" },
+    });
+    if (saveIntent.type !== "transition") throw new Error("expected transition");
+    const saveFocused = transitionNewSessionFlow(editing, saveIntent.action);
+    expect(saveFocused).toMatchObject({ mode: "editName", editNameFocus: "save" });
+    if (saveFocused?.mode !== "editName") throw new Error("expected edit mode");
+
+    expect(newSessionIntentForInput(saveFocused, input("x"))).toEqual({ type: "none" });
+    expect(newSessionIntentForInput(saveFocused, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
+
+    const backIntent = newSessionIntentForInput(saveFocused, input("", { rightArrow: true }));
+    expect(backIntent).toEqual({
+      type: "transition",
+      action: { type: "editNameFocusSet", focus: "back" },
+    });
+    if (backIntent.type !== "transition") throw new Error("expected transition");
+    const backFocused = transitionNewSessionFlow(saveFocused, backIntent.action);
+    if (backFocused?.mode !== "editName") throw new Error("expected edit mode");
+    expect(backFocused.editNameFocus).toBe("back");
+    expect(newSessionIntentForInput(backFocused, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "cancel" },
+    });
+    expect(newSessionIntentForInput(backFocused, input("", { upArrow: true }))).toEqual({
+      type: "transition",
+      action: { type: "editNameFocusSet", focus: "name" },
+    });
+    expect(newSessionIntentForInput(backFocused, input("", { escape: true }))).toEqual({
+      type: "transition",
+      action: { type: "cancel" },
+    });
+  });
+
+  it("resolves visible controls directly without generated input paths", () => {
+    const snapshot = createHarnessSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    expect(newSessionIntentForAction(opened, "review.project")).toEqual({
+      type: "transition",
+      action: { type: "pickProject" },
+    });
+    expect(newSessionIntentForAction(opened, "review.create")).toEqual({ type: "submit" });
+
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
+    if (editing?.mode !== "editName") throw new Error("expected edit mode");
+    const saveFocused = transitionNewSessionFlow(editing, {
+      type: "editNameFocusSet",
+      focus: "save",
+    });
+    if (saveFocused?.mode !== "editName") throw new Error("expected edit mode");
+    const focusName = newSessionIntentForAction(saveFocused, "editName.name");
+    expect(focusName).toEqual({
+      type: "transition",
+      action: { type: "editNameFocusSet", focus: "name" },
+    });
+    if (focusName.type !== "transition") throw new Error("expected transition");
+    expect(transitionNewSessionFlow(saveFocused, focusName.action)).toMatchObject({
+      mode: "editName",
+      editNameFocus: "name",
+    });
+    expect(newSessionIntentForAction(saveFocused, "editName.save")).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
+    expect(newSessionIntentForAction(saveFocused, "editName.back")).toEqual({
+      type: "transition",
+      action: { type: "cancel" },
+    });
+  });
+
+  it("keeps Enter and Ctrl-S as predictable name-save paths", () => {
+    const snapshot = createHarnessSnapshot();
+    const opened = createNewSessionFlow(snapshot, "aaaaaa");
+    if (opened === undefined) throw new Error("expected a flow");
+    const editing = transitionNewSessionFlow(opened, { type: "editName" });
+    if (editing?.mode !== "editName") throw new Error("expected edit mode");
+
+    expect(newSessionIntentForInput(editing, input("\r", { return: true }))).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
+    expect(newSessionIntentForInput(editing, input("s", { ctrl: true }))).toEqual({
+      type: "transition",
+      action: { type: "commitName" },
+    });
+  });
+
   it("moves the edit-name cursor and edits at the insertion point", () => {
     const snapshot = createHarnessSnapshot();
     const opened = createNewSessionFlow(snapshot, "aaaaaa");
@@ -354,12 +458,14 @@ describe("new session flow", () => {
         code: "HARNESS_PROVIDER_UNAVAILABLE",
       },
     });
+    expect(newSessionActionEnabled(snapshot, opened, "review.create")).toBe(false);
 
     const opencode = { ...opened, selectedHarness: "opencode" };
     expect(validateNewSessionCreate(snapshot, opencode)).toMatchObject({
       ok: true,
       harnessProvider: "opencode",
     });
+    expect(newSessionActionEnabled(snapshot, opencode, "review.create")).toBe(true);
 
     const unknown = { ...opened, selectedHarness: "scripted" };
     expect(validateNewSessionCreate(snapshot, unknown)).toMatchObject({

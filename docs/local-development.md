@@ -146,6 +146,7 @@ bun run station:isolated:stop     # tear down the observer + host for this workt
 ```
 
 `station:isolated` does everything needed for a self-contained sandbox:
+
 - generates a worktree-local config (`.dev-state/config.toml`: state relocated
   under `.dev-state`, socket relocated under a short checkout-keyed temp path,
   `terminal = "noop-terminal"`, persistence flag on, supported
@@ -174,6 +175,11 @@ Use `pnpm station:devbox dev` for the same isolated stack with `bun --hot` UI
 reload. It keeps the observer, state, hooks, and host under `.dev-state`, but UI
 edits under `station/src/**` reload in place.
 
+Before Observer startup, the wrapper creates or repairs only this checkout's
+keyed socket directory to mode `0700`. It refuses a symlink, non-directory, or
+directory owned by another user rather than changing another path; it never
+repairs, replaces, or removes an existing socket or boot-claim file.
+
 An inaccessible devbox socket is a preservation boundary, not an automatic
 reset. Startup prints `OBSERVER_SOCKET_INACCESSIBLE`, preserves the existing
 Observer, host, agents, socket, and `.dev-state`, and exits nonzero. Restore
@@ -198,6 +204,7 @@ reattaches.
 > `~/.claude/settings.json` is never modified.
 
 Test the persistence loop:
+
 1. Open a worktree row → launches a fresh host-backed agent.
 2. Quit Station (`q`) — the agent keeps running in the detached host.
 3. Re-run `bun run station:isolated` → the **same** agent reattaches with its scrollback.
@@ -337,18 +344,23 @@ driver against your **real** observer (the one tracking your actual agents),
 point it at the global observer instead of an isolated one.
 
 One-time setup:
+
 1. Enable persistence in your real config (`~/.config/station/config.toml`):
+
    ```toml
    [feature_flags]
    station_persistent_agents = true
    ```
+
    Keep `terminal = "tmux"` — Station launches always go through the host-backed
    `native` provider regardless, so the default only affects tmux-launched agents.
 2. Build the checkout your observer runs from, then restart it so it picks up the
    flag + persistence code:
+
    ```bash
    pnpm build && pnpm stn observer restart
    ```
+
    No `STATION_HOST_ENTRY` is needed: the observer resolves the Bun host
    entry from its own checkout (`resolveStationHostEntry` in
    `apps/cli/src/observerProviders.ts`); the env var only overrides it for a
@@ -357,6 +369,7 @@ One-time setup:
 Then run Station against the real observer (with `XDG_RUNTIME_DIR` unset it
 defaults to the global socket; otherwise set `STATION_OBSERVER_SOCKET_PATH` to the
 observer's configured `socket_path`):
+
 ```bash
 cd station && bun run station
 ```
@@ -373,9 +386,11 @@ cd station && bun run station
 To see UI changes live, run the **`dev`** script (`bun --hot`) instead of
 `station`, **from the worktree you're editing** — it hot-reloads your edits and
 still connects to your real observer by default:
+
 ```bash
 pnpm station:ui-dev
 ```
+
 There is no "push it to main to see it" step. The Station UI is a Bun process
 that talks to the observer over a socket, so a worktree's UI runs directly
 against the same observer your global build started — edit a component / layout /
@@ -470,7 +485,7 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   reported "unavailable" and PTYs fall back to non-persistent with no error. Set
   `STATION_HOST_ENTRY` only to override the resolved path (non-standard
   layout / pinned host build).
-- **"<harness> status hooks are not installed" on launch** → the shared launch
+- **`<harness> status hooks are not installed` on launch** → the shared launch
   preflight refreshes only the selected harness health and then refuses to spawn
   an agent whose required status hooks aren't installed *for this observer*.
   New, Fork, classic create/start/resume, and the final terminal-open boundary
@@ -504,4 +519,3 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   same `--config` for `stop`/`status` or you target the wrong observer.
 - **No `STATION_STATE_DIR` env var exists** → isolation is config-only
   (`[observer] state_dir` + `socket_path`).
-```

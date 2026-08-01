@@ -7,3 +7,4 @@ export * from "./hooks.js";
 export * from "./ingressRules.js";
 export * from "./launch.js";
 export * from "./provider.js";
+export * from "./recoveryArtifacts.js";

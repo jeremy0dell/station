@@ -967,6 +967,12 @@
           "bindings": ["createSessionForkHandler"]
         },
         {
+          "specifier": "./session/importRecoveryHandle.js",
+          "resolvedPath": "apps/observer/src/commands/session/importRecoveryHandle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createSessionImportRecoveryHandleHandler"]
+        },
+        {
           "specifier": "./session/rename.js",
           "resolvedPath": "apps/observer/src/commands/session/rename.ts",
           "edgeKind": "runtime",
@@ -1474,6 +1480,108 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/session/importRecoveryHandle.ts",
+      "exports": [
+        {
+          "name": "createSessionImportRecoveryHandleHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership."
+        },
+        {
+          "name": "CreateSessionImportRecoveryHandleHandlerOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../assertCommand.js",
+          "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
+          "edgeKind": "runtime",
+          "bindings": ["assertCommandType"]
+        },
+        {
+          "specifier": "../queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandler"]
+        },
+        {
+          "specifier": "../reconcile.js",
+          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reconcileAndPublish"]
+        },
+        {
+          "specifier": "./shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "commandValidationError",
+            "findProjectOrThrow",
+            "resolveHarnessProviderOrThrow",
+            "throwIfAborted"
+          ]
+        },
+        {
+          "specifier": "../../features/evaluator.js",
+          "resolvedPath": "apps/observer/src/features/evaluator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["FeatureFlagEvaluator"]
+        },
+        {
+          "specifier": "../../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["EventJournal", "SessionStore"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../../runtime/eventBus.js",
+          "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreeHasLiveAgent"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderProjectConfig", "SafeError", "SessionRecoveryHandle", "WorktreeRow"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["pathIsSameOrInside"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/commands/session/index.ts",
       "exports": [
         {
@@ -1526,6 +1634,18 @@
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "createSessionImportRecoveryHandleHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership."
+        },
+        {
+          "name": "CreateSessionImportRecoveryHandleHandlerOptions",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -1679,6 +1799,12 @@
         {
           "specifier": "./create.js",
           "resolvedPath": "apps/observer/src/commands/session/create.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./importRecoveryHandle.js",
+          "resolvedPath": "apps/observer/src/commands/session/importRecoveryHandle.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -4224,7 +4350,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -4384,6 +4510,18 @@
         },
         {
           "name": "CreateSessionCreateHandlerOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "createSessionImportRecoveryHandleHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership."
+        },
+        {
+          "name": "CreateSessionImportRecoveryHandleHandlerOptions",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5295,6 +5433,12 @@
           "purpose": null
         },
         {
+          "name": "readSessionRecoveryHandlesFromBackup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Reads typed recovery identities from an offline Observer backup while keeping SQLite rows and queries inside the persistence adapter boundary."
+        },
+        {
           "name": "reconcileAndPublish",
           "kind": "function",
           "role": null,
@@ -5815,6 +5959,12 @@
         {
           "specifier": "./persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./persistence/recoveryArchiveReader.js",
+          "resolvedPath": "apps/observer/src/persistence/recoveryArchiveReader.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -7948,6 +8098,37 @@
       ]
     },
     {
+      "path": "apps/observer/src/persistence/recoveryArchiveReader.ts",
+      "exports": [
+        {
+          "name": "readSessionRecoveryHandlesFromBackup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Reads typed recovery identities from an offline Observer backup while keeping SQLite rows and queries inside the persistence adapter boundary."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./sessionRecoveryHandles.js",
+          "resolvedPath": "apps/observer/src/persistence/sessionRecoveryHandles.ts",
+          "edgeKind": "runtime",
+          "bindings": ["listSessionRecoveryHandles"]
+        },
+        {
+          "specifier": "../sqlite/driver.js",
+          "resolvedPath": "apps/observer/src/sqlite/driver.ts",
+          "edgeKind": "runtime",
+          "bindings": ["openSqlDatabase"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionRecoveryHandle"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/persistence/retention.ts",
       "exports": [
         {
@@ -9549,7 +9730,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -9808,6 +9989,7 @@
             "ProviderHookEvent",
             "ProviderHookReceipt",
             "ReconcileReceipt",
+            "SessionRecoveryReadiness",
             "StationCommand",
             "StationEvent"
           ]
@@ -11735,6 +11917,143 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/setup/adapters/config.ts",
+      "declaration": "createSetupConfigAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates semantic setup configuration policy into validated config-owned planning and persistence.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupConfigMutationPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/adapters/harnessTracking.ts",
+      "declaration": "createHarnessTrackingAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates harness tracking preparation into an in-process provider installer and sanitized commit evidence.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupHarnessTrackingPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/adapters/observerActivation.ts",
+      "declaration": "createObserverActivationAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "restartObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupObserverActivationPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/adapters/operations.ts",
+      "declaration": "createSetupOperationAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Assigns semantic setup operations to config, provider, process, filesystem, and Observer boundary implementations.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/setup/adapters/config.ts",
+          "declaration": "createSetupConfigAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/adapters/harnessTracking.ts",
+          "declaration": "createHarnessTrackingAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/adapters/observerActivation.ts",
+          "declaration": "createObserverActivationAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationExecutor",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupPackageInstallationPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/presenters/text.ts",
+      "declaration": "createTextSetupPresenter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves typed setup views and message references into terminal prompts and output.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/commands/snapshot.ts",
+      "declaration": "runSnapshotCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates snapshot CLI options into a pinned Observer query, optionally refusing to spawn a missing runtime for read-only maintenance planning.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/tui.ts",
       "declaration": "runTuiCommand",
       "kind": "function",
@@ -12391,6 +12710,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/session/importRecoveryHandle.ts",
+          "declaration": "createSessionImportRecoveryHandleHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/session/rename.ts",
           "declaration": "createSessionRenameHandler",
           "kind": "function",
@@ -12448,6 +12774,14 @@
       "kind": "function",
       "role": "USE CASE",
       "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/session/importRecoveryHandle.ts",
+      "declaration": "createSessionImportRecoveryHandleHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership.",
       "dependencies": []
     },
     {
@@ -12831,6 +13165,14 @@
       "dependencies": []
     },
     {
+      "path": "apps/observer/src/persistence/recoveryArchiveReader.ts",
+      "declaration": "readSessionRecoveryHandlesFromBackup",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads typed recovery identities from an offline Observer backup while keeping SQLite rows and queries inside the persistence adapter boundary.",
+      "dependencies": []
+    },
+    {
       "path": "apps/observer/src/persistence/sqliteAdapter.ts",
       "declaration": "createSqliteObserverPersistence",
       "kind": "function",
@@ -12992,7 +13334,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -13614,6 +13956,22 @@
       ]
     },
     {
+      "path": "integrations/harness/claude/src/recoveryArtifacts.ts",
+      "declaration": "createClaudeRecoveryArtifactLocator",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves exact Claude transcript files from the configured Claude projects root without leaking that layout into migration orchestration.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/sessionRecovery.ts",
+          "declaration": "SessionRecoveryArtifactLocator",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "integrations/harness/codex/src/hookAdapter.ts",
       "declaration": "codexHookAdapter",
       "kind": "const",
@@ -13639,6 +13997,22 @@
         {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/harness/codex/src/recoveryArtifacts.ts",
+      "declaration": "createCodexRecoveryArtifactLocator",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves exact Codex rollout and shell-snapshot files for one native thread while keeping Codex home layout private to the integration.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/sessionRecovery.ts",
+          "declaration": "SessionRecoveryArtifactLocator",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -13695,6 +14069,22 @@
         {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/harness/opencode/src/recoveryArtifacts.ts",
+      "declaration": "createOpenCodeRecoveryArtifactLocator",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves OpenCode recovery to its provider-owned database, whose linked session rows must be transferred as one indivisible artifact.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/sessionRecovery.ts",
+          "declaration": "SessionRecoveryArtifactLocator",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -13794,7 +14184,7 @@
       "declaration": "TmuxProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Station terminal operations into tmux-owned topology and commands.",
+      "purpose": "Translates Station terminal operations into tmux-owned topology, durable process launch, and commands.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -13865,7 +14255,7 @@
       "declaration": "ObserverApi",
       "kind": "type",
       "role": "DRIVING PORT",
-      "purpose": "Exposes Observer queries, handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "purpose": "Exposes Observer state and recovery-readiness queries, handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
       "dependencies": []
     },
     {
@@ -13881,7 +14271,7 @@
       "declaration": "ManagedTerminalLifecycle",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Owns the single managed terminal target used for an external Station launch. Attachments expose only adapter-owned target identity. A local fallback may instead carry a provider-neutral output policy for the caller-owned process, and at most one target may exist per worktree.",
+      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -13914,6 +14304,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/sessionRecovery.ts",
+      "declaration": "SessionRecoveryArtifactLocator",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Locates provider-owned files required to recover one exact native execution without exposing provider storage conventions to migration orchestration.",
       "dependencies": []
     },
     {
@@ -14072,6 +14470,70 @@
       "kind": "function",
       "role": "POLICY",
       "purpose": "Selects available, supported, unprepared harnesses whose selected or persisted intent requires repair.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupConfigMutationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Commits the desired Station setup configuration without exposing its representation to setup policy.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupHarnessTrackingPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Prepares one selected harness's Station-owned tracking artifacts.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupLauncherLinkPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Links the Station launchers required for bare terminal commands.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupObserverActivationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Activates a committed setup configuration and confirms Observer health.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupOperationExecutor",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Executes one semantic setup operation through its assigned outward capability.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupPackageInstallationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Runs the installer selected for a setup package target.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupTmuxConfigurationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Persists or live-loads the selected tmux popup configuration.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupWorktrunkIntegrationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Applies Worktrunk tracking or shell integration requested by setup.",
       "dependencies": []
     }
   ]

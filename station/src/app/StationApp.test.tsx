@@ -69,24 +69,24 @@ describe("Station app composition", () => {
     expect(station.composition.stationViewStore.getState().collapsedProjectIds.has("station")).toBe(true);
 
     station.source.setSnapshot(noProjectsSnapshot());
-    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
-      "Add your first project.",
+    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project"))).toContain(
+      "Add your first project",
     );
 
     station.setup.mockInput.pressKey("c", { ctrl: true });
     await waitFor(() => !overlayVisible(station));
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
-      "Add your first project.",
+    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project"))).toContain(
+      "Add your first project",
     );
 
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
     await waitFor(() => !overlayVisible(station));
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
-      "Add your first project.",
+    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project"))).toContain(
+      "Add your first project",
     );
 
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
@@ -120,20 +120,22 @@ describe("Station app composition", () => {
 
     station.store.actions.focusPane(firstPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
-    await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_working",
-    );
+    await waitFor(() => {
+      const focus = station.composition.stationViewStore.getState().dashboardFocus;
+      return focus?.kind === "session" && focus.sessionId === "ses_wt_station_working";
+    });
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(
-      () => !("focusedRowId" in station.composition.stationViewStore.getState()),
+      () => !("dashboardFocus" in station.composition.stationViewStore.getState()),
     );
 
     station.store.actions.focusPane(secondPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
-    await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_idle",
-    );
+    await waitFor(() => {
+      const focus = station.composition.stationViewStore.getState().dashboardFocus;
+      return focus?.kind === "session" && focus.sessionId === "ses_wt_station_idle";
+    });
   });
 
   it("opens the attention dashboard instead of focusing another session in the same worktree", async () => {

@@ -1966,7 +1966,10 @@ describe("createStationInputRuntime New Session hosted launch", () => {
       harness.pressKey(title);
       harness.pressKey("\r");
     }
-    const submit = resolveNewSessionSubmit(harness.stationViewStore);
+    const submit = resolveNewSessionSubmit(harness.stationViewStore, {
+      type: "newSession.activate",
+      actionId: "review.create",
+    });
     if (submit.kind !== "submit") {
       throw new Error("expected the New Session wizard to be on the review screen");
     }

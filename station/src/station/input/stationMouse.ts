@@ -11,6 +11,7 @@ import {
   isRemoveProjectArmed,
   LIST_REGISTRY,
   tuiScreenBehavior,
+  type ProjectHeaderControl,
   type ProjectSettingsItemId,
   type TuiInputMode,
   type TuiStore,
@@ -21,38 +22,41 @@ import {
   addWidgetSettingsPickerChoice,
   dismissStationToasts,
   dispatchRowSlot,
+  dispatchStationAction,
   dispatchStationKey,
   focusProjectSettingsItem,
-  openDefaultAgentPickerForProject,
   openWidgetSettingsPanel,
   openWidgetSettingsPicker,
   removeWidgetSettingsRow,
   toggleWidgetSettingsRow,
   resolveForkSessionSubmit,
-  resolveProjectPaneTarget,
-  resolveQuickSessionSubmit,
+  resolveNewSessionSubmit,
   resolveRowAgentTarget,
   resolveRowPaneTarget,
   scrollStationView,
   selectAddProjectRow,
-  toggleProjectCollapsed,
   type OpenPaneTarget,
   type RowAgentTarget,
   type StationKeyOutcome,
 } from "./stationActions.js";
+import type { AddProjectActionId, NewSessionActionId } from "@station/dashboard-core";
 
 export type StationMouseTarget =
   | { kind: "row"; rowId: string }
   | { kind: "projectHeader"; projectId: string }
   | { kind: "link"; url: string }
-  /** The `[+sh]` affordance on a session row: open a shell in its checkout. */
+  /** The trailing shell affordance on a session row. */
   | { kind: "openShellForRow"; rowId: string }
-  /** The `[+sh]` affordance on a project header: open a shell in its root. */
+  /** The trailing shell affordance on a project header. */
   | { kind: "openShellForProject"; projectId: string }
   /** The `[+]` quick-session affordance on a project header. */
   | { kind: "quickSessionForProject"; projectId: string }
+  /** The Add Session control rendered for a project with no visible sessions. */
+  | { kind: "emptyProjectAction"; projectId: string }
   /** The `[▾]` default-agent affordance on a project header. */
   | { kind: "showDefaultAgentPickerForProject"; projectId: string }
+  /** The zero-project dashboard CTA; guarded against stale non-empty snapshots. */
+  | { kind: "firstProjectAdd" }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
@@ -76,6 +80,12 @@ export type StationMouseTarget =
   | { kind: "widgetSettingsPickerChoice"; index: number }
   /** A folder/start row in the add-project browser; clicking moves the cursor there. */
   | { kind: "addProjectRow"; index: number }
+  /** An explicit Add Project control resolved against its current mode and enabled state. */
+  | { kind: "addProjectAction"; actionId: AddProjectActionId }
+  /** A Create Session field or editor control represented by its semantic action. */
+  | { kind: "newSessionAction"; actionId: NewSessionActionId }
+  /** The Rename Session button represented by its semantic submit action. */
+  | { kind: "renameSessionSubmit" }
   /** A sheet's primary submit button (the fork details "Fork" action). */
   | { kind: "sheetSubmit" }
   /** The viewport outside a bounded screen; primary-down safely cancels that screen. */
@@ -94,7 +104,7 @@ export type StationMouseOutcome =
    * Consumed; the router should open-or-focus a pane rooted at `cwd`. Pane
    * lifecycle is the Station coordination store's job, not the view store's,
    * so this surfaces as a router outcome the same way close-overlay does. Used
-   * for the `[+sh]` shell affordances (command/args/worktreeId stay absent).
+   * for the session/project shell affordances (command/args/worktreeId stay absent).
    */
   | {
       kind: "open-pane";
@@ -123,8 +133,7 @@ export type StationMouseOutcome =
   | { kind: "open-url"; url: string }
   /**
    * Consumed; the router should create a new worktree and host its agent in a
-   * Station pane. The create-hint click counterpart of the keyboard Enter on the
-   * New Session review screen.
+   * Station pane. Pointer Create, direct C, and focused Enter all converge here.
    */
   | {
       kind: "launch-new-session";
@@ -196,32 +205,31 @@ export function routeStationMouse(
       }
       return { kind: "open-url", url: target.url };
     case "projectHeader":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      toggleProjectCollapsed(store, target.projectId);
-      return { kind: "handled" };
+      return routeProjectHeaderActivation(store, mode, target.projectId, "primary");
     case "openShellForRow":
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
       return fromPaneTarget(resolveRowPaneTarget(store, target.rowId));
     case "openShellForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      return fromPaneTarget(resolveProjectPaneTarget(store, target.projectId));
+      return routeProjectHeaderActivation(store, mode, target.projectId, "shell");
     case "quickSessionForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      return fromQuickSessionSubmit(resolveQuickSessionSubmit(store, target.projectId));
+      return routeProjectHeaderActivation(store, mode, target.projectId, "quickSession");
+    case "emptyProjectAction":
+      return mode === "dashboard"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "dashboard.emptyProject.activate",
+              projectId: target.projectId,
+            }),
+          )
+        : { kind: "handled" };
     case "showDefaultAgentPickerForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      openDefaultAgentPickerForProject(store, target.projectId);
-      return { kind: "handled" };
+      return routeProjectHeaderActivation(store, mode, target.projectId, "defaultAgent");
+    case "firstProjectAdd":
+      return mode === "dashboard"
+        ? fromKeyOutcome(dispatchStationAction(store, { type: "dashboard.addProject" }))
+        : { kind: "handled" };
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
@@ -283,6 +291,29 @@ export function routeStationMouse(
       }
       selectAddProjectRow(store, target.index);
       return { kind: "handled" };
+    case "addProjectAction":
+      return fromKeyOutcome(
+        dispatchStationAction(store, {
+          type: "addProject.activate",
+          actionId: target.actionId,
+        }),
+      );
+    case "newSessionAction": {
+      const action = { type: "newSession.activate", actionId: target.actionId } as const;
+      const submit = resolveNewSessionSubmit(store, action);
+      if (submit.kind === "submit") {
+        return {
+          kind: "launch-new-session",
+          projectId: submit.projectId,
+          title: submit.title,
+          branch: submit.branch,
+          harness: submit.harness,
+        };
+      }
+      return fromKeyOutcome(dispatchStationAction(store, action));
+    }
+    case "renameSessionSubmit":
+      return fromKeyOutcome(dispatchStationAction(store, { type: "renameSession.submit" }));
     case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {
         return { kind: "handled" };
@@ -328,6 +359,24 @@ export function routeStationMouse(
     case "sheetBackdrop":
       return { kind: "handled" };
   }
+}
+
+function routeProjectHeaderActivation(
+  store: StoreApi<TuiStore>,
+  mode: TuiInputMode,
+  projectId: string,
+  actionId: ProjectHeaderControl,
+): StationMouseOutcome {
+  if (mode !== "dashboard") {
+    return { kind: "handled" };
+  }
+  return fromKeyOutcome(
+    dispatchStationAction(store, {
+      type: "dashboard.projectHeader.activate",
+      projectId,
+      actionId,
+    }),
+  );
 }
 
 function routeDashboardRow(store: StoreApi<TuiStore>, rowId: string): StationMouseOutcome {
@@ -378,7 +427,23 @@ function routeStationWheel(
 }
 
 function fromKeyOutcome(outcome: StationKeyOutcome): StationMouseOutcome {
-  return outcome.kind === "close-overlay" ? { kind: "close-overlay" } : { kind: "handled" };
+  switch (outcome.kind) {
+    case "close-overlay":
+      return { kind: "close-overlay" };
+    case "open-pane":
+      return fromPaneTarget(outcome.target);
+    case "launch-new-session":
+      return {
+        kind: "launch-new-session",
+        projectId: outcome.target.projectId,
+        title: outcome.target.title,
+        branch: outcome.target.branch,
+        harness: outcome.target.harness,
+      };
+    case "handled":
+    case "unmapped":
+      return { kind: "handled" };
+  }
 }
 
 /** An unresolvable target (stale row, missing project) is an inert click. */
@@ -404,27 +469,6 @@ function fromPaneTarget(target: OpenPaneTarget | undefined): StationMouseOutcome
     outcome.worktreeId = target.worktreeId;
   }
   return outcome;
-}
-
-/**
- * Map a quick-session submit to an outcome: `submit` surfaces a
- * `launch-new-session` router outcome (the executor creates the worktree and
- * hosts the agent). Blocked projects have already emitted an error toast;
- * `none` means only a stale or missing target and remains inert.
- */
-function fromQuickSessionSubmit(
-  result: ReturnType<typeof resolveQuickSessionSubmit>,
-): StationMouseOutcome {
-  if (result.kind === "submit") {
-    return {
-      kind: "launch-new-session",
-      projectId: result.projectId,
-      title: result.title,
-      branch: result.branch,
-      harness: result.harness,
-    };
-  }
-  return { kind: "handled" };
 }
 
 /**

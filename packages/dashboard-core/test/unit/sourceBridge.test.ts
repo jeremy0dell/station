@@ -11,6 +11,7 @@ import {
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { createDashboardSnapshot, createZeroWorktreeSnapshot } from "../fixtures/snapshots.js";
 
 const NOW = 1_750_000_000_000;
 
@@ -52,6 +53,65 @@ describe("applySnapshotSourceState", () => {
 
     const second = applySnapshotSourceState(first, { snapshot, connection }, NOW + 50);
     expect(second).toBe(first);
+  });
+
+  it("reconciles dashboard focus when a source snapshot replaces the list", () => {
+    const snapshot = createDashboardSnapshot();
+    const initial = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: {
+        kind: "projectHeader",
+        projectId: "web",
+        control: "defaultAgent",
+      },
+    });
+    const withoutWeb = {
+      ...snapshot,
+      projects: snapshot.projects.filter((project) => project.id !== "web"),
+      rows: snapshot.rows.filter((row) => row.projectId !== "web"),
+      sessions: snapshot.sessions.filter((session) => session.projectId !== "web"),
+    };
+
+    const replaced = applySnapshotSourceState(
+      initial,
+      {
+        snapshot: withoutWeb,
+        connection: { state: "connected", since: NOW },
+      },
+      NOW,
+    );
+
+    expect(replaced.dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "api",
+      control: "primary",
+    });
+  });
+
+  it("preserves or positionally reconciles empty-project focus across source snapshots", () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const initial = createInitialTuiState({
+      initialSnapshot: snapshot,
+      dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+    });
+    const connected = { state: "connected" as const, since: NOW };
+
+    const preserved = applySnapshotSourceState(
+      initial,
+      { snapshot: { ...snapshot, generatedAt: "2026-05-20T12:01:00.000Z" }, connection: connected },
+      NOW,
+    );
+    expect(preserved.dashboardFocus).toEqual({ kind: "emptyProjectAction", projectId: "web" });
+
+    const reconciled = applySnapshotSourceState(
+      initial,
+      { snapshot: createDashboardSnapshot(), connection: connected },
+      NOW,
+    );
+    expect(reconciled.dashboardFocus).toEqual({
+      kind: "session",
+      sessionId: "ses_wt_web_working",
+    });
   });
 
   it("still produces a new state when the failure status actually changes", () => {
@@ -123,6 +183,8 @@ function makeStore(): StoreApi<TuiStore> {
     ...createInitialTuiState(),
     start: () => () => {},
     handleKey: () => ({ dismissPopup: false }),
+    handleAction: () => ({ dismissPopup: false }),
+    createQuickSession: () => {},
     setTerminalRows: () => {},
     focusDashboardSession: () => {},
     clearDashboardFocus: () => {},

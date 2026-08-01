@@ -6,6 +6,7 @@ import { CliSetupPlanSchema } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
+import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 import { configBackedHarnessHooksProbe } from "../fixtures/setupTrackingSupport.js";
 
 async function runCli(...args: Parameters<typeof runCliBase>) {
@@ -230,7 +231,7 @@ describe("CLI setup command", () => {
       "opencode --version": "opencode 1.0.0\n",
     });
 
-    const setupDeps = {
+    const setupDeps: SetupCommandDeps = {
       cwd: repo,
       homeDir: join(root, "home"),
       env: { PATH: "/fake/bin" },
@@ -243,6 +244,18 @@ describe("CLI setup command", () => {
       },
       access: readySetupAccess(),
       fs: fakeFs({ [configPath]: source }),
+      async providerTrackingPort(operation) {
+        const provider =
+          operation.kind === "prepare-worktrunk-tracking"
+            ? "worktrunk"
+            : (operation.harnessId ?? "opencode");
+        installed.add(provider);
+        return {
+          status: "completed" as const,
+          operationId: operation.id,
+          commit: { kind: "provider-tracking" as const, provider, changed: true },
+        };
+      },
       async probeHarnessHooksStatus(harnessId: string) {
         const prepared = installed.has(harnessId);
         return {
@@ -266,12 +279,7 @@ describe("CLI setup command", () => {
       actions: expect.arrayContaining([expect.objectContaining({ id: "opencode-hooks" })]),
     });
     expect(result.code).toBe(0);
-    expect(calls).toContainEqual(
-      expect.objectContaining({
-        command: "/fake/bin/stn",
-        args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
-      }),
-    );
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
     expect(calls.flatMap((call) => call.args ?? [])).not.toContain("--takeover");
     expect(installed).toContain("opencode");
   });
@@ -487,9 +495,9 @@ describe("CLI setup command", () => {
     expect(output).toContain(
       "these bare launchers do not resolve to this installation on PATH: stn, stn-ingress, stn-tmux-popup",
     );
-    expect(output).toContain(`station ${stationLauncher}`);
-    expect(output).toContain(`ingress ${providerHookIngressLauncher}`);
-    expect(output).toContain(`tmuxPopup ${popupLauncher}`);
+    expect(output).toContain(`Station: ${stationLauncher}`);
+    expect(output).toContain(`Ingress: ${providerHookIngressLauncher}`);
+    expect(output).toContain(`tmux popup: ${popupLauncher}`);
     expect(output).toContain(`PATH=${shellQuotedRoot}\${PATH:+":$PATH"}`);
     expect(output).toContain(`${shellQuotedStation} doctor`);
     expect(output).toContain(`  ${shellQuotedStation}\n`);
@@ -505,6 +513,11 @@ describe("CLI setup command", () => {
     expect(output).not.toContain("\n  stn doctor\n");
     expect(output).not.toContain("\n  stn\n");
     expect(output).not.toContain("station:link");
+    expect(output.split("\n").some((line) => /^\s*[[{]/.test(line))).toBe(false);
+    expect(output).not.toMatch(
+      /"(?:provider|commands|before|after|rawResult|serializedResult|data)"\s*:/,
+    );
+    expect(output).not.toMatch(/command\s+\[[^\]]*\]/);
   });
 
   it("generates the compiled binding from installed ownership while preserving its key", async () => {
@@ -613,6 +626,7 @@ describe("CLI setup command", () => {
     await mkdir(repo, { recursive: true });
     const calls: ExternalCommandInput[] = [];
     const fs = fakeFs({});
+    const chunks: string[] = [];
     let activationCount = 0;
 
     const result = await runCli(
@@ -641,17 +655,56 @@ describe("CLI setup command", () => {
           activateObserverConfig: async () => {
             activationCount += 1;
           },
-          writeStdout: () => undefined,
+          writeStdout: (chunk) => {
+            chunks.push(chunk);
+          },
         },
       },
     );
 
     expect(result.code).toBe(0);
+    expect(chunks.join("")).toContain("SKIP      Write STATION config");
     expect(Object.keys(fs.files)).toEqual([]);
     expect(calls.some((call) => call.command === "brew" && call.args?.[0] === "install")).toBe(
       false,
     );
     expect(activationCount).toBe(0);
+  });
+
+  it("renders the failed apply result when config persistence fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    fs.rename = async () => {
+      throw new Error("synthetic config rename failure");
+    };
+    const chunks: string[] = [];
+    let activationCount = 0;
+
+    const result = await runCli(["--config", configPath, "setup", "apply", "--yes"], {
+      setupDeps: {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: readySetupRunner(repo),
+        access: readySetupAccess(),
+        fs,
+        activateObserverConfig: async () => {
+          activationCount += 1;
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(activationCount).toBe(0);
+    expect(fs.files[configPath]).toBeUndefined();
+    expect(chunks.join("")).toContain("Failed: Write STATION config");
+    expect(chunks.join("")).toContain("Config write failed. Run: stn setup plan");
   });
 
   it("blocks ambiguous noninteractive setup without mutation", async () => {
@@ -952,6 +1005,7 @@ describe("CLI setup command", () => {
       setupDeps: {
         cwd: root,
         env: { PATH: "/fake/bin" },
+        nodeVersion: "v22.14.0",
         runner: fakeRunner([], {
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
@@ -974,8 +1028,10 @@ describe("CLI setup command", () => {
     const output = chunks.join("");
     expect(result.code).toBe(1);
     expect(output).toContain("expected >=24.2 <25");
-    expect(output).toContain("incompatible pnpm 8.15.0 (expected 11.x)");
+    expect(output).toContain("WARN pnpm incompatible 8.15.0 (expected 11.x)");
     expect(output).toContain("After Node.js 24.2+ (and below 25) is active");
+    expect(output).toContain("fnm install 24 && fnm use 24");
+    expect(output).toContain("nvm install 24 && nvm use 24");
     expect(output).toContain("corepack prepare pnpm@11.0.0 --activate");
     expect(output).toContain("STATION setup does not change Node or pnpm automatically.");
   });
@@ -1060,7 +1116,7 @@ describe("CLI setup command", () => {
       ]),
     );
     expect(chunks.join("")).toContain("stn setup system final");
-    expect(chunks.join("")).toContain("ok Worktrunk / wt");
+    expect(chunks.join("")).toContain("OK Worktrunk / wt");
   });
 });
 

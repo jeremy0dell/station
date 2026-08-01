@@ -79,6 +79,7 @@ function emptyStationStore(): StoreApi<TuiStore> {
     ...createInitialTuiState(),
     start: () => () => {},
     handleKey: () => ({ dismissPopup: false }),
+    handleAction: () => ({ dismissPopup: false }),
     createQuickSession: () => {},
     setTerminalRows: () => {},
     focusDashboardSession: () => {},

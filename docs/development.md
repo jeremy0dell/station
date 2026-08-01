@@ -47,6 +47,7 @@ provider homes are checkout-local. See the copy-paste recipe in
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
+- Before Observer startup, `station:devbox` creates or repairs only its checkout-keyed socket directory to mode `0700`. It refuses symlinks, non-directories, and directories owned by another user; it never repairs or replaces socket and claim files.
 - If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
 - `pnpm station:devbox tmux dev` starts a checkout-keyed private tmux server and isolated live Observer, then keeps the foreground command as the signal-cleanup owner. Attach with `pnpm station:devbox tmux attach`; inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
@@ -228,6 +229,31 @@ pnpm smoke:release
 pnpm smoke:install
 ```
 
+Native Station per-TTY ownership has a focused Bun suite and a private real-PTY
+acceptance lane:
+
+```bash
+cd station
+bun test src/singleInstance.test.ts
+bun run typecheck
+cd ..
+
+STATION_REAL_E2E=1 pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-tui-singleton.test.ts
+
+pnpm build:binary -- --version 0.0.0-local
+STATION_REAL_E2E=1 \
+STATION_COMPILED_BIN="$PWD/station/dist/bin/stn" \
+pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-tui-singleton.test.ts
+pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+The real lane requires macOS or Linux, Bun, and Python 3. It owns its PTY and
+fixture processes and does not use the user's Station configuration.
+
 Dead-code audits are repository-owned and cover both the pnpm monorepo and the separate
 `station/` Bun workspace:
 
@@ -270,7 +296,8 @@ check Node/Bun inaccessible and stale classification plus displaced-listener aba
 claim gate makes no fairness claim.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
-real stale-socket races, XDG/state divergence, explicit paths with spaces,
+real stale-socket races, read-only snapshot refusal, XDG/state divergence,
+explicit paths with spaces,
 claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
 same-version build-identity handoff and refusal, cross-version graceful handoff,
 inaccessible-socket preservation, displaced shutdown, clean restart while the
@@ -705,11 +732,16 @@ stn doctor
 stn tui
 ```
 
-On the welcome screen, press `Enter` or `Space`. On the empty dashboard, press
-`Enter` or `A` on **Add your first project** and select the disposable Git
-repository. Then press `N`, create a session with the authenticated agent, and
-ask it to edit the disposable README. Confirm the transcript and diff appear,
-then quit and reopen `stn tui` and confirm the session remains.
+On the welcome screen, press `Enter` or `Space`. On the empty dashboard, run
+first-project onboarding from **Add your first project** three independent ways:
+pointer-only through the visible CTA and folder/action controls, direct commands
+beginning with `A`, and arrows plus `Enter`. Each pass must select the disposable
+Git repository and must refuse an ordinary non-Git folder. Then press `N` and run
+Create Session pointer-only, with `P/N/A/C`, and with arrows plus `Enter`; verify
+focus remains visible, agent health remains readable without color, and Save/Back
+work in the name editor. Ask the authenticated agent to edit
+the disposable README, confirm the transcript and diff appear, then quit and
+reopen `stn tui` and confirm the session remains.
 
 If the compiled tmux binding was enabled, use `tmux prefix + Space` for the cold
 open, close the popup with the same chord, and use it again for a warm reopen.
@@ -898,6 +930,22 @@ Use `pnpm setup:system:check` before real lanes. Real lanes may require `STATION
 ## TUI Work
 
 TUI work has additional OpenTUI/React and terminal-layout expectations. The terminal UI is the OpenTUI renderer in `station/` (package `@station/workspace`, built on `@opentui/core` + `@opentui/react` + `react`). Use [TUI development](tui.md) before changing `station/` components, hooks, sources, keymaps, selectors, popup behavior, or renderer tests.
+
+### Primary-workflow interaction acceptance
+
+For dashboard interaction changes, manually verify native Station and the tmux
+popup with three independent passes:
+
+1. Pointer: complete first-project onboarding and create a named session using
+   only visible controls (typing text is allowed).
+2. Direct commands: use `A`, the displayed Add Project commands, then `N` and
+   `P/N/A/C` for Create Session.
+3. Focus: use arrows plus `Enter` for folder lists, review actions, and name
+   editor actions at both wide and minimum supported widths.
+
+Git-invalid Add Project submit must stay disabled, native Create Session must
+open a Station-managed pane, and the popup must continue through its configured
+terminal adapter.
 
 ## TypeScript And Data Rules
 

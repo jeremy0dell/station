@@ -49,19 +49,23 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Link STATION launchers globally?");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex tracking?");
-      expect(result.stdout).toContain(`Applying: Write STATION config (${fixture.configPath})`);
+      expect(result.stdout).not.toContain("Applying: Write STATION config");
+      expect(result.stdout).not.toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Completed: Write STATION config");
-      expect(result.stdout).toContain(
-        `Running: ${join(fixture.bin, "wt")} -y config shell install zsh`,
-      );
+      expect(result.stdout).toContain("Applying: Install Worktrunk shell integration");
       expect(result.stdout).toContain("fake shell integration installed");
       expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
       expect(result.stdout).toContain("Core setup complete.");
+      expect(result.stdout).not.toContain(
+        "Run stn doctor after setup to validate the Observer runtime.",
+      );
+      expect(result.stdout).not.toMatch(/"(?:provider|commands|before|after|rawResult|data)"\s*:/);
+      expect(result.stdout).not.toMatch(/command\s+\[[^\]]*\]/);
       expect(result.stdout).toContain("Remaining");
       expect(result.stdout).toContain(
         "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup",
       );
-      expect(result.stdout).toContain(`command pnpm --dir ${process.cwd()} station:link`);
+      expect(result.stdout).toContain(`Run: pnpm --dir ${process.cwd()} station:link`);
       expect(result.stdout).toContain(`'${join(process.cwd(), "bin", "stn")}' doctor`);
       expect(result.stdout).toContain("Use stn instead of the absolute path (optional):");
       expect(result.stdout).toContain(
@@ -194,6 +198,14 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Install OpenCode tracking?");
       expect(result.stdout).toContain("Completed: Install Codex tracking");
       expect(result.stdout).toContain("Completed: Install OpenCode tracking");
+      expect(result.stdout).not.toMatch(
+        /"(?:provider|commands|before|after|rawResult|serializedResult)"\s*:/,
+      );
+      expect(
+        result.stdout
+          .split("\n")
+          .some((line) => line.trimStart().startsWith("{") || line.trimStart().startsWith("[")),
+      ).toBe(false);
       const config = await readFile(fixture.configPath, "utf8");
       expect(config).toContain('harness = "codex"');
       expect(config).toContain("[harness.codex]");
@@ -369,13 +381,10 @@ describe("setup guided feedback e2e", () => {
 
         expect(first.exitCode).toBe(0);
         expect(second.exitCode).toBe(0);
-        expect(first.stdout).toContain(
-          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
-        );
+        expect(first.stdout).toContain("Applying: Install Worktrunk shell integration");
+        expect(first.stdout).toContain("fake shell integration installed");
         expect(second.stdout).not.toContain("Install Worktrunk shell integration?");
-        expect(second.stdout).not.toContain(
-          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
-        );
+        expect(second.stdout).not.toContain("Applying: Install Worktrunk shell integration");
         const check = await runStation(
           ["--config", fixture.configPath, "setup", "check", "--json"],
           {
@@ -455,7 +464,8 @@ describe("setup guided feedback e2e", () => {
       expect(result.stdout).toContain("Codex install completed.");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex tracking?");
-      expect(result.stdout).toContain("Applying: Write STATION config");
+      expect(result.stdout).not.toContain("Applying: Write STATION config");
+      expect(result.stdout).toContain("Completed: Write STATION config");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
     } finally {
@@ -465,6 +475,9 @@ describe("setup guided feedback e2e", () => {
 
   it("runs the persisted absolute popup launcher in a fresh minimal-PATH tmux context", async () => {
     const fixture = await createFixture({ harness: "codex", launchers: "complex" });
+    const tmuxConfigPath = join(fixture.home, ".tmux.conf");
+    const originalTmuxConfig = "# user tmux config\n";
+    await writeFile(tmuxConfigPath, originalTmuxConfig, "utf8");
     try {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
@@ -483,9 +496,16 @@ describe("setup guided feedback e2e", () => {
         `Direct fallback: ${join(process.cwd(), "bin", "stn")} popup`,
       );
 
-      const tmuxConfigPath = join(fixture.home, ".tmux.conf");
       const tmuxConfig = await readFile(tmuxConfigPath, "utf8");
+      expect(tmuxConfig).toContain(originalTmuxConfig.trim());
       expect(tmuxConfig).toContain("bind-key Space run-shell -b");
+      const tmuxBackups = (await readdir(fixture.home)).filter(
+        (name) => name.startsWith(".tmux.conf.") && name.endsWith(".bak"),
+      );
+      expect(tmuxBackups).toHaveLength(1);
+      await expect(readFile(join(fixture.home, tmuxBackups[0] ?? ""), "utf8")).resolves.toBe(
+        originalTmuxConfig,
+      );
       expect(tmuxConfig).not.toContain("STATION_FOCUS_CLIENT_ID=#{q:client_name} stn-tmux-popup");
 
       const freshTmux = spawnSync(

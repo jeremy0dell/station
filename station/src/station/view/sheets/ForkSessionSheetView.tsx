@@ -7,7 +7,7 @@ import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
-  SheetButton,
+  SheetButtonRow,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
@@ -106,12 +106,19 @@ function ForkDetails({
         </SheetMessageLine>
       ) : null}
       <SheetLine width={contentWidth}> </SheetLine>
-      <SheetButton
-        label={focus === "submit" ? "> Fork" : "Fork"}
-        shortcut="enter"
-        tone="success"
-        fixedWidth={Math.min(contentWidth, 18)}
-        mouseTarget={{ kind: "sheetSubmit" }}
+      <SheetButtonRow
+        width={contentWidth}
+        buttons={[
+          {
+            id: "fork.submit",
+            label: "Fork",
+            shortcut: "enter",
+            tone: "success",
+            mouseTarget: { kind: "sheetSubmit" },
+            focused: focus === "submit",
+            disabled: false,
+          },
+        ]}
       />
       <SheetFooter width={contentWidth}>↑↓:field space:toggle enter:fork esc:back</SheetFooter>
     </BottomSheetFrameView>

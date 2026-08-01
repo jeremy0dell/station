@@ -1,6 +1,6 @@
 import { createTuiStore } from "@station/dashboard-core";
 import { describe, expect, it, vi } from "vitest";
-import { createCommandSnapshot } from "../../fixtures/snapshots.js";
+import { createCommandSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 describe("quick session", () => {
@@ -31,8 +31,24 @@ describe("quick session", () => {
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
   });
 
+  it("moves accepted empty-project Quick Session focus at the standalone consumer", async () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const service = new FakeTuiObserverService(snapshot);
+    const store = createTuiStore({ service, initialSnapshot: snapshot });
+
+    store.setState({ dashboardFocus: { kind: "emptyProjectAction", projectId: "web" } });
+    store.getState().createQuickSession("web");
+
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "web",
+      control: "quickSession",
+    });
+    await vi.waitFor(() => expect(service.dispatched).toHaveLength(1));
+  });
+
   it("shows the unavailable project's exact error without dispatching", () => {
-    const snapshot = createCommandSnapshot("idle");
+    const snapshot = createZeroWorktreeSnapshot();
     const project = snapshot.projects[0];
     if (project === undefined) throw new Error("project fixture missing");
     const error = {
@@ -56,10 +72,15 @@ describe("quick session", () => {
     };
     const service = new FakeTuiObserverService(unavailable);
     const store = createTuiStore({ service, initialSnapshot: unavailable });
+    store.setState({ dashboardFocus: { kind: "emptyProjectAction", projectId: project.id } });
 
     store.getState().createQuickSession(project.id);
 
     expect(service.dispatched).toEqual([]);
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "emptyProjectAction",
+      projectId: project.id,
+    });
     expect(store.getState().localRows.pendingCreate).toEqual([]);
     expect(store.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",

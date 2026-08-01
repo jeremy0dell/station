@@ -1,3 +1,4 @@
+import { reconcileDashboardFocus } from "../dashboardFocus.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
@@ -32,14 +33,13 @@ export function handleSearchKey(state: TuiState, key: TuiKey): TuiTransition {
   }
 
   if (isReturnKey(key)) {
-    return {
-      state: {
-        ...state,
-        searchQuery: state.screen.value,
-        scrollOffset: 0,
-        screen: { name: "dashboard" },
-      },
+    const next: TuiState = {
+      ...state,
+      searchQuery: state.screen.value,
+      scrollOffset: 0,
+      screen: { name: "dashboard" },
     };
+    return { state: reconcileDashboardFocus(state, next) };
   }
 
   if (key.input.length === 0) {

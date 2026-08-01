@@ -113,6 +113,20 @@ describe("station overlay layer in the keymap stack", () => {
     expect(view.getState().screen).toMatchObject({ name: "search", value: "" });
   });
 
+  it("intercepts direct C as the native managed New Session launch", () => {
+    const view = makeViewStore();
+    const station = makeStationStore(true);
+    const keymap = createStationKeymap(view);
+    routeKey("N", station.getState(), keymap);
+    routeKey("\x1b[B", station.getState(), keymap);
+
+    expect(routeKey("C", station.getState(), keymap)).toMatchObject({
+      kind: "pane-launch-new-session",
+      projectId: "station",
+      harness: "codex",
+    });
+  });
+
   it("swallows native pane commands while the dashboard is open", () => {
     const view = makeViewStore();
     const station = makeStationStore(true);
@@ -248,6 +262,24 @@ describe("station input through the station runtime", () => {
     ).toBe(true);
     expect([...view.getState().collapsedProjectIds]).toEqual(["station"]);
     expect(station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+  });
+
+  it("routes New Session action clicks without leaking input to panes", () => {
+    const { view, station, runtime, written } = makeRuntime(true);
+    runtime.handleSequence("N");
+
+    expect(
+      runtime.dispatchMouse(
+        { kind: "station", target: { kind: "newSessionAction", actionId: "review.name" } },
+        LEFT_DOWN,
+      ),
+    ).toBe(true);
+    expect(view.getState().screen).toMatchObject({
+      name: "newSession",
+      flow: { mode: "editName" },
+    });
+    expect(station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+    expect(written).toEqual([]);
   });
 
   it("gives bounded-screen barriers first refusal without opening a context menu", () => {

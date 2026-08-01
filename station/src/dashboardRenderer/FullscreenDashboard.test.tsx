@@ -7,12 +7,12 @@ import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 import { STATION_COLORS } from "../station/view/theme.js";
 import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
-import type { DashboardMouseEffects } from "./dashboardMouse.js";
+import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { FullscreenDashboard } from "./FullscreenDashboard.js";
 
 const SURFACE = { width: 80, height: 24 };
 const WIDGET_SURFACE = { width: 99, height: 25 };
-const TEST_EFFECTS: DashboardMouseEffects = {
+const TEST_EFFECTS: DashboardRendererEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
@@ -332,7 +332,7 @@ describe("FullscreenDashboard configured widgets", () => {
 async function render(
   store: ReturnType<typeof makeStationTestStore>["store"],
   size: { width: number; height: number } = SURFACE,
-  effects: DashboardMouseEffects = TEST_EFFECTS,
+  effects: DashboardRendererEffects = TEST_EFFECTS,
 ) {
   const setup = await testRender(
     <FullscreenDashboard store={store} effects={effects} onCopyNotice={() => {}} />,

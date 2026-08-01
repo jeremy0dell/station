@@ -8,10 +8,9 @@ import {
   isConfigAction,
   isHookSetupAction,
   isInstallAction,
-  markRequiredIncomplete,
 } from "../flowUtils.js";
-import { renderOptions, write } from "../io.js";
-import { renderSetupApplyResult, renderSetupPlan } from "../render.js";
+import { setupPresenter } from "../io.js";
+import { overlaySetupActionStatuses } from "../presentation/projectSetupResult.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "../types.js";
 
 export async function runNonInteractiveApply(
@@ -23,21 +22,23 @@ export async function runNonInteractiveApply(
     noBrew: flags.noBrew,
     planConfigWrite: true,
   });
+  const presenter = setupPresenter(deps);
 
   if (flags.dryRun) {
-    const dryRun = await applySetupPlan(initial.plan, applyOptions(deps, { dryRun: true }));
-    await write(deps, renderSetupPlan(dryRun.plan, renderOptions(deps)));
+    const result = await applySetupPlan(
+      initial.plan,
+      applyOptions(deps, { dryRun: true, execution: initial }),
+    );
+    await presenter.write(
+      presenter.renderPlan(
+        overlaySetupActionStatuses(initial.presentationView, result.plan.actions),
+      ),
+    );
     return { code: initial.harnessSelection.source === "unresolved" ? 1 : 0 };
   }
 
   if (initial.harnessSelection.source === "unresolved") {
-    await write(
-      deps,
-      renderSetupApplyResult(initial.plan, {
-        ...renderOptions(deps),
-        selectionRequired: true,
-      }),
-    );
+    await presenter.write(presenter.renderApplyResult(initial.presentationView));
     return { code: 1 };
   }
 
@@ -47,40 +48,45 @@ export async function runNonInteractiveApply(
       actionFilter: isInstallAction,
       announceActions: true,
       showCommandOutput: true,
+      execution: initial,
     }),
   );
+  const reprobeDeps = depsWithBrewBinPath(deps);
   if (installResult.failedAction !== undefined) {
-    await write(
-      deps,
-      renderSetupApplyResult(markRequiredIncomplete(installResult.plan), renderOptions(deps)),
-    );
+    const final = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
+      noBrew: flags.noBrew,
+    });
+    await presenter.write(presenter.renderApplyResult(final.presentationView));
     return { code: 1 };
   }
 
-  const reprobeDeps = depsWithBrewBinPath(deps);
   const refreshed = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
     noBrew: flags.noBrew,
     planConfigWrite: true,
   });
   if (!coreReadyForConfigWrite(refreshed.plan)) {
-    await write(deps, renderSetupApplyResult(refreshed.plan, renderOptions(deps)));
+    await presenter.write(presenter.renderApplyResult(refreshed.presentationView));
     return { code: 1 };
   }
 
   const writeResult = await applySetupPlan(
     refreshed.plan,
-    applyOptions(reprobeDeps, { actionFilter: isConfigAction, announceActions: true }),
+    applyOptions(reprobeDeps, {
+      actionFilter: isConfigAction,
+      announceActions: true,
+      execution: refreshed,
+    }),
   );
   if (writeResult.failedAction !== undefined) {
-    await write(deps, renderSetupApplyResult(writeResult.plan, renderOptions(deps)));
+    const failedView = overlaySetupActionStatuses(
+      refreshed.presentationView,
+      writeResult.plan.actions,
+    );
+    await presenter.write(presenter.renderApplyResult(failedView));
     return { code: 1 };
   }
 
-  const activationError = await activateCompletedConfigWrite(
-    writeResult.plan,
-    refreshed.facts.homeDir,
-    reprobeDeps,
-  );
+  const activationError = await activateCompletedConfigWrite(refreshed, reprobeDeps);
   if (activationError !== undefined) {
     return { code: 1 };
   }
@@ -94,20 +100,16 @@ export async function runNonInteractiveApply(
       actionFilter: isHookSetupAction,
       announceActions: true,
       showCommandOutput: true,
+      execution: trackingPlan,
     }),
   );
-  if (trackingResult.failedAction !== undefined) {
-    await write(
-      deps,
-      renderSetupApplyResult(markRequiredIncomplete(trackingResult.plan), renderOptions(deps)),
-    );
-    return { code: 1 };
-  }
 
-  // Successful actions do not prove readiness; rebuild the plan from current config and artifacts.
+  // Operation outcomes do not prove readiness; rebuild the plan from current config and artifacts.
   const final = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
     noBrew: flags.noBrew,
   });
-  await write(deps, renderSetupApplyResult(final.plan, renderOptions(deps)));
-  return { code: final.plan.summary.requiredOk ? 0 : 1 };
+  await presenter.write(presenter.renderApplyResult(final.presentationView));
+  return {
+    code: trackingResult.failedAction === undefined && final.plan.summary.requiredOk ? 0 : 1,
+  };
 }

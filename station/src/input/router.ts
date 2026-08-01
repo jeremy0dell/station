@@ -94,6 +94,33 @@ export type RouteOutcome =
   | { kind: "swallowed" }
   | { kind: "ignored" };
 
+/** Builds pane-open outcomes without materializing absent optional launch fields. */
+export function paneOpenOutcome(target: {
+  paneId: PaneId;
+  cwd: string;
+  role: PaneRole;
+  command?: string;
+  args?: readonly string[];
+  worktreeId?: string;
+}): Extract<RouteOutcome, { kind: "pane-open" }> {
+  const outcome: Extract<RouteOutcome, { kind: "pane-open" }> = {
+    kind: "pane-open",
+    paneId: target.paneId,
+    cwd: target.cwd,
+    role: target.role,
+  };
+  if (target.command !== undefined) {
+    outcome.command = target.command;
+  }
+  if (target.args !== undefined) {
+    outcome.args = target.args;
+  }
+  if (target.worktreeId !== undefined) {
+    outcome.worktreeId = target.worktreeId;
+  }
+  return outcome;
+}
+
 /**
  * The one place the managed-launch outcome is built — shared by the row click
  * (mouse binding) and the row slot key (overlay layer) so they can't drift.

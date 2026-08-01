@@ -1,4 +1,4 @@
-import type { ProjectView, SessionId } from "@station/contracts";
+import type { ProjectView } from "@station/contracts";
 import stringWidth from "string-width";
 import type {
   DashboardSessionOverflow,
@@ -7,7 +7,7 @@ import type {
 
 export { dashboardFooterLabel } from "../../state/keymap.js";
 
-import type { TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
+import type { DashboardFocus, TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
 import type { RowGridRowInput } from "../WorktreeRow/layout.js";
 import { worktreeRowGridInput, worktreeStyleRowGridInput } from "../WorktreeRow/rowInput.js";
 
@@ -113,7 +113,7 @@ function plural(count: number, noun: string): string {
   return count === 1 ? noun : `${noun}s`;
 }
 
-export const FIRST_RUN_BODY_LABEL = "Add your first project.";
+export const FIRST_RUN_BODY_LABEL = "Add your first project";
 
 export function scrollIndicatorLabel(
   direction: "above" | "below",
@@ -128,10 +128,10 @@ export function scrollIndicatorLabel(
 export function rowGridInputForViewportItem(
   item: DashboardViewportItem,
   keyByRow: ReadonlyMap<string, string>,
-  focusedRowId?: SessionId,
+  dashboardFocus?: DashboardFocus,
 ): RowGridRowInput | undefined {
   if (item.type === "session") {
-    const focused = focusedRowId !== undefined && item.row.id === focusedRowId;
+    const focused = dashboardFocus?.kind === "session" && item.row.id === dashboardFocus.sessionId;
     if (item.pendingRemove !== undefined) {
       return worktreeStyleRowGridInput({
         id: item.id,

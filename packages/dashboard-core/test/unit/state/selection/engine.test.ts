@@ -180,7 +180,7 @@ describe("selectionMiddleware — inert with an empty registry", () => {
     expect(deriveTuiInputMode(dashboard)).toBe("dashboard");
     const moved = handleTuiKey(dashboard, { input: "", downArrow: true }, KEY_CONTEXT).state;
     // The dashboard's own focus engine still owns the cursor; the shared slice stays empty.
-    expect(moved.focusedRowId).toBeDefined();
+    expect(moved.dashboardFocus).toBeDefined();
     expect(moved.selection.size).toBe(0);
   });
 });
