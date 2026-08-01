@@ -1,5 +1,17 @@
 import type { SetupToolId, SupportedHarnessId } from "./facts.js";
 
+export type SetupRecommendationCategory =
+  | "socket-evidence"
+  | "config-diagnostics"
+  | "launcher-path"
+  | "station-ui"
+  | "worktrunk-automation"
+  | "worktrunk-shell"
+  | "tmux-popup"
+  | "worktrunk-hooks"
+  | "harness-tracking"
+  | "doctor";
+
 export type SetupIssue =
   | { readonly code: "state-directory-unwritable"; readonly tier: "required" }
   | { readonly code: "socket-evidence-unavailable"; readonly tier: "recommended" }

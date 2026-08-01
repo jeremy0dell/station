@@ -9,7 +9,7 @@ import type {
   SetupDependencyFact,
   SetupWorktrunkAutomationFact,
   SetupWorktrunkShellIntegrationFact,
-} from "../model.js";
+} from "../adapters/inspectionTypes.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";

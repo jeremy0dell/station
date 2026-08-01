@@ -1,5 +1,5 @@
 import { type ResolveExecutablePathOptions, resolveExecutablePath } from "@station/runtime";
-import type { SetupDependencyFact } from "../model.js";
+import type { SetupDependencyFact } from "../adapters/inspectionTypes.js";
 import { setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";
 

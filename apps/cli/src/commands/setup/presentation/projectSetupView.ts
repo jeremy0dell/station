@@ -77,13 +77,9 @@ function assertPresentationCounts(plan: CoreSetupPlan, checks: readonly SetupVie
   const requiredMissing = checks.filter(
     (check) => check.tier === "required" && check.status !== "ok",
   ).length;
-  const warnings = checks.filter((check) => check.status === "warning").length;
-  if (
-    plan.result.readiness.requiredMissing !== requiredMissing ||
-    plan.result.warningCount !== warnings
-  ) {
+  if (plan.result.readiness.requiredMissing !== requiredMissing) {
     throw new Error(
-      `Semantic setup counts do not match the human projection: required ${plan.result.readiness.requiredMissing}/${requiredMissing}, warnings ${plan.result.warningCount}/${warnings}.`,
+      `Semantic setup required count does not match the human projection: ${plan.result.readiness.requiredMissing}/${requiredMissing}.`,
     );
   }
 }

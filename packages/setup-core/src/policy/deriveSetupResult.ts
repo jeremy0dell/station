@@ -1,5 +1,5 @@
 import type { SetupPlanningFacts } from "../model/facts.js";
-import type { SetupIssue } from "../model/issues.js";
+import type { SetupIssue, SetupRecommendationCategory } from "../model/issues.js";
 import type { SetupOperation } from "../model/operations.js";
 import type { SetupResult } from "../model/result.js";
 
@@ -12,7 +12,7 @@ export type DeriveSetupResultInput = {
 /**
  * POLICY
  *
- * Derives readiness and compatibility counts from current semantic evidence without trusting attempted mutations.
+ * Derives readiness and semantic recommendations from current evidence without trusting attempted mutations.
  */
 export function deriveSetupResult(input: DeriveSetupResultInput): SetupResult {
   const requiredIssues = input.issues.filter((issue) => issue.tier === "required");
@@ -37,42 +37,49 @@ export function deriveSetupResult(input: DeriveSetupResultInput): SetupResult {
       requiredMissing: workflowIssues.length,
     },
     requiredIssueCount: requiredIssues.length,
-    warningCount: deriveWarningCount(input.evidence, input.issues),
+    recommendations: deriveRecommendations(input.issues),
     selectedOperationCount: input.operations.filter((operation) => operation.selected).length,
   };
 }
 
-function deriveWarningCount(evidence: SetupPlanningFacts, issues: readonly SetupIssue[]): number {
-  let count = 1;
-  if (issues.some((issue) => issue.code === "socket-evidence-unavailable")) count += 1;
-  if (issues.some((issue) => issue.code === "config-diagnostic")) count += 1;
-  if (issues.some((issue) => issue.code === "launcher-unready")) count += 1;
-  if (issues.some((issue) => issue.code === "station-ui-missing")) count += 1;
-  if (issues.some((issue) => issue.code === "worktrunk-shell-missing")) count += 1;
-
-  const tmuxPopupConflict = issues.some(
-    (issue) =>
-      issue.code === "tmux-popup-unready" &&
-      issue.scope === "persisted" &&
-      issue.state === "conflict",
-  );
-  const tmuxPopupWarning =
-    tmuxPopupConflict ||
-    (toolAvailable(evidence, "tmux") &&
-      (evidence.launchers.tmuxPopup === "missing" ||
-        issues.some((issue) => issue.code === "tmux-popup-unready")));
-  if (tmuxPopupWarning) count += 1;
-
-  const worktrunkWarning =
-    toolAvailable(evidence, "worktrunk") &&
-    (evidence.worktrunkAutomation === "warning" ||
-      issues.some((issue) => issue.code === "worktrunk-hooks-missing"));
-  if (worktrunkWarning) count += 1;
-
-  count += issues.filter(
-    (issue) => issue.code === "harness-tracking-unprepared" && issue.tier === "recommended",
-  ).length;
-  return count;
+function deriveRecommendations(
+  issues: readonly SetupIssue[],
+): readonly SetupRecommendationCategory[] {
+  const categories = new Set<SetupRecommendationCategory>(["doctor"]);
+  for (const issue of issues) {
+    switch (issue.code) {
+      case "socket-evidence-unavailable":
+        categories.add("socket-evidence");
+        break;
+      case "config-diagnostic":
+        categories.add("config-diagnostics");
+        break;
+      case "launcher-unready":
+        categories.add("launcher-path");
+        break;
+      case "station-ui-missing":
+        categories.add("station-ui");
+        break;
+      case "worktrunk-automation-unready":
+        categories.add("worktrunk-automation");
+        break;
+      case "worktrunk-shell-missing":
+        categories.add("worktrunk-shell");
+        break;
+      case "tmux-popup-unready":
+        categories.add("tmux-popup");
+        break;
+      case "worktrunk-hooks-missing":
+        categories.add("worktrunk-hooks");
+        break;
+      case "harness-tracking-unprepared":
+        if (issue.tier === "recommended") categories.add("harness-tracking");
+        break;
+      default:
+        break;
+    }
+  }
+  return [...categories];
 }
 
 function toolAvailable(

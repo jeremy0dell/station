@@ -11,7 +11,7 @@ import {
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupGitFact } from "../model.js";
+import type { SetupGitFact } from "../adapters/inspectionTypes.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv } from "./env.js";
 

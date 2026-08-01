@@ -1,11 +1,14 @@
 import type { HarnessHooksStatus, ProviderHookArtifactOwner } from "@station/contracts";
 import type { ExternalCommandRunner } from "@station/runtime";
-import type { SetupOperation, SetupOperationOutcome } from "@station/setup-core";
+import type {
+  SetupOperation,
+  SetupOperationOutcome,
+  SupportedHarnessId,
+} from "@station/setup-core";
 import type { CliEnv } from "../../env.js";
 import type { SetupApplyFileSystem } from "./apply.js";
 import type { SetupFileSystemReader } from "./checks/config.js";
 import type { SetupStateDirFileSystem } from "./checks/stateDir.js";
-import type { SupportedHarnessId } from "./model.js";
 
 export type SetupPromptChoice = {
   value: string;

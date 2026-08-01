@@ -3,7 +3,7 @@ import { access as nodeAccess, stat as nodeStat, realpath } from "node:fs/promis
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CliEnv } from "../../../env.js";
-import type { SetupLauncherFact, SetupLaunchersFact } from "../model.js";
+import type { SetupLauncherFact, SetupLaunchersFact } from "../adapters/inspectionTypes.js";
 
 export type CheckSetupLaunchersOptions = {
   env?: CliEnv;

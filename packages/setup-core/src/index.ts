@@ -13,10 +13,22 @@ export {
   supportedHarnessIds,
 } from "./model/facts.js";
 export type { HarnessSelectionIntent, SetupPlanningIntent } from "./model/intent.js";
-export type { SetupIssue } from "./model/issues.js";
+export type { SetupIssue, SetupRecommendationCategory } from "./model/issues.js";
 export type { SetupOperation } from "./model/operations.js";
 export type { SetupPlan } from "./model/plan.js";
 export type { SetupResult } from "./model/result.js";
+export type {
+  SetupSessionApplication,
+  SetupSessionApplyPhase,
+  SetupSessionBlockReason,
+  SetupSessionEffect,
+  SetupSessionEvent,
+  SetupSessionInspectionPhase,
+  SetupSessionResult,
+  SetupSessionState,
+  SetupSessionStatus,
+  SetupSessionTransition,
+} from "./model/session.js";
 export { assessHarnessTracking } from "./policy/assessHarnessTracking.js";
 export { deriveSetupReadiness } from "./policy/deriveReadiness.js";
 export { type DeriveSetupResultInput, deriveSetupResult } from "./policy/deriveSetupResult.js";
@@ -26,6 +38,9 @@ export { selectHarnessTrackingRepairTargets } from "./policy/selectRepairTargets
 export type {
   SetupConfigMutationPort,
   SetupHarnessTrackingPort,
+  SetupInspection,
+  SetupInspectionOutcome,
+  SetupInspectionRequest,
   SetupLauncherLinkPort,
   SetupObserverActivationPort,
   SetupOperationCommit,
@@ -37,3 +52,12 @@ export type {
   SetupTmuxConfigurationPort,
   SetupWorktrunkIntegrationPort,
 } from "./ports.js";
+export { createSetupSessionApplication } from "./session/application.js";
+export {
+  emptySetupOperationCheckpoints,
+  hasCompletedSetupOperation,
+  recordCompletedSetupOperation,
+  type SetupOperationCheckpoint,
+  type SetupOperationCheckpoints,
+} from "./session/checkpoints.js";
+export { createSetupSessionState, transitionSetupSession } from "./session/transition.js";

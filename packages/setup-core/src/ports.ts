@@ -1,6 +1,7 @@
 import type { SafeError } from "@station/contracts";
-import type { SetupToolId, SupportedHarnessId } from "./model/facts.js";
+import type { SetupPlanningFacts, SetupToolId, SupportedHarnessId } from "./model/facts.js";
 import type { SetupOperation } from "./model/operations.js";
+import type { SetupSessionInspectionPhase } from "./model/session.js";
 
 export type SetupPackageTarget =
   | { readonly kind: "tool"; readonly id: SetupToolId }
@@ -51,6 +52,22 @@ export type SetupOperationOutcome =
       readonly operationId: SetupOperation["id"];
       readonly error: SafeError;
     };
+
+export type SetupInspectionRequest = {
+  readonly phase: SetupSessionInspectionPhase;
+  readonly revision: number;
+};
+
+export type SetupInspectionOutcome =
+  | { readonly status: "completed"; readonly facts: SetupPlanningFacts }
+  | { readonly status: "failed"; readonly error: SafeError };
+
+/**
+ * DRIVEN PORT
+ *
+ * Reads and normalizes current setup evidence while keeping filesystem, TOML, and provider representations outside core.
+ */
+export type SetupInspection = (request: SetupInspectionRequest) => Promise<SetupInspectionOutcome>;
 
 /**
  * DRIVEN PORT

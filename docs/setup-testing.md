@@ -10,6 +10,12 @@ The setup engine is dependency-injected end to end (`runner`, `access`, `fs`,
 in-process. The few states that need a real OS (real `brew install`, a truly
 CLT-absent Mac) run in a VM.
 
+The non-interactive surfaces additionally drive a process-local semantic session. Its unit
+suite covers pure revisions/transitions, completed-operation checkpoints, and the serialized
+inspection/effect loop. Checkpoints prevent an operation completed during one invocation from
+being replayed during that invocation; they are not a session store and do not recover a restart.
+The guided flow remains separately covered as the retained compatibility path.
+
 ## The profile contract
 
 A **machine profile** is one declarative record of machine state + expected
@@ -138,7 +144,9 @@ nothing for tier 1, `docker build --target` for tier 2, `tart clone` for tier 3;
 (2) runs the read-only, machine-readable surfaces (`stn setup check --json`,
 `stn setup plan --json`, `stn setup apply --dry-run`); verifies that several
 runnable CLIs leave selection unresolved and that no read-only mode mutates
-config, provider homes, durable Observer state, sockets, or tmux. The state-
+config, provider homes, durable Observer state, sockets, or tmux. JSON compatibility warnings
+are projected at the CLI adapter from semantic evidence, so profile assertions continue to treat
+the published JSON shape—not a core warning-row count—as the machine contract. The state-
 directory readiness check is the narrow exception: it creates and removes a temporary probe file and can
 leave a newly created empty state directory; (3) captures stdout + exit code; (4)
 structurally diffs the JSON plan + exit code against the profile's `expect`; (5)

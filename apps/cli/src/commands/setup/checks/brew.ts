@@ -4,7 +4,7 @@ import {
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupBrewFact } from "../model.js";
+import type { SetupBrewFact } from "../adapters/inspectionTypes.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv } from "./env.js";
 

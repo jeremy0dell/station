@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
 import { persistentUiOwnerClientOption } from "@station/tmux";
-import type { SetupTmuxBindingFact } from "../model.js";
+import type { SetupTmuxBindingFact } from "../adapters/inspectionTypes.js";
 import type { SetupFileSystemReader } from "./config.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 
