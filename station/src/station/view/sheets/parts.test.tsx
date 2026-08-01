@@ -7,7 +7,12 @@ import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
 import { STATION_COLORS } from "../theme.js";
-import { SheetButtonRow, type SheetButtonSpec } from "./parts.js";
+import {
+  responsiveSheetFooterText,
+  responsiveSheetText,
+  SheetButtonRow,
+  type SheetButtonSpec,
+} from "./parts.js";
 
 const teardowns: Array<() => void> = [];
 afterEach(() => {
@@ -115,5 +120,25 @@ describe("SheetButtonRow", () => {
     expect(trailing?.bg === undefined ? undefined : rgbToHex(trailing.bg)).not.toBe(
       STATION_COLORS.cyan,
     );
+  });
+});
+
+describe("responsive sheet text", () => {
+  const variants = {
+    expanded: "Expanded copy",
+    compact: "Compact",
+  } as const;
+
+  it("selects copy from measured available width", () => {
+    const expandedWidth = variants.expanded.length;
+    expect(responsiveSheetText(expandedWidth, variants)).toBe(variants.expanded);
+    const narrowerWidth = expandedWidth - " ".length;
+    expect(responsiveSheetText(narrowerWidth, variants)).toBe(variants.compact);
+  });
+
+  it("reserves the footer inset before selecting copy", () => {
+    const expandedFooter = ` ${variants.expanded}`;
+    expect(responsiveSheetFooterText(expandedFooter.length, variants)).toBe(variants.expanded);
+    expect(responsiveSheetFooterText(variants.expanded.length, variants)).toBe(variants.compact);
   });
 });

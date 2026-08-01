@@ -5,6 +5,9 @@ import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
+  responsiveSheetFooterText,
+  responsiveSheetText,
+  type ResponsiveSheetText,
   SheetButtonRow,
   SheetControlRow,
   SheetFooter,
@@ -22,7 +25,33 @@ export type ForkSessionSheetViewProps = {
   rows: number;
 };
 
-const LABEL_WIDTH = 8;
+const SOURCE_LABEL_WIDTH = 8;
+const CONTROL_LABEL_WIDTH = 6;
+const CHOOSE_SLOT_CONTENT_ROWS = 5;
+const CHOOSE_SLOT_MIN_HEIGHT = 7;
+const DETAILS_BASE_CONTENT_ROWS = 7;
+const DETAILS_MIN_HEIGHT = 9;
+
+const FORK_ACTION_HELP = {
+  expanded: "↑↓ focus · Enter fork · Esc back",
+  compact: "↑↓ · Enter fork · Esc",
+} as const satisfies ResponsiveSheetText;
+
+const COPY_DIRTY_HELP = {
+  expanded: "Space/Enter toggle · ↑↓ focus · Esc back",
+  compact: "Space/↵ toggle · ↑↓ · Esc back",
+} as const satisfies ResponsiveSheetText;
+
+const DETAILS_HELP_BY_FOCUS = {
+  name: FORK_ACTION_HELP,
+  copyDirty: COPY_DIRTY_HELP,
+  submit: FORK_ACTION_HELP,
+} as const satisfies Record<ForkDetailsScreen["focus"], ResponsiveSheetText>;
+
+const SOURCE_RUNNING_MESSAGE = {
+  expanded: "Source keeps running — copy is read-only.",
+  compact: "Source running; copy is read-only.",
+} as const satisfies ResponsiveSheetText;
 
 export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheetViewProps) {
   const sheetWidth = compactSheetWidth(columns);
@@ -34,8 +63,8 @@ export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheet
         rows={rows}
         width={sheetWidth}
         title="Select session to fork"
-        contentRows={5}
-        minHeight={7}
+        contentRows={CHOOSE_SLOT_CONTENT_ROWS}
+        minHeight={CHOOSE_SLOT_MIN_HEIGHT}
       >
         <SheetLine width={contentWidth}> </SheetLine>
         <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
@@ -43,7 +72,15 @@ export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheet
       </BottomSheetFrameView>
     );
   }
-  return <ForkDetails screen={screen} columns={columns} rows={rows} contentWidth={contentWidth} sheetWidth={sheetWidth} />;
+  return (
+    <ForkDetails
+      screen={screen}
+      columns={columns}
+      rows={rows}
+      contentWidth={contentWidth}
+      sheetWidth={sheetWidth}
+    />
+  );
 }
 
 function ForkDetails({
@@ -66,36 +103,30 @@ function ForkDetails({
     ) : (
       screen.draftTitle.value
     );
-  const helper =
-    focus === "copyDirty"
-      ? contentWidth >= 40
-        ? "Space/Enter toggle · ↑↓ focus · Esc back"
-        : "Space/↵ toggle · ↑↓ · Esc back"
-      : contentWidth >= 32
-        ? "↑↓ focus · Enter fork · Esc back"
-        : "↑↓ · Enter fork · Esc";
-  const extraRows =
-    (screen.sourceAgentRunning ? 1 : 0) +
-    (screen.validationError !== undefined ? 1 : 0);
+  const footerText = responsiveSheetFooterText(contentWidth, DETAILS_HELP_BY_FOCUS[focus]);
+  const extraRows = [
+    screen.sourceAgentRunning,
+    screen.validationError !== undefined,
+  ].filter(Boolean).length;
   return (
     <BottomSheetFrameView
       columns={columns}
       rows={rows}
       width={sheetWidth}
       title="Fork Session"
-      contentRows={7 + extraRows}
-      minHeight={9}
+      contentRows={DETAILS_BASE_CONTENT_ROWS + extraRows}
+      minHeight={DETAILS_MIN_HEIGHT}
     >
       <SheetLabelValue
         width={contentWidth}
         label="Source"
-        labelWidth={LABEL_WIDTH}
+        labelWidth={SOURCE_LABEL_WIDTH}
         value={`${screen.projectLabel} · ${screen.sourceBranch}`}
       />
       <SheetControlRow
         width={contentWidth}
         label="Name"
-        labelWidth={LABEL_WIDTH - 2}
+        labelWidth={CONTROL_LABEL_WIDTH}
         value={titleValue}
         valueCells={screen.draftTitle.value.length + Number(focus === "name")}
         focused={focus === "name"}
@@ -104,16 +135,14 @@ function ForkDetails({
       <SheetControlRow
         width={contentWidth}
         label="Copy"
-        labelWidth={LABEL_WIDTH - 2}
+        labelWidth={CONTROL_LABEL_WIDTH}
         value={`[${screen.copyDirty ? "x" : " "}] uncommitted changes`}
         focused={focus === "copyDirty"}
         mouseTarget={{ kind: "forkSessionAction", actionId: "details.copyDirty" }}
       />
       {screen.sourceAgentRunning ? (
         <SheetMessageLine width={contentWidth} tone="muted">
-          {contentWidth >= 41
-            ? "Source keeps running — copy is read-only."
-            : "Source running; copy is read-only."}
+          {responsiveSheetText(contentWidth, SOURCE_RUNNING_MESSAGE)}
         </SheetMessageLine>
       ) : null}
       {screen.validationError !== undefined ? (
@@ -139,7 +168,7 @@ function ForkDetails({
           },
         ]}
       />
-      <SheetFooter width={contentWidth}>{helper}</SheetFooter>
+      <SheetFooter width={contentWidth}>{footerText}</SheetFooter>
     </BottomSheetFrameView>
   );
 }
