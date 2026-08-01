@@ -9,8 +9,8 @@ import {
   isHookSetupAction,
   isInstallAction,
 } from "../flowUtils.js";
-import { renderOptions, write } from "../io.js";
-import { renderSetupApplyResult, renderSetupPlan } from "../render.js";
+import { setupPresenter } from "../io.js";
+import { overlaySetupActionStatuses } from "../presentation/projectSetupResult.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "../types.js";
 
 export async function runNonInteractiveApply(
@@ -22,24 +22,23 @@ export async function runNonInteractiveApply(
     noBrew: flags.noBrew,
     planConfigWrite: true,
   });
+  const presenter = setupPresenter(deps);
 
   if (flags.dryRun) {
-    const dryRun = await applySetupPlan(
+    const result = await applySetupPlan(
       initial.plan,
       applyOptions(deps, { dryRun: true, execution: initial }),
     );
-    await write(deps, renderSetupPlan(dryRun.plan, renderOptions(deps)));
+    await presenter.write(
+      presenter.renderPlan(
+        overlaySetupActionStatuses(initial.presentationView, result.plan.actions),
+      ),
+    );
     return { code: initial.harnessSelection.source === "unresolved" ? 1 : 0 };
   }
 
   if (initial.harnessSelection.source === "unresolved") {
-    await write(
-      deps,
-      renderSetupApplyResult(initial.plan, {
-        ...renderOptions(deps),
-        selectionRequired: true,
-      }),
-    );
+    await presenter.write(presenter.renderApplyResult(initial.presentationView));
     return { code: 1 };
   }
 
@@ -57,7 +56,7 @@ export async function runNonInteractiveApply(
     const final = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
       noBrew: flags.noBrew,
     });
-    await write(deps, renderSetupApplyResult(final.plan, renderOptions(deps)));
+    await presenter.write(presenter.renderApplyResult(final.presentationView));
     return { code: 1 };
   }
 
@@ -66,7 +65,7 @@ export async function runNonInteractiveApply(
     planConfigWrite: true,
   });
   if (!coreReadyForConfigWrite(refreshed.plan)) {
-    await write(deps, renderSetupApplyResult(refreshed.plan, renderOptions(deps)));
+    await presenter.write(presenter.renderApplyResult(refreshed.presentationView));
     return { code: 1 };
   }
 
@@ -79,7 +78,11 @@ export async function runNonInteractiveApply(
     }),
   );
   if (writeResult.failedAction !== undefined) {
-    await write(deps, renderSetupApplyResult(writeResult.plan, renderOptions(deps)));
+    const failedView = overlaySetupActionStatuses(
+      refreshed.presentationView,
+      writeResult.plan.actions,
+    );
+    await presenter.write(presenter.renderApplyResult(failedView));
     return { code: 1 };
   }
 
@@ -105,7 +108,7 @@ export async function runNonInteractiveApply(
   const final = await collectSetupPlanForCommand("apply", options, reprobeDeps, {
     noBrew: flags.noBrew,
   });
-  await write(deps, renderSetupApplyResult(final.plan, renderOptions(deps)));
+  await presenter.write(presenter.renderApplyResult(final.presentationView));
   return {
     code: trackingResult.failedAction === undefined && final.plan.summary.requiredOk ? 0 : 1,
   };

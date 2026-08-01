@@ -57,6 +57,7 @@
     "@station/runtime": "workspace:*",
     "@station/scripted-harness": "workspace:*",
     "@station/setup-core": "workspace:*",
+    "@station/setup-messages": "workspace:*",
     "@station/terminal": "workspace:*",
     "@station/tmux": "workspace:*",
     "@station/worktrunk": "workspace:*",

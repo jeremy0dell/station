@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolveSetupMessage } from "@station/setup-messages";
 import { describe, expect, it } from "vitest";
 import { resolveSetupHarnessSelection } from "../../src/commands/setup/harnessSelection.js";
 import type {
@@ -9,6 +11,17 @@ import type {
 import { buildSetupPlan, buildSetupPlans } from "../../src/commands/setup/planner.js";
 
 describe("setup plan projection", () => {
+  it("keeps the machine projector independent from human message resolution", () => {
+    const source = readFileSync(
+      new URL("../../src/commands/setup/presentation/projectCliSetupPlan.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toContain("@station/setup-messages");
+    expect(source).not.toContain("resolveSetupMessage");
+    expect(source).not.toContain("ProjectSetupView");
+  });
+
   it("binds every projected production mutation to semantic execution authority", () => {
     const currentFacts = facts({
       config: {
@@ -39,6 +52,16 @@ describe("setup plan projection", () => {
         (operation) => operation.kind === "activate-observer-config",
       ),
     ).toBe(true);
+    expect(built.presentationView.checks.find((check) => check.id === "harness")).toMatchObject({
+      label: { id: "label.agent-cli" },
+      explanation: { id: "check.harness-inferred" },
+    });
+    expect(
+      built.presentationView.checks
+        .flatMap((check) => check.details)
+        .some((detail) => detail.label.id === "detail.default-agent"),
+    ).toBe(true);
+    expect(JSON.parse(JSON.stringify(built.compatibilityPlan))).toEqual(built.compatibilityPlan);
   });
   it("reports all core checks ready and no selected actions", () => {
     const plan = buildSetupPlan(facts());
@@ -1095,6 +1118,99 @@ describe("setup plan projection", () => {
       status: "ok",
       message: "Core STATION config is ready; projects are added explicitly in STATION.",
     });
+  });
+
+  it("uses human agent wording without changing the legacy machine message", () => {
+    const built = buildSetupPlans(
+      facts({
+        harnesses: harnesses([]),
+        config: { status: "missing", path: "/tmp/config.toml", message: "Config missing." },
+      }),
+    );
+    const machine = built.compatibilityPlan.checks.find((check) => check.id === "harness");
+    const human = built.presentationView.checks.find((check) => check.id === "harness");
+
+    expect(machine?.message).toContain("supported harness CLI");
+    expect(
+      resolveSetupMessage(human?.explanation ?? { id: "check.harness-none-available" }),
+    ).toContain("supported agent CLI");
+  });
+
+  const base = facts();
+  it.each([
+    ["ready configured setup", facts()],
+    [
+      "missing required tools",
+      facts({
+        worktrunk: { status: "missing", command: "wt", message: "Worktrunk missing." },
+        tmux: { status: "missing", command: "tmux", message: "tmux missing." },
+      }),
+    ],
+    [
+      "ambiguous agents",
+      facts({
+        harnesses: harnesses(["codex", "opencode"]),
+        config: { status: "missing", path: "/tmp/config.toml", message: "Config missing." },
+      }),
+    ],
+    [
+      "unavailable configured default",
+      facts({
+        harnesses: harnesses(["opencode"]),
+        config: validConfigFact({
+          configuredHarnesses: ["codex", "opencode"],
+          configuredHookHarnesses: ["opencode"],
+        }),
+      }),
+    ],
+    [
+      "missing socket evidence",
+      facts({ socketEvidence: { status: "missing", command: "/usr/bin/lsof" } }),
+    ],
+    [
+      "launcher PATH mismatch",
+      facts({
+        launchers: {
+          ...base.launchers,
+          station: {
+            ...base.launchers.station,
+            source: "installed",
+            resolvedPath: "/opt/station/stn",
+          },
+          ingress: {
+            ...base.launchers.ingress,
+            source: "installed",
+            resolvedPath: "/opt/station/stn-ingress",
+          },
+          tmuxPopup: {
+            ...base.launchers.tmuxPopup,
+            source: "installed",
+            resolvedPath: "/opt/station/stn-tmux-popup",
+          },
+        },
+      }),
+    ],
+    [
+      "harness tracking drift",
+      facts({
+        harnessTracking: [
+          { harnessId: "codex", capability: "supported", requested: true, installed: false },
+        ],
+      }),
+    ],
+    [
+      "invalid config",
+      facts({
+        config: {
+          status: "invalid",
+          path: "/tmp/config.toml",
+          source: "schema_version = 1\n[defaults\n",
+          message: "STATION config is not safe to update.",
+        },
+      }),
+    ],
+  ] as const)("preserves the exact main JSON fixture for %s", (_name, input) => {
+    expect(JSON.stringify(buildSetupPlan(input))).toMatchSnapshot();
   });
 });
 

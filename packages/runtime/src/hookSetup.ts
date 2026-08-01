@@ -584,9 +584,11 @@ export function assignBackupPaths(
 }
 
 export function commandLine(args: readonly string[]): string {
-  return args.map(shellQuote).join(" ");
+  return args.map((arg) => shellQuote(arg)).join(" ");
 }
 
-export function shellQuote(value: string): string {
-  return /^[A-Za-z0-9_./:=@+-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+export function shellQuote(value: string, force = false): string {
+  return !force && /^[A-Za-z0-9_./:=@+-]+$/.test(value)
+    ? value
+    : `'${value.replaceAll("'", "'\\''")}'`;
 }

@@ -1,9 +1,12 @@
 import { access, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { SafeError } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
+  type RuntimeSafeError,
   runExternalCommand,
+  safeErrorFromUnknown,
 } from "@station/runtime";
 import type {
   SetupOperation,
@@ -40,7 +43,7 @@ export type ApplySetupPlanOptions = {
   showCommandOutput?: boolean;
   onActionStart?: (action: SetupAction) => void | Promise<void>;
   onActionComplete?: (action: SetupAction) => void | Promise<void>;
-  onActionFailed?: (action: SetupAction) => void | Promise<void>;
+  onActionFailed?: (action: SetupAction, error: SafeError) => void | Promise<void>;
   operationBindings?: readonly SetupOperationBinding[];
   executeOperation?: SetupOperationExecutor;
 };
@@ -92,7 +95,7 @@ export async function applySetupPlan(
       const failed = { ...action, status: "failed" as const };
       failedAction ??= failed;
       failedOperation ??= outcome;
-      await options.onActionFailed?.(failed);
+      await options.onActionFailed?.(failed, outcome.error);
       actions.push(failed);
       if (
         binding.operation.kind === "prepare-harness-tracking" ||
@@ -123,16 +126,23 @@ export async function applySetupPlan(
       const completed = { ...action, status: "completed" as const };
       await options.onActionComplete?.(completed);
       actions.push(completed);
-    } catch {
+    } catch (error) {
       const failed = { ...action, status: "failed" as const };
       failedAction ??= failed;
-      await options.onActionFailed?.(failed);
+      const safeError = safeErrorFromUnknown(error, setupActionFailed);
+      await options.onActionFailed?.(failed, safeError);
       actions.push(failed);
       return applyResult(plan, actions, operationOutcomes, failedAction, failedOperation, true);
     }
   }
   return applyResult(plan, actions, operationOutcomes, failedAction, failedOperation, false);
 }
+
+const setupActionFailed: RuntimeSafeError = {
+  tag: "SetupActionError",
+  code: "SETUP_ACTION_FAILED",
+  message: "Setup could not apply the selected action.",
+};
 
 function completedAction(action: SetupAction, outcome: SetupOperationOutcome): SetupAction {
   if (
