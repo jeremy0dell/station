@@ -7,6 +7,7 @@ import type {
   PendingStartAgentRow,
 } from "../state/localRows.js";
 import type { TuiViewState } from "../state/types.js";
+import { matchesDashboardOptimisticSearch } from "./dashboardSearchProjection.js";
 import {
   type DashboardSessionRow,
   type KeyedChoice,
@@ -137,7 +138,17 @@ export function selectDashboardItems(
     }
     const projectLocalRows = localRows
       .filter((row) => row.projectId === group.project.id)
-      .filter((row) => localRowMatchesSearch(row, group.project, state.searchQuery));
+      .filter((row) =>
+        matchesDashboardOptimisticSearch(
+          {
+            title: row.title,
+            branch: row.branch,
+            projectLabel: group.project.label,
+            pendingHarnessProvider: row.status === "pending" ? row.harnessProvider : undefined,
+          },
+          state.searchQuery,
+        ),
+      );
     const rows = mergeRowsAndCreateSessionLocalRows(group.rows, projectLocalRows, state);
     if (rows.length === 0) {
       items.push({
@@ -259,19 +270,4 @@ function rowBranch(row: GroupDashboardRow): string {
 
 function rowId(row: GroupDashboardRow): string {
   return row.type === "session" ? row.row.id : row.row.localId;
-}
-
-function localRowMatchesSearch(
-  row: DashboardCreateSessionLocalRow,
-  project: ProjectView,
-  searchQuery: string,
-): boolean {
-  const query = searchQuery.trim().toLocaleLowerCase();
-  if (query.length === 0) {
-    return true;
-  }
-  const harnessProvider = row.status === "pending" ? (row.harnessProvider ?? "") : "";
-  return [row.title, row.branch, project.label, harnessProvider].some((value) =>
-    value.toLocaleLowerCase().includes(query),
-  );
 }

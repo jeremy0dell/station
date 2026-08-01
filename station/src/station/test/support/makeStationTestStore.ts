@@ -1,7 +1,12 @@
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
-import { createTuiStore, type TuiFolderService, type TuiStore } from "@station/dashboard-core";
+import {
+  createTuiStore,
+  legacySearchExperience,
+  type TuiFolderService,
+  type TuiStore,
+} from "@station/dashboard-core";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import { FakeStationSource } from "./fakeStationSource.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";
@@ -33,6 +38,7 @@ export function makeStationTestStore(options: MakeStationTestStoreOptions = {}):
   const store = createTuiStore({
     source,
     service,
+    dashboardSearchExperience: legacySearchExperience,
     ...(snapshot === undefined || options.seedInitialSnapshot === false
       ? {}
       : { initialSnapshot: snapshot }),

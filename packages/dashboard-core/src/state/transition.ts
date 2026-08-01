@@ -1,4 +1,8 @@
 import type { ProjectId, StationCommand } from "@station/contracts";
+import {
+  type DashboardSearchExperience,
+  legacySearchExperience,
+} from "./experiences/dashboardSearch.js";
 import type { TuiKey } from "./keys.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
@@ -12,7 +16,6 @@ import { handleProjectSettingsKey } from "./screens/projectSettings.js";
 import { handleProjectSettingsPickerKey } from "./screens/projectSettingsPicker.js";
 import { handleRemoveWorktreeKey } from "./screens/removeWorktree.js";
 import { handleRenameSessionKey } from "./screens/renameSession.js";
-import { handleSearchKey } from "./screens/search.js";
 import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
 import { selectionMiddleware } from "./selection/middleware.js";
 import { activeTuiToast, isTuiToastHiddenByScreen } from "./toasts.js";
@@ -42,6 +45,7 @@ export function handleTuiKey(
   state: TuiState,
   key: TuiKey,
   context: TuiRuntimeContext = { cwd: process.cwd(), homeDir: process.env.HOME ?? "" },
+  dashboardSearchExperience: DashboardSearchExperience = legacySearchExperience,
 ): TuiTransition {
   if (key.ctrl === true && key.input === "c") {
     return {
@@ -73,11 +77,11 @@ export function handleTuiKey(
 
   switch (state.screen.name) {
     case "dashboard":
-      return handleDashboardKey(state, key, context);
+      return handleDashboardKey(state, key, context, dashboardSearchExperience);
     case "help":
       return handleHelpKey(state, key);
     case "search":
-      return handleSearchKey(state, key);
+      return dashboardSearchExperience.handleKey(state, key);
     case "projectCollapse":
       return handleProjectCollapseKey(state, key);
     case "projectSettingsPicker":

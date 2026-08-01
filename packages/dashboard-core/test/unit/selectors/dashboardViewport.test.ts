@@ -70,6 +70,18 @@ describe("dashboard viewport selector", () => {
     ).toEqual(["ses_wt_web_working", "ses_wt_web_attention", "ses_wt_web_exited"]);
   });
 
+  it("reports session-row overflow independently of project chrome", () => {
+    const snapshot = createDashboardSnapshot();
+    const viewport = selectDashboardViewport(snapshot, createInitialTuiState({ terminalRows: 10 }));
+
+    expect(viewport.sessionOverflow).toEqual({
+      above: 0,
+      below: 5,
+      visible: 2,
+      total: 7,
+    });
+  });
+
   it("uses only viewport-visible sessions for row choices", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
@@ -294,6 +306,48 @@ describe("dashboard viewport selector", () => {
       const items = selectDashboardItems(snapshot, { ...state, searchQuery });
       expect(items.some((item) => item.type === "createLocalRow")).toBe(true);
     }
+  });
+
+  it("searches only pending optimistic rows by their harness", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      searchQuery: "  CoDeX  ",
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "local_create_pending_harness",
+            projectId: "web",
+            title: "Pending launch",
+            branch: "station-pending-harness",
+            harnessProvider: "codex",
+            createdAt: "2026-05-31T12:00:00.000Z",
+          },
+        ],
+        failedCreate: [
+          {
+            localId: "local_create_failed_harness",
+            projectId: "web",
+            title: "Failed launch",
+            branch: "station-failed-harness",
+            error: {
+              tag: "ClientObserverError",
+              code: "PREPARE_FAILED",
+              message: "Harness preparation failed.",
+            },
+            expiresAt: Date.now() + 4_000,
+          },
+        ],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+
+    expect(
+      selectDashboardItems(snapshot, state).flatMap((item) =>
+        item.type === "createLocalRow" ? [item.row.localId] : [],
+      ),
+    ).toEqual(["local_create_pending_harness"]);
   });
 
   it("renders one observer row when branch metadata changes but the session title stays stable", () => {

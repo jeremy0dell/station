@@ -10,6 +10,17 @@ import { createStationStubObserverService } from "./stubObserverService.js";
 import { createStationViewStore } from "./stationViewStore.js";
 
 describe("createStationViewStore", () => {
+  it("composes the legacy dashboard search experience", () => {
+    const store = makeStore();
+
+    store.getState().handleKey({ input: "/" });
+    store.getState().handleKey({ input: "pty" });
+    store.getState().handleKey({ input: "\r", return: true });
+
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.getState().searchQuery).toBe("pty");
+  });
+
   it("routes row activation through the stubbed command service with real pending state", async () => {
     const store = makeStore();
     const slot = slotForRow(store, "ses_wt_station_none");
