@@ -31,8 +31,6 @@ if [ ! -f "$CLI" ]; then
   exit 1
 fi
 
-mkdir -p "$DS/observer" "$SOCKET_DIR"
-
 if [ "$COMMAND" = "stop" ]; then
   # Graceful stop can hang mid-reconcile, so finish with path-scoped SIGKILLs
   # against only this worktree's isolated observer and persistent host.
@@ -48,6 +46,46 @@ if [ "$COMMAND" != "start" ] && [ "$COMMAND" != "dev" ]; then
   echo "Usage: $0 [start|dev|--hot|stop]" >&2
   exit 1
 fi
+
+mkdir -p "$DS/observer"
+
+# This wrapper owns only its checkout-keyed directory, so it may repair that
+# directory while the generic Observer startup must reject uncertain paths.
+python3 - "$SOCKET_DIR" <<'PY'
+import os, stat, sys
+
+path = sys.argv[1]
+old_umask = os.umask(0)
+try:
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        pass
+finally:
+    os.umask(old_umask)
+
+flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+try:
+    descriptor = os.open(path, flags)
+except OSError as error:
+    raise SystemExit(f"Devbox socket path is not a safe directory: {path}: {error}") from error
+
+try:
+    metadata = os.fstat(descriptor)
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise SystemExit(f"Devbox socket path is not a directory: {path}")
+    if metadata.st_uid != os.geteuid():
+        raise SystemExit(f"Devbox socket directory is not owned by the current user: {path}")
+    os.fchmod(descriptor, 0o700)
+    repaired = os.fstat(descriptor)
+    current = os.lstat(path)
+    if (current.st_dev, current.st_ino) != (repaired.st_dev, repaired.st_ino):
+        raise SystemExit(f"Devbox socket directory changed while it was being prepared: {path}")
+    if not stat.S_ISDIR(current.st_mode) or stat.S_IMODE(repaired.st_mode) != 0o700:
+        raise SystemExit(f"Devbox socket directory could not be secured to mode 0700: {path}")
+finally:
+    os.close(descriptor)
+PY
 
 # Build the isolated config from the real one: durable observer state relocated
 # to .dev-state and sockets relocated to a short temp path. Everything else
