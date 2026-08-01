@@ -5,11 +5,12 @@ import type {
   DashboardViewportItem,
 } from "../../selectors/dashboardViewport.js";
 
-export { dashboardFooterLabel } from "../../state/keymap.js";
-
+import { dashboardFooterLabel } from "../../state/keymap.js";
 import type { DashboardFocus, TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
-import type { RowGridRowInput } from "../WorktreeRow/layout.js";
+import type { RowGridLayout, RowGridRowInput } from "../WorktreeRow/layout.js";
 import { worktreeRowGridInput, worktreeStyleRowGridInput } from "../WorktreeRow/rowInput.js";
+
+export { dashboardFooterLabel };
 
 export type DashboardHeaderStatus = {
   full: string;
@@ -21,6 +22,52 @@ export type TopRowWidgetText = {
   /** Narrower form tried before the strip starts dropping widgets outright. */
   compact?: string;
 };
+
+export type DashboardTableHeaderModel =
+  | { kind: "columns"; layout: RowGridLayout }
+  | { kind: "aboveOverflow"; overflow: DashboardSessionOverflow }
+  | { kind: "empty" };
+
+export function dashboardTableHeaderModel({
+  layout,
+  overflow,
+}: {
+  layout: RowGridLayout | undefined;
+  overflow: DashboardSessionOverflow;
+}): DashboardTableHeaderModel {
+  // The position cue owns the shared row whenever sessions are hidden above.
+  if (overflow.above > 0) {
+    return { kind: "aboveOverflow", overflow };
+  }
+  if (layout !== undefined) {
+    return { kind: "columns", layout };
+  }
+  return { kind: "empty" };
+}
+
+export type DashboardFooterModel =
+  | { kind: "loading"; text: string }
+  | { kind: "dashboard"; text: string };
+
+export function dashboardFooterModel({
+  columns,
+  quitHint,
+  hasSnapshot,
+  firstRun,
+}: {
+  columns: number;
+  quitHint: string;
+  hasSnapshot: boolean;
+  firstRun: boolean;
+}): DashboardFooterModel {
+  if (!hasSnapshot) {
+    return { kind: "loading", text: quitHint };
+  }
+  return {
+    kind: "dashboard",
+    text: dashboardFooterLabel({ columns, quitHint, firstRun }),
+  };
+}
 
 /**
  * The frame's right-embedded strip: observer status (when present) then the

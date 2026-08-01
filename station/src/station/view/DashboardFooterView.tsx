@@ -2,7 +2,7 @@ import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import {
   activeTuiToast,
-  dashboardFooterLabel,
+  dashboardFooterModel,
   isTuiToastHiddenByScreen,
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
@@ -21,18 +21,16 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
   const snapshot = useStore(store, (state) => state.snapshot);
   const quitHint = useStore(store, selectFooterQuitHint);
   const contentColumns = Math.max(1, Math.floor(columns));
-  const label =
-    snapshot === undefined
-      ? quitHint
-      : dashboardFooterLabel({
-          columns: contentColumns,
-          quitHint,
-          firstRun: snapshot.projects.length === 0,
-        });
+  const model = dashboardFooterModel({
+    columns: contentColumns,
+    quitHint,
+    hasSnapshot: snapshot !== undefined,
+    firstRun: snapshot !== undefined && snapshot.projects.length === 0,
+  });
 
   return (
-    <text fg={snapshot === undefined ? STATION_COLORS.gray : STATION_COLORS.foreground}>
-      {truncateCells(label, contentColumns)}
+    <text fg={model.kind === "loading" ? STATION_COLORS.gray : STATION_COLORS.foreground}>
+      {truncateCells(model.text, contentColumns)}
     </text>
   );
 }
