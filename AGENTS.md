@@ -33,6 +33,10 @@ Assume the reviewer is technically capable but may not know Station's internal a
 
 STATION is terminal/TUI-first. Ignore generic web, frontend, site, image, and browser guidance unless the task explicitly targets a web frontend or browser-rendered UI.
 
+## Module Organization
+
+When a module’s name cannot clearly describe what it owns, identify its independent outputs and give each one a module named after that responsibility. Extract only genuinely shared mechanics; do not group unrelated behavior merely because it belongs to the same feature.
+
 ## Code Comments
 
 Prefer self-documenting code. Add a comment when it protects non-obvious intent that future edits could plausibly break: ordering constraints, fallbacks, invariants, cancellation or concurrency behavior, external tool quirks, boundary translations, or other concerns in that realm.
