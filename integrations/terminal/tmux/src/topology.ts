@@ -11,6 +11,7 @@ export type TmuxWorkbenchConfig = {
   popupHeight: string;
   popupPosition: string;
   popupScope: TmuxPopupScope;
+  popupStatusBar: boolean;
 };
 
 export type TmuxSessionOption = {
@@ -27,6 +28,7 @@ export const defaultTmuxWorkbenchConfig: TmuxWorkbenchConfig = {
   popupHeight: "50%",
   popupPosition: "C",
   popupScope: "server",
+  popupStatusBar: false,
 };
 
 export const defaultTmuxWorkbenchSessionOptions: readonly TmuxSessionOption[] = [
@@ -45,6 +47,7 @@ export function resolveTmuxWorkbenchConfig(config: TmuxConfig = {}): TmuxWorkben
     popupHeight: config.popupHeight ?? defaultTmuxWorkbenchConfig.popupHeight,
     popupPosition: config.popupPosition ?? defaultTmuxWorkbenchConfig.popupPosition,
     popupScope: config.popupScope ?? defaultTmuxWorkbenchConfig.popupScope,
+    popupStatusBar: config.popupStatusBar ?? defaultTmuxWorkbenchConfig.popupStatusBar,
   };
 }
 

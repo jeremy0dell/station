@@ -115,15 +115,15 @@ server. Reloading after a key change can leave the old key active until
 `tmux unbind-key <old-key>` or a server restart; Station does not unbind a key
 whose ownership it cannot prove.
 
-For a compiled install with default popup geometry, the generated fast command
+For a compiled install with the default popup settings, the generated fast command
 uses the canonical installed directory, the exact sibling `stn-tmux-popup`
 alias, and the resolved tmux executable. First use can invoke that full CLI
 fallback to initialize the hidden UI; a valid warm use directly attaches or
 toggles it without loading config or starting Bun or the Observer. Configured
-custom geometry and `popup_scope = "client"` use the config-aware sibling alias
-instead so every open reads its geometry and ownership scope; setup with an
-explicit `--config` path also uses that alias so an existing hidden UI cannot
-mask a config change. Rerun `stn setup` after changing either setting so the
+custom geometry, `popup_scope = "client"`, and `popup_status_bar = true` use the
+config-aware sibling alias instead so every open reads those settings; setup with
+an explicit `--config` path also uses that alias so an existing hidden UI cannot
+mask a config change. Rerun `stn setup` after changing any of these settings so the
 managed binding is regenerated. Controlled
 binding failures are silent, return success to tmux, and show at most a
 temporary status-line message. Run `stn popup` directly for ordinary diagnostic
