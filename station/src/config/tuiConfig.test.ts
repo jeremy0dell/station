@@ -27,7 +27,7 @@ describe("loadStationTuiConfig", () => {
 
   it("uses the legacy search experience when the STATION config is absent", async () => {
     await expect(loadStationTuiConfig({ path: "/definitely/not/here/config.toml" })).resolves.toEqual({
-      dashboardSearchExperience: legacySearchExperience,
+      composition: { dashboardSearchExperience: legacySearchExperience },
     });
   });
 
@@ -75,7 +75,7 @@ enabled = true
         widgets: [{ type: "fleet" }, { type: "prs" }],
       },
       configPath,
-      dashboardSearchExperience: legacySearchExperience,
+      composition: { dashboardSearchExperience: legacySearchExperience },
     });
   });
 
@@ -86,7 +86,7 @@ enabled = true
 
     const result = await loadStationTuiConfig({ path: configPath });
 
-    expect(result.dashboardSearchExperience).toBe(persistentFilterExperience);
+    expect(result.composition.dashboardSearchExperience).toBe(persistentFilterExperience);
   });
 
   it("surfaces a warning when [tui] is invalid and widgets fall back", async () => {
@@ -121,7 +121,7 @@ root = "${projectRoot}"
     const result = await loadStationTuiConfig({ path: configPath });
 
     expect(result.config).toBeUndefined();
-    expect(result.dashboardSearchExperience).toBe(legacySearchExperience);
+    expect(result.composition.dashboardSearchExperience).toBe(legacySearchExperience);
     expect(result.warning).toContain("[tui]");
   });
 
@@ -134,7 +134,7 @@ root = "${projectRoot}"
     const result = await loadStationTuiConfig({ path: configPath });
 
     expect(result.config).toBeUndefined();
-    expect(result.dashboardSearchExperience).toBe(legacySearchExperience);
+    expect(result.composition.dashboardSearchExperience).toBe(legacySearchExperience);
     expect(result.warning).toContain("widgets disabled");
   });
 

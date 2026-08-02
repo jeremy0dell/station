@@ -91,7 +91,7 @@ export async function runDashboardMain(): Promise<void> {
     source: client.state,
     service: client.service,
     clientLabel: "station",
-    dashboardSearchExperience: tuiConfig.dashboardSearchExperience,
+    ...tuiConfig.composition,
     onExit: exit,
     initialState: {
       widgets: tuiConfig.config?.widgets ?? [],

@@ -249,7 +249,7 @@ async function startStationMain(
     overlayWidthPercent: stationConfig.config.overlay_width_percent,
     overlayHeightPercent: stationConfig.config.overlay_height_percent,
     automations: stationConfig.config.automations,
-    dashboardSearchExperience: tuiConfig.dashboardSearchExperience,
+    ...tuiConfig.composition,
     clipboardEffects,
     openExternalUrl,
     ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),
