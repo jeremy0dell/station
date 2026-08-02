@@ -58,8 +58,24 @@ describe("setup guided feedback e2e", () => {
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toContain("Link STATION launchers globally?");
+      expect(result.stdout).toContain(`Runs: pnpm --dir ${process.cwd()} station:link`);
+      expect(result.stdout).toContain("Does not edit shell startup files.");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
+      expect(result.stdout).toContain(
+        "Prepares Station-managed lifecycle hook entries for ~/.config/station/config.toml.",
+      );
       expect(result.stdout).toContain("Install Codex tracking?");
+      expect(result.stdout).toContain("Does not sign in, bypass provider trust");
+      expect(result.stdout).toContain("unrelated hooks.");
+      expect(result.stdout).toContain("Writes selected settings to ~/.config/station/config.toml");
+      expect(result.stdout).toContain("add the current repository as a project.");
+      expect(result.stdout).toContain(
+        "May update ~/.zshrc. Station will not create it if missing.",
+      );
+      expect(result.stdout).toContain(
+        "Ensures Station’s prefix + Space binding is saved in ~/.tmux.conf",
+      );
+      expect(result.stdout).toContain("Other tmux configuration is preserved.");
       expect(result.stdout).not.toContain("Applying: Write STATION config");
       expect(result.stdout).not.toContain(`Applying: Write STATION config (${fixture.configPath})`);
       expect(result.stdout).toContain("Selected changes");

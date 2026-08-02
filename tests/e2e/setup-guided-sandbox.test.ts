@@ -88,12 +88,24 @@ describe("manual guided setup sandbox", () => {
       expect(opening).toContain("Required tools");
       expect(opening).toContain("Install Worktrunk with Homebrew.");
       expect(opening).toContain("Install git-delta with Homebrew.");
+      for (const formula of ["worktrunk", "tmux", "bun", "diffnav", "git-delta"]) {
+        expect(opening).toContain(`https://formulae.brew.sh/formula/${formula}`);
+      }
       expect(opening).not.toContain("Agent selection: unresolved");
       expect(opening).not.toContain("STATION state directory");
       expect(opening).not.toContain("MISSING");
       expect(opening).not.toContain("Recommended");
       expect(opening).not.toContain("Actions");
       expect(opening).not.toContain(root);
+      expect(result.stdout).toContain("Does not edit shell startup files.");
+      expect(result.stdout).toContain("Writes selected settings to ~/.config/station/config.toml");
+      expect(result.stdout).toContain("Does not add the current repository as a project.");
+      expect(result.stdout).toContain(
+        "May update ~/.zshrc. Station will not create it if missing.",
+      );
+      expect(result.stdout).toContain("Other tmux configuration is preserved.");
+      expect(result.stdout).toContain("Does not sign in, bypass provider trust");
+      expect(result.stdout).toContain("unrelated hooks.");
       for (const label of ["Claude Code", "Codex", "Cursor Agent", "OpenCode", "Pi"]) {
         expect(result.stdout).toContain(`Starting: Install ${label}.`);
         expect(result.stdout).toContain(`Finished: Install ${label}.`);

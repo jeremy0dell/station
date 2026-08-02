@@ -146,7 +146,9 @@ The default `first-run` profile has required tools but no agent CLI. `multi` sta
 OpenCode, `missing-tools` starts with those agents but no required tools, and `everything-missing`
 exercises both installer stages. During UX review, the guided opening should contain only its trust
 copy, compact inspection progress, and selected prerequisite proposal; the
-Core/Recommended/Actions/Next matrix belongs to `stn setup check`. Use `--keep` to retain the printed root, edit any shim under its
+Core/Recommended/Actions/Next matrix belongs to `stn setup check`. Verify selected Homebrew tools
+link to their official Formulae pages and each later consent names its command or home-relative
+target plus the important non-effects. Use `--keep` to retain the printed root, edit any shim under its
 `bin/` directory from another terminal, inspect `external-commands.log`, and rerun its `run-setup`
 launcher. `--prepare-only` creates that environment without starting setup. Without `--keep`, the
 root is removed after completion or cancellation; no profile reads credentials, provider config,

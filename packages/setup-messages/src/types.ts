@@ -181,6 +181,7 @@ export type SetupMessageArguments = {
   "guided.invalid-selection": undefined;
   "guided.required-tools-title": undefined;
   "guided.required-tools-intro": undefined;
+  "guided.required-tool-source": { url: string };
   "guided.tools-prompt": undefined;
   "guided.no-changes": undefined;
   "guided.harness-select-prompt": undefined;
@@ -199,12 +200,12 @@ export type SetupMessageArguments = {
   "guided.external-success": { label: string };
   "guided.external-failure": { label: string };
   "guided.required-harnesses-unavailable": { harnesses: string };
-  "guided.config-write-prompt": undefined;
+  "guided.config-write-prompt": { path: string };
   "guided.config-not-written": undefined;
   "guided.config-write-failed": undefined;
   "guided.hook-install-failed": undefined;
-  "guided.worktrunk-shell-prompt": undefined;
-  "guided.tmux-popup-prompt": undefined;
+  "guided.worktrunk-shell-prompt": { command: string; path: string };
+  "guided.tmux-popup-prompt": { key: string; path: string };
   "guided.tmux-not-changed": undefined;
   "guided.tmux-not-persisted": undefined;
   "guided.tmux-loaded": { key: string };
@@ -227,9 +228,9 @@ export type SetupMessageArguments = {
   "guided.homebrew-core-required": undefined;
   "guided.homebrew-url": undefined;
   "guided.command-line-tools-hint": undefined;
-  "guided.launcher-link-prompt": undefined;
+  "guided.launcher-link-prompt": { command: string };
   "guided.launcher-link-failed": undefined;
-  "guided.worktrunk-hooks-prompt": undefined;
+  "guided.worktrunk-hooks-prompt": { path: string };
   "guided.tracking-consent-prompt": { label: string };
   "guided.tracking-declined": undefined;
   "guided.no-agent-title": undefined;

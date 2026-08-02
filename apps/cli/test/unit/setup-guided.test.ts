@@ -1222,11 +1222,11 @@ describe("guided setup command", () => {
         activateObserverConfig: noopActivateObserverConfig,
         prompt: {
           async confirm(message) {
-            if (message === "Install or load tmux popup binding?") {
+            if (message.startsWith("Install or load tmux popup binding?")) {
               rejectTmuxPersistence = true;
               return true;
             }
-            return message === "Write and activate core Station config?";
+            return message.startsWith("Write and activate core Station config?");
           },
           async selectMany() {
             return ["codex"];
@@ -1983,7 +1983,8 @@ describe("guided setup command", () => {
     expect(output).toContain("It will ask before installing tools or updating configuration.");
     expect(output).toContain("Checking this project and its tools...");
     expect(output).toContain("Required tools");
-    expect(output).toContain("Station proposes:\n- Install diffnav with Homebrew.");
+    expect(output).toContain("Homebrew will install:\n- Install diffnav with Homebrew.");
+    expect(output).toContain("Source: https://formulae.brew.sh/formula/diffnav");
     expect(output).not.toContain("Agent selection: unresolved");
     expect(output).not.toContain("STATION state directory");
     expect(output).not.toContain("MISSING");
@@ -2281,8 +2282,8 @@ function prompt(input: {
 const popupInstallPrompt: GuidedPromptFixture = {
   async confirm(message) {
     return (
-      message === "Write and activate core Station config?" ||
-      message === "Install or load tmux popup binding?"
+      message.startsWith("Write and activate core Station config?") ||
+      message.startsWith("Install or load tmux popup binding?")
     );
   },
   async selectMany() {

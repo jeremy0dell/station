@@ -6,6 +6,7 @@ import {
   type SetupOperationOutcome,
   type SetupOperationProgress,
   type SetupSessionState,
+  type SetupToolInstallOperation,
   type SupportedHarnessId,
 } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
@@ -38,6 +39,14 @@ type GuidedHarnessSelection =
   | { readonly kind: "selected"; readonly harnessIds: SupportedHarnessId[] }
   | { readonly kind: "cancelled" }
   | { readonly kind: "blocked" };
+
+const homebrewFormulaUrls = {
+  worktrunk: "https://formulae.brew.sh/formula/worktrunk",
+  tmux: "https://formulae.brew.sh/formula/tmux",
+  bun: "https://formulae.brew.sh/formula/bun",
+  diffnav: "https://formulae.brew.sh/formula/diffnav",
+  "git-delta": "https://formulae.brew.sh/formula/git-delta",
+} satisfies Record<SetupToolInstallOperation["tool"], string>;
 
 /**
  * ADAPTER
@@ -272,11 +281,9 @@ async function driveGuidedSession(
   }
 
   let linkStationLaunchers = false;
-  if (shouldPromptLauncherLink(requireFacts(composition))) {
-    const answer = await confirm(
-      composition,
-      presenter.prompt(setupMessageRef("guided.launcher-link-prompt")),
-    );
+  const launcherFacts = requireFacts(composition);
+  if (shouldPromptLauncherLink(launcherFacts)) {
+    const answer = await confirm(composition, launcherLinkPrompt(launcherFacts, presenter));
     if (answer.kind === "cancelled") return { code: 1 };
     linkStationLaunchers = answer.value;
   }
@@ -285,7 +292,11 @@ async function driveGuidedSession(
   if (shouldPromptWorktrunkHooks(facts)) {
     const answer = await confirm(
       composition,
-      presenter.prompt(setupMessageRef("guided.worktrunk-hooks-prompt")),
+      presenter.prompt(
+        setupMessageRef("guided.worktrunk-hooks-prompt", {
+          path: homeDisplayPath(facts.configPath, facts.homeDir),
+        }),
+      ),
     );
     if (answer.kind === "cancelled") return { code: 1 };
     installWorktrunkHooks = answer.value;
@@ -339,9 +350,14 @@ async function driveGuidedSession(
     (operation) => operation.kind === "write-config" && operation.selected,
   );
   if (writesConfig) {
+    const configFacts = requireFacts(composition);
     const answer = await confirm(
       composition,
-      presenter.prompt(setupMessageRef("guided.config-write-prompt")),
+      presenter.prompt(
+        setupMessageRef("guided.config-write-prompt", {
+          path: homeDisplayPath(configFacts.configPath, configFacts.homeDir),
+        }),
+      ),
     );
     if (answer.kind === "cancelled") return { code: 1 };
     if (!answer.value) {
@@ -360,7 +376,7 @@ async function driveGuidedSession(
   if (shellAction !== undefined) {
     const answer = await confirm(
       composition,
-      presenter.prompt(setupMessageRef("guided.worktrunk-shell-prompt")),
+      worktrunkShellPrompt(requireFacts(composition), presenter),
     );
     if (answer.kind === "cancelled") return { code: 1 };
     installWorktrunkShell = answer.value;
@@ -372,7 +388,7 @@ async function driveGuidedSession(
   if (tmuxOperation !== undefined) {
     const answer = await confirm(
       composition,
-      presenter.prompt(setupMessageRef("guided.tmux-popup-prompt")),
+      tmuxPopupPrompt(requireFacts(composition), presenter),
     );
     if (answer.kind === "cancelled") return { code: 1 };
     configureTmuxPopup = answer.value;
@@ -779,6 +795,50 @@ function renderTmuxFeedback(composition: SetupComposition, requested: boolean): 
   );
 }
 
+function launcherLinkPrompt(facts: SetupFacts, presenter: TextSetupPresenter): string {
+  const command = formatCommand(["pnpm", "--dir", facts.launchers.packageRoot, "station:link"]);
+  return presenter.prompt(setupMessageRef("guided.launcher-link-prompt", { command }));
+}
+
+function worktrunkShellPrompt(facts: SetupFacts, presenter: TextSetupPresenter): string {
+  const integration = facts.worktrunkShellIntegration;
+  const baseCommand = [
+    facts.worktrunk.resolvedPath ?? facts.worktrunk.command,
+    "-y",
+    "config",
+    "shell",
+    "install",
+  ];
+  const command =
+    integration.shell === undefined ? baseCommand : [...baseCommand, integration.shell];
+  return presenter.prompt(
+    setupMessageRef("guided.worktrunk-shell-prompt", {
+      command: formatCommand(command),
+      path:
+        integration.rcPath === undefined
+          ? "the active shell startup file"
+          : homeDisplayPath(integration.rcPath, facts.homeDir),
+    }),
+  );
+}
+
+function tmuxPopupPrompt(facts: SetupFacts, presenter: TextSetupPresenter): string {
+  const key = facts.tmuxBinding.status === "conflict" ? "Space" : facts.tmuxBinding.bindingKey;
+  return presenter.prompt(
+    setupMessageRef("guided.tmux-popup-prompt", {
+      key,
+      path: homeDisplayPath(facts.tmuxBinding.path, facts.homeDir),
+    }),
+  );
+}
+
+function homeDisplayPath(path: string, homeDir: string): string {
+  if (homeDir === "/") return path;
+  if (path === homeDir) return "~";
+  const homePrefix = homeDir.endsWith("/") ? homeDir : `${homeDir}/`;
+  return path.startsWith(homePrefix) ? `~/${path.slice(homePrefix.length)}` : path;
+}
+
 function renderRequiredToolsReview(
   composition: SetupComposition,
   projection: Extract<SetupSessionProjection, { status: "projected" }>,
@@ -790,13 +850,18 @@ function renderRequiredToolsReview(
       action.operationId === undefined ? [] : [[action.operationId, action] as const],
     ),
   );
-  const proposedChanges = operations.map((operation) => {
+  const proposedChanges = operations.flatMap((operation) => {
     const action = actionsByOperationId.get(operation.id);
     const description =
       action === undefined
         ? operationLabel(composition, operation)
         : presenter.text(action.explanation);
-    return `- ${description}`;
+    const source = presenter.text(
+      setupMessageRef("guided.required-tool-source", {
+        url: homebrewFormulaUrls[operation.tool],
+      }),
+    );
+    return [`- ${description}`, source];
   });
   const body = [
     presenter.text(setupMessageRef("guided.required-tools-intro")),

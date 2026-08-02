@@ -326,7 +326,8 @@ export const setupMessageCatalog = {
   },
   "guided.invalid-selection": { terminal: "Choose only values shown in this list." },
   "guided.required-tools-title": { terminal: "Required tools" },
-  "guided.required-tools-intro": { terminal: "Station proposes:" },
+  "guided.required-tools-intro": { terminal: "Homebrew will install:" },
+  "guided.required-tool-source": { terminal: "  Source: {url}" },
   "guided.tools-prompt": { terminal: "Install these required tools?" },
   "guided.no-changes": { terminal: "Required tool changes were declined." },
   "guided.harness-select-prompt": { terminal: "Select agent CLIs to prepare." },
@@ -356,14 +357,23 @@ export const setupMessageCatalog = {
   "guided.required-harnesses-unavailable": {
     terminal: "Required agent CLIs are unavailable: {harnesses}.",
   },
-  "guided.config-write-prompt": { terminal: "Write and activate core Station config?" },
+  "guided.config-write-prompt": {
+    terminal:
+      "Write and activate core Station config?\nWrites selected settings to {path}, then activates the Observer. Does not add the current repository as a project.",
+  },
   "guided.config-not-written": { terminal: "Config was not written." },
   "guided.config-write-failed": { terminal: "Config write failed. Run: stn setup plan" },
   "guided.hook-install-failed": {
     terminal: "Hook install failed. Fix the error above, then run: stn setup",
   },
-  "guided.worktrunk-shell-prompt": { terminal: "Install Worktrunk shell integration?" },
-  "guided.tmux-popup-prompt": { terminal: "Install or load tmux popup binding?" },
+  "guided.worktrunk-shell-prompt": {
+    terminal:
+      "Install Worktrunk shell integration?\nRuns: {command}\nMay update {path}. Station will not create it if missing.",
+  },
+  "guided.tmux-popup-prompt": {
+    terminal:
+      "Install or load tmux popup binding?\nEnsures Station’s prefix + {key} binding is saved in {path} and loaded into the current tmux server when available. Other tmux configuration is preserved.",
+  },
   "guided.tmux-not-changed": { terminal: "The tmux popup binding was not changed." },
   "guided.tmux-not-persisted": {
     terminal: "Tmux popup binding was not persisted. Run stn setup to retry.",
@@ -400,7 +410,7 @@ export const setupMessageCatalog = {
   },
   "guided.homebrew-prompt": {
     terminal:
-      "Install Homebrew now? The official installer may require normal administrator or password interaction.",
+      "Install Homebrew from https://brew.sh now? The official installer may require normal administrator or password interaction.",
   },
   "guided.homebrew-installing": { terminal: "Installing Homebrew..." },
   "guided.homebrew-failed": { terminal: "Homebrew install failed." },
@@ -422,13 +432,20 @@ export const setupMessageCatalog = {
   "guided.command-line-tools-hint": {
     terminal: "Command Line Tools: xcode-select --install",
   },
-  "guided.launcher-link-prompt": { terminal: "Link STATION launchers globally?" },
+  "guided.launcher-link-prompt": {
+    terminal:
+      "Link STATION launchers globally?\nRuns: {command}\nExposes stn, stn-ingress, and stn-tmux-popup. Does not edit shell startup files.",
+  },
   "guided.launcher-link-failed": {
     terminal: "STATION launcher link failed. Continuing with checkout launcher paths.",
   },
-  "guided.worktrunk-hooks-prompt": { terminal: "Install Worktrunk lifecycle hooks?" },
+  "guided.worktrunk-hooks-prompt": {
+    terminal:
+      "Install Worktrunk lifecycle hooks?\nPrepares Station-managed lifecycle hook entries for {path}. Does not enable unrelated hooks.",
+  },
   "guided.tracking-consent-prompt": {
-    terminal: "{label}? Station requires tracking to observe the selected agent’s activity.",
+    terminal:
+      "{label}? Station requires tracking to observe the selected agent’s activity.\nWrites Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable unrelated hooks.",
   },
   "guided.tracking-declined": {
     terminal:

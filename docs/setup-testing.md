@@ -23,8 +23,11 @@ Real-PTY coverage proves immediate Y/N, empty-selection reprompting, narrow-term
 explicit default selection, terminal restoration, and normalized human-only output. The guided
 opening must present a compact inspection step and only selected prerequisite changes; it must not
 render the Core/Recommended/Actions/Next diagnostic matrix owned by the read-only
-`stn setup check` and `stn setup plan` surfaces. Non-TTY coverage proves guided setup exits before
-inspection or mutation.
+`stn setup check` and `stn setup plan` surfaces. Selected Homebrew tools link only to their
+allowlisted official Formulae pages. Later consent prompts expose a shell-safe command or
+home-relative target and bounded effect, while continuing to reject raw operation payloads and
+machine-specific home paths from reviewed transcripts. Non-TTY coverage proves guided setup exits
+before inspection or mutation.
 
 Manual interaction uses the same isolation goals without scripted input:
 

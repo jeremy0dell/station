@@ -26,45 +26,69 @@
 │  Codex
 │
 ◆  Link STATION launchers globally?
+│  Runs: pnpm --dir <CHECKOUT> station:link
+│  Exposes stn, stn-ingress, and stn-tmux-popup. Does not edit shell startup files.
 │  ○ Yes / ● No
 └
 
 ◇  Link STATION launchers globally?
+│  Runs: pnpm --dir <CHECKOUT> station:link
+│  Exposes stn, stn-ingress, and stn-tmux-popup. Does not edit shell startup files.
 │  No
 │
 ◆  Install Worktrunk lifecycle hooks?
+│  Prepares Station-managed lifecycle hook entries for ~/.config/station/config.toml. Does not
+│  enable unrelated hooks.
 │  ○ Yes / ● No
 └
 
 ◇  Install Worktrunk lifecycle hooks?
+│  Prepares Station-managed lifecycle hook entries for ~/.config/station/config.toml. Does not
+│  enable unrelated hooks.
 │  No
 │
 ◆  Install Codex tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
 │  ○ Yes / ● No
 └
 
 ◇  Install Codex tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
 │  Yes
 │
 ◆  Install OpenCode tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
 │  ○ Yes / ● No
 └
 
 ◇  Install OpenCode tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
 │  Yes
 │
 ◆  Write and activate core Station config?
+│  Writes selected settings to ~/.config/station/config.toml, then activates the Observer. Does not
+│  add the current repository as a project.
 │  ○ Yes / ● No
 └
 
 ◇  Write and activate core Station config?
+│  Writes selected settings to ~/.config/station/config.toml, then activates the Observer. Does not
+│  add the current repository as a project.
 │  Yes
 │
 ◆  Install or load tmux popup binding?
+│  Ensures Station’s prefix + Space binding is saved in ~/.tmux.conf and loaded into the current
+│  tmux server when available. Other tmux configuration is preserved.
 │  ○ Yes / ● No
 └
 
 ◇  Install or load tmux popup binding?
+│  Ensures Station’s prefix + Space binding is saved in ~/.tmux.conf and loaded into the current
+│  tmux server when available. Other tmux configuration is preserved.
 │  No
 │
 ◇  Selected changes ──────────────────╮

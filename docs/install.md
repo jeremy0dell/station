@@ -162,9 +162,12 @@ stn tui
 
 Setup uses immediate Y/N controls and navigable agent menus. Guided output starts with a compact
 read-only inspection step, then shows only the current decision or blocker. Before installing
-required tools, it names the selected installations and their mechanism; the complete machine
-inventory remains available through `stn setup check`. Station asks before installing tools or
-updating Station, provider, shell, or tmux configuration. Ctrl-C cancels safely: completed
+required tools, it names the selected installations, links their official Homebrew Formulae pages,
+and identifies the installation mechanism; the complete machine inventory remains available
+through `stn setup check`. Later consent prompts name the command or home-relative target they may
+change and call out important non-effects such as preserving shell files, provider trust, unrelated
+hooks, and explicit project selection. Station asks before installing tools or updating Station,
+provider, shell, or tmux configuration. Ctrl-C cancels safely: completed
 bootstrap, installer, config, hook, shell, or tmux changes remain committed, and rerunning setup
 inspects the current state before continuing. Native Homebrew and agent-installer output remains
 live between explicit Station start and finish boundaries; no Clack prompt or spinner competes for
