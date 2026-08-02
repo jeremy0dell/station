@@ -35,6 +35,28 @@ describe("CLI setup command", () => {
     );
   });
 
+  it("rejects non-TTY guided setup before inspection or mutation", async () => {
+    const chunks: string[] = [];
+    let inspections = 0;
+
+    const result = await runCli(["setup"], {
+      setupDeps: {
+        now: () => {
+          inspections += 1;
+          return new Date("2026-06-08T12:00:00.000Z");
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(inspections).toBe(0);
+    expect(chunks.join("")).toContain("Guided setup requires an interactive terminal.");
+    expect(chunks.join("")).toContain("stn setup plan --json");
+  });
+
   it("returns deterministic JSON for setup check without loading observer config", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");

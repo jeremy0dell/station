@@ -1,0 +1,152 @@
+┌  Station setup
+│
+●  Set up Station for this project.
+│  Station will check the local tools it needs and prepare each step.
+│  It will ask before installing tools or updating configuration.
+│  Full diagnostics are available from this launcher's setup check command.
+│
+◇  Checking this project and its tools...
+│
+◆  Select agent CLIs to prepare.
+│  2 agent choices are available.
+│  Use ↑/↓ to navigate, Space to select, and Enter to continue.
+│  ◻ Codex (0.1.0)
+│  ◻ OpenCode
+└
+◇  Select agent CLIs to prepare.
+│  2 agent choices are available.
+│  Use ↑/↓ to navigate, Space to select, and Enter to continue.
+│  Codex, OpenCode
+│
+◆  Choose the default agent for the new config.
+│  ● Codex (0.1.0)
+│  ○ OpenCode
+└
+◇  Choose the default agent for the new config.
+│  Codex
+│
+◆  Link STATION launchers globally?
+│  Makes stn, stn-ingress, and stn-tmux-popup available from any shell.
+│  Runs this checkout’s station:link package script. Does not edit shell startup files.
+│  ○ Yes / ● No
+└
+
+◇  Link STATION launchers globally?
+│  Makes stn, stn-ingress, and stn-tmux-popup available from any shell.
+│  Runs this checkout’s station:link package script. Does not edit shell startup files.
+│  No
+│
+◆  Install Worktrunk lifecycle hooks?
+│  Prepares Station-managed lifecycle hook entries for ~/.config/station/config.toml. Does not
+│  enable unrelated hooks.
+│  ○ Yes / ● No
+└
+
+◇  Install Worktrunk lifecycle hooks?
+│  Prepares Station-managed lifecycle hook entries for ~/.config/station/config.toml. Does not
+│  enable unrelated hooks.
+│  No
+│
+◆  Install Codex tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
+│  ○ Yes / ● No
+└
+
+◇  Install Codex tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
+│  Yes
+│
+◆  Install OpenCode tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
+│  ○ Yes / ● No
+└
+
+◇  Install OpenCode tracking? Station requires tracking to observe the selected agent’s activity.
+│  Writes Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable
+│  unrelated hooks.
+│  Yes
+│
+◆  Write and activate core Station config?
+│  Writes selected settings to ~/.config/station/config.toml, then activates the Observer. Does not
+│  add the current repository as a project.
+│  ○ Yes / ● No
+└
+
+◇  Write and activate core Station config?
+│  Writes selected settings to ~/.config/station/config.toml, then activates the Observer. Does not
+│  add the current repository as a project.
+│  Yes
+│
+◆  Install or load tmux popup binding?
+│  Assigns tmux prefix + Space to open Station.
+│  Saves Station’s managed binding in ~/.tmux.conf and loads it now when tmux is running. A
+│  user-configured prefix + Space binding is never replaced.
+│  ○ Yes / ● No
+└
+
+◇  Install or load tmux popup binding?
+│  Assigns tmux prefix + Space to open Station.
+│  Saves Station’s managed binding in ~/.tmux.conf and loads it now when tmux is running. A
+│  user-configured prefix + Space binding is never replaced.
+│  No
+│
+◇  Selected changes ──────────────────╮
+│                                     │
+│  Already completed prerequisites    │
+│  - None                             │
+│                                     │
+│  Will apply                         │
+│  - Install Codex tracking           │
+│  - Install OpenCode tracking        │
+│  - Create config directory          │
+│  - Write STATION config             │
+│  - Activate Observer configuration  │
+│                                     │
+├─────────────────────────────────────╯
+│
+◇  Write STATION config
+│
+◆  Write STATION config
+│
+◇  Activating observer configuration...
+│
+◆  Observer configuration active.
+│
+◇  Install Codex tracking
+│
+◆  Install Codex tracking
+│
+◇  Install OpenCode tracking
+│
+◆  Install OpenCode tracking
+Core setup complete. Tracking is prepared for Codex and OpenCode.
+
+Codex may require review of Station’s current hook definition through /hooks; setup did not bypass or verify that review.
+
+Remaining
+
+  WARN      STATION launchers                    These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup; setup will use their current-checkout paths.
+           Station: <CHECKOUT>/bin/stn
+           Ingress: <CHECKOUT>/bin/stn-ingress
+           tmux popup: <CHECKOUT>/integrations/terminal/tmux/bin/stn-popup
+  SKIP      Link STATION launchers               Link stn, stn-ingress, and stn-tmux-popup for bare terminal commands.
+           Run: pnpm --dir <CHECKOUT> station:link
+
+Use stn instead of the absolute path (optional):
+  The absolute commands under Next already work; these steps enable shorter launcher names.
+  To use stn from this checkout, run the link command above; it exposes all three launcher names together.
+  Then verify:
+    command -v stn
+    command -v stn-ingress
+    command -v stn-tmux-popup
+  Future login shell launcher resolution remains unverified until those checks pass in a new login shell.
+
+Next
+
+  '<CHECKOUT>/bin/stn' doctor
+  '<CHECKOUT>/bin/stn'
+│
+└  Setup complete.

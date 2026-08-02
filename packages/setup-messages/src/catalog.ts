@@ -4,7 +4,8 @@ export const setupMessageCatalog = {
   "setup.heading": { terminal: "stn setup {mode}" },
   "setup.selection-summary": { terminal: "Agent selection: {source}" },
   "setup.introduction": {
-    terminal: "Set up required tools and one or more agents. Add your first project in Station.",
+    terminal:
+      "Set up Station for this project.\nStation will check the local tools it needs and prepare each step.\nIt will ask before installing tools or updating configuration.\nFull diagnostics are available from this launcher's setup check command.",
   },
   "section.core": { terminal: "Core" },
   "section.recommended": { terminal: "Recommended" },
@@ -305,24 +306,74 @@ export const setupMessageCatalog = {
   "recovery.core-incomplete": { terminal: "Core setup is incomplete." },
   "recovery.then-run": { terminal: "Then run:" },
   "recovery.run-command": { terminal: "Run: {command}" },
-  "guided.tools-prompt": { terminal: "Install missing required tools?" },
-  "guided.no-changes": { terminal: "No changes made." },
-  "guided.harness-select-prompt": {
-    terminal:
-      "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
+  "guided.heading": { terminal: "Station setup" },
+  "guided.checking": { terminal: "Checking this project and its tools..." },
+  "guided.interactive-required": {
+    terminal: "Guided setup requires an interactive terminal.",
   },
+  "guided.interactive-recovery": {
+    terminal: "Run stn setup directly in a terminal.",
+  },
+  "guided.interactive-automation": {
+    terminal:
+      "Automation can inspect stn setup check --json and stn setup plan --json, then use explicit noninteractive apply after review when appropriate.",
+  },
+  "guided.yes-label": { terminal: "Yes" },
+  "guided.no-label": { terminal: "No" },
+  "guided.selection-summary": { terminal: "{count} agent choices are available." },
+  "guided.selection-instructions": {
+    terminal: "Use ↑/↓ to navigate, Space to select, and Enter to continue.",
+  },
+  "guided.invalid-selection": { terminal: "Choose only values shown in this list." },
+  "guided.required-tools-title": { terminal: "Required tools" },
+  "guided.required-tools-intro": { terminal: "Homebrew will install:" },
+  "guided.required-tool-source": { terminal: "Official formula ↗" },
+  "guided.tools-prompt": { terminal: "Install these required tools?" },
+  "guided.no-changes": { terminal: "Required tool changes were declined." },
+  "guided.harness-select-prompt": { terminal: "Select agent CLIs to prepare." },
   "guided.harness-select-required": { terminal: "Select at least one available agent CLI." },
+  "guided.default-agent-prompt": {
+    terminal: "Choose the default agent for the new config.",
+  },
+  "guided.current-default-hint": {
+    terminal: "Current default; remains the default",
+  },
+  "guided.installer-select-prompt": {
+    terminal: "Choose agent CLIs to install ({count} choices).",
+  },
+  "guided.review-title": { terminal: "Selected changes" },
+  "guided.review-completed": { terminal: "Already completed prerequisites" },
+  "guided.review-apply": { terminal: "Will apply" },
+  "guided.review-none": { terminal: "- None" },
+  "guided.cancelled": {
+    terminal:
+      "Setup cancelled. Changes already completed were kept. Run stn setup again to inspect the current state and continue.",
+  },
+  "guided.complete-outro": { terminal: "Setup complete." },
+  "guided.incomplete-outro": { terminal: "Setup incomplete." },
+  "guided.external-start": { terminal: "Starting: {label}. Native output follows." },
+  "guided.external-success": { terminal: "Finished: {label}." },
+  "guided.external-failure": { terminal: "Failed: {label}." },
   "guided.required-harnesses-unavailable": {
     terminal: "Required agent CLIs are unavailable: {harnesses}.",
   },
-  "guided.config-write-prompt": { terminal: "Write core STATION config?" },
+  "guided.config-write-prompt": {
+    terminal:
+      "Write and activate core Station config?\nWrites selected settings to {path}, then activates the Observer. Does not add the current repository as a project.",
+  },
   "guided.config-not-written": { terminal: "Config was not written." },
   "guided.config-write-failed": { terminal: "Config write failed. Run: stn setup plan" },
   "guided.hook-install-failed": {
     terminal: "Hook install failed. Fix the error above, then run: stn setup",
   },
-  "guided.worktrunk-shell-prompt": { terminal: "Install Worktrunk shell integration?" },
-  "guided.tmux-popup-prompt": { terminal: "Install or load tmux popup binding?" },
+  "guided.worktrunk-shell-prompt": {
+    terminal:
+      "Install Worktrunk shell integration?\nAdds Worktrunk shell helpers to {path}.\nRuns: {command}\nDoes not create {path} if it is missing.",
+  },
+  "guided.tmux-popup-prompt": {
+    terminal:
+      "Install or load tmux popup binding?\nAssigns tmux prefix + {key} to open Station.\nSaves Station’s managed binding in {path} and loads it now when tmux is running. A user-configured prefix + {key} binding is never replaced.",
+  },
   "guided.tmux-not-changed": { terminal: "The tmux popup binding was not changed." },
   "guided.tmux-not-persisted": {
     terminal: "Tmux popup binding was not persisted. Run stn setup to retry.",
@@ -358,7 +409,8 @@ export const setupMessageCatalog = {
     terminal: "Install the Command Line Tools (xcode-select --install), then run: stn setup",
   },
   "guided.homebrew-prompt": {
-    terminal: "Install Homebrew now? (runs the official Homebrew installer)",
+    terminal:
+      "Install Homebrew from https://brew.sh now? The official installer may require normal administrator or password interaction.",
   },
   "guided.homebrew-installing": { terminal: "Installing Homebrew..." },
   "guided.homebrew-failed": { terminal: "Homebrew install failed." },
@@ -380,13 +432,20 @@ export const setupMessageCatalog = {
   "guided.command-line-tools-hint": {
     terminal: "Command Line Tools: xcode-select --install",
   },
-  "guided.launcher-link-prompt": { terminal: "Link STATION launchers globally?" },
+  "guided.launcher-link-prompt": {
+    terminal:
+      "Link STATION launchers globally?\nMakes stn, stn-ingress, and stn-tmux-popup available from any shell.\nRuns this checkout’s station:link package script. Does not edit shell startup files.",
+  },
   "guided.launcher-link-failed": {
     terminal: "STATION launcher link failed. Continuing with checkout launcher paths.",
   },
-  "guided.worktrunk-hooks-prompt": { terminal: "Install Worktrunk lifecycle hooks?" },
+  "guided.worktrunk-hooks-prompt": {
+    terminal:
+      "Install Worktrunk lifecycle hooks?\nPrepares Station-managed lifecycle hook entries for {path}. Does not enable unrelated hooks.",
+  },
   "guided.tracking-consent-prompt": {
-    terminal: "{label}? Station requires tracking to observe the selected agent’s activity.",
+    terminal:
+      "{label}? Station requires tracking to observe the selected agent’s activity.\nWrites Station-owned tracking artifacts. Does not sign in, bypass provider trust, or enable unrelated hooks.",
   },
   "guided.tracking-declined": {
     terminal:
@@ -394,7 +453,7 @@ export const setupMessageCatalog = {
   },
   "guided.no-agent-title": { terminal: "No supported agent CLI is available." },
   "guided.no-agent-explanation": {
-    terminal: "Station needs one agent CLI. You can install one or more now.",
+    terminal: "Station needs one agent CLI. Choose one or more supported installers.",
   },
   "guided.installer-prompt": { terminal: "{label}? ({description})" },
   "guided.no-agent-installed": { terminal: "No agent CLI was installed." },

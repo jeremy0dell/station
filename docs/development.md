@@ -127,6 +127,77 @@ Full-frame captures use the private wrapper and preserve trailing cells;
 assertions wait for two identical captures rather than accepting an
 intermediate repaint.
 
+## Guided setup development
+
+Guided `stn setup` uses `@clack/prompts` through the sole production import in
+`apps/cli/src/commands/setup/presenters/clack.ts`. Keep direct Clack imports out of the guided
+driver, setup core, providers, config, and tests; presenter unit tests inject the exported plain function
+object instead of mocking the package globally. Bare guided setup requires TTY stdin and stdout,
+while check, plan, explicit apply, system, help, and JSON surfaces remain noninteractive.
+
+For manual UX exploration, run the real guided flow in a disposable sandbox:
+
+```bash
+pnpm setup:guided:sandbox
+pnpm setup:guided:sandbox -- --profile multi --keep
+pnpm setup:guided:sandbox -- --profile everything-missing --keep
+```
+
+The sandbox builds the checkout, creates a committed disposable repository, then launches the real
+CLI with inherited terminal I/O. An `env -i` boundary relocates `HOME`, every XDG directory, config,
+Observer state and sockets, and all provider homes beneath one private temporary root. Fake
+Homebrew, curl, npm, pnpm, Worktrunk, tmux, and agent commands prevent network access and global
+installation while allowing accepted installer operations to re-probe their sandbox executables. The real Observer runs
+only against the sandbox paths and is stopped when setup exits.
+
+The default `first-run` profile has required tools but no agent CLI. `multi` starts with Codex and
+OpenCode, `missing-tools` starts with those agents but no required tools, and `everything-missing`
+exercises both installer stages. During UX review, the guided opening should contain only its trust
+copy, compact inspection progress, and selected prerequisite proposal; the
+Core/Recommended/Actions/Next matrix belongs to `stn setup check`. Verify selected Homebrew tools
+show compact clickable Formulae labels rather than raw URLs, prompt details are visually secondary
+to the first-line decision, and no resolved sandbox shim path leaks into consent copy. The tmux
+consent must explain that prefix + Space opens Station, and setup must reject a user-configured
+assignment while permitting tmux's built-in `next-layout` default. Use `--keep` to retain the printed root, edit any shim under its
+`bin/` directory from another terminal, inspect `external-commands.log`, and rerun its `run-setup`
+launcher. `--prepare-only` creates that environment without starting setup. Without `--keep`, the
+root is removed after completion or cancellation; no profile reads credentials, provider config,
+shell startup files, normal tmux state, or global Station state.
+
+The automated real-terminal lane requires Python 3 and uses the standard-library `pty` module:
+
+```bash
+pnpm exec vitest run --config config/vitest/vitest.unit.config.ts \
+  apps/cli/test/unit/setup-clack-presenter.test.ts
+pnpm test:e2e:setup:guided
+pnpm test:e2e:setup:guided:all-shells
+```
+
+The PTY support normalizes terminal controls and redraws. When intentional copy or layout changes
+alter `apps/cli/test/fixtures/setup-guided-transcript.txt`, regenerate from the fixed 100×24 happy
+scenario with the command below, review the normalized transcript manually, and verify it contains
+no environment paths, JSON envelopes, provider values, or raw operation structures:
+
+```bash
+STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm exec vitest run \
+  --config config/vitest/vitest.setup-e2e.config.ts \
+  tests/e2e/setup-guided-feedback.test.ts -t "writes multiple selected agent CLIs"
+```
+
+Python must never reach the user's
+Station homes, config, state, sockets, provider homes, or tmux server.
+
+After changing Clack or another shipped dependency, run the normal build and static gates, then
+validate the compiled runtime:
+
+```bash
+pnpm build:binary -- --version 0.0.0-local
+pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+At minimum, exercise the compiled binary's non-TTY guided preflight to prove the packaged dependency
+loads before release validation.
+
 ## Deterministic Gates
 
 ### Deterministic test isolation

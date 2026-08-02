@@ -12036,7 +12036,7 @@
       "declaration": "createSetupComposition",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires one CLI invocation's inspection, operation, session, guided progress, and presentation adapters.",
+      "purpose": "Wires one CLI invocation's session and presentation boundaries, selecting Clack as the default guided adapter.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
@@ -12048,6 +12048,13 @@
         {
           "path": "apps/cli/src/commands/setup/adapters/operations.ts",
           "declaration": "createSetupOperationAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/presenters/clack.ts",
+          "declaration": "createClackSetupPresenter",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -12076,19 +12083,19 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/setup/presenters/clack.ts",
+      "declaration": "createClackSetupPresenter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates guided setup interaction and progress into Clack controls while normalizing terminal cancellation before it reaches session orchestration.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/setup/presenters/json.ts",
       "declaration": "createJsonSetupPresenter",
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Projects semantic setup evidence into the frozen machine-facing CLI schema without resolving human presentation copy.",
-      "dependencies": []
-    },
-    {
-      "path": "apps/cli/src/commands/setup/presenters/linePrompt.ts",
-      "declaration": "createLinePromptSetupPresenter",
-      "kind": "function",
-      "role": "ADAPTER",
-      "purpose": "Translates Enter-submitted line input into setup confirmations and validated multiple selections while coordinating terminal ownership.",
       "dependencies": []
     },
     {
@@ -12104,15 +12111,8 @@
       "declaration": "runGuidedSetupSession",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Drives guided line-oriented setup through one injected composition while keeping prompts, progress, and terminal ownership outside setup core.",
+      "purpose": "Drives Clack-guided setup through one injected composition while normalizing typed cancellation and preserving application-owned mutation ordering.",
       "dependencies": [
-        {
-          "path": "apps/cli/src/commands/setup/presenters/linePrompt.ts",
-          "declaration": "createLinePromptSetupPresenter",
-          "kind": "function",
-          "role": "ADAPTER",
-          "edgeKind": "runtime"
-        },
         {
           "path": "packages/setup-core/src/policy/assessSetupPlan.ts",
           "declaration": "assessSetupPlan",
