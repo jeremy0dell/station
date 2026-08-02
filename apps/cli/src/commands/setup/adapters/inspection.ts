@@ -1,8 +1,12 @@
+import type { SetupConfigMutationPlan } from "@station/config";
+import { CliSetupHarnessIdSchema } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
 import {
   assessHarnessTracking,
   type HarnessSelectionFacts,
+  type HarnessSelectionResolution,
   type HarnessTrackingFacts,
+  resolveHarnessSelection,
   type SetupInspection,
   type SetupOperationOutcome,
   type SetupPlanningFacts,
@@ -10,24 +14,14 @@ import {
   type SupportedHarnessId,
 } from "@station/setup-core";
 import { type CollectSetupFactsOptions, collectSetupFacts } from "../checks/system.js";
-import { planSetupConfigWrite } from "../configWriter.js";
-import {
-  harnessSupportsSetupHooks,
-  isSupportedHarnessId,
-  relevantHarnessTrackingIds,
-  resolveSetupHarnessSelection,
-  type SetupHarnessSelection,
-} from "../harnessSelection.js";
-import type { ConfigWritePlan } from "../model.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "../types.js";
+import { planSetupConfigMutationForInspection } from "./config.js";
 import type { SetupFacts, SetupHarnessTrackingFact, SetupMode } from "./inspectionTypes.js";
 import { SetupHarnessTrackingFactSchema } from "./inspectionTypes.js";
 
 export type SetupInspectionSnapshot = {
   readonly facts: SetupFacts;
-  readonly planningFacts: SetupPlanningFacts;
-  readonly harnessSelection: SetupHarnessSelection;
-  readonly configWrite?: ConfigWritePlan;
+  readonly configMutation?: SetupConfigMutationPlan;
 };
 
 export type SetupInspectionAdapter = SetupInspection & {
@@ -47,7 +41,7 @@ export type SetupInspectionAdapterOptions = {
 /**
  * ADAPTER
  *
- * Collects CLI machine and provider evidence for the requested intent while retaining TOML, paths, commands, and provider representations locally.
+ * Collects CLI and provider evidence, resolves normalized harness intent, and plans read-only config mutations while retaining boundary representations locally.
  */
 export function createSetupInspectionAdapter(
   options: SetupInspectionAdapterOptions,
@@ -63,32 +57,29 @@ export function createSetupInspectionAdapter(
         inspectionDeps,
         { noBrew: options.noBrew },
       );
-      const harnessSelection = resolveIntentHarnessSelection(facts, request.intent);
-      const withTracking = await collectHarnessTrackingFacts(
+      const selection = resolveIntentHarnessSelection(facts, request.intent);
+      const withTracking = await collectHarnessTrackingFacts({
         facts,
-        harnessSelection,
-        inspectionDeps,
-      );
-      const trackedHarnessIds =
-        harnessSelection.requiredHarnessIds.filter(harnessSupportsSetupHooks);
-      let configWrite: ConfigWritePlan | undefined;
+        selection,
+        deps: inspectionDeps,
+      });
+      const trackingHarnessIds = selectedHarnessIds(selection).filter(harnessSupportsSetupHooks);
+      let configMutation: SetupConfigMutationPlan | undefined;
       if (options.planConfigWrite) {
-        configWrite = await planSetupConfigWrite(withTracking, {
-          harnessSelection,
-          installHarnessHooks: trackedHarnessIds,
-          installWorktrunkHooks: request.intent.installWorktrunkHooks,
+        configMutation = await planSetupConfigMutationForInspection({
+          facts: withTracking,
+          selection,
+          trackingIntent: {
+            harnessIds: trackingHarnessIds,
+            installWorktrunkHooks: request.intent.installWorktrunkHooks,
+          },
         });
       }
-      const planningFacts = normalizeSetupPlanningFacts(
-        withTracking,
-        harnessSelection,
-        configWrite,
-      );
-      const next: SetupInspectionSnapshot =
-        configWrite === undefined
-          ? { facts: withTracking, planningFacts, harnessSelection }
-          : { facts: withTracking, planningFacts, harnessSelection, configWrite };
-      snapshot = next;
+      const planningFacts = normalizeSetupPlanningFacts(withTracking, selection, configMutation);
+      snapshot =
+        configMutation === undefined
+          ? { facts: withTracking }
+          : { facts: withTracking, configMutation };
       return { status: "completed", facts: planningFacts };
     } catch (error) {
       return {
@@ -120,17 +111,8 @@ export function createSetupInspectionAdapter(
 function resolveIntentHarnessSelection(
   facts: SetupFacts,
   intent: SetupPlanningIntent,
-): SetupHarnessSelection {
-  switch (intent.harnessSelection.kind) {
-    case "automatic":
-      return resolveSetupHarnessSelection(facts);
-    case "explicit":
-      return resolveSetupHarnessSelection(facts, intent.harnessSelection.harnessIds);
-    case "cancelled":
-      return { selected: [], requiredHarnessIds: [], source: "unresolved" };
-    default:
-      return assertNever(intent.harnessSelection);
-  }
+): HarnessSelectionResolution {
+  return resolveHarnessSelection(normalizeHarnessSelectionFacts(facts), intent.harnessSelection);
 }
 
 export async function collectSetupFactsForCommand(
@@ -164,17 +146,48 @@ export async function collectSetupFactsForCommand(
   return collectSetupFacts(collectOptions);
 }
 
-export async function collectHarnessTrackingFacts(
-  facts: SetupFacts,
-  harnessSelection: SetupHarnessSelection,
-  deps: SetupCommandDeps,
-): Promise<SetupFacts> {
+async function collectHarnessTrackingFacts(input: {
+  readonly facts: SetupFacts;
+  readonly selection: HarnessSelectionResolution;
+  readonly deps: SetupCommandDeps;
+}): Promise<SetupFacts> {
   const harnessTracking = await Promise.all(
-    relevantHarnessTrackingIds(facts, harnessSelection).map((harnessId) =>
-      probeHarnessTrackingFact(facts, harnessId, deps),
+    relevantHarnessTrackingIds({ facts: input.facts, selection: input.selection }).map(
+      (harnessId) => probeHarnessTrackingFact(input.facts, harnessId, input.deps),
     ),
   );
-  return { ...facts, harnessTracking };
+  return { ...input.facts, harnessTracking };
+}
+
+function selectedHarnessIds(selection: HarnessSelectionResolution): readonly SupportedHarnessId[] {
+  return selection.outcome === "selected" ? selection.requiredHarnessIds : [];
+}
+
+function relevantHarnessTrackingIds(input: {
+  readonly facts: Pick<SetupFacts, "config" | "harnesses">;
+  readonly selection: HarnessSelectionResolution;
+}): SupportedHarnessId[] {
+  const configuredHarnessIds =
+    input.facts.config.status === "valid"
+      ? [input.facts.config.defaults.harness, ...input.facts.config.configuredHarnesses].flatMap(
+          (value) => {
+            const parsed = CliSetupHarnessIdSchema.safeParse(value);
+            return parsed.success ? [parsed.data] : [];
+          },
+        )
+      : [];
+  const harnessIds = [
+    ...new Set([...selectedHarnessIds(input.selection), ...configuredHarnessIds]),
+  ];
+  return harnessIds.filter((harnessId) =>
+    input.facts.harnesses.some((harness) => harness.id === harnessId),
+  );
+}
+
+function harnessSupportsSetupHooks(
+  harnessId: SupportedHarnessId,
+): harnessId is "claude" | "codex" | "cursor" | "opencode" {
+  return harnessId !== "pi";
 }
 
 async function probeHarnessTrackingFact(
@@ -269,8 +282,8 @@ const setupHarnessProbeFailed = {
 
 export function normalizeSetupPlanningFacts(
   facts: SetupFacts,
-  selection: SetupHarnessSelection,
-  configWrite: ConfigWritePlan | undefined,
+  selection: HarnessSelectionResolution,
+  configMutation: SetupConfigMutationPlan | undefined,
 ): SetupPlanningFacts {
   return {
     generatedAt: facts.generatedAt,
@@ -300,7 +313,7 @@ export function normalizeSetupPlanningFacts(
     installableHarnessIds: facts.harnesses.map((harness) => harness.id),
     config: {
       state: normalizeConfigState(facts),
-      write: configWrite?.operation ?? "none",
+      write: configMutation?.operation ?? "none",
       diagnostics:
         facts.config.status === "valid"
           ? (facts.config.diagnostics ?? []).map((diagnostic) => ({
@@ -352,12 +365,12 @@ function normalizeHarnessSelectionFacts(facts: SetupFacts): HarnessSelectionFact
 
 function normalizeHarnessTracking(
   facts: SetupFacts,
-  selection: SetupHarnessSelection,
+  selection: HarnessSelectionResolution,
 ): SetupPlanningFacts["harnessTracking"] {
-  const requiredHarnessIds = new Set(selection.requiredHarnessIds);
+  const requiredHarnessIds = new Set(selectedHarnessIds(selection));
   const persistedHarnessIds =
     facts.config.status === "valid" ? new Set(facts.config.configuredHookHarnesses) : new Set();
-  return relevantHarnessTrackingIds(facts, selection).map((harnessId) => {
+  return relevantHarnessTrackingIds({ facts, selection }).map((harnessId) => {
     const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
     return {
       harnessId,
@@ -408,7 +421,7 @@ function normalizeConfigState(facts: SetupFacts): SetupPlanningFacts["config"]["
   const defaults = facts.config.defaults;
   return defaults.worktreeProvider === "worktrunk" &&
     defaults.terminal === "tmux" &&
-    isSupportedHarnessId(defaults.harness)
+    CliSetupHarnessIdSchema.safeParse(defaults.harness).success
     ? "valid"
     : "invalid";
 }

@@ -1,18 +1,17 @@
 import { isCompiledBinary } from "@station/runtime";
-import type { SetupToolId, SetupToolInstallOperation } from "@station/setup-core";
+import type { SetupToolInstallOperation } from "@station/setup-core";
 import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
+import type { CliEnv } from "../../env.js";
 import { createSetupOperationAdapter } from "./adapters/operations.js";
-import { applySetupPlan } from "./apply.js";
 import { checkBrewDependency } from "./checks/brew.js";
 import { checkSetupBun } from "./checks/bun.js";
 import { checkSetupDiffnav } from "./checks/diffnav.js";
 import { checkSetupGitDelta } from "./checks/gitDelta.js";
+import type { SetupDependencyCheckOptions } from "./checks/system.js";
 import { checkSetupTmux } from "./checks/tmux.js";
 import { checkSetupToolchain, type ToolchainFact } from "./checks/toolchain.js";
 import { checkSetupWorktrunk } from "./checks/worktrunk.js";
-import { applyOptions, dependencyOptionsForCommand } from "./flowUtils.js";
 import { setupPresenter } from "./io.js";
-import type { SetupAction, SetupPlan } from "./model.js";
 import type {
   TextSetupSystemHint,
   TextSetupSystemRow,
@@ -42,24 +41,21 @@ export async function runSetupSystemCommand(
     }
     if (initial.diffnav.status === "missing") operations.push(systemInstallOperation("diffnav"));
     if (initial.gitDelta.status === "missing") operations.push(systemInstallOperation("git-delta"));
-    const actions = operations.map((operation) => systemInstallAction(operation.tool));
-    const result = await applySetupPlan(
-      systemPlan(actions),
-      applyOptions(deps, {
-        announceActions: true,
-        showCommandOutput: true,
-        execution: {
-          operationBindings: operations.map((operation) => ({
-            actionId: `install-${operation.tool}`,
-            operation,
-          })),
-          executeOperation: createSetupOperationAdapter({ deps }),
-        },
-      }),
-    );
-    operationFailed = result.failedAction !== undefined;
-    if (operationFailed) {
-      await presenter.writeMessage(setupMessageRef("system.install-failed"));
+    const executeOperation = createSetupOperationAdapter({ deps });
+    // System prerequisites are ordered and fail-fast, so later installs never run after a required package failure.
+    for (const operation of operations) {
+      const progress = {
+        label: systemToolInstallLabel({ operation, text: presenter.text }),
+      };
+      await presenter.write(`${presenter.renderProgressStart(progress)}\n`);
+      const outcome = await executeOperation(operation);
+      if (outcome.status === "failed") {
+        operationFailed = true;
+        await presenter.write(`${presenter.renderProgressFailure(progress, outcome.error)}\n`);
+        await presenter.writeMessage(setupMessageRef("system.install-failed"));
+        break;
+      }
+      await presenter.write(`${presenter.renderProgressComplete(progress)}\n`);
     }
   }
 
@@ -171,21 +167,9 @@ function systemReady(facts: SystemFacts): boolean {
   );
 }
 
-function systemInstallAction(tool: SetupToolId): SetupAction {
-  const formula = toolFormula(tool);
-  return {
-    id: `install-${tool}`,
-    kind: "brew-install",
-    tier: "required",
-    selected: true,
-    label: resolveSetupMessage(setupMessageRef("action.install-label", { label: tool })),
-    message: resolveSetupMessage(setupMessageRef("action.install-homebrew", { label: tool })),
-    command: ["brew", "install", formula],
-    data: { formula },
-  };
-}
-
-function systemInstallOperation(tool: SetupToolId): SetupToolInstallOperation {
+function systemInstallOperation(
+  tool: SetupToolInstallOperation["tool"],
+): SetupToolInstallOperation {
   return {
     id: `install:${tool}`,
     kind: "install-tool",
@@ -195,28 +179,37 @@ function systemInstallOperation(tool: SetupToolId): SetupToolInstallOperation {
   };
 }
 
-function toolFormula(tool: SetupToolId): string {
-  return tool === "worktrunk" ? "worktrunk" : tool;
+function systemToolInstallLabel(input: {
+  readonly operation: SetupToolInstallOperation;
+  readonly text: (reference: ReturnType<typeof setupMessageRef>) => string;
+}): string {
+  const { operation, text } = input;
+  const label =
+    operation.tool === "worktrunk"
+      ? setupMessageRef("label.worktrunk")
+      : operation.tool === "tmux"
+        ? setupMessageRef("label.tmux")
+        : operation.tool === "bun"
+          ? setupMessageRef("label.bun")
+          : operation.tool === "diffnav"
+            ? setupMessageRef("label.diffnav")
+            : setupMessageRef("label.git-delta");
+  return text(
+    setupMessageRef("action.install-label", {
+      label: resolveSetupMessage(label),
+    }),
+  );
 }
 
-function systemPlan(actions: SetupAction[]): SetupPlan {
-  return {
-    generatedAt: new Date().toISOString(),
-    mode: "apply",
-    checks: [],
-    actions,
-    summary: {
-      launchReady: true,
-      workflowReady: true,
-      requiredOk: true,
-      requiredMissing: 0,
-      warnings: 0,
-      selectedActions: actions.length,
-      selectionSource: "unresolved",
-      configPath: "",
-    },
-    nextSteps: [],
-  };
+function dependencyOptionsForCommand(
+  deps: SetupCommandDeps,
+  env: CliEnv | undefined,
+): SetupDependencyCheckOptions {
+  const dependencyOptions: SetupDependencyCheckOptions = {};
+  if (env !== undefined) dependencyOptions.env = env;
+  if (deps.runner !== undefined) dependencyOptions.runner = deps.runner;
+  if (deps.access !== undefined) dependencyOptions.access = deps.access;
+  return dependencyOptions;
 }
 
 function toolchainStatusLabel(fact: ToolchainFact): string {

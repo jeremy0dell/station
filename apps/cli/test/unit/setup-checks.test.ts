@@ -7,8 +7,15 @@ import {
   type ExternalCommandRunner,
   gitLocalEnvironmentVariables,
 } from "@station/runtime";
+import {
+  type HarnessSelectionFacts,
+  planSetup,
+  resolveHarnessSelection,
+} from "@station/setup-core";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { normalizeSetupPlanningFacts } from "../../src/commands/setup/adapters/inspection.js";
+import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
 import { checkSetupBun } from "../../src/commands/setup/checks/bun.js";
 import { setupProbeTimeoutMs } from "../../src/commands/setup/checks/constants.js";
 import { checkSetupDiffnav } from "../../src/commands/setup/checks/diffnav.js";
@@ -27,7 +34,35 @@ import {
 } from "../../src/commands/setup/checks/tmuxBinding.js";
 import { checkSetupWorktrunkShellIntegration } from "../../src/commands/setup/checks/worktrunk.js";
 import { checkSetupXcode } from "../../src/commands/setup/checks/xcode.js";
-import { buildSetupPlan } from "../../src/commands/setup/planner.js";
+import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
+
+function buildSetupPlan(facts: SetupFacts) {
+  const config: HarnessSelectionFacts["config"] =
+    facts.config.status === "valid"
+      ? { status: "valid", defaultHarness: facts.config.defaults.harness }
+      : { status: facts.config.status };
+  const selectionFacts: HarnessSelectionFacts = {
+    config,
+    harnesses: facts.harnesses.map((harness) => ({
+      id: harness.id,
+      availability: harness.status === "ok" ? "available" : "unavailable",
+    })),
+  };
+  const selection = resolveHarnessSelection(selectionFacts, { kind: "automatic" });
+  const evidence = normalizeSetupPlanningFacts(facts, selection, undefined);
+  const plan = planSetup(evidence, {
+    mode: facts.mode,
+    harnessSelection: { kind: "automatic" },
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
+    installWorktrunkHooks: false,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
+  });
+  return createJsonSetupPresenter().project({ plan, facts });
+}
 
 describe("setup dependency checks", () => {
   const tempRoots: string[] = [];

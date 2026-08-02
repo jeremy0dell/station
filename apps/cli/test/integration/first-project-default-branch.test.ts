@@ -3,12 +3,15 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { type AddProjectToConfigResult, addProjectToConfig } from "@station/config";
+import {
+  type AddProjectToConfigResult,
+  addProjectToConfig,
+  renderSetupConfig,
+} from "@station/config";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { environmentWithoutGitLocals } from "@station/runtime";
 import { WorktrunkProvider } from "@station/worktrunk";
 import { describe, expect, it } from "vitest";
-import { renderNewSetupConfig } from "../../src/commands/setup/configWriter.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -248,14 +251,12 @@ async function withFreshConfig(
   try {
     await writeFile(
       configPath,
-      renderNewSetupConfig([
-        {
-          id: "codex",
-          label: "Codex",
-          status: "ok",
-          command: "codex",
-        },
-      ]),
+      renderSetupConfig({
+        defaultHarness: "codex",
+        harnesses: [{ id: "codex", command: "codex", installHooks: false }],
+        worktrunkCommand: "wt",
+        installWorktrunkHooks: false,
+      }),
       "utf8",
     );
     await run({ root, configPath, repo });

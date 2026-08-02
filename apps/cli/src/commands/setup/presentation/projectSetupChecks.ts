@@ -1,8 +1,8 @@
 import { dirname } from "node:path";
 import { setupMessageRef } from "@station/setup-messages";
 import { stationUiInstallHint } from "../../../stationWorkspace.js";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
-import type { SetupFacts } from "../model.js";
 import type { SetupDisplayDetail, SetupViewCheck } from "./setupViewTypes.js";
 
 export function projectSetupEnvironmentChecks(facts: SetupFacts): readonly SetupViewCheck[] {

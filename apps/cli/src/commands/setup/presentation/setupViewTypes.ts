@@ -1,7 +1,10 @@
-import type { SetupPlan as CoreSetupPlan, SetupOperation } from "@station/setup-core";
+import type { CliSetupAction, CliSetupCheck, CliSetupPlan } from "@station/contracts";
+import type {
+  SetupPlan as CoreSetupPlan,
+  SetupOperation,
+  SupportedHarnessId,
+} from "@station/setup-core";
 import type { SetupMessageRef } from "@station/setup-messages";
-import type { SetupHarnessSelection } from "../harnessSelection.js";
-import type { SetupAction, SetupCheck, SetupMode, SupportedHarnessId } from "../model.js";
 
 export type SetupDisplayDetail = {
   readonly label: SetupMessageRef;
@@ -10,8 +13,8 @@ export type SetupDisplayDetail = {
 
 export type SetupViewCheck = {
   readonly id: string;
-  readonly tier: SetupCheck["tier"];
-  readonly status: SetupCheck["status"];
+  readonly tier: CliSetupCheck["tier"];
+  readonly status: CliSetupCheck["status"];
   readonly label: SetupMessageRef;
   readonly explanation: SetupMessageRef;
   readonly details: readonly SetupDisplayDetail[];
@@ -21,9 +24,9 @@ export type SetupViewAction = {
   readonly id: string;
   readonly operationId?: SetupOperation["id"];
   readonly kind: SetupOperation["kind"] | "mkdir";
-  readonly tier: SetupAction["tier"];
+  readonly tier: CliSetupAction["tier"];
   readonly selected: boolean;
-  readonly status?: SetupAction["status"];
+  readonly status?: CliSetupAction["status"];
   readonly label: SetupMessageRef;
   readonly explanation: SetupMessageRef;
 };
@@ -68,12 +71,18 @@ export type SetupViewResult = CoreSetupPlan["result"] & {
   readonly apply: SetupApplyPresentation;
 };
 
+export type SetupPresentationHarnessSelection = {
+  readonly source: CliSetupPlan["summary"]["selectionSource"];
+  readonly requiredHarnessIds: readonly SupportedHarnessId[];
+  readonly defaultHarness?: SupportedHarnessId;
+};
+
 export type ProjectSetupView = {
   readonly generatedAt: string;
-  readonly mode: SetupMode;
+  readonly mode: CoreSetupPlan["mode"];
   readonly title: SetupMessageRef;
   readonly selection: {
-    readonly source: SetupHarnessSelection["source"];
+    readonly source: SetupPresentationHarnessSelection["source"];
     readonly summary: SetupMessageRef;
     readonly defaultHarness?: SupportedHarnessId;
   };

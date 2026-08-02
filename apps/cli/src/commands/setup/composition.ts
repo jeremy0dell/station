@@ -1,4 +1,4 @@
-import type { SafeError } from "@station/contracts";
+import type { CliSetupPlan, SafeError } from "@station/contracts";
 import {
   createSetupSessionApplication,
   type SetupEditableIntent,
@@ -15,7 +15,6 @@ import {
 import type { SetupMode } from "./adapters/inspectionTypes.js";
 import { createSetupOperationAdapter } from "./adapters/operations.js";
 import { setupPresenter } from "./io.js";
-import type { SetupPlan } from "./model.js";
 import { projectSessionView } from "./presentation/projectSessionView.js";
 import { type ProjectSetupView, projectSetupView } from "./presentation/projectSetupView.js";
 import { createClackSetupPresenter } from "./presenters/clack.js";
@@ -31,7 +30,7 @@ export type CliSetupSession = {
 
 export type ProjectedSetupSession = {
   readonly status: "projected";
-  readonly plan: SetupPlan;
+  readonly plan: CliSetupPlan;
   readonly view: ProjectSetupView;
   readonly session: ReturnType<typeof projectSessionView>;
 };
@@ -66,7 +65,7 @@ export type CreateSetupCompositionOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Wires one CLI invocation's session and presentation boundaries, selecting Clack as the default guided adapter.
+ * Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation.
  */
 export function createSetupComposition(options: CreateSetupCompositionOptions): SetupComposition {
   const inspection = createSetupInspectionAdapter({
@@ -128,15 +127,16 @@ export function createSetupComposition(options: CreateSetupCompositionOptions): 
     guided,
     json,
     text,
-    project: (state) => projectCurrentSession(state, session, json),
+    project: (state) => projectCurrentSession({ state, session, json }),
   };
 }
 
-function projectCurrentSession(
-  state: SetupSessionState,
-  session: CliSetupSession,
-  json: JsonSetupPresenter,
-): SetupSessionProjection {
+function projectCurrentSession(input: {
+  readonly state: SetupSessionState;
+  readonly session: CliSetupSession;
+  readonly json: JsonSetupPresenter;
+}): SetupSessionProjection {
+  const { state, session, json } = input;
   const snapshot = session.snapshot();
   const sessionView = projectSessionView(state);
   if (snapshot === undefined || sessionView.plan === undefined) {
@@ -147,14 +147,18 @@ function projectCurrentSession(
         (state.status === "cancelled" ? setupSessionCancelled : setupEvidenceUnavailable),
     };
   }
-  const input =
-    snapshot.configWrite === undefined
+  const projectionInput =
+    snapshot.configMutation === undefined
       ? { plan: sessionView.plan, facts: snapshot.facts }
-      : { plan: sessionView.plan, facts: snapshot.facts, configWrite: snapshot.configWrite };
+      : {
+          plan: sessionView.plan,
+          facts: snapshot.facts,
+          configMutation: snapshot.configMutation,
+        };
   return {
     status: "projected",
-    plan: json.project(input),
-    view: projectSetupView(input),
+    plan: json.project(projectionInput),
+    view: projectSetupView(projectionInput),
     session: sessionView,
   };
 }

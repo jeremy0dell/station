@@ -1,32 +1,40 @@
+import type { SetupConfigMutationPlan } from "@station/config";
 import type { SetupOperation, SetupToolInstallOperation } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
-import type { SetupHarnessSelection } from "../harnessSelection.js";
-import type { ConfigWritePlan, SetupFacts } from "../model.js";
-import type { SetupViewAction } from "./setupViewTypes.js";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
+import type { SetupPresentationHarnessSelection, SetupViewAction } from "./setupViewTypes.js";
 
-export function projectSetupActions(
-  operations: readonly SetupOperation[],
-  facts: SetupFacts,
-  selection: SetupHarnessSelection,
-  configWrite: ConfigWritePlan | undefined,
-): readonly SetupViewAction[] {
+export function projectSetupActions(input: {
+  readonly operations: readonly SetupOperation[];
+  readonly facts: SetupFacts;
+  readonly selection: SetupPresentationHarnessSelection;
+  readonly configMutation: SetupConfigMutationPlan | undefined;
+}): readonly SetupViewAction[] {
+  const { operations, facts, selection, configMutation } = input;
   const actions = operations.flatMap((operation) =>
-    projectSetupOperationActions(operation, facts, configWrite),
+    projectSetupOperationActions({ operation, facts, configMutation }),
   );
-  if (configWrite?.operation === "blocked") {
-    actions.push(...projectConfigWriteActions(configWrite, selection.selected.length > 0));
+  if (configMutation?.operation === "blocked") {
+    actions.push(
+      ...projectConfigWriteActions({
+        configMutation,
+        hasSelectedHarness: selection.requiredHarnessIds.length > 0,
+      }),
+    );
   }
   return actions;
 }
 
-export function projectSetupOperationActions(
-  operation: SetupOperation,
-  facts: SetupFacts,
-  configWrite: ConfigWritePlan | undefined,
-): SetupViewAction[] {
+export function projectSetupOperationActions(input: {
+  readonly operation: SetupOperation;
+  readonly facts: SetupFacts;
+  readonly configMutation: SetupConfigMutationPlan | undefined;
+}): SetupViewAction[] {
+  const { operation, facts, configMutation } = input;
   switch (operation.kind) {
-    case "install-tool":
-      return [projectInstallToolAction(operation, facts)];
+    case "install-tool": {
+      return [projectInstallToolAction({ operation, facts })];
+    }
     case "link-launchers":
       return [
         {
@@ -104,8 +112,13 @@ export function projectSetupOperationActions(
         },
       ];
     }
-    case "write-config":
-      return projectConfigWriteActions(configWrite, true, operation.id);
+    case "write-config": {
+      return projectConfigWriteActions({
+        configMutation,
+        hasSelectedHarness: true,
+        operationId: operation.id,
+      });
+    }
     case "install-harness": {
       const label =
         facts.harnesses.find((harness) => harness.id === operation.harnessId)?.label ??
@@ -118,7 +131,7 @@ export function projectSetupOperationActions(
           tier: "required",
           selected: operation.selected,
           label: setupMessageRef("action.install-label", { label }),
-          explanation: harnessInstallerMessage(operation.harnessId, facts),
+          explanation: harnessInstallerMessage({ harnessId: operation.harnessId, facts }),
         },
       ];
     }
@@ -153,10 +166,11 @@ export function projectSetupOperationActions(
   }
 }
 
-function harnessInstallerMessage(
-  harnessId: Extract<SetupOperation, { kind: "install-harness" }>["harnessId"],
-  facts: SetupFacts,
-) {
+function harnessInstallerMessage(input: {
+  readonly harnessId: Extract<SetupOperation, { kind: "install-harness" }>["harnessId"];
+  readonly facts: SetupFacts;
+}) {
+  const { harnessId, facts } = input;
   const macBrewAvailable = facts.xcode.applicable && facts.brew.status === "ok";
   switch (harnessId) {
     case "codex":
@@ -176,10 +190,11 @@ function harnessInstallerMessage(
   }
 }
 
-function projectInstallToolAction(
-  operation: SetupToolInstallOperation,
-  facts: SetupFacts,
-): SetupViewAction {
+function projectInstallToolAction(input: {
+  readonly operation: SetupToolInstallOperation;
+  readonly facts: SetupFacts;
+}): SetupViewAction {
+  const { operation, facts } = input;
   const presentation = toolPresentation(operation.tool);
   const installerAvailable = facts.brew.status === "ok";
   return {
@@ -218,15 +233,16 @@ function toolPresentation(tool: SetupToolInstallOperation["tool"]): {
   }
 }
 
-function projectConfigWriteActions(
-  configWrite: ConfigWritePlan | undefined,
-  hasSelectedHarness: boolean,
-  operationId?: SetupOperation["id"],
-): SetupViewAction[] {
-  if (!hasSelectedHarness || configWrite === undefined || configWrite.operation === "none") {
+function projectConfigWriteActions(input: {
+  readonly configMutation: SetupConfigMutationPlan | undefined;
+  readonly hasSelectedHarness: boolean;
+  readonly operationId?: SetupOperation["id"];
+}): SetupViewAction[] {
+  const { configMutation, hasSelectedHarness, operationId } = input;
+  if (!hasSelectedHarness || configMutation === undefined || configMutation.operation === "none") {
     return [];
   }
-  if (configWrite.operation === "blocked") {
+  if (configMutation.operation === "blocked") {
     return [
       {
         id: "config-blocked",
@@ -234,7 +250,7 @@ function projectConfigWriteActions(
         tier: "required",
         selected: false,
         label: setupMessageRef("action.config-blocked-label"),
-        explanation: setupMessageRef("check.evidence", { message: configWrite.reason }),
+        explanation: setupMessageRef("check.evidence", { message: configMutation.reason }),
       },
     ];
   }
@@ -249,18 +265,18 @@ function projectConfigWriteActions(
       explanation: setupMessageRef("action.config-directory-message"),
     },
     {
-      id: configWrite.operation === "create" ? "write-config" : "update-config",
+      id: configMutation.operation === "create" ? "write-config" : "update-config",
       ...(operationId === undefined ? {} : { operationId }),
       kind: "write-config",
       tier: "required",
       selected: true,
       label: setupMessageRef(
-        configWrite.operation === "create"
+        configMutation.operation === "create"
           ? "action.config-create-label"
           : "action.config-update-label",
       ),
       explanation: setupMessageRef(
-        configWrite.operation === "create"
+        configMutation.operation === "create"
           ? "action.config-create-message"
           : "action.config-update-message",
       ),

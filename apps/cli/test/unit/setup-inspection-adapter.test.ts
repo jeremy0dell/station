@@ -1,11 +1,15 @@
+import type { HarnessSelectionResolution } from "@station/setup-core";
 import { describe, expect, it } from "vitest";
+import { planSetupConfigMutationForInspection } from "../../src/commands/setup/adapters/config.js";
 import {
   createSetupInspectionAdapter,
   normalizeSetupPlanningFacts,
 } from "../../src/commands/setup/adapters/inspection.js";
-import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
+import {
+  type SetupFacts,
+  SetupHarnessTrackingFactSchema,
+} from "../../src/commands/setup/adapters/inspectionTypes.js";
 import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
-import type { SetupHarnessSelection } from "../../src/commands/setup/harnessSelection.js";
 import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 
 describe("setup inspection adapter", () => {
@@ -13,6 +17,7 @@ describe("setup inspection adapter", () => {
     const planning = normalizeSetupPlanningFacts(facts(), selection(), {
       operation: "update",
       path: "/tmp/config.toml",
+      before: "private TOML",
       content: "private TOML",
     });
 
@@ -27,6 +32,94 @@ describe("setup inspection adapter", () => {
         assessment: expect.objectContaining({ state: "prepared" }),
       }),
     ]);
+  });
+
+  it("plans config previews with selected tracking and detected custom commands", async () => {
+    const input = facts();
+    const plan = await planSetupConfigMutationForInspection({
+      facts: {
+        ...input,
+        worktrunk: {
+          ...input.worktrunk,
+          command: "/custom/bin/wt",
+          resolvedPath: "/custom/bin/wt",
+        },
+        tmux: {
+          ...input.tmux,
+          command: "/custom/bin/tmux",
+          resolvedPath: "/custom/bin/tmux",
+        },
+        config: {
+          status: "missing",
+          path: "/tmp/new-config.toml",
+          message: "missing",
+        },
+      },
+      selection: {
+        outcome: "selected",
+        source: "explicit",
+        requiredHarnessIds: ["codex"],
+        defaultHarness: "codex",
+      },
+      trackingIntent: { harnessIds: ["codex"], installWorktrunkHooks: true },
+    });
+
+    expect(plan.operation).toBe("create");
+    if (plan.operation !== "create") throw new Error("expected create plan");
+    expect(plan.content).toContain('command = "/custom/bin/wt"');
+    expect(plan.content).toContain('[terminal.tmux]\ncommand = "/custom/bin/tmux"');
+    expect(plan.content).toContain("install_hooks = true");
+    expect(plan.content).toContain("use_lifecycle_hooks = true");
+  });
+
+  it("preserves config preview blocking for invalid config and unresolved selection", async () => {
+    const input = facts();
+    const invalid = await planSetupConfigMutationForInspection({
+      facts: {
+        ...input,
+        config: {
+          status: "invalid",
+          path: "/tmp/config.toml",
+          source: "private invalid TOML",
+          message: "Config is invalid.",
+        },
+      },
+      selection: { outcome: "invalid", reason: "invalid-config" },
+      trackingIntent: { harnessIds: [], installWorktrunkHooks: false },
+    });
+    const unresolved = await planSetupConfigMutationForInspection({
+      facts: input,
+      selection: { outcome: "ambiguous", candidateHarnessIds: ["codex", "pi"] },
+      trackingIntent: { harnessIds: [], installWorktrunkHooks: false },
+    });
+
+    expect(invalid).toEqual({
+      operation: "blocked",
+      path: "/tmp/config.toml",
+      reason: "Config is invalid.",
+    });
+    expect(unresolved).toEqual({
+      operation: "blocked",
+      path: "/tmp/config.toml",
+      reason: "Multiple supported harness CLIs are available; explicit selection is required.",
+    });
+  });
+
+  it("strictly validates tracking facts at the inspection boundary", () => {
+    expect(
+      SetupHarnessTrackingFactSchema.parse({
+        harnessId: "codex",
+        capability: "supported",
+        requested: true,
+      }),
+    ).toMatchObject({ harnessId: "codex", requested: true });
+    expect(() =>
+      SetupHarnessTrackingFactSchema.parse({
+        harnessId: "codex",
+        capability: "supported",
+        providerPayload: "private",
+      }),
+    ).toThrow();
   });
 
   it("refreshes invocation dependencies after a completed package install", () => {
@@ -103,9 +196,9 @@ function operationDeps(
   };
 }
 
-function selection(): SetupHarnessSelection {
+function selection(): HarnessSelectionResolution {
   return {
-    selected: [{ id: "codex", label: "Codex", status: "ok", command: "codex" }],
+    outcome: "selected",
     requiredHarnessIds: ["codex"],
     source: "configured",
     defaultHarness: "codex",

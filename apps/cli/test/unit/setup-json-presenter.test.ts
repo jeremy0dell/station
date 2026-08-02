@@ -1,19 +1,97 @@
 import { readFileSync } from "node:fs";
+import type { SetupConfigMutationPlan as ConfigWritePlan } from "@station/config";
+import {
+  type HarnessSelectionFacts,
+  type HarnessSelectionResolution,
+  planSetup,
+  resolveHarnessSelection,
+  type SetupPlanningIntent,
+  type SupportedHarnessId,
+} from "@station/setup-core";
 import { resolveSetupMessage } from "@station/setup-messages";
 import { describe, expect, it } from "vitest";
-import { resolveSetupHarnessSelection } from "../../src/commands/setup/harnessSelection.js";
+import { normalizeSetupPlanningFacts } from "../../src/commands/setup/adapters/inspection.js";
 import type {
-  ConfigWritePlan,
   SetupFacts,
   SetupHarnessFact,
-  SupportedHarnessId,
-} from "../../src/commands/setup/model.js";
-import { buildSetupPlan, buildSetupPlans } from "../../src/commands/setup/planner.js";
+} from "../../src/commands/setup/adapters/inspectionTypes.js";
+import { projectSetupView } from "../../src/commands/setup/presentation/projectSetupView.js";
+import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
+
+type BuildSetupPlanOptions = {
+  readonly configWrite?: ConfigWritePlan;
+  readonly harnessSelection?: HarnessSelectionResolution;
+  readonly installWorktrunkHooks?: boolean;
+};
+
+function buildSetupPlan(
+  ...arguments_: [SetupFacts, BuildSetupPlanOptions?]
+): ReturnType<ReturnType<typeof createJsonSetupPresenter>["project"]> {
+  return buildSetupPlans(...arguments_).compatibilityPlan;
+}
+
+function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
+  const [setupFacts, options = {}] = arguments_;
+  const selection =
+    options.harnessSelection ??
+    resolveHarnessSelection(coreSelectionFacts(setupFacts), { kind: "automatic" });
+  const evidence = normalizeSetupPlanningFacts(setupFacts, selection, options.configWrite);
+  const harnessSelection: SetupPlanningIntent["harnessSelection"] =
+    selection.outcome === "selected" && selection.source === "explicit"
+      ? { kind: "explicit", harnessIds: selection.requiredHarnessIds }
+      : { kind: "automatic" };
+  const semanticPlan = planSetup(evidence, {
+    mode: setupFacts.mode,
+    harnessSelection,
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: false,
+    harnessTrackingSelection: { kind: "automatic" },
+    installWorktrunkHooks: options.installWorktrunkHooks === true,
+    installWorktrunkShell: false,
+    configureTmuxPopup: false,
+  });
+  const projectionInput =
+    options.configWrite === undefined
+      ? { plan: semanticPlan, facts: setupFacts }
+      : { plan: semanticPlan, facts: setupFacts, configMutation: options.configWrite };
+  return {
+    semanticPlan,
+    presentationView: projectSetupView(projectionInput),
+    compatibilityPlan: createJsonSetupPresenter().project(projectionInput),
+  };
+}
+
+function resolveSetupHarnessSelection(
+  ...arguments_: [setupFacts: SetupFacts, selectedIds?: readonly SupportedHarnessId[]]
+): HarnessSelectionResolution {
+  const [setupFacts, selectedIds] = arguments_;
+  return resolveHarnessSelection(
+    coreSelectionFacts(setupFacts),
+    selectedIds === undefined
+      ? { kind: "automatic" }
+      : { kind: "explicit", harnessIds: selectedIds },
+  );
+}
+
+function coreSelectionFacts(setupFacts: SetupFacts): HarnessSelectionFacts {
+  const config: HarnessSelectionFacts["config"] =
+    setupFacts.config.status === "valid"
+      ? { status: "valid", defaultHarness: setupFacts.config.defaults.harness }
+      : { status: setupFacts.config.status };
+  return {
+    config,
+    harnesses: setupFacts.harnesses.map((harness) => ({
+      id: harness.id,
+      availability: harness.status === "ok" ? "available" : "unavailable",
+    })),
+  };
+}
 
 describe("setup plan projection", () => {
   it("keeps the machine projector independent from human message resolution", () => {
     const source = readFileSync(
-      new URL("../../src/commands/setup/presentation/projectCliSetupPlan.ts", import.meta.url),
+      new URL("../../src/commands/setup/presenters/json.ts", import.meta.url),
       "utf8",
     );
 
@@ -49,13 +127,11 @@ describe("setup plan projection", () => {
         content: "schema_version = 1\n",
       },
     });
-    const boundActionIds = new Set(built.operationBindings.map((binding) => binding.actionId));
     const mutatingActions = built.compatibilityPlan.actions.filter(
       (action) => action.kind !== "noop",
     );
 
     expect(mutatingActions.length).toBeGreaterThan(0);
-    for (const action of mutatingActions) expect(boundActionIds.has(action.id)).toBe(true);
     expect(
       built.compatibilityPlan.actions.some((action) => action.id === "activate-observer-config"),
     ).toBe(false);
@@ -423,8 +499,8 @@ describe("setup plan projection", () => {
     });
     const plan = buildSetupPlan(input, {
       harnessSelection: {
+        outcome: "selected",
         defaultHarness: "opencode",
-        selected: input.harnesses.filter((harness) => harness.id === "opencode"),
         requiredHarnessIds: ["opencode"],
         source: "explicit",
       },
@@ -449,9 +525,8 @@ describe("setup plan projection", () => {
     });
 
     expect(resolveSetupHarnessSelection(input, ["codex"])).toEqual({
-      selected: [],
-      requiredHarnessIds: [],
-      source: "unresolved",
+      outcome: "invalid",
+      reason: "unsupported-configured-default",
     });
   });
 
@@ -469,8 +544,8 @@ describe("setup plan projection", () => {
     });
     const plan = buildSetupPlan(input, {
       harnessSelection: {
+        outcome: "selected",
         defaultHarness: "codex",
-        selected: input.harnesses.filter((harness) => harness.status === "ok"),
         requiredHarnessIds: ["codex", "opencode", "pi"],
         source: "explicit",
       },
@@ -1026,6 +1101,7 @@ describe("setup plan projection", () => {
       configWrite: {
         operation: "update",
         path: "/tmp/config.toml",
+        before: "schema_version = 1\n",
         content: "schema_version = 1\n",
       },
     });

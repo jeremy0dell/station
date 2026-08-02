@@ -11921,7 +11921,7 @@
       "declaration": "createSetupConfigAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates semantic setup configuration policy into validated config-owned planning and persistence.",
+      "purpose": "Translates semantic setup configuration intent through one shared preview mapper and serializes validated config-owned persistence.",
       "dependencies": [
         {
           "path": "packages/setup-core/src/ports.ts",
@@ -11953,8 +11953,15 @@
       "declaration": "createSetupInspectionAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Collects CLI machine and provider evidence for the requested intent while retaining TOML, paths, commands, and provider representations locally.",
+      "purpose": "Collects CLI and provider evidence, resolves normalized harness intent, and plans read-only config mutations while retaining boundary representations locally.",
       "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
+          "declaration": "resolveHarnessSelection",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
         {
           "path": "packages/setup-core/src/ports.ts",
           "declaration": "SetupInspection",
@@ -11992,7 +11999,7 @@
       "declaration": "createSetupOperationAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Assigns semantic setup operations to config, provider, process, filesystem, and Observer boundary implementations. Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.",
+      "purpose": "Assigns package/bootstrap, config, provider, process, filesystem, and Observer operations to their final outward implementations. Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/config.ts",
@@ -12036,7 +12043,7 @@
       "declaration": "createSetupComposition",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires one CLI invocation's session and presentation boundaries, selecting Clack as the default guided adapter.",
+      "purpose": "Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
@@ -12095,7 +12102,7 @@
       "declaration": "createJsonSetupPresenter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Projects semantic setup evidence into the frozen machine-facing CLI schema without resolving human presentation copy.",
+      "purpose": "Directly projects semantic plans and adapter evidence into the strict frozen CLI schema without resolving human presentation copy.",
       "dependencies": []
     },
     {
