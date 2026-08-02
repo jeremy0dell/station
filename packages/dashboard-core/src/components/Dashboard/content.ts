@@ -1,14 +1,31 @@
 import type { ProjectView } from "@station/contracts";
 import stringWidth from "string-width";
+import type { DashboardPersistentFilterProjection } from "../../selectors/dashboardPersistentFilter.js";
 import type {
   DashboardSessionOverflow,
   DashboardViewportItem,
 } from "../../selectors/dashboardViewport.js";
 
-import { dashboardFooterLabel } from "../../state/keymap.js";
-import type { DashboardFocus, TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
+import {
+  dashboardFooterLabel,
+  QUIT_HINT_CLOSE,
+  QUIT_HINT_FILTER_CLOSE,
+} from "../../state/keymap.js";
+import type {
+  DashboardFocus,
+  DashboardPersistentFilter,
+  TuiObserverConnectionStatus,
+  TuiScreen,
+} from "../../state/types.js";
 import type { RowGridLayout, RowGridRowInput } from "../WorktreeRow/layout.js";
 import { worktreeRowGridInput, worktreeStyleRowGridInput } from "../WorktreeRow/rowInput.js";
+import {
+  type DashboardFilterHeaderModel,
+  type DashboardPersistentFilterFooterModel,
+  dashboardPersistentFilterAppliedFooterModel,
+  dashboardPersistentFilterEditingFooterModel,
+  dashboardPersistentFilterHeaderModel,
+} from "./filterLine.js";
 
 export { dashboardFooterLabel };
 
@@ -24,6 +41,7 @@ export type TopRowWidgetText = {
 };
 
 export type DashboardTableHeaderModel =
+  | { kind: "persistentFilter"; filter: DashboardFilterHeaderModel }
   | { kind: "columns"; layout: RowGridLayout }
   | { kind: "aboveOverflow"; overflow: DashboardSessionOverflow }
   | { kind: "empty" };
@@ -31,10 +49,24 @@ export type DashboardTableHeaderModel =
 export function dashboardTableHeaderModel({
   layout,
   overflow,
+  columns = 80,
+  persistentFilter,
 }: {
   layout: RowGridLayout | undefined;
   overflow: DashboardSessionOverflow;
+  columns?: number;
+  persistentFilter?: DashboardPersistentFilterProjection;
 }): DashboardTableHeaderModel {
+  if (persistentFilter !== undefined) {
+    return {
+      kind: "persistentFilter",
+      filter: dashboardPersistentFilterHeaderModel({
+        columns,
+        projection: persistentFilter,
+        overflow,
+      }),
+    };
+  }
   // The position cue owns the shared row whenever sessions are hidden above.
   if (overflow.above > 0) {
     return { kind: "aboveOverflow", overflow };
@@ -47,21 +79,39 @@ export function dashboardTableHeaderModel({
 
 export type DashboardFooterModel =
   | { kind: "loading"; text: string }
-  | { kind: "dashboard"; text: string };
+  | { kind: "dashboard"; text: string }
+  | DashboardPersistentFilterFooterModel;
 
 export function dashboardFooterModel({
   columns,
   quitHint,
   hasSnapshot,
   firstRun,
+  screen,
+  persistentFilter,
 }: {
   columns: number;
   quitHint: string;
   hasSnapshot: boolean;
   firstRun: boolean;
+  screen?: TuiScreen;
+  persistentFilter?: DashboardPersistentFilter;
 }): DashboardFooterModel {
   if (!hasSnapshot) {
     return { kind: "loading", text: quitHint };
+  }
+  if (screen?.name === "persistentFilter") {
+    return dashboardPersistentFilterEditingFooterModel(columns);
+  }
+  if (persistentFilter !== undefined) {
+    const appliedQuitHint = quitHint === QUIT_HINT_CLOSE ? QUIT_HINT_FILTER_CLOSE : quitHint;
+    const text = dashboardFooterLabel({
+      columns,
+      quitHint: appliedQuitHint,
+      firstRun,
+      persistentFilter: true,
+    });
+    return dashboardPersistentFilterAppliedFooterModel(text);
   }
   return {
     kind: "dashboard",
@@ -188,6 +238,9 @@ export function rowGridInputForViewportItem(
         activity: "removing session...",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
+        ...(item.persistentFilterMatch === undefined
+          ? {}
+          : { persistentFilterMatch: item.persistentFilterMatch }),
         ...(focused ? { focused: true } : {}),
       });
     }
@@ -202,6 +255,9 @@ export function rowGridInputForViewportItem(
         activity,
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
+        ...(item.persistentFilterMatch === undefined
+          ? {}
+          : { persistentFilterMatch: item.persistentFilterMatch }),
         ...(focused ? { focused: true } : {}),
       });
     }
@@ -211,6 +267,9 @@ export function rowGridInputForViewportItem(
       slot: keyByRow.get(item.row.id),
       title: item.displayTitle,
       focused,
+      ...(item.persistentFilterMatch === undefined
+        ? {}
+        : { persistentFilterMatch: item.persistentFilterMatch }),
     });
   }
   if (item.type !== "createLocalRow") {
@@ -226,6 +285,9 @@ export function rowGridInputForViewportItem(
       activityImportance: "meaningful",
       activityOverflow: "rowSlack",
       color: "red",
+      ...(item.persistentFilterMatch === undefined
+        ? {}
+        : { persistentFilterMatch: item.persistentFilterMatch }),
     });
   }
   return worktreeStyleRowGridInput({
@@ -237,6 +299,9 @@ export function rowGridInputForViewportItem(
     activity: "starting session...",
     activityImportance: "meaningful",
     activityOverflow: "rowSlack",
+    ...(item.persistentFilterMatch === undefined
+      ? {}
+      : { persistentFilterMatch: item.persistentFilterMatch }),
   });
 }
 

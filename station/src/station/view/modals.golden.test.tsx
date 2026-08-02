@@ -11,9 +11,10 @@ import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
-import type { TuiKey } from "@station/dashboard-core";
+import type { DashboardSearchExperience, TuiKey } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
 import {
+  persistentFilterExperience,
   addPendingProjectDefaultHarness,
   applyAddProjectFolderLoaded,
   applyAddProjectFolderReviewFailed,
@@ -37,6 +38,7 @@ type ModalCase = {
   prepare?: (store: StoreApi<TuiStore>) => void;
   size?: { width: number; height: number };
   trimSnapshotTrailingWhitespace?: true;
+  dashboardSearchExperience?: DashboardSearchExperience;
   expect: string[];
   reject?: string[];
 };
@@ -81,6 +83,13 @@ const CASES: ModalCase[] = [
     name: "search prompt",
     keys: [{ input: "/" }, { input: "api" }],
     expect: ["search: api"],
+  },
+  {
+    name: "persistent filter header editor without prompt overlay",
+    keys: [{ input: "/" }, { input: "api" }],
+    dashboardSearchExperience: persistentFilterExperience,
+    expect: ["FILTER /api▏", "FILTER", "Enter apply", "api-cache"],
+    reject: ["search: api"],
   },
   {
     name: "collapse project sheet",
@@ -487,9 +496,13 @@ describe("modal flow golden frames", () => {
     }
   });
 
-  function makeStore(snapshot = manyProjectsSnapshot()): StoreApi<TuiStore> {
+  function makeStore(
+    snapshot = manyProjectsSnapshot(),
+    dashboardSearchExperience?: DashboardSearchExperience,
+  ): StoreApi<TuiStore> {
     return makeStationTestStore({
       snapshot,
+      ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
       folderService: {
         cwd: () => "/Users/example/Developer/station",
         homeDir: () => "/Users/example",
@@ -503,7 +516,7 @@ describe("modal flow golden frames", () => {
 
   for (const modal of CASES) {
     it(`renders the ${modal.name}`, async () => {
-      const store = makeStore(modal.snapshot?.());
+      const store = makeStore(modal.snapshot?.(), modal.dashboardSearchExperience);
       for (const key of modal.keys) {
         store.getState().handleKey(key);
       }

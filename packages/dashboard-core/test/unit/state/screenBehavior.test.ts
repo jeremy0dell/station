@@ -70,6 +70,11 @@ const screenBehaviorCases: readonly [
 ][] = [
   ["dashboard", { name: "dashboard" }, "absent"],
   ["search", { name: "search", value: "api" }, "absent"],
+  [
+    "persistent filter",
+    { name: "persistentFilter", draft: createEditableTextInputState("api") },
+    "absent",
+  ],
   ["help", { name: "help" }, "present"],
   ["project collapse picker", { name: "projectCollapse" }, "present"],
   ["project settings picker", { name: "projectSettingsPicker" }, "present"],
@@ -278,6 +283,7 @@ describe("TUI screen behavior", () => {
       { name: "renameSession", step: "chooseSlot" },
       { name: "fork", step: "chooseSlot" },
       { name: "search", value: "api" },
+      { name: "persistentFilter", draft: createEditableTextInputState("api") },
       { name: "dashboard" },
     ] satisfies TuiScreen[]) {
       const state = withScreen(screen);

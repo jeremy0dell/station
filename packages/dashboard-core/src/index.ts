@@ -1,5 +1,6 @@
 export * from "./components/BottomSheetFrame/layout.js";
 export * from "./components/Dashboard/content.js";
+export * from "./components/Dashboard/filterLine.js";
 export * from "./components/Dashboard/layout.js";
 export * from "./components/EditableTextInput/editing.js";
 export * from "./components/HelpOverlay/helpPanel.js";
@@ -19,6 +20,7 @@ export * from "./flows/addProject/state.js";
 export * from "./flows/addProject/types.js";
 export * from "./flows/newSession.js";
 export * from "./flows/stepWizard.js";
+export * from "./selectors/dashboardPersistentFilter.js";
 export * from "./selectors/dashboardSearchProjection.js";
 export * from "./selectors/dashboardViewport.js";
 export * from "./selectors/fleetSummary.js";

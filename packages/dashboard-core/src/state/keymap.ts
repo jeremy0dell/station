@@ -6,6 +6,7 @@ export type TuiInputMode =
   | "dashboard"
   | "help"
   | "search"
+  | "persistentFilter"
   | "projectCollapse"
   | "projectSettingsPicker"
   | "removeChooseSlot"
@@ -39,6 +40,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return "help";
     case "search":
       return "search";
+    case "persistentFilter":
+      return "persistentFilter";
     case "projectCollapse":
       return "projectCollapse";
     case "projectSettingsPicker":
@@ -80,7 +83,13 @@ type DashboardKeyPattern =
 
 type DashboardNamedKey = Extract<DashboardKeyPattern, { kind: "named" }>["named"];
 
-type DashboardFooterVariant = "full" | "compact" | "firstRunFull" | "firstRunCompact";
+type DashboardFooterVariant =
+  | "full"
+  | "compact"
+  | "firstRunFull"
+  | "firstRunCompact"
+  | "filteredFull"
+  | "filteredCompact";
 
 type DashboardFooterMetadata = {
   order: number;
@@ -193,6 +202,14 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "named", named: "escape" },
     action: "tui.popup.dismiss",
     outcome: "dismiss-popup",
+    help: {
+      keys: "Esc",
+      label: "clear persistent filter",
+      footer: {
+        order: 55,
+        labels: { filteredFull: "clear", filteredCompact: "clear" },
+      },
+    },
   },
   {
     id: "tui.dashboard.search",
@@ -202,7 +219,15 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "/",
       label: "search",
-      footer: { order: 50, labels: { full: "search", compact: "search" } },
+      footer: {
+        order: 50,
+        labels: {
+          full: "search",
+          compact: "search",
+          filteredFull: "edit",
+          filteredCompact: "edit",
+        },
+      },
     },
   },
   {
@@ -313,26 +338,35 @@ export type TuiHelpContentLine =
   | { key: string; description: string };
 
 export const QUIT_HINT_CLOSE = "Q/esc:close";
+export const QUIT_HINT_FILTER_CLOSE = "Q:close";
 export const QUIT_HINT_DISMISS_ERROR = "Esc:dismiss  Q:close";
 
 export function dashboardFooterLabel({
   columns,
   quitHint,
   firstRun = false,
+  persistentFilter = false,
 }: {
   columns: number;
   quitHint: string;
   firstRun?: boolean;
+  persistentFilter?: boolean;
 }): string {
-  const full = dashboardFooterCandidate(firstRun ? "firstRunFull" : "full", quitHint);
-  const compact = dashboardFooterCandidate(firstRun ? "firstRunCompact" : "compact", quitHint);
+  const full = dashboardFooterCandidate(
+    firstRun ? "firstRunFull" : persistentFilter ? "filteredFull" : "full",
+    quitHint,
+  );
+  const compact = dashboardFooterCandidate(
+    firstRun ? "firstRunCompact" : persistentFilter ? "filteredCompact" : "compact",
+    quitHint,
+  );
   if (firstRun && full.length > columns) {
     return quitHint === QUIT_HINT_DISMISS_ERROR && compact.length > columns ? quitHint : compact;
   }
   if (full.length <= columns) {
     return full;
   }
-  if (quitHint === QUIT_HINT_CLOSE) {
+  if (quitHint !== QUIT_HINT_DISMISS_ERROR) {
     return compact;
   }
   return compact.length <= columns ? compact : quitHint;
@@ -347,7 +381,11 @@ function dashboardFooterCandidate(variant: DashboardFooterVariant, quitHint: str
       if (help?.footer === undefined) {
         return [];
       }
-      const label = help.footer.labels[variant];
+      const fallbackVariant =
+        variant === "filteredFull" ? "full" : variant === "filteredCompact" ? "compact" : undefined;
+      const label =
+        help.footer.labels[variant] ??
+        (fallbackVariant === undefined ? undefined : help.footer.labels[fallbackVariant]);
       return label === undefined
         ? []
         : [{ order: help.footer.order, text: `${help.keys} ${label}` }];

@@ -4,12 +4,15 @@ import type {
   DashboardTableHeaderModel,
   RowGridLayout,
 } from "@station/dashboard-core";
+import { DashboardFilterView } from "./DashboardFilterView.js";
 import { Segments } from "./segments.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 import { STATION_COLORS } from "./theme.js";
 
 export function DashboardTableHeaderView({ model }: { model: DashboardTableHeaderModel }) {
   switch (model.kind) {
+    case "persistentFilter":
+      return <DashboardFilterView model={model.filter} />;
     case "columns":
       return <ColumnHeaderRow layout={model.layout} />;
     case "aboveOverflow":

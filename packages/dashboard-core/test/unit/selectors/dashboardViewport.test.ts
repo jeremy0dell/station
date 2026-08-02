@@ -474,4 +474,62 @@ describe("dashboard viewport selector", () => {
       displayTitle: "Readable feature task",
     });
   });
+
+  it("carries soft-preview metadata without changing order, visibility, slots, or overflow", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 10 });
+    const resting = selectDashboardViewport(snapshot, state);
+    const editing = selectDashboardViewport(snapshot, state, {
+      name: "persistentFilter",
+      draft: { value: "QUEUE", cursor: 5 },
+    });
+
+    expect(editing.items.map((item) => item.id)).toEqual(resting.items.map((item) => item.id));
+    expect(editing.visibleItems.map((item) => item.id)).toEqual(
+      resting.visibleItems.map((item) => item.id),
+    );
+    expect(editing.displayRowChoices).toEqual(resting.displayRowChoices);
+    expect(editing.sessionOverflow).toEqual(resting.sessionOverflow);
+    expect(editing.persistentFilter).toMatchObject({
+      source: "draft",
+      matchCount: 1,
+      totalCount: 7,
+    });
+    expect(editing.items.find((item) => item.id === "session:ses_wt_api_working")).toMatchObject({
+      persistentFilterMatch: { matched: true, dimmed: false },
+    });
+    expect(editing.items.find((item) => item.id === "session:ses_wt_web_idle")).toMatchObject({
+      persistentFilterMatch: { matched: false, dimmed: true },
+    });
+  });
+
+  it("includes optimistic rows in persistent-preview counts and metadata", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      persistentFilter: { query: "pending launch" },
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "local_filter_pending",
+            projectId: "web",
+            title: "Pending launch",
+            branch: "station-pending-filter",
+            harnessProvider: "codex",
+            createdAt: "2026-05-31T12:00:00.000Z",
+          },
+        ],
+        failedCreate: [],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+
+    const viewport = selectDashboardViewport(snapshot, state, { name: "dashboard" });
+
+    expect(viewport.persistentFilter).toMatchObject({ matchCount: 1, totalCount: 8 });
+    expect(viewport.items.find((item) => item.id === "create:local_filter_pending")).toMatchObject({
+      persistentFilterMatch: { matched: true, dimmed: false },
+    });
+  });
 });

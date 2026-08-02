@@ -1,12 +1,20 @@
 import type { ProjectId, ProjectView, StationSnapshot } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
+import { worktreeRowVisibleFields } from "../components/WorktreeRow/rowInput.js";
 import type {
   FailedCreateSessionRow,
   PendingCreateSessionRow,
   PendingRemoveWorktreeRow,
   PendingStartAgentRow,
 } from "../state/localRows.js";
-import type { TuiViewState } from "../state/types.js";
+import type { TuiScreen, TuiViewState } from "../state/types.js";
+import {
+  type DashboardPersistentFilterCandidate,
+  type DashboardPersistentFilterProjection,
+  type DashboardPersistentFilterProjectMatch,
+  type DashboardPersistentFilterRowMatch,
+  selectDashboardPersistentFilter,
+} from "./dashboardPersistentFilter.js";
 import { matchesDashboardOptimisticSearch } from "./dashboardSearchProjection.js";
 import {
   type DashboardSessionRow,
@@ -31,6 +39,7 @@ export type DashboardViewportItem =
       id: string;
       project: ProjectView;
       collapsed: boolean;
+      persistentFilterMatch?: DashboardPersistentFilterProjectMatch;
     }
   | {
       type: "emptyProject";
@@ -44,11 +53,13 @@ export type DashboardViewportItem =
       displayTitle: string;
       pendingRemove?: PendingRemoveWorktreeRow;
       pendingStart?: PendingStartAgentRow;
+      persistentFilterMatch?: DashboardPersistentFilterRowMatch;
     }
   | {
       type: "createLocalRow";
       id: string;
       row: DashboardCreateSessionLocalRow;
+      persistentFilterMatch?: DashboardPersistentFilterRowMatch;
     };
 
 export type DashboardViewport = {
@@ -61,6 +72,7 @@ export type DashboardViewport = {
   rowChoices: Array<KeyedChoice<DashboardSessionRow>>;
   displayRowChoices: Array<KeyedChoice<DashboardSessionRow>>;
   sessionOverflow: DashboardSessionOverflow;
+  persistentFilter?: DashboardPersistentFilterProjection;
 };
 
 /** Session-row counts (not raw item counts) for the scroll-overflow labels. */
@@ -74,8 +86,9 @@ export type DashboardSessionOverflow = {
 export function selectDashboardViewport(
   snapshot: StationSnapshot,
   state: TuiViewState,
+  activeScreen: TuiScreen = { name: "dashboard" },
 ): DashboardViewport {
-  const items = selectDashboardItems(snapshot, state);
+  const { items, persistentFilter } = selectDashboardItemsProjection(snapshot, state, activeScreen);
   const bodyRows = dashboardBodyRows(state.terminalRows);
   const clampedScrollOffset = clampDashboardScrollOffset({
     bodyRows,
@@ -94,7 +107,7 @@ export function selectDashboardViewport(
   const above = countSessionRows(items.slice(0, clampedScrollOffset));
   const visible = countSessionRows(visibleItems);
   const total = countSessionRows(items);
-  return {
+  const viewport: DashboardViewport = {
     bodyRows,
     clampedScrollOffset,
     hiddenAbove,
@@ -107,6 +120,10 @@ export function selectDashboardViewport(
     displayRowChoices,
     sessionOverflow: { above, below: total - above - visible, visible, total },
   };
+  if (persistentFilter !== undefined) {
+    viewport.persistentFilter = persistentFilter;
+  }
+  return viewport;
 }
 
 function countSessionRows(items: readonly DashboardViewportItem[]): number {
@@ -114,6 +131,118 @@ function countSessionRows(items: readonly DashboardViewportItem[]): number {
 }
 
 export function selectDashboardItems(
+  snapshot: StationSnapshot,
+  state: TuiViewState,
+  activeScreen: TuiScreen = { name: "dashboard" },
+): DashboardViewportItem[] {
+  return selectDashboardItemsProjection(snapshot, state, activeScreen).items;
+}
+
+function selectDashboardItemsProjection(
+  snapshot: StationSnapshot,
+  state: TuiViewState,
+  activeScreen: TuiScreen,
+): {
+  items: DashboardViewportItem[];
+  persistentFilter: DashboardPersistentFilterProjection | undefined;
+} {
+  const items = selectDashboardItemsWithoutPersistentFilter(snapshot, state);
+  const projectLabels = new Map(snapshot.projects.map((project) => [project.id, project.label]));
+  const candidates = items.flatMap((item) => {
+    const candidate = persistentFilterCandidate(item, projectLabels);
+    return candidate === undefined ? [] : [candidate];
+  });
+  const persistentFilter = selectDashboardPersistentFilter({
+    candidates,
+    screen: activeScreen,
+    ...(state.persistentFilter === undefined ? {} : { applied: state.persistentFilter }),
+  });
+  if (persistentFilter === undefined) {
+    return { items, persistentFilter };
+  }
+  return {
+    items: items.map((item) => attachPersistentFilterMatch(item, persistentFilter)),
+    persistentFilter,
+  };
+}
+
+function persistentFilterCandidate(
+  item: DashboardViewportItem,
+  projectLabels: ReadonlyMap<ProjectId, string>,
+): DashboardPersistentFilterCandidate | undefined {
+  if (item.type === "session") {
+    const projectLabel =
+      projectLabels.get(item.row.worktree.projectId) ?? item.row.worktree.projectLabel;
+    if (item.pendingRemove !== undefined) {
+      return {
+        kind: "session",
+        id: item.id,
+        projectId: item.row.worktree.projectId,
+        projectLabel,
+        visibleFields: { title: item.displayTitle, status: "removing session..." },
+      };
+    }
+    if (item.pendingStart !== undefined) {
+      return {
+        kind: "session",
+        id: item.id,
+        projectId: item.row.worktree.projectId,
+        projectLabel,
+        visibleFields: {
+          title: item.displayTitle,
+          status: item.pendingStart.operation === "resumeAgent" ? "resuming..." : "starting...",
+        },
+      };
+    }
+    return {
+      kind: "session",
+      id: item.id,
+      projectId: item.row.worktree.projectId,
+      projectLabel,
+      visibleFields: worktreeRowVisibleFields(item.row.presentation, item.displayTitle),
+    };
+  }
+  if (item.type !== "createLocalRow") {
+    return undefined;
+  }
+  const projectLabel = projectLabels.get(item.row.projectId) ?? item.row.projectId;
+  return item.row.status === "failed"
+    ? {
+        kind: "optimistic",
+        id: item.id,
+        projectId: item.row.projectId,
+        projectLabel,
+        visibleFields: { title: item.row.title, status: item.row.error.message },
+      }
+    : {
+        kind: "optimistic",
+        id: item.id,
+        projectId: item.row.projectId,
+        projectLabel,
+        visibleFields: {
+          title: item.row.title,
+          agent: item.row.harnessProvider ?? "",
+          status: "starting session...",
+        },
+      };
+}
+
+function attachPersistentFilterMatch(
+  item: DashboardViewportItem,
+  projection: DashboardPersistentFilterProjection,
+): DashboardViewportItem {
+  if (item.type === "projectHeader") {
+    const match = projection.projects.get(item.project.id);
+    return match === undefined ? item : { ...item, persistentFilterMatch: match };
+  }
+  if (item.type === "session" || item.type === "createLocalRow") {
+    const match = projection.rows.get(item.id);
+    return match === undefined ? item : { ...item, persistentFilterMatch: match };
+  }
+  return item;
+}
+
+function selectDashboardItemsWithoutPersistentFilter(
   snapshot: StationSnapshot,
   state: TuiViewState,
 ): DashboardViewportItem[] {

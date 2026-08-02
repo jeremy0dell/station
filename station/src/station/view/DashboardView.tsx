@@ -26,7 +26,9 @@ import {
 } from "@station/dashboard-core";
 import type {
   DashboardFocus,
+  DashboardPersistentFilterProjectMatch,
   ProjectHeaderControl,
+  TuiScreen,
   TuiViewState,
 } from "@station/dashboard-core";
 import type { StationMouseTarget } from "../input/stationMouse.js";
@@ -64,12 +66,13 @@ const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
 export type DashboardViewProps = {
   snapshot: StationSnapshot;
   viewState: TuiViewState;
+  screen: TuiScreen;
   columns?: number;
 };
 
-export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardViewProps) {
+export function DashboardView({ snapshot, viewState, screen, columns = 80 }: DashboardViewProps) {
   const dispatch = useStationMouse();
-  const viewport = selectDashboardViewport(snapshot, viewState);
+  const viewport = selectDashboardViewport(snapshot, viewState, screen);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
@@ -80,6 +83,10 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
     overflow: viewport.sessionOverflow,
+    columns: contentColumns,
+    ...(viewport.persistentFilter === undefined
+      ? {}
+      : { persistentFilter: viewport.persistentFilter }),
   });
   return (
     <box
@@ -260,6 +267,7 @@ function DashboardViewportRow({
           columns={columns}
           project={item.project}
           collapsed={item.collapsed}
+          persistentFilterMatch={item.persistentFilterMatch}
           focus={
             dashboardFocus?.kind === "projectHeader" &&
             dashboardFocus.projectId === item.project.id
@@ -383,11 +391,13 @@ function ProjectHeaderLine({
   project,
   collapsed,
   focus,
+  persistentFilterMatch,
 }: {
   columns: number;
   project: ProjectView;
   collapsed: boolean;
   focus?: ProjectHeaderControl | undefined;
+  persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
   const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
   const shellLabel = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
@@ -406,6 +416,7 @@ function ProjectHeaderLine({
         collapsed={collapsed}
         width={Math.max(1, columns - controlsWidth)}
         focused={focus === "primary"}
+        persistentFilterMatch={persistentFilterMatch}
       />
       <box flexGrow={1} height={1} />
       <ProjectHeaderSeparator />
@@ -435,11 +446,13 @@ function ProjectHeaderPrimary({
   collapsed,
   width,
   focused,
+  persistentFilterMatch,
 }: {
   project: ProjectView;
   collapsed: boolean;
   width: number;
   focused: boolean;
+  persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
@@ -457,7 +470,12 @@ function ProjectHeaderPrimary({
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
-      <ProjectHeaderLabel project={project} collapsed={collapsed} width={width} />
+      <ProjectHeaderLabel
+        project={project}
+        collapsed={collapsed}
+        width={width}
+        persistentFilterMatch={persistentFilterMatch}
+      />
     </text>
   );
 }
@@ -504,10 +522,12 @@ function ProjectHeaderLabel({
   project,
   collapsed,
   width,
+  persistentFilterMatch,
 }: {
   project: ProjectView;
   collapsed: boolean;
   width: number;
+  persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
   const parts = projectHeaderLabelParts(project, collapsed);
   const combined = truncateCells(`${parts.title}${parts.counts}`, width);
@@ -515,8 +535,56 @@ function ProjectHeaderLabel({
   const counts = combined.slice(parts.title.length);
   return (
     <>
-      <span attributes={TextAttributes.BOLD}>{title}</span>
+      <ProjectHeaderTitle
+        title={title}
+        labelOffset={Math.min(title.length, parts.title.length - project.label.length)}
+        match={persistentFilterMatch}
+      />
       <span fg={STATION_COLORS.gray}>{counts}</span>
     </>
+  );
+}
+
+function ProjectHeaderTitle({
+  title,
+  labelOffset,
+  match,
+}: {
+  title: string;
+  labelOffset: number;
+  match?: DashboardPersistentFilterProjectMatch | undefined;
+}) {
+  const label = title.slice(labelOffset);
+  const ranges = match?.labelRanges ?? [];
+  if (ranges.length === 0) {
+    return <span attributes={TextAttributes.BOLD}>{title}</span>;
+  }
+  const segments: Array<{ text: string; matched: boolean }> = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    const start = Math.min(label.length, Math.max(cursor, range.start));
+    const end = Math.min(label.length, Math.max(start, range.end));
+    if (start > cursor) segments.push({ text: label.slice(cursor, start), matched: false });
+    if (end > start) segments.push({ text: label.slice(start, end), matched: true });
+    cursor = end;
+  }
+  if (cursor < label.length) segments.push({ text: label.slice(cursor), matched: false });
+  return (
+    <span attributes={TextAttributes.BOLD}>
+      {title.slice(0, labelOffset)}
+      {segments.map((segment, index) => (
+        <span
+          key={`${index}:${segment.text}`}
+          {...(segment.matched
+            ? {
+                fg: STATION_COLORS.filterMatchForeground,
+                bg: STATION_COLORS.filterMatchBackground,
+              }
+            : {})}
+        >
+          {segment.text}
+        </span>
+      ))}
+    </span>
   );
 }

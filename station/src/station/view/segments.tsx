@@ -3,7 +3,7 @@ import type { RowSegment } from "@station/dashboard-core";
 import stringWidth from "string-width";
 import { useHoverPointer } from "../../useHoverPointer.js";
 import { type StationMouseTarget } from "../input/stationMouse.js";
-import { rowColorToHex } from "./theme.js";
+import { rowColorToHex, STATION_COLORS } from "./theme.js";
 import { Throbber } from "./Throbber.js";
 import {
   useStationHoverEnabled,
@@ -54,7 +54,10 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
   const pointerProps = useHoverPointer({ enabled: useStationHoverEnabled() });
   const { left, segment, url, width } = link;
   const attributes = textSegmentAttributes(segment);
-  const fg = rowColorToHex(segment.color);
+  const fg = segment.filterMatch === true
+    ? STATION_COLORS.filterMatchForeground
+    : rowColorToHex(segment.color);
+  const bg = segment.filterMatch === true ? STATION_COLORS.filterMatchBackground : undefined;
   const target: StationMouseTarget = { kind: "link", url };
   return (
     <text
@@ -64,6 +67,7 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
       width={width}
       height={1}
       {...(fg === undefined ? {} : { fg })}
+      {...(bg === undefined ? {} : { bg })}
       attributes={attributes}
       {...pointerProps}
       {...stationMouseProps(dispatch, target)}
@@ -76,12 +80,22 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
 function Segment({ segment }: { segment: RowSegment }) {
   if (segment.kind === "throbber") {
     const fg = rowColorToHex(segment.color);
-    return <Throbber variant={segment.variant} {...(fg === undefined ? {} : { fg })} />;
+    const throbber = <Throbber variant={segment.variant} {...(fg === undefined ? {} : { fg })} />;
+    return segment.dimmedPreview === true ? (
+      <span attributes={TextAttributes.DIM}>{throbber}</span>
+    ) : throbber;
   }
   const attributes = textSegmentAttributes(segment);
-  const fg = rowColorToHex(segment.color);
+  const fg = segment.filterMatch === true
+    ? STATION_COLORS.filterMatchForeground
+    : rowColorToHex(segment.color);
+  const bg = segment.filterMatch === true ? STATION_COLORS.filterMatchBackground : undefined;
   return (
-    <span {...(fg === undefined ? {} : { fg })} attributes={attributes}>
+    <span
+      {...(fg === undefined ? {} : { fg })}
+      {...(bg === undefined ? {} : { bg })}
+      attributes={attributes}
+    >
       {segment.text}
     </span>
   );
@@ -89,7 +103,7 @@ function Segment({ segment }: { segment: RowSegment }) {
 
 function textSegmentAttributes(segment: TextRowSegment): number {
   let attributes = TextAttributes.NONE;
-  if (segment.dimColor === true) {
+  if (segment.dimColor === true || segment.dimmedPreview === true) {
     attributes |= TextAttributes.DIM;
   }
   if (segment.underline === true) {

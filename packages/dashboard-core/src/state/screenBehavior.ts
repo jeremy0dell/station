@@ -3,6 +3,7 @@ import { dashboardScreenBehavior } from "./screens/dashboard.js";
 import { forkScreenBehavior } from "./screens/fork.js";
 import { helpScreenBehavior } from "./screens/help.js";
 import { newSessionScreenBehavior } from "./screens/newSession.js";
+import { persistentFilterScreenBehavior } from "./screens/persistentFilter.js";
 import { projectCollapseScreenBehavior } from "./screens/projectCollapse.js";
 import { projectDefaultAgentScreenBehavior } from "./screens/projectDefaultAgent.js";
 import { projectSettingsScreenBehavior } from "./screens/projectSettings.js";
@@ -31,6 +32,8 @@ export function tuiScreenBehavior(screen: TuiScreen): TuiScreenBehavior {
       return helpScreenBehavior;
     case "search":
       return searchScreenBehavior;
+    case "persistentFilter":
+      return persistentFilterScreenBehavior;
     case "projectCollapse":
       return projectCollapseScreenBehavior;
     case "projectSettingsPicker":

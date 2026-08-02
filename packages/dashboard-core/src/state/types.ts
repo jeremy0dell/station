@@ -32,8 +32,14 @@ export type TuiRuntimeState = {
   focusOrigin?: TerminalFocusOrigin;
 };
 
+export type DashboardPersistentFilter = {
+  query: string;
+};
+
 export type TuiViewState = {
   searchQuery: string;
+  /** Dashboard-local applied filter; absence means no persistent filter is applied. */
+  persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds: ReadonlySet<string>;
   scrollOffset: number;
   terminalRows: number;
@@ -78,6 +84,7 @@ export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
   | { name: "search"; value: string }
+  | { name: "persistentFilter"; draft: EditableTextInputState }
   | { name: "projectCollapse" }
   | { name: "projectSettingsPicker" }
   | { name: "removeWorktree"; step: "chooseSlot" }
@@ -141,6 +148,7 @@ export type ProjectSettingsItemId = "agent" | "remove";
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;
   searchQuery?: string;
+  persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds?: Iterable<string>;
   scrollOffset?: number;
   terminalRows?: number;

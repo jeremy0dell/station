@@ -1,6 +1,7 @@
 import {
   createInitialTuiState,
   dashboardFooterLabel,
+  deriveTuiInputMode,
   handleTuiKey,
   isSlotKey,
   QUIT_HINT_DISMISS_ERROR,
@@ -20,6 +21,16 @@ describe("dashboard key bindings", () => {
     expect(matchDashboardBinding({ input: "\r", return: true })?.action).toBe("tui.focus.activate");
     expect(matchDashboardBinding({ input: "N" })?.action).toBe("tui.newSession.open");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
+  });
+
+  it("derives the dedicated persistent-filter input mode", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    expect(
+      deriveTuiInputMode({
+        ...base,
+        screen: { name: "persistentFilter", draft: { value: "", cursor: 0 } },
+      }),
+    ).toBe("persistentFilter");
   });
 
   it("gives the global Ctrl-C exit precedence over slot matching", () => {
@@ -79,7 +90,13 @@ describe("dashboard popup lifecycle keys", () => {
   });
 });
 
-type DashboardFooterVariant = "full" | "compact" | "firstRunFull" | "firstRunCompact";
+type DashboardFooterVariant =
+  | "full"
+  | "compact"
+  | "firstRunFull"
+  | "firstRunCompact"
+  | "filteredFull"
+  | "filteredCompact";
 
 type DashboardFooterMetadata = {
   order: number;
@@ -132,6 +149,18 @@ describe("dashboard footer", () => {
     );
     expect(dashboardFooterLabel({ columns: 40, quitHint: "Q/esc:close", firstRun: true })).toBe(
       `${shortcutsFromBindingMetadata("firstRunCompact")}  Q/esc:close`,
+    );
+  });
+
+  it("derives applied-filter edit and clear affordances from dashboard binding metadata", () => {
+    expect(
+      dashboardFooterLabel({
+        columns: 140,
+        quitHint: "Q:close",
+        persistentFilter: true,
+      }),
+    ).toBe(
+      "↵ activate  N new  A add  ⇥ next-needs-me  / edit  Esc clear  X delete  ? help  Q:close",
     );
   });
 

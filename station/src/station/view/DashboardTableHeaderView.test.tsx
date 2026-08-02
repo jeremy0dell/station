@@ -53,6 +53,25 @@ describe("DashboardTableHeaderView", () => {
     expect(setup.captureCharFrame().split("\n")[0]?.trimEnd()).toBe(HEADER_TEXT);
   });
 
+  it("lets a persistent filter model replace the complete columns and overflow row", async () => {
+    const setup = await renderHeader({
+      kind: "persistentFilter",
+      filter: {
+        kind: "applied",
+        zeroMatches: false,
+        segments: [
+          { text: "FILTER ", role: "label" },
+          { text: "working", role: "query" },
+          { text: "  2/8 matches", role: "count" },
+        ],
+      },
+    });
+    const line = setup.captureCharFrame().split("\n")[0]?.trimEnd() ?? "";
+
+    expect(line).toBe("FILTER working  2/8 matches");
+    expect(line).not.toContain("SESSION");
+  });
+
   it("renders above-overflow content", async () => {
     const setup = await renderHeader({
       kind: "aboveOverflow",

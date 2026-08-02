@@ -20,6 +20,12 @@ export const STATION_COLORS = {
   frozenSurface: "#12161b",
   focusBackground: "#15222e",
   compactFocusBackground: "#1b3448",
+  filterEditorRail: "#22d3ee",
+  filterEditorSurface: "#11232c",
+  filterAppliedSurface: "#171b20",
+  filterMatchBackground: "#3f4a1b",
+  filterMatchForeground: "#f1f5c4",
+  filterZeroMatch: "#fbbf24",
 } as const;
 
 export function rowColorToHex(color: RowColor | undefined): string | undefined {
@@ -40,7 +46,13 @@ export function rowColorToHex(color: RowColor | undefined): string | undefined {
       return STATION_COLORS.cyan;
     case "purple":
       return STATION_COLORS.purple;
+    default:
+      return assertNeverRowColor(color);
   }
+}
+
+function assertNeverRowColor(_color: never): never {
+  throw new Error("Unhandled row color.");
 }
 
 export function toastBorderColorHex(name: ToastBorderColorName): string {

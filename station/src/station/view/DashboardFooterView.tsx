@@ -1,3 +1,4 @@
+import { TextAttributes } from "@opentui/core";
 import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import {
@@ -7,6 +8,7 @@ import {
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
   truncateCells,
+  type DashboardFilterFooterSegment,
   type DashboardFooterModel,
   type TuiState,
   type TuiStore,
@@ -20,6 +22,8 @@ export type DashboardFooterViewProps = {
 
 export function DashboardFooterView({ store, columns }: DashboardFooterViewProps) {
   const snapshot = useStore(store, (state) => state.snapshot);
+  const screen = useStore(store, (state) => state.screen);
+  const persistentFilter = useStore(store, (state) => state.persistentFilter);
   const quitHint = useStore(store, selectFooterQuitHint);
   const contentColumns = Math.max(1, Math.floor(columns));
   const model = dashboardFooterModel({
@@ -27,22 +31,50 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
     quitHint,
     hasSnapshot: snapshot !== undefined,
     firstRun: snapshot !== undefined && snapshot.projects.length === 0,
+    screen,
+    ...(persistentFilter === undefined ? {} : { persistentFilter }),
   });
 
-  return (
-    <text fg={dashboardFooterColor(model)}>{truncateCells(model.text, contentColumns)}</text>
-  );
+  return renderDashboardFooter(model, contentColumns);
 }
 
-function dashboardFooterColor(model: DashboardFooterModel): string {
+function renderDashboardFooter(model: DashboardFooterModel, columns: number) {
   switch (model.kind) {
     case "loading":
-      return STATION_COLORS.gray;
+      return <text fg={STATION_COLORS.gray}>{truncateCells(model.text, columns)}</text>;
     case "dashboard":
-      return STATION_COLORS.foreground;
+    case "persistentFilterApplied":
+      return <text fg={STATION_COLORS.foreground}>{truncateCells(model.text, columns)}</text>;
+    case "persistentFilterEditing":
+      return (
+        <box height={1} width="100%" backgroundColor={STATION_COLORS.filterEditorSurface}>
+          <text width="100%">
+            {model.segments.map((segment, index) => (
+              <span
+                key={`${segment.role}:${index}`}
+                fg={footerSegmentForeground(segment)}
+                {...(segment.role === "badge" ? { bg: STATION_COLORS.filterEditorRail } : {})}
+                attributes={
+                  segment.role === "badge" || segment.role === "key"
+                    ? TextAttributes.BOLD
+                    : TextAttributes.NONE
+                }
+              >
+                {segment.text}
+              </span>
+            ))}
+          </text>
+        </box>
+      );
     default:
       return assertNeverDashboardFooterModel(model);
   }
+}
+
+function footerSegmentForeground(segment: DashboardFilterFooterSegment): string {
+  if (segment.role === "badge") return STATION_COLORS.background;
+  if (segment.role === "key") return STATION_COLORS.foreground;
+  return STATION_COLORS.gray;
 }
 
 function assertNeverDashboardFooterModel(_model: never): never {

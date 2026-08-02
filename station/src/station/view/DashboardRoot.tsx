@@ -39,6 +39,7 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
   const loading = useStore(store, (state) => state.loading);
   const screen = useStore(store, (state) => state.screen);
   const searchQuery = useStore(store, (state) => state.searchQuery);
+  const persistentFilter = useStore(store, (state) => state.persistentFilter);
   const collapsedProjectIds = useStore(store, (state) => state.collapsedProjectIds);
   const scrollOffset = useStore(store, (state) => state.scrollOffset);
   const dashboardFocus = useStore(store, (state) => state.dashboardFocus);
@@ -125,8 +126,10 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
             terminalRows: rows,
             localRows,
             selection,
+            ...(persistentFilter === undefined ? {} : { persistentFilter }),
             ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
           }}
+          screen={screen}
           columns={columns}
         />
         <DashboardFooterView store={store} columns={contentColumns} />

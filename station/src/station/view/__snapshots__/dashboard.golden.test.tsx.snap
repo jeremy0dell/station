@@ -381,3 +381,111 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 Esc:dismiss  Q:close
 "
 `;
+
+exports[`dashboard golden frames renders the persistent filter soft-preview editor at wide width 1`] = `
+"                                                                                                                        
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle     4 projects · 10 sessions · 9 agents 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+▏ FILTER /cli▏                                                                                               1/10 match 
+▼ station  5 sessions · 4 agents                                                            [shell] [quick session] [▾] 
+ [1] ○ cli-help-man                              codex     idle                                            +14 -6 #70 ✓ 
+ [2] - docs-cleanup                              codex     no agent                                                     
+ [3] ○ pty-buffer                                codex     idle                                                   #73 ✓ 
+ [4] + session-resume                            codex     starting                                                     
+ [5] ⠋ station-overlay                           codex     working                                       +412 -96 #76 … 
+                                                                                                                        
+▼ observer  3 sessions · 3 agents                                                           [shell] [quick session] [▾] 
+ [6] x batch-export                              opencode  exited                                                  #8 ✓ 
+ [7] ⠋ provider-hooks                            opencode  working                                         +32 -8 #16 … 
+ [8] ○ trace-bundle                              opencode  idle                                              +1 -1 #4 ✓ 
+                                                                                                                        
+▼ scripts  2 sessions · 2 agents                                                            [shell] [quick session] [▾] 
+ [9] ○ api-cache                                 opencode  idle                                            +14 -6 #5 x1 
+ [a] ? metadata-refresh                          opencode  unknown                                            +3 -1 #10 
+                                                                                                                        
+▼ empty-project  0 sessions                                                                 [shell] [quick session] [▾] 
+ no sessions yet · [ + add session ]                                                                                    
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+ FILTER   ←→ cursor  Enter apply  Ctrl-U clear  Esc cancel                                                              
+"
+`;
+
+exports[`dashboard golden frames renders a recoverable zero-match persistent preview 1`] = `
+"                                                                                
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
+─────────────────────────────────────────────────────────────────────────────── 
+▏ FILTER /no-such-session▏                                         0/10 matches 
+▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
+ [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
+ [2] - docs-cleanup                       codex     no agent                    
+ [3] ○ pty-buffer                         codex     idle                  #73 ✓ 
+ [4] + session-resume                     codex     starting                    
+ [5] ⠋ station-overlay                    codex     working      +412 -96 #76 … 
+                                                                                
+▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
+ [6] x batch-export                       opencode  exited                 #8 ✓ 
+ [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
+ [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
+                                                                                
+▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
+ [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
+ [a] ? metadata-refresh                   opencode  unknown           +3 -1 #10 
+                                                                                
+▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
+                                                                                
+─────────────────────────────────────────────────────────────────────────────── 
+ FILTER   ←→ cursor  Enter apply  Ctrl-U clear  Esc cancel                      
+"
+`;
+
+exports[`dashboard golden frames renders an applied persistent summary at compact width 1`] = `
+"                                                            
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown   
+─────────────────────────────────────────────────────────── 
+FILTER working                                 2/10 matches 
+▼ station  5 sessions · 4 agents              [sh] [qs] [▾] 
+ [1] ○ cli-help-man            codex     idle         #70 ✓ 
+ [2] - docs-cleanup            codex     no agent           
+ [3] ○ pty-buffer              codex     idle         #73 ✓ 
+ [4] + session-resume          codex     starting           
+ [5] ⠋ station-overlay         codex     working      #76 … 
+                                                            
+▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
+ [6] x batch-export            opencode  exited        #8 ✓ 
+▼ 4 below · showing 6 of 10                                 
+─────────────────────────────────────────────────────────── 
+↵ activate  N new  ⇥ next  / edit  Esc clear  X delete  ? … 
+"
+`;
+
+exports[`dashboard golden frames clips a long persistent draft at minimum dashboard size 1`] = `
+"                                        
+FLEET  ● 0 ready  ⠋ 2 working  ! 0      
+─────────────────────────────────────── 
+▏ FILTER /t-filter-draft▏  0/10 matches 
+▼ station  5 sessions · … [sh] [qs] [▾] 
+ [1] ○ cli-help-man        idle         
+ [2] - docs-cleanup        no agent     
+ [3] ○ pty-buffer          idle         
+ [4] + session-resume      starting     
+▼ 6 below · showing 4 of 10             
+─────────────────────────────────────── 
+ FILTER   ↵ apply  Esc cancel           
+"
+`;

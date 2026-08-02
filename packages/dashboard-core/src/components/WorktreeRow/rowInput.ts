@@ -1,4 +1,8 @@
 import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
+import type {
+  DashboardPersistentFilterMatchRange,
+  DashboardPersistentFilterRowMatch,
+} from "../../selectors/dashboardPersistentFilter.js";
 import {
   type RowColor,
   type RowGridCell,
@@ -17,15 +21,17 @@ export function worktreeRowGridInput({
   slot,
   title,
   focused,
+  persistentFilterMatch,
 }: {
   id?: string;
   row: WorktreeRowModel;
   slot: string | undefined;
   title?: string | undefined;
   focused?: boolean | undefined;
+  persistentFilterMatch?: DashboardPersistentFilterRowMatch | undefined;
 }): RowGridRowInput {
   const marker = statusMarker(row);
-  const displayTitle = title ?? row.branch;
+  const visibleFields = worktreeRowVisibleFields(row, title);
   const activity = activityCellForRow(row);
   const ready = isReadyToRead(row);
   const state = row.agent?.state ?? "none";
@@ -33,14 +39,15 @@ export function worktreeRowGridInput({
     id: id ?? row.id,
     slot,
     marker,
-    title: displayTitle,
-    agent: row.agent?.harness ?? "-",
-    activity: activity.text,
+    title: visibleFields.title,
+    agent: visibleFields.agent,
+    activity: visibleFields.status,
     activityImportance: activity.importance,
     // Let the status claim the row's trailing slack so it stretches to the end
     // instead of truncating while empty space remains, matching transient rows.
     activityOverflow: "rowSlack",
     metadataGroups: metadataGroups(row),
+    ...(persistentFilterMatch === undefined ? {} : { persistentFilterMatch }),
   };
   // Tone colors the glyph + status label only — the session name must stay
   // foreground in every state (D12/D13).
@@ -73,6 +80,7 @@ export function worktreeStyleRowGridInput(input: {
   agentColor?: RowColor;
   metadataGroups?: WorktreeRowMetadataGroups;
   focused?: true;
+  persistentFilterMatch?: DashboardPersistentFilterRowMatch;
 }): RowGridRowInput {
   const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
   cells.identity = {
@@ -88,20 +96,32 @@ export function worktreeStyleRowGridInput(input: {
   };
   cells.title = {
     key: "title",
-    segments: [textSegment(input.title, { color: input.color })],
+    segments: matchedTextSegments(
+      input.title,
+      input.color,
+      input.persistentFilterMatch?.ranges.title ?? [],
+    ),
     importance: "required",
   };
   if (input.agent !== undefined) {
     cells.agent = {
       key: "agent",
-      segments: [textSegment(input.agent, { color: input.agentColor ?? input.color })],
+      segments: matchedTextSegments(
+        input.agent,
+        input.agentColor ?? input.color,
+        input.persistentFilterMatch?.ranges.agent ?? [],
+      ),
       importance: "optional",
     };
   }
   if (input.activity !== undefined) {
     cells.activity = {
       key: "activity",
-      segments: [textSegment(input.activity, { color: input.activityColor ?? input.color })],
+      segments: matchedTextSegments(
+        input.activity,
+        input.activityColor ?? input.color,
+        input.persistentFilterMatch?.ranges.status ?? [],
+      ),
       importance: input.activityImportance ?? "optional",
     };
     if (input.activityOverflow !== undefined) {
@@ -119,17 +139,62 @@ export function worktreeStyleRowGridInput(input: {
     }
   }
 
+  if (input.persistentFilterMatch?.dimmed === true) {
+    for (const cell of Object.values(cells)) {
+      if (cell !== undefined) {
+        cell.segments = cell.segments.map(dimmedPreviewSegment);
+      }
+    }
+  }
+
   const row: RowGridRowInput = {
     id: input.id,
     cells,
   };
   if (input.metadataGroups !== undefined) {
-    row.metadataGroups = input.metadataGroups;
+    row.metadataGroups =
+      input.persistentFilterMatch?.dimmed === true
+        ? {
+            diff: input.metadataGroups.diff.map(dimmedPreviewSegment),
+            pr: input.metadataGroups.pr.map(dimmedPreviewSegment),
+          }
+        : input.metadataGroups;
   }
   if (input.color !== undefined) {
     row.color = input.color;
   }
   return row;
+}
+
+function matchedTextSegments(
+  text: string,
+  color: RowColor | undefined,
+  ranges: readonly DashboardPersistentFilterMatchRange[],
+): RowSegment[] {
+  if (ranges.length === 0) {
+    return [textSegment(text, { color })];
+  }
+  const segments: RowSegment[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    const start = Math.min(text.length, Math.max(cursor, range.start));
+    const end = Math.min(text.length, Math.max(start, range.end));
+    if (start > cursor) {
+      segments.push(textSegment(text.slice(cursor, start), { color }));
+    }
+    if (end > start) {
+      segments.push(textSegment(text.slice(start, end), { color, filterMatch: true }));
+    }
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    segments.push(textSegment(text.slice(cursor), { color }));
+  }
+  return segments;
+}
+
+function dimmedPreviewSegment(segment: RowSegment): RowSegment {
+  return { ...segment, dimmedPreview: true };
 }
 
 function identitySegments(
@@ -157,6 +222,17 @@ function identitySegments(
   }
   segments.push(textSegment(" ", { color }));
   return segments;
+}
+
+export function worktreeRowVisibleFields(
+  row: WorktreeRowModel,
+  title?: string,
+): { title: string; agent: string; status: string } {
+  return {
+    title: title ?? row.branch,
+    agent: row.agent?.harness ?? "-",
+    status: activityCellForRow(row).text,
+  };
 }
 
 function activityCellForRow(row: WorktreeRowModel): {
