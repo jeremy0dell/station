@@ -1,11 +1,11 @@
 ┌  Station setup
 │
-●  Set up Station for this project.
+●  Set up Station on this machine.
 │  Station will check the local tools it needs and prepare each step.
 │  It will ask before installing tools or updating configuration.
 │  Full diagnostics are available from this launcher's setup check command.
 │
-◇  Checking this project and its tools...
+◇  Checking local tools and Station configuration...
 │
 ◆  Select agent CLIs to prepare.
 │  2 agent choices are available.

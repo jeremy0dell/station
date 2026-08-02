@@ -10,7 +10,7 @@ import {
   type SetupToolInstallOperation,
   type SupportedHarnessId,
 } from "@station/setup-core";
-import { setupMessageRef } from "@station/setup-messages";
+import { type SetupMessageRef, setupMessageRef } from "@station/setup-messages";
 import type { SetupComposition, SetupSessionProjection } from "../composition.js";
 import { isSupportedHarnessId } from "../harnessSelection.js";
 import type { SetupFacts } from "../model.js";
@@ -18,7 +18,6 @@ import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResul
 import type { TextSetupPresenter } from "../presenters/text.js";
 import { formatCommand } from "../render.js";
 import type {
-  SetupCommandDeps,
   SetupCommandOptions,
   SetupCommandResult,
   SetupPromptAdapter,
@@ -31,10 +30,6 @@ type CreateGuidedSetupComposition = (
   progress: SetupOperationProgress,
   initialIntent: SetupEditableIntent,
 ) => SetupComposition;
-
-type GuidedPromptResult<T> =
-  | { readonly kind: "answered"; readonly value: T }
-  | { readonly kind: "cancelled" };
 
 type GuidedHarnessSelection =
   | { readonly kind: "selected"; readonly harnessIds: SupportedHarnessId[] }
@@ -49,6 +44,14 @@ const homebrewFormulaUrls = {
   "git-delta": "https://formulae.brew.sh/formula/git-delta",
 } satisfies Record<SetupToolInstallOperation["tool"], string>;
 
+const setupToolLabelRefs = {
+  worktrunk: setupMessageRef("label.worktrunk"),
+  tmux: setupMessageRef("label.tmux"),
+  bun: setupMessageRef("label.bun"),
+  diffnav: setupMessageRef("label.diffnav"),
+  "git-delta": setupMessageRef("label.git-delta"),
+} satisfies Record<SetupToolInstallOperation["tool"], SetupMessageRef>;
+
 /**
  * ADAPTER
  *
@@ -56,7 +59,6 @@ const homebrewFormulaUrls = {
  */
 export async function runGuidedSetupSession(
   options: SetupCommandOptions,
-  _deps: SetupCommandDeps,
   createComposition: CreateGuidedSetupComposition,
 ): Promise<SetupCommandResult> {
   const initialIntent = guidedIntent();
@@ -648,10 +650,7 @@ function shouldPromptWorktrunkHooks(facts: SetupFacts): boolean {
   );
 }
 
-async function renderOperationStarted(
-  composition: SetupComposition,
-  operation: SetupOperation,
-): Promise<void> {
+function renderOperationStarted(composition: SetupComposition, operation: SetupOperation): void {
   const label = operationLabel(composition, operation);
   if (operation.kind === "activate-observer-config") {
     composition.guided.logStep(composition.text.renderActivationStart());
@@ -747,30 +746,45 @@ function operationLabel(composition: SetupComposition, operation: SetupOperation
     const action = matching.find((candidate) => candidate.kind === operation.kind) ?? matching[0];
     if (action !== undefined) return composition.text.text(action.label);
   }
-  switch (operation.kind) {
-    case "activate-observer-config":
-      return composition.text.text(setupMessageRef("label.observer-activation"));
-    case "install-homebrew":
-      return composition.text.text(
-        setupMessageRef("action.install-label", {
-          label: composition.text.text(setupMessageRef("label.homebrew")),
-        }),
-      );
-    case "install-xcode-command-line-tools":
-      return composition.text.text(
-        setupMessageRef("action.install-label", {
-          label: composition.text.text(setupMessageRef("label.command-line-tools")),
-        }),
-      );
-    case "install-harness":
-      return composition.text.text(
-        setupMessageRef("action.install-label", {
-          label: harnessLabel(composition.session.snapshot()?.facts, operation.harnessId),
-        }),
-      );
-    default:
-      return composition.text.text(setupMessageRef("label.setup-operation"));
+  if (operation.kind === "install-tool") {
+    return composition.text.text(
+      setupMessageRef("action.install-label", {
+        label: setupToolLabel(composition.text, operation.tool),
+      }),
+    );
   }
+  if (operation.kind === "activate-observer-config") {
+    return composition.text.text(setupMessageRef("label.observer-activation"));
+  }
+  if (operation.kind === "install-homebrew") {
+    return composition.text.text(
+      setupMessageRef("action.install-label", {
+        label: composition.text.text(setupMessageRef("label.homebrew")),
+      }),
+    );
+  }
+  if (operation.kind === "install-xcode-command-line-tools") {
+    return composition.text.text(
+      setupMessageRef("action.install-label", {
+        label: composition.text.text(setupMessageRef("label.command-line-tools")),
+      }),
+    );
+  }
+  if (operation.kind === "install-harness") {
+    return composition.text.text(
+      setupMessageRef("action.install-label", {
+        label: harnessLabel(composition.session.snapshot()?.facts, operation.harnessId),
+      }),
+    );
+  }
+  return composition.text.text(setupMessageRef("label.setup-operation"));
+}
+
+function setupToolLabel(
+  presenter: TextSetupPresenter,
+  tool: SetupToolInstallOperation["tool"],
+): string {
+  return presenter.text(setupToolLabelRefs[tool]);
 }
 
 function harnessLabel(facts: SetupFacts | undefined, harnessId: SupportedHarnessId): string {
@@ -906,28 +920,28 @@ function renderSelectedChangesReview(
 async function confirm(
   composition: SetupComposition,
   message: string,
-): Promise<GuidedPromptResult<boolean>> {
+): Promise<SetupPromptAnswer<boolean>> {
   return normalizePromptAnswer(composition, await composition.guided.confirm({ message }));
 }
 
 async function selectOne(
   composition: SetupComposition,
   request: Parameters<SetupPromptAdapter["selectOne"]>[0],
-): Promise<GuidedPromptResult<string>> {
+): Promise<SetupPromptAnswer<string>> {
   return normalizePromptAnswer(composition, await composition.guided.selectOne(request));
 }
 
 async function selectMany(
   composition: SetupComposition,
   request: Parameters<SetupPromptAdapter["selectMany"]>[0],
-): Promise<GuidedPromptResult<readonly string[]>> {
+): Promise<SetupPromptAnswer<readonly string[]>> {
   return normalizePromptAnswer(composition, await composition.guided.selectMany(request));
 }
 
 async function normalizePromptAnswer<T>(
   composition: SetupComposition,
   answer: SetupPromptAnswer<T>,
-): Promise<GuidedPromptResult<T>> {
+): Promise<SetupPromptAnswer<T>> {
   if (answer.kind === "answered") return answer;
   await composition.session.application.cancel();
   composition.guided.cancel(composition.text.text(setupMessageRef("guided.cancelled")));

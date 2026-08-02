@@ -1254,6 +1254,8 @@ scroll_on_output = "teleport"
 
   it.each([
     "bind-key Space display-message 'custom action'\n",
+    "bind-key \"Space\" display-message 'custom action'\n",
+    "set -g status off ; bind-key Space display-message 'custom action'\n",
     "bind -r Space display-message 'custom action'\n",
     "bind-key -N 'Custom action' -T prefix Space display-message 'custom action'\n",
   ])("refuses to replace a user-configured prefix + Space binding", async (source) => {
@@ -1271,11 +1273,28 @@ scroll_on_output = "teleport"
     });
   });
 
+  it("rejects a managed binding disabled by a later user command", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const source = `${tmuxPopupBindingBlock()}unbind-key Space\n`;
+
+    await expect(
+      checkSetupTmuxBinding({
+        homeDir,
+        fs: readOnlyFs({ [join(homeDir, ".tmux.conf")]: source }),
+      }),
+    ).resolves.toMatchObject({
+      status: "conflict",
+      message: expect.stringContaining("changed after Station’s managed block"),
+    });
+  });
+
   it("allows a freed prefix + Space key while ignoring root-table assignments", async () => {
     const root = await tempRoot(tempRoots);
     const homeDir = join(root, "home");
     const source = [
       "bind-key -T root Space display-message 'root action'",
+      "bind-key -Troot Space display-message 'attached root action'",
       "bind-key Space display-message 'old prefix action'",
       "unbind-key Space",
       "",

@@ -41,7 +41,7 @@ describe("guided setup session driver", () => {
       },
     };
 
-    const result = await runGuidedSetupSession({}, deps, (...compositionArguments) => {
+    const result = await runGuidedSetupSession({}, (...compositionArguments) => {
       const [options, operationProgress, initialIntent] = compositionArguments;
       return createSetupComposition({
         mode: "apply",
@@ -73,7 +73,7 @@ describe("guided setup session driver", () => {
       },
     };
 
-    const result = await runGuidedSetupSession({}, deps, (...compositionArguments) => {
+    const result = await runGuidedSetupSession({}, (...compositionArguments) => {
       const [options, operationProgress, initialIntent] = compositionArguments;
       return createSetupComposition({
         mode: "apply",

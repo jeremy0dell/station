@@ -11992,7 +11992,7 @@
       "declaration": "createSetupOperationAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Assigns semantic setup operations to config, provider, process, filesystem, and Observer boundary implementations.",
+      "purpose": "Assigns semantic setup operations to config, provider, process, filesystem, and Observer boundary implementations. Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/config.ts",

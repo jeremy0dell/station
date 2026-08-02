@@ -28,6 +28,8 @@ that link only to their allowlisted official Formulae pages. The first line rema
 prompt while later consent details are visually subdued; stable command names replace resolved
 temporary shim paths. Tmux checks allow its built-in `next-layout` action to be replaced but reject
 user-configured assignments of the selected prefix key in `~/.tmux.conf` or the current server.
+The tmux operation adapter repeats that check against the exact admitted config bytes and current
+server immediately before mutation, then refuses if either precondition changed.
 Guided transcripts continue to reject raw operation payloads and machine-specific home paths.
 Non-TTY coverage proves guided setup exits
 before inspection or mutation.

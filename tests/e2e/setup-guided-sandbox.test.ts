@@ -83,8 +83,8 @@ describe("manual guided setup sandbox", () => {
       const toolConsentOffset = result.stdout.indexOf("Install these required tools?");
       expect(toolConsentOffset).toBeGreaterThan(0);
       const opening = result.stdout.slice(0, toolConsentOffset);
-      expect(opening).toContain("Set up Station for this project.");
-      expect(opening).toContain("Checking this project and its tools...");
+      expect(opening).toContain("Set up Station on this machine.");
+      expect(opening).toContain("Checking local tools and Station configuration...");
       expect(opening).toContain("Required tools");
       expect(opening).toContain("Install Worktrunk");
       expect(opening).toContain("Install git-delta");
