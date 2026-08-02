@@ -80,12 +80,23 @@ type DashboardKeyPattern =
 
 type DashboardNamedKey = Extract<DashboardKeyPattern, { kind: "named" }>["named"];
 
+type DashboardFooterVariant = "full" | "compact" | "firstRunFull" | "firstRunCompact";
+
+type DashboardFooterMetadata = {
+  order: number;
+  labels: Partial<Record<DashboardFooterVariant, string>>;
+};
+
 type DashboardBindingSpec = {
   id: string;
   pattern: DashboardKeyPattern;
   action: string;
   outcome: "handled" | "exit" | "dismiss-popup";
-  help?: { keys: string; label: string };
+  help?: {
+    keys: string;
+    label: string;
+    footer?: DashboardFooterMetadata;
+  };
 };
 
 const slotHelp = { keys: "1-9 a-z", label: "open visible session" };
@@ -122,7 +133,19 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "named", named: "return" },
     action: "tui.focus.activate",
     outcome: "handled",
-    help: { keys: "↵", label: "activate focus" },
+    help: {
+      keys: "↵",
+      label: "activate focus",
+      footer: {
+        order: 10,
+        labels: {
+          full: "activate",
+          compact: "activate",
+          firstRunFull: "add first project",
+          firstRunCompact: "add first project",
+        },
+      },
+    },
   },
   {
     // Tab reaches the dashboard as legacy \t, which the byte path folds to
@@ -131,7 +154,14 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "char", char: "i", ctrl: true },
     action: "tui.focus.nextNeedsMe",
     outcome: "handled",
-    help: { keys: "⇥", label: "next session needing you" },
+    help: {
+      keys: "⇥",
+      label: "next session needing you",
+      footer: {
+        order: 40,
+        labels: { full: "next-needs-me", compact: "next" },
+      },
+    },
   },
   {
     id: "tui.dashboard.help",
@@ -145,6 +175,11 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "char", char: "?" },
     action: "tui.help.open",
     outcome: "handled",
+    help: {
+      keys: "?",
+      label: "help",
+      footer: { order: 70, labels: { full: "help", compact: "help" } },
+    },
   },
   {
     id: "tui.dashboard.quit",
@@ -164,7 +199,11 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "char", char: "/" },
     action: "tui.search.open",
     outcome: "handled",
-    help: { keys: "/", label: "search" },
+    help: {
+      keys: "/",
+      label: "search",
+      footer: { order: 50, labels: { full: "search", compact: "search" } },
+    },
   },
   {
     id: "tui.dashboard.rename",
@@ -192,21 +231,36 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "char", char: "X" },
     action: "tui.remove.open",
     outcome: "handled",
-    help: { keys: "X", label: "delete session" },
+    help: {
+      keys: "X",
+      label: "delete session",
+      footer: { order: 60, labels: { full: "delete", compact: "delete" } },
+    },
   },
   {
     id: "tui.dashboard.newSession",
     pattern: { kind: "char", char: "N" },
     action: "tui.newSession.open",
     outcome: "handled",
-    help: { keys: "N", label: "new" },
+    help: {
+      keys: "N",
+      label: "new",
+      footer: { order: 20, labels: { full: "new", compact: "new" } },
+    },
   },
   {
     id: "tui.dashboard.addProject",
     pattern: { kind: "char", char: "A" },
     action: "tui.addProject.open",
     outcome: "handled",
-    help: { keys: "A", label: "add" },
+    help: {
+      keys: "A",
+      label: "add",
+      footer: {
+        order: 30,
+        labels: { full: "add", firstRunFull: "add project" },
+      },
+    },
   },
   {
     id: "tui.dashboard.widgetSettings",
@@ -270,15 +324,10 @@ export function dashboardFooterLabel({
   quitHint: string;
   firstRun?: boolean;
 }): string {
-  const full = firstRun
-    ? `↵ add first project  A add project  ${quitHint}`
-    : `↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
-  const compactFirstRun = `↵ add first project  ${quitHint}`;
-  const compact = `↵ activate  N new  ⇥ next  / search  X delete  ? help  ${quitHint}`;
+  const full = dashboardFooterCandidate(firstRun ? "firstRunFull" : "full", quitHint);
+  const compact = dashboardFooterCandidate(firstRun ? "firstRunCompact" : "compact", quitHint);
   if (firstRun && full.length > columns) {
-    return quitHint === QUIT_HINT_DISMISS_ERROR && compactFirstRun.length > columns
-      ? quitHint
-      : compactFirstRun;
+    return quitHint === QUIT_HINT_DISMISS_ERROR && compact.length > columns ? quitHint : compact;
   }
   if (full.length <= columns) {
     return full;
@@ -287,6 +336,26 @@ export function dashboardFooterLabel({
     return compact;
   }
   return compact.length <= columns ? compact : quitHint;
+}
+
+function dashboardFooterCandidate(variant: DashboardFooterVariant, quitHint: string): string {
+  const bindings: readonly DashboardBindingSpec[] = TUI_DASHBOARD_BINDINGS;
+  // Presentation order stays in footer metadata so key-match precedence can remain independent.
+  const shortcuts = bindings
+    .flatMap((binding) => {
+      const help = binding.help;
+      if (help?.footer === undefined) {
+        return [];
+      }
+      const label = help.footer.labels[variant];
+      return label === undefined
+        ? []
+        : [{ order: help.footer.order, text: `${help.keys} ${label}` }];
+    })
+    .sort((left, right) => left.order - right.order)
+    .map(({ text }) => text)
+    .join("  ");
+  return shortcuts.length === 0 ? quitHint : `${shortcuts}  ${quitHint}`;
 }
 
 export function isSlotKey(key: TuiKey): boolean {
