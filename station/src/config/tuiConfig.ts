@@ -8,12 +8,20 @@ import {
   type TuiConfig,
   type TuiWidgetConfig,
 } from "@station/config";
-import type { createTuiStore } from "@station/dashboard-core";
+import {
+  legacySearchExperience,
+  persistentFilterExperience,
+  type DashboardSearchExperience,
+  type createTuiStore,
+} from "@station/dashboard-core";
+import { FeatureFlagDefinitions } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
 
 type TuiStoreApi = ReturnType<typeof createTuiStore>;
 
 export type StationTuiConfigLoadResult = {
+  /** Resolved once at renderer composition; downstream dashboard code never reads feature flags. */
+  dashboardSearchExperience: DashboardSearchExperience;
   config?: TuiConfig;
   configPath?: string;
   warning?: string;
@@ -27,7 +35,14 @@ export async function loadStationTuiConfig(options?: {
   try {
     const loaded =
       configPath === undefined ? await loadConfig() : await loadConfig({ configPath });
-    const result: StationTuiConfigLoadResult = {};
+    const dashboardPersistentFilter =
+      loaded.config.featureFlags?.dashboardPersistentFilter ??
+      FeatureFlagDefinitions.dashboardPersistentFilter.defaultValue;
+    const result: StationTuiConfigLoadResult = {
+      dashboardSearchExperience: dashboardPersistentFilter
+        ? persistentFilterExperience
+        : legacySearchExperience,
+    };
     if (loaded.config.tui !== undefined) {
       result.config = loaded.config.tui;
     }
@@ -41,7 +56,7 @@ export async function loadStationTuiConfig(options?: {
     return result;
   } catch (cause) {
     if (cause instanceof ConfigError && cause.code === "CONFIG_FILE_NOT_FOUND") {
-      return {};
+      return { dashboardSearchExperience: legacySearchExperience };
     }
     const error =
       cause instanceof ConfigError
@@ -52,6 +67,7 @@ export async function loadStationTuiConfig(options?: {
             message: "Could not load STATION TUI widget config",
           });
     return {
+      dashboardSearchExperience: legacySearchExperience,
       warning: `${error.message}; widgets disabled.`,
     };
   }

@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
-import { createTuiStore } from "@station/dashboard-core";
+import {
+  createTuiStore,
+  legacySearchExperience,
+  persistentFilterExperience,
+} from "@station/dashboard-core";
 import { createStationViewStore } from "../station/store/stationViewStore.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
@@ -21,10 +25,10 @@ describe("loadStationTuiConfig", () => {
     }
   });
 
-  it("silently omits widgets when the STATION config is absent", async () => {
-    await expect(loadStationTuiConfig({ path: "/definitely/not/here/config.toml" })).resolves.toEqual(
-      {},
-    );
+  it("uses the legacy search experience when the STATION config is absent", async () => {
+    await expect(loadStationTuiConfig({ path: "/definitely/not/here/config.toml" })).resolves.toEqual({
+      dashboardSearchExperience: legacySearchExperience,
+    });
   });
 
   it("loads [tui.widgets] from the normal STATION config", async () => {
@@ -71,7 +75,18 @@ enabled = true
         widgets: [{ type: "fleet" }, { type: "prs" }],
       },
       configPath,
+      dashboardSearchExperience: legacySearchExperience,
     });
+  });
+
+  it("resolves the persistent search experience when enabled in TOML", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
+    dirs.push(dir);
+    const configPath = await writeWidgetTestConfig(dir, "dashboard_persistent_filter = true");
+
+    const result = await loadStationTuiConfig({ path: configPath });
+
+    expect(result.dashboardSearchExperience).toBe(persistentFilterExperience);
   });
 
   it("surfaces a warning when [tui] is invalid and widgets fall back", async () => {
@@ -106,6 +121,7 @@ root = "${projectRoot}"
     const result = await loadStationTuiConfig({ path: configPath });
 
     expect(result.config).toBeUndefined();
+    expect(result.dashboardSearchExperience).toBe(legacySearchExperience);
     expect(result.warning).toContain("[tui]");
   });
 
@@ -118,6 +134,7 @@ root = "${projectRoot}"
     const result = await loadStationTuiConfig({ path: configPath });
 
     expect(result.config).toBeUndefined();
+    expect(result.dashboardSearchExperience).toBe(legacySearchExperience);
     expect(result.warning).toContain("widgets disabled");
   });
 
@@ -314,7 +331,10 @@ function addWidgetThroughSettings(
   store.getState().handleKey({ input: "\r", return: true });
 }
 
-async function writeWidgetTestConfig(dir: string): Promise<string> {
+async function writeWidgetTestConfig(
+  dir: string,
+  featureFlag?: string,
+): Promise<string> {
   const projectRoot = join(dir, "project");
   await mkdir(projectRoot);
   const configPath = join(dir, "config.toml");
@@ -329,6 +349,7 @@ terminal = "tmux"
 harness = "codex"
 layout = "agent-build-shell"
 
+${featureFlag === undefined ? "" : `[feature_flags]\n${featureFlag}\n`}
 [[tui.widgets]]
 type = "time"
 

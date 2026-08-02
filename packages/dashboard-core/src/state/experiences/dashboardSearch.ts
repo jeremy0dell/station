@@ -15,3 +15,9 @@ export const legacySearchExperience: DashboardSearchExperience = {
   open: openLegacyDashboardSearch,
   handleKey: handleLegacyDashboardSearchKey,
 };
+
+// Keep a separate identity so #395 can change this selected arm without changing #394 behavior.
+export const persistentFilterExperience: DashboardSearchExperience = {
+  open: openLegacyDashboardSearch,
+  handleKey: handleLegacyDashboardSearchKey,
+};
