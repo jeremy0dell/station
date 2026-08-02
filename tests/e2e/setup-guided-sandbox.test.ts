@@ -6,7 +6,7 @@ import { runGuidedPty } from "../support/setup-guided";
 
 const sandboxScript = "scripts/setup/setup-guided-sandbox.mjs";
 
-function prepareSandbox(profile: "first-run" | "multi"): string {
+function prepareSandbox(profile: "first-run" | "multi" | "everything-missing"): string {
   const prepared = spawnSync(
     process.execPath,
     [sandboxScript, "--prepare-only", "--skip-build", "--profile", profile],
@@ -57,8 +57,8 @@ describe("manual guided setup sandbox", () => {
     }
   });
 
-  it("runs every agent installer through sandbox shims", async () => {
-    const root = prepareSandbox("first-run");
+  it("keeps the missing-tools review compact while running every sandbox installer", async () => {
+    const root = prepareSandbox("everything-missing");
 
     try {
       const result = await runGuidedPty({
@@ -67,18 +67,33 @@ describe("manual guided setup sandbox", () => {
         cwd: process.cwd(),
         env: process.env,
         inputs: [
+          "y",
           "1,2,3,4,5",
           "1,2,3,4,5",
           "select:1",
           ...Array.from({ length: 14 }, () => "y" as const),
         ],
-        timeoutMs: 45_000,
+        timeoutMs: 75_000,
         rows: 30,
         columns: 100,
       });
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      const toolConsentOffset = result.stdout.indexOf("Install these required tools?");
+      expect(toolConsentOffset).toBeGreaterThan(0);
+      const opening = result.stdout.slice(0, toolConsentOffset);
+      expect(opening).toContain("Set up Station for this project.");
+      expect(opening).toContain("Checking this project and its tools...");
+      expect(opening).toContain("Required tools");
+      expect(opening).toContain("Install Worktrunk with Homebrew.");
+      expect(opening).toContain("Install git-delta with Homebrew.");
+      expect(opening).not.toContain("Agent selection: unresolved");
+      expect(opening).not.toContain("STATION state directory");
+      expect(opening).not.toContain("MISSING");
+      expect(opening).not.toContain("Recommended");
+      expect(opening).not.toContain("Actions");
+      expect(opening).not.toContain(root);
       for (const label of ["Claude Code", "Codex", "Cursor Agent", "OpenCode", "Pi"]) {
         expect(result.stdout).toContain(`Starting: Install ${label}.`);
         expect(result.stdout).toContain(`Finished: Install ${label}.`);

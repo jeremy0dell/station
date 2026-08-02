@@ -160,7 +160,11 @@ stn doctor
 stn tui
 ```
 
-Setup uses immediate Y/N controls and navigable agent menus. Ctrl-C cancels safely: completed
+Setup uses immediate Y/N controls and navigable agent menus. Guided output starts with a compact
+read-only inspection step, then shows only the current decision or blocker. Before installing
+required tools, it names the selected installations and their mechanism; the complete machine
+inventory remains available through `stn setup check`. Station asks before installing tools or
+updating Station, provider, shell, or tmux configuration. Ctrl-C cancels safely: completed
 bootstrap, installer, config, hook, shell, or tmux changes remain committed, and rerunning setup
 inspects the current state before continuing. Native Homebrew and agent-installer output remains
 live between explicit Station start and finish boundaries; no Clack prompt or spinner competes for

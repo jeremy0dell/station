@@ -1945,6 +1945,55 @@ describe("guided setup command", () => {
     expect(calls.some((call) => call.command === "/bin/bash")).toBe(false);
   });
 
+  it("shows a compact required-tool proposal instead of the diagnostic matrix", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "linux",
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "brew --version": "Homebrew 4.0.0\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/delta"]),
+        fs: fakeFs({}),
+        prompt: prompt({ confirms: [false] }),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(output).toContain("Set up Station for this project.");
+    expect(output).toContain("It will ask before installing tools or updating configuration.");
+    expect(output).toContain("Checking this project and its tools...");
+    expect(output).toContain("Required tools");
+    expect(output).toContain("Station proposes:\n- Install diffnav with Homebrew.");
+    expect(output).not.toContain("Agent selection: unresolved");
+    expect(output).not.toContain("STATION state directory");
+    expect(output).not.toContain("MISSING");
+    expect(output).not.toMatch(/(?:^|\n)Core(?:\n|$)/);
+    expect(output).not.toMatch(/(?:^|\n)Recommended(?:\n|$)/);
+    expect(calls.some((call) => call.command === "brew" && call.args?.[0] === "install")).toBe(
+      false,
+    );
+  });
+
   it("installs core tools after a fresh Apple-Silicon Homebrew install, then writes config", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -2050,7 +2099,7 @@ describe("guided setup command", () => {
           async confirm(message: string) {
             return (
               message.includes("Install Homebrew") ||
-              message.includes("Install or upgrade missing required tools") ||
+              message.includes("Install these required tools") ||
               message.includes("Write and activate core Station config")
             );
           },
@@ -2176,7 +2225,7 @@ describe("guided setup command", () => {
           async confirm(message: string) {
             return (
               message.includes("Install Homebrew") ||
-              message.includes("Install or upgrade missing required tools") ||
+              message.includes("Install these required tools") ||
               message.includes("Install Codex") ||
               message.includes("Write and activate core Station config")
             );

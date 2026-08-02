@@ -170,6 +170,7 @@ export type SetupMessageArguments = {
   "recovery.then-run": undefined;
   "recovery.run-command": { command: string };
   "guided.heading": undefined;
+  "guided.checking": undefined;
   "guided.interactive-required": undefined;
   "guided.interactive-recovery": undefined;
   "guided.interactive-automation": undefined;
@@ -178,6 +179,8 @@ export type SetupMessageArguments = {
   "guided.selection-summary": { count: number };
   "guided.selection-instructions": undefined;
   "guided.invalid-selection": undefined;
+  "guided.required-tools-title": undefined;
+  "guided.required-tools-intro": undefined;
   "guided.tools-prompt": undefined;
   "guided.no-changes": undefined;
   "guided.harness-select-prompt": undefined;

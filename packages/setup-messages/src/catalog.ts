@@ -4,7 +4,8 @@ export const setupMessageCatalog = {
   "setup.heading": { terminal: "stn setup {mode}" },
   "setup.selection-summary": { terminal: "Agent selection: {source}" },
   "setup.introduction": {
-    terminal: "Set up required tools and one or more agents. Add your first project in Station.",
+    terminal:
+      "Set up Station for this project.\nStation will check the local tools it needs and prepare each step.\nIt will ask before installing tools or updating configuration.\nFull diagnostics are available from this launcher's setup check command.",
   },
   "section.core": { terminal: "Core" },
   "section.recommended": { terminal: "Recommended" },
@@ -306,6 +307,7 @@ export const setupMessageCatalog = {
   "recovery.then-run": { terminal: "Then run:" },
   "recovery.run-command": { terminal: "Run: {command}" },
   "guided.heading": { terminal: "Station setup" },
+  "guided.checking": { terminal: "Checking this project and its tools..." },
   "guided.interactive-required": {
     terminal: "Guided setup requires an interactive terminal.",
   },
@@ -323,7 +325,9 @@ export const setupMessageCatalog = {
     terminal: "Use ↑/↓ to navigate, Space to select, and Enter to continue.",
   },
   "guided.invalid-selection": { terminal: "Choose only values shown in this list." },
-  "guided.tools-prompt": { terminal: "Install or upgrade missing required tools?" },
+  "guided.required-tools-title": { terminal: "Required tools" },
+  "guided.required-tools-intro": { terminal: "Station proposes:" },
+  "guided.tools-prompt": { terminal: "Install these required tools?" },
   "guided.no-changes": { terminal: "Required tool changes were declined." },
   "guided.harness-select-prompt": { terminal: "Select agent CLIs to prepare." },
   "guided.harness-select-required": { terminal: "Select at least one available agent CLI." },

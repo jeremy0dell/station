@@ -20,8 +20,11 @@ during one invocation from being replayed during that invocation; they retain op
 only, are not a session store, and do not recover a restart. The guided Clack adapter is
 separately covered through injected plain functions for prompt mapping and typed cancellation.
 Real-PTY coverage proves immediate Y/N, empty-selection reprompting, narrow-terminal navigation,
-explicit default selection, terminal restoration, and normalized human-only output. Non-TTY
-coverage proves guided setup exits before inspection or mutation.
+explicit default selection, terminal restoration, and normalized human-only output. The guided
+opening must present a compact inspection step and only selected prerequisite changes; it must not
+render the Core/Recommended/Actions/Next diagnostic matrix owned by the read-only
+`stn setup check` and `stn setup plan` surfaces. Non-TTY coverage proves guided setup exits before
+inspection or mutation.
 
 Manual interaction uses the same isolation goals without scripted input:
 

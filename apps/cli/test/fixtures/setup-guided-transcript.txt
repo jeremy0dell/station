@@ -1,6 +1,11 @@
 ┌  Station setup
 │
-●  Set up required tools and one or more agents. Add your first project in Station.
+●  Set up Station for this project.
+│  Station will check the local tools it needs and prepare each step.
+│  It will ask before installing tools or updating configuration.
+│  Full diagnostics are available from this launcher's setup check command.
+│
+◇  Checking this project and its tools...
 │
 ◆  Select agent CLIs to prepare.
 │  2 agent choices are available.

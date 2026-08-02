@@ -78,6 +78,7 @@ async function driveGuidedSession(
 
   prompt.intro(presenter.text(setupMessageRef("guided.heading")));
   prompt.logInfo(presenter.text(setupMessageRef("setup.introduction")));
+  prompt.logStep(presenter.text(setupMessageRef("guided.checking")));
 
   let state = await composition.session.application.start();
   let projection = await requireProjection(composition, state);
@@ -146,13 +147,14 @@ async function driveGuidedSession(
   if (projection === undefined) return finishIncomplete(composition);
   const selectedToolOperations =
     projection.session.plan?.operations.filter(
-      (operation) => operation.kind === "install-tool" && operation.selected,
+      (operation): operation is Extract<SetupOperation, { kind: "install-tool" }> =>
+        operation.kind === "install-tool" && operation.selected,
     ) ?? [];
   const missingTools = projection.session.plan?.issues.some(
     (issue) => issue.code === "tool-missing" && issue.tier === "required",
   );
   if (selectedToolOperations.length > 0) {
-    await presenter.write(presenter.renderPlan(projection.view));
+    renderRequiredToolsReview(composition, projection, selectedToolOperations);
     const answer = await confirm(
       composition,
       presenter.prompt(setupMessageRef("guided.tools-prompt")),
@@ -170,11 +172,11 @@ async function driveGuidedSession(
         (issue) => issue.code === "tool-missing" && issue.tier === "required",
       )
     ) {
-      await presenter.write(presenter.renderPlan(projection.view));
+      await presenter.write(presenter.renderApplyResult(projection.view));
       return finishIncomplete(composition);
     }
   } else if (missingTools) {
-    await presenter.write(presenter.renderPlan(projection.view));
+    await presenter.write(presenter.renderApplyResult(projection.view));
     return finishIncomplete(composition);
   }
 
@@ -775,6 +777,32 @@ function renderTmuxFeedback(composition: SetupComposition, requested: boolean): 
   composition.guided.logInfo(
     presenter.text(setupMessageRef("guided.direct-fallback", { command: popupCommand })),
   );
+}
+
+function renderRequiredToolsReview(
+  composition: SetupComposition,
+  projection: Extract<SetupSessionProjection, { status: "projected" }>,
+  operations: readonly Extract<SetupOperation, { kind: "install-tool" }>[],
+): void {
+  const presenter = composition.text;
+  const actionsByOperationId = new Map(
+    projection.view.actions.flatMap((action) =>
+      action.operationId === undefined ? [] : [[action.operationId, action] as const],
+    ),
+  );
+  const proposedChanges = operations.map((operation) => {
+    const action = actionsByOperationId.get(operation.id);
+    const description =
+      action === undefined
+        ? operationLabel(composition, operation)
+        : presenter.text(action.explanation);
+    return `- ${description}`;
+  });
+  const body = [
+    presenter.text(setupMessageRef("guided.required-tools-intro")),
+    ...proposedChanges,
+  ].join("\n");
+  composition.guided.note(body, presenter.text(setupMessageRef("guided.required-tools-title")));
 }
 
 function renderSelectedChangesReview(
