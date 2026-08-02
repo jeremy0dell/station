@@ -8,16 +8,14 @@
 // dismissPopup transitions instead of exitCode.
 import type { StoreApi } from "zustand/vanilla";
 import type { StationClient } from "../../sources/types.js";
-import type { TuiFolderService } from "@station/dashboard-core";
-import {
-  createTuiStore,
-  legacySearchExperience,
-  type TuiStore,
-} from "@station/dashboard-core";
+import type { DashboardSearchExperience, TuiFolderService } from "@station/dashboard-core";
+import { createTuiStore, legacySearchExperience, type TuiStore } from "@station/dashboard-core";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 
 export type CreateStationViewStoreOptions = {
   folderService?: TuiFolderService;
+  /** Resolved at renderer composition; defaults only for direct/test callers. */
+  dashboardSearchExperience?: DashboardSearchExperience;
   /** `[tui].widgets` seed for the session's live widget set. */
   widgets?: readonly TuiWidgetConfig[];
   /** False when widget edits cannot be written back to config.toml. */
@@ -32,7 +30,7 @@ export function createStationViewStore(
     source: client.state,
     service: client.service,
     clientLabel: "Station",
-    dashboardSearchExperience: legacySearchExperience,
+    dashboardSearchExperience: options.dashboardSearchExperience ?? legacySearchExperience,
     persistentPopup: true,
     onDismiss: async () => {
       // Dismiss is the router's job: the overlay layer maps the transition's

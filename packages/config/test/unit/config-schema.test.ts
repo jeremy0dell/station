@@ -95,11 +95,13 @@ describe("config schemas", () => {
     const config = StationConfigSchema.parse({
       ...baseConfig,
       featureFlags: {
+        dashboardPersistentFilter: true,
         sessionResumeAgent: true,
       },
     });
 
     expect(config.featureFlags).toEqual({
+      dashboardPersistentFilter: true,
       sessionResumeAgent: true,
     });
     expect(

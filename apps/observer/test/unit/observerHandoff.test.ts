@@ -5,6 +5,7 @@ import {
   negotiateObserverIncumbent,
   type ObserverIncumbentLifecycle,
   type ObserverProcessEvidenceSource,
+  type ObserverProcessSignalResult,
 } from "../../src/runtime/observerHandoff.js";
 
 const socketPath = "/tmp/station/observer.sock";
@@ -381,6 +382,26 @@ describe("negotiateObserverIncumbent", () => {
     expect(fixture.signal).not.toHaveBeenCalled();
   });
 
+  it("proves incumbent absence without enumerating the live successor", async () => {
+    const fixture = handoffFixture();
+    fixture.stop.mockImplementation(async () => {
+      fixture.listening = false;
+      fixture.startToken = undefined;
+      fixture.evidence.listObserverProcesses = () => {
+        throw new Error("successor process evidence is unavailable");
+      };
+      return {
+        schemaVersion: "0.9.0" as const,
+        stopped: true,
+        at: "2026-07-12T12:00:00.000Z",
+      };
+    });
+
+    await expect(runNegotiation(fixture)).resolves.toMatchObject({ action: "replaced" });
+    expect(fixture.signal).toHaveBeenCalledWith(100, 0);
+    expect(fixture.signal).not.toHaveBeenCalledWith(100, "SIGTERM");
+  });
+
   it("does not treat unreadable process identity as exact death", async () => {
     const fixture = handoffFixture();
     fixture.stop.mockImplementation(async () => {
@@ -455,8 +476,9 @@ function handoffFixture() {
       stopped: true,
       at: "2026-07-12T12:00:00.000Z",
     })),
-    signal: vi.fn((_pid: number, requestedSignal: NodeJS.Signals | 0) =>
-      requestedSignal === 0 ? "absent" : "sent",
+    signal: vi.fn(
+      (_pid: number, requestedSignal: NodeJS.Signals | 0): ObserverProcessSignalResult =>
+        requestedSignal === 0 ? "absent" : "sent",
     ),
     sleep: vi.fn(async (ms: number) => {
       fixture.time += ms;
