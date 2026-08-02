@@ -173,7 +173,8 @@ function attach() {
   }
   const result = run(manifest.tmuxWrapper, ["attach-session", "-t", manifest.baseSession], {
     cwd: manifest.projectRoot,
-    env: laneEnvironment(manifest),
+    // The isolated XDG home omits caller-specific terminfo such as Ghostty's app bundle.
+    env: laneEnvironment(manifest, { TERM: "xterm-256color" }),
     stdio: "inherit",
     check: false,
     timeoutMs: undefined,

@@ -620,7 +620,7 @@ async function startPtyClient(manifest) {
     ["-c", ptyBridgeScript, process.execPath, wrapperPath, "tmux", "attach"],
     {
       cwd: manifest.projectRoot,
-      env: { ...outerEnv, TERM: "xterm-256color" },
+      env: { ...outerEnv, TERM: "station-unsupported-terminal" },
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
