@@ -305,17 +305,54 @@ export const setupMessageCatalog = {
   "recovery.core-incomplete": { terminal: "Core setup is incomplete." },
   "recovery.then-run": { terminal: "Then run:" },
   "recovery.run-command": { terminal: "Run: {command}" },
-  "guided.tools-prompt": { terminal: "Install missing required tools?" },
-  "guided.no-changes": { terminal: "No changes made." },
-  "guided.harness-select-prompt": {
-    terminal:
-      "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
+  "guided.heading": { terminal: "Station setup" },
+  "guided.interactive-required": {
+    terminal: "Guided setup requires an interactive terminal.",
   },
+  "guided.interactive-recovery": {
+    terminal: "Run stn setup directly in a terminal.",
+  },
+  "guided.interactive-automation": {
+    terminal:
+      "Automation can inspect stn setup check --json and stn setup plan --json, then use explicit noninteractive apply after review when appropriate.",
+  },
+  "guided.yes-label": { terminal: "Yes" },
+  "guided.no-label": { terminal: "No" },
+  "guided.selection-summary": { terminal: "{count} agent choices are available." },
+  "guided.selection-instructions": {
+    terminal: "Use ↑/↓ to navigate, Space to select, and Enter to continue.",
+  },
+  "guided.invalid-selection": { terminal: "Choose only values shown in this list." },
+  "guided.tools-prompt": { terminal: "Install or upgrade missing required tools?" },
+  "guided.no-changes": { terminal: "Required tool changes were declined." },
+  "guided.harness-select-prompt": { terminal: "Select agent CLIs to prepare." },
   "guided.harness-select-required": { terminal: "Select at least one available agent CLI." },
+  "guided.default-agent-prompt": {
+    terminal: "Choose the default agent for the new config.",
+  },
+  "guided.current-default-hint": {
+    terminal: "Current default; remains the default",
+  },
+  "guided.installer-select-prompt": {
+    terminal: "Choose agent CLIs to install ({count} choices).",
+  },
+  "guided.review-title": { terminal: "Selected changes" },
+  "guided.review-completed": { terminal: "Already completed prerequisites" },
+  "guided.review-apply": { terminal: "Will apply" },
+  "guided.review-none": { terminal: "- None" },
+  "guided.cancelled": {
+    terminal:
+      "Setup cancelled. Changes already completed were kept. Run stn setup again to inspect the current state and continue.",
+  },
+  "guided.complete-outro": { terminal: "Setup complete." },
+  "guided.incomplete-outro": { terminal: "Setup incomplete." },
+  "guided.external-start": { terminal: "Starting: {label}. Native output follows." },
+  "guided.external-success": { terminal: "Finished: {label}." },
+  "guided.external-failure": { terminal: "Failed: {label}." },
   "guided.required-harnesses-unavailable": {
     terminal: "Required agent CLIs are unavailable: {harnesses}.",
   },
-  "guided.config-write-prompt": { terminal: "Write core STATION config?" },
+  "guided.config-write-prompt": { terminal: "Write and activate core Station config?" },
   "guided.config-not-written": { terminal: "Config was not written." },
   "guided.config-write-failed": { terminal: "Config write failed. Run: stn setup plan" },
   "guided.hook-install-failed": {
@@ -358,7 +395,8 @@ export const setupMessageCatalog = {
     terminal: "Install the Command Line Tools (xcode-select --install), then run: stn setup",
   },
   "guided.homebrew-prompt": {
-    terminal: "Install Homebrew now? (runs the official Homebrew installer)",
+    terminal:
+      "Install Homebrew now? The official installer may require normal administrator or password interaction.",
   },
   "guided.homebrew-installing": { terminal: "Installing Homebrew..." },
   "guided.homebrew-failed": { terminal: "Homebrew install failed." },
@@ -394,7 +432,7 @@ export const setupMessageCatalog = {
   },
   "guided.no-agent-title": { terminal: "No supported agent CLI is available." },
   "guided.no-agent-explanation": {
-    terminal: "Station needs one agent CLI. You can install one or more now.",
+    terminal: "Station needs one agent CLI. Choose one or more supported installers.",
   },
   "guided.installer-prompt": { terminal: "{label}? ({description})" },
   "guided.no-agent-installed": { terminal: "No agent CLI was installed." },

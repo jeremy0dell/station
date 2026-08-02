@@ -119,6 +119,48 @@ Full-frame captures use the private wrapper and preserve trailing cells;
 assertions wait for two identical captures rather than accepting an
 intermediate repaint.
 
+## Guided setup development
+
+Guided `stn setup` uses `@clack/prompts` through the sole production import in
+`apps/cli/src/commands/setup/presenters/clack.ts`. Keep direct Clack imports out of the guided
+driver, setup core, providers, config, and tests; presenter unit tests inject the exported plain function
+object instead of mocking the package globally. Bare guided setup requires TTY stdin and stdout,
+while check, plan, explicit apply, system, help, and JSON surfaces remain noninteractive.
+
+The real-terminal lane requires Python 3 and uses the standard-library `pty` module:
+
+```bash
+pnpm exec vitest run --config config/vitest/vitest.unit.config.ts \
+  apps/cli/test/unit/setup-clack-presenter.test.ts
+pnpm test:e2e:setup:guided
+pnpm test:e2e:setup:guided:all-shells
+```
+
+The PTY support normalizes terminal controls and redraws. When intentional copy or layout changes
+alter `apps/cli/test/fixtures/setup-guided-transcript.txt`, regenerate from the fixed 100×24 happy
+scenario with the command below, review the normalized transcript manually, and verify it contains
+no environment paths, JSON envelopes, provider values, or raw operation structures:
+
+```bash
+STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm exec vitest run \
+  --config config/vitest/vitest.setup-e2e.config.ts \
+  tests/e2e/setup-guided-feedback.test.ts -t "writes multiple selected agent CLIs"
+```
+
+Python must never reach the user's
+Station homes, config, state, sockets, provider homes, or tmux server.
+
+After changing Clack or another shipped dependency, run the normal build and static gates, then
+validate the compiled runtime:
+
+```bash
+pnpm build:binary -- --version 0.0.0-local
+pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+At minimum, exercise the compiled binary's non-TTY guided preflight to prove the packaged dependency
+loads before release validation.
+
 ## Deterministic Gates
 
 Git-backed fixtures and child processes must clear Git's repository-local environment variables;

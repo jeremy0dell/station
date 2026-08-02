@@ -4,6 +4,7 @@ import { dirname, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const sourceRoot = resolve("packages/setup-core/src");
+const cliSetupRoot = resolve("apps/cli/src/commands/setup");
 const nodeBuiltins = new Set(builtinModules.flatMap((module) => [module, `node:${module}`]));
 const forbiddenPackage =
   /^@station\/(?:cli|config|observer|observability|claude|codex|cursor|opencode|pi|tmux|terminal|worktrunk|github-repository|scripted-harness|harness-shared|setup-messages)$|^integrations\/|^@clack\/|^react(?:\/|$)|^@opentui\//;
@@ -108,6 +109,22 @@ describe("setup core boundaries", () => {
     expect(drivenPorts.sort()).toEqual([...drivenPortNames].sort());
   });
 
+  it("confines Clack to the guided terminal adapter", async () => {
+    const importers: string[] = [];
+    for (const file of await sourceFiles(cliSetupRoot)) {
+      const source = await readFile(file, "utf8");
+      if (importSpecifiers(source).includes("@clack/prompts")) {
+        importers.push(relative(process.cwd(), file));
+      }
+    }
+
+    expect(importers).toEqual(["apps/cli/src/commands/setup/presenters/clack.ts"]);
+    const adapter = await readFile("apps/cli/src/commands/setup/presenters/clack.ts", "utf8");
+    expect(adapter).not.toMatch(
+      /from ["']@station\/(?:claude|codex|cursor|opencode|pi|worktrunk)["']/,
+    );
+  });
+
   it("keeps the guided session driver on the composition-owned application boundary", async () => {
     const source = await readFile(
       "apps/cli/src/commands/setup/session/runGuidedSetupSession.ts",
@@ -115,8 +132,10 @@ describe("setup core boundaries", () => {
     );
 
     expect(source).not.toMatch(/from ["'][^"']*\/(?:apply|flowUtils)\.js["']/);
+    expect(source).not.toContain("@clack/prompts");
     expect(source).not.toContain("createSetupOperationAdapter");
     expect(source).not.toContain("createSetupComposition");
+    expect(source).not.toContain("applySetupPlan");
     expect(source).toMatch(/createComposition\(\s*options,/);
   });
 });

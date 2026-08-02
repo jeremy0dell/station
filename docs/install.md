@@ -149,7 +149,9 @@ before network requests, temporary-directory creation, or destination mutation.
 
 ## Complete First-Run Setup
 
-Run setup only after `stn --version` succeeds:
+Run setup only after `stn --version` succeeds. Guided setup requires a real terminal connected to
+both stdin and stdout; piping answers is unsupported. If a coding agent cannot pass through that
+TTY, it must ask you to run `stn setup` directly and continue with read-only JSON checks afterward.
 
 ```bash
 stn setup
@@ -158,18 +160,25 @@ stn doctor
 stn tui
 ```
 
-Setup checks or offers to install Worktrunk, tmux, diffnav, and git-delta;
+Setup uses immediate Y/N controls and navigable agent menus. Ctrl-C cancels safely: completed
+bootstrap, installer, config, hook, shell, or tmux changes remain committed, and rerunning setup
+inspects the current state before continuing. Native Homebrew and agent-installer output remains
+live between explicit Station start and finish boundaries; no Clack prompt or spinner competes for
+the terminal.
+
+Setup checks or offers to install or upgrade Worktrunk, tmux, diffnav, and git-delta;
 requires a runnable supported agent CLI; writes a valid zero-project
 `~/.config/station/config.toml`; starts or restarts the Observer; and offers
 Worktrunk shell integration and the `Ctrl-b Space` tmux popup binding. With no
 config, exactly one runnable agent CLI is inferred and identified; several
-runnable CLIs require explicit guided selection. Check, plan, dry-run, and
-noninteractive apply never choose the catalog-first CLI in that ambiguous case.
-An existing config always preserves its global default, even when another CLI is
-available.
+runnable CLIs require explicit guided selection. When multiple CLIs are selected for a new config,
+setup asks which selected CLI should be the default. Check, plan, dry-run, and noninteractive apply
+never choose the catalog-first CLI in an ambiguous case. An existing config always preserves and
+marks its global default, even when another CLI is available or selected.
 
-If no supported agent CLI is runnable, setup offers Codex, Cursor Agent,
-OpenCode, Pi, and Claude Code individually. On macOS with Homebrew available,
+If no supported agent CLI is runnable, setup presents one multiselect containing Claude Code,
+Codex, Cursor Agent, OpenCode, and Pi. An empty selection declines installation; selected installers
+run independently in the selected order, and one failure does not prevent later choices. On macOS with Homebrew available,
 Codex and Claude Code use the official casks and OpenCode and Pi use fully
 qualified official core formulae; Cursor uses its unattended vendor installer.
 Without a usable Homebrew package, Codex runs with the vendor's documented

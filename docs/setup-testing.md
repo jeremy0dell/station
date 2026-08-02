@@ -17,9 +17,28 @@ checkpoints, non-authoritative progress failures, and the serialized inspection/
 every operation port unused, preserve actionable boundary errors, and re-inspect package and
 harness installs with refreshed executable paths. Checkpoints prevent an operation completed
 during one invocation from being replayed during that invocation; they retain operation identity
-only, are not a session store, and do not recover a restart. The guided line presenter remains
-separately covered for prompt ordering, invalid-selection reprompting, terminal ownership, and
-human-only progress output.
+only, are not a session store, and do not recover a restart. The guided Clack adapter is
+separately covered through injected plain functions for prompt mapping and typed cancellation.
+Real-PTY coverage proves immediate Y/N, empty-selection reprompting, narrow-terminal navigation,
+explicit default selection, terminal restoration, and normalized human-only output. Non-TTY
+coverage proves guided setup exits before inspection or mutation.
+
+The focused guided lane requires Python 3 for its standard-library `pty` bridge:
+
+```bash
+pnpm test:e2e:setup:guided
+pnpm test:e2e:setup:guided:all-shells
+```
+
+The bridge isolates the child terminal and normalizes ANSI, OSC, cursor movement, and carriage
+redraws before assertions. Review changes to
+`apps/cli/test/fixtures/setup-guided-transcript.txt` as user-facing copy: regenerate it only from
+the fixed-size PTY scenario, inspect every changed line, and keep environment paths and control
+sequences out. Guided tests reject Station JSON envelopes, operation IDs, provider data, raw argv,
+and object coercion while permitting explicitly bracketed native installer output. External-output
+coverage also verifies that no Clack prompt or spinner owns the terminal while the child owns
+inherited stdin, stdout, and stderr. Cancellation after a committed prerequisite must preserve that
+checkpoint and start no later operation.
 
 ## The profile contract
 
