@@ -183,7 +183,7 @@ function makeStore(): StoreApi<TuiStore> {
     ...createInitialTuiState(),
     start: () => () => {},
     handleKey: () => ({ dismissPopup: false }),
-    handleAction: () => ({ dismissPopup: false }),
+    dispatch: () => ({ dismissPopup: false }),
     createQuickSession: () => {},
     setTerminalRows: () => {},
     focusDashboardSession: () => {},
@@ -192,5 +192,8 @@ function makeStore(): StoreApi<TuiStore> {
     dismissToasts: () => {},
     expireToasts: () => {},
     refreshActiveToastExpiry: () => {},
+    addPendingCreateSession: () => {},
+    failPendingCreateSession: () => {},
+    removePendingCreateSession: () => {},
   }));
 }

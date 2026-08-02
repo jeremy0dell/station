@@ -46,7 +46,7 @@ describe("TUI store", () => {
     });
 
     const keyResult = keyStore.getState().handleKey({ input: "A" });
-    const actionResult = actionStore.getState().handleAction({ type: "dashboard.addProject" });
+    const actionResult = actionStore.getState().dispatch({ type: "dashboard.addProject" });
 
     expect(actionResult).toEqual(keyResult);
     expect(actionStore.getState().screen).toEqual(keyStore.getState().screen);
@@ -59,7 +59,7 @@ describe("TUI store", () => {
       initialSnapshot: snapshot,
     });
 
-    const result = store.getState().handleAction({
+    const result = store.getState().dispatch({
       type: "dashboard.projectHeader.activate",
       projectId: "web",
       actionId: "shell",
@@ -81,7 +81,7 @@ describe("TUI store", () => {
       initialSnapshot: snapshot,
     });
 
-    const result = store.getState().handleAction({
+    const result = store.getState().dispatch({
       type: "dashboard.emptyProject.activate",
       projectId: "web",
     });
@@ -100,6 +100,76 @@ describe("TUI store", () => {
       projectId: "web",
       control: "quickSession",
     });
+  });
+
+  it("routes state-only actions through the transition executor", () => {
+    const snapshot = createDashboardSnapshot();
+    const store = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+    });
+
+    const result = store.getState().dispatch({
+      type: "dashboard.projectHeader.focus",
+      projectId: "web",
+      control: "defaultAgent",
+    });
+
+    expect(result).toEqual({ dismissPopup: false });
+    expect(store.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "web",
+      control: "defaultAgent",
+    });
+  });
+
+  it("owns the optimistic hosted-create row lifecycle without replacing store actions", () => {
+    const snapshot = createDashboardSnapshot();
+    const store = createTuiStore({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      initialState: { terminalRows: 42 },
+    });
+    const actions = {
+      dispatch: store.getState().dispatch,
+      handleKey: store.getState().handleKey,
+      start: store.getState().start,
+    };
+    const error: SafeError = {
+      tag: "StationLaunchError",
+      code: "HOSTED_CREATE_FAILED",
+      message: "The hosted create failed.",
+    };
+
+    store.getState().addPendingCreateSession({
+      localId: "local-create-1",
+      projectId: "web",
+      title: "new session",
+      branch: "new-session",
+      harnessProvider: "codex",
+      createdAt: fixtureNow,
+    });
+    expect(store.getState().localRows.pendingCreate).toEqual([
+      expect.objectContaining({ localId: "local-create-1", projectId: "web" }),
+    ]);
+
+    store.getState().failPendingCreateSession("local-create-1", error, 123_456);
+    expect(store.getState().localRows.pendingCreate).toEqual([]);
+    expect(store.getState().localRows.failedCreate).toEqual([
+      expect.objectContaining({
+        localId: "local-create-1",
+        error,
+        expiresAt: 123_456,
+      }),
+    ]);
+
+    store.getState().removePendingCreateSession("local-create-1");
+    expect(store.getState().localRows.failedCreate).toEqual([]);
+    expect(store.getState().terminalRows).toBe(42);
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.getState().dispatch).toBe(actions.dispatch);
+    expect(store.getState().handleKey).toBe(actions.handleKey);
+    expect(store.getState().start).toBe(actions.start);
   });
 
   it("loads initial snapshots and cleans up event subscriptions", async () => {
