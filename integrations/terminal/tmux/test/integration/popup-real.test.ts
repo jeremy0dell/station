@@ -46,7 +46,7 @@ const realDashboardFrameUrl = new URL(
 const outputTailBytes = 64 * 1024;
 const popupBorderColumns = 2;
 const popupBorderRows = 2;
-const nestedTmuxStatusRows = 1;
+const nestedTmuxStatusRows = 0;
 const outerTmuxStatusRows = 1;
 const ptyBridgeScript = `
 import fcntl
@@ -384,7 +384,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     );
     const firstRuntime = await waitForDashboardRuntimeEvidence(fixture, firstPopup, process.pid);
     const popupAttach = await waitForPopupAttachRecord(fixture);
-    expect(popupAttach).toMatchObject({ rows: 41, columns: 120 });
+    expect(popupAttach).toMatchObject({ rows: 40, columns: 120 });
     await expectConvergedDashboardDimensions(fixture, { rows: 40, columns: 120 });
     await resizeDashboardSurface(fixture, { rows: 25, columns: 99 });
 
@@ -678,49 +678,49 @@ describeRealTmux("real tmux dev popup routing", () => {
         label: "cold issue geometry",
         outer: { columns: 169, rows: 47 },
         nested: { columns: 99, rows: 26 },
-        pane: { columns: 99, rows: 25 },
+        pane: { columns: 99, rows: 26 },
       },
       {
         label: "tiny fallback",
         outer: { columns: 70, rows: 25 },
         nested: { columns: 40, rows: 13 },
-        pane: { columns: 40, rows: 12 },
+        pane: { columns: 40, rows: 13 },
       },
       {
         label: "supported minimum",
         outer: { columns: 104, rows: 32 },
         nested: { columns: 60, rows: 17 },
-        pane: { columns: 60, rows: 16 },
+        pane: { columns: 60, rows: 17 },
       },
       {
         label: "standard terminal",
         outer: { columns: 137, rows: 45 },
         nested: { columns: 80, rows: 25 },
-        pane: { columns: 80, rows: 24 },
+        pane: { columns: 80, rows: 25 },
       },
       {
         label: "percentage round down",
         outer: { columns: 168, rows: 47 },
         nested: { columns: 98, rows: 26 },
-        pane: { columns: 98, rows: 25 },
+        pane: { columns: 98, rows: 26 },
       },
       {
         label: "above issue geometry",
         outer: { columns: 170, rows: 47 },
         nested: { columns: 100, rows: 26 },
-        pane: { columns: 100, rows: 25 },
+        pane: { columns: 100, rows: 26 },
       },
       {
         label: "large terminal",
         outer: { columns: 204, rows: 72 },
         nested: { columns: 120, rows: 41 },
-        pane: { columns: 120, rows: 40 },
+        pane: { columns: 120, rows: 41 },
       },
       {
         label: "return to issue geometry",
         outer: { columns: 169, rows: 47 },
         nested: { columns: 99, rows: 26 },
-        pane: { columns: 99, rows: 25 },
+        pane: { columns: 99, rows: 26 },
       },
     ];
 
@@ -753,7 +753,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       ).toEqual(geometry.nested);
 
       const pane = await waitForPaneDimensions(fixture, geometry.pane);
-      expect(nestedClient.rows, `${geometry.label} hidden status row`).toBe(pane.rows + 1);
+      expect(nestedClient.rows, `${geometry.label} status-free popup geometry`).toBe(pane.rows);
       const content = await waitForPaneContent(
         fixture,
         popup,
@@ -3068,6 +3068,7 @@ function snapshotObserver(
       return { commandId, accepted: true, status: "accepted" };
     },
     getCommand: async (commandId) => records.get(commandId),
+    getSessionRecoveryReadiness: async () => unsupportedObserverCall("getSessionRecoveryReadiness"),
     reconcile: async (reason = "manual") => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       reason,
@@ -3129,6 +3130,7 @@ function popupFocusObserver(focusCommands: StationCommand[]): ObserverApi {
       return { commandId, accepted: true, status: "accepted" };
     },
     getCommand: async (commandId) => records.get(commandId),
+    getSessionRecoveryReadiness: async () => unsupportedObserverCall("getSessionRecoveryReadiness"),
     reconcile: async (reason = "manual") => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       reason,

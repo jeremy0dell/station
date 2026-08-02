@@ -34,6 +34,7 @@ describe("tmux popup launcher", () => {
       "set-option -gq @station_popup_client client_1",
       "set-option -gq @station_popup_focus_client client_1",
       "set-option -t _station-ui-dev mouse on",
+      "set-option -t _station-ui-dev status off",
       expect.stringContaining(
         `display-popup -c client_1 -w 50% -h 50% -E env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui-dev'`,
       ),
@@ -89,6 +90,7 @@ describe("tmux popup launcher", () => {
       "set-option -gq @station_popup_client client_1",
       "set-option -gq @station_popup_focus_client client_1",
       "set-option -t _station-ui mouse on",
+      "set-option -t _station-ui status off",
       expect.stringContaining(
         `display-popup -c client_1 -w 50% -h 50% -E env -u TMUX '${fixture.tmuxPath}' -T hyperlinks attach-session -t '_station-ui'`,
       ),

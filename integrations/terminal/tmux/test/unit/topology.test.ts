@@ -20,6 +20,7 @@ describe("tmux workbench topology", () => {
       popupHeight: "50%",
       popupPosition: "C",
       popupScope: "server",
+      popupStatusBar: false,
     });
   });
 

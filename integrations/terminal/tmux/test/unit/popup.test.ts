@@ -72,6 +72,7 @@ describe("tmux popup", () => {
       ],
       ["set-option", "-t", "_station-ui", "-q", "@station_popup_ui_signature", defaultSignature],
       popupMouseCall,
+      popupStatusOffCall,
     ]);
 
     const reusedCalls: ExternalCommandInput[] = [];
@@ -90,6 +91,7 @@ describe("tmux popup", () => {
       ["has-session", "-t", "_station-ui"],
       ["show-options", "-t", "_station-ui", "-qv", "@station_popup_ui_signature"],
       popupMouseCall,
+      popupStatusOffCall,
     ]);
 
     let replacedAlive = true;
@@ -211,7 +213,12 @@ describe("tmux popup", () => {
     await expect(
       openTmuxPopup({
         checkoutRoot: fake.root,
-        config: { popupHeight: "80%", popupPosition: "C", popupWidth: "90%" },
+        config: {
+          popupHeight: "80%",
+          popupPosition: "C",
+          popupStatusBar: true,
+          popupWidth: "90%",
+        },
         env: { TMUX: "/tmp/tmux/default,1,0" },
         runner: fake.runner,
       }),
@@ -239,6 +246,13 @@ describe("tmux popup", () => {
     const display = fake.calls.findLast(claimedPopupAction);
     expect(display?.args?.[3]).toContain("display-popup -c /dev/ttys001 -w 90% -h 80% -E");
     expect(display?.args?.[3]).toContain("@station_popup_active_claim");
+    expect(fake.calls.map((call) => call.args)).toContainEqual([
+      "set-option",
+      "-t",
+      "_station-ui",
+      "status",
+      "on",
+    ]);
     expect(fake.globalOptions.get("@station_popup_active_claim")).toMatch(/^v1\.open\./);
   });
 
@@ -797,6 +811,7 @@ describe("tmux popup", () => {
 });
 
 const popupMouseCall = ["set-option", "-t", "_station-ui", "mouse", "on"];
+const popupStatusOffCall = ["set-option", "-t", "_station-ui", "status", "off"];
 
 type PopupFakeOptions = {
   activeClaim?: boolean;

@@ -93,6 +93,7 @@ describe("managed tmux popup fast binding", () => {
     const action = calls[1]?.args.at(-2) ?? "";
     const claim = /active_claim (v1\.open\.[^ ;]+)/.exec(action)?.[1];
     expect(claim).toBeDefined();
+    expect(action).toContain("set-option -t _station-ui status off");
     expect(action).toContain("display-popup -c /dev/ttys001");
     expect(action).toContain(
       `if-shell -F '#{==:#{@station_popup_active_claim},${claim}}' 'set-option -gq -u @station_popup_active_claim ; if-shell -F "#{==:#{@station_popup_client},/dev/ttys001}" "set-option -gq -u @station_popup_client" ; if-shell -F "#{==:#{@station_popup_focus_client},/dev/ttys001}" "set-option -gq -u @station_popup_focus_client"'`,

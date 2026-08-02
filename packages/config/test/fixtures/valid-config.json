@@ -33,7 +33,8 @@
       "popupWidth": "50%",
       "popupHeight": "50%",
       "popupPosition": "C",
-      "popupScope": "server"
+      "popupScope": "server",
+      "popupStatusBar": false
     }
   },
   "harness": {

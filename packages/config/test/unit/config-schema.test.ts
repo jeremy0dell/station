@@ -191,17 +191,26 @@ describe("config schemas", () => {
     ).toBe(false);
   });
 
-  it("accepts tmux popup scopes and rejects unsupported ownership modes", async () => {
+  it("accepts tmux popup display settings and rejects unsupported values", async () => {
     const config = StationConfigSchema.parse({
       ...(await loadJson("valid-config.json")),
-      terminal: { tmux: { popupScope: "client" } },
+      terminal: { tmux: { popupScope: "client", popupStatusBar: true } },
     });
 
-    expect(config.terminal?.tmux?.popupScope).toBe("client");
+    expect(config.terminal?.tmux).toMatchObject({
+      popupScope: "client",
+      popupStatusBar: true,
+    });
     expect(
       StationConfigSchema.safeParse({
         ...config,
         terminal: { tmux: { popupScope: "window" } },
+      }).success,
+    ).toBe(false);
+    expect(
+      StationConfigSchema.safeParse({
+        ...config,
+        terminal: { tmux: { popupStatusBar: "yes" } },
       }).success,
     ).toBe(false);
   });
