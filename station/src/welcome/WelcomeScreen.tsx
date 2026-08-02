@@ -3,7 +3,13 @@ import { useRenderer, useTerminalDimensions } from "@opentui/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
-import { lerpColor } from "../stationButton/colors.js";
+import { tweenStationColor } from "../stationButton/colors.js";
+import {
+  toOpenTuiColor,
+  useStationTheme,
+  type StationForegroundColor,
+  type StationTheme,
+} from "../theme/index.js";
 import { useHoverPointer } from "../useHoverPointer.js";
 
 export type WelcomeScreenProps = {
@@ -17,12 +23,6 @@ const OPEN_LABEL = "Open project view";
 const CONTINUE_LABEL = "Continue →";
 // Width fits the longest label so both stacked CTAs align.
 const MIN_BUTTON_WIDTH = OPEN_LABEL.length + 8;
-const BUTTON_BG = "#1f2937";
-const BUTTON_BG_MUTED = "#101316";
-const BUTTON_BG_HOVER = "#263142";
-// Soft, desaturated peak so the looping shimmer reads as a gentle light pass
-// rather than a saturated cyan band sweeping the label.
-export const WELCOME_BUTTON_SHIMMER_BG = "#4a6a8c";
 const SHIMMER_WIDTH = 6;
 const SHIMMER_INTERVAL_MS = 80;
 const FULL_WORDMARK = [
@@ -36,7 +36,7 @@ const COMPACT_WORDMARK = ["station"] as const;
 
 type WelcomeLine = {
   text: string;
-  fg: string;
+  fg: StationForegroundColor;
 };
 
 export function WelcomeScreen({
@@ -44,9 +44,10 @@ export function WelcomeScreen({
   focused = true,
   canContinue = false,
 }: WelcomeScreenProps) {
+  const theme = useStationTheme();
   const { width, height } = useTerminalDimensions();
   const workspaceRows = Math.max(1, height);
-  const content = welcomeLines(width, workspaceRows);
+  const content = welcomeLines(width, workspaceRows, theme);
   // Two stacked CTAs (with a gap) when continuing is possible, else one.
   const ctaRows = canContinue ? 7 : 3;
   const gapRows = content.length > 0 && workspaceRows - content.length - ctaRows >= 1 ? 1 : 0;
@@ -58,7 +59,7 @@ export function WelcomeScreen({
     <box width="100%" height="100%" flexDirection="column" alignItems="center" overflow="hidden">
       {topPad > 0 ? <box height={topPad} /> : null}
       {content.map((line, index) => (
-        <text key={`${index}:${line.text}`} fg={line.fg}>
+        <text key={`${index}:${line.text}`} fg={toOpenTuiColor(line.fg)}>
           {line.text}
         </text>
       ))}
@@ -112,13 +113,14 @@ function WelcomeButton({
   focused: boolean;
   shimmer: boolean;
 }) {
+  const theme = useStationTheme();
   const innerWidth = Math.max(label.length, width - 2);
   const line = `+${"-".repeat(innerWidth)}+`;
   const [hovered, setHovered] = useState(false);
   const shimmerFrame = useShimmerFrame(shimmer && hovered);
   const pointerProps = useHoverPointer({ onHoverChange: setHovered });
   const active = focused || hovered;
-  const borderFg = active ? "#60a5fa" : "#3f4750";
+  const borderFg = active ? theme.welcome.borderActive : theme.welcome.border;
   const onMouseDown = (event: MouseEvent): void => {
     event.stopPropagation();
     dispatchMouse(target, normalizeStationMouseEvent(event));
@@ -133,7 +135,7 @@ function WelcomeButton({
       onMouseDown={onMouseDown}
       overflow="hidden"
     >
-      <text fg={borderFg} onMouseDown={onMouseDown}>
+      <text fg={toOpenTuiColor(borderFg)} onMouseDown={onMouseDown}>
         {line}
       </text>
       <ShimmerLabel
@@ -143,37 +145,38 @@ function WelcomeButton({
         shimmerFrame={shimmerFrame}
         onMouseDown={onMouseDown}
       />
-      <text fg={borderFg} onMouseDown={onMouseDown}>
+      <text fg={toOpenTuiColor(borderFg)} onMouseDown={onMouseDown}>
         {line}
       </text>
     </box>
   );
 }
 
-function welcomeLines(columns: number, rows: number): readonly WelcomeLine[] {
+function welcomeLines(columns: number, rows: number, theme: StationTheme): readonly WelcomeLine[] {
+  const { border, muted, wordmark, borderActive: activeBorder } = theme.welcome;
   const canRenderFull = columns >= FULL_WORDMARK[0].length + 4 && rows >= 13;
   if (canRenderFull) {
     return [
-      { text: "+------------------------------+", fg: "#3f4750" },
-      { text: "Welcome to", fg: "#a1a1aa" },
-      ...FULL_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" })),
+      { text: "+------------------------------+", fg: border },
+      { text: "Welcome to", fg: muted },
+      ...FULL_WORDMARK.map((text) => ({ text, fg: wordmark })),
     ];
   }
   if (rows >= 7) {
     return [
-      { text: "Welcome to", fg: "#a1a1aa" },
-      ...COMPACT_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" })),
-      { text: "----------------", fg: "#60a5fa" },
+      { text: "Welcome to", fg: muted },
+      ...COMPACT_WORDMARK.map((text) => ({ text, fg: wordmark })),
+      { text: "----------------", fg: activeBorder },
     ];
   }
   if (rows >= 5) {
     return [
-      { text: "Welcome to", fg: "#a1a1aa" },
-      ...COMPACT_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" })),
+      { text: "Welcome to", fg: muted },
+      ...COMPACT_WORDMARK.map((text) => ({ text, fg: wordmark })),
     ];
   }
   if (rows >= 4) {
-    return COMPACT_WORDMARK.map((text) => ({ text, fg: "#f4f4f5" }));
+    return COMPACT_WORDMARK.map((text) => ({ text, fg: wordmark }));
   }
   return [];
 }
@@ -191,26 +194,32 @@ function ShimmerLabel({
   shimmerFrame: number;
   onMouseDown: (event: MouseEvent) => void;
 }): ReactNode {
+  const theme = useStationTheme();
   const shimmerCenter = 1 + (shimmerFrame % Math.max(1, text.length - 2));
   return (
     <box flexDirection="row" height={1}>
       {Array.from(text, (char, index) => {
         const border = index === 0 || index === text.length - 1;
         const intensity = hovered && !border ? shimmerIntensity(index, shimmerCenter) : 0;
-        const baseBg = focused ? BUTTON_BG : BUTTON_BG_MUTED;
+        const baseBg = focused ? theme.welcome.button : theme.welcome.buttonMuted;
         const bg =
           intensity > 0
-            ? lerpColor(BUTTON_BG_HOVER, WELCOME_BUTTON_SHIMMER_BG, intensity)
+            ? tweenStationColor(theme.welcome.buttonHover, theme.welcome.shimmer, intensity)
             : baseBg;
         const fg =
           intensity > 0
-            ? lerpColor("#f4f4f5", "#ffffff", intensity)
+            ? tweenStationColor(theme.welcome.wordmark, theme.welcome.shimmerPeak, intensity)
             : focused
-              ? "#f4f4f5"
-              : "#a1a1aa";
+              ? theme.welcome.wordmark
+              : theme.welcome.muted;
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed-width static button label
-          <text key={index} fg={fg} bg={bg} onMouseDown={onMouseDown}>
+          <text
+            key={index}
+            fg={toOpenTuiColor(fg)}
+            bg={toOpenTuiColor(bg)}
+            onMouseDown={onMouseDown}
+          >
             {char}
           </text>
         );

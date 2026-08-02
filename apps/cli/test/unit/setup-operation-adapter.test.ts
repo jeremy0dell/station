@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import type { ClaudeHookInstallResult } from "@station/claude";
 import type { CodexHookInstallResult } from "@station/codex";
 import { emptyConfig } from "@station/config";
@@ -11,7 +12,12 @@ import {
   type SetupHarnessTrackingRunners,
 } from "../../src/commands/setup/adapters/harnessTracking.js";
 import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
+import {
+  tmuxPopupBindingMarker,
+  tmuxPopupRunShellCommand,
+} from "../../src/commands/setup/checks/tmuxBinding.js";
 import type { SetupFacts } from "../../src/commands/setup/model.js";
+import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 
 const trackedProviders = ["claude", "codex", "cursor", "opencode"] as const;
 
@@ -53,6 +59,153 @@ describe("setup operation adapters", () => {
         stdio: "inherit",
       }),
     ]);
+  });
+
+  it("revalidates persisted tmux conflicts immediately before mutation", async () => {
+    const tmuxConfigPath = "/tmp/station-tmux-precondition/.tmux.conf";
+    const writes: string[] = [];
+    const execute = createSetupOperationAdapter({
+      facts: tmuxFacts({ path: tmuxConfigPath, insideTmux: false, liveStatus: "unknown" }),
+      deps: {
+        env: { PATH: "/bin" },
+        fs: tmuxOperationFs({
+          readFile: async () => 'bind-key "Space" display-message "user action"\n',
+          writeFile: async (path) => {
+            writes.push(path);
+          },
+        }),
+      },
+    });
+
+    const outcome = await execute({
+      id: "persist-tmux-popup",
+      kind: "configure-tmux-popup",
+      tier: "recommended",
+      selected: true,
+      scope: "persisted",
+    });
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "SETUP_TMUX_CONFLICT", message: expect.stringContaining("will not replace") },
+    });
+    expect(writes).toEqual([]);
+  });
+
+  it("refuses tmux replacement when admitted config bytes change before rename", async () => {
+    const tmuxConfigPath = "/tmp/station-tmux-replacement/.tmux.conf";
+    const initialConfig = "set -g mouse on\n";
+    let reads = 0;
+    let renamed = false;
+    const execute = createSetupOperationAdapter({
+      facts: tmuxFacts({ path: tmuxConfigPath, insideTmux: false, liveStatus: "unknown" }),
+      deps: {
+        env: { PATH: "/bin" },
+        now: () => new Date("2026-06-08T12:00:00.000Z"),
+        fs: tmuxOperationFs({
+          readFile: async () => {
+            reads += 1;
+            return reads === 1
+              ? initialConfig
+              : 'bind-key "Space" display-message "late user action"\n';
+          },
+          rename: async () => {
+            renamed = true;
+          },
+        }),
+      },
+    });
+
+    const outcome = await execute({
+      id: "persist-tmux-popup",
+      kind: "configure-tmux-popup",
+      tier: "recommended",
+      selected: true,
+      scope: "persisted",
+    });
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "SETUP_TMUX_WRITE_FAILED" },
+    });
+    expect(reads).toBe(2);
+    expect(renamed).toBe(false);
+  });
+
+  it("revalidates live tmux conflicts immediately before mutation", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const execute = createSetupOperationAdapter({
+      facts: tmuxFacts({
+        path: "/tmp/station-tmux-live-precondition/.tmux.conf",
+        insideTmux: true,
+        liveStatus: "missing",
+      }),
+      deps: {
+        env: { PATH: "/bin", TMUX: "/tmp/tmux.sock,1,0" },
+        runner: async (input) => {
+          calls.push(input);
+          return {
+            command: input.command,
+            args: input.args ?? [],
+            stdout: 'bind-key -T prefix Space display-message "user action"\n',
+            stderr: "",
+            exitCode: 0,
+          };
+        },
+        fs: tmuxOperationFs(),
+      },
+    });
+
+    const outcome = await execute({
+      id: "load-tmux-popup",
+      kind: "configure-tmux-popup",
+      tier: "recommended",
+      selected: true,
+      scope: "live",
+    });
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "SETUP_TMUX_CONFLICT", message: expect.stringContaining("will not replace") },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.args?.[0]).toBe("list-keys");
+  });
+
+  it("leaves a live tmux binding unchanged when revalidation is unavailable", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const execute = createSetupOperationAdapter({
+      facts: tmuxFacts({
+        path: "/tmp/station-tmux-live-unknown/.tmux.conf",
+        insideTmux: true,
+        liveStatus: "missing",
+      }),
+      deps: {
+        env: { PATH: "/bin", TMUX: "/tmp/tmux.sock,1,0" },
+        runner: async (input) => {
+          calls.push(input);
+          throw new Error("tmux evidence unavailable");
+        },
+        fs: tmuxOperationFs(),
+      },
+    });
+
+    const outcome = await execute({
+      id: "load-tmux-popup",
+      kind: "configure-tmux-popup",
+      tier: "recommended",
+      selected: true,
+      scope: "live",
+    });
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: {
+        code: "SETUP_TMUX_CONFLICT",
+        message: expect.stringContaining("could not be revalidated"),
+      },
+    });
+    expect(calls).toHaveLength(1);
   });
 
   it("keeps a missing shell rc precondition inside the Worktrunk adapter", async () => {
@@ -99,7 +252,7 @@ describe("setup operation adapters", () => {
   it.each(
     trackedProviders,
   )("sanitizes %s installation fields into commit evidence", async (provider) => {
-    const adapter = harnessTrackingAdapter(provider, false);
+    const adapter = harnessTrackingAdapter({ provider, fail: false });
     const operation = trackingOperation(provider);
 
     const outcome = await adapter(operation);
@@ -120,7 +273,7 @@ describe("setup operation adapters", () => {
   });
 
   it.each(trackedProviders)("normalizes unknown %s failures without raw data", async (provider) => {
-    const adapter = harnessTrackingAdapter(provider, true);
+    const adapter = harnessTrackingAdapter({ provider, fail: true });
     const outcome = await adapter(trackingOperation(provider));
 
     expect(outcome).toMatchObject({
@@ -156,7 +309,50 @@ describe("setup operation adapters", () => {
   });
 });
 
-function harnessTrackingAdapter(provider: (typeof trackedProviders)[number], fail: boolean) {
+function tmuxOperationFs(
+  overrides: Partial<NonNullable<SetupCommandDeps["fs"]>> = {},
+): NonNullable<SetupCommandDeps["fs"]> {
+  return {
+    async readFile(path) {
+      throw Object.assign(new Error(`Missing file: ${path}`), { code: "ENOENT" });
+    },
+    async mkdir() {},
+    async writeFile() {},
+    async rename() {},
+    async access(path) {
+      throw Object.assign(new Error(`Missing file: ${path}`), { code: "ENOENT" });
+    },
+    ...overrides,
+  };
+}
+
+function tmuxFacts(input: {
+  readonly path: string;
+  readonly insideTmux: boolean;
+  readonly liveStatus: "loaded" | "missing" | "unknown";
+}): SetupFacts {
+  const launcherCommand = "/tmp/bin/stn-tmux-popup";
+  return {
+    homeDir: dirname(input.path),
+    tmux: { status: "ok", command: "tmux", resolvedPath: "/bin/tmux" },
+    tmuxBinding: {
+      status: "missing",
+      path: input.path,
+      marker: tmuxPopupBindingMarker,
+      launcherCommand,
+      runShellCommand: tmuxPopupRunShellCommand(launcherCommand),
+      bindingKey: "Space",
+      insideTmux: input.insideTmux,
+      liveStatus: input.liveStatus,
+      message: "Optional tmux popup binding is not installed.",
+    },
+  } as SetupFacts;
+}
+
+function harnessTrackingAdapter(input: {
+  readonly provider: (typeof trackedProviders)[number];
+  readonly fail: boolean;
+}) {
   return createHarnessTrackingAdapter({
     configPath: () => "/station/config.toml",
     homeDir: "/home/test",
@@ -166,32 +362,32 @@ function harnessTrackingAdapter(provider: (typeof trackedProviders)[number], fai
       projects: [],
       diagnostics: [],
     }),
-    runners: providerRunners(provider, fail),
+    runners: providerRunners(input),
   });
 }
 
-function providerRunners(
-  provider: (typeof trackedProviders)[number],
-  fail: boolean,
-): SetupHarnessTrackingRunners {
+function providerRunners(input: {
+  readonly provider: (typeof trackedProviders)[number];
+  readonly fail: boolean;
+}): SetupHarnessTrackingRunners {
   const rejected = () => {
-    throw new Error(fail ? "raw provider sentinel" : "unused provider runner");
+    throw new Error(input.fail ? "raw provider sentinel" : "unused provider runner");
   };
   return {
     claude: async () => {
-      if (provider !== "claude" || fail) return rejected();
+      if (input.provider !== "claude" || input.fail) return rejected();
       return providerInstallResult("claude");
     },
     codex: async () => {
-      if (provider !== "codex" || fail) return rejected();
+      if (input.provider !== "codex" || input.fail) return rejected();
       return providerInstallResult("codex");
     },
     cursor: async () => {
-      if (provider !== "cursor" || fail) return rejected();
+      if (input.provider !== "cursor" || input.fail) return rejected();
       return providerInstallResult("cursor");
     },
     opencode: async () => {
-      if (provider !== "opencode" || fail) return rejected();
+      if (input.provider !== "opencode" || input.fail) return rejected();
       return providerInstallResult("opencode");
     },
   };
@@ -214,72 +410,72 @@ function providerInstallResult(
     before: "native before sentinel",
     after: "native after sentinel",
   };
-  switch (provider) {
-    case "claude":
-      return {
-        ...shared,
-        provider,
-        settingsPath: "/provider/claude.json",
-        userSettingsPath: "/provider/claude-user.json",
-        hookScriptPath: "/provider/claude.sh",
-        events: [],
-        missing: [],
-        settingsChanged: true,
-        scriptChanged: true,
-        artifactInvalid: false,
-        userSettingsCleanup: {
-          settingsPath: "/provider/claude-user.json",
-          changed: false,
-          stale: [],
-          before: "",
-          after: "",
-        },
-        backupPaths: ["/provider/claude.bak"],
-      };
-    case "codex":
-      return {
-        ...shared,
-        provider,
-        configPath: "/provider/codex.toml",
-        profileName: "station",
-        profileConfigPath: "/provider/codex-profile.toml",
-        baseConfigPath: "/provider/codex-base.toml",
-        hookScriptPath: "/provider/codex.sh",
-        commands: {} as CodexHookInstallResult["commands"],
-        missing: [],
-        configChanged: true,
-        generatedGlobalChanged: false,
-        scriptChanged: true,
-        generatedGlobalCleanup: {
-          configPath: "/provider/codex-base.toml",
-          changed: false,
-          stale: [],
-          before: "",
-          after: "",
-        },
-        backupPaths: ["/provider/codex.bak"],
-      };
-    case "cursor":
-      return {
-        ...shared,
-        provider,
-        hooksPath: "/provider/cursor.json",
-        hookScriptPath: "/provider/cursor.sh",
-        commands: {} as CursorHookInstallResult["commands"],
-        missing: [],
-        configChanged: true,
-        scriptChanged: true,
-        backupPaths: ["/provider/cursor.bak"],
-      };
-    case "opencode":
-      return {
-        ...shared,
-        provider,
-        configDir: "/provider/opencode",
-        pluginPath: "/provider/opencode/plugin.ts",
-        backupPath: "/provider/opencode.bak",
-      };
+  if (provider === "claude") {
+    return {
+      ...shared,
+      provider,
+      settingsPath: "/provider/claude.json",
+      userSettingsPath: "/provider/claude-user.json",
+      hookScriptPath: "/provider/claude.sh",
+      events: [],
+      missing: [],
+      settingsChanged: true,
+      scriptChanged: true,
+      artifactInvalid: false,
+      userSettingsCleanup: {
+        settingsPath: "/provider/claude-user.json",
+        changed: false,
+        stale: [],
+        before: "",
+        after: "",
+      },
+      backupPaths: ["/provider/claude.bak"],
+    };
   }
+  if (provider === "codex") {
+    return {
+      ...shared,
+      provider,
+      configPath: "/provider/codex.toml",
+      profileName: "station",
+      profileConfigPath: "/provider/codex-profile.toml",
+      baseConfigPath: "/provider/codex-base.toml",
+      hookScriptPath: "/provider/codex.sh",
+      commands: {} as CodexHookInstallResult["commands"],
+      missing: [],
+      configChanged: true,
+      generatedGlobalChanged: false,
+      scriptChanged: true,
+      generatedGlobalCleanup: {
+        configPath: "/provider/codex-base.toml",
+        changed: false,
+        stale: [],
+        before: "",
+        after: "",
+      },
+      backupPaths: ["/provider/codex.bak"],
+    };
+  }
+  if (provider === "cursor") {
+    return {
+      ...shared,
+      provider,
+      hooksPath: "/provider/cursor.json",
+      hookScriptPath: "/provider/cursor.sh",
+      commands: {} as CursorHookInstallResult["commands"],
+      missing: [],
+      configChanged: true,
+      scriptChanged: true,
+      backupPaths: ["/provider/cursor.bak"],
+    };
+  }
+  return {
+    ...shared,
+    provider,
+    configDir: "/provider/opencode",
+    pluginPath: "/provider/opencode/plugin.ts",
+    backupPath: "/provider/opencode.bak",
+  };
 }
 
 function trackingOperation(harnessId: SupportedHarnessId) {

@@ -14,7 +14,7 @@ import { StationToast } from "../StationToast.js";
 import { PaneGrid, PaneRegistryProvider } from "../terminal/index.js";
 import { WelcomeScreen } from "../welcome/WelcomeScreen.js";
 import { StationOverlay } from "../station/StationOverlay.js";
-import { STATION_COLORS } from "../station/view/theme.js";
+import { toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import type { StationAppProps } from "./types.js";
 
@@ -38,6 +38,7 @@ export function StationApp({
   overlayWidthPercent,
   overlayHeightPercent,
 }: StationAppProps) {
+  const theme = useStationTheme();
   const overlayVisible = useStoreValue(store, selectStationOverlayVisible);
   const hasPanes = useStoreValue(store, selectPaneCount) > 0;
   const welcomeVisible = useStoreValue(store, selectWelcomeVisible);
@@ -47,7 +48,12 @@ export function StationApp({
   const topRowWidgets = useTopRowWidgets(widgets, topRowWidgetDeps);
 
   return (
-    <box width="100%" height="100%" flexDirection="column" backgroundColor={STATION_COLORS.background}>
+    <box
+      width="100%"
+      height="100%"
+      flexDirection="column"
+      backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
+    >
       <box width="100%" flexGrow={1} flexDirection="column">
         {/* Welcome replaces the grid during the boot intro / empty workspace; the
             panes' PTYs live in the registry, so they re-attach when it dismisses. */}

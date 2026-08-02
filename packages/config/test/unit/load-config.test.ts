@@ -761,7 +761,7 @@ ${projectToml("web", root)}
     expect(loaded.config.featureFlags).toEqual({});
   });
 
-  it("normalizes resume feature flag and harness resume opt-in", async () => {
+  it("normalizes feature flags and harness resume opt-in", async () => {
     const tempDir = await makeTempDir();
     const root = await makeProjectRoot(tempDir, "web");
 
@@ -776,6 +776,7 @@ harness = "codex"
 layout = "agent-build-shell"
 
 [feature_flags]
+dashboard_persistent_filter = true
 session_resume_agent = true
 
 [harness.codex]
@@ -787,6 +788,7 @@ ${projectToml("web", root)}
     );
 
     expect(loaded.config.featureFlags).toEqual({
+      dashboardPersistentFilter: true,
       sessionResumeAgent: true,
     });
     expect(loaded.config.harness?.codex?.resume).toBe(true);

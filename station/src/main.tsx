@@ -36,6 +36,7 @@ import { openExternalUrl } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
+import { nativeStationTheme, StationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
 
 export type RunStationMainOptions = {
@@ -70,8 +71,7 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     process.exitCode = 1;
     return;
   }
-  const ttyOwnership =
-    ownershipResult.kind === "owned" ? ownershipResult.ownership : undefined;
+  const ttyOwnership = ownershipResult.kind === "owned" ? ownershipResult.ownership : undefined;
   try {
     const started = await startStationMain(options, ttyOwnership);
     if (!started) {
@@ -249,6 +249,7 @@ async function startStationMain(
     overlayWidthPercent: stationConfig.config.overlay_width_percent,
     overlayHeightPercent: stationConfig.config.overlay_height_percent,
     automations: stationConfig.config.automations,
+    ...tuiConfig.composition,
     clipboardEffects,
     openExternalUrl,
     ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),
@@ -305,13 +306,18 @@ async function startStationMain(
     ? createRenderProfiler(devRenderProfilePath())
     : undefined;
   station.start();
+  const stationApp = (
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationApp {...station.viewProps} />
+    </StationThemeProvider>
+  );
   root.render(
     onRenderProfile ? (
       <Profiler id="station" onRender={onRenderProfile}>
-        <StationApp {...station.viewProps} />
+        {stationApp}
       </Profiler>
     ) : (
-      <StationApp {...station.viewProps} />
+      stationApp
     ),
   );
 

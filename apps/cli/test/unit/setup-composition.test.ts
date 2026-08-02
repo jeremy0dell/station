@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSetupComposition } from "../../src/commands/setup/composition.js";
+import type { SetupPromptAdapter } from "../../src/commands/setup/types.js";
 
 describe("setup composition", () => {
   it("creates one invocation-scoped session without inspecting or mutating during construction", () => {
@@ -16,7 +17,41 @@ describe("setup composition", () => {
       inspectionPhase: "initial",
     });
     expect(composition.session.snapshot()).toBeUndefined();
+    expect(typeof composition.guided.isInteractiveTerminal).toBe("function");
     expect(typeof composition.json.project).toBe("function");
+    expect(typeof composition.text.renderPlan).toBe("function");
+  });
+
+  it("uses an injected guided presenter without invoking it during construction", () => {
+    const promptCall = () => {
+      throw new Error("composition must not invoke the presenter");
+    };
+    const prompt: SetupPromptAdapter = {
+      isInteractiveTerminal: promptCall,
+      intro: promptCall,
+      outro: promptCall,
+      cancel: promptCall,
+      confirm: promptCall,
+      selectOne: promptCall,
+      selectMany: promptCall,
+      note: promptCall,
+      logStep: promptCall,
+      logSuccess: promptCall,
+      logWarn: promptCall,
+      logError: promptCall,
+      logInfo: promptCall,
+    };
+
+    const composition = createSetupComposition({
+      mode: "apply",
+      options: {},
+      deps: { prompt },
+      noBrew: false,
+      planConfigWrite: true,
+    });
+
+    expect(composition.guided).toBe(prompt);
+    expect(composition.session.snapshot()).toBeUndefined();
   });
 
   it("projects inspection diagnostics even when collection produced no snapshot", async () => {

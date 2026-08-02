@@ -13,14 +13,45 @@ import type { SetupStateDirFileSystem } from "./checks/stateDir.js";
 export type SetupPromptChoice = {
   value: string;
   label: string;
+  hint?: string;
+};
+
+export type SetupPromptAnswer<T> =
+  | { readonly kind: "answered"; readonly value: T }
+  | { readonly kind: "cancelled" };
+
+export type SetupConfirmRequest = {
+  readonly message: string;
+};
+
+export type SetupSelectOneRequest = {
+  readonly message: string;
+  readonly choices: readonly SetupPromptChoice[];
+  readonly initialValue?: string;
+};
+
+export type SetupSelectManyRequest = {
+  readonly message: string;
+  readonly choices: readonly SetupPromptChoice[];
+  readonly initialValues?: readonly string[];
 };
 
 export type SetupPromptAdapter = {
-  confirm(message: string): Promise<boolean>;
-  selectMany(message: string, choices: readonly SetupPromptChoice[]): Promise<readonly string[]>;
-  pause?(): void;
-  resume?(): void;
-  close?(): void | Promise<void>;
+  readonly isInteractiveTerminal: () => boolean;
+  readonly intro: (title: string) => void;
+  readonly outro: (message: string) => void;
+  readonly cancel: (message: string) => void;
+  readonly confirm: (request: SetupConfirmRequest) => Promise<SetupPromptAnswer<boolean>>;
+  readonly selectOne: (request: SetupSelectOneRequest) => Promise<SetupPromptAnswer<string>>;
+  readonly selectMany: (
+    request: SetupSelectManyRequest,
+  ) => Promise<SetupPromptAnswer<readonly string[]>>;
+  readonly note: (message: string, title?: string) => void;
+  readonly logStep: (message: string) => void;
+  readonly logSuccess: (message: string) => void;
+  readonly logWarn: (message: string) => void;
+  readonly logError: (message: string) => void;
+  readonly logInfo: (message: string) => void;
 };
 
 export type SetupCommandDeps = {

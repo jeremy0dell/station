@@ -175,6 +175,28 @@ describe("text setup presenter", () => {
     expect(plain).not.toContain("\u001b[");
   });
 
+  it("dims prompt details and renders compact OSC 8 links", () => {
+    const presenter = createTextSetupPresenter({ color: true, hyperlinks: true });
+    const prompt = presenter.prompt(setupMessageRef("guided.launcher-link-prompt"));
+    const link = presenter.link({
+      label: "Official Homebrew formula ↗",
+      url: "https://formulae.brew.sh/formula/tmux",
+    });
+
+    expect(prompt.startsWith("Link STATION launchers globally?\n\u001b[2mMakes stn")).toBe(true);
+    expect(prompt).toContain("\u001b[2mRuns this checkout’s station:link package script.");
+    expect(link).toContain(
+      "\u001b]8;;https://formulae.brew.sh/formula/tmux\u001b\\Official Homebrew formula ↗\u001b]8;;\u001b\\",
+    );
+    expect(link).toContain("\u001b[4m");
+
+    const plainLink = createTextSetupPresenter({ color: false, hyperlinks: false }).link({
+      label: "Official Homebrew formula ↗",
+      url: "https://formulae.brew.sh/formula/tmux",
+    });
+    expect(plainLink).toBe("Official Homebrew formula ↗ (https://formulae.brew.sh/formula/tmux)");
+  });
+
   it("renders Git-specific and generic blocked results without inspecting check IDs", () => {
     const presenter = createTextSetupPresenter();
     const git = presenter.renderApplyResult(

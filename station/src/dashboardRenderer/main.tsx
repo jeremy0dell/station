@@ -5,7 +5,7 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { createTuiStore, legacySearchExperience } from "@station/dashboard-core";
+import { createTuiStore } from "@station/dashboard-core";
 import {
   loadStationTuiConfig,
   startWidgetConfigWrites,
@@ -22,8 +22,8 @@ import {
   executeDashboardControlIntent,
   type DashboardRendererEffects,
 } from "./dashboardEffects.js";
-import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
+import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 import {
   createPopupRuntime,
   createProcessRendererControlChannel,
@@ -91,7 +91,7 @@ export async function runDashboardMain(): Promise<void> {
     source: client.state,
     service: client.service,
     clientLabel: "station",
-    dashboardSearchExperience: legacySearchExperience,
+    ...tuiConfig.composition,
     onExit: exit,
     initialState: {
       widgets: tuiConfig.config?.widgets ?? [],
@@ -192,7 +192,7 @@ export async function runDashboardMain(): Promise<void> {
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
     nextRoot.render(
-      <FullscreenDashboard
+      <StandaloneDashboardApp
         store={store}
         effects={rendererEffects}
         onCopyNotice={copyNoticeText}

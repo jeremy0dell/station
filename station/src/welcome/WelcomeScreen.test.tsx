@@ -5,7 +5,12 @@ import { testRender } from "@opentui/react/test-utils";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
-import { WelcomeScreen, WELCOME_BUTTON_SHIMMER_BG } from "./WelcomeScreen.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../theme/index.js";
+import { WelcomeScreen } from "./WelcomeScreen.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
@@ -53,7 +58,9 @@ describe("WelcomeScreen", () => {
 
   it("shows both CTAs when restored sessions can be continued", async () => {
     const setup = await testRender(
-      <WelcomeScreen dispatchMouse={() => true} canContinue />,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <WelcomeScreen dispatchMouse={() => true} canContinue />
+      </StationThemeProvider>,
       SURFACE,
     );
     await setup.flush();
@@ -83,7 +90,9 @@ describe("WelcomeScreen", () => {
           backgrounds.add(rgbToHex(bg as Parameters<typeof rgbToHex>[0]));
         }
       }
-      expect(backgrounds.has(WELCOME_BUTTON_SHIMMER_BG)).toBe(true);
+      expect(backgrounds.has(stationColorSnapshotValue(nativeStationTheme.welcome.shimmer))).toBe(
+        true,
+      );
     } finally {
       setup.renderer.destroy();
     }
@@ -93,7 +102,12 @@ describe("WelcomeScreen", () => {
 async function renderWelcomeScreen(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
 ) {
-  const setup = await testRender(<WelcomeScreen dispatchMouse={dispatchMouse} />, SURFACE);
+  const setup = await testRender(
+    <StationThemeProvider theme={nativeStationTheme}>
+      <WelcomeScreen dispatchMouse={dispatchMouse} />
+    </StationThemeProvider>,
+    SURFACE,
+  );
   await setup.flush();
   return setup;
 }

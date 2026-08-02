@@ -29,6 +29,7 @@ describe("observer feature flag evaluator", () => {
     const evaluator = createFeatureFlagEvaluator({ revisionSeed: "test" });
 
     expect(evaluator.all().flags).toEqual({
+      dashboardPersistentFilter: false,
       sessionResumeAgent: false,
       stationPersistentAgents: false,
     });

@@ -1,4 +1,5 @@
 import { TextAttributes } from "@opentui/core";
+import { nativeStationTheme } from "../../../theme/index.js";
 import type { VtCase } from "./types.js";
 
 export const sgrCases: readonly VtCase[] = [
@@ -7,14 +8,14 @@ export const sgrCases: readonly VtCase[] = [
     feed: "\x1b[31mred",
     expect: {
       rows: ["red"],
-      cells: [{ at: [0, 0], char: "r", fg: "#cd3131" }],
+      cells: [{ at: [0, 0], char: "r", fg: nativeStationTheme.terminal.ansi16[1].value }],
     },
   },
   {
     name: "sgr bright foreground maps to the bright palette",
     feed: "\x1b[92mok",
     expect: {
-      cells: [{ at: [0, 0], fg: "#23d18b" }],
+      cells: [{ at: [0, 0], fg: nativeStationTheme.terminal.ansi16[10].value }],
     },
   },
   {
@@ -61,8 +62,7 @@ export const sgrCases: readonly VtCase[] = [
       cells: [
         {
           at: [0, 0],
-          attributes:
-            TextAttributes.INVERSE | TextAttributes.HIDDEN | TextAttributes.STRIKETHROUGH,
+          attributes: TextAttributes.INVERSE | TextAttributes.HIDDEN | TextAttributes.STRIKETHROUGH,
         },
       ],
     },
@@ -82,7 +82,7 @@ export const sgrCases: readonly VtCase[] = [
       cells: [
         {
           at: [0, 0],
-          fg: "#cd3131",
+          fg: nativeStationTheme.terminal.ansi16[1].value,
           attributes: TextAttributes.BOLD | TextAttributes.UNDERLINE,
         },
         { at: [0, 2], char: "c", fgDefault: true, attributes: 0 },
@@ -94,7 +94,11 @@ export const sgrCases: readonly VtCase[] = [
     feed: "\x1b[1;31mAB\x1b[0mCD",
     expect: {
       cells: [
-        { at: [0, 0], fg: "#cd3131", attributes: TextAttributes.BOLD },
+        {
+          at: [0, 0],
+          fg: nativeStationTheme.terminal.ansi16[1].value,
+          attributes: TextAttributes.BOLD,
+        },
         { at: [0, 2], char: "C", fgDefault: true, attributes: 0 },
       ],
     },
@@ -104,7 +108,7 @@ export const sgrCases: readonly VtCase[] = [
     feed: ["\x1b[3", "1mred"],
     expect: {
       rows: ["red"],
-      cells: [{ at: [0, 0], fg: "#cd3131" }],
+      cells: [{ at: [0, 0], fg: nativeStationTheme.terminal.ansi16[1].value }],
     },
   },
 ];

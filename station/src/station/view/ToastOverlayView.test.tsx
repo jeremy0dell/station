@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import type { TuiToast } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
@@ -79,22 +80,14 @@ describe("ToastOverlayView actions", () => {
   it("keeps hover feedback and dismissal isolated to the dismiss control", async () => {
     const fixture = await renderNotice();
     const dismiss = cellFor(fixture.frame(), "[ dismiss ]");
-    const ordinary = spanAtFrameCell(
-      fixture.setup.captureSpans(),
-      dismiss.row,
-      dismiss.col,
-    );
+    const ordinary = spanAtFrameCell(fixture.setup.captureSpans(), dismiss.row, dismiss.col);
 
     await act(async () => {
       await fixture.setup.mockMouse.moveTo(dismiss.col, dismiss.row);
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
     await fixture.setup.flush();
-    const hovered = spanAtFrameCell(
-      fixture.setup.captureSpans(),
-      dismiss.row,
-      dismiss.col,
-    );
+    const hovered = spanAtFrameCell(fixture.setup.captureSpans(), dismiss.row, dismiss.col);
     expect(hovered?.fg).not.toBe(ordinary?.fg);
     expect(hovered?.bg).not.toBe(ordinary?.bg);
 
@@ -114,23 +107,25 @@ async function renderNotice() {
   const copied: string[] = [];
   store.getState().start();
   const setup = await testRender(
-    <StationHoverProvider value>
-      <StationMouseProvider
-        value={(target) => {
-          targets.push(target);
-          if (target.kind === "toast") {
-            store.getState().dismissToasts();
-          }
-        }}
-      >
-        <DashboardRoot
-          store={store}
-          columns={99}
-          rows={25}
-          onCopyNotice={(text) => copied.push(text)}
-        />
-      </StationMouseProvider>
-    </StationHoverProvider>,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationHoverProvider value>
+        <StationMouseProvider
+          value={(target) => {
+            targets.push(target);
+            if (target.kind === "toast") {
+              store.getState().dismissToasts();
+            }
+          }}
+        >
+          <DashboardRoot
+            store={store}
+            columns={99}
+            rows={25}
+            onCopyNotice={(text) => copied.push(text)}
+          />
+        </StationMouseProvider>
+      </StationHoverProvider>
+    </StationThemeProvider>,
     { width: 99, height: 25 },
   );
   teardowns.push(() => setup.renderer.destroy());

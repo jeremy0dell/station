@@ -14,10 +14,13 @@ export type {
 } from "./types.js";
 
 export async function runSetupCommand(
-  argv: readonly string[],
-  options: SetupCommandOptions = {},
-  deps: SetupCommandDeps = {},
+  ...commandArguments: [
+    argv: readonly string[],
+    options?: SetupCommandOptions,
+    deps?: SetupCommandDeps,
+  ]
 ): Promise<SetupCommandResult> {
+  const [argv, options = {}, deps = {}] = commandArguments;
   let args: ReturnType<typeof parseSetupArgs>;
   try {
     args = parseSetupArgs(argv);
