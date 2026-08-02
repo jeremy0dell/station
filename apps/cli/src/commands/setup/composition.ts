@@ -18,9 +18,10 @@ import { setupPresenter } from "./io.js";
 import type { SetupPlan } from "./model.js";
 import { projectSessionView } from "./presentation/projectSessionView.js";
 import { type ProjectSetupView, projectSetupView } from "./presentation/projectSetupView.js";
+import { createClackSetupPresenter } from "./presenters/clack.js";
 import { createJsonSetupPresenter, type JsonSetupPresenter } from "./presenters/json.js";
 import type { TextSetupPresenter } from "./presenters/text.js";
-import type { SetupCommandDeps, SetupCommandOptions } from "./types.js";
+import type { SetupCommandDeps, SetupCommandOptions, SetupPromptAdapter } from "./types.js";
 
 export type CliSetupSession = {
   readonly application: SetupSessionApplication;
@@ -45,6 +46,7 @@ export type SetupSessionProjection = ProjectedSetupSession | UnavailableSetupSes
 /** Invocation-scoped setup runtime and its machine and terminal presentation adapters. */
 export type SetupComposition = {
   readonly session: CliSetupSession;
+  readonly guided: SetupPromptAdapter;
   readonly json: JsonSetupPresenter;
   readonly text: TextSetupPresenter;
   readonly project: (state: SetupSessionState) => SetupSessionProjection;
@@ -64,7 +66,7 @@ export type CreateSetupCompositionOptions = {
 /**
  * COMPOSITION ROOT
  *
- * Wires one CLI invocation's inspection, operation, session, guided progress, and presentation adapters.
+ * Wires one CLI invocation's session and presentation boundaries, selecting Clack as the default guided adapter.
  */
 export function createSetupComposition(options: CreateSetupCompositionOptions): SetupComposition {
   const inspection = createSetupInspectionAdapter({
@@ -118,10 +120,12 @@ export function createSetupComposition(options: CreateSetupCompositionOptions): 
     inspection,
     snapshot: inspection.current,
   };
+  const guided = options.deps.prompt ?? createClackSetupPresenter();
   const json = createJsonSetupPresenter();
   const text = setupPresenter(options.deps);
   return {
     session,
+    guided,
     json,
     text,
     project: (state) => projectCurrentSession(state, session, json),

@@ -3,7 +3,7 @@ import { runSetupCommand } from "../setup/index.js";
 
 export const setupCliCommand: CliCommandNode = {
   name: "setup",
-  description: "Check, plan, or apply local STATION setup.",
+  description: "Run guided setup, or check, plan, and apply local Station setup.",
   run: runSetupCliCommand,
   usage: [
     "stn setup",
@@ -23,7 +23,8 @@ export const setupCliCommand: CliCommandNode = {
   ],
   examples: ["pnpm stn setup check --json", "pnpm stn setup apply --dry-run"],
   notes: [
-    "Core STATION setup is separate from optional provider CLIs and shell integrations.",
+    "Bare stn setup is interactive and requires a terminal.",
+    "Automation can use setup check --json, setup plan --json, and explicit setup apply --yes after review.",
     "Setup help and manual output is read-only and does not inspect the local machine.",
   ],
   children: [

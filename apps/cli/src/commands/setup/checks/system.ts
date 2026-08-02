@@ -191,10 +191,11 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     checkSetupWorktrunkAutomation(worktrunkAutomationInput),
     checkSetupWorktrunkShellIntegration(worktrunkShellIntegrationInput),
   ]);
-  const launcherCommand =
-    options.tmuxPopupOwnerRoot === undefined
-      ? setupLauncherExecutable(launchers.tmuxPopup)
-      : join(options.tmuxPopupOwnerRoot, "stn-tmux-popup");
+  const tmuxLauncherInput: ResolveTmuxLauncherCommandInput = { compiled, launchers };
+  if (options.tmuxPopupOwnerRoot !== undefined) {
+    tmuxLauncherInput.ownerRoot = options.tmuxPopupOwnerRoot;
+  }
+  const launcherCommand = await resolveTmuxLauncherCommand(tmuxLauncherInput);
   let resolvedLaunchers: SetupLaunchersFact = launchers;
   if (options.tmuxPopupOwnerRoot !== undefined) {
     let tmuxPopup: SetupLauncherFact;
@@ -301,6 +302,28 @@ export async function checkSetupSocketEvidence(
     status: (await canExecute(command, options.access)) ? "ok" : "missing",
     command,
   };
+}
+
+type ResolveTmuxLauncherCommandInput = {
+  compiled: boolean;
+  launchers: SetupLaunchersFact;
+  ownerRoot?: string;
+};
+
+async function resolveTmuxLauncherCommand(input: ResolveTmuxLauncherCommandInput): Promise<string> {
+  if (input.ownerRoot !== undefined) return join(input.ownerRoot, "stn-tmux-popup");
+  const linkedCheckoutPopup =
+    !input.compiled &&
+    input.launchers.tmuxPopup.source === "path" &&
+    input.launchers.tmuxPopup.resolvedPath !== undefined &&
+    (await setupLauncherPathsMatch(
+      input.launchers.tmuxPopup.resolvedPath,
+      input.launchers.tmuxPopup.checkoutPath,
+    ));
+  // A source binding stays checkout-scoped when linking adds an equivalent PATH alias mid-apply.
+  return linkedCheckoutPopup
+    ? input.launchers.tmuxPopup.checkoutPath
+    : setupLauncherExecutable(input.launchers.tmuxPopup);
 }
 
 function usesManagedFastPopupDefaults(config: SetupConfigFact): boolean {

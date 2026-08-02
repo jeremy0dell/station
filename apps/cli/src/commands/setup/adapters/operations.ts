@@ -24,7 +24,11 @@ import {
 import { runWorktrunkHooksCommand } from "../../providerHookAdapters.js";
 import type { SetupApplyFileSystem } from "../apply.js";
 import { commandEnv } from "../checks/env.js";
-import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "../checks/tmuxBinding.js";
+import {
+  checkSetupTmuxBinding,
+  tmuxPopupBindingBlock,
+  tmuxPopupBindingEndMarker,
+} from "../checks/tmuxBinding.js";
 import { resolveHarnessInstallDefinition } from "../harnessInstall.js";
 import type { SetupFacts } from "../model.js";
 import type { SetupCommandDeps } from "../types.js";
@@ -41,6 +45,7 @@ export type SetupOperationAdapterOptions = {
  * ADAPTER
  *
  * Assigns semantic setup operations to config, provider, process, filesystem, and Observer boundary implementations.
+ * Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.
  */
 export function createSetupOperationAdapter(
   options: SetupOperationAdapterOptions,
@@ -281,37 +286,95 @@ async function configureTmux(
   if (facts.tmuxBinding.status === "conflict") {
     return failedOutcome(operation, tmuxConflictFallback, tmuxConflictFallback);
   }
-  if (operation.scope === "live") {
-    return runExternalOperation(
-      operation,
-      [
-        facts.tmux.resolvedPath ?? facts.tmux.command,
-        "bind-key",
-        facts.tmuxBinding.bindingKey,
-        "run-shell",
-        "-b",
-        facts.tmuxBinding.runShellCommand,
-      ],
-      { kind: "tmux-popup", scope: "live", changed: true },
-      deps,
-    );
-  }
 
   try {
     const fs = deps.fs ?? nodeSetupFileSystem();
     const existing = await readFileIfPresent(fs, facts.tmuxBinding.path);
-    const block = tmuxPopupBindingBlock(facts.tmuxBinding.launcherCommand, {
-      bindingKey: facts.tmuxBinding.bindingKey,
+    const recheckOptions: Parameters<typeof checkSetupTmuxBinding>[0] = {
+      homeDir: facts.homeDir,
+      fs: {
+        async readFile(path) {
+          if (path === facts.tmuxBinding.path && existing !== undefined) return existing;
+          throw Object.assign(new Error(`Missing file: ${path}`), { code: "ENOENT" });
+        },
+      },
+      launcherCommand: facts.tmuxBinding.launcherCommand,
       runShellCommand: facts.tmuxBinding.runShellCommand,
+      tmuxCommand: facts.tmux.resolvedPath ?? facts.tmux.command,
+    };
+    if (deps.env !== undefined) recheckOptions.env = deps.env;
+    if (deps.runner !== undefined) recheckOptions.runner = deps.runner;
+    const currentBinding = await checkSetupTmuxBinding(recheckOptions);
+    if (currentBinding.status === "conflict") {
+      return {
+        status: "failed",
+        operationId: operation.id,
+        error: { ...tmuxConflictFallback, message: currentBinding.message },
+      };
+    }
+    if (currentBinding.bindingKey !== facts.tmuxBinding.bindingKey) {
+      return {
+        status: "failed",
+        operationId: operation.id,
+        error: {
+          ...tmuxConflictFallback,
+          message: `The tmux popup key changed from ${facts.tmuxBinding.bindingKey} to ${currentBinding.bindingKey} after setup inspection.`,
+        },
+      };
+    }
+
+    if (operation.scope === "live") {
+      if (!currentBinding.insideTmux || currentBinding.liveStatus === "loaded") {
+        return {
+          status: "completed",
+          operationId: operation.id,
+          commit: { kind: "tmux-popup", scope: "live", changed: false },
+        };
+      }
+      if (currentBinding.liveStatus === "unknown") {
+        return {
+          status: "failed",
+          operationId: operation.id,
+          error: {
+            ...tmuxConflictFallback,
+            message:
+              "The current tmux server binding could not be revalidated; setup left it unchanged.",
+          },
+        };
+      }
+      return runExternalOperation(
+        operation,
+        [
+          facts.tmux.resolvedPath ?? facts.tmux.command,
+          "bind-key",
+          currentBinding.bindingKey,
+          "run-shell",
+          "-b",
+          currentBinding.runShellCommand,
+        ],
+        { kind: "tmux-popup", scope: "live", changed: true },
+        deps,
+      );
+    }
+
+    if (currentBinding.status === "ok") {
+      return {
+        status: "completed",
+        operationId: operation.id,
+        commit: { kind: "tmux-popup", scope: "persisted", changed: false },
+      };
+    }
+    const block = tmuxPopupBindingBlock(currentBinding.launcherCommand, {
+      bindingKey: currentBinding.bindingKey,
+      runShellCommand: currentBinding.runShellCommand,
     });
     const content = replaceMarkedBlock(
       existing ?? "",
-      facts.tmuxBinding.marker,
+      currentBinding.marker,
       tmuxPopupBindingEndMarker,
       block,
     );
-    const changed = content !== existing;
-    if (!changed) {
+    if (content === existing) {
       return {
         status: "completed",
         operationId: operation.id,
@@ -323,8 +386,8 @@ async function configureTmux(
     const backupPath =
       existing === undefined
         ? undefined
-        : await writeTmuxBackup(fs, facts.tmuxBinding.path, existing, deps.now);
-    await replaceWithSetupFileSystem(fs, facts.tmuxBinding.path, content);
+        : await writeTmuxBackup(fs, currentBinding.path, existing, deps.now);
+    await replaceWithSetupFileSystem(fs, currentBinding.path, content, existing);
     return {
       status: "completed",
       operationId: operation.id,
@@ -384,7 +447,7 @@ function configPersistenceFileSystem(
       const current = await readFileIfPresent(fs, path);
       if (current === content) return "unchanged";
       if (current !== expectedContent) return "stale";
-      await replaceWithSetupFileSystem(fs, path, content);
+      await replaceWithSetupFileSystem(fs, path, content, current);
       return "replaced";
     },
   };
@@ -428,11 +491,18 @@ async function replaceWithSetupFileSystem(
   fs: SetupApplyFileSystem,
   path: string,
   content: string,
+  expectedContent: string | undefined,
 ): Promise<void> {
   await fs.mkdir(dirname(path), { recursive: true });
   const tempPath = `${path}.tmp-${process.pid}-${Date.now()}`;
   try {
     await fs.writeFile(tempPath, content);
+    // The exact bytes admitted by preflight must still be current after the replacement is ready.
+    if ((await readFileIfPresent(fs, path)) !== expectedContent) {
+      throw Object.assign(new Error(`Setup target changed before replacement: ${path}`), {
+        code: "ESTALE",
+      });
+    }
     await fs.rename(tempPath, path);
   } catch (error) {
     await fs.rm?.(tempPath, { force: true }).catch(() => undefined);
