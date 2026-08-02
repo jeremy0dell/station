@@ -5,14 +5,10 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import {
-  DashboardSurfaceProvider,
-  TERMINAL_DEFAULT_SURFACES,
-} from "../station/view/dashboardSurfaceContext.js";
 import { STATION_COLORS } from "../station/view/theme.js";
-import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
+import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
-import { FullscreenDashboard } from "./FullscreenDashboard.js";
+import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 
 const SURFACE = { width: 80, height: 24 };
 const WIDGET_SURFACE = { width: 99, height: 25 };
@@ -77,6 +73,32 @@ describe("FullscreenDashboard surface ownership", () => {
     });
 
     expectTerminalDefaultBackground(setup, "Surface ownership notice");
+  });
+
+  it("obscures dashboard cells with an opaque default background and restores them", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    const before = setup.captureCharFrame();
+
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+
+    const after = setup.captureCharFrame();
+    const obscured = findObscuredHelpCell(before, after);
+    const span = spanAtFrameCell(setup.captureSpans(), obscured.row, obscured.col);
+    expect(frameChar(after, obscured.row, obscured.col)).toBe(" ");
+    expect(span?.bg.intent).toBe("default");
+
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "Q" });
+      await setup.flush();
+    });
+
+    expect(frameChar(setup.captureCharFrame(), obscured.row, obscured.col)).toBe(
+      obscured.original,
+    );
   });
 });
 
@@ -439,9 +461,7 @@ async function render(
   effects: DashboardRendererEffects = TEST_EFFECTS,
 ) {
   const setup = await testRender(
-    <DashboardSurfaceProvider value={TERMINAL_DEFAULT_SURFACES}>
-      <FullscreenDashboard store={store} effects={effects} onCopyNotice={() => {}} />
-    </DashboardSurfaceProvider>,
+    <StandaloneDashboardApp store={store} effects={effects} onCopyNotice={() => {}} />,
     size,
   );
   await setup.flush();
@@ -468,6 +488,33 @@ function cellFor(frame: string, needle: string): { col: number; row: number } {
     throw new Error(`Could not find ${JSON.stringify(needle)} in frame:\n${frame}`);
   }
   return { col, row };
+}
+
+function findObscuredHelpCell(
+  before: string,
+  after: string,
+): { row: number; col: number; original: string } {
+  const lines = after.split("\n");
+  const top = lines.findIndex((line) => line.includes("╭") && line.includes("╮"));
+  const topCells = [...(lines[top] ?? "")];
+  const left = topCells.indexOf("╭");
+  const right = topCells.lastIndexOf("╮");
+  const bottom = lines.findIndex(
+    (line, row) => row > top && frameChar(line, 0, left) === "╰",
+  );
+  if (top < 0 || left < 0 || right <= left || bottom <= top) {
+    throw new Error(`Could not locate Help bounds in frame:\n${after}`);
+  }
+
+  for (let row = top + 1; row < bottom; row += 1) {
+    for (let col = left + 1; col < right; col += 1) {
+      const original = frameChar(before, row, col);
+      if (/^[A-Za-z0-9]$/u.test(original) && frameChar(after, row, col) === " ") {
+        return { row, col, original };
+      }
+    }
+  }
+  throw new Error(`Help did not obscure a stable dashboard character:\n${after}`);
 }
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {

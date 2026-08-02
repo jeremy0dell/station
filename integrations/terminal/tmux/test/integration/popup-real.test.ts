@@ -2,7 +2,7 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { promisify } from "node:util";
+import { promisify, stripVTControlCharacters } from "node:util";
 import {
   type CommandId,
   type CommandRecord,
@@ -260,6 +260,23 @@ type TmuxClientTarget = {
   windowId: string;
 };
 
+describe("captured tmux background parsing", () => {
+  it("distinguishes explicit backgrounds from a later terminal-default reset", () => {
+    expect(
+      capturedBackgroundIntentAtText("\u001b[48;2;16;19;22mstation · overview", "station"),
+    ).toBe("explicit");
+    expect(
+      capturedBackgroundIntentAtText(
+        "\u001b[48;2;16;19;22mold\u001b[49mstation · overview",
+        "station",
+      ),
+    ).toBe("default");
+    expect(
+      capturedBackgroundIntentAtText("\u001b[38;2;49;19;22mstation · overview", "station"),
+    ).toBe("default");
+  });
+});
+
 describeRealTmux("real tmux dev popup routing", () => {
   let cleanup: (() => Promise<void>) | undefined;
   let tmux: string;
@@ -447,6 +464,7 @@ describeRealTmux("real tmux dev popup routing", () => {
         isAcceptanceDashboardContent(content) && content.includes("20 agents · 1 open PR"),
       "deterministic real dashboard did not render configured widgets",
     );
+    await expectHiddenTextUsesDefaultBackground(fixture, "station · overview");
     const firstRuntime = await waitForDashboardRuntimeEvidence(fixture, firstPopup, process.pid);
     const popupAttach = await waitForPopupAttachRecord(fixture);
     expect(popupAttach).toMatchObject({ rows: 40, columns: 120 });
@@ -468,6 +486,7 @@ describeRealTmux("real tmux dev popup routing", () => {
         !content.includes("no widgets yet"),
       "widget settings did not receive the configured standalone widget definitions",
     );
+    await expectHiddenTextUsesDefaultBackground(fixture, "saved to config.toml");
     await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForExactFrame(fixture, baseline);
 
@@ -478,6 +497,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       (content) => content.includes("station help"),
       "outer keyboard input did not open station help",
     );
+    await expectHiddenTextUsesDefaultBackground(fixture, "station help");
     await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForPaneContent(
       fixture,
@@ -485,6 +505,17 @@ describeRealTmux("real tmux dev popup routing", () => {
       (content) => isAcceptanceDashboardContent(content) && !content.includes("station help"),
       "Esc did not return from station help to the dashboard",
     );
+    await waitForExactFrame(fixture, baseline);
+
+    await fixture.ptyClient.write(Buffer.from("R", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) => content.includes("Rename:"),
+      "outer keyboard input did not open the Rename prompt",
+    );
+    await expectHiddenTextUsesDefaultBackground(fixture, "Rename:");
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForExactFrame(fixture, baseline);
 
     for (const dimensions of [
@@ -1905,6 +1936,94 @@ async function captureHiddenStyledLine(fixture: DashboardFixture, row: number): 
   return line;
 }
 
+type CapturedBackgroundIntent = "default" | "explicit";
+
+async function expectHiddenTextUsesDefaultBackground(
+  fixture: DashboardFixture,
+  needle: string,
+): Promise<void> {
+  const content = await tmuxExec(
+    fixture.wrapper,
+    ["capture-pane", "-e", "-p", "-N", "-t", persistentUiSessionName],
+    fixture.env,
+  );
+  const line = content
+    .split("\n")
+    .find((candidate) => stripVTControlCharacters(candidate).includes(needle));
+  if (line === undefined) {
+    throw new Error(`hidden pane does not contain styled text ${JSON.stringify(needle)}`);
+  }
+  expect(
+    capturedBackgroundIntentAtText(line, needle),
+    `expected terminal-default background for ${JSON.stringify(needle)} in ${JSON.stringify(line)}`,
+  ).toBe("default");
+}
+
+function capturedBackgroundIntentAtText(
+  styledLine: string,
+  needle: string,
+): CapturedBackgroundIntent {
+  const plainLine = stripVTControlCharacters(styledLine);
+  const targetOffset = plainLine.indexOf(needle);
+  if (targetOffset < 0) {
+    throw new Error(`styled line does not contain ${JSON.stringify(needle)}`);
+  }
+
+  let background: CapturedBackgroundIntent = "default";
+  let plainOffset = 0;
+  let sourceOffset = 0;
+  const sgrPattern = new RegExp(`${String.fromCharCode(27)}\\[([0-9;:]*)m`, "gu");
+  for (const match of styledLine.matchAll(sgrPattern)) {
+    const matchOffset = match.index;
+    const visibleText = stripVTControlCharacters(styledLine.slice(sourceOffset, matchOffset));
+    if (targetOffset < plainOffset + visibleText.length) {
+      return background;
+    }
+    plainOffset += visibleText.length;
+    background = applyCapturedBackgroundSgr(background, match[1] ?? "");
+    sourceOffset = matchOffset + match[0].length;
+  }
+  return background;
+}
+
+function applyCapturedBackgroundSgr(
+  current: CapturedBackgroundIntent,
+  parameters: string,
+): CapturedBackgroundIntent {
+  const values = (parameters.length === 0 ? "0" : parameters)
+    .replaceAll(":", ";")
+    .split(";")
+    .filter((value) => value.length > 0)
+    .map(Number);
+  let background = current;
+  for (let index = 0; index < values.length; index += 1) {
+    const code = values[index];
+    if (code === 0 || code === 49) {
+      background = "default";
+      continue;
+    }
+    if (code === 38 || code === 48) {
+      if (code === 48) {
+        background = "explicit";
+      }
+      const colorMode = values[index + 1];
+      if (colorMode === 5) {
+        index += 2;
+      } else if (colorMode === 2) {
+        index += 4;
+      }
+      continue;
+    }
+    if (
+      (code !== undefined && code >= 40 && code <= 47) ||
+      (code !== undefined && code >= 100 && code <= 107)
+    ) {
+      background = "explicit";
+    }
+  }
+  return background;
+}
+
 function paneCell(content: string, needle: string): { col: number; row: number } {
   const lines = content.split("\n");
   const row = lines.findIndex((line) => line.includes(needle));
@@ -2976,7 +3095,7 @@ function deterministicDashboardSnapshot(projectRoot: string): StationSnapshot {
       id: worktreeId,
       projectId: "popup-real",
       projectLabel: "POPUP ACCEPTANCE",
-      title: `popup-${sequence}`,
+      title,
       branch: `popup-${sequence}`,
       path: join(projectRoot, `popup-${sequence}`),
       worktree,

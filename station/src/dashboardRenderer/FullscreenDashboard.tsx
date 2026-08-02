@@ -27,17 +27,19 @@ import { routeDashboardMouse } from "./dashboardMouse.js";
  * Mouse targets route through the standalone dashboard adapter, which reuses
  * shared dashboard actions and delegates terminal effects to its environment.
  */
+export type FullscreenDashboardProps = {
+  store: StoreApi<TuiStore>;
+  effects: DashboardRendererEffects;
+  onCopyNotice: (text: string) => void;
+  hoverEnabled?: boolean;
+};
+
 export function FullscreenDashboard({
   store,
   effects,
   onCopyNotice,
   hoverEnabled = true,
-}: {
-  store: StoreApi<TuiStore>;
-  effects: DashboardRendererEffects;
-  onCopyNotice: (text: string) => void;
-  hoverEnabled?: boolean;
-}) {
+}: FullscreenDashboardProps) {
   const { surfaceBackground } = useDashboardSurfaces();
   const { width, height } = useTerminalDimensions();
   const widgets = useStore(store, (state) => state.widgets);

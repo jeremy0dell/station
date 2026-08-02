@@ -22,12 +22,8 @@ import {
   executeDashboardControlIntent,
   type DashboardRendererEffects,
 } from "./dashboardEffects.js";
-import {
-  DashboardSurfaceProvider,
-  TERMINAL_DEFAULT_SURFACES,
-} from "../station/view/dashboardSurfaceContext.js";
-import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
+import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 import {
   createPopupRuntime,
   createProcessRendererControlChannel,
@@ -196,14 +192,12 @@ export async function runDashboardMain(): Promise<void> {
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
     nextRoot.render(
-      <DashboardSurfaceProvider value={TERMINAL_DEFAULT_SURFACES}>
-        <FullscreenDashboard
-          store={store}
-          effects={rendererEffects}
-          onCopyNotice={copyNoticeText}
-          hoverEnabled={!popupRenderer}
-        />
-      </DashboardSurfaceProvider>,
+      <StandaloneDashboardApp
+        store={store}
+        effects={rendererEffects}
+        onCopyNotice={copyNoticeText}
+        hoverEnabled={!popupRenderer}
+      />,
     );
     process.on("exit", onProcessExit);
 
