@@ -23,7 +23,20 @@ Real-PTY coverage proves immediate Y/N, empty-selection reprompting, narrow-term
 explicit default selection, terminal restoration, and normalized human-only output. Non-TTY
 coverage proves guided setup exits before inspection or mutation.
 
-The focused guided lane requires Python 3 for its standard-library `pty` bridge:
+Manual interaction uses the same isolation goals without scripted input:
+
+```bash
+pnpm setup:guided:sandbox
+pnpm setup:guided:sandbox -- --profile everything-missing --keep
+```
+
+The command runs the built CLI on the current terminal but supplies a private temporary home,
+config, XDG roots, provider homes, Observer/socket paths, committed Git repository, and fake
+installer/tool commands. It never runs a real package manager or network downloader. Retained
+sandboxes expose their generated `run-setup` launcher, editable `bin/` shims, and
+`external-commands.log` for cancellation, failure, resize, narrow-terminal, and rerun exploration.
+
+The focused automated guided lane requires Python 3 for its standard-library `pty` bridge:
 
 ```bash
 pnpm test:e2e:setup:guided

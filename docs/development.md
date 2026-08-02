@@ -127,7 +127,30 @@ driver, setup core, providers, config, and tests; presenter unit tests inject th
 object instead of mocking the package globally. Bare guided setup requires TTY stdin and stdout,
 while check, plan, explicit apply, system, help, and JSON surfaces remain noninteractive.
 
-The real-terminal lane requires Python 3 and uses the standard-library `pty` module:
+For manual UX exploration, run the real guided flow in a disposable sandbox:
+
+```bash
+pnpm setup:guided:sandbox
+pnpm setup:guided:sandbox -- --profile multi --keep
+pnpm setup:guided:sandbox -- --profile everything-missing --keep
+```
+
+The sandbox builds the checkout, creates a committed disposable repository, then launches the real
+CLI with inherited terminal I/O. An `env -i` boundary relocates `HOME`, every XDG directory, config,
+Observer state and sockets, and all provider homes beneath one private temporary root. Fake
+Homebrew, curl, npm, pnpm, Worktrunk, tmux, and agent commands prevent network access and global
+installation while allowing accepted installer operations to re-probe their sandbox executables. The real Observer runs
+only against the sandbox paths and is stopped when setup exits.
+
+The default `first-run` profile has required tools but no agent CLI. `multi` starts with Codex and
+OpenCode, `missing-tools` starts with those agents but no required tools, and `everything-missing`
+exercises both installer stages. Use `--keep` to retain the printed root, edit any shim under its
+`bin/` directory from another terminal, inspect `external-commands.log`, and rerun its `run-setup`
+launcher. `--prepare-only` creates that environment without starting setup. Without `--keep`, the
+root is removed after completion or cancellation; no profile reads credentials, provider config,
+shell startup files, normal tmux state, or global Station state.
+
+The automated real-terminal lane requires Python 3 and uses the standard-library `pty` module:
 
 ```bash
 pnpm exec vitest run --config config/vitest/vitest.unit.config.ts \

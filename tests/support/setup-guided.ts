@@ -7,6 +7,7 @@ export type GuidedPtyInput =
   | "cancel"
   | `${number}`
   | `${number},${number}`
+  | `${number},${number},${string}`
   | `select:${number}`
   | { readonly raw: string };
 
