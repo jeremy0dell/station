@@ -1,6 +1,7 @@
 import type { TmuxConfig } from "@station/config";
 import type { TmuxCommandInput } from "../command.js";
 import { tmuxProviderErrorFromUnknown } from "../errors.js";
+import { resolveTmuxWorkbenchConfig } from "../topology.js";
 import { buildTmuxPopupArgs } from "./args.js";
 import {
   popupCommandInput,
@@ -117,6 +118,7 @@ function persistentSessionOptions(
 ): TmuxPersistentPopupSessionOptions {
   const input: TmuxPersistentPopupSessionOptions = {
     command,
+    popupStatusBar: resolveTmuxWorkbenchConfig(options.config).popupStatusBar,
     tuiCommand: persistentUi.command,
     uiSessionName: persistentUi.sessionName,
   };

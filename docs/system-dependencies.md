@@ -86,9 +86,13 @@ The Worktrunk provider shells out to `wt`. Install Worktrunk before using a conf
 worktree_provider = "worktrunk"
 ```
 
-The tmux provider shells out to `tmux` for the workbench and popup local-use path. Guided
-`stn setup` offers an optional recommended binding in a marked block in `~/.tmux.conf`; it is
-never selected without consent. A new block defaults to `tmux prefix + Space`:
+The tmux provider shells out to `tmux` for the workbench and popup local-use path. The
+source-only private tmux devbox also requires ncurses `tput` on `PATH` when attaching; it
+uses that tool against the isolated terminfo environment to preserve only caller terminals
+that provide tmux's required `clear` and `cup` capabilities. Compiled Station and ordinary
+tmux provider use do not add this development-only requirement. Guided `stn setup` offers
+an optional recommended binding in a marked block in `~/.tmux.conf`; it is never selected
+without consent. A new block defaults to `tmux prefix + Space`:
 
 ```tmux
 # >>> station popup binding >>>
@@ -115,15 +119,15 @@ server. Reloading after a key change can leave the old key active until
 `tmux unbind-key <old-key>` or a server restart; Station does not unbind a key
 whose ownership it cannot prove.
 
-For a compiled install with default popup geometry, the generated fast command
+For a compiled install with the default popup settings, the generated fast command
 uses the canonical installed directory, the exact sibling `stn-tmux-popup`
 alias, and the resolved tmux executable. First use can invoke that full CLI
 fallback to initialize the hidden UI; a valid warm use directly attaches or
 toggles it without loading config or starting Bun or the Observer. Configured
-custom geometry and `popup_scope = "client"` use the config-aware sibling alias
-instead so every open reads its geometry and ownership scope; setup with an
-explicit `--config` path also uses that alias so an existing hidden UI cannot
-mask a config change. Rerun `stn setup` after changing either setting so the
+custom geometry, `popup_scope = "client"`, and `popup_status_bar = true` use the
+config-aware sibling alias instead so every open reads those settings; setup with
+an explicit `--config` path also uses that alias so an existing hidden UI cannot
+mask a config change. Rerun `stn setup` after changing any of these settings so the
 managed binding is regenerated. Controlled
 binding failures are silent, return success to tmux, and show at most a
 temporary status-line message. Run `stn popup` directly for ordinary diagnostic

@@ -34,10 +34,10 @@ provider homes are checkout-local. See the copy-paste recipe in
 - Source popup registrations are scoped to the canonical checkout root that
   created them. Compiled registrations are scoped to the canonical installed
   binary directory instead; neither path may register filesystem root `/`.
-- With default popup geometry, the optional binding installed by a compiled
-  `stn setup` uses the generated direct tmux fast path. Custom geometry uses the
-  config-aware exact sibling `stn-tmux-popup` alias instead, as does setup run
-  with an explicit `--config` path. The fast path's
+- With default popup settings, the optional binding installed by a compiled
+  `stn setup` uses the generated direct tmux fast path. Custom geometry, client
+  scope, or an enabled popup status bar uses the config-aware exact sibling
+  `stn-tmux-popup` alias instead, as does setup run with an explicit `--config` path. The fast path's
   first use can enter that alias, while a valid warm use attaches, toggles, or
   transfers the existing `_station-ui` session without Bun, config loading, or
   Observer startup. Build the binary with
@@ -73,6 +73,14 @@ Observer, empty provider homes, a committed disposable Git project, and a
 strict minimal config. It never seeds real auth, Git, SSH, hooks, config, or
 default tmux state. `status` inspects only the recorded private manifest,
 server, sockets, and matching processes.
+
+Attach preserves the caller's `TERM` only when ncurses `tput` can resolve it
+inside the isolated environment with tmux's required `clear` and `cup`
+capabilities. Caller-specific `TERMINFO`, `TERMINFO_DIRS`, and external XDG data
+paths are intentionally not imported. An absent, unavailable, or unsuitable
+terminal falls back to `xterm-256color`; a rejected value is named in the
+fallback diagnostic, so the documented attach command never needs a manual
+`TERM` prefix.
 
 Use `Ctrl-b Space` in the attached base session. The binding enters the built
 CLI's production `popup` command; `_station-ui` owns the long-lived CLI parent,
@@ -120,6 +128,24 @@ assertions wait for two identical captures rather than accepting an
 intermediate repaint.
 
 ## Deterministic Gates
+
+### Unit and integration test machines
+
+The ordinary `vitest.unit.config.ts` and `vitest.integration.config.ts` lanes create a private
+machine root for each test file. They redirect the home, temporary, XDG, harness, Git, GitHub CLI,
+and shell-history paths; clear Station runtime/correlation overrides plus inherited Git, SSH, and
+GitHub credentials; and pass the sandbox paths to child processes. The root is removed after the
+file, including ordinary test failures.
+
+Use `vi.stubEnv` for test-local environment changes and let the shared setup restore the complete
+per-file baseline. Environment-mutating tests must not use `it.concurrent` or otherwise overlap in
+the same file because `process.env` is process-global. Set `STATION_TEST_MACHINE_KEEP_ROOT=1` for a
+focused run to retain the root and print its location, inspect it, and remove it manually afterward.
+
+Contracts, diagnostics, scripted-agent, setup E2E, Observer E2E, real-provider, and real tmux popup
+configs do not use this boundary. The isolation prevents accidental inheritance and environment
+leakage; it does not contain explicit absolute paths, signals, file descriptors, network access, or
+subprocesses that deliberately escape the redirected environment.
 
 Git-backed fixtures and child processes must clear Git's repository-local environment variables;
 `cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`

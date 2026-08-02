@@ -113,15 +113,18 @@ describe("config loading", () => {
     expect(loaded.diagnostics).toEqual([]);
   });
 
-  it("normalizes the configured tmux popup scope", async () => {
+  it("normalizes the configured tmux popup settings", async () => {
     const tempDir = await makeTempDir();
     const root = await makeProjectRoot(tempDir, "web");
     const loaded = await loadConfigFromToml(
-      `${baseToml(projectToml("web", root))}\n[terminal.tmux]\npopup_scope = "client"\n`,
+      `${baseToml(projectToml("web", root))}\n[terminal.tmux]\npopup_scope = "client"\npopup_status_bar = true\n`,
       { configPath: join(tempDir, "config.toml"), homeDir: tempDir },
     );
 
-    expect(loaded.config.terminal?.tmux?.popupScope).toBe("client");
+    expect(loaded.config.terminal?.tmux).toMatchObject({
+      popupScope: "client",
+      popupStatusBar: true,
+    });
   });
 
   it("loads TOML, applies defaults, expands paths, and keeps every configured project", async () => {

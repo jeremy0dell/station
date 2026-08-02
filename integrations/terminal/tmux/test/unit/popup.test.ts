@@ -72,6 +72,7 @@ describe("tmux popup", () => {
       ],
       ["set-option", "-t", "_station-ui", "-q", "@station_popup_ui_signature", defaultSignature],
       popupMouseCall,
+      popupStatusOffCall,
     ]);
 
     const reusedCalls: ExternalCommandInput[] = [];
@@ -90,6 +91,7 @@ describe("tmux popup", () => {
       ["has-session", "-t", "_station-ui"],
       ["show-options", "-t", "_station-ui", "-qv", "@station_popup_ui_signature"],
       popupMouseCall,
+      popupStatusOffCall,
     ]);
 
     let replacedAlive = true;
@@ -148,6 +150,13 @@ describe("tmux popup", () => {
     expect(
       calls.find((call) => call.args?.includes("@station_popup_ui_signature"))?.args?.at(-1),
     ).toContain(":client=/dev/ttys001");
+    expect(calls.map((call) => call.args)).toContainEqual([
+      "set-option",
+      "-t",
+      "_station-ui-client",
+      "status",
+      "off",
+    ]);
     expect(calls.map((call) => call.args)).toContainEqual([
       "set-option",
       "-t",
@@ -211,7 +220,12 @@ describe("tmux popup", () => {
     await expect(
       openTmuxPopup({
         checkoutRoot: fake.root,
-        config: { popupHeight: "80%", popupPosition: "C", popupWidth: "90%" },
+        config: {
+          popupHeight: "80%",
+          popupPosition: "C",
+          popupStatusBar: true,
+          popupWidth: "90%",
+        },
         env: { TMUX: "/tmp/tmux/default,1,0" },
         runner: fake.runner,
       }),
@@ -239,6 +253,13 @@ describe("tmux popup", () => {
     const display = fake.calls.findLast(claimedPopupAction);
     expect(display?.args?.[3]).toContain("display-popup -c /dev/ttys001 -w 90% -h 80% -E");
     expect(display?.args?.[3]).toContain("@station_popup_active_claim");
+    expect(fake.calls.map((call) => call.args)).toContainEqual([
+      "set-option",
+      "-t",
+      "_station-ui",
+      "status",
+      "on",
+    ]);
     expect(fake.globalOptions.get("@station_popup_active_claim")).toMatch(/^v1\.open\./);
   });
 
@@ -751,6 +772,31 @@ describe("tmux popup", () => {
     expect(legacy.globalOptions.has("@station_popup_focus_client")).toBe(false);
   });
 
+  it("fails before display when the persistent status bar cannot be configured", async () => {
+    const calls: ExternalCommandInput[] = [];
+
+    await expect(
+      openTmuxPopup({
+        env: {},
+        runner: async (input) => {
+          calls.push(input);
+          if (input.args?.at(-2) === "status") {
+            throw Object.assign(new Error("failed"), { code: 1, stderr: "status failed" });
+          }
+          if (input.args?.includes("@station_popup_ui_signature")) {
+            return tmuxCommandResult(input, `${defaultSignature}\n`);
+          }
+          return tmuxCommandResult(input);
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "TERMINAL_OPEN_FAILED",
+      message: "tmux failed to configure the persistent station popup UI status bar.",
+      provider: "tmux",
+    });
+    expect(calls.some((call) => call.args?.[0] === "display-popup")).toBe(false);
+  });
+
   it("handles interactive duration, exit 129, and provider errors", async () => {
     await expect(
       openTmuxPopup({
@@ -797,6 +843,7 @@ describe("tmux popup", () => {
 });
 
 const popupMouseCall = ["set-option", "-t", "_station-ui", "mouse", "on"];
+const popupStatusOffCall = ["set-option", "-t", "_station-ui", "status", "off"];
 
 type PopupFakeOptions = {
   activeClaim?: boolean;

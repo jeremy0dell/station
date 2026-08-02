@@ -85,7 +85,10 @@ const lanePassthroughEnvironmentVariables = new Set([
   "TZ",
   "USER",
 ]);
+const fallbackAttachTerminal = "xterm-256color";
 const signalExitCodes = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
+const observerProcessTokenPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
 
 const [rawCommand = "dev", ...commandArgs] = process.argv.slice(2);
@@ -169,14 +172,90 @@ function attach() {
   if (!privateServerAlive(manifest) || !privateSessionExists(manifest, manifest.baseSession)) {
     throw staleLaneError(manifest);
   }
+  const terminal = attachTerminal(manifest);
   const result = run(manifest.tmuxWrapper, ["attach-session", "-t", manifest.baseSession], {
     cwd: manifest.projectRoot,
-    env: laneEnvironment(manifest),
+    env: laneEnvironment(manifest, { TERM: terminal }),
     stdio: "inherit",
     check: false,
     timeoutMs: undefined,
   });
   process.exitCode = result.status;
+}
+
+function attachTerminal(manifest) {
+  const tput = resolveExecutable("tput");
+  if (tput === undefined) {
+    throw new Error("Private tmux attach requires `tput` from ncurses on PATH.");
+  }
+
+  const requested = process.env.TERM?.trim();
+  if (requested !== undefined && requested.length > 0) {
+    const requestedProbe = probeAttachTerminal(manifest, tput, requested);
+    if (requestedProbe.usable) {
+      return requested;
+    }
+    const fallbackProbe =
+      requested === fallbackAttachTerminal
+        ? requestedProbe
+        : probeAttachTerminal(manifest, tput, fallbackAttachTerminal);
+    if (!fallbackProbe.usable) {
+      throw unusableFallbackTerminalError(fallbackProbe.reason);
+    }
+    process.stderr.write(
+      `Private tmux cannot use caller TERM=${JSON.stringify(requested)}: ${requestedProbe.reason}; ` +
+        `using TERM=${fallbackAttachTerminal}.\n`,
+    );
+    return fallbackAttachTerminal;
+  }
+
+  const fallbackProbe = probeAttachTerminal(manifest, tput, fallbackAttachTerminal);
+  if (!fallbackProbe.usable) {
+    throw unusableFallbackTerminalError(fallbackProbe.reason);
+  }
+  return fallbackAttachTerminal;
+}
+
+function probeAttachTerminal(manifest, tput, terminal) {
+  // Probe against the lane environment so caller-only terminfo paths cannot weaken isolation.
+  const probeEnvironment = laneEnvironment(manifest, { TERM: terminal });
+  const clear = run(tput, ["-T", terminal, "clear"], {
+    cwd: manifest.projectRoot,
+    env: probeEnvironment,
+    check: false,
+  });
+  if (clear.status !== 0) {
+    return {
+      usable: false,
+      reason:
+        clear.status === 1
+          ? "terminfo lacks the required clear capability"
+          : "terminfo is unavailable inside the isolated environment",
+    };
+  }
+
+  const cup = run(tput, ["-T", terminal, "cup", "0", "0"], {
+    cwd: manifest.projectRoot,
+    env: probeEnvironment,
+    check: false,
+  });
+  if (cup.status !== 0) {
+    return {
+      usable: false,
+      reason:
+        cup.status === 1
+          ? "terminfo lacks the required cup capability"
+          : "terminfo is unavailable inside the isolated environment",
+    };
+  }
+  return { usable: true };
+}
+
+function unusableFallbackTerminalError(reason) {
+  return new Error(
+    `Private tmux fallback TERM=${fallbackAttachTerminal} is unusable: ${reason}. ` +
+      "Install its ncurses terminfo entry before attaching.",
+  );
 }
 
 function status() {
@@ -777,11 +856,14 @@ function writeManifest(manifest) {
 function validateObserverIdentity(identity, socketPath) {
   const keys = Object.keys(identity).sort();
   if (
-    JSON.stringify(keys) !== JSON.stringify(["osStartTime", "pid", "socketPath", "version"]) ||
+    JSON.stringify(keys) !==
+      JSON.stringify(["osStartTime", "pid", "processToken", "socketPath", "version"]) ||
     !Number.isInteger(identity.pid) ||
     identity.pid <= 0 ||
     typeof identity.osStartTime !== "string" ||
     identity.osStartTime.length === 0 ||
+    typeof identity.processToken !== "string" ||
+    !observerProcessTokenPattern.test(identity.processToken) ||
     typeof identity.version !== "string" ||
     identity.version.length === 0 ||
     identity.socketPath !== socketPath
@@ -1060,7 +1142,8 @@ function assertObserverOwnership(manifest, identity) {
     record.startTime !== identity.osStartTime ||
     !record.command.includes("observerMain.js") ||
     !record.command.includes(`--socket ${manifest.observerSocketPath}`) ||
-    !record.command.includes(`--state-dir ${manifest.stateDir}`)
+    !record.command.includes(`--state-dir ${manifest.stateDir}`) ||
+    !record.command.includes(`--process-token ${identity.processToken}`)
   ) {
     throw new Error(`Private Observer process evidence no longer matches pid ${identity.pid}.`);
   }

@@ -139,6 +139,7 @@ Worktrunk, and recreate it under the managed root.
 | `window_naming` | `project-branch` | Single-value enum. |
 | `primary_agent_pane` | bool | |
 | `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. |
+| `popup_status_bar` | bool | Show the persistent popup's nested tmux status bar. Defaults to `false`; this never changes the invoking tmux session's status bar. Rerun `stn setup` after changing it so an installed popup binding uses the config-aware launch path when needed. |
 | `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
 
 ### `[harness.<id>]` — agent harnesses (optional)
