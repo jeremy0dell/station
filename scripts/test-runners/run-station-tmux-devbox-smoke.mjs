@@ -149,7 +149,8 @@ try {
   const manifestAfterRefusal = readManifest();
   assert(
     manifestAfterRefusal.tmuxServerPid === manifest.tmuxServerPid &&
-      manifestAfterRefusal.observerIdentity.pid === manifest.observerIdentity.pid &&
+      JSON.stringify(manifestAfterRefusal.observerIdentity) ===
+        JSON.stringify(manifest.observerIdentity) &&
       privateSessionExists(manifest, manifest.baseSession),
     "preexisting lane refusal stopped or replaced the private lane",
   );
@@ -212,12 +213,12 @@ try {
   }
 
   const source = targetBytes.toString("utf8");
-  const insertion = "        <DashboardRoot store={store} columns={width} rows={height} />";
+  const insertion = "          <DashboardRoot\n";
   assert(source.includes(insertion), `HMR insertion point missing from ${hmrTarget}`);
   const nextProbeTargetBytes = Buffer.from(
     source.replace(
       insertion,
-      `        <text position="absolute" left={0} top={2} zIndex={100}>${probe}</text>\n${insertion}`,
+      `          <text position="absolute" left={0} top={2} zIndex={100}>${probe}</text>\n${insertion}`,
     ),
     "utf8",
   );
@@ -375,6 +376,11 @@ function proveManifestAndIsolation(manifest) {
     assert(socketPath.length < 104, `Unix socket path is too long: ${socketPath}`);
   }
   assert(existsSync(manifest.observerSocketPath), "private Observer socket is absent");
+  const observerPidfile = JSON.parse(readFileSync(`${manifest.observerSocketPath}.pid`, "utf8"));
+  assert(
+    JSON.stringify(observerPidfile) === JSON.stringify(manifest.observerIdentity),
+    "manifest Observer identity does not match its strict pidfile",
+  );
   assert(existsSync(manifest.tmuxSocketPath), "private tmux socket is absent");
   assert(!existsSync(manifest.hostSocketPath), "read-only lane unexpectedly started Station Host");
   assert(!existsSync(manifest.bareTmuxLogPath), "a child invoked the failing bare tmux shim");
@@ -614,7 +620,7 @@ async function startPtyClient(manifest) {
     ["-c", ptyBridgeScript, process.execPath, wrapperPath, "tmux", "attach"],
     {
       cwd: manifest.projectRoot,
-      env: { ...outerEnv, TERM: "xterm-256color" },
+      env: { ...outerEnv, TERM: "station-unsupported-terminal" },
       stdio: ["pipe", "pipe", "pipe"],
     },
   );

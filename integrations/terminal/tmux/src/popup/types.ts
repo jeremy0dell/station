@@ -53,6 +53,7 @@ export type TmuxClientIdentity = {
 export type TmuxPersistentPopupSessionOptions = {
   command?: string;
   focusClientId?: string;
+  popupStatusBar?: boolean;
   runner?: ExternalCommandRunner;
   timeoutMs?: number;
   tuiCommand?: string;

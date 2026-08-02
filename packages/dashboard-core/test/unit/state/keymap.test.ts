@@ -6,7 +6,7 @@ import {
   QUIT_HINT_DISMISS_ERROR,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { matchDashboardBinding } from "../../../src/state/keymap.js";
+import { matchDashboardBinding, TUI_DASHBOARD_BINDINGS } from "../../../src/state/keymap.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
@@ -79,36 +79,79 @@ describe("dashboard popup lifecycle keys", () => {
   });
 });
 
+type DashboardFooterVariant = "full" | "compact" | "firstRunFull" | "firstRunCompact";
+
+type DashboardFooterMetadata = {
+  order: number;
+  labels: Partial<Record<DashboardFooterVariant, string>>;
+};
+
+function footerBindingMetadata(
+  binding: (typeof TUI_DASHBOARD_BINDINGS)[number],
+): { keys: string; footer: DashboardFooterMetadata } | undefined {
+  if (!("help" in binding) || !("footer" in binding.help)) {
+    return undefined;
+  }
+  return { keys: binding.help.keys, footer: binding.help.footer };
+}
+
+function shortcutsFromBindingMetadata(variant: DashboardFooterVariant): string {
+  return TUI_DASHBOARD_BINDINGS.flatMap((binding) => {
+    const metadata = footerBindingMetadata(binding);
+    const label = metadata?.footer.labels[variant];
+    return metadata === undefined || label === undefined
+      ? []
+      : [{ order: metadata.footer.order, text: `${metadata.keys} ${label}` }];
+  })
+    .sort((left, right) => left.order - right.order)
+    .map(({ text }) => text)
+    .join("  ");
+}
+
 describe("dashboard footer", () => {
-  it("keeps the first-project action at wide and compact widths", () => {
-    for (const columns of [120, 40]) {
-      const label = dashboardFooterLabel({
-        columns,
-        quitHint: "Q/esc:close",
-        firstRun: true,
-      });
-      expect(label).toContain("add first project");
-      expect(label).not.toContain("open");
-      expect(label).not.toContain("N new");
-      expect(label).not.toContain("delete");
-    }
+  it("derives every responsive shortcut variant from binding metadata", () => {
+    expect(shortcutsFromBindingMetadata("full")).toBe(
+      "↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help",
+    );
+    expect(shortcutsFromBindingMetadata("compact")).toBe(
+      "↵ activate  N new  ⇥ next  / search  X delete  ? help",
+    );
+    expect(shortcutsFromBindingMetadata("firstRunFull")).toBe("↵ add first project  A add project");
+    expect(shortcutsFromBindingMetadata("firstRunCompact")).toBe("↵ add first project");
   });
 
-  it("labels focused Enter as activate at wide and compact widths", () => {
-    for (const columns of [120, 80]) {
-      const label = dashboardFooterLabel({ columns, quitHint: "Q/esc:close" });
-      expect(label).toContain("↵ activate");
-      expect(label).not.toContain("↵ open");
-    }
+  it("selects full and compact registry projections without changing footer copy", () => {
+    expect(dashboardFooterLabel({ columns: 120, quitHint: "Q/esc:close" })).toBe(
+      `${shortcutsFromBindingMetadata("full")}  Q/esc:close`,
+    );
+    expect(dashboardFooterLabel({ columns: 80, quitHint: "Q/esc:close" })).toBe(
+      `${shortcutsFromBindingMetadata("compact")}  Q/esc:close`,
+    );
+    expect(dashboardFooterLabel({ columns: 120, quitHint: "Q/esc:close", firstRun: true })).toBe(
+      `${shortcutsFromBindingMetadata("firstRunFull")}  Q/esc:close`,
+    );
+    expect(dashboardFooterLabel({ columns: 40, quitHint: "Q/esc:close", firstRun: true })).toBe(
+      `${shortcutsFromBindingMetadata("firstRunCompact")}  Q/esc:close`,
+    );
   });
 
-  it("keeps error dismissal and close copy visible at compact widths", () => {
-    expect(dashboardFooterLabel({ columns: 120, quitHint: QUIT_HINT_DISMISS_ERROR })).toContain(
-      QUIT_HINT_DISMISS_ERROR,
+  it("keeps visible-error dismissal readable through compact and quit-only fallbacks", () => {
+    expect(dashboardFooterLabel({ columns: 120, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
+      `${shortcutsFromBindingMetadata("full")}  ${QUIT_HINT_DISMISS_ERROR}`,
+    );
+    expect(dashboardFooterLabel({ columns: 80, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
+      `${shortcutsFromBindingMetadata("compact")}  ${QUIT_HINT_DISMISS_ERROR}`,
     );
     expect(dashboardFooterLabel({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
       QUIT_HINT_DISMISS_ERROR,
     );
+    expect(
+      dashboardFooterLabel({
+        columns: 50,
+        quitHint: QUIT_HINT_DISMISS_ERROR,
+        firstRun: true,
+      }),
+    ).toBe(`${shortcutsFromBindingMetadata("firstRunCompact")}  ${QUIT_HINT_DISMISS_ERROR}`);
     expect(
       dashboardFooterLabel({
         columns: 40,

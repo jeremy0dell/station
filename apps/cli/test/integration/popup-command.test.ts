@@ -290,6 +290,7 @@ describe("CLI popup command", () => {
         popupHeight: "80%",
         popupPosition: "C",
         popupScope: "client",
+        popupStatusBar: true,
       },
     };
     const calls: TmuxPopupOptions[] = [];
@@ -324,6 +325,7 @@ describe("CLI popup command", () => {
           popupHeight: "80%",
           popupPosition: "C",
           popupScope: "client",
+          popupStatusBar: true,
         },
         env: {
           TMUX: "/tmp/tmux-501/default,123,0",

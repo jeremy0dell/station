@@ -144,6 +144,7 @@ export const TmuxConfigSchema = z
     popupHeight: nonEmptyStringSchema.optional(),
     popupPosition: nonEmptyStringSchema.optional(),
     popupScope: TmuxPopupScopeSchema.optional(),
+    popupStatusBar: z.boolean().optional(),
   })
   .strict();
 
