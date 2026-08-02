@@ -9,7 +9,7 @@ import type { TuiStore } from "@station/dashboard-core";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { DashboardFrameTitle } from "./view/DashboardFrameTitle.js";
 import { DashboardRoot } from "./view/DashboardRoot.js";
-import { STATION_COLORS } from "./view/theme.js";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import { StationMouseProvider, type StationMouseDispatch } from "./view/stationMouseContext.js";
 
 export type StationOverlayProps = {
@@ -81,6 +81,7 @@ export function StationOverlay({
   widthPercent,
   heightPercent,
 }: StationOverlayProps) {
+  const theme = useStationTheme();
   const { width, height } = useTerminalDimensions();
   const dispatch = useCallback<StationMouseDispatch>(
     (target: StationMouseTarget, event) => {
@@ -125,8 +126,8 @@ export function StationOverlay({
         height={layout.height}
         zIndex={30}
         border
-        borderColor={STATION_COLORS.gray}
-        backgroundColor={STATION_COLORS.background}
+        borderColor={toOpenTuiColor(theme.interaction.border)}
+        backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.panel)}
         flexDirection="column"
         onMouseDown={stopPopupMouse}
         onMouseScroll={stopPopupMouse}

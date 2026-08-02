@@ -5,7 +5,7 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import { STATION_COLORS } from "../station/view/theme.js";
+import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
 import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
@@ -96,9 +96,7 @@ describe("FullscreenDashboard surface ownership", () => {
       await setup.flush();
     });
 
-    expect(frameChar(setup.captureCharFrame(), obscured.row, obscured.col)).toBe(
-      obscured.original,
-    );
+    expect(frameChar(setup.captureCharFrame(), obscured.row, obscured.col)).toBe(obscured.original);
   });
 });
 
@@ -149,7 +147,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).not.toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(async () => {
@@ -159,7 +157,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanHex(spanAtFrameCell(setup.captureSpans(), titleAction.row, titleAction.col))).toBe(
-      STATION_COLORS.gray,
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
     );
 
     await actOn(async () => {
@@ -179,9 +177,7 @@ describe("FullscreenDashboard mouse composition", () => {
       await setup.flush();
     });
 
-    await actOn(() =>
-      setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT),
-    );
+    await actOn(() => setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT));
 
     expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
     expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
@@ -219,7 +215,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), addWidget.row, addWidget.col))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
@@ -246,7 +242,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
@@ -499,9 +495,7 @@ function findObscuredHelpCell(
   const topCells = [...(lines[top] ?? "")];
   const left = topCells.indexOf("╭");
   const right = topCells.lastIndexOf("╮");
-  const bottom = lines.findIndex(
-    (line, row) => row > top && frameChar(line, 0, left) === "╰",
-  );
+  const bottom = lines.findIndex((line, row) => row > top && frameChar(line, 0, left) === "╰");
   if (top < 0 || left < 0 || right <= left || bottom <= top) {
     throw new Error(`Could not locate Help bounds in frame:\n${after}`);
   }
@@ -532,7 +526,7 @@ function expectTerminalDefaultBackground(
   const cell = cellFor(setup.captureCharFrame(), needle);
   const span = spanAtFrameCell(setup.captureSpans(), cell.row, cell.col);
   expect(span?.bg.intent).toBe("default");
-  expect(spanBgHex(span)).toBe(STATION_COLORS.background);
+  expect(spanBgHex(span)).toBe(stationColorSnapshotValue(nativeStationTheme.text.inverse));
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

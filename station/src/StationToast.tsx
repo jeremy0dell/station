@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useSyncExternalStore } from "react";
 import { selectToast } from "./state/selectors.js";
 import type { StationStore } from "./state/store.js";
-import { STATION_COLORS } from "./station/view/theme.js";
+import { toOpenTuiColor, useStationTheme } from "./theme/index.js";
 
 // App-level toast pinned to the bottom-right of the whole Station window — above
 // the shell pane AND the STATION overlay (high zIndex, absolute so nothing reflows
@@ -13,6 +13,7 @@ import { STATION_COLORS } from "./station/view/theme.js";
 const TOAST_DISMISS_MS = 2500;
 
 export function StationToast({ store }: { store: StationStore }) {
+  const theme = useStationTheme();
   const getToast = () => selectToast(store.getState());
   const toast = useSyncExternalStore(store.subscribe, getToast, getToast);
   // Re-armed per token, so a newer toast's timer can't clear an older one (and
@@ -35,11 +36,13 @@ export function StationToast({ store }: { store: StationStore }) {
       right={2}
       bottom={1}
       zIndex={100}
-      backgroundColor={toast.kind === "error" ? STATION_COLORS.red : STATION_COLORS.blue}
+      backgroundColor={toOpenTuiColor(
+        toast.kind === "error" ? theme.status.danger : theme.status.info,
+      )}
       paddingLeft={1}
       paddingRight={1}
     >
-      <text fg={STATION_COLORS.background}>{toast.message}</text>
+      <text fg={toOpenTuiColor(theme.text.inverse)}>{toast.message}</text>
     </box>
   );
 }

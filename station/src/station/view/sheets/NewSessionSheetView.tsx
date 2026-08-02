@@ -11,7 +11,7 @@ import {
   type TuiSelectionState,
 } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { providerHealthStatusColor } from "../theme.js";
+import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
@@ -111,6 +111,7 @@ function Review({
   state: Extract<NewSessionFlowState, { mode: "review" }>;
   width: number;
 }) {
+  const theme = useStationTheme();
   const content = newSessionReviewContent(snapshot, state);
   return (
     <>
@@ -132,7 +133,7 @@ function Review({
                   status: {
                     glyph: status.glyph,
                     text: status.text,
-                    color: providerHealthStatusColor(status.tone),
+                    color: providerHealthColor(theme, status.tone),
                   },
                 })}
           />
@@ -171,7 +172,12 @@ function EditName({
   const content = newSessionEditNameContent(state);
   return (
     <>
-      <SheetLabelValue width={width} label="Project" labelWidth={12} value={project?.label ?? "-"} />
+      <SheetLabelValue
+        width={width}
+        label="Project"
+        labelWidth={12}
+        value={project?.label ?? "-"}
+      />
       <SheetControlRow
         width={width}
         label={content.controls.name.label}
@@ -231,6 +237,7 @@ function ProjectPicker({
   width: number;
   selectedId?: ProjectView["id"];
 }) {
+  const theme = useStationTheme();
   const projects = selectNewSessionProjectChoices(snapshot);
   return (
     <>
@@ -241,7 +248,7 @@ function ProjectPicker({
           choiceKey={choice.key}
           label={choice.value.label}
           detail={choice.value.health.status}
-          color={providerHealthStatusColor(choice.value.health.status)}
+          color={providerHealthColor(theme, choice.value.health.status)}
           width={width}
           selected={choice.value.id === selectedId}
         />

@@ -11,8 +11,7 @@ import {
 } from "@station/dashboard-core";
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
-import { useDashboardSurfaces } from "./dashboardSurfaceContext.js";
-import { STATION_COLORS } from "./theme.js";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import {
   stationMouseProps,
   useStationHoverState,
@@ -44,7 +43,8 @@ export function DashboardFrameTitle({
   topRowWidgets = [],
   zIndex,
 }: DashboardFrameTitleProps) {
-  const { surfaceBackground } = useDashboardSurfaces();
+  const theme = useStationTheme();
+  const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.panel);
   const dispatch = useStationMouse();
   const [hovered, setHover] = useStationHoverState();
   const snapshot = useStore(store, (state) => state.snapshot);
@@ -56,8 +56,8 @@ export function DashboardFrameTitle({
   const needsYou = snapshot === undefined ? 0 : selectFleetSummary(snapshot).needsYou;
   const subtitle =
     needsYou > 0
-      ? { text: `! ${needsYou} need you`, color: STATION_COLORS.red }
-      : { text: OVERVIEW_SUBTITLE, color: STATION_COLORS.gray };
+      ? { text: `! ${needsYou} need you`, color: toOpenTuiColor(theme.status.danger) }
+      : { text: OVERVIEW_SUBTITLE, color: toOpenTuiColor(theme.text.muted) };
   const title = ` ${PRODUCT_LABEL} ${subtitle.text} `;
 
   const status = observerHeaderStatusForConnection(observerConnectionStatus, snapshot !== undefined);
@@ -81,7 +81,7 @@ export function DashboardFrameTitle({
         zIndex={zIndex}
         bg={surfaceBackground}
       >
-        <span fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>
+        <span fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
           {` ${PRODUCT_LABEL} `}
         </span>
         <span fg={subtitle.color}>{`${subtitle.text} `}</span>
@@ -94,10 +94,10 @@ export function DashboardFrameTitle({
         flexDirection="row"
       >
         {strip.length > 0 ? (
-          <text fg={STATION_COLORS.gray} bg={surfaceBackground}>{` ${strip}`}</text>
+          <text fg={toOpenTuiColor(theme.text.muted)} bg={surfaceBackground}>{` ${strip}`}</text>
         ) : null}
         <text
-          fg={hover ? STATION_COLORS.cyan : STATION_COLORS.gray}
+          fg={toOpenTuiColor(hover ? theme.action.primary : theme.text.muted)}
           bg={surfaceBackground}
           {...stationMouseProps(dispatch, { kind: "widgetSettingsOpen" })}
           onMouseOver={() => setHover(true)}

@@ -1,6 +1,19 @@
 import { describe, expect, it } from "bun:test";
+import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import {
+  nativeStationTheme,
+  StationThemeProvider,
+  type StationTheme,
+} from "../theme/index.js";
+import {
+  alphaColor,
+  indexedColor,
+  rgbColor,
+  terminalDefaultColor,
+} from "../theme/types.js";
+import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { MouseTargetRef } from "../input/router.js";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { ContextMenuItem } from "./types.js";
@@ -51,6 +64,41 @@ describe("ContextMenuSurface", () => {
     }
   });
 
+  it("preserves non-RGB intent through a real menu surface", async () => {
+    const indexedSnapshot = rgbColor("#cd3131");
+    const theme = {
+      ...nativeStationTheme,
+      text: {
+        ...nativeStationTheme.text,
+        menu: terminalDefaultColor("foreground", rgbColor("#d4d4d8")),
+      },
+      contextMenu: {
+        surface: terminalDefaultColor("background", rgbColor("#101316")),
+        selected: indexedColor(1, indexedSnapshot),
+        border: alphaColor(rgbColor("#336699"), 0.5),
+      },
+    } as const satisfies StationTheme;
+    const setup = await renderSurface(() => true, theme);
+    try {
+      const spans = setup.captureSpans();
+      const border = spanAtFrameCell(spans, 0, 0)?.fg;
+      expect(border?.intent).toBe("rgb");
+      // OpenTUI composites alpha into the terminal cell while preserving the requested blend.
+      expect(border === undefined ? undefined : rgbToHex(border)).toBe("#223d58");
+
+      const inactive = spanAtFrameCell(spans, 1, 1);
+      expect(inactive?.bg.intent).toBe("default");
+
+      const selected = spanAtFrameCell(spans, 3, 1);
+      expect(selected?.bg.intent).toBe("indexed");
+      expect(selected?.bg.slot).toBe(1);
+      expect(selected?.bg === undefined ? undefined : rgbToHex(selected.bg)).toBe("#cd3131");
+      expect(selected?.fg.intent).toBe("default");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
   it("routes item hover targets on mouse move", async () => {
     const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
     const setup = await renderSurface((target, event) => {
@@ -70,15 +118,18 @@ describe("ContextMenuSurface", () => {
 
 async function renderSurface(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
+  theme: StationTheme = nativeStationTheme,
 ) {
   const setup = await testRender(
-    <ContextMenuSurface
-      items={ITEMS}
-      activeIndex={2}
-      width={18}
-      height={5}
-      dispatchMouse={dispatchMouse}
-    />,
+    <StationThemeProvider theme={theme}>
+      <ContextMenuSurface
+        items={ITEMS}
+        activeIndex={2}
+        width={18}
+        height={5}
+        dispatchMouse={dispatchMouse}
+      />
+    </StationThemeProvider>,
     { width: 24, height: 8 },
   );
   await setup.flush();

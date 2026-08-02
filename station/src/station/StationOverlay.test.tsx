@@ -11,7 +11,11 @@ import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import { routeStationMouse } from "./input/stationMouse.js";
 import { makeStationTestStore } from "./test/support/makeStationTestStore.js";
 import { StationOverlay, stationPopupLayout } from "./StationOverlay.js";
-import { STATION_COLORS } from "./view/theme.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../theme/index.js";
 
 const SURFACE = { width: 100, height: 28 };
 const teardowns: Array<() => void> = [];
@@ -29,7 +33,7 @@ describe("StationOverlay", () => {
     const title = cellFor(setup.captureCharFrame(), "station · overview");
     let span = spanAtFrameCell(setup.captureSpans(), title.row, title.col);
     expect(span?.bg.intent).toBe("rgb");
-    expect(spanBgHex(span)).toBe(STATION_COLORS.background);
+    expect(spanBgHex(span)).toBe(stationColorSnapshotValue(nativeStationTheme.surfaces.panel));
 
     await act(async () => {
       store.getState().handleKey({ input: "H" });
@@ -38,7 +42,7 @@ describe("StationOverlay", () => {
     const help = cellFor(setup.captureCharFrame(), "station help");
     span = spanAtFrameCell(setup.captureSpans(), help.row, help.col);
     expect(span?.bg.intent).toBe("rgb");
-    expect(spanBgHex(span)).toBe(STATION_COLORS.overlayBackdrop);
+    expect(spanBgHex(span)).toBe(stationColorSnapshotValue(nativeStationTheme.surfaces.help));
   });
 
   it("routes primary clicks outside the popup through the STATION backdrop target", async () => {
@@ -158,7 +162,7 @@ describe("StationOverlay", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, row.col))).not.toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await setup.mockMouse.click(layout.left + 1, layout.top + 1, MouseButtons.LEFT);
@@ -206,7 +210,9 @@ async function renderOverlay(
   store: StoreApi<TuiStore> = makeStationTestStore().store,
 ) {
   const setup = await testRender(
-    <StationOverlay store={store} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationOverlay store={store} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />
+    </StationThemeProvider>,
     SURFACE,
   );
   await setup.flush();
@@ -225,5 +231,8 @@ function cellFor(frame: string, needle: string): { col: number; row: number } {
 }
 
 function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
-  return span?.bg === undefined ? undefined : rgbToHex(span.bg);
+  if (span?.bg === undefined) {
+    return undefined;
+  }
+  return rgbToHex(span.bg);
 }
