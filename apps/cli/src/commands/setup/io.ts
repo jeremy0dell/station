@@ -1,6 +1,6 @@
 import { promisify } from "node:util";
 import { createTextSetupPresenter, type TextSetupPresenter } from "./presenters/text.js";
-import type { SetupRenderOptions } from "./theme.js";
+import type { SetupRenderOptions } from "./presenters/theme.js";
 import type { SetupCommandDeps } from "./types.js";
 
 export async function write(deps: SetupCommandDeps, content: string): Promise<void> {

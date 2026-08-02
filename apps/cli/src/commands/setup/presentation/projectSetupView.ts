@@ -1,7 +1,8 @@
+import type { SetupConfigMutationPlan } from "@station/config";
 import type { SetupPlan as CoreSetupPlan } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
-import type { ConfigWritePlan, SetupFacts } from "../model.js";
-import { SetupHarnessTrackingFactSchema } from "../model.js";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
+import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
 import { projectSetupActions } from "./projectSetupActions.js";
 import {
   projectSetupEnvironmentChecks,
@@ -30,24 +31,28 @@ export type {
 export type ProjectSetupViewInput = {
   readonly plan: CoreSetupPlan;
   readonly facts: SetupFacts;
-  readonly configWrite?: ConfigWritePlan;
+  readonly configMutation?: SetupConfigMutationPlan;
 };
 
 export function projectSetupView(input: ProjectSetupViewInput): ProjectSetupView {
   SetupHarnessTrackingFactSchema.array().parse(input.facts.harnessTracking);
-  const selection = projectSetupHarnessSelection(input.plan, input.facts);
+  const selection = projectSetupHarnessSelection(input.plan);
   const environment = projectSetupEnvironmentChecks(input.facts);
-  const harness = projectSetupHarnessChecks(input.plan, input.facts, selection);
+  const harness = projectSetupHarnessChecks({
+    plan: input.plan,
+    facts: input.facts,
+    selection,
+  });
   const config = projectSetupConfigChecks(input.facts);
   const operational = projectSetupOperationalChecks(input.facts);
   const checks = [...environment, ...harness, ...config, ...operational];
   assertPresentationCounts(input.plan, checks);
-  const actions = projectSetupActions(
-    input.plan.operations,
-    input.facts,
+  const actions = projectSetupActions({
+    operations: input.plan.operations,
+    facts: input.facts,
     selection,
-    input.configWrite,
-  );
+    configMutation: input.configMutation,
+  });
   return {
     generatedAt: input.plan.generatedAt,
     mode: input.plan.mode,

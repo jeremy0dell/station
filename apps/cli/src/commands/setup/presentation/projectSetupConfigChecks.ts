@@ -1,6 +1,6 @@
+import { CliSetupHarnessIdSchema } from "@station/contracts";
 import { setupMessageRef } from "@station/setup-messages";
-import { isSupportedHarnessId } from "../harnessSelection.js";
-import type { SetupFacts } from "../model.js";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type { SetupDisplayDetail, SetupViewCheck } from "./setupViewTypes.js";
 
 export function projectSetupConfigChecks(facts: SetupFacts): readonly SetupViewCheck[] {
@@ -73,7 +73,7 @@ function projectConfigCheck(facts: SetupFacts): SetupViewCheck {
       details,
     };
   }
-  if (!isSupportedHarnessId(facts.config.defaults.harness)) {
+  if (!CliSetupHarnessIdSchema.safeParse(facts.config.defaults.harness).success) {
     return {
       id: "config",
       tier: "required",

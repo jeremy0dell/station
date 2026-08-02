@@ -1,36 +1,35 @@
 import { dirname } from "node:path";
+import type { SetupConfigMutationPlan } from "@station/config";
 import {
+  CliSetupHarnessIdSchema,
   type CliSetupPlan,
   CliSetupPlanSchema,
   type ProviderHookArtifactOwnership,
+  type CliSetupAction as SetupAction,
+  type CliSetupCheck as SetupCheck,
 } from "@station/contracts";
 import type {
   SetupPlan as CoreSetupPlan,
   HarnessTrackingAssessment,
   SetupOperation,
+  SupportedHarnessId,
 } from "@station/setup-core";
 import { stationUiInstallHint } from "../../../stationWorkspace.js";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
+import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "../checks/tmuxBinding.js";
-import {
-  harnessSupportsSetupHooks,
-  isSupportedHarnessId,
-  relevantHarnessTrackingIds,
-  type SetupHarnessSelection,
-} from "../harnessSelection.js";
-import type {
-  ConfigWritePlan,
-  SetupAction,
-  SetupCheck,
-  SetupFacts,
-  SupportedHarnessId,
-} from "../model.js";
-import { SetupHarnessTrackingFactSchema } from "../model.js";
+
+type SetupHarnessSelection = {
+  readonly source: CliSetupPlan["summary"]["selectionSource"];
+  readonly requiredHarnessIds: readonly SupportedHarnessId[];
+  readonly defaultHarness?: SupportedHarnessId;
+};
 
 export type JsonSetupPresenterInput = {
   readonly plan: CoreSetupPlan;
   readonly facts: SetupFacts;
-  readonly configWrite?: ConfigWritePlan;
+  readonly configMutation?: SetupConfigMutationPlan;
 };
 
 export type JsonSetupPresenter = {
@@ -40,7 +39,7 @@ export type JsonSetupPresenter = {
 /**
  * ADAPTER
  *
- * Projects semantic setup evidence into the frozen machine-facing CLI schema without resolving human presentation copy.
+ * Directly projects semantic plans and adapter evidence into the strict frozen CLI schema without resolving human presentation copy.
  */
 export function createJsonSetupPresenter(): JsonSetupPresenter {
   return { project: projectJsonSetupPlan };
@@ -49,9 +48,14 @@ export function createJsonSetupPresenter(): JsonSetupPresenter {
 function projectJsonSetupPlan(input: JsonSetupPresenterInput): CliSetupPlan {
   const { facts } = input;
   SetupHarnessTrackingFactSchema.array().parse(facts.harnessTracking);
-  const harnessSelection = projectHarnessSelection(input.plan, facts);
+  const harnessSelection = projectHarnessSelection(input.plan);
   const checks = setupChecks(input.plan, facts, harnessSelection);
-  const actions = setupActions(input.plan.operations, facts, harnessSelection, input.configWrite);
+  const actions = setupActions(
+    input.plan.operations,
+    facts,
+    harnessSelection,
+    input.configMutation,
+  );
   const { readiness } = input.plan.result;
   assertCompatibilityCounts(input.plan, checks);
   const summary = {
@@ -88,18 +92,11 @@ function assertCompatibilityCounts(plan: CoreSetupPlan, checks: readonly SetupCh
   }
 }
 
-function projectHarnessSelection(plan: CoreSetupPlan, facts: SetupFacts): SetupHarnessSelection {
+function projectHarnessSelection(plan: CoreSetupPlan): SetupHarnessSelection {
   if (plan.selection.outcome !== "selected") {
-    return { selected: [], requiredHarnessIds: [], source: "unresolved" };
+    return { requiredHarnessIds: [], source: "unresolved" };
   }
-  const selected = plan.selection.requiredHarnessIds.flatMap((harnessId) => {
-    const harness = facts.harnesses.find(
-      (candidate) => candidate.id === harnessId && candidate.status === "ok",
-    );
-    return harness === undefined ? [] : [harness];
-  });
   return {
-    selected,
     requiredHarnessIds: plan.selection.requiredHarnessIds,
     source: plan.selection.source,
     defaultHarness: plan.selection.defaultHarness,
@@ -416,7 +413,7 @@ function harnessTrackingChecks(
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
 ): SetupCheck[] {
-  const harnessIds = relevantHarnessTrackingIds(facts, harnessSelection);
+  const harnessIds = plan.evidence.harnessTracking.map((tracking) => tracking.harnessId);
   const required = new Set(harnessSelection.requiredHarnessIds);
   return harnessIds.map((harnessId) =>
     harnessTrackingCheck(plan, facts, harnessId, required.has(harnessId), harnessSelection.source),
@@ -449,7 +446,7 @@ function harnessTrackingCheck(
   const details: Record<string, string> = {
     harness: harnessId,
     selectionSource,
-    capability: harnessSupportsSetupHooks(harnessId) ? "supported" : "unsupported",
+    capability: fact?.capability ?? "supported",
     state: assessment.state,
   };
   if (assessment.state !== "not-applicable") {
@@ -821,7 +818,7 @@ function defaultConfigCoreProblem(
   if (config.defaults.terminal !== "tmux") {
     return `Config defaults use terminal ${config.defaults.terminal}; set defaults.terminal to "tmux" for the setup core path.`;
   }
-  if (!isSupportedHarnessId(config.defaults.harness)) {
+  if (!CliSetupHarnessIdSchema.safeParse(config.defaults.harness).success) {
     return `Config defaults use unsupported harness ${config.defaults.harness}; choose claude, codex, cursor, opencode, or pi for the setup core path.`;
   }
   return undefined;
@@ -831,7 +828,7 @@ function setupActions(
   operations: readonly SetupOperation[],
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
-  configWrite: ConfigWritePlan | undefined,
+  configWrite: SetupConfigMutationPlan | undefined,
 ): SetupAction[] {
   const actions: SetupAction[] = [];
   for (const operation of operations) {
@@ -930,7 +927,9 @@ function setupActions(
     }
   }
   if (configWrite?.operation === "blocked") {
-    actions.push(...configWriteActions(configWrite, harnessSelection.selected.length > 0));
+    actions.push(
+      ...configWriteActions(configWrite, harnessSelection.requiredHarnessIds.length > 0),
+    );
   }
   return actions;
 }
@@ -1040,7 +1039,7 @@ function installAction(
 }
 
 function configWriteActions(
-  configWrite: ConfigWritePlan | undefined,
+  configWrite: SetupConfigMutationPlan | undefined,
   hasSelectedHarness: boolean,
 ): SetupAction[] {
   if (!hasSelectedHarness) return [];
@@ -1083,7 +1082,6 @@ function configWriteActions(
     data: {
       operation: configWrite.operation,
       content: configWrite.content,
-      ...(configWrite.backupPath === undefined ? {} : { backupPath: configWrite.backupPath }),
     },
   };
   return [mkdirAction, writeAction];

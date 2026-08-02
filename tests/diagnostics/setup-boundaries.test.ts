@@ -8,6 +8,18 @@ const cliSetupRoot = resolve("apps/cli/src/commands/setup");
 const nodeBuiltins = new Set(builtinModules.flatMap((module) => [module, `node:${module}`]));
 const forbiddenPackage =
   /^@station\/(?:cli|config|observer|observability|claude|codex|cursor|opencode|pi|tmux|terminal|worktrunk|github-repository|scripted-harness|harness-shared|setup-messages)$|^integrations\/|^@clack\/|^react(?:\/|$)|^@opentui\//;
+const retiredSetupModules = [
+  "apply.ts",
+  "configWriter.ts",
+  "flowUtils.ts",
+  "harnessInstall.ts",
+  "harnessSelection.ts",
+  "model.ts",
+  "planner.ts",
+  "presentation/projectCliSetupPlan.ts",
+  "render.ts",
+  "theme.ts",
+] as const;
 const controlledRoles = [
   "DRIVING PORT",
   "DRIVEN PORT",
@@ -107,6 +119,44 @@ describe("setup core boundaries", () => {
     expect(drivingPorts.sort()).toEqual([...drivingPortNames].sort());
     expect(policies.sort()).toEqual([...policyNames].sort());
     expect(drivenPorts.sort()).toEqual([...drivenPortNames].sort());
+  });
+
+  it("removes compatibility orchestration and all production imports of it", async () => {
+    for (const retiredModule of retiredSetupModules) {
+      await expect(readFile(resolve(cliSetupRoot, retiredModule), "utf8")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    }
+
+    const retiredPaths = new Set(
+      retiredSetupModules.map((retiredModule) => resolve(cliSetupRoot, retiredModule)),
+    );
+    for (const file of await sourceFiles(cliSetupRoot)) {
+      const source = await readFile(file, "utf8");
+      const importedRetiredPaths = importSpecifiers(source)
+        .filter((specifier) => specifier.startsWith("."))
+        .map((specifier) => resolve(dirname(file), specifier.replace(/\.js$/, ".ts")))
+        .filter((importedPath) => retiredPaths.has(importedPath));
+      const displayPath = relative(process.cwd(), file);
+      expect(importedRetiredPaths, displayPath).toEqual([]);
+      expect(source, displayPath).not.toMatch(
+        /\b(?:applySetupPlan|SetupOperationBinding|isHarnessInstallAction)\b/,
+      );
+    }
+  });
+
+  it("routes setup entrypoints through semantic composition and operation adapters", async () => {
+    for (const flow of ["guided.ts", "readOnly.ts", "nonInteractive.ts"] as const) {
+      const source = await readFile(resolve(cliSetupRoot, "flows", flow), "utf8");
+      expect(source, flow).toContain("createSetupComposition");
+    }
+
+    const system = await readFile(resolve(cliSetupRoot, "systemCommand.ts"), "utf8");
+    expect(system).toContain("SetupToolInstallOperation");
+    expect(system).toContain("createSetupOperationAdapter");
+    expect(system).not.toContain("SetupAction");
+    expect(system).not.toContain("SetupPlan");
+    expect(system).not.toContain("applySetupPlan");
   });
 
   it("confines Clack to the guided terminal adapter", async () => {

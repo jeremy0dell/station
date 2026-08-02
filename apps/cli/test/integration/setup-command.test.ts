@@ -1254,6 +1254,45 @@ describe("CLI setup command", () => {
     expect(calls).toEqual([]);
   });
 
+  it("setup system --yes stops ordered installs after the first required failure", async () => {
+    const root = await tempRoot(tempRoots);
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runCli(["setup", "system", "--yes"], {
+      setupDeps: {
+        cwd: root,
+        env: { PATH: "/fake/bin" },
+        runner: async (input) => {
+          calls.push(input);
+          if (`${input.command} ${(input.args ?? []).join(" ")}` === "brew install worktrunk") {
+            throw new Error("synthetic Worktrunk install failure");
+          }
+          return fakeRunner([], {
+            "brew --version": "Homebrew 4.0.0\n",
+            "pnpm --version": "11.0.0\n",
+          })(input);
+        },
+        access: fakeAccess([]),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    expect(result.code).toBe(1);
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ command: "brew", args: ["install", "worktrunk"] }),
+      ]),
+    );
+    expect(
+      calls.some((call) => call.command === "brew" && call.args?.join(" ") === "install tmux"),
+    ).toBe(false);
+    expect(chunks.join("")).toContain("Failed: Install Worktrunk");
+    expect(chunks.join("")).toContain("stn setup system final");
+  });
+
   it("setup system --yes rechecks after fake installs and returns refreshed readiness", async () => {
     const root = await tempRoot(tempRoots);
     const calls: ExternalCommandInput[] = [];

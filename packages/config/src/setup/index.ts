@@ -3,6 +3,7 @@ export {
   renderSetupConfig,
   type SetupConfigDesiredState,
   type SetupConfigMutationInput,
+  type SetupConfigMutationPlan,
 } from "./mutations.js";
 export {
   type PersistSetupConfigMutationOptions,

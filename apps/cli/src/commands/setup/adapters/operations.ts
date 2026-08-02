@@ -22,18 +22,16 @@ import {
   type SetupWorktrunkTrackingOperation,
 } from "@station/setup-core";
 import { runWorktrunkHooksCommand } from "../../providerHookAdapters.js";
-import type { SetupApplyFileSystem } from "../apply.js";
 import { commandEnv } from "../checks/env.js";
 import {
   checkSetupTmuxBinding,
   tmuxPopupBindingBlock,
   tmuxPopupBindingEndMarker,
 } from "../checks/tmuxBinding.js";
-import { resolveHarnessInstallDefinition } from "../harnessInstall.js";
-import type { SetupFacts } from "../model.js";
-import type { SetupCommandDeps } from "../types.js";
+import type { SetupApplyFileSystem, SetupCommandDeps } from "../types.js";
 import { createSetupConfigAdapter } from "./config.js";
 import { createHarnessTrackingAdapter } from "./harnessTracking.js";
+import type { SetupFacts } from "./inspectionTypes.js";
 import { createObserverActivationAdapter } from "./observerActivation.js";
 
 export type SetupOperationAdapterOptions = {
@@ -44,7 +42,7 @@ export type SetupOperationAdapterOptions = {
 /**
  * ADAPTER
  *
- * Assigns semantic setup operations to config, provider, process, filesystem, and Observer boundary implementations.
+ * Assigns package/bootstrap, config, provider, process, filesystem, and Observer operations to their final outward implementations.
  * Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.
  */
 export function createSetupOperationAdapter(
@@ -151,11 +149,12 @@ function packageInstallCommand(
       return ["brew", "install", toolFormula(operation.tool)];
     case "install-harness": {
       const currentFacts = requireFacts(facts);
-      return resolveHarnessInstallDefinition(operation.harnessId, {
+      return harnessInstallCommand({
+        harnessId: operation.harnessId,
         brewAvailable: currentFacts.brew.status === "ok",
         homeDir: currentFacts.homeDir,
         macos: currentFacts.xcode.applicable,
-      }).command;
+      });
     }
     case "install-homebrew":
       return [
@@ -174,6 +173,93 @@ function packageInstallCommand(
     default:
       return assertNever(operation);
   }
+}
+
+function harnessInstallCommand(input: {
+  readonly harnessId: Extract<
+    SetupPackageInstallOperation,
+    { kind: "install-harness" }
+  >["harnessId"];
+  readonly brewAvailable: boolean;
+  readonly homeDir: string;
+  readonly macos: boolean;
+}): readonly string[] {
+  const macBrewAvailable = input.macos && input.brewAvailable;
+  const harnessId = input.harnessId;
+  if (harnessId === "codex") {
+    if (macBrewAvailable) return ["brew", "install", "--cask", "homebrew/cask/codex"];
+    return ["/bin/bash", "-c", codexInstallerCommand];
+  }
+  if (harnessId === "cursor") {
+    return ["/bin/bash", "-c", downloadedInstallerCommand({ url: "https://cursor.com/install" })];
+  }
+  if (harnessId === "opencode") {
+    if (input.brewAvailable) return ["brew", "install", "homebrew/core/opencode"];
+    return [
+      "/bin/bash",
+      "-c",
+      downloadedInstallerCommand({
+        url: "https://opencode.ai/install",
+        execute:
+          '/bin/bash "$installer" --no-modify-path && mkdir -p "$HOME/.local/bin" && ln -s "$HOME/.opencode/bin/opencode" "$HOME/.local/bin/opencode"',
+      }),
+    ];
+  }
+  if (harnessId === "pi") {
+    if (input.brewAvailable) return ["brew", "install", "homebrew/core/pi-coding-agent"];
+    return [
+      "npm",
+      "install",
+      "--global",
+      "--prefix",
+      `${input.homeDir}/.local`,
+      "--ignore-scripts",
+      "--no-fund",
+      "--no-audit",
+      "@earendil-works/pi-coding-agent",
+    ];
+  }
+  if (harnessId === "claude") {
+    if (macBrewAvailable) {
+      return ["brew", "install", "--cask", "homebrew/cask/claude-code"];
+    }
+    return [
+      "npm",
+      "install",
+      "--global",
+      "--prefix",
+      `${input.homeDir}/.local`,
+      "--no-fund",
+      "--no-audit",
+      "@anthropic-ai/claude-code",
+    ];
+  }
+  return assertNever(harnessId);
+}
+
+const codexInstallerCommand = [
+  "set -eu",
+  'installer="$(mktemp)"',
+  'installer_home="$(mktemp -d)"',
+  'cleanup() { rm -f "$installer"; rm -rf "$installer_home"; }',
+  "trap cleanup EXIT",
+  'curl -fsSL https://chatgpt.com/codex/install.sh -o "$installer"',
+  'station_user_home="$HOME"',
+  `station_codex_home="\${CODEX_HOME:-$station_user_home/.codex}"`,
+  'HOME="$installer_home" CODEX_HOME="$station_codex_home" CODEX_INSTALL_DIR="$station_user_home/.local/bin" CODEX_NON_INTERACTIVE=1 /bin/sh "$installer"',
+].join("; ");
+
+function downloadedInstallerCommand(input: {
+  readonly url: string;
+  readonly execute?: string;
+}): string {
+  return [
+    "set -eu",
+    'installer="$(mktemp)"',
+    "trap 'rm -f \"$installer\"' EXIT",
+    `curl -fsSL ${input.url} -o "$installer"`,
+    input.execute ?? '/bin/bash "$installer"',
+  ].join("; ");
 }
 
 function packageTarget(

@@ -11,7 +11,9 @@ in-process. The few states that need a real OS (real `brew install`, a truly
 CLT-absent Mac) run in a VM.
 
 The guided and non-interactive surfaces drive one process-local semantic session per invocation.
-Its unit suite covers intent-bound inspection, staged prerequisite preparation, revision filtering,
+Check and plan JSON are projected directly from that semantic state and CLI inspection evidence,
+while `setup system` executes ordered typed bootstrap operations through the CLI operation adapter
+and re-inspects system facts after execution. Its unit suite covers intent-bound inspection, staged prerequisite preparation, revision filtering,
 cancellation during in-flight effects, inspection and operation failures, completed-operation
 checkpoints, non-authoritative progress failures, and the serialized inspection/effect loop. CLI tests also require dry runs to leave
 every operation port unused, preserve actionable boundary errors, and re-inspect package and
@@ -192,8 +194,8 @@ nothing for tier 1, `docker build --target` for tier 2, `tart clone` for tier 3;
 (2) runs the read-only, machine-readable surfaces (`stn setup check --json`,
 `stn setup plan --json`, `stn setup apply --dry-run`); verifies that several
 runnable CLIs leave selection unresolved and that no read-only mode mutates
-config, provider homes, durable Observer state, sockets, or tmux. JSON compatibility warnings
-are projected at the CLI adapter from semantic evidence, so profile assertions continue to treat
+config, provider homes, durable Observer state, sockets, or tmux. Stable JSON warning rows
+are projected directly at the CLI presenter from semantic evidence, so profile assertions continue to treat
 the published JSON shape—not a core warning-row count—as the machine contract. The state-
 directory readiness check is the narrow exception: it creates and removes a temporary probe file and can
 leave a newly created empty state directory; (3) captures stdout + exit code; (4)

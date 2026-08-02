@@ -11,12 +11,12 @@ import {
   createHarnessTrackingAdapter,
   type SetupHarnessTrackingRunners,
 } from "../../src/commands/setup/adapters/harnessTracking.js";
+import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
 import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
 import {
   tmuxPopupBindingMarker,
   tmuxPopupRunShellCommand,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
-import type { SetupFacts } from "../../src/commands/setup/model.js";
 import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 
 const trackedProviders = ["claude", "codex", "cursor", "opencode"] as const;
