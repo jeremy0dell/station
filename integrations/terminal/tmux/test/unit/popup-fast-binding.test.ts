@@ -146,6 +146,7 @@ describe("managed tmux popup fast binding", () => {
     expect(action.indexOf("set-option -gq @station_popup_active_claim v1.open.")).toBeLessThan(
       action.indexOf("display-popup -c /dev/ttys001 -C"),
     );
+    expect(action).toContain("set-option -t _station-ui status off");
     expect(action).toContain("display-popup -c /dev/ttys002 -w 50% -h 50%");
   });
 

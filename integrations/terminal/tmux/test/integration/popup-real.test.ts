@@ -25,7 +25,11 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { tmuxPopupRunShellCommand } from "../../../../../apps/cli/src/commands/setup/checks/tmuxBinding.js";
 import { mockObserverSnapshot } from "../../../../../station/src/sources/fixtures/mockObserverSnapshot.js";
-import { buildManagedFastPopupRunShellCommand, openTmuxPopup } from "../../src/popup";
+import {
+  buildManagedFastPopupRunShellCommand,
+  ensurePersistentPopupSession,
+  openTmuxPopup,
+} from "../../src/popup";
 import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
 import { TmuxProvider } from "../../src/provider";
 import { shellQuote } from "../../src/shell";
@@ -350,6 +354,67 @@ describeRealTmux("real tmux dev popup routing", () => {
 
     await expect(readFile(normalMarker, "utf8")).resolves.toBe("start\n");
   }, 60_000);
+
+  it("keeps popup status session-scoped and reapplies config on warm reuse", async () => {
+    const root = await makeCheckoutTempRoot();
+    const wrapperLogPath = join(root, "tmux-wrapper.log");
+    const wrapper = await writeTmuxWrapper({
+      root,
+      tmux,
+      label: `stn-popup-status-${process.pid}-${Date.now()}`,
+      attachLogPath: join(root, "attach.log"),
+      wrapperLogPath,
+    });
+    const fixture: MarkerFixture = { root, wrapper, wrapperLogPath };
+    cleanup = () => cleanupMarkerFixture(fixture);
+
+    const baseSession = "base";
+    const popupSession = "_station-ui-status-real";
+    const marker = join(root, "popup-started.txt");
+    const tuiCommand = persistentMarkerCommand(marker);
+    const sessionStatus = async (sessionName: string): Promise<string> =>
+      tmuxExec(wrapper, ["show-options", "-t", sessionName, "-qv", "status"]).then((value) =>
+        value.trim(),
+      );
+
+    await tmuxExec(wrapper, ["new-session", "-d", "-s", baseSession, "sleep 300"]);
+    await tmuxExec(wrapper, ["set-option", "-t", baseSession, "status", "on"]);
+
+    await expect(
+      ensurePersistentPopupSession({ command: wrapper, tuiCommand, uiSessionName: popupSession }),
+    ).resolves.toEqual({ created: true, sessionName: popupSession });
+    await waitForFileText(marker, "start\n");
+    const initialPid = await panePid(wrapper, popupSession);
+    await expect(
+      Promise.all([sessionStatus(baseSession), sessionStatus(popupSession)]),
+    ).resolves.toEqual(["on", "off"]);
+
+    await expect(
+      ensurePersistentPopupSession({
+        command: wrapper,
+        popupStatusBar: true,
+        tuiCommand,
+        uiSessionName: popupSession,
+      }),
+    ).resolves.toEqual({ created: false, sessionName: popupSession });
+    expect(await panePid(wrapper, popupSession)).toBe(initialPid);
+    await expect(
+      Promise.all([sessionStatus(baseSession), sessionStatus(popupSession)]),
+    ).resolves.toEqual(["on", "on"]);
+
+    await expect(
+      ensurePersistentPopupSession({
+        command: wrapper,
+        popupStatusBar: false,
+        tuiCommand,
+        uiSessionName: popupSession,
+      }),
+    ).resolves.toEqual({ created: false, sessionName: popupSession });
+    expect(await panePid(wrapper, popupSession)).toBe(initialPid);
+    await expect(
+      Promise.all([sessionStatus(baseSession), sessionStatus(popupSession)]),
+    ).resolves.toEqual(["on", "off"]);
+  }, 30_000);
 
   it("renders an exact real dashboard and routes outer keyboard and resize without replacing the renderer", async () => {
     const fixture = await createDashboardFixture(tmux, {

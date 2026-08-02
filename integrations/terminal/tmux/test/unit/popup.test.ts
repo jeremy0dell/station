@@ -154,6 +154,13 @@ describe("tmux popup", () => {
       "set-option",
       "-t",
       "_station-ui-client",
+      "status",
+      "off",
+    ]);
+    expect(calls.map((call) => call.args)).toContainEqual([
+      "set-option",
+      "-t",
+      "_station-ui-client",
       "-q",
       persistentUiOwnerClientOption,
       "/dev/ttys001",
@@ -763,6 +770,31 @@ describe("tmux popup", () => {
     legacy.globalOptions.set("@station_popup_focus_client", "/dev/ttys001");
     await openTmuxPopup({ env: {}, runner: legacy.runner });
     expect(legacy.globalOptions.has("@station_popup_focus_client")).toBe(false);
+  });
+
+  it("fails before display when the persistent status bar cannot be configured", async () => {
+    const calls: ExternalCommandInput[] = [];
+
+    await expect(
+      openTmuxPopup({
+        env: {},
+        runner: async (input) => {
+          calls.push(input);
+          if (input.args?.at(-2) === "status") {
+            throw Object.assign(new Error("failed"), { code: 1, stderr: "status failed" });
+          }
+          if (input.args?.includes("@station_popup_ui_signature")) {
+            return tmuxCommandResult(input, `${defaultSignature}\n`);
+          }
+          return tmuxCommandResult(input);
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "TERMINAL_OPEN_FAILED",
+      message: "tmux failed to configure the persistent station popup UI status bar.",
+      provider: "tmux",
+    });
+    expect(calls.some((call) => call.args?.[0] === "display-popup")).toBe(false);
   });
 
   it("handles interactive duration, exit 129, and provider errors", async () => {
