@@ -19,7 +19,6 @@ const palette = {
   hover: rgbColor("#1f242b"),
   overlay: rgbColor("#000000"),
   hairline: rgbColor("#20252c"),
-  frozen: rgbColor("#12161b"),
   focus: rgbColor("#15222e"),
   compactFocus: rgbColor("#1b3448"),
   menuSurface: rgbColor("#15191e"),
@@ -112,7 +111,6 @@ const sharedRoles = {
     compactFocus: palette.compactFocus,
     border: palette.gray,
     hairline: palette.hairline,
-    overlay: palette.overlay,
   },
   welcome: {
     button: palette.welcomeButton,
@@ -155,13 +153,11 @@ export const nativeStationTheme = {
   surfaces: {
     canvas: palette.background,
     panel: palette.background,
-    frozen: palette.frozen,
     prompt: palette.background,
     help: palette.overlay,
     sheet: palette.background,
     settings: palette.background,
     toast: palette.background,
-    overlay: palette.overlay,
   },
 } as const satisfies StationTheme;
 
@@ -171,16 +167,14 @@ const terminalBackground = (fallback: StationRgbColor) =>
 export const embeddedStationTheme = {
   ...sharedRoles,
   surfaces: {
-    // Terminal-default intent still paints opaque cells; fallback is only the stable RGB snapshot.
+    // Terminal-default intent still paints opaque cells; the snapshot keeps non-default consumers deterministic.
     canvas: terminalBackground(palette.background),
     panel: terminalBackground(palette.background),
-    frozen: terminalBackground(palette.frozen),
     prompt: terminalBackground(palette.background),
     help: terminalBackground(palette.background),
     sheet: terminalBackground(palette.background),
     settings: terminalBackground(palette.background),
     toast: terminalBackground(palette.background),
-    overlay: terminalBackground(palette.background),
   },
   contextMenu: {
     ...sharedRoles.contextMenu,
@@ -191,8 +185,3 @@ export const embeddedStationTheme = {
     background: terminalBackground(palette.background),
   },
 } as const satisfies StationTheme;
-
-export const builtInTheme = {
-  native: nativeStationTheme,
-  embedded: embeddedStationTheme,
-} as const satisfies Readonly<Record<"native" | "embedded", StationTheme>>;

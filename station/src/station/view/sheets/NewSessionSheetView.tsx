@@ -11,11 +11,7 @@ import {
   type TuiSelectionState,
 } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import {
-  providerHealthColor,
-  stationRgbValue,
-  useStationTheme,
-} from "../../../theme/index.js";
+import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
@@ -137,7 +133,7 @@ function Review({
                   status: {
                     glyph: status.glyph,
                     text: status.text,
-                    color: stationRgbValue(providerHealthColor(theme, status.tone)),
+                    color: providerHealthColor(theme, status.tone),
                   },
                 })}
           />
@@ -176,7 +172,12 @@ function EditName({
   const content = newSessionEditNameContent(state);
   return (
     <>
-      <SheetLabelValue width={width} label="Project" labelWidth={12} value={project?.label ?? "-"} />
+      <SheetLabelValue
+        width={width}
+        label="Project"
+        labelWidth={12}
+        value={project?.label ?? "-"}
+      />
       <SheetControlRow
         width={width}
         label={content.controls.name.label}
@@ -247,7 +248,7 @@ function ProjectPicker({
           choiceKey={choice.key}
           label={choice.value.label}
           detail={choice.value.health.status}
-          color={stationRgbValue(providerHealthColor(theme, choice.value.health.status))}
+          color={providerHealthColor(theme, choice.value.health.status)}
           width={width}
           selected={choice.value.id === selectedId}
         />

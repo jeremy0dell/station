@@ -1,14 +1,11 @@
-import { EmbeddedStationThemeProvider } from "../theme/index.js";
-import {
-  FullscreenDashboard,
-  type FullscreenDashboardProps,
-} from "./FullscreenDashboard.js";
+import { embeddedStationTheme, StationThemeProvider } from "../theme/index.js";
+import { FullscreenDashboard, type FullscreenDashboardProps } from "./FullscreenDashboard.js";
 
 /** Production composition root for the standalone and popup dashboard renderer. */
 export function StandaloneDashboardApp(props: FullscreenDashboardProps) {
   return (
-    <EmbeddedStationThemeProvider>
+    <StationThemeProvider theme={embeddedStationTheme}>
       <FullscreenDashboard {...props} />
-    </EmbeddedStationThemeProvider>
+    </StationThemeProvider>
   );
 }

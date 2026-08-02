@@ -19,7 +19,11 @@ import {
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { DashboardRoot } from "./DashboardRoot.js";
-import { nativeStationTheme, stationRgbValue } from "../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../theme/index.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
@@ -99,9 +103,11 @@ describe("dashboard golden frames", () => {
         </StationMouseProvider>
       );
     const setup = await testRender(
-      <StationHoverProvider value={input.hoverEnabled ?? true}>
-        {mouseDashboard}
-      </StationHoverProvider>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationHoverProvider value={input.hoverEnabled ?? true}>
+          {mouseDashboard}
+        </StationHoverProvider>
+      </StationThemeProvider>,
       { width: input.width, height: input.height },
     );
     teardowns.push(() => {
@@ -150,7 +156,9 @@ describe("dashboard golden frames", () => {
     });
     store.getState().start();
     const setup = await testRender(
-      <DashboardRoot store={store} columns={width} rows={height} onCopyNotice={() => {}} />,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardRoot store={store} columns={width} rows={height} onCopyNotice={() => {}} />
+      </StationThemeProvider>,
       { width, height },
     );
     teardowns.push(() => {
@@ -158,7 +166,10 @@ describe("dashboard golden frames", () => {
     });
     await setup.renderOnce();
 
-    const loadingLines = setup.captureCharFrame().split("\n").map((line) => line.trimEnd());
+    const loadingLines = setup
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trimEnd());
     expect(loadingLines[height - 2]).toBe(divider);
     expect(loadingLines[height - 1]).toBe("Q/esc:close");
 
@@ -168,7 +179,10 @@ describe("dashboard golden frames", () => {
     });
     await setup.flush();
 
-    const liveLines = setup.captureCharFrame().split("\n").map((line) => line.trimEnd());
+    const liveLines = setup
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trimEnd());
     expect(liveLines[2]).toBe(divider);
     expect(liveLines[3]).toContain("SESSION");
     expect(liveLines[height - 2]).toBe(divider);
@@ -244,16 +258,20 @@ describe("dashboard golden frames", () => {
     const attentionRow = lines.findIndex((line) => line.includes("! hook-scope"));
     expect(attentionRow).toBeGreaterThan(0);
     const markerCol = lines[attentionRow]?.indexOf("!") ?? -1;
-    expect(spanHex(spanAtFrameCell(frame, attentionRow, markerCol))).toBe(stationRgbValue(nativeStationTheme.status.danger));
+    expect(spanHex(spanAtFrameCell(frame, attentionRow, markerCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.danger),
+    );
 
     const failGlyphCol = lines[attentionRow]?.lastIndexOf("x2") ?? -1;
     expect(failGlyphCol).toBeGreaterThan(0);
-    expect(spanHex(spanAtFrameCell(frame, attentionRow, failGlyphCol))).toBe(stationRgbValue(nativeStationTheme.status.danger));
+    expect(spanHex(spanAtFrameCell(frame, attentionRow, failGlyphCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.danger),
+    );
 
     const prCol = lines[attentionRow]?.indexOf("#12") ?? -1;
     expect(prCol).toBeGreaterThan(0);
     const prSpan = spanAtFrameCell(frame, attentionRow, prCol);
-    expect(spanHex(prSpan)).toBe(stationRgbValue(nativeStationTheme.status.working));
+    expect(spanHex(prSpan)).toBe(stationColorSnapshotValue(nativeStationTheme.status.working));
     expect(((prSpan?.attributes ?? 0) & TextAttributes.UNDERLINE) !== 0).toBe(true);
   });
 
@@ -272,20 +290,30 @@ describe("dashboard golden frames", () => {
     expect(workingRow).toBeGreaterThan(0);
     const throbberCol = lines[workingRow]?.indexOf("⠋") ?? -1;
     expect(throbberCol).toBeGreaterThan(0);
-    expect(spanHex(spanAtFrameCell(frame, workingRow, throbberCol))).toBe(stationRgbValue(nativeStationTheme.status.working));
+    expect(spanHex(spanAtFrameCell(frame, workingRow, throbberCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.working),
+    );
     const workingWordCol = lines[workingRow]?.indexOf("working") ?? -1;
-    expect(spanHex(spanAtFrameCell(frame, workingRow, workingWordCol))).toBe(stationRgbValue(nativeStationTheme.status.working));
+    expect(spanHex(spanAtFrameCell(frame, workingRow, workingWordCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.working),
+    );
     const workingNameCol = lines[workingRow]?.indexOf("pr-info") ?? -1;
-    expect(spanHex(spanAtFrameCell(frame, workingRow, workingNameCol))).not.toBe(stationRgbValue(nativeStationTheme.status.working));
+    expect(spanHex(spanAtFrameCell(frame, workingRow, workingNameCol))).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.working),
+    );
 
     // Calm (exited) row: the status label recedes to gray; the name does not.
     const exitedRow = lines.findIndex((line) => line.includes("done-run"));
     expect(exitedRow).toBeGreaterThan(0);
     const exitedWordCol = lines[exitedRow]?.indexOf("exited") ?? -1;
     expect(exitedWordCol).toBeGreaterThan(0);
-    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedWordCol))).toBe(stationRgbValue(nativeStationTheme.text.muted));
+    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedWordCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
     const exitedNameCol = lines[exitedRow]?.indexOf("done-run") ?? -1;
-    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedNameCol))).not.toBe(stationRgbValue(nativeStationTheme.text.muted));
+    expect(spanHex(spanAtFrameCell(frame, exitedRow, exitedNameCol))).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
   });
 
   it("keeps alert and unknown session names foreground while their status carries the colour", async () => {
@@ -301,18 +329,22 @@ describe("dashboard golden frames", () => {
     expect(attentionRow).toBeGreaterThan(0);
     const attentionNameCol = lines[attentionRow]?.indexOf("hook-scope") ?? -1;
     expect(spanHex(spanAtFrameCell(frame, attentionRow, attentionNameCol))).toBe(
-      stationRgbValue(nativeStationTheme.text.primary),
+      stationColorSnapshotValue(nativeStationTheme.text.primary),
     );
 
     const unknownRow = lines.findIndex((line) => line.includes("metadata-refresh"));
     expect(unknownRow).toBeGreaterThan(0);
     const unknownWordCol = lines[unknownRow]?.indexOf("unknown") ?? -1;
-    expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownWordCol))).toBe(stationRgbValue(nativeStationTheme.status.warning));
+    expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownWordCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.warning),
+    );
     const unknownMarkCol = lines[unknownRow]?.indexOf("?") ?? -1;
-    expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownMarkCol))).toBe(stationRgbValue(nativeStationTheme.status.warning));
+    expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownMarkCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.warning),
+    );
     const unknownNameCol = lines[unknownRow]?.indexOf("metadata-refresh") ?? -1;
     expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownNameCol))).toBe(
-      stationRgbValue(nativeStationTheme.text.primary),
+      stationColorSnapshotValue(nativeStationTheme.text.primary),
     );
   });
 
@@ -374,15 +406,19 @@ describe("dashboard golden frames", () => {
     });
     await setup.flush();
     const hovered = spanAtFrameCell(setup.captureSpans(), row, col + 2);
-    expect(spanHex(hovered)).toBe(stationRgbValue(nativeStationTheme.text.inverse));
-    expect(spanBgHex(hovered)).toBe(stationRgbValue(nativeStationTheme.action.primary));
+    expect(spanHex(hovered)).toBe(stationColorSnapshotValue(nativeStationTheme.text.inverse));
+    expect(spanBgHex(hovered)).toBe(stationColorSnapshotValue(nativeStationTheme.action.primary));
 
     await setup.mockMouse.click(col + 2, row, MouseButtons.LEFT);
     expect(targets.at(-1)).toEqual({ kind: "firstProjectAdd" });
   });
 
   it("assigns slots only to visible actionable rows", async () => {
-    const setup = await renderDashboard({ width: 80, height: 40, snapshot: manyProjectsSnapshot() });
+    const setup = await renderDashboard({
+      width: 80,
+      height: 40,
+      snapshot: manyProjectsSnapshot(),
+    });
     const frame = setup.captureCharFrame();
     expect(frame).toContain("[1]");
     // The starting row gets a slot too (it has a focusable terminal), but the
@@ -417,16 +453,16 @@ describe("dashboard golden frames", () => {
 
       let spans = setup.captureSpans();
       expect(spanBgHex(spanAtFrameCell(spans, row, col))).toBe(
-        stationRgbValue(nativeStationTheme.interaction.compactFocus),
+        stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
       );
       expect(spanBgHex(spanAtFrameCell(spans, row, after - 1))).toBe(
-        stationRgbValue(nativeStationTheme.interaction.compactFocus),
+        stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
       );
       expect(spanBgHex(spanAtFrameCell(spans, row, col - 1))).not.toBe(
-        stationRgbValue(nativeStationTheme.interaction.compactFocus),
+        stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
       );
       expect(spanBgHex(spanAtFrameCell(spans, row, after))).not.toBe(
-        stationRgbValue(nativeStationTheme.interaction.compactFocus),
+        stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
       );
 
       await act(async () => {
@@ -435,8 +471,12 @@ describe("dashboard golden frames", () => {
       });
       await setup.flush();
       spans = setup.captureSpans();
-      expect(spanHex(spanAtFrameCell(spans, row, col))).toBe(stationRgbValue(nativeStationTheme.text.inverse));
-      expect(spanBgHex(spanAtFrameCell(spans, row, col))).toBe(stationRgbValue(nativeStationTheme.action.primary));
+      expect(spanHex(spanAtFrameCell(spans, row, col))).toBe(
+        stationColorSnapshotValue(nativeStationTheme.text.inverse),
+      );
+      expect(spanBgHex(spanAtFrameCell(spans, row, col))).toBe(
+        stationColorSnapshotValue(nativeStationTheme.action.primary),
+      );
 
       await act(async () => {
         await setup.mockMouse.moveTo(0, 0);
@@ -444,15 +484,13 @@ describe("dashboard golden frames", () => {
       });
       await setup.flush();
       expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, col))).toBe(
-        stationRgbValue(nativeStationTheme.interaction.compactFocus),
+        stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
       );
 
       await setup.mockMouse.click(col - 1, row, MouseButtons.LEFT);
       await setup.mockMouse.click(col, row, MouseButtons.LEFT);
       await setup.mockMouse.click(after, row, MouseButtons.LEFT);
-      expect(targets).toEqual([
-        { kind: "emptyProjectAction", projectId: "empty-project" },
-      ]);
+      expect(targets).toEqual([{ kind: "emptyProjectAction", projectId: "empty-project" }]);
     }
   });
 
@@ -463,7 +501,9 @@ describe("dashboard golden frames", () => {
     });
     store.getState().start();
     const setup = await testRender(
-      <DashboardRoot store={store} columns={80} rows={24} onCopyNotice={() => {}} />,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardRoot store={store} columns={80} rows={24} onCopyNotice={() => {}} />
+      </StationThemeProvider>,
       { width: 80, height: 24 },
     );
     teardowns.push(() => {
@@ -482,8 +522,12 @@ describe("dashboard golden frames", () => {
     const cursorRow = lines.findIndex((line) => line.startsWith("▏"));
     expect(lines[cursorRow]).toContain("hook-scope");
     const spans = setup.captureSpans();
-    expect(spanHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(stationRgbValue(nativeStationTheme.action.primary));
-    expect(spanBgHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(stationRgbValue(nativeStationTheme.interaction.keyboardFocus));
+    expect(spanHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.action.primary),
+    );
+    expect(spanBgHex(spanAtFrameCell(spans, cursorRow, 0))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.keyboardFocus),
+    );
 
     // Tab (Ctrl-I) jumps past the working/unknown rows to the stuck one.
     store.getState().handleKey({ input: "i", ctrl: true });
@@ -530,22 +574,26 @@ describe("dashboard golden frames", () => {
         for (const [control, column] of Object.entries(samples)) {
           const background = spanBgHex(spanAtFrameCell(spans, row, column));
           if (control === controls[index]) {
-            expect(background).toBe(stationRgbValue(nativeStationTheme.interaction.compactFocus));
+            expect(background).toBe(
+              stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
+            );
           } else {
-            expect(background).not.toBe(stationRgbValue(nativeStationTheme.interaction.compactFocus));
+            expect(background).not.toBe(
+              stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
+            );
           }
         }
         expect(spanBgHex(spanAtFrameCell(spans, row, primaryEnd))).not.toBe(
-          stationRgbValue(nativeStationTheme.interaction.compactFocus),
+          stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, shellStart - 1))).not.toBe(
-          stationRgbValue(nativeStationTheme.interaction.compactFocus),
+          stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, quickStart - 1))).not.toBe(
-          stationRgbValue(nativeStationTheme.interaction.compactFocus),
+          stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
         );
         expect(spanBgHex(spanAtFrameCell(spans, row, defaultStart - 1))).not.toBe(
-          stationRgbValue(nativeStationTheme.interaction.compactFocus),
+          stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
         );
       }
     }
@@ -585,7 +633,11 @@ describe("dashboard golden frames", () => {
   });
 
   it("lets project-header hover supersede and then reveal keyboard focus", async () => {
-    const setup = await renderDashboard({ width: 120, height: 24, snapshot: manyProjectsSnapshot() });
+    const setup = await renderDashboard({
+      width: 120,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+    });
     setup.store.getState().handleKey({ input: "", downArrow: true });
     setup.store.getState().handleKey({ input: "", rightArrow: true });
     await setup.flush();
@@ -597,19 +649,23 @@ describe("dashboard golden frames", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     await setup.flush();
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, shell))).toBe(
-      stationRgbValue(nativeStationTheme.interaction.hover),
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await setup.mockMouse.moveTo(0, 0);
     await new Promise((resolve) => setTimeout(resolve, 10));
     await setup.flush();
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, shell))).toBe(
-      stationRgbValue(nativeStationTheme.interaction.compactFocus),
+      stationColorSnapshotValue(nativeStationTheme.interaction.compactFocus),
     );
   });
 
   it("paints hovered session rows through the trailing action column", async () => {
-    const setup = await renderDashboard({ width: 80, height: 24, snapshot: manyProjectsSnapshot() });
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+    });
     const before = setup.captureCharFrame();
     const lines = before.split("\n");
     const row = lines.findIndex((line) => line.includes("docs-cleanup"));
@@ -621,7 +677,9 @@ describe("dashboard golden frames", () => {
     await setup.flush();
 
     const spans = setup.captureSpans();
-    expect(spanBgHex(spanAtFrameCell(spans, row, 78))).toBe(stationRgbValue(nativeStationTheme.interaction.hover));
+    expect(spanBgHex(spanAtFrameCell(spans, row, 78))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
   });
 
   it("suppresses popup hover styling without removing click targets", async () => {
@@ -644,7 +702,7 @@ describe("dashboard golden frames", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row, 78))).not.toBe(
-      stationRgbValue(nativeStationTheme.interaction.hover),
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
     expect(clicked).toMatchObject({ kind: "row" });
@@ -685,5 +743,4 @@ describe("dashboard golden frames", () => {
       expect(frame.replace(/[ \t]+$/gm, "")).toMatchSnapshot();
     }
   });
-
 });

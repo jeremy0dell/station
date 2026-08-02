@@ -1,121 +1,143 @@
 import { describe, expect, it } from "bun:test";
 import { embeddedStationTheme, nativeStationTheme } from "./builtInTheme.js";
-import { stationRgbValue } from "./openTuiColor.js";
 import type { StationTheme } from "./types.js";
 
-function expectCompleteTheme(theme: StationTheme): void {
-  expect(Object.keys(theme.surfaces).sort()).toEqual([
-    "canvas",
-    "frozen",
-    "help",
-    "overlay",
-    "panel",
-    "prompt",
-    "settings",
-    "sheet",
-    "toast",
-  ]);
-  expect(Object.keys(theme.text).sort()).toEqual([
-    "disabled",
-    "inverse",
-    "menu",
-    "muted",
-    "primary",
-  ]);
-  expect(Object.keys(theme.status).sort()).toEqual([
-    "accent",
-    "danger",
-    "info",
-    "neutral",
-    "success",
-    "warning",
-    "working",
-  ]);
-  expect(Object.keys(theme.action).sort()).toEqual(["danger", "primary", "success", "warning"]);
-  expect(Object.keys(theme.interaction).sort()).toEqual([
-    "border",
-    "compactFocus",
-    "hairline",
-    "hover",
-    "keyboardFocus",
-    "overlay",
-  ]);
-  expect(Object.keys(theme.welcome).sort()).toEqual([
-    "border",
-    "borderActive",
-    "button",
-    "buttonHover",
-    "buttonMuted",
-    "muted",
-    "shimmer",
-    "shimmerPeak",
-    "wordmark",
-  ]);
-  expect(Object.keys(theme.contextMenu).sort()).toEqual(["border", "selected", "surface"]);
-  expect(Object.keys(theme.island).sort()).toEqual([
-    "actionable",
-    "attention",
-    "background",
-    "expanded",
-    "resting",
-  ]);
-  expect(theme.pane.shells).toHaveLength(4);
-  expect(theme.terminal.ansi16).toHaveLength(16);
-}
+const rgb = (value: `#${string}`) => ({ kind: "rgb" as const, value });
+const defaultBackground = (value: `#${string}`) => ({
+  kind: "terminal-default" as const,
+  channel: "background" as const,
+  snapshot: rgb(value),
+});
+
+const terminal = {
+  defaultForeground: rgb("#d4d4d8"),
+  defaultBackground: rgb("#101316"),
+  ansi16: [
+    rgb("#000000"),
+    rgb("#cd3131"),
+    rgb("#0dbc79"),
+    rgb("#e5e510"),
+    rgb("#2472c8"),
+    rgb("#bc3fbc"),
+    rgb("#11a8cd"),
+    rgb("#e5e5e5"),
+    rgb("#666666"),
+    rgb("#f14c4c"),
+    rgb("#23d18b"),
+    rgb("#f5f543"),
+    rgb("#3b8eea"),
+    rgb("#d670d6"),
+    rgb("#29b8db"),
+    rgb("#ffffff"),
+  ],
+} as const;
+
+const sharedRoles = {
+  text: {
+    primary: rgb("#e4e4e7"),
+    muted: rgb("#9ca3af"),
+    inverse: rgb("#101316"),
+    disabled: rgb("#7a828c"),
+    menu: rgb("#f4f4f5"),
+  },
+  status: {
+    neutral: rgb("#9ca3af"),
+    danger: rgb("#f87171"),
+    warning: rgb("#fbbf24"),
+    success: rgb("#4ade80"),
+    working: rgb("#60a5fa"),
+    info: rgb("#60a5fa"),
+    accent: rgb("#d2a8ff"),
+  },
+  action: {
+    primary: rgb("#22d3ee"),
+    success: rgb("#4ade80"),
+    danger: rgb("#f87171"),
+    warning: rgb("#fbbf24"),
+  },
+  interaction: {
+    hover: rgb("#1f242b"),
+    keyboardFocus: rgb("#15222e"),
+    compactFocus: rgb("#1b3448"),
+    border: rgb("#9ca3af"),
+    hairline: rgb("#20252c"),
+  },
+  welcome: {
+    button: rgb("#1f2937"),
+    buttonMuted: rgb("#101316"),
+    buttonHover: rgb("#263142"),
+    shimmer: rgb("#4a6a8c"),
+    border: rgb("#3f4750"),
+    borderActive: rgb("#60a5fa"),
+    muted: rgb("#a1a1aa"),
+    wordmark: rgb("#f4f4f5"),
+    shimmerPeak: rgb("#ffffff"),
+  },
+  contextMenu: {
+    surface: rgb("#15191e"),
+    selected: rgb("#2f3842"),
+    border: rgb("#5b6470"),
+  },
+  island: {
+    background: rgb("#101316"),
+    resting: rgb("#4ade80"),
+    expanded: rgb("#60a5fa"),
+    attention: rgb("#f87171"),
+    actionable: rgb("#d2a8ff"),
+  },
+  pane: {
+    primary: { active: rgb("#60a5fa"), inactive: rgb("#1d4ed8") },
+    shells: [
+      { active: rgb("#34d399"), inactive: rgb("#14532d") },
+      { active: rgb("#c084fc"), inactive: rgb("#581c87") },
+      { active: rgb("#fbbf24"), inactive: rgb("#713f12") },
+      { active: rgb("#22d3ee"), inactive: rgb("#164e63") },
+    ],
+    selection: rgb("#264f78"),
+  },
+  terminal,
+} as const;
+
+const expectedNativeTheme = {
+  ...sharedRoles,
+  surfaces: {
+    canvas: rgb("#101316"),
+    panel: rgb("#101316"),
+    prompt: rgb("#101316"),
+    help: rgb("#000000"),
+    sheet: rgb("#101316"),
+    settings: rgb("#101316"),
+    toast: rgb("#101316"),
+  },
+} as const satisfies StationTheme;
+
+const expectedEmbeddedTheme = {
+  ...sharedRoles,
+  surfaces: {
+    canvas: defaultBackground("#101316"),
+    panel: defaultBackground("#101316"),
+    prompt: defaultBackground("#101316"),
+    help: defaultBackground("#101316"),
+    sheet: defaultBackground("#101316"),
+    settings: defaultBackground("#101316"),
+    toast: defaultBackground("#101316"),
+  },
+  contextMenu: {
+    ...sharedRoles.contextMenu,
+    surface: defaultBackground("#15191e"),
+  },
+  island: {
+    ...sharedRoles.island,
+    background: defaultBackground("#101316"),
+  },
+} as const satisfies StationTheme;
 
 describe("built-in Station themes", () => {
-  it("implements every semantic role in both renderer variants", () => {
-    expectCompleteTheme(nativeStationTheme);
-    expectCompleteTheme(embeddedStationTheme);
+  it("preserves every native role and RGB value", () => {
+    expect(nativeStationTheme).toEqual(expectedNativeTheme);
   });
 
-  it("retains the native Station-dark RGB roles", () => {
-    expect(stationRgbValue(nativeStationTheme.surfaces.canvas)).toBe("#101316");
-    expect(stationRgbValue(nativeStationTheme.text.primary)).toBe("#e4e4e7");
-    expect(stationRgbValue(nativeStationTheme.text.muted)).toBe("#9ca3af");
-    expect(stationRgbValue(nativeStationTheme.interaction.hover)).toBe("#1f242b");
-    expect(stationRgbValue(nativeStationTheme.interaction.keyboardFocus)).toBe("#15222e");
-    expect(stationRgbValue(nativeStationTheme.interaction.compactFocus)).toBe("#1b3448");
-  });
-
-  it("keeps embedded surfaces terminal-default with the Station-dark fallback", () => {
-    for (const role of [
-      embeddedStationTheme.surfaces.canvas,
-      embeddedStationTheme.surfaces.panel,
-      embeddedStationTheme.surfaces.prompt,
-      embeddedStationTheme.surfaces.help,
-      embeddedStationTheme.surfaces.sheet,
-      embeddedStationTheme.surfaces.settings,
-      embeddedStationTheme.surfaces.toast,
-    ]) {
-      expect(role.kind).toBe("terminal-default");
-      if (role.kind === "terminal-default") {
-        expect(role.channel).toBe("background");
-        expect(stationRgbValue(role.fallback)).toBe("#101316");
-      }
-    }
-  });
-
-  it("retains terminal defaults and ANSI-16 output", () => {
-    expect(stationRgbValue(nativeStationTheme.terminal.defaultForeground)).toBe("#d4d4d8");
-    expect(stationRgbValue(nativeStationTheme.terminal.defaultBackground)).toBe("#101316");
-    expect(nativeStationTheme.terminal.ansi16.map(stationRgbValue)).toEqual([
-      "#000000",
-      "#cd3131",
-      "#0dbc79",
-      "#e5e510",
-      "#2472c8",
-      "#bc3fbc",
-      "#11a8cd",
-      "#e5e5e5",
-      "#666666",
-      "#f14c4c",
-      "#23d18b",
-      "#f5f543",
-      "#3b8eea",
-      "#d670d6",
-      "#29b8db",
-      "#ffffff",
-    ]);
+  it("preserves every embedded role, intent, channel, and snapshot", () => {
+    expect(embeddedStationTheme).toEqual(expectedEmbeddedTheme);
   });
 });

@@ -1,11 +1,16 @@
-import { stationRgbValue, type StationTheme } from "../theme/index.js";
+import {
+  rgbColor,
+  stationColorSnapshotValue,
+  type StationColor,
+  type StationTheme,
+} from "../theme/index.js";
 
 // Themeable color tokens for the station button. border/icon/text are separate
 // tokens though equal per state, so a theme can diverge them later.
 export type StationButtonStateColors = {
-  border: string;
-  icon: string;
-  text: string;
+  border: StationColor;
+  icon: StationColor;
+  text: StationColor;
 };
 
 export type DynamicStationButtonColors = {
@@ -15,10 +20,7 @@ export type DynamicStationButtonColors = {
 
 // Rest/expanded/attention/actionable remain separate roles so the active theme owns every morph endpoint.
 export function dynamicStationButtonColors(theme: StationTheme): DynamicStationButtonColors {
-  const resting = stationRgbValue(theme.island.resting);
-  const expanded = stationRgbValue(theme.island.expanded);
-  const attention = stationRgbValue(theme.island.attention);
-  const actionable = stationRgbValue(theme.island.actionable);
+  const { resting, expanded, attention, actionable } = theme.island;
   return {
     base: {
       collapsed: { border: resting, icon: resting, text: resting },
@@ -41,9 +43,16 @@ export function stationButtonColors(
   return expanded ? group.expanded : group.collapsed;
 }
 
+/** Preserves endpoint intent while using deterministic RGB snapshots during a transition. */
+export function tweenStationColor(from: StationColor, to: StationColor, t: number): StationColor {
+  if (t <= 0) return from;
+  if (t >= 1) return to;
+  return rgbColor(lerpColor(stationColorSnapshotValue(from), stationColorSnapshotValue(to), t));
+}
+
 // Interpolate between two #rrggbb colors. Continuous (24-bit), so it animates
 // smoothly even while the integer-cell box size steps.
-export function lerpColor(from: string, to: string, t: number): string {
+export function lerpColor(from: string, to: string, t: number): `#${string}` {
   const a = parseHex(from);
   const b = parseHex(to);
   const channel = (i: number): number => {

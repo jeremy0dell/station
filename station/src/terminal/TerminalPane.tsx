@@ -1,7 +1,8 @@
 import { basename } from "node:path";
+import type { ColorInput } from "@opentui/core";
 import "./TerminalScreenRenderable.js";
 import type { PaneId } from "../state/types.js";
-import { stationRgbValue, useStationTheme } from "../theme/index.js";
+import { toOpenTuiColor, useStationTheme } from "../theme/index.js";
 import { usePaneTerminal } from "./registry/paneTerminalContext.js";
 
 export type TerminalPaneProps = {
@@ -15,7 +16,7 @@ export type TerminalPaneProps = {
    */
   onForwardInput?: (bytes: string) => void;
   /** Visual only: the pane border color. PaneGrid passes the active accent. */
-  borderColor?: string;
+  borderColor?: ColorInput;
   title?: string;
 };
 
@@ -32,8 +33,7 @@ export function TerminalPane({
 }: TerminalPaneProps) {
   const theme = useStationTheme();
   const term = usePaneTerminal(paneId);
-  const resolvedBorderColor =
-    borderColor ?? stationRgbValue(theme.pane.primary.inactive);
+  const resolvedBorderColor = borderColor ?? toOpenTuiColor(theme.pane.primary.inactive);
 
   return (
     <box

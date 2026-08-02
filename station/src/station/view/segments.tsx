@@ -3,7 +3,7 @@ import type { RowSegment } from "@station/dashboard-core";
 import stringWidth from "string-width";
 import { useHoverPointer } from "../../useHoverPointer.js";
 import { type StationMouseTarget } from "../input/stationMouse.js";
-import { rowColor, stationRgbValue, useStationTheme } from "../../theme/index.js";
+import { rowColor, toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { Throbber } from "./Throbber.js";
 import {
   useStationHoverEnabled,
@@ -40,10 +40,7 @@ export function SegmentLinkTargets({ segments }: { segments: readonly RowSegment
   return (
     <>
       {segmentLinks(segments).map((link, index) => (
-        <SegmentLinkTarget
-          key={`link:${link.url}:${link.left}:${index}`}
-          link={link}
-        />
+        <SegmentLinkTarget key={`link:${link.url}:${link.left}:${index}`} link={link} />
       ))}
     </>
   );
@@ -56,7 +53,7 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
   const { left, segment, url, width } = link;
   const attributes = textSegmentAttributes(segment);
   const color = rowColor(theme, segment.color);
-  const fg = color === undefined ? undefined : stationRgbValue(color);
+  const fg = color === undefined ? undefined : toOpenTuiColor(color);
   const target: StationMouseTarget = { kind: "link", url };
   return (
     <text
@@ -79,12 +76,12 @@ function Segment({ segment }: { segment: RowSegment }) {
   const theme = useStationTheme();
   if (segment.kind === "throbber") {
     const color = rowColor(theme, segment.color);
-    const fg = color === undefined ? undefined : stationRgbValue(color);
+    const fg = color === undefined ? undefined : toOpenTuiColor(color);
     return <Throbber variant={segment.variant} {...(fg === undefined ? {} : { fg })} />;
   }
   const attributes = textSegmentAttributes(segment);
   const color = rowColor(theme, segment.color);
-  const fg = color === undefined ? undefined : stationRgbValue(color);
+  const fg = color === undefined ? undefined : toOpenTuiColor(color);
   return (
     <span {...(fg === undefined ? {} : { fg })} attributes={attributes}>
       {segment.text}

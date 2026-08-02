@@ -13,7 +13,11 @@ import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../../theme/index.js";
 import { NewSessionSheetView } from "./NewSessionSheetView.js";
 
 const teardowns: Array<() => void> = [];
@@ -39,24 +43,22 @@ function snapshotWithCodexStatus(
   };
 }
 
-async function render(
-  snapshot: StationSnapshot,
-  state: NewSessionFlowState,
-  width = 80,
-) {
+async function render(snapshot: StationSnapshot, state: NewSessionFlowState, width = 80) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
-    <StationHoverProvider value>
-      <StationMouseProvider value={(target) => targets.push(target)}>
-        <NewSessionSheetView
-          snapshot={snapshot}
-          state={state}
-          selection={new Map()}
-          columns={width}
-          rows={24}
-        />
-      </StationMouseProvider>
-    </StationHoverProvider>,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationHoverProvider value>
+        <StationMouseProvider value={(target) => targets.push(target)}>
+          <NewSessionSheetView
+            snapshot={snapshot}
+            state={state}
+            selection={new Map()}
+            columns={width}
+            rows={24}
+          />
+        </StationMouseProvider>
+      </StationHoverProvider>
+    </StationThemeProvider>,
     { width, height: 24 },
   );
   teardowns.push(() => setup.renderer.destroy());
@@ -75,7 +77,7 @@ describe("NewSessionSheetView", () => {
     const shortcutCol = lines[projectRow]?.indexOf("P)") ?? -1;
     const shortcutSpan = spanAtFrameCell(setup.captureSpans(), projectRow, shortcutCol);
     expect(shortcutSpan?.fg === undefined ? undefined : rgbToHex(shortcutSpan.fg)).toBe(
-      stationRgbValue(nativeStationTheme.status.warning),
+      stationColorSnapshotValue(nativeStationTheme.status.warning),
     );
 
     const agentRow = lines.findIndex((line) => line.includes("Agent (A)"));
@@ -83,7 +85,7 @@ describe("NewSessionSheetView", () => {
     expect(lines[agentRow]).toContain("codex ● healthy");
     const healthSpan = spanAtFrameCell(setup.captureSpans(), agentRow, healthCol);
     expect(healthSpan?.fg === undefined ? undefined : rgbToHex(healthSpan.fg)).toBe(
-      stationRgbValue(nativeStationTheme.status.success),
+      stationColorSnapshotValue(nativeStationTheme.status.success),
     );
 
     const createRow = lines.findIndex((line) => line.includes("Create session (C)"));
@@ -154,8 +156,7 @@ describe("NewSessionSheetView", () => {
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
     expect(
       targets.some(
-        (target) =>
-          target.kind === "newSessionAction" && target.actionId === "review.create",
+        (target) => target.kind === "newSessionAction" && target.actionId === "review.create",
       ),
     ).toBe(false);
   });

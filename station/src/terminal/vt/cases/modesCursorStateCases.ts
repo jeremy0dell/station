@@ -1,4 +1,4 @@
-import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
+import { nativeStationTheme } from "../../../theme/index.js";
 import type { VtCase } from "./types.js";
 
 export const modesCursorStateCases: readonly VtCase[] = [
@@ -11,7 +11,7 @@ export const modesCursorStateCases: readonly VtCase[] = [
         {
           at: [1, 2],
           char: "X",
-          fg: stationRgbValue(nativeStationTheme.terminal.ansi16[1]),
+          fg: nativeStationTheme.terminal.ansi16[1].value,
         },
       ],
       cursor: { x: 3, y: 1 },

@@ -1,39 +1,24 @@
 import type { ProviderHealth } from "@station/contracts";
 import type { RowColor, ToastBorderColorName } from "@station/dashboard-core";
-import type { StationRgbColor, StationTheme } from "./types.js";
+import type { StationSemanticColor, StationTheme } from "./types.js";
 
 export { embeddedStationTheme, nativeStationTheme } from "./builtInTheme.js";
-export {
-  stationRgbValue,
-  toOpenTuiColor,
-  toOpenTuiOpaqueColor,
-} from "./openTuiColor.js";
-export {
-  EmbeddedStationThemeProvider,
-  NativeStationThemeProvider,
-  StationThemeProvider,
-  useStationTheme,
-} from "./themeContext.js";
-export {
-  alphaColor,
-  indexedColor,
-  rgbColor,
-  terminalDefaultColor,
-} from "./types.js";
+export { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
+export { StationThemeProvider, useStationTheme } from "./themeContext.js";
+export { rgbColor, stationColorSnapshotValue } from "./types.js";
 export type {
-  StationAlphaColor,
   StationColor,
-  StationIndexedColor,
-  StationOpaqueColor,
-  StationPaneAccent,
-  StationRgbColor,
-  StationTerminalDefaultColor,
+  StationForegroundColor,
+  StationSemanticColor,
   StationTerminalTheme,
   StationTheme,
 } from "./types.js";
 
 /** Resolves dashboard-core's renderer-neutral row label through semantic theme roles. */
-export function rowColor(theme: StationTheme, color: RowColor | undefined): StationRgbColor | undefined {
+export function rowColor(
+  theme: StationTheme,
+  color: RowColor | undefined,
+): StationSemanticColor | undefined {
   switch (color) {
     case undefined:
       return undefined;
@@ -58,7 +43,7 @@ export function rowColor(theme: StationTheme, color: RowColor | undefined): Stat
 export function toastBorderColor(
   theme: StationTheme,
   name: ToastBorderColorName,
-): StationRgbColor {
+): StationSemanticColor {
   switch (name) {
     case "red":
       return theme.status.danger;
@@ -73,12 +58,12 @@ export function toastBorderColor(
 export function providerHealthColor(
   theme: StationTheme,
   status: ProviderHealth["status"],
-): StationRgbColor;
+): StationSemanticColor;
 export function providerHealthColor(theme: StationTheme, status: undefined): undefined;
 export function providerHealthColor(
   theme: StationTheme,
   status: ProviderHealth["status"] | undefined,
-): StationRgbColor | undefined {
+): StationSemanticColor | undefined {
   switch (status) {
     case undefined:
       return undefined;

@@ -1,7 +1,7 @@
 // Render layer for the dashboard: one <text> per line, sized by the shared
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type ColorInput } from "@opentui/core";
 import type { ProjectView, StationSnapshot } from "@station/contracts";
 import {
   dashboardTableHeaderModel,
@@ -24,11 +24,7 @@ import {
   type DashboardViewportItem,
   type FleetSummary,
 } from "@station/dashboard-core";
-import type {
-  DashboardFocus,
-  ProjectHeaderControl,
-  TuiViewState,
-} from "@station/dashboard-core";
+import type { DashboardFocus, ProjectHeaderControl, TuiViewState } from "@station/dashboard-core";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import {
   DashboardScrollIndicatorView,
@@ -36,12 +32,8 @@ import {
 } from "./DashboardTableHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
-import { stationRgbValue, useStationTheme } from "../../theme/index.js";
-import {
-  useStationHoverState,
-  useStationMouse,
-  stationMouseProps,
-} from "./stationMouseContext.js";
+import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
+import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 // The project-header "open a shell here" click target stays in its own trailing
 // cell so stopPropagation can never also toggle the header.
@@ -71,10 +63,17 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
-  const keyByRow = new Map(viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]));
+  const keyByRow = new Map(
+    viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]),
+  );
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
-    : dashboardRowLayouts(viewport.visibleItems, keyByRow, contentColumns, viewState.dashboardFocus);
+    : dashboardRowLayouts(
+        viewport.visibleItems,
+        keyByRow,
+        contentColumns,
+        viewState.dashboardFocus,
+      );
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
     overflow: viewport.sessionOverflow,
@@ -113,7 +112,7 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
 
 export function Divider({ columns }: { columns: number }) {
   const theme = useStationTheme();
-  return <text fg={stationRgbValue(theme.text.muted)}>{"─".repeat(Math.max(1, columns))}</text>;
+  return <text fg={toOpenTuiColor(theme.text.muted)}>{"─".repeat(Math.max(1, columns))}</text>;
 }
 
 // Pinned fleet triage bar: glyph + colour reinforce each status lane. ready/
@@ -129,23 +128,39 @@ function FleetBar({
   columns: number;
 }) {
   const theme = useStationTheme();
-  const parts: { glyph: string; color: string; label: string; animate?: boolean }[] = [
-    { glyph: "●", color: stationRgbValue(theme.status.success), label: `${summary.ready} ready` },
+  const parts: { glyph: string; color: ColorInput; label: string; animate?: boolean }[] = [
+    { glyph: "●", color: toOpenTuiColor(theme.status.success), label: `${summary.ready} ready` },
     {
       glyph: "⠿",
-      color: stationRgbValue(theme.status.working),
+      color: toOpenTuiColor(theme.status.working),
       label: `${summary.working} working`,
       animate: summary.working > 0,
     },
-    { glyph: "!", color: stationRgbValue(theme.status.danger), label: `${summary.needsYou} needs you` },
+    {
+      glyph: "!",
+      color: toOpenTuiColor(theme.status.danger),
+      label: `${summary.needsYou} needs you`,
+    },
   ];
   if (summary.unknown > 0) {
-    parts.push({ glyph: "?", color: stationRgbValue(theme.status.warning), label: `${summary.unknown} unknown` });
+    parts.push({
+      glyph: "?",
+      color: toOpenTuiColor(theme.status.warning),
+      label: `${summary.unknown} unknown`,
+    });
   }
   if (summary.exited > 0) {
-    parts.push({ glyph: "x", color: stationRgbValue(theme.status.neutral), label: `${summary.exited} exited` });
+    parts.push({
+      glyph: "x",
+      color: toOpenTuiColor(theme.status.neutral),
+      label: `${summary.exited} exited`,
+    });
   }
-  parts.push({ glyph: "○", color: stationRgbValue(theme.status.neutral), label: `${summary.idle} idle` });
+  parts.push({
+    glyph: "○",
+    color: toOpenTuiColor(theme.status.neutral),
+    label: `${summary.idle} idle`,
+  });
   const lanesWidth =
     "FLEET".length + parts.reduce((total, part) => total + 3 + 1 + part.label.length, 0);
   const totals = fleetCountsLabel(
@@ -154,7 +169,7 @@ function FleetBar({
   );
   return (
     <box height={1} width="100%" flexDirection="row" overflow="hidden">
-      <text flexGrow={1} fg={stationRgbValue(theme.text.muted)}>
+      <text flexGrow={1} fg={toOpenTuiColor(theme.text.muted)}>
         <span attributes={TextAttributes.BOLD}>FLEET</span>
         {parts.map((part) => (
           <span key={part.label}>
@@ -168,7 +183,7 @@ function FleetBar({
           </span>
         ))}
       </text>
-      {totals.length > 0 ? <text fg={stationRgbValue(theme.text.muted)}>{totals}</text> : null}
+      {totals.length > 0 ? <text fg={toOpenTuiColor(theme.text.muted)}>{totals}</text> : null}
     </box>
   );
 }
@@ -207,12 +222,12 @@ function dashboardRowLayouts(
   });
   const headerLayout = layouts.find((layout) => layout.id === COLUMN_HEADER_ROW_ID);
   const layoutByItem = new Map(
-    layouts.filter((layout) => layout.id !== COLUMN_HEADER_ROW_ID).map((layout) => [layout.id, layout]),
+    layouts
+      .filter((layout) => layout.id !== COLUMN_HEADER_ROW_ID)
+      .map((layout) => [layout.id, layout]),
   );
   return { headerLayout, layoutByItem };
 }
-
-
 
 function DashboardBody({
   columns,
@@ -262,8 +277,7 @@ function DashboardViewportRow({
           project={item.project}
           collapsed={item.collapsed}
           focus={
-            dashboardFocus?.kind === "projectHeader" &&
-            dashboardFocus.projectId === item.project.id
+            dashboardFocus?.kind === "projectHeader" && dashboardFocus.projectId === item.project.id
               ? dashboardFocus.control
               : undefined
           }
@@ -272,7 +286,7 @@ function DashboardViewportRow({
     case "emptyProject":
       return (
         <box flexDirection="row" height={1}>
-          <text fg={stationRgbValue(theme.text.muted)}>{emptyProjectLabel()}</text>
+          <text fg={toOpenTuiColor(theme.text.muted)}>{emptyProjectLabel()}</text>
           <EmptySessionButton
             projectId={item.project.id}
             focused={
@@ -287,15 +301,13 @@ function DashboardViewportRow({
         <SessionRowLine
           rowId={item.row.id}
           layout={layout}
-          focused={
-            dashboardFocus?.kind === "session" && dashboardFocus.sessionId === item.row.id
-          }
+          focused={dashboardFocus?.kind === "session" && dashboardFocus.sessionId === item.row.id}
         />
       );
     case "createLocalRow":
       // Local create rows have no slot and no activation target.
       return layout === undefined ? null : (
-        <text fg={stationRgbValue(theme.text.primary)}>
+        <text fg={toOpenTuiColor(theme.text.primary)}>
           <Segments segments={layout.segments} />
         </text>
       );
@@ -316,16 +328,21 @@ function SessionRowLine({
   const [hover, setHover] = useStationHoverState();
   // Persistent cursor fill sits under the transient hover fill.
   const background = hover
-    ? { backgroundColor: stationRgbValue(theme.interaction.hover) }
+    ? { backgroundColor: toOpenTuiColor(theme.interaction.hover) }
     : focused === true
-      ? { backgroundColor: stationRgbValue(theme.interaction.keyboardFocus) }
+      ? { backgroundColor: toOpenTuiColor(theme.interaction.keyboardFocus) }
       : {};
   return (
     <box flexDirection="row" width="100%" height={1} {...background}>
-      <box flexGrow={1} height={1} onMouseOver={() => setHover(true)} onMouseOut={() => setHover(false)}>
+      <box
+        flexGrow={1}
+        height={1}
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+      >
         <text
           width="100%"
-          fg={stationRgbValue(theme.text.primary)}
+          fg={toOpenTuiColor(theme.text.primary)}
           {...stationMouseProps(dispatch, { kind: "row", rowId })}
         >
           <Segments segments={layout.segments} />
@@ -344,9 +361,9 @@ function FirstProjectButton({ columns }: { columns: number }) {
   return (
     <text
       flexShrink={0}
-      fg={stationRgbValue(hover ? theme.text.inverse : theme.action.primary)}
+      fg={toOpenTuiColor(hover ? theme.text.inverse : theme.action.primary)}
       attributes={TextAttributes.BOLD}
-      {...(hover ? { bg: stationRgbValue(theme.action.primary) } : {})}
+      {...(hover ? { bg: toOpenTuiColor(theme.action.primary) } : {})}
       {...stationMouseProps(dispatch, { kind: "firstProjectAdd" })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -364,14 +381,14 @@ function EmptySessionButton({ projectId, focused }: { projectId: string; focused
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const background = hover
-    ? { bg: stationRgbValue(theme.action.primary) }
+    ? { bg: toOpenTuiColor(theme.action.primary) }
     : focused
-      ? { bg: stationRgbValue(theme.interaction.compactFocus) }
+      ? { bg: toOpenTuiColor(theme.interaction.compactFocus) }
       : {};
   return (
     <text
       flexShrink={0}
-      fg={stationRgbValue(hover ? theme.text.inverse : theme.action.primary)}
+      fg={toOpenTuiColor(hover ? theme.text.inverse : theme.action.primary)}
       {...background}
       {...stationMouseProps(dispatch, { kind: "emptyProjectAction", projectId })}
       onMouseOver={() => setHover(true)}
@@ -449,14 +466,14 @@ function ProjectHeaderPrimary({
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const background = hover
-    ? { bg: stationRgbValue(theme.interaction.hover) }
+    ? { bg: toOpenTuiColor(theme.interaction.hover) }
     : focused
-      ? { bg: stationRgbValue(theme.interaction.compactFocus) }
+      ? { bg: toOpenTuiColor(theme.interaction.compactFocus) }
       : {};
   return (
     <text
       flexShrink={0}
-      fg={stationRgbValue(theme.text.primary)}
+      fg={toOpenTuiColor(theme.text.primary)}
       {...background}
       {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
       onMouseOver={() => setHover(true)}
@@ -480,14 +497,14 @@ function ProjectHeaderActionSegment({
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const background = hover
-    ? { bg: stationRgbValue(theme.interaction.hover) }
+    ? { bg: toOpenTuiColor(theme.interaction.hover) }
     : focused
-      ? { bg: stationRgbValue(theme.interaction.compactFocus) }
+      ? { bg: toOpenTuiColor(theme.interaction.compactFocus) }
       : {};
   return (
     <text
       flexShrink={0}
-      fg={stationRgbValue(hover ? theme.status.success : theme.text.muted)}
+      fg={toOpenTuiColor(hover ? theme.status.success : theme.text.muted)}
       {...background}
       {...stationMouseProps(dispatch, target)}
       onMouseOver={() => setHover(true)}
@@ -501,7 +518,7 @@ function ProjectHeaderActionSegment({
 function ProjectHeaderSeparator() {
   const theme = useStationTheme();
   return (
-    <text flexShrink={0} fg={stationRgbValue(theme.text.muted)}>
+    <text flexShrink={0} fg={toOpenTuiColor(theme.text.muted)}>
       {" "}
     </text>
   );
@@ -524,7 +541,7 @@ function ProjectHeaderLabel({
   return (
     <>
       <span attributes={TextAttributes.BOLD}>{title}</span>
-      <span fg={stationRgbValue(theme.text.muted)}>{counts}</span>
+      <span fg={toOpenTuiColor(theme.text.muted)}>{counts}</span>
     </>
   );
 }

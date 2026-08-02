@@ -13,7 +13,7 @@ import { buildMouseReportSequence } from "./input/mouseReport.js";
 import { type MouseButtonName, MouseTracking } from "./protocol/mouse.js";
 import type { VtRow } from "./vt/rows.js";
 import type { MouseProtocol, StationVtScreen } from "./vt/screen.js";
-import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
+import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
 import {
   type CellPoint,
   type CellSelection,
@@ -160,7 +160,11 @@ export class TerminalScreenRenderable extends Renderable {
     // (DECSET 1003). Selection never used motion, so this is purely additive.
     // Shift/Ctrl stay reserved for the outer terminal's own selection.
     if (event.type === "move") {
-      if (protocol?.tracking === MouseTracking.Any && !event.modifiers.shift && !event.modifiers.ctrl) {
+      if (
+        protocol?.tracking === MouseTracking.Any &&
+        !event.modifiers.shift &&
+        !event.modifiers.ctrl
+      ) {
         this.#forwardPointer(protocol, "motion", local, event.modifiers);
       }
       return;
@@ -452,10 +456,8 @@ export class TerminalScreenRenderable extends Renderable {
       this.#rowsVersion = version;
     }
 
-    const defaultFg = rgbaForHex(
-      stationRgbValue(nativeStationTheme.terminal.defaultForeground),
-    );
-    const selectionBg = rgbaForHex(stationRgbValue(nativeStationTheme.pane.selection));
+    const defaultFg = rgbaForHex(nativeStationTheme.terminal.defaultForeground.value);
+    const selectionBg = rgbaForHex(stationColorSnapshotValue(nativeStationTheme.pane.selection));
     // Order the selection once per frame, not once per row.
     const orderedSelection = this.#selection === null ? null : orderSelection(this.#selection);
     const rowLimit = Math.min(this.#rows.length, this.height);

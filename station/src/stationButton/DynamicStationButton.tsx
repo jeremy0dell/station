@@ -7,9 +7,14 @@ import {
   type StationMouseEvent,
 } from "../input/mouse.js";
 import { useHoverPointer } from "../useHoverPointer.js";
-import { stationRgbValue, toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
+import {
+  toOpenTuiColor,
+  toOpenTuiOpaqueColor,
+  useStationTheme,
+  type StationColor,
+} from "../theme/index.js";
 import { Throbber } from "../station/view/Throbber.js";
-import { lerpColor, type StationButtonStateColors, stationButtonColors } from "./colors.js";
+import { type StationButtonStateColors, stationButtonColors, tweenStationColor } from "./colors.js";
 import type { ProjectRollupEntry, ProjectRollupStatus } from "./status.js";
 import {
   ATTENTION_MARK,
@@ -78,11 +83,11 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
   // the background while collapsed marks/icon stay fully visible.
   const from = stationButtonColors(theme, attention, false);
   const to = stationButtonColors(theme, attention, true);
-  const border = lerpColor(from.border, to.border, open);
-  const icon = lerpColor(from.icon, to.icon, open);
+  const border = tweenStationColor(from.border, to.border, open);
+  const icon = tweenStationColor(from.icon, to.icon, open);
   const color: StationButtonStateColors = expanded
     ? { border, icon, text: to.text }
-    : { border, icon, text: lerpColor(from.text, to.text, open) };
+    : { border, icon, text: tweenStationColor(from.text, to.text, open) };
 
   // The icon rests at its collapsed spot (base: centered; alert: the "!" frame's
   // center, mid-row) and glides to the top-left (0,0) as the card opens — a
@@ -119,7 +124,7 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
       height={dims.height}
       border
       borderStyle="rounded"
-      borderColor={color.border}
+      borderColor={toOpenTuiColor(color.border)}
       flexDirection="column"
       // Opaque in every state so the resize transition never flashes panes through it.
       backgroundColor={toOpenTuiOpaqueColor(theme.island.background)}
@@ -164,11 +169,7 @@ function StationButtonContent(props: {
       return <CollapsedAttention color={color} />;
     case "counts":
       return (
-        <CollapsedCounts
-          iconColor={color.icon}
-          working={display.working}
-          ready={display.ready}
-        />
+        <CollapsedCounts iconColor={color.icon} working={display.working} ready={display.ready} />
       );
     case "celebration":
       return (
@@ -213,10 +214,10 @@ function StationButtonContent(props: {
   }
 }
 
-function IconGlyph({ color }: { color: string }): ReactNode {
+function IconGlyph({ color }: { color: StationColor }): ReactNode {
   return (
     <box width={ICON_COLS}>
-      <text fg={color}>{STATION_ICON}</text>
+      <text fg={toOpenTuiColor(color)}>{STATION_ICON}</text>
     </box>
   );
 }
@@ -226,7 +227,7 @@ function IconRow({
   padX,
   padY,
 }: {
-  color: string;
+  color: StationColor;
   padX: number;
   padY: number;
 }): ReactNode {
@@ -244,11 +245,11 @@ function GradientText({
 }: {
   text: string;
   reveal: number;
-  color: string;
+  color: StationColor;
 }): ReactNode {
   const theme = useStationTheme();
   if (reveal >= 1) {
-    return <text fg={color}>{text}</text>;
+    return <text fg={toOpenTuiColor(color)}>{text}</text>;
   }
   const front = reveal * (text.length + GRADIENT_EDGE);
   return (
@@ -257,10 +258,7 @@ function GradientText({
         const local = Math.min(1, Math.max(0, (front - i) / GRADIENT_EDGE));
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length static string
-          <text
-            key={i}
-            fg={lerpColor(stationRgbValue(theme.text.inverse), color, local)}
-          >
+          <text key={i} fg={toOpenTuiColor(tweenStationColor(theme.text.inverse, color, local))}>
             {char}
           </text>
         );
@@ -286,22 +284,22 @@ function CollapsedAttention({ color }: { color: StationButtonStateColors }): Rea
   const markRow = ATTENTION_MARK.repeat(COLLAPSED_ATTENTION_COLS - 2);
   return (
     <box flexDirection="column">
-      <text fg={color.text}>{markRow}</text>
+      <text fg={toOpenTuiColor(color.text)}>{markRow}</text>
       <box flexDirection="row">
-        <text fg={color.text}>{ATTENTION_MARK}</text>
+        <text fg={toOpenTuiColor(color.text)}>{ATTENTION_MARK}</text>
         <box flexGrow={1} alignItems="center" justifyContent="center">
           <IconGlyph color={color.icon} />
         </box>
-        <text fg={color.text}>{ATTENTION_MARK}</text>
+        <text fg={toOpenTuiColor(color.text)}>{ATTENTION_MARK}</text>
       </box>
-      <text fg={color.text}>{markRow}</text>
+      <text fg={toOpenTuiColor(color.text)}>{markRow}</text>
     </box>
   );
 }
 
 // Collapsed fleet counts show only active lanes: braille working and ● ready.
 function CollapsedCounts(props: {
-  iconColor: string;
+  iconColor: StationColor;
   working: number;
   ready: number;
 }): ReactNode {
@@ -313,13 +311,13 @@ function CollapsedCounts(props: {
         <span> </span>
         {props.working > 0 ? (
           <>
-            <Throbber variant="braille" fg={stationRgbValue(theme.status.working)} />
-            <span fg={stationRgbValue(theme.status.working)}>{paintedCount(props.working)}</span>
+            <Throbber variant="braille" fg={toOpenTuiColor(theme.status.working)} />
+            <span fg={toOpenTuiColor(theme.status.working)}>{paintedCount(props.working)}</span>
           </>
         ) : null}
         {props.working > 0 && props.ready > 0 ? <span> </span> : null}
         {props.ready > 0 ? (
-          <span fg={stationRgbValue(theme.status.success)}>{`●${paintedCount(props.ready)}`}</span>
+          <span fg={toOpenTuiColor(theme.status.success)}>{`●${paintedCount(props.ready)}`}</span>
         ) : null}
       </text>
     </box>
@@ -336,15 +334,11 @@ function CollapsedCelebration({
   reveal: number;
 }): ReactNode {
   const theme = useStationTheme();
-  const success = stationRgbValue(theme.status.success);
+  const success = theme.status.success;
   return (
     <box flexDirection="row" paddingLeft={ICON_PAD}>
-      <IconGlyph color={lerpColor(color.icon, success, reveal)} />
-      <GradientText
-        text={` ${celebrationText(celebration)}`}
-        reveal={reveal}
-        color={success}
-      />
+      <IconGlyph color={tweenStationColor(color.icon, success, reveal)} />
+      <GradientText text={` ${celebrationText(celebration)}`} reveal={reveal} color={success} />
     </box>
   );
 }
@@ -382,7 +376,7 @@ function RollupGlyph({ status }: { status: ProjectRollupStatus }): ReactNode {
   if (status === "working") {
     return (
       <text>
-        <Throbber variant="braille" fg={stationRgbValue(theme.status.working)} />
+        <Throbber variant="braille" fg={toOpenTuiColor(theme.status.working)} />
         <span> </span>
       </text>
     );
@@ -393,7 +387,7 @@ function RollupGlyph({ status }: { status: ProjectRollupStatus }): ReactNode {
       : status === "ready"
         ? { glyph: "●", color: theme.status.success }
         : { glyph: "○", color: theme.status.neutral };
-  return <text fg={stationRgbValue(mark.color)}>{`${mark.glyph} `}</text>;
+  return <text fg={toOpenTuiColor(mark.color)}>{`${mark.glyph} `}</text>;
 }
 
 function ExpandedRollup(props: {
@@ -443,12 +437,7 @@ function ExpandedAttention(props: {
           color={color.text}
         />
         {attentionLines(props.needsYouCount).map((line) => (
-          <GradientText
-            key={line}
-            text={line}
-            reveal={reveal}
-            color={color.text}
-          />
+          <GradientText key={line} text={line} reveal={reveal} color={color.text} />
         ))}
       </box>
     </box>
@@ -468,10 +457,7 @@ function useButtonTransition(input: IslandDisplayInput, expanded: boolean): Butt
   const collapsedDisplay = islandDisplay(input, false);
   const celebrationPaintEligible =
     !expanded && open === 0 && collapsedDisplay.kind === "celebration";
-  const tweenedCelebration = useTweenedOptionalValue(
-    input.celebration,
-    celebrationPaintEligible,
-  );
+  const tweenedCelebration = useTweenedOptionalValue(input.celebration, celebrationPaintEligible);
   const collapsed = collapsedButtonState(
     input,
     tweenedCelebration.value,

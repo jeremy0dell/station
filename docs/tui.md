@@ -253,8 +253,8 @@ session row or empty-project action is inert. Remove, rename, and fork row choos
 session-only traversal, as do slot keys and next-needs-me. `N` continues to open the session flow
 without changing dashboard focus. Gaps and optimistic create rows remain non-focusable.
 
-Focused compact controls use the stronger bounded fill from
-`STATION_COLORS.compactFocusBackground`. A project header's primary segment covers the rendered
+Focused compact controls use the canonical theme's stronger bounded
+`interaction.compactFocus` fill. A project header's primary segment covers the rendered
 disclosure/name/summary text without painting flexible trailing whitespace, while each trailing
 control owns exactly its label cells and separator spaces remain inert. An empty project's fill and
 pointer target cover only `[ + add session ]`; its explanatory text and surrounding whitespace

@@ -36,7 +36,7 @@ import { openExternalUrl } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
-import { NativeStationThemeProvider } from "./theme/index.js";
+import { nativeStationTheme, StationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
 
 export type RunStationMainOptions = {
@@ -71,8 +71,7 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     process.exitCode = 1;
     return;
   }
-  const ttyOwnership =
-    ownershipResult.kind === "owned" ? ownershipResult.ownership : undefined;
+  const ttyOwnership = ownershipResult.kind === "owned" ? ownershipResult.ownership : undefined;
   try {
     const started = await startStationMain(options, ttyOwnership);
     if (!started) {
@@ -307,9 +306,9 @@ async function startStationMain(
     : undefined;
   station.start();
   const stationApp = (
-    <NativeStationThemeProvider>
+    <StationThemeProvider theme={nativeStationTheme}>
       <StationApp {...station.viewProps} />
-    </NativeStationThemeProvider>
+    </StationThemeProvider>
   );
   root.render(
     onRenderProfile ? (

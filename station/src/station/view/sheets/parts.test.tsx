@@ -6,7 +6,11 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../../theme/index.js";
 import {
   responsiveSheetFooterText,
   responsiveSheetText,
@@ -42,11 +46,13 @@ function button(
 async function render(buttons: readonly SheetButtonSpec[], width = 40) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
-    <StationHoverProvider value>
-      <StationMouseProvider value={(target) => targets.push(target)}>
-        <SheetButtonRow width={width} buttons={buttons} />
-      </StationMouseProvider>
-    </StationHoverProvider>,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationHoverProvider value>
+        <StationMouseProvider value={(target) => targets.push(target)}>
+          <SheetButtonRow width={width} buttons={buttons} />
+        </StationMouseProvider>
+      </StationHoverProvider>
+    </StationThemeProvider>,
     { width, height: 2 },
   );
   teardowns.push(() => setup.renderer.destroy());
@@ -62,9 +68,7 @@ describe("SheetButtonRow", () => {
     expect(line.slice(10).trim()).toBe("");
 
     await setup.mockMouse.click(2, 0, MouseButtons.LEFT);
-    expect(targets).toEqual([
-      { kind: "removeWorktreeAction", actionId: "confirm.delete" },
-    ]);
+    expect(targets).toEqual([{ kind: "removeWorktreeAction", actionId: "confirm.delete" }]);
     await setup.mockMouse.click(30, 0, MouseButtons.LEFT);
     expect(targets).toHaveLength(1);
   });
@@ -86,10 +90,7 @@ describe("SheetButtonRow", () => {
   });
 
   it("uses compact equal-width controls only when the natural group cannot fit", async () => {
-    const { setup, targets } = await render(
-      [button("Save", "y"), button("Back", "n")],
-      12,
-    );
+    const { setup, targets } = await render([button("Save", "y"), button("Back", "n")], 12);
     expect(setup.captureCharFrame().split("\n")[0]).toBe("  Save  Back");
 
     await setup.mockMouse.click(2, 0, MouseButtons.LEFT);
@@ -116,9 +117,11 @@ describe("SheetButtonRow", () => {
 
     const inside = spanAtFrameCell(setup.captureSpans(), 0, 2);
     const trailing = spanAtFrameCell(setup.captureSpans(), 0, 20);
-    expect(inside?.bg === undefined ? undefined : rgbToHex(inside.bg)).toBe(stationRgbValue(nativeStationTheme.action.primary));
+    expect(inside?.bg === undefined ? undefined : rgbToHex(inside.bg)).toBe(
+      stationColorSnapshotValue(nativeStationTheme.action.primary),
+    );
     expect(trailing?.bg === undefined ? undefined : rgbToHex(trailing.bg)).not.toBe(
-      stationRgbValue(nativeStationTheme.action.primary),
+      stationColorSnapshotValue(nativeStationTheme.action.primary),
     );
   });
 });

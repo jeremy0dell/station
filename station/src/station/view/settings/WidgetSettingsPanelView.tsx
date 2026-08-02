@@ -8,11 +8,7 @@ import {
 } from "@station/dashboard-core";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { fit } from "../sheets/parts.js";
-import {
-  stationRgbValue,
-  toOpenTuiOpaqueColor,
-  useStationTheme,
-} from "../../../theme/index.js";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import {
   stationMouseProps,
   useStationHoverState,
@@ -54,20 +50,20 @@ export function WidgetSettingsPanelView({
       height={height}
       zIndex={10}
       border
-      borderColor={stationRgbValue(theme.interaction.hairline)}
+      borderColor={toOpenTuiColor(theme.interaction.hairline)}
       backgroundColor={surfaceBackground}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
       <text
-        fg={stationRgbValue(theme.text.primary)}
+        fg={toOpenTuiColor(theme.text.primary)}
         bg={surfaceBackground}
         attributes={TextAttributes.BOLD}
         {...UNSELECTABLE_TEXT}
       >
         {fit(` ${model.title}`, innerWidth)}
       </text>
-      <text fg={stationRgbValue(theme.text.muted)} bg={surfaceBackground} {...UNSELECTABLE_TEXT}>
+      <text fg={toOpenTuiColor(theme.text.muted)} bg={surfaceBackground} {...UNSELECTABLE_TEXT}>
         {fit(` ${model.note}`, innerWidth)}
       </text>
       {model.lines.map((line) => (
@@ -80,7 +76,7 @@ export function WidgetSettingsPanelView({
         />
       ))}
       <text
-        fg={stationRgbValue(theme.text.primary)}
+        fg={toOpenTuiColor(theme.text.primary)}
         bg={surfaceBackground}
         attributes={TextAttributes.DIM}
         {...UNSELECTABLE_TEXT}
@@ -117,7 +113,7 @@ function PanelLine({
   const [hover, setHover] = useStationHoverState();
   if (line.kind === "empty") {
     return (
-      <text fg={stationRgbValue(theme.text.muted)} bg={surfaceBackground} {...UNSELECTABLE_TEXT}>
+      <text fg={toOpenTuiColor(theme.text.muted)} bg={surfaceBackground} {...UNSELECTABLE_TEXT}>
         {fit(`   ${line.label}`, width)}
       </text>
     );
@@ -125,8 +121,8 @@ function PanelLine({
   if (line.kind === "add") {
     return (
       <text
-        fg={stationRgbValue(theme.action.primary)}
-        bg={hover ? stationRgbValue(theme.interaction.hover) : surfaceBackground}
+        fg={toOpenTuiColor(theme.action.primary)}
+        bg={hover ? toOpenTuiColor(theme.interaction.hover) : surfaceBackground}
         {...UNSELECTABLE_TEXT}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsAdd" })}
         onMouseOver={() => setHover(true)}
@@ -139,14 +135,14 @@ function PanelLine({
   if (line.kind === "pickerChoice") {
     let background: ColorInput = surfaceBackground;
     if (line.active) {
-      background = stationRgbValue(theme.interaction.keyboardFocus);
+      background = toOpenTuiColor(theme.interaction.keyboardFocus);
     }
     if (hover) {
-      background = stationRgbValue(theme.interaction.hover);
+      background = toOpenTuiColor(theme.interaction.hover);
     }
     return (
       <text
-        fg={stationRgbValue(line.active ? theme.action.primary : theme.text.primary)}
+        fg={toOpenTuiColor(line.active ? theme.action.primary : theme.text.primary)}
         bg={background}
         {...UNSELECTABLE_TEXT}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsPickerChoice", index: line.index })}
@@ -161,17 +157,17 @@ function PanelLine({
   const dimmed = focus === "picker";
   const chip = line.enabled ? "[on ]" : "[off]";
   const marker = line.active && !dimmed ? "▸" : " ";
-  let rowColor: string = stationRgbValue(theme.text.muted);
+  let rowColor: ColorInput = toOpenTuiColor(theme.text.muted);
   if (!dimmed && line.active) {
-    rowColor = stationRgbValue(theme.action.primary);
+    rowColor = toOpenTuiColor(theme.action.primary);
   } else if (!dimmed && line.enabled) {
-    rowColor = stationRgbValue(theme.text.primary);
+    rowColor = toOpenTuiColor(theme.text.primary);
   }
   return (
     <box flexDirection="row">
       <text
         fg={rowColor}
-        bg={hover && !dimmed ? stationRgbValue(theme.interaction.hover) : surfaceBackground}
+        bg={hover && !dimmed ? toOpenTuiColor(theme.interaction.hover) : surfaceBackground}
         {...UNSELECTABLE_TEXT}
         {...stationMouseProps(dispatch, { kind: "widgetSettingsRow", index: line.index })}
         onMouseOver={() => setHover(true)}
@@ -208,7 +204,7 @@ function RemoveMark({
       : theme.interaction.hairline;
   return (
     <text
-      fg={stationRgbValue(color)}
+      fg={toOpenTuiColor(color)}
       bg={surfaceBackground}
       {...UNSELECTABLE_TEXT}
       {...stationMouseProps(dispatch, { kind: "widgetSettingsRemove", index })}

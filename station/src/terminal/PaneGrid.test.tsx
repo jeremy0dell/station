@@ -6,7 +6,11 @@ import type { MouseTargetRef } from "../input/router.js";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import { PaneGrid } from "./PaneGrid.js";
-import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../theme/index.js";
 import { PaneRegistryProvider } from "./registry/paneTerminalContext.js";
 import { createPtyRegistry } from "./registry/ptyRegistry.js";
 import { spanAtFrameCell } from "./testing/frameProbe.js";
@@ -17,8 +21,8 @@ import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 
 const SURFACE = { width: 40, height: 12 };
-const PRIMARY_BORDER_ACTIVE = stationRgbValue(nativeStationTheme.pane.primary.active);
-const PRIMARY_BORDER_INACTIVE = stationRgbValue(nativeStationTheme.pane.primary.inactive);
+const PRIMARY_BORDER_ACTIVE = stationColorSnapshotValue(nativeStationTheme.pane.primary.active);
+const PRIMARY_BORDER_INACTIVE = stationColorSnapshotValue(nativeStationTheme.pane.primary.inactive);
 // One pane filling the surface: TerminalPane border + padding eat 2 cells each side.
 const FULL_INTERIOR = { cols: SURFACE.width - 4, rows: SURFACE.height - 4 };
 
@@ -50,13 +54,15 @@ describe("PaneGrid", () => {
         : undefined;
     const dispatchMouse = (_target: MouseTargetRef, _event: StationMouseEvent): boolean => true;
     const setup = await testRender(
-      <PaneRegistryProvider registry={registry}>
-        <PaneGrid
-          store={store}
-          {...(stationViewStore === undefined ? {} : { stationViewStore })}
-          dispatchMouse={dispatchMouse}
-        />
-      </PaneRegistryProvider>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <PaneRegistryProvider registry={registry}>
+          <PaneGrid
+            store={store}
+            {...(stationViewStore === undefined ? {} : { stationViewStore })}
+            dispatchMouse={dispatchMouse}
+          />
+        </PaneRegistryProvider>
+      </StationThemeProvider>,
       SURFACE,
     );
     teardowns.push(() => {
@@ -129,7 +135,10 @@ describe("PaneGrid", () => {
     });
     await pumpUntil(setup, () => registry.get("pane-split-0")?.terminal != null);
     store.actions.closePane("pane-split-0");
-    await pumpUntil(setup, () => !store.getState().workspace.panes.some((p) => p.id === "pane-split-0"));
+    await pumpUntil(
+      setup,
+      () => !store.getState().workspace.panes.some((p) => p.id === "pane-split-0"),
+    );
 
     // The reshape remounted main's TerminalPane, but the registry — not the
     // component — owns the PTY, so it is never disposed.

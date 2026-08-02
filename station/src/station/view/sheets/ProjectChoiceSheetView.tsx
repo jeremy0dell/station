@@ -4,11 +4,7 @@ import {
   selectProjectChooserChoices,
   type TuiSelectionState,
 } from "@station/dashboard-core";
-import {
-  providerHealthColor,
-  stationRgbValue,
-  useStationTheme,
-} from "../../../theme/index.js";
+import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetChoiceLine, SheetFooter, SheetLine } from "./parts.js";
 
@@ -48,7 +44,12 @@ export function ProjectChoiceSheetView({
   const start = Math.max(0, Math.min(selectedIndex, choices.length - listHeight));
   const visible = choices.slice(start, start + listHeight);
   return (
-    <BottomSheetFrameView columns={columns} rows={rows} title={TITLE[mode]} contentRows={visible.length + 4}>
+    <BottomSheetFrameView
+      columns={columns}
+      rows={rows}
+      title={TITLE[mode]}
+      contentRows={visible.length + 4}
+    >
       <SheetLine width={width}> </SheetLine>
       {visible.map((choice) => (
         <SheetChoiceLine
@@ -56,7 +57,7 @@ export function ProjectChoiceSheetView({
           choiceKey={choice.key}
           label={choice.value.label}
           detail={choice.value.health.status}
-          color={stationRgbValue(providerHealthColor(theme, choice.value.health.status))}
+          color={providerHealthColor(theme, choice.value.health.status)}
           width={width}
           selected={choice.value.id === selectedId}
         />

@@ -21,11 +21,7 @@ import {
   type MouseTrackingValue,
 } from "../protocol/mouse.js";
 import type { StationTerminalSize } from "../types.js";
-import {
-  nativeStationTheme,
-  stationRgbValue,
-  type StationTerminalTheme,
-} from "../../theme/index.js";
+import { nativeStationTheme, type StationTerminalTheme } from "../../theme/index.js";
 import { buildVtPalette256 } from "./palette.js";
 import { buildVisibleRows, type VtRow } from "./rows.js";
 
@@ -217,9 +213,9 @@ export type StationVtScreen = {
 
 export function createStationVtScreen(options: StationVtScreenOptions): StationVtScreen {
   const theme = options.theme ?? nativeStationTheme.terminal;
-  const palette = buildVtPalette256(theme.ansi16.map(stationRgbValue));
-  const defaultForeground = stationRgbValue(theme.defaultForeground);
-  const defaultBackground = stationRgbValue(theme.defaultBackground);
+  const palette = buildVtPalette256(theme.ansi16.map((color) => color.value));
+  const defaultForeground = theme.defaultForeground.value;
+  const defaultBackground = theme.defaultBackground.value;
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const syncHoldMaxMs = options.syncHoldMaxMs ?? SYNC_OUTPUT_HOLD_MAX_MS;
   const requestedScrollback = options.scrollback ?? DEFAULT_SCROLLBACK_LINES;
@@ -448,8 +444,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   });
   terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) => {
     const isNormalBufferFullScreenErase =
-      params[0] === EraseInDisplayMode.EntireDisplay &&
-      terminal.buffer.active.type === "normal";
+      params[0] === EraseInDisplayMode.EntireDisplay && terminal.buffer.active.type === "normal";
     const isSynchronizedFullScreenErase =
       isNormalBufferFullScreenErase && terminal.modes.synchronizedOutputMode;
     // Archive the transition into an app-owned screen, not its subsequent repaint frames.

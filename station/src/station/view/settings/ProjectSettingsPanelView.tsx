@@ -26,11 +26,7 @@ import {
   useStationMouse,
   stationMouseProps,
 } from "../stationMouseContext.js";
-import {
-  stationRgbValue,
-  toOpenTuiOpaqueColor,
-  useStationTheme,
-} from "../../../theme/index.js";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 
 type ProjectSettingsScreen = Extract<TuiScreen, { name: "projectSettings" }>;
 
@@ -77,12 +73,14 @@ export function ProjectSettingsPanelView({
       height={height}
       zIndex={10}
       border
-      borderColor={stationRgbValue(theme.interaction.hairline)}
+      borderColor={toOpenTuiColor(theme.interaction.hairline)}
       backgroundColor={surfaceBackground}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.BOLD}>{fit(` ${title}`, innerWidth)}</text>
+      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
+        {fit(` ${title}`, innerWidth)}
+      </text>
       <box flexDirection="row" width={innerWidth} height={contentHeight}>
         <box flexDirection="column" width={leftWidth}>
           <ItemList
@@ -100,11 +98,15 @@ export function ProjectSettingsPanelView({
             width={rightWidth}
             focused={screen.focus === "detail"}
             localRows={localRows}
-            selectedAgentId={selection.get(PROJECT_SETTINGS_AGENT_LIST_ID) as ProviderId | undefined}
+            selectedAgentId={
+              selection.get(PROJECT_SETTINGS_AGENT_LIST_ID) as ProviderId | undefined
+            }
           />
         </box>
       </box>
-      <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(` ${footer}`, innerWidth)}</text>
+      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
+        {fit(` ${footer}`, innerWidth)}
+      </text>
     </box>
   );
 }
@@ -149,8 +151,8 @@ function SettingsItemRow({
   const [hover, setHover] = useStationHoverState();
   return (
     <text
-      fg={stationRgbValue(active ? theme.action.primary : theme.text.primary)}
-      {...(hover ? { bg: stationRgbValue(theme.interaction.hover) } : {})}
+      fg={toOpenTuiColor(active ? theme.action.primary : theme.text.primary)}
+      {...(hover ? { bg: toOpenTuiColor(theme.interaction.hover) } : {})}
       {...stationMouseProps(dispatch, { kind: "projectSettingsItem", itemId: item.id })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -214,7 +216,9 @@ function AgentDetail({
     <>
       <PaneHeader label="Default agent" width={width} focused={focused} />
       {choices.length === 0 ? (
-        <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(" No agents available", width)}</text>
+        <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
+          {fit(" No agents available", width)}
+        </text>
       ) : (
         <>
           <AgentChoiceListView
@@ -225,7 +229,9 @@ function AgentDetail({
             pending={currentDefault?.pending ?? false}
           />
           <SheetLine width={width}> </SheetLine>
-          <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(" ✓ current · ↑↓ ↵ · 1-9/a-z", width)}</text>
+          <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
+            {fit(" ✓ current · ↑↓ ↵ · 1-9/a-z", width)}
+          </text>
         </>
       )}
     </>
@@ -247,11 +253,15 @@ function RemoveDetail({
   return (
     <>
       <PaneHeader label="Remove project" width={width} focused={focused} danger />
-      <text fg={stationRgbValue(theme.text.primary)}>{fit(" Removes it from Station.", width)}</text>
-      <text fg={stationRgbValue(theme.text.primary)}>{fit(" Worktrees & files stay on disk.", width)}</text>
+      <text fg={toOpenTuiColor(theme.text.primary)}>{fit(" Removes it from Station.", width)}</text>
+      <text fg={toOpenTuiColor(theme.text.primary)}>
+        {fit(" Worktrees & files stay on disk.", width)}
+      </text>
       <SheetLine width={width}> </SheetLine>
-      <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(` Type "${phrase}" to confirm`, width)}</text>
-      <text fg={stationRgbValue(theme.text.primary)}>
+      <text fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
+        {fit(` Type "${phrase}" to confirm`, width)}
+      </text>
+      <text fg={toOpenTuiColor(theme.text.primary)}>
         {" ▸ "}
         <EditableTextInputView {...screen.removeDraft} placeholder={phrase} />
       </text>
@@ -274,13 +284,13 @@ function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
   const label = "[ Remove project (R) ]".slice(0, Math.max(0, width - 1));
   return (
     <box flexDirection="row">
-      <text>{" "}</text>
+      <text> </text>
       <text
-        fg={stationRgbValue(
+        fg={toOpenTuiColor(
           hot ? theme.text.inverse : armed ? theme.status.danger : theme.text.muted,
         )}
         attributes={armed ? TextAttributes.BOLD : TextAttributes.DIM}
-        {...(hot ? { bg: stationRgbValue(theme.status.danger) } : {})}
+        {...(hot ? { bg: toOpenTuiColor(theme.status.danger) } : {})}
         {...stationMouseProps(dispatch, { kind: "projectSettingsConfirmRemove" })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -310,8 +320,8 @@ function PaneHeader({
   if (focused) {
     return (
       <text
-        fg={stationRgbValue(theme.text.inverse)}
-        bg={stationRgbValue(accent)}
+        fg={toOpenTuiColor(theme.text.inverse)}
+        bg={toOpenTuiColor(accent)}
         attributes={TextAttributes.BOLD}
       >
         {fit(` ${label}`, width)}
@@ -320,7 +330,7 @@ function PaneHeader({
   }
   return (
     <text
-      fg={stationRgbValue(danger ? theme.status.danger : theme.text.primary)}
+      fg={toOpenTuiColor(danger ? theme.status.danger : theme.text.primary)}
       attributes={TextAttributes.BOLD}
     >
       {fit(` ${label}`, width)}
@@ -335,7 +345,7 @@ function VerticalDivider({ height }: { height: number }) {
   return (
     <box flexDirection="column" width={1}>
       {Array.from({ length: height }, (_, row) => (
-        <text key={row} fg={stationRgbValue(theme.text.muted)}>
+        <text key={row} fg={toOpenTuiColor(theme.text.muted)}>
           │
         </text>
       ))}

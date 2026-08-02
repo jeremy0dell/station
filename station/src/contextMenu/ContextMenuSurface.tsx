@@ -67,7 +67,7 @@ export function ContextMenuSurface({
             key={item.id}
             width="100%"
             height={1}
-            backgroundColor={toOpenTuiColor(
+            backgroundColor={toOpenTuiOpaqueColor(
               active ? theme.contextMenu.selected : theme.contextMenu.surface,
             )}
             onMouseDown={onItemMouseDown}
@@ -92,11 +92,7 @@ function borderLine(width: number): string {
   return `+${"-".repeat(width)}+`;
 }
 
-function menuRowColor(
-  theme: StationTheme,
-  item: ContextMenuItem,
-  disabled: boolean,
-): ColorInput {
+function menuRowColor(theme: StationTheme, item: ContextMenuItem, disabled: boolean): ColorInput {
   if (disabled) {
     return toOpenTuiColor(theme.text.disabled);
   }

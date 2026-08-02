@@ -13,7 +13,11 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../../theme/index.js";
 import { AddProjectSheetView } from "./AddProjectSheetView.js";
 
 const teardowns: Array<() => void> = [];
@@ -43,11 +47,13 @@ async function render(
 ) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
-    <StationHoverProvider value>
-      <StationMouseProvider value={(target) => targets.push(target)}>
-        <AddProjectSheetView state={flow} selection={selection} columns={width} rows={24} />
-      </StationMouseProvider>
-    </StationHoverProvider>,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationHoverProvider value>
+        <StationMouseProvider value={(target) => targets.push(target)}>
+          <AddProjectSheetView state={flow} selection={selection} columns={width} rows={24} />
+        </StationMouseProvider>
+      </StationHoverProvider>
+    </StationThemeProvider>,
     { width, height: 24 },
   );
   teardowns.push(() => setup.renderer.destroy());
@@ -70,7 +76,7 @@ describe("AddProjectSheetView", () => {
     const shortcutCol = lines[row]?.indexOf("A)") ?? -1;
     const shortcutSpan = spanAtFrameCell(setup.captureSpans(), row, shortcutCol);
     expect(shortcutSpan?.fg === undefined ? undefined : rgbToHex(shortcutSpan.fg)).toBe(
-      stationRgbValue(nativeStationTheme.status.warning),
+      stationColorSnapshotValue(nativeStationTheme.status.warning),
     );
 
     await act(async () => {
@@ -79,12 +85,16 @@ describe("AddProjectSheetView", () => {
     });
     await setup.flush();
     const span = spanAtFrameCell(setup.captureSpans(), row, col);
-    expect(span?.fg === undefined ? undefined : rgbToHex(span.fg)).toBe(stationRgbValue(nativeStationTheme.text.inverse));
-    expect(span?.bg === undefined ? undefined : rgbToHex(span.bg)).toBe(stationRgbValue(nativeStationTheme.action.primary));
+    expect(span?.fg === undefined ? undefined : rgbToHex(span.fg)).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.inverse),
+    );
+    expect(span?.bg === undefined ? undefined : rgbToHex(span.bg)).toBe(
+      stationColorSnapshotValue(nativeStationTheme.action.primary),
+    );
     const gapCol = (lines[row]?.indexOf("Edit id") ?? 0) - 1;
     const gapSpan = spanAtFrameCell(setup.captureSpans(), row, gapCol);
     expect(gapSpan?.bg === undefined ? undefined : rgbToHex(gapSpan.bg)).not.toBe(
-      stationRgbValue(nativeStationTheme.action.primary),
+      stationColorSnapshotValue(nativeStationTheme.action.primary),
     );
 
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
@@ -96,15 +106,12 @@ describe("AddProjectSheetView", () => {
     const lines = setup.captureCharFrame().split("\n");
     const row = lines.findIndex((line) => line.includes("Add project (A)"));
     const col = lines[row]?.indexOf("Add project") ?? -1;
-    expect(setup.captureCharFrame()).toContain(
-      "Choose a folder inside an existing Git repository",
-    );
+    expect(setup.captureCharFrame()).toContain("Choose a folder inside an existing Git repository");
 
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
     expect(
       targets.some(
-        (target) =>
-          target.kind === "addProjectAction" && target.actionId === "review.submit",
+        (target) => target.kind === "addProjectAction" && target.actionId === "review.submit",
       ),
     ).toBe(false);
   });

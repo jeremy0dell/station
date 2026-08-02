@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { getLinkId, rgbToHex, TextAttributes } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { MAIN_PANE_ID } from "../state/types.js";
-import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../theme/index.js";
 import { PaneRegistryProvider } from "./registry/paneTerminalContext.js";
 import { createPtyRegistry, type PtyRegistry } from "./registry/ptyRegistry.js";
 import { TerminalPane } from "./TerminalPane.js";
@@ -54,9 +58,11 @@ describe("TerminalPane frame rendering", () => {
       registry.ensure(MAIN_PANE_ID, spawnOptions);
     }
     const setup = await testRender(
-      <PaneRegistryProvider registry={registry}>
-        <TerminalPane paneId={MAIN_PANE_ID} />
-      </PaneRegistryProvider>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <PaneRegistryProvider registry={registry}>
+          <TerminalPane paneId={MAIN_PANE_ID} />
+        </PaneRegistryProvider>
+      </StationThemeProvider>,
       SURFACE,
     );
     teardowns.push(() => {
@@ -117,7 +123,7 @@ describe("TerminalPane frame rendering", () => {
     const span = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x);
     expect(span?.text).toContain("hello station");
     expect(rgbToHex(span?.fg as Parameters<typeof rgbToHex>[0])).toBe(
-      stationRgbValue(nativeStationTheme.terminal.defaultForeground),
+      stationColorSnapshotValue(nativeStationTheme.terminal.defaultForeground),
     );
   });
 
@@ -129,7 +135,7 @@ describe("TerminalPane frame rendering", () => {
     const errSpan = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x);
     expect(errSpan?.text).toContain("ERR");
     expect(rgbToHex(errSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe(
-      stationRgbValue(nativeStationTheme.terminal.ansi16[1]),
+      stationColorSnapshotValue(nativeStationTheme.terminal.ansi16[1]),
     );
     expect((errSpan?.attributes ?? 0) & TextAttributes.BOLD).toBe(TextAttributes.BOLD);
     const okSpan = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 4);

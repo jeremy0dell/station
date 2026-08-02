@@ -2,6 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from "reac
 import type { StoreApi } from "zustand/vanilla";
 import type { TuiStore } from "@station/dashboard-core";
 import type { StationSnapshot } from "@station/contracts";
+import type { ColorInput } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { selectActivePaneTree, type PaneNode } from "../state/paneTree.js";
@@ -18,7 +19,7 @@ import {
 } from "../state/types.js";
 import { usePaneRegistry } from "./registry/paneTerminalContext.js";
 import type { PtyRegistryView } from "./registry/ptyRegistry.js";
-import { stationRgbValue, useStationTheme, type StationTheme } from "../theme/index.js";
+import { toOpenTuiColor, useStationTheme, type StationTheme } from "../theme/index.js";
 import { TerminalPane } from "./TerminalPane.js";
 
 export type PaneGridProps = {
@@ -129,8 +130,8 @@ function forwardInputFor(ctx: RenderCtx, paneId: PaneId): (bytes: string) => voi
 }
 
 type PaneAccent = {
-  active: string;
-  inactive: string;
+  active: ColorInput;
+  inactive: ColorInput;
 };
 
 function useStationSnapshot(store: StoreApi<TuiStore> | undefined): StationSnapshot | undefined {
@@ -147,7 +148,7 @@ function panePresentation(
   paneId: PaneId,
   active: boolean,
   ctx: Pick<RenderCtx, "workspace" | "snapshot">,
-): { borderColor: string; title: string | undefined } {
+): { borderColor: ColorInput; title: string | undefined } {
   const record = paneRecord(ctx.workspace.panes, paneId);
   const title = paneSemanticTitle(paneId, ctx.workspace, ctx.snapshot);
   const accent = paneAccent(theme, paneId, record);
@@ -166,11 +167,10 @@ function paneAccent(
   const accent =
     record?.role === "primary-agent" || paneId === MAIN_PANE_ID
       ? theme.pane.primary
-      : // stableIndex returns hash % length, always in range for the fixed array.
-        theme.pane.shells[stableIndex(paneId, theme.pane.shells.length)]!;
+      : theme.pane.shells[stableIndex(paneId, theme.pane.shells.length)];
   return {
-    active: stationRgbValue(accent.active),
-    inactive: stationRgbValue(accent.inactive),
+    active: toOpenTuiColor(accent.active),
+    inactive: toOpenTuiColor(accent.inactive),
   };
 }
 
@@ -192,8 +192,7 @@ function paneSemanticTitle(
     const row = snapshot?.rows.find((candidate) => candidate.id === primaryAgent.worktreeId);
     const session = snapshot?.sessions.find(
       (candidate) =>
-        candidate.id === primaryAgent.sessionId ||
-        candidate.worktreeId === primaryAgent.worktreeId,
+        candidate.id === primaryAgent.sessionId || candidate.worktreeId === primaryAgent.worktreeId,
     );
     const title = session?.title ?? row?.branch ?? primaryAgent.worktreeId;
     const provider = row?.agent?.harness ?? session?.harness.provider;

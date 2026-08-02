@@ -10,7 +10,11 @@ import {
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
 import { DashboardFrameTitle } from "./DashboardFrameTitle.js";
-import { nativeStationTheme, stationRgbValue } from "../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../theme/index.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
@@ -41,12 +45,14 @@ describe("DashboardFrameTitle", () => {
     });
     store.getState().start();
     const setup = await testRender(
-      <DashboardFrameTitle
-        store={store}
-        frame={FRAME}
-        topRowWidgets={input.widgets ?? []}
-        zIndex={1}
-      />,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardFrameTitle
+          store={store}
+          frame={FRAME}
+          topRowWidgets={input.widgets ?? []}
+          zIndex={1}
+        />
+      </StationThemeProvider>,
       SIZE,
     );
     teardowns.push(() => {
@@ -72,9 +78,13 @@ describe("DashboardFrameTitle", () => {
     const lines = frame.split("\n");
     const spans = setup.captureSpans();
     const subtitleCol = lines[0]?.indexOf("· overview") ?? -1;
-    expect(spanHex(spanAtFrameCell(spans, 0, subtitleCol))).toBe(stationRgbValue(nativeStationTheme.text.muted));
+    expect(spanHex(spanAtFrameCell(spans, 0, subtitleCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
     const stripCol = lines[0]?.indexOf("10:42 AM") ?? -1;
-    expect(spanHex(spanAtFrameCell(spans, 0, stripCol))).toBe(stationRgbValue(nativeStationTheme.text.muted));
+    expect(spanHex(spanAtFrameCell(spans, 0, stripCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
   });
 
   it("swaps the subtitle to a red needs-you flag when sessions ask", async () => {
@@ -86,7 +96,9 @@ describe("DashboardFrameTitle", () => {
     const lines = frame.split("\n");
     const spans = setup.captureSpans();
     const flagCol = lines[0]?.indexOf("! 3 need you") ?? -1;
-    expect(spanHex(spanAtFrameCell(spans, 0, flagCol))).toBe(stationRgbValue(nativeStationTheme.status.danger));
+    expect(spanHex(spanAtFrameCell(spans, 0, flagCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.danger),
+    );
   });
 
   it("carries the display-only reconnect status in the strip", async () => {

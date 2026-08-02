@@ -1,11 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
-import {
-  alphaColor,
-  indexedColor,
-  rgbColor,
-  terminalDefaultColor,
-} from "./types.js";
+import { alphaColor, indexedColor, rgbColor, terminalDefaultColor } from "./types.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
 
 function rgba(value: ReturnType<typeof toOpenTuiColor>) {
@@ -20,16 +15,15 @@ describe("OpenTUI Station color adapter", () => {
     expect(toOpenTuiColor(rgbColor("#010203"))).toBe("#010203");
   });
 
-  it("preserves indexed ANSI intent", () => {
-    const value = rgba(toOpenTuiColor(indexedColor(42)));
+  it("preserves indexed ANSI intent and the observed RGB snapshot", () => {
+    const value = rgba(toOpenTuiColor(indexedColor(1, rgbColor("#cd3131"))));
     expect(value.intent).toBe("indexed");
-    expect(value.slot).toBe(42);
+    expect(value.slot).toBe(1);
+    expect(rgbToHex(value)).toBe("#cd3131");
   });
 
-  it("preserves terminal-default intent and fallback", () => {
-    const value = rgba(
-      toOpenTuiColor(terminalDefaultColor("background", rgbColor("#101316"))),
-    );
+  it("preserves terminal-default intent and snapshot", () => {
+    const value = rgba(toOpenTuiColor(terminalDefaultColor("background", rgbColor("#101316"))));
     expect(value.intent).toBe("default");
     expect(rgbToHex(value)).toBe("#101316");
   });

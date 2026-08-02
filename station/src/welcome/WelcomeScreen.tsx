@@ -3,8 +3,13 @@ import { useRenderer, useTerminalDimensions } from "@opentui/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
-import { lerpColor } from "../stationButton/colors.js";
-import { stationRgbValue, useStationTheme, type StationTheme } from "../theme/index.js";
+import { tweenStationColor } from "../stationButton/colors.js";
+import {
+  toOpenTuiColor,
+  useStationTheme,
+  type StationForegroundColor,
+  type StationTheme,
+} from "../theme/index.js";
 import { useHoverPointer } from "../useHoverPointer.js";
 
 export type WelcomeScreenProps = {
@@ -31,7 +36,7 @@ const COMPACT_WORDMARK = ["station"] as const;
 
 type WelcomeLine = {
   text: string;
-  fg: string;
+  fg: StationForegroundColor;
 };
 
 export function WelcomeScreen({
@@ -54,7 +59,7 @@ export function WelcomeScreen({
     <box width="100%" height="100%" flexDirection="column" alignItems="center" overflow="hidden">
       {topPad > 0 ? <box height={topPad} /> : null}
       {content.map((line, index) => (
-        <text key={`${index}:${line.text}`} fg={line.fg}>
+        <text key={`${index}:${line.text}`} fg={toOpenTuiColor(line.fg)}>
           {line.text}
         </text>
       ))}
@@ -115,9 +120,7 @@ function WelcomeButton({
   const shimmerFrame = useShimmerFrame(shimmer && hovered);
   const pointerProps = useHoverPointer({ onHoverChange: setHovered });
   const active = focused || hovered;
-  const borderFg = stationRgbValue(
-    active ? theme.welcome.borderActive : theme.welcome.border,
-  );
+  const borderFg = active ? theme.welcome.borderActive : theme.welcome.border;
   const onMouseDown = (event: MouseEvent): void => {
     event.stopPropagation();
     dispatchMouse(target, normalizeStationMouseEvent(event));
@@ -132,7 +135,7 @@ function WelcomeButton({
       onMouseDown={onMouseDown}
       overflow="hidden"
     >
-      <text fg={borderFg} onMouseDown={onMouseDown}>
+      <text fg={toOpenTuiColor(borderFg)} onMouseDown={onMouseDown}>
         {line}
       </text>
       <ShimmerLabel
@@ -142,22 +145,15 @@ function WelcomeButton({
         shimmerFrame={shimmerFrame}
         onMouseDown={onMouseDown}
       />
-      <text fg={borderFg} onMouseDown={onMouseDown}>
+      <text fg={toOpenTuiColor(borderFg)} onMouseDown={onMouseDown}>
         {line}
       </text>
     </box>
   );
 }
 
-function welcomeLines(
-  columns: number,
-  rows: number,
-  theme: StationTheme,
-): readonly WelcomeLine[] {
-  const border = stationRgbValue(theme.welcome.border);
-  const muted = stationRgbValue(theme.welcome.muted);
-  const wordmark = stationRgbValue(theme.welcome.wordmark);
-  const activeBorder = stationRgbValue(theme.welcome.borderActive);
+function welcomeLines(columns: number, rows: number, theme: StationTheme): readonly WelcomeLine[] {
+  const { border, muted, wordmark, borderActive: activeBorder } = theme.welcome;
   const canRenderFull = columns >= FULL_WORDMARK[0].length + 4 && rows >= 13;
   if (canRenderFull) {
     return [
@@ -205,30 +201,25 @@ function ShimmerLabel({
       {Array.from(text, (char, index) => {
         const border = index === 0 || index === text.length - 1;
         const intensity = hovered && !border ? shimmerIntensity(index, shimmerCenter) : 0;
-        const baseBg = stationRgbValue(
-          focused ? theme.welcome.button : theme.welcome.buttonMuted,
-        );
+        const baseBg = focused ? theme.welcome.button : theme.welcome.buttonMuted;
         const bg =
           intensity > 0
-            ? lerpColor(
-                stationRgbValue(theme.welcome.buttonHover),
-                stationRgbValue(theme.welcome.shimmer),
-                intensity,
-              )
+            ? tweenStationColor(theme.welcome.buttonHover, theme.welcome.shimmer, intensity)
             : baseBg;
         const fg =
           intensity > 0
-            ? lerpColor(
-                stationRgbValue(theme.welcome.wordmark),
-                stationRgbValue(theme.welcome.shimmerPeak),
-                intensity,
-              )
-            : stationRgbValue(
-                focused ? theme.welcome.wordmark : theme.welcome.muted,
-              );
+            ? tweenStationColor(theme.welcome.wordmark, theme.welcome.shimmerPeak, intensity)
+            : focused
+              ? theme.welcome.wordmark
+              : theme.welcome.muted;
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed-width static button label
-          <text key={index} fg={fg} bg={bg} onMouseDown={onMouseDown}>
+          <text
+            key={index}
+            fg={toOpenTuiColor(fg)}
+            bg={toOpenTuiColor(bg)}
+            onMouseDown={onMouseDown}
+          >
             {char}
           </text>
         );

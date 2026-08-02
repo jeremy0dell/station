@@ -1,21 +1,27 @@
-/** A six-digit sRGB color used as a renderer-neutral theme value. */
+/** A normalized six-digit sRGB color used as a renderer-neutral theme value. */
 export type StationRgbColor = Readonly<{
   kind: "rgb";
   value: `#${string}`;
 }>;
 
-/** A terminal palette index whose RGB value is resolved by the renderer. */
+/** A terminal palette index with the observed RGB snapshot used by non-indexed consumers. */
 export type StationIndexedColor = Readonly<{
   kind: "indexed";
   index: number;
+  snapshot: StationRgbColor;
 }>;
 
-/** The enclosing terminal's default color, with a stable RGB snapshot for unsupported renderers. */
-export type StationTerminalDefaultColor = Readonly<{
+/** The enclosing terminal's default color and its stable observed RGB snapshot. */
+export type StationTerminalDefaultColor<
+  Channel extends "foreground" | "background" = "foreground" | "background",
+> = Readonly<{
   kind: "terminal-default";
-  channel: "foreground" | "background";
-  fallback: StationRgbColor;
+  channel: Channel;
+  snapshot: StationRgbColor;
 }>;
+
+export type StationTerminalDefaultForegroundColor = StationTerminalDefaultColor<"foreground">;
+export type StationTerminalDefaultBackgroundColor = StationTerminalDefaultColor<"background">;
 
 /** An explicit sRGB color rendered with fractional alpha. */
 export type StationAlphaColor = Readonly<{
@@ -24,15 +30,23 @@ export type StationAlphaColor = Readonly<{
   alpha: number;
 }>;
 
+/** Non-default semantic intent suitable for either foreground or background rendering. */
+export type StationSemanticColor = StationRgbColor | StationIndexedColor | StationAlphaColor;
+
 /** Renderer-neutral color intent preserved until a renderer adapter consumes it. */
-export type StationColor =
-  | StationRgbColor
-  | StationIndexedColor
-  | StationTerminalDefaultColor
-  | StationAlphaColor;
+export type StationColor = StationSemanticColor | StationTerminalDefaultColor;
+
+/** Foreground intent whose terminal-default variant cannot carry background semantics. */
+export type StationForegroundColor = StationSemanticColor | StationTerminalDefaultForegroundColor;
 
 /** Color intent that always paints an opaque cell or terminal-owned default cell. */
 export type StationOpaqueColor = Exclude<StationColor, StationAlphaColor>;
+
+/** Opaque background intent whose terminal-default variant cannot carry foreground semantics. */
+export type StationOpaqueBackgroundColor =
+  | StationRgbColor
+  | StationIndexedColor
+  | StationTerminalDefaultBackgroundColor;
 
 export type StationTerminalTheme = Readonly<{
   defaultForeground: StationRgbColor;
@@ -59,102 +73,135 @@ export type StationTerminalTheme = Readonly<{
 }>;
 
 export type StationPaneAccent = Readonly<{
-  active: StationRgbColor;
-  inactive: StationRgbColor;
+  active: StationSemanticColor;
+  inactive: StationSemanticColor;
 }>;
+
+type StationPaneAccentCycle = readonly [
+  StationPaneAccent,
+  StationPaneAccent,
+  StationPaneAccent,
+  StationPaneAccent,
+];
 
 /**
  * Complete semantic color contract shared by Station's native and embedded renderers.
- * Surface roles are opaque by construction; components select roles rather than palette values.
+ * Opaque background roles reject alpha and foreground-default intent by construction.
  */
 export type StationTheme = Readonly<{
   surfaces: Readonly<{
-    canvas: StationOpaqueColor;
-    panel: StationOpaqueColor;
-    frozen: StationOpaqueColor;
-    prompt: StationOpaqueColor;
-    help: StationOpaqueColor;
-    sheet: StationOpaqueColor;
-    settings: StationOpaqueColor;
-    toast: StationOpaqueColor;
-    overlay: StationOpaqueColor;
+    canvas: StationOpaqueBackgroundColor;
+    panel: StationOpaqueBackgroundColor;
+    prompt: StationOpaqueBackgroundColor;
+    help: StationOpaqueBackgroundColor;
+    sheet: StationOpaqueBackgroundColor;
+    settings: StationOpaqueBackgroundColor;
+    toast: StationOpaqueBackgroundColor;
   }>;
   text: Readonly<{
-    primary: StationRgbColor;
-    muted: StationRgbColor;
-    inverse: StationRgbColor;
-    disabled: StationRgbColor;
-    menu: StationRgbColor;
+    primary: StationForegroundColor;
+    muted: StationForegroundColor;
+    inverse: StationForegroundColor;
+    disabled: StationForegroundColor;
+    menu: StationForegroundColor;
   }>;
   status: Readonly<{
-    neutral: StationRgbColor;
-    danger: StationRgbColor;
-    warning: StationRgbColor;
-    success: StationRgbColor;
-    working: StationRgbColor;
-    info: StationRgbColor;
-    accent: StationRgbColor;
+    neutral: StationSemanticColor;
+    danger: StationSemanticColor;
+    warning: StationSemanticColor;
+    success: StationSemanticColor;
+    working: StationSemanticColor;
+    info: StationSemanticColor;
+    accent: StationSemanticColor;
   }>;
   action: Readonly<{
-    primary: StationRgbColor;
-    success: StationRgbColor;
-    danger: StationRgbColor;
-    warning: StationRgbColor;
+    primary: StationSemanticColor;
+    success: StationSemanticColor;
+    danger: StationSemanticColor;
+    warning: StationSemanticColor;
   }>;
   interaction: Readonly<{
-    hover: StationRgbColor;
-    keyboardFocus: StationRgbColor;
-    compactFocus: StationRgbColor;
-    border: StationRgbColor;
-    hairline: StationRgbColor;
-    overlay: StationOpaqueColor;
+    hover: StationOpaqueBackgroundColor;
+    keyboardFocus: StationOpaqueBackgroundColor;
+    compactFocus: StationOpaqueBackgroundColor;
+    border: StationSemanticColor;
+    hairline: StationSemanticColor;
   }>;
   welcome: Readonly<{
-    button: StationRgbColor;
-    buttonMuted: StationRgbColor;
-    buttonHover: StationRgbColor;
-    shimmer: StationRgbColor;
-    border: StationRgbColor;
-    borderActive: StationRgbColor;
-    muted: StationRgbColor;
-    wordmark: StationRgbColor;
-    shimmerPeak: StationRgbColor;
+    button: StationOpaqueBackgroundColor;
+    buttonMuted: StationOpaqueBackgroundColor;
+    buttonHover: StationOpaqueBackgroundColor;
+    shimmer: StationSemanticColor;
+    border: StationForegroundColor;
+    borderActive: StationForegroundColor;
+    muted: StationForegroundColor;
+    wordmark: StationForegroundColor;
+    shimmerPeak: StationSemanticColor;
   }>;
   contextMenu: Readonly<{
-    surface: StationOpaqueColor;
-    selected: StationRgbColor;
-    border: StationRgbColor;
+    surface: StationOpaqueBackgroundColor;
+    selected: StationOpaqueBackgroundColor;
+    border: StationSemanticColor;
   }>;
   island: Readonly<{
-    background: StationOpaqueColor;
-    resting: StationRgbColor;
-    expanded: StationRgbColor;
-    attention: StationRgbColor;
-    actionable: StationRgbColor;
+    background: StationOpaqueBackgroundColor;
+    resting: StationSemanticColor;
+    expanded: StationSemanticColor;
+    attention: StationSemanticColor;
+    actionable: StationSemanticColor;
   }>;
   pane: Readonly<{
     primary: StationPaneAccent;
-    shells: readonly StationPaneAccent[];
-    selection: StationRgbColor;
+    shells: StationPaneAccentCycle;
+    selection: StationOpaqueBackgroundColor;
   }>;
   terminal: StationTerminalTheme;
 }>;
 
+const RGB_HEX_PATTERN = /^#[0-9a-f]{6}$/i;
+
 export function rgbColor(value: `#${string}`): StationRgbColor {
-  return { kind: "rgb", value };
+  if (!RGB_HEX_PATTERN.test(value)) {
+    throw new RangeError(`RGB color must use six-digit #rrggbb form, got ${value}`);
+  }
+  return { kind: "rgb", value: value.toLowerCase() as `#${string}` };
 }
 
-export function indexedColor(index: number): StationIndexedColor {
-  return { kind: "indexed", index };
+export function indexedColor(index: number, snapshot: StationRgbColor): StationIndexedColor {
+  if (!Number.isInteger(index) || index < 0 || index > 255) {
+    throw new RangeError(`Indexed color must be an integer in the range 0..255, got ${index}`);
+  }
+  return { kind: "indexed", index, snapshot };
 }
 
-export function terminalDefaultColor(
-  channel: StationTerminalDefaultColor["channel"],
-  fallback: StationRgbColor,
-): StationTerminalDefaultColor {
-  return { kind: "terminal-default", channel, fallback };
+export function terminalDefaultColor<Channel extends "foreground" | "background">(
+  channel: Channel,
+  snapshot: StationRgbColor,
+): StationTerminalDefaultColor<Channel> {
+  return { kind: "terminal-default", channel, snapshot };
 }
 
 export function alphaColor(color: StationRgbColor, alpha: number): StationAlphaColor {
+  if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
+    throw new RangeError(`Alpha must be finite and in the range 0..1, got ${alpha}`);
+  }
   return { kind: "alpha", color, alpha };
+}
+
+/** Returns the deterministic RGB snapshot carried by any rendering intent. */
+export function stationColorSnapshot(color: StationColor): StationRgbColor {
+  switch (color.kind) {
+    case "rgb":
+      return color;
+    case "indexed":
+    case "terminal-default":
+      return color.snapshot;
+    case "alpha":
+      return color.color;
+  }
+}
+
+/** Returns the deterministic RGB snapshot value carried by any rendering intent. */
+export function stationColorSnapshotValue(color: StationColor): `#${string}` {
+  return stationColorSnapshot(color).value;
 }

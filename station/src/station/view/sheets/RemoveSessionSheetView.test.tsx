@@ -7,13 +7,14 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../../theme/index.js";
 import { RemoveSessionSheetView } from "./RemoveSessionSheetView.js";
 
-type RemoveConfirmScreen = Extract<
-  TuiScreen,
-  { name: "removeWorktree"; step: "confirm" }
->;
+type RemoveConfirmScreen = Extract<TuiScreen, { name: "removeWorktree"; step: "confirm" }>;
 
 const teardowns: Array<() => void> = [];
 afterEach(() => {
@@ -34,15 +35,13 @@ function confirmScreen(actionFocus: RemoveConfirmScreen["actionFocus"]): RemoveC
 async function render(actionFocus: RemoveConfirmScreen["actionFocus"], width = 80) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
-    <StationHoverProvider value>
-      <StationMouseProvider value={(target) => targets.push(target)}>
-        <RemoveSessionSheetView
-          screen={confirmScreen(actionFocus)}
-          columns={width}
-          rows={16}
-        />
-      </StationMouseProvider>
-    </StationHoverProvider>,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationHoverProvider value>
+        <StationMouseProvider value={(target) => targets.push(target)}>
+          <RemoveSessionSheetView screen={confirmScreen(actionFocus)} columns={width} rows={16} />
+        </StationMouseProvider>
+      </StationHoverProvider>
+    </StationThemeProvider>,
     { width, height: 16 },
   );
   teardowns.push(() => setup.renderer.destroy());
@@ -62,10 +61,10 @@ describe("RemoveSessionSheetView", () => {
     const deleteSpan = spanAtFrameCell(setup.captureSpans(), row, deleteCol);
     const keepSpan = spanAtFrameCell(setup.captureSpans(), row, keepCol);
     expect(deleteSpan?.fg === undefined ? undefined : rgbToHex(deleteSpan.fg)).toBe(
-      stationRgbValue(nativeStationTheme.status.danger),
+      stationColorSnapshotValue(nativeStationTheme.status.danger),
     );
     expect(keepSpan?.bg === undefined ? undefined : rgbToHex(keepSpan.bg)).toBe(
-      stationRgbValue(nativeStationTheme.interaction.keyboardFocus),
+      stationColorSnapshotValue(nativeStationTheme.interaction.keyboardFocus),
     );
   });
 
@@ -83,7 +82,7 @@ describe("RemoveSessionSheetView", () => {
     await setup.flush();
     const deleteSpan = spanAtFrameCell(setup.captureSpans(), row, deleteCol);
     expect(deleteSpan?.bg === undefined ? undefined : rgbToHex(deleteSpan.bg)).toBe(
-      stationRgbValue(nativeStationTheme.status.danger),
+      stationColorSnapshotValue(nativeStationTheme.status.danger),
     );
 
     await setup.mockMouse.click(deleteCol, row, MouseButtons.LEFT);

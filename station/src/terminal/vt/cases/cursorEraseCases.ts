@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
+import { nativeStationTheme } from "../../../theme/index.js";
 import type { VtCase } from "./types.js";
 
 export const cursorEraseCases: readonly VtCase[] = [
@@ -101,8 +101,8 @@ export const cursorEraseCases: readonly VtCase[] = [
     feed: "\x1b[44m\x1b[2J",
     expect: {
       cells: [
-        { at: [0, 0], bg: stationRgbValue(nativeStationTheme.terminal.ansi16[4]) },
-        { at: [5, 19], bg: stationRgbValue(nativeStationTheme.terminal.ansi16[4]) },
+        { at: [0, 0], bg: nativeStationTheme.terminal.ansi16[4].value },
+        { at: [5, 19], bg: nativeStationTheme.terminal.ansi16[4].value },
       ],
     },
   },

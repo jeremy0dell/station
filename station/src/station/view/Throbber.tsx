@@ -2,6 +2,7 @@
 // clock (120ms) drives every throbber via useSyncExternalStore, so all
 // markers tick in lockstep and the interval stops when the last throbber
 // unmounts. Frame families match upstream.
+import type { ColorInput } from "@opentui/core";
 import { memo, useCallback, useSyncExternalStore } from "react";
 
 export type ThrobberVariant = "circle" | "braille" | "dots";
@@ -28,7 +29,7 @@ export const Throbber = memo(function Throbber({
   fg,
 }: {
   variant: ThrobberVariant;
-  fg?: string;
+  fg?: ColorInput;
 }) {
   const frameTick = useAnimationTick(1);
   const frames =
