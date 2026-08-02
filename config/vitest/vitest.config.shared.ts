@@ -1,6 +1,9 @@
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const testMachineSetupPath = fileURLToPath(
+  new URL("./test-machine-sandbox.setup.ts", import.meta.url),
+);
 const dashboardCoreSourceDir = fileURLToPath(
   new URL("../../packages/dashboard-core/src", import.meta.url),
 );
@@ -95,4 +98,15 @@ export const commonTestConfig = {
   environment: "node",
   globals: false,
   passWithNoTests: false,
+} as const;
+
+export const machineIsolatedTestConfig = {
+  ...commonTestConfig,
+  isolate: true,
+  setupFiles: [testMachineSetupPath] as string[],
+  unstubEnvs: true,
+  sequence: {
+    hooks: "stack",
+    setupFiles: "list",
+  },
 } as const;

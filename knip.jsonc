@@ -27,7 +27,9 @@
         "tools/architecture/serve-observer-architecture.mjs",
         "tools/lint/check-observer-architecture.mjs",
         "tests/support/observerMain.js",
-        "tests/agent/real/pi/fixtures/station-extension-protocol-v1.mjs"
+        "tests/agent/real/pi/fixtures/station-extension-protocol-v1.mjs",
+        "tests/diagnostics/fixtures/vitest-machine-isolation/*.fixture.ts",
+        "tests/diagnostics/fixtures/vitest-machine-isolation/vitest.config.ts"
       ],
       "project": [
         "config/**/*.ts",

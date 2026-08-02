@@ -730,3 +730,4 @@ export class FakeHarnessProvider implements HarnessProvider {
 }
 
 export * from "./setupProfiles.js";
+export * from "./testMachine.js";
