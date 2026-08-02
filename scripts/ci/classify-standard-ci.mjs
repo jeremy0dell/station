@@ -67,7 +67,8 @@ function isShellMatrixPath(path) {
     path.startsWith("apps/cli/src/commands/setup/") ||
     path === "apps/cli/test/unit/setup-checks.test.ts" ||
     path.startsWith("integrations/worktree/worktrunk/") ||
-    path === "tests/e2e/setup-guided-feedback.test.ts"
+    /^tests\/e2e\/setup-guided-.*\.test\.ts$/u.test(path) ||
+    path === "tests/support/setup-guided.ts"
   );
 }
 

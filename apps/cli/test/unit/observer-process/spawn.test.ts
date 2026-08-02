@@ -8,6 +8,9 @@ import { selfExecArgv } from "../../../src/selfExec.js";
 const paths = {
   socketPath: "/tmp/station/run/observer.sock",
   stateDir: "/tmp/station",
+  dbPath: "/tmp/station/observer.sqlite",
+  logDir: "/tmp/station/logs",
+  diagnosticsDir: "/tmp/station/diagnostics",
   hookSpoolDir: "/tmp/station/spool/hooks",
 };
 const buildVersion = `1.2.3+station.${"a".repeat(64)}`;

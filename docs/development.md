@@ -74,6 +74,14 @@ strict minimal config. It never seeds real auth, Git, SSH, hooks, config, or
 default tmux state. `status` inspects only the recorded private manifest,
 server, sockets, and matching processes.
 
+Attach preserves the caller's `TERM` only when ncurses `tput` can resolve it
+inside the isolated environment with tmux's required `clear` and `cup`
+capabilities. Caller-specific `TERMINFO`, `TERMINFO_DIRS`, and external XDG data
+paths are intentionally not imported. An absent, unavailable, or unsuitable
+terminal falls back to `xterm-256color`; a rejected value is named in the
+fallback diagnostic, so the documented attach command never needs a manual
+`TERM` prefix.
+
 Use `Ctrl-b Space` in the attached base session. The binding enters the built
 CLI's production `popup` command; `_station-ui` owns the long-lived CLI parent,
 which retains the renderer-control IPC channel while the Bun renderer reloads
@@ -119,7 +127,126 @@ Full-frame captures use the private wrapper and preserve trailing cells;
 assertions wait for two identical captures rather than accepting an
 intermediate repaint.
 
+## Guided setup development
+
+Guided `stn setup` uses `@clack/prompts` through the sole production import in
+`apps/cli/src/commands/setup/presenters/clack.ts`. Keep direct Clack imports out of the guided
+driver, setup core, providers, config, and tests; presenter unit tests inject the exported plain function
+object instead of mocking the package globally. Bare guided setup requires TTY stdin and stdout,
+while check, plan, explicit apply, system, help, and JSON surfaces remain noninteractive.
+
+For manual UX exploration, run the real guided flow in a disposable sandbox:
+
+```bash
+pnpm setup:guided:sandbox
+pnpm setup:guided:sandbox -- --profile multi --keep
+pnpm setup:guided:sandbox -- --profile everything-missing --keep
+```
+
+The sandbox builds the checkout, creates a committed disposable repository, then launches the real
+CLI with inherited terminal I/O. An `env -i` boundary relocates `HOME`, every XDG directory, config,
+Observer state and sockets, and all provider homes beneath one private temporary root. Fake
+Homebrew, curl, npm, pnpm, Worktrunk, tmux, and agent commands prevent network access and global
+installation while allowing accepted installer operations to re-probe their sandbox executables. The real Observer runs
+only against the sandbox paths and is stopped when setup exits.
+
+The default `first-run` profile has required tools but no agent CLI. `multi` starts with Codex and
+OpenCode, `missing-tools` starts with those agents but no required tools, and `everything-missing`
+exercises both installer stages. During UX review, the guided opening should contain only its trust
+copy, compact inspection progress, and selected prerequisite proposal; the
+Core/Recommended/Actions/Next matrix belongs to `stn setup check`. Verify selected Homebrew tools
+show compact clickable Formulae labels rather than raw URLs, prompt details are visually secondary
+to the first-line decision, and no resolved sandbox shim path leaks into consent copy. The tmux
+consent must explain that prefix + Space opens Station, and setup must reject a user-configured
+assignment while permitting tmux's built-in `next-layout` default. Use `--keep` to retain the printed root, edit any shim under its
+`bin/` directory from another terminal, inspect `external-commands.log`, and rerun its `run-setup`
+launcher. `--prepare-only` creates that environment without starting setup. Without `--keep`, the
+root is removed after completion or cancellation; no profile reads credentials, provider config,
+shell startup files, normal tmux state, or global Station state.
+
+The automated real-terminal lane requires Python 3 and uses the standard-library `pty` module:
+
+```bash
+pnpm exec vitest run --config config/vitest/vitest.unit.config.ts \
+  apps/cli/test/unit/setup-clack-presenter.test.ts
+pnpm test:e2e:setup:guided
+pnpm test:e2e:setup:guided:all-shells
+```
+
+The PTY support normalizes terminal controls and redraws. When intentional copy or layout changes
+alter `apps/cli/test/fixtures/setup-guided-transcript.txt`, regenerate from the fixed 100×24 happy
+scenario with the command below, review the normalized transcript manually, and verify it contains
+no environment paths, JSON envelopes, provider values, or raw operation structures:
+
+```bash
+STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm exec vitest run \
+  --config config/vitest/vitest.setup-e2e.config.ts \
+  tests/e2e/setup-guided-feedback.test.ts -t "writes multiple selected agent CLIs"
+```
+
+Python must never reach the user's
+Station homes, config, state, sockets, provider homes, or tmux server.
+
+After changing Clack or another shipped dependency, run the normal build and static gates, then
+validate the compiled runtime:
+
+```bash
+pnpm build:binary -- --version 0.0.0-local
+pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+At minimum, exercise the compiled binary's non-TTY guided preflight to prove the packaged dependency
+loads before release validation.
+
 ## Deterministic Gates
+
+### Deterministic test isolation
+
+Each test lane declares one of four boundaries: automatic per-file machine isolation, lane-owned
+fixtures, an explicitly controlled process runner, or intentional machine interaction. The boundary
+is an environment and default-path guarantee, not an OS security boundary.
+
+| Lane | Config or runner | Classification | State and environment ownership |
+| --- | --- | --- | --- |
+| Unit | `vitest.unit.config.ts` | Automatic machine isolation | One private machine root and restored environment per test file. |
+| Integration | `vitest.integration.config.ts` | Automatic machine isolation | One private machine root and restored environment per test file. |
+| Contracts | `vitest.contracts.config.ts` | Automatic machine isolation | Schema tests stay pure while new files fail closed onto private defaults. |
+| Diagnostics | `vitest.diagnostics.config.ts` | Automatic machine isolation | Diagnostics and their child processes start from private machine defaults unless a test supplies an explicit environment. |
+| Scripted agent | `vitest.agent-scripted.config.ts` | Automatic machine isolation | Scripted harness state, provider homes, Git defaults, and child processes inherit the private file root. |
+| Setup E2E | `vitest.setup-e2e.config.ts` | Lane-owned fixtures | Each fixture constructs its complete home, PATH, provider shims, runtime directory, and hostile inputs; a parent sandbox would mask missing fixture inputs. |
+| Observer and general E2E | `vitest.e2e.config.ts` | Lane-owned fixtures | Tests own config, state, sockets, repositories, and Observer process cleanup, including deliberate default-path scenarios. |
+| Installer smoke | `scripts/test-runners/run-install-smoke.mjs` | Controlled process runner | The runner supplies a private root and sanitized install, config, state, and tool environment. |
+| SQLite and Observer-claim cross-runtime | `scripts/test-runners/run-sqlite-cross-runtime.mjs` and `scripts/test-runners/run-observer-claim-cross-runtime.mjs` | Lane-owned process paths | Runners own temporary databases, sockets, claims, and cleanup while inheriting only the ambient toolchain needed to launch Node and Bun. |
+| Station renderer and PTY | `pnpm test:ci:station` | Intentional non-Vitest exception | Bun tests own focused temporary fixtures; there is no suite-wide machine sandbox, so tests must not use default Station paths for mutation. |
+| Binary smoke and handoff stress | `scripts/test-runners/run-binary-smoke.mjs` | Controlled process runner | The runner owns private build, worktree, config, state, evidence, and child-process paths while preserving required build-tool discovery. |
+| Build, typecheck, and lint | Root package scripts | Checkout tooling | These commands intentionally read the checkout and write declared build outputs; they are not test-machine sandboxes. |
+| Real provider, Worktrunk, E2E, and tmux popup | Real Vitest configs below | Intentional machine interaction | These opt-in lanes exercise installed providers, real worktrees, or a real tmux server and retain their deliberate machine contract. |
+
+The automatic group is exactly `vitest.unit.config.ts`, `vitest.integration.config.ts`,
+`vitest.contracts.config.ts`, `vitest.diagnostics.config.ts`, and
+`vitest.agent-scripted.config.ts`. Each creates a private machine root for every test file. The
+shared setup redirects home, temporary, XDG, harness, Git, GitHub CLI, and shell-history paths;
+clears Station runtime/correlation overrides plus inherited Git, SSH, and GitHub credentials; and
+passes the sandbox paths to child processes. The root is removed after the file, including ordinary
+test failures.
+
+Use `vi.stubEnv` for test-local environment changes and let the shared setup restore the complete
+per-file baseline. Environment-mutating tests must not use `it.concurrent` or otherwise overlap in
+the same file because `process.env` is process-global. Set `STATION_TEST_MACHINE_KEEP_ROOT=1` for a
+focused automatic-lane run to retain the root and print its location, inspect it, and remove it
+manually afterward.
+
+The intentional real-machine configs are `vitest.real-e2e.config.ts`,
+`vitest.claude-real.config.ts`, `vitest.codex-real.config.ts`,
+`vitest.cursor-real.config.ts`, `vitest.opencode-real.config.ts`,
+`vitest.pi-real.config.ts`, `vitest.tmux-popup-real.config.ts`, and
+`vitest.worktrunk-real.config.ts`. They do not compose the automatic setup. Setup E2E and Observer
+E2E also omit it because their owned environment construction is part of what those lanes test.
+
+Automatic isolation prevents accidental inheritance and environment leakage. It does not contain
+explicit absolute paths, signals, file descriptors, network access, custom child environments,
+installed tools, or subprocesses that deliberately escape the redirected environment. The
+OS-level containment decision belongs to #401.
 
 Git-backed fixtures and child processes must clear Git's repository-local environment variables;
 `cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`

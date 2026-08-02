@@ -40,7 +40,6 @@ winsize = struct.pack("HHHH", 40, 120, 0, 0)
 pid, fd = pty.fork()
 if pid == 0:
     fcntl.ioctl(sys.stdin.fileno(), termios.TIOCSWINSZ, winsize)
-    os.environ.setdefault("TERM", "xterm-256color")
     os.execvp(sys.argv[1], sys.argv[1:])
 
 fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
@@ -161,7 +160,15 @@ try {
   devbox(["tmux", "logs"]);
 
   proveManifestAndIsolation(manifest);
-  ptyClient = await startPtyClient(manifest);
+  await proveAttachTerminalFallbacks(manifest);
+  ptyClient = await startPtyClient(manifest, {
+    term: "xterm",
+    expectedTerminal: "xterm",
+  });
+  assert(
+    !ptyClient.output.includes("Private tmux cannot use caller TERM="),
+    "valid caller terminal unexpectedly used the fallback",
+  );
   assertPrivateServerEnvironment(manifest);
   await proveBaseShellIsolation(manifest);
   await triggerPopup(ptyClient);
@@ -376,7 +383,10 @@ function proveManifestAndIsolation(manifest) {
     assert(socketPath.length < 104, `Unix socket path is too long: ${socketPath}`);
   }
   assert(existsSync(manifest.observerSocketPath), "private Observer socket is absent");
-  const observerPidfile = JSON.parse(readFileSync(`${manifest.observerSocketPath}.pid`, "utf8"));
+  const observerPidfile = readJsonFile(
+    `${manifest.observerSocketPath}.pid`,
+    "private Observer pidfile",
+  );
   assert(
     JSON.stringify(observerPidfile) === JSON.stringify(manifest.observerIdentity),
     "manifest Observer identity does not match its strict pidfile",
@@ -614,13 +624,63 @@ function runtimeEvidence(manifest) {
   };
 }
 
-async function startPtyClient(manifest) {
+async function proveAttachTerminalFallbacks(manifest) {
+  const cases = [
+    {
+      label: "absent caller terminal",
+      term: undefined,
+      expectedTerminal: "xterm-256color",
+    },
+    {
+      label: "unavailable caller terminal",
+      term: "station-unsupported-terminal",
+      expectedTerminal: "xterm-256color",
+      expectedDiagnostic: "terminfo is unavailable inside the isolated environment",
+    },
+    {
+      label: "unsuitable caller terminal",
+      term: "dumb",
+      expectedTerminal: "xterm-256color",
+      expectedDiagnostic: "terminfo lacks the required clear capability",
+    },
+  ];
+
+  for (const testCase of cases) {
+    const client = await startPtyClient(manifest, testCase);
+    try {
+      if (testCase.expectedDiagnostic === undefined) {
+        assert(
+          !client.output.includes("Private tmux cannot use caller TERM="),
+          `${testCase.label} unexpectedly reported a rejected caller terminal`,
+        );
+        continue;
+      }
+      await waitFor(
+        () =>
+          client.output.includes(`TERM=${JSON.stringify(testCase.term)}`) &&
+          client.output.includes(testCase.expectedDiagnostic) &&
+          client.output.includes("using TERM=xterm-256color"),
+        `${testCase.label} did not report the fallback reason`,
+      );
+    } finally {
+      await client.close();
+    }
+  }
+}
+
+async function startPtyClient(manifest, { term, expectedTerminal }) {
+  const clientEnvironment = { ...outerEnv };
+  if (term === undefined) {
+    delete clientEnvironment.TERM;
+  } else {
+    clientEnvironment.TERM = term;
+  }
   const child = spawn(
     "python3",
     ["-c", ptyBridgeScript, process.execPath, wrapperPath, "tmux", "attach"],
     {
       cwd: manifest.projectRoot,
-      env: { ...outerEnv, TERM: "station-unsupported-terminal" },
+      env: clientEnvironment,
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
@@ -628,20 +688,41 @@ async function startPtyClient(manifest) {
     child.once("error", rejectExit);
     child.once("exit", (code, signal) => resolveExit({ code, signal }));
   });
+  let output = "";
+  const appendOutput = (chunk) => {
+    output = `${output}${chunk.toString("utf8")}`.slice(-32_000);
+  };
+  child.stdout.on("data", appendOutput);
+  child.stderr.on("data", appendOutput);
+
   let clientName;
+  let clientTerminal;
   await waitFor(() => {
-    const output = tmux(
+    const clients = tmux(
       manifest,
-      ["list-clients", "-t", manifest.baseSession, "-F", "#{client_name}"],
+      ["list-clients", "-t", manifest.baseSession, "-F", "#{client_name}\t#{client_termname}"],
       { check: false },
     ).stdout.trim();
-    clientName = output.split(/\r?\n/u).find(Boolean);
+    const client = clients
+      .split(/\r?\n/u)
+      .filter(Boolean)
+      .map((line) => line.split("\t"))
+      .find(([name]) => name !== undefined);
+    clientName = client?.[0];
+    clientTerminal = client?.[1];
     return clientName !== undefined;
   }, "ordinary PTY client did not attach");
+  assert(
+    clientTerminal === expectedTerminal,
+    `ordinary PTY client used TERM=${clientTerminal ?? "<unknown>"}; expected ${expectedTerminal}`,
+  );
   return {
     child,
     clientName,
     exit,
+    get output() {
+      return output;
+    },
     async write(bytes) {
       if (!child.stdin.write(bytes)) {
         await new Promise((resolveDrain, rejectDrain) => {
@@ -686,7 +767,15 @@ function tmux(manifest, args, options = {}) {
 }
 
 function readManifest() {
-  return JSON.parse(readFileSync(manifestPath, "utf8"));
+  return readJsonFile(manifestPath, "private tmux manifest");
+}
+
+function readJsonFile(path, label) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`Could not parse ${label} at ${path}.`, { cause: error });
+  }
 }
 
 function assertOwnershipOutput(output, manifest) {

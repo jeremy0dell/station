@@ -13,7 +13,7 @@ import type {
   SetupViewAction,
   SetupViewCheck,
 } from "../presentation/projectSetupView.js";
-import { type SetupRenderOptions, type SetupTheme, setupTheme } from "./theme.js";
+import { type SetupLink, type SetupRenderOptions, type SetupTheme, setupTheme } from "./theme.js";
 
 export type TextSetupPresenterOptions = SetupRenderOptions & {
   readonly write?: (chunk: string) => void | Promise<void>;
@@ -40,6 +40,8 @@ export type TextSetupSystemView = {
 export type TextSetupPresenter = {
   readonly text: (ref: SetupMessageRef) => string;
   readonly prompt: (ref: SetupMessageRef) => string;
+  readonly detail: (value: string) => string;
+  readonly link: (input: SetupLink) => string;
   readonly write: (chunk: string) => Promise<void>;
   readonly writeMessage: (ref: SetupMessageRef) => Promise<void>;
   readonly renderPlan: (view: ProjectSetupView) => string;
@@ -70,7 +72,9 @@ export function createTextSetupPresenter(
   const text = (ref: SetupMessageRef) => resolveSetupMessage(ref);
   return {
     text,
-    prompt: text,
+    prompt: (ref) => formatPrompt({ message: text(ref), theme }),
+    detail: theme.dim,
+    link: theme.link,
     async write(chunk) {
       await writer(chunk);
     },
@@ -88,9 +92,14 @@ export function createTextSetupPresenter(
       renderProgressFailure(text(setupMessageRef("label.setup-inspection")), error, theme),
     renderActivationStart: () => text(setupMessageRef("activation.start")),
     renderActivationComplete: () => theme.green(text(setupMessageRef("activation.complete"))),
-    renderActivationFailure: (error, commands) => renderActivationFailure(error, commands, theme),
+    renderActivationFailure: (...args) => renderActivationFailure(args[0], args[1], theme),
     renderSystemStatus: (view) => renderSystemStatus(view, theme),
   };
+}
+
+function formatPrompt(input: { readonly message: string; readonly theme: SetupTheme }): string {
+  const [question = "", ...details] = input.message.split("\n");
+  return [question, ...details.map(input.theme.dim)].join("\n");
 }
 
 function renderPlan(view: ProjectSetupView, theme: SetupTheme): string {

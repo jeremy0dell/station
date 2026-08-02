@@ -49,6 +49,14 @@ export const FeatureFlagDefinitions = {
     lifecycle: "temporary",
     summary: "Host Station agents in a standalone daemon so they survive UI close and reattach.",
   },
+  dashboardPersistentFilter: {
+    defaultValue: false,
+    exposure: "server",
+    owner: "tui",
+    surfaces: ["config", "tui"],
+    lifecycle: "temporary",
+    summary: "Select the persistent dashboard filter search experience.",
+  },
 } as const satisfies FeatureFlagDefinitionsMap;
 
 export type FeatureFlagKeyForDefinitions<Definitions extends FeatureFlagDefinitionsMap> =

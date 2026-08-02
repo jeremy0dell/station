@@ -9,7 +9,7 @@ export function runGuidedSetup(
   options: SetupCommandOptions,
   deps: SetupCommandDeps,
 ): Promise<SetupCommandResult> {
-  return runGuidedSetupSession(options, deps, (guidedOptions, operationProgress, initialIntent) =>
+  return runGuidedSetupSession(options, (guidedOptions, operationProgress, initialIntent) =>
     createSetupComposition({
       mode: "apply",
       options: guidedOptions,

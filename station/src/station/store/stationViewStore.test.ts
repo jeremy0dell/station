@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { StoreApi } from "zustand/vanilla";
-import { selectDashboardViewport } from "@station/dashboard-core";
+import {
+  selectDashboardViewport,
+  type DashboardSearchExperience,
+} from "@station/dashboard-core";
 import type { TuiFolderService } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -19,6 +22,31 @@ describe("createStationViewStore", () => {
 
     expect(store.getState().screen).toEqual({ name: "dashboard" });
     expect(store.getState().searchQuery).toBe("pty");
+  });
+
+  it("forwards a supplied resolved search experience without selecting one", () => {
+    const dashboardSearchExperience: DashboardSearchExperience = {
+      open: (state) => ({
+        state: { ...state, screen: { name: "search", value: "resolved:" } },
+      }),
+      handleKey: (state, key) => {
+        if (state.screen.name !== "search") {
+          return { state };
+        }
+        return {
+          state: {
+            ...state,
+            screen: { name: "search", value: `${state.screen.value}${key.input}` },
+          },
+        };
+      },
+    };
+    const store = makeStore(undefined, dashboardSearchExperience);
+
+    store.getState().handleKey({ input: "/" });
+    store.getState().handleKey({ input: "native" });
+
+    expect(store.getState().screen).toEqual({ name: "search", value: "resolved:native" });
   });
 
   it("routes row activation through the stubbed command service with real pending state", async () => {
@@ -106,13 +134,19 @@ describe("createStationViewStore", () => {
   });
 });
 
-function makeStore(folderService?: TuiFolderService): StoreApi<TuiStore> {
+function makeStore(
+  folderService?: TuiFolderService,
+  dashboardSearchExperience?: DashboardSearchExperience,
+): StoreApi<TuiStore> {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
   const options: Parameters<typeof createStationViewStore>[1] = {
   };
   if (folderService !== undefined) {
     options.folderService = folderService;
+  }
+  if (dashboardSearchExperience !== undefined) {
+    options.dashboardSearchExperience = dashboardSearchExperience;
   }
   const store = createStationViewStore(
     {

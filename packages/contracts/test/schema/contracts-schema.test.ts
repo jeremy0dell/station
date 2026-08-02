@@ -5,6 +5,7 @@ import {
   AgentPrepareExternalLaunchResultSchema,
   AgentReportExternalExitParamsSchema,
   AgentReportExternalExitResultSchema,
+  ClientFeatureFlagsSchema,
   CommandRecordSchema,
   createClientFeatureFlagsSchema,
   createEvaluatedFeatureFlagsSchema,
@@ -533,12 +534,27 @@ describe("contract schemas", () => {
     expectFails(StationSnapshotSchema, snapshot, "snapshot row terminal with target id");
   });
 
-  it("accepts the production resume feature flag and rejects unknown flags", () => {
+  it("accepts production feature flags, rejects unknown flags, and excludes TUI flags from clients", () => {
     expect(FeatureFlagConfigSchema.parse({})).toEqual({});
-    expect(FeatureFlagConfigSchema.parse({ sessionResumeAgent: true })).toEqual({
+    expect(
+      FeatureFlagConfigSchema.parse({
+        dashboardPersistentFilter: true,
+        sessionResumeAgent: true,
+      }),
+    ).toEqual({
+      dashboardPersistentFilter: true,
       sessionResumeAgent: true,
     });
     expect(FeatureFlagConfigSchema.safeParse({ "test.fake": true }).success).toBe(false);
+    expect(
+      ClientFeatureFlagsSchema.safeParse({
+        revision: "test",
+        flags: {
+          dashboardPersistentFilter: true,
+          sessionResumeAgent: true,
+        },
+      }).success,
+    ).toBe(false);
 
     expect(
       StationSnapshotSchema.parse({
