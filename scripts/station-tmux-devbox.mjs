@@ -85,6 +85,7 @@ const lanePassthroughEnvironmentVariables = new Set([
   "TZ",
   "USER",
 ]);
+const fallbackAttachTerminal = "xterm-256color";
 const signalExitCodes = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
 const observerProcessTokenPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -171,15 +172,90 @@ function attach() {
   if (!privateServerAlive(manifest) || !privateSessionExists(manifest, manifest.baseSession)) {
     throw staleLaneError(manifest);
   }
+  const terminal = attachTerminal(manifest);
   const result = run(manifest.tmuxWrapper, ["attach-session", "-t", manifest.baseSession], {
     cwd: manifest.projectRoot,
-    // The isolated XDG home omits caller-specific terminfo such as Ghostty's app bundle.
-    env: laneEnvironment(manifest, { TERM: "xterm-256color" }),
+    env: laneEnvironment(manifest, { TERM: terminal }),
     stdio: "inherit",
     check: false,
     timeoutMs: undefined,
   });
   process.exitCode = result.status;
+}
+
+function attachTerminal(manifest) {
+  const tput = resolveExecutable("tput");
+  if (tput === undefined) {
+    throw new Error("Private tmux attach requires `tput` from ncurses on PATH.");
+  }
+
+  const requested = process.env.TERM?.trim();
+  if (requested !== undefined && requested.length > 0) {
+    const requestedProbe = probeAttachTerminal(manifest, tput, requested);
+    if (requestedProbe.usable) {
+      return requested;
+    }
+    const fallbackProbe =
+      requested === fallbackAttachTerminal
+        ? requestedProbe
+        : probeAttachTerminal(manifest, tput, fallbackAttachTerminal);
+    if (!fallbackProbe.usable) {
+      throw unusableFallbackTerminalError(fallbackProbe.reason);
+    }
+    process.stderr.write(
+      `Private tmux cannot use caller TERM=${JSON.stringify(requested)}: ${requestedProbe.reason}; ` +
+        `using TERM=${fallbackAttachTerminal}.\n`,
+    );
+    return fallbackAttachTerminal;
+  }
+
+  const fallbackProbe = probeAttachTerminal(manifest, tput, fallbackAttachTerminal);
+  if (!fallbackProbe.usable) {
+    throw unusableFallbackTerminalError(fallbackProbe.reason);
+  }
+  return fallbackAttachTerminal;
+}
+
+function probeAttachTerminal(manifest, tput, terminal) {
+  // Probe against the lane environment so caller-only terminfo paths cannot weaken isolation.
+  const probeEnvironment = laneEnvironment(manifest, { TERM: terminal });
+  const clear = run(tput, ["-T", terminal, "clear"], {
+    cwd: manifest.projectRoot,
+    env: probeEnvironment,
+    check: false,
+  });
+  if (clear.status !== 0) {
+    return {
+      usable: false,
+      reason:
+        clear.status === 1
+          ? "terminfo lacks the required clear capability"
+          : "terminfo is unavailable inside the isolated environment",
+    };
+  }
+
+  const cup = run(tput, ["-T", terminal, "cup", "0", "0"], {
+    cwd: manifest.projectRoot,
+    env: probeEnvironment,
+    check: false,
+  });
+  if (cup.status !== 0) {
+    return {
+      usable: false,
+      reason:
+        cup.status === 1
+          ? "terminfo lacks the required cup capability"
+          : "terminfo is unavailable inside the isolated environment",
+    };
+  }
+  return { usable: true };
+}
+
+function unusableFallbackTerminalError(reason) {
+  return new Error(
+    `Private tmux fallback TERM=${fallbackAttachTerminal} is unusable: ${reason}. ` +
+      "Install its ncurses terminfo entry before attaching.",
+  );
 }
 
 function status() {

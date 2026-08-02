@@ -74,6 +74,14 @@ strict minimal config. It never seeds real auth, Git, SSH, hooks, config, or
 default tmux state. `status` inspects only the recorded private manifest,
 server, sockets, and matching processes.
 
+Attach preserves the caller's `TERM` only when ncurses `tput` can resolve it
+inside the isolated environment with tmux's required `clear` and `cup`
+capabilities. Caller-specific `TERMINFO`, `TERMINFO_DIRS`, and external XDG data
+paths are intentionally not imported. An absent, unavailable, or unsuitable
+terminal falls back to `xterm-256color`; a rejected value is named in the
+fallback diagnostic, so the documented attach command never needs a manual
+`TERM` prefix.
+
 Use `Ctrl-b Space` in the attached base session. The binding enters the built
 CLI's production `popup` command; `_station-ui` owns the long-lived CLI parent,
 which retains the renderer-control IPC channel while the Bun renderer reloads

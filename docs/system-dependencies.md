@@ -86,9 +86,13 @@ The Worktrunk provider shells out to `wt`. Install Worktrunk before using a conf
 worktree_provider = "worktrunk"
 ```
 
-The tmux provider shells out to `tmux` for the workbench and popup local-use path. Guided
-`stn setup` offers an optional recommended binding in a marked block in `~/.tmux.conf`; it is
-never selected without consent. A new block defaults to `tmux prefix + Space`:
+The tmux provider shells out to `tmux` for the workbench and popup local-use path. The
+source-only private tmux devbox also requires ncurses `tput` on `PATH` when attaching; it
+uses that tool against the isolated terminfo environment to preserve only caller terminals
+that provide tmux's required `clear` and `cup` capabilities. Compiled Station and ordinary
+tmux provider use do not add this development-only requirement. Guided `stn setup` offers
+an optional recommended binding in a marked block in `~/.tmux.conf`; it is never selected
+without consent. A new block defaults to `tmux prefix + Space`:
 
 ```tmux
 # >>> station popup binding >>>
