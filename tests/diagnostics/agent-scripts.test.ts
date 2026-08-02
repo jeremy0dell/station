@@ -1,10 +1,11 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { parseCleanupArgs } from "../../scripts/maintenance/agent-cleanup.mjs";
 import {
   isUnder,
@@ -56,22 +57,45 @@ const rescueMetadata = {
   observerBuildVersion: "0.0.0-test+station.test",
 };
 
-type TurboConfig = {
-  futureFlags?: {
-    watchUsingTaskInputs?: boolean;
-  };
-  tasks?: {
-    build?: {
-      inputs?: string[];
-      outputs?: string[];
-    };
-    "build:identity"?: {
-      cache?: boolean;
-      dependsOn?: string[];
-      inputs?: string[];
-    };
-  };
-};
+const turboConfigSchema = z.object({
+  futureFlags: z
+    .object({
+      watchUsingTaskInputs: z.boolean().optional(),
+    })
+    .optional(),
+  tasks: z
+    .object({
+      build: z
+        .object({
+          inputs: z.array(z.string()).optional(),
+          outputs: z.array(z.string()).optional(),
+        })
+        .optional(),
+      "build:identity": z
+        .object({
+          cache: z.boolean().optional(),
+          dependsOn: z.array(z.string()).optional(),
+          inputs: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+const packageScriptsSchema = z.object({
+  scripts: z.record(z.string(), z.string()).optional(),
+});
+
+const turboDryRunSchema = z.object({
+  tasks: z
+    .array(
+      z.object({
+        taskId: z.string().optional(),
+        inputs: z.record(z.string(), z.string()).optional(),
+      }),
+    )
+    .optional(),
+});
 
 describe("agent cleanup/reset scripts", () => {
   it("defaults cleanup and reset to dry-run mode", () => {
@@ -145,6 +169,10 @@ managed_root = "~/.worktrees"`);
 
 describe("session migration script", () => {
   it("defaults to a read-only plan and requires --yes for full migration", () => {
+    vi.stubEnv("CODEX_HOME", undefined);
+    vi.stubEnv("XDG_DATA_HOME", undefined);
+    vi.stubEnv("CLAUDE_CONFIG_DIR", undefined);
+
     expect(
       parseSessionMigrationArgs(["--archive", "rescue", "--target-config", "target.toml"], {
         cwd: "/tmp",
@@ -517,10 +545,11 @@ describe("binary smoke script", () => {
     const scriptPath = fileURLToPath(
       new URL("../../scripts/test-runners/run-binary-smoke.mjs", import.meta.url),
     );
-    execFileSync(process.execPath, [scriptPath], {
+    const reaped = spawnSync(process.execPath, [scriptPath], {
       env: { ...process.env, STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK: "1" },
-      stdio: "pipe",
+      encoding: "utf8",
     });
+    expect(reaped.status, reaped.stderr).toBe(0);
 
     const interrupted = spawnSync(process.execPath, [scriptPath], {
       env: { ...process.env, STATION_BINARY_SMOKE_CANCELLATION_EXIT_SELF_CHECK: "1" },
@@ -768,12 +797,17 @@ describe("tui dev script", () => {
   });
 
   it("keeps turbo build watch inputs from reacting to tests", () => {
-    const turboConfig = JSON.parse(
-      readFileSync(new URL("../../turbo.json", import.meta.url), "utf8"),
-    ) as TurboConfig;
-    const cliPackage = JSON.parse(
-      readFileSync(new URL("../../apps/cli/package.json", import.meta.url), "utf8"),
-    ) as { scripts?: Record<string, string> };
+    const turboConfigResult = turboConfigSchema.safeParse(
+      JSON.parse(readFileSync(new URL("../../turbo.json", import.meta.url), "utf8")),
+    );
+    const cliPackageResult = packageScriptsSchema.safeParse(
+      JSON.parse(readFileSync(new URL("../../apps/cli/package.json", import.meta.url), "utf8")),
+    );
+    expect(turboConfigResult.success).toBe(true);
+    expect(cliPackageResult.success).toBe(true);
+    if (!turboConfigResult.success || !cliPackageResult.success) return;
+    const turboConfig = turboConfigResult.data;
+    const cliPackage = cliPackageResult.data;
 
     expect(turboConfig.tasks?.build?.inputs).toEqual(
       expect.arrayContaining([
@@ -794,16 +828,19 @@ describe("tui dev script", () => {
     });
     expect(cliPackage.scripts?.["build:identity"]).toBe("node ../../scripts/build-identity.mjs");
 
-    const dryRun = JSON.parse(
-      execFileSync(
-        "pnpm",
-        ["exec", "turbo", "run", "build:identity", "--filter=@station/cli", "--dry=json"],
-        {
-          cwd: fileURLToPath(new URL("../../", import.meta.url)),
-          encoding: "utf8",
-        },
-      ),
-    ) as { tasks?: Array<{ taskId?: string; inputs?: Record<string, string> }> };
+    const dryRunProcess = spawnSync(
+      "pnpm",
+      ["exec", "turbo", "run", "build:identity", "--filter=@station/cli", "--dry=json"],
+      {
+        cwd: fileURLToPath(new URL("../../", import.meta.url)),
+        encoding: "utf8",
+      },
+    );
+    expect(dryRunProcess.status, dryRunProcess.stderr).toBe(0);
+    const dryRunResult = turboDryRunSchema.safeParse(JSON.parse(dryRunProcess.stdout));
+    expect(dryRunResult.success).toBe(true);
+    if (!dryRunResult.success) return;
+    const dryRun = dryRunResult.data;
     const identityTask = dryRun.tasks?.find(
       (task) => task.taskId === "@station/cli#build:identity",
     );
