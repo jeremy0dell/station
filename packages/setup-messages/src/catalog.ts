@@ -5,7 +5,7 @@ export const setupMessageCatalog = {
   "setup.selection-summary": { terminal: "Agent selection: {source}" },
   "setup.introduction": {
     terminal:
-      "Set up Station for this project.\nStation will check the local tools it needs and prepare each step.\nIt will ask before installing tools or updating configuration.\nFull diagnostics are available from this launcher's setup check command.",
+      "Set up Station on this machine.\nStation will check the local tools it needs and prepare each step.\nIt will ask before installing tools or updating configuration.\nFull diagnostics are available from this launcher's setup check command.",
   },
   "section.core": { terminal: "Core" },
   "section.recommended": { terminal: "Recommended" },
@@ -307,7 +307,7 @@ export const setupMessageCatalog = {
   "recovery.then-run": { terminal: "Then run:" },
   "recovery.run-command": { terminal: "Run: {command}" },
   "guided.heading": { terminal: "Station setup" },
-  "guided.checking": { terminal: "Checking this project and its tools..." },
+  "guided.checking": { terminal: "Checking local tools and Station configuration..." },
   "guided.interactive-required": {
     terminal: "Guided setup requires an interactive terminal.",
   },

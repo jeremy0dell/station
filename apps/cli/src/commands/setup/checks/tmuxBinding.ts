@@ -263,6 +263,17 @@ function parseMarkedBinding(input: {
   ) {
     return bindingConflict(configuredKeyConflictMessage(bindingKey));
   }
+  if (
+    !managedPrefixBindingRemainsEffective({
+      lines: input.lines,
+      ownedRange: input.ownedRange,
+      bindingKey,
+    })
+  ) {
+    return bindingConflict(
+      `tmux prefix + ${bindingKey} is changed after Station’s managed block; setup will not move or replace user configuration.`,
+    );
+  }
   return { status: "binding", bindingKey, quotedRunShellCommand };
 }
 
@@ -304,11 +315,33 @@ function hasConfiguredPrefixBinding(input: {
     ) {
       continue;
     }
-    const action = directPrefixBindingAction({ line, bindingKey: input.bindingKey });
-    if (action === "bind") assigned = true;
-    if (action === "unbind") assigned = false;
+    for (const action of directPrefixBindingActions({ line, bindingKey: input.bindingKey })) {
+      assigned = action === "bind";
+    }
   }
   return assigned;
+}
+
+function managedPrefixBindingRemainsEffective(input: {
+  readonly lines: readonly string[];
+  readonly ownedRange: { readonly start: number; readonly end: number };
+  readonly bindingKey: string;
+}): boolean {
+  let managed = false;
+  for (const [index, line] of input.lines.entries()) {
+    if (index === input.ownedRange.start) {
+      managed = true;
+      continue;
+    }
+    if (index > input.ownedRange.start && index <= input.ownedRange.end) continue;
+    for (const _action of directPrefixBindingActions({
+      line,
+      bindingKey: input.bindingKey,
+    })) {
+      managed = false;
+    }
+  }
+  return managed;
 }
 
 const bindingCommands = new Set(["bind", "bind-key", "unbind", "unbind-key"]);
@@ -320,19 +353,23 @@ type TmuxBindingSelector = {
   readonly unbindAll: boolean;
 };
 
-function directPrefixBindingAction(input: {
+function directPrefixBindingActions(input: {
   readonly line: string;
   readonly bindingKey: string;
-}): "bind" | "unbind" | undefined {
-  const tokens = tmuxConfigTokens(input.line);
-  const command = tokens[0] ?? "";
-  if (!bindingCommands.has(command)) return undefined;
+}): Array<"bind" | "unbind"> {
+  const actions: Array<"bind" | "unbind"> = [];
+  for (const tokens of tmuxConfigCommands(input.line)) {
+    const command = tokens[0] ?? "";
+    if (!bindingCommands.has(command)) continue;
 
-  const selector = tmuxBindingSelector(tokens.slice(1));
-  if (selector.table !== "prefix") return undefined;
-  const action = bindCommands.has(command) ? "bind" : "unbind";
-  if (selector.key === input.bindingKey) return action;
-  return action === "unbind" && selector.unbindAll ? "unbind" : undefined;
+    const selector = tmuxBindingSelector(tokens.slice(1));
+    if (selector.table !== "prefix") continue;
+    const action = bindCommands.has(command) ? "bind" : "unbind";
+    if (selector.key === input.bindingKey || (action === "unbind" && selector.unbindAll)) {
+      actions.push(action);
+    }
+  }
+  return actions;
 }
 
 function tmuxBindingSelector(tokens: readonly string[]): TmuxBindingSelector {
@@ -343,6 +380,10 @@ function tmuxBindingSelector(tokens: readonly string[]): TmuxBindingSelector {
     if (token === "-T") {
       table = tokens[index + 1] ?? "";
       index += 1;
+      continue;
+    }
+    if (token.startsWith("-T") && token.length > 2) {
+      table = token.slice(2);
       continue;
     }
     if (token === "-N") {
@@ -359,10 +400,73 @@ function tmuxBindingSelector(tokens: readonly string[]): TmuxBindingSelector {
   return { table, unbindAll };
 }
 
-function tmuxConfigTokens(line: string): readonly string[] {
-  const tokens = line.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s#]+|#.*/g) ?? [];
-  const commentIndex = tokens.findIndex((token) => token.startsWith("#"));
-  return commentIndex < 0 ? tokens : tokens.slice(0, commentIndex);
+// Only unescaped top-level semicolons split commands; quoted and braced fragments remain intact.
+function tmuxConfigCommands(line: string): readonly (readonly string[])[] {
+  const commands: string[][] = [];
+  let tokens: string[] = [];
+  let token = "";
+  let tokenStarted = false;
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+  let braceDepth = 0;
+
+  const finishToken = () => {
+    if (!tokenStarted) return;
+    tokens.push(token);
+    token = "";
+    tokenStarted = false;
+  };
+  const finishCommand = () => {
+    finishToken();
+    if (tokens.length > 0) commands.push(tokens);
+    tokens = [];
+  };
+
+  for (const character of line) {
+    if (escaped) {
+      token += character;
+      tokenStarted = true;
+      escaped = false;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) {
+        quote = undefined;
+      } else if (character === "\\" && quote === '"') {
+        escaped = true;
+      } else {
+        token += character;
+      }
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "#" && !tokenStarted) break;
+    if (character === "{") braceDepth += 1;
+    if (character === "}") braceDepth = Math.max(0, braceDepth - 1);
+    if (character === ";" && braceDepth === 0) {
+      finishCommand();
+      continue;
+    }
+    if (/\s/u.test(character) && braceDepth === 0) {
+      finishToken();
+      continue;
+    }
+    token += character;
+    tokenStarted = true;
+  }
+  if (escaped) token += "\\";
+  finishCommand();
+  return commands;
 }
 
 function configuredKeyConflictMessage(bindingKey: string): string {

@@ -1375,10 +1375,10 @@ describe("guided setup command", () => {
       "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",
     );
     expect(output).not.toContain("persisted and loaded in the current tmux server");
-    // Intent-bound replanning adds two read-only probes before the complete apply sequence.
+    // Intent-bound replanning plus the mutation-boundary recheck probe launcher startup.
     expect(
       calls.filter((call) => basename(call.command) === "tmux" && call.args?.[0] === "run-shell"),
-    ).toHaveLength(7);
+    ).toHaveLength(8);
   });
 
   it("delegates Worktrunk launcher composition while resolving the agent ingress launcher", async () => {
@@ -2033,9 +2033,9 @@ describe("guided setup command", () => {
 
     const output = chunks.join("");
     expect(result.code).toBe(1);
-    expect(output).toContain("Set up Station for this project.");
+    expect(output).toContain("Set up Station on this machine.");
     expect(output).toContain("It will ask before installing tools or updating configuration.");
-    expect(output).toContain("Checking this project and its tools...");
+    expect(output).toContain("Checking local tools and Station configuration...");
     expect(output).toContain("Required tools");
     expect(output).toContain("Homebrew will install:\n- Install diffnav");
     expect(output).toContain("Official formula ↗ (https://formulae.brew.sh/formula/diffnav)");
@@ -2055,6 +2055,7 @@ describe("guided setup command", () => {
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
     const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
     const configPath = join(root, "home/.config/station/config.toml");
 
     // Fresh arm64 Mac: CLT present, but brew and every core tool are missing. brew
@@ -2162,11 +2163,22 @@ describe("guided setup command", () => {
             return ["codex"];
           },
         },
-        writeStdout: () => undefined,
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
     expect(result.code).toBe(0);
+    const output = chunks.join("");
+    const completedReview = output.slice(
+      output.indexOf("Already completed prerequisites"),
+      output.indexOf("Will apply"),
+    );
+    for (const label of ["Worktrunk / wt", "tmux", "Bun", "diffnav", "git-delta"]) {
+      expect(completedReview).toContain(`Install ${label}`);
+    }
+    expect(completedReview).not.toContain("Apply setup change");
     // The brew-install actions actually ran (not silent no-ops) — the discriminator:
     // before the fix the re-probe never sees brew, so these are never executed.
     expect(
