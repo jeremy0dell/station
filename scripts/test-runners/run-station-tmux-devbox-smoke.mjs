@@ -131,10 +131,28 @@ try {
   assert(resetRefusal.status !== 0, "reset unexpectedly succeeded without --yes");
   assertIncludes(resetRefusal.stderr, "Refusing to reset without --yes", "reset refusal");
 
+  const nonInteractiveDev = devbox(["tmux", "dev"], { check: false });
+  assert(nonInteractiveDev.status !== 0, "non-interactive tmux dev unexpectedly succeeded");
+  assertIncludes(
+    nonInteractiveDev.stderr,
+    "tmux dev requires an interactive terminal.",
+    "non-interactive refusal",
+  );
+  assertIncludes(
+    nonInteractiveDev.stderr,
+    "pnpm station:devbox tmux start",
+    "non-interactive guidance",
+  );
+  assert(!existsSync(privateRoot), "non-interactive tmux dev created the private root");
+  assert(
+    !processRecords().some((record) => record.command.includes(privateRoot)),
+    "non-interactive tmux dev left a private process",
+  );
+
   const firstStart = devbox(["tmux", "start"]);
   ownsPrivateLane = true;
-  const manifest = readManifest();
-  assertOwnershipOutput(firstStart.stdout, manifest);
+  const splitManifest = readManifest();
+  assertOwnershipOutput(firstStart.stdout, splitManifest);
   const preexistingLaneRefusal = checked(process.execPath, [fileURLToPath(import.meta.url)], {
     env: outerEnv,
     check: false,
@@ -147,21 +165,21 @@ try {
   );
   const manifestAfterRefusal = readManifest();
   assert(
-    manifestAfterRefusal.tmuxServerPid === manifest.tmuxServerPid &&
+    manifestAfterRefusal.tmuxServerPid === splitManifest.tmuxServerPid &&
       JSON.stringify(manifestAfterRefusal.observerIdentity) ===
-        JSON.stringify(manifest.observerIdentity) &&
-      privateSessionExists(manifest, manifest.baseSession),
+        JSON.stringify(splitManifest.observerIdentity) &&
+      privateSessionExists(splitManifest, splitManifest.baseSession),
     "preexisting lane refusal stopped or replaced the private lane",
   );
   const secondStart = devbox(["tmux", "start"]);
-  assertOwnershipOutput(secondStart.stdout, manifest);
+  assertOwnershipOutput(secondStart.stdout, splitManifest);
   const initialStatus = devbox(["tmux", "status"]);
-  assertOwnershipOutput(initialStatus.stdout, manifest);
+  assertOwnershipOutput(initialStatus.stdout, splitManifest);
   devbox(["tmux", "logs"]);
 
-  proveManifestAndIsolation(manifest);
-  await proveAttachTerminalFallbacks(manifest);
-  ptyClient = await startPtyClient(manifest, {
+  proveManifestAndIsolation(splitManifest);
+  await proveAttachTerminalFallbacks(splitManifest);
+  ptyClient = await startPtyClient(splitManifest, {
     term: "xterm",
     expectedTerminal: "xterm",
   });
@@ -169,8 +187,21 @@ try {
     !ptyClient.output.includes("Private tmux cannot use caller TERM="),
     "valid caller terminal unexpectedly used the fallback",
   );
-  assertPrivateServerEnvironment(manifest);
-  await proveBaseShellIsolation(manifest);
+  assertPrivateServerEnvironment(splitManifest);
+  await proveBaseShellIsolation(splitManifest);
+  await ptyClient.close();
+  ptyClient = undefined;
+  devbox(["tmux", "stop"]);
+  assert(!existsSync(privateRoot), "split start/attach/stop did not remove the private root");
+
+  ptyClient = await startPtyDev({ term: "xterm", expectedTerminal: "xterm" });
+  const manifest = ptyClient.manifest;
+  assertIncludes(ptyClient.output, "Build complete.", "interactive build output");
+  assert(
+    Number.isInteger(manifest.devOwnerPid) && manifest.devOwnerPid > 0,
+    "interactive manifest does not name its foreground owner",
+  );
+  proveManifestAndIsolation(manifest);
   await triggerPopup(ptyClient);
   await waitFor(
     () => privateSessionExists(manifest, manifest.hiddenSession),
@@ -276,15 +307,33 @@ try {
   assertWrapperAudit(manifest);
   assert(!existsSync(manifest.bareTmuxLogPath), "a child invoked bare/default tmux");
 
-  await ptyClient.close();
+  const detachResult = await ptyClient.detachAndWait();
+  assert(
+    detachResult.code === 0 && detachResult.signal === null,
+    `interactive detach exited as ${JSON.stringify(detachResult)}\n${ptyClient.output}`,
+  );
   ptyClient = undefined;
-  devbox(["tmux", "stop"]);
-  devbox(["tmux", "stop"]);
-  assert(!existsSync(privateRoot), "stop did not remove the private root");
+  assert(!existsSync(privateRoot), "interactive detach did not remove the private root");
+  for (const pid of [
+    beforeHmr.serverPid,
+    beforeHmr.basePanePid,
+    beforeHmr.hiddenPanePid,
+    beforeHmr.cli.pid,
+    beforeHmr.renderer.pid,
+    beforeHmr.observerPid,
+    beforeHmr.nestedClientPid,
+    beforeHmr.hostPid,
+  ].filter((pid) => pid !== undefined)) {
+    assert(!processExists(pid), `interactive detach left private process ${pid}`);
+  }
+  const stoppedStatus = devbox(["tmux", "status"]);
+  assertIncludes(stoppedStatus.stdout, "Station private tmux devbox: stopped", "detach status");
 
   await proveBaseDescendantCleanup();
   await proveVerifiedPartialReset();
   await proveFailedStartupRollback();
+  await proveAttachFailureRollback();
+  await proveExternalStopCoordination();
   await proveSignals();
   proveOuterSentinels();
   assert(readFileSync(hmrTarget).equals(targetBytes), "HMR target bytes changed after smoke");
@@ -516,42 +565,113 @@ async function proveFailedStartupRollback() {
   assert(!existsSync(privateRoot), "failed startup retained private resources");
 }
 
+async function proveAttachFailureRollback() {
+  const realTmux = checked("/bin/sh", ["-c", "command -v tmux"], { env: outerEnv }).stdout.trim();
+  assert(realTmux.startsWith("/"), `could not resolve the real tmux executable: ${realTmux}`);
+  const attachMarker = join(outerRoot, "attach-failure.marker");
+  const proxy = join(outerRoot, "attach-failure-tmux");
+  writeFileSync(
+    proxy,
+    [
+      "#!/bin/sh",
+      'for arg in "$@"; do',
+      '  if [ "$arg" = "attach-session" ]; then',
+      `    : > ${shellQuote(attachMarker)}`,
+      "    sleep 1",
+      "    exit 86",
+      "  fi",
+      "done",
+      `exec ${shellQuote(realTmux)} "$@"`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  chmodSync(proxy, 0o700);
+
+  const client = spawnPtyCommand("dev", {
+    term: "xterm",
+    env: { ...outerEnv, STATION_TMUX_DEVBOX_TMUX_BIN: proxy },
+  });
+  try {
+    await waitFor(
+      () => existsSync(attachMarker),
+      "injected attach failure was not reached",
+      60_000,
+    );
+    const manifest = readManifest();
+    assert(privateSessionExists(manifest, manifest.baseSession), "attach failure missed startup");
+    const result = await withTimeout(client.exit, 60_000, "attach failure owner did not exit");
+    assert(
+      result.code === 86 && result.signal === null,
+      `attach failure exited as ${JSON.stringify(result)}\n${client.output}`,
+    );
+    assert(!existsSync(privateRoot), "attach failure retained private resources");
+  } finally {
+    if (existsSync(privateRoot)) {
+      devbox(["tmux", "stop"], { check: false });
+    }
+    await client.close();
+  }
+}
+
+async function proveExternalStopCoordination() {
+  const client = await startPtyDev({ term: "xterm", expectedTerminal: "xterm" });
+  try {
+    devbox(["tmux", "stop"]);
+    const result = await withTimeout(client.exit, 30_000, "externally stopped owner did not exit");
+    assert(
+      result.code === 143 && result.signal === null,
+      `externally stopped owner exited as ${JSON.stringify(result)}\n${client.output}`,
+    );
+    assert(
+      !client.output.includes("cleanup retained"),
+      `external stop raced cleanup\n${client.output}`,
+    );
+    assert(!existsSync(privateRoot), "external stop retained the private root");
+  } finally {
+    await client.close();
+    devbox(["tmux", "stop"], { check: false });
+  }
+}
+
 async function proveSignals() {
   for (const [signal, expectedCode] of [
     ["SIGINT", 130],
     ["SIGHUP", 129],
     ["SIGTERM", 143],
   ]) {
-    const owner = spawn(process.execPath, [wrapperPath, "tmux", "dev"], {
-      cwd: repoRoot,
-      env: outerEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    owner.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf8");
-    });
-    owner.stderr.on("data", (chunk) => {
-      stderr += chunk.toString("utf8");
-    });
-    const exit = new Promise((resolveExit, rejectExit) => {
-      owner.once("error", rejectExit);
-      owner.once("exit", (code, exitedSignal) => resolveExit({ code, signal: exitedSignal }));
-    });
-    await waitFor(
-      () => stdout.includes("Foreground owner active."),
-      `${signal} owner did not become ready\n${stdout}\n${stderr}`,
-      30_000,
-    );
-    owner.kill(signal);
-    const result = await withTimeout(exit, 30_000, `${signal} owner did not exit`);
+    const client = await startPtyDev({ term: "xterm", expectedTerminal: "xterm" });
+    const owner = readManifest().devOwnerPid;
+    assert(Number.isInteger(owner) && owner > 0, `${signal} owner identity is missing`);
+    process.kill(owner, signal);
+    const result = await withTimeout(client.exit, 30_000, `${signal} owner did not exit`);
     assert(
       result.code === expectedCode && result.signal === null,
-      `${signal} owner exited as ${JSON.stringify(result)}\n${stdout}\n${stderr}`,
+      `${signal} owner exited as ${JSON.stringify(result)}\n${client.output}`,
     );
     assert(!existsSync(privateRoot), `${signal} cleanup retained ${privateRoot}`);
+    await client.close();
   }
+}
+
+function popupProcesses(records, hiddenPanePid) {
+  const processes = [
+    records.find((record) => record.pid === hiddenPanePid),
+    ...descendants(records, hiddenPanePid),
+  ].filter((record) => record !== undefined);
+  return {
+    cli: processes.find(
+      (record) =>
+        record.command.includes(cliPath) &&
+        record.command.includes("tui") &&
+        record.command.includes("--popup") &&
+        record.command.includes("--persistent"),
+    ),
+    renderer: processes.find(
+      (record) =>
+        record.command.includes("bun") && record.command.includes("src/dashboardRenderer/main.tsx"),
+    ),
+  };
 }
 
 function assertStableRuntime(before, after, label) {
@@ -592,21 +712,7 @@ function runtimeEvidence(manifest) {
   const nestedClientPid =
     nested.length === 0 ? undefined : positiveInteger(nested, "nested client pid");
   const records = processRecords();
-  const processTree = [
-    records.find((record) => record.pid === hiddenPanePid),
-    ...descendants(records, hiddenPanePid),
-  ].filter((record) => record !== undefined);
-  const cli = processTree.find(
-    (record) =>
-      record.command.includes(cliPath) &&
-      record.command.includes("tui") &&
-      record.command.includes("--popup") &&
-      record.command.includes("--persistent"),
-  );
-  const renderer = processTree.find(
-    (record) =>
-      record.command.includes("bun") && record.command.includes("src/dashboardRenderer/main.tsx"),
-  );
+  const { cli, renderer } = popupProcesses(records, hiddenPanePid);
   const observerPid = readManifest().observerIdentity.pid;
   const host = records.find(
     (record) =>
@@ -668,18 +774,18 @@ async function proveAttachTerminalFallbacks(manifest) {
   }
 }
 
-async function startPtyClient(manifest, { term, expectedTerminal }) {
-  const clientEnvironment = { ...outerEnv };
-  if (term === undefined) {
+function spawnPtyCommand(subcommand, options = {}) {
+  const clientEnvironment = { ...(options.env ?? outerEnv) };
+  if (options.term === undefined) {
     delete clientEnvironment.TERM;
   } else {
-    clientEnvironment.TERM = term;
+    clientEnvironment.TERM = options.term;
   }
   const child = spawn(
     "python3",
-    ["-c", ptyBridgeScript, process.execPath, wrapperPath, "tmux", "attach"],
+    ["-c", ptyBridgeScript, process.execPath, wrapperPath, "tmux", subcommand],
     {
-      cwd: manifest.projectRoot,
+      cwd: options.cwd ?? repoRoot,
       env: clientEnvironment,
       stdio: ["pipe", "pipe", "pipe"],
     },
@@ -695,30 +801,8 @@ async function startPtyClient(manifest, { term, expectedTerminal }) {
   child.stdout.on("data", appendOutput);
   child.stderr.on("data", appendOutput);
 
-  let clientName;
-  let clientTerminal;
-  await waitFor(() => {
-    const clients = tmux(
-      manifest,
-      ["list-clients", "-t", manifest.baseSession, "-F", "#{client_name}\t#{client_termname}"],
-      { check: false },
-    ).stdout.trim();
-    const client = clients
-      .split(/\r?\n/u)
-      .filter(Boolean)
-      .map((line) => line.split("\t"))
-      .find(([name]) => name !== undefined);
-    clientName = client?.[0];
-    clientTerminal = client?.[1];
-    return clientName !== undefined;
-  }, "ordinary PTY client did not attach");
-  assert(
-    clientTerminal === expectedTerminal,
-    `ordinary PTY client used TERM=${clientTerminal ?? "<unknown>"}; expected ${expectedTerminal}`,
-  );
   return {
     child,
-    clientName,
     exit,
     get output() {
       return output;
@@ -732,14 +816,96 @@ async function startPtyClient(manifest, { term, expectedTerminal }) {
       }
     },
     async close() {
-      if (clientName !== undefined && privateSessionExists(manifest, manifest.baseSession)) {
-        tmux(manifest, ["detach-client", "-t", clientName], { check: false });
-      }
       child.stdin.end();
       child.kill("SIGTERM");
-      await withTimeout(exit, 5_000, "ordinary PTY client did not exit").catch(() => undefined);
+      await withTimeout(exit, 5_000, `${subcommand} PTY command did not exit`).catch(
+        () => undefined,
+      );
     },
   };
+}
+
+async function startPtyClient(manifest, { term, expectedTerminal }) {
+  const client = spawnPtyCommand("attach", { term, cwd: manifest.projectRoot });
+  const { clientName, clientTerminal } = await waitForAttachedPtyClient(manifest);
+  assert(
+    clientTerminal === expectedTerminal,
+    `ordinary PTY client used TERM=${clientTerminal ?? "<unknown>"}; expected ${expectedTerminal}`,
+  );
+  const closeProcess = client.close.bind(client);
+  client.clientName = clientName;
+  client.close = async () => {
+    if (privateSessionExists(manifest, manifest.baseSession)) {
+      tmux(manifest, ["detach-client", "-t", clientName], { check: false });
+    }
+    await closeProcess();
+  };
+  return client;
+}
+
+async function startPtyDev({ term, expectedTerminal }) {
+  const client = spawnPtyCommand("dev", { term });
+  try {
+    await waitFor(
+      () => client.output.includes("Build complete."),
+      `interactive dev build did not complete\n${client.output}`,
+      120_000,
+    );
+    await waitFor(
+      () => existsSync(manifestPath) && readManifest().devOwnerPid !== null,
+      `interactive dev owner did not claim the manifest\n${client.output}`,
+      30_000,
+    );
+    const manifest = readManifest();
+    const { clientName, clientTerminal } = await waitForAttachedPtyClient(manifest);
+    assert(
+      clientTerminal === expectedTerminal,
+      `interactive PTY client used TERM=${clientTerminal ?? "<unknown>"}; expected ${expectedTerminal}`,
+    );
+    const closeProcess = client.close.bind(client);
+    client.manifest = manifest;
+    client.clientName = clientName;
+    client.detachAndWait = async () => {
+      await client.write(Buffer.from([0x02]));
+      await delay(25);
+      await client.write(Buffer.from("d"));
+      return await withTimeout(client.exit, 30_000, "interactive detach did not exit");
+    };
+    client.close = async () => {
+      if (existsSync(privateRoot)) {
+        devbox(["tmux", "stop"], { check: false });
+      }
+      await closeProcess();
+    };
+    return client;
+  } catch (error) {
+    if (existsSync(privateRoot)) {
+      devbox(["tmux", "stop"], { check: false });
+    }
+    await client.close();
+    throw error;
+  }
+}
+
+async function waitForAttachedPtyClient(manifest) {
+  let clientName;
+  let clientTerminal;
+  await waitFor(() => {
+    const clients = tmux(
+      manifest,
+      ["list-clients", "-t", manifest.baseSession, "-F", "#{client_name}\t#{client_termname}"],
+      { check: false },
+    ).stdout.trim();
+    const attached = clients
+      .split(/\r?\n/u)
+      .filter(Boolean)
+      .map((line) => line.split("\t"))
+      .find(([name]) => name !== undefined);
+    clientName = attached?.[0];
+    clientTerminal = attached?.[1];
+    return clientName !== undefined;
+  }, "PTY client did not attach");
+  return { clientName, clientTerminal };
 }
 
 async function triggerPopup(client) {
@@ -958,6 +1124,10 @@ function git(args) {
 
 function gitStatus(args) {
   return checked("git", args, { cwd: repoRoot, env: outerEnv, check: false }).status;
+}
+
+function shellQuote(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function pathInside(root, path) {

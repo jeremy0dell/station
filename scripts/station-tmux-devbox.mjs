@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
   accessSync,
@@ -27,6 +27,9 @@ const manifestPath = join(privateRoot, "manifest.json");
 const cliPath = join(repoRoot, "apps", "cli", "dist", "main.js");
 const stationDir = join(repoRoot, "station");
 const hostEntry = join(stationDir, "src", "host", "hostMain.ts");
+const backendScriptPath = realpathSync(fileURLToPath(import.meta.url));
+const packageJsonPath = join(repoRoot, "package.json");
+const buildIdentityPath = join(repoRoot, "packages", "runtime", "dist", "station-build-id");
 const baseSession = "station-devbox";
 const hiddenSession = "_station-ui";
 const manifestKeys = [
@@ -89,15 +92,16 @@ const fallbackAttachTerminal = "xterm-256color";
 const signalExitCodes = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
 const observerProcessTokenPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const buildIdentityPattern = /^[0-9a-f]{64}$/u;
 const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
 
 const [rawCommand = "dev", ...commandArgs] = process.argv.slice(2);
-const command =
-  rawCommand === "-h" || rawCommand === "--help"
-    ? "help"
-    : rawCommand === "tmux"
-      ? "dev"
-      : rawCommand;
+let command = rawCommand;
+if (rawCommand === "-h" || rawCommand === "--help") {
+  command = "help";
+} else if (rawCommand === "tmux") {
+  command = "dev";
+}
 
 try {
   switch (command) {
@@ -134,32 +138,29 @@ try {
 }
 
 async function dev() {
-  let manifest = await ensureLaneStarted();
-  const currentStartTime = processStartTime(process.pid);
-  if (currentStartTime === undefined) {
-    throw new Error(`Could not verify the tmux devbox owner process ${process.pid}.`);
+  requireInteractiveDev();
+  assertNoLiveForegroundOwnerBeforeBuild();
+  log("Building checkout (pnpm build; Turbo-cached when unchanged)…");
+  run("pnpm", ["build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    timeoutMs: undefined,
+  });
+  log("Build complete.");
+
+  await ensureLaneStarted({ expectedObserverVersion: currentObserverBuildVersion() });
+  const manifest = claimForegroundOwner();
+  let preparation;
+  try {
+    preparation = prepareAttach(manifest);
+  } catch (error) {
+    await cleanupClaimedLaneAfterFailure(manifest, error);
   }
-  if (
-    manifest.devOwnerPid !== null &&
-    manifest.devOwnerPid !== process.pid &&
-    manifest.devOwnerStartTime !== null &&
-    processMatchesStart(manifest.devOwnerPid, manifest.devOwnerStartTime)
-  ) {
-    throw new Error(
-      `The private tmux lane already has foreground owner ${manifest.devOwnerPid}. ` +
-        `Stop it with: pnpm station:devbox tmux stop`,
-    );
-  }
-  manifest = {
-    ...manifest,
-    devOwnerPid: process.pid,
-    devOwnerStartTime: currentStartTime,
-  };
-  writeManifest(manifest);
+
   printOwnership(manifest, collectEvidence(manifest));
   log("");
-  log("Foreground owner active. Ctrl-C, SIGHUP, SIGTERM, or `tmux stop` cleans this lane.");
-  await waitAsForegroundOwner();
+  log("Attached dev lane: Ctrl-b Space opens Station; Ctrl-b d leaves and cleans up.");
+  process.exitCode = await runInteractiveLifecycle(manifest, preparation);
 }
 
 async function start() {
@@ -168,19 +169,107 @@ async function start() {
 }
 
 function attach() {
-  const manifest = requireRunningManifest();
-  if (!privateServerAlive(manifest) || !privateSessionExists(manifest, manifest.baseSession)) {
-    throw staleLaneError(manifest);
-  }
-  const terminal = attachTerminal(manifest);
-  const result = run(manifest.tmuxWrapper, ["attach-session", "-t", manifest.baseSession], {
-    cwd: manifest.projectRoot,
-    env: laneEnvironment(manifest, { TERM: terminal }),
+  const preparation = prepareAttach(requireRunningManifest());
+  const result = run(preparation.command, preparation.args, {
+    cwd: preparation.cwd,
+    env: preparation.env,
     stdio: "inherit",
     check: false,
     timeoutMs: undefined,
   });
   process.exitCode = result.status;
+}
+
+function prepareAttach(manifest) {
+  if (!privateServerAlive(manifest) || !privateSessionExists(manifest, manifest.baseSession)) {
+    throw staleLaneError(manifest);
+  }
+  const terminal = attachTerminal(manifest);
+  return {
+    command: manifest.tmuxWrapper,
+    args: ["attach-session", "-t", manifest.baseSession],
+    cwd: manifest.projectRoot,
+    env: laneEnvironment(manifest, { TERM: terminal }),
+  };
+}
+
+function requireInteractiveDev() {
+  if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
+    throw new Error(
+      "tmux dev requires an interactive terminal.\n" +
+        "For automation, use: pnpm station:devbox tmux start",
+    );
+  }
+}
+
+function assertNoLiveForegroundOwnerBeforeBuild() {
+  if (!existsSync(privateRoot)) {
+    return;
+  }
+  assertNoLiveForegroundOwner(readManifest());
+}
+
+function currentObserverBuildVersion() {
+  let packageJson;
+  try {
+    packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  } catch (error) {
+    throw new Error(`Could not read the Station package version from ${packageJsonPath}.`, {
+      cause: error,
+    });
+  }
+  const version = packageJson?.version;
+  const identity = readFileSync(buildIdentityPath, "utf8").trim();
+  if (typeof version !== "string" || version.length === 0 || version.includes("+station.")) {
+    throw new Error(`Station package version is invalid at ${packageJsonPath}.`);
+  }
+  if (!buildIdentityPattern.test(identity)) {
+    throw new Error(`Station build identity is invalid at ${buildIdentityPath}. Run pnpm build.`);
+  }
+  return `${version}${version.includes("+") ? "." : "+"}station.${identity}`;
+}
+
+function claimForegroundOwner() {
+  const manifest = requireRunningManifest();
+  const currentStartTime = processStartTime(process.pid);
+  if (currentStartTime === undefined) {
+    throw new Error(`Could not verify the tmux devbox owner process ${process.pid}.`);
+  }
+  assertNoLiveForegroundOwner(manifest);
+  const claimed = {
+    ...manifest,
+    devOwnerPid: process.pid,
+    devOwnerStartTime: currentStartTime,
+  };
+  writeManifest(claimed);
+  return claimed;
+}
+
+function assertNoLiveForegroundOwner(manifest) {
+  if (
+    manifest.devOwnerPid !== null &&
+    manifest.devOwnerPid !== process.pid &&
+    manifest.devOwnerStartTime !== null &&
+    processMatchesStart(manifest.devOwnerPid, manifest.devOwnerStartTime)
+  ) {
+    throw new Error(
+      `The private tmux lane already has foreground owner ${manifest.devOwnerPid}. ` +
+        "Stop it with: pnpm station:devbox tmux stop",
+    );
+  }
+}
+
+async function cleanupClaimedLaneAfterFailure(manifest, failure) {
+  try {
+    const owned = requireCurrentOwner(manifest);
+    await cleanupLane(owned);
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [failure, cleanupError],
+      `Interactive tmux startup failed and cleanup retained ${privateRoot} as evidence.`,
+    );
+  }
+  throw failure;
 }
 
 function attachTerminal(manifest) {
@@ -306,8 +395,7 @@ async function stop() {
     log(`Station private tmux devbox already stopped (${privateRoot} is absent).`);
     return;
   }
-  const manifest = readManifest();
-  await cleanupLane(manifest);
+  await stopLane(readManifest());
   log(`Stopped the private tmux lane and removed ${privateRoot}.`);
 }
 
@@ -321,8 +409,7 @@ async function reset(args) {
     log(`Station private tmux devbox already reset (${privateRoot} is absent).`);
     return;
   }
-  const manifest = readManifest();
-  await cleanupLane(manifest);
+  await stopLane(readManifest());
   log(`Reset the verified private tmux lane at ${privateRoot}.`);
 }
 
@@ -331,23 +418,25 @@ function help() {
     [
       "Usage: pnpm station:devbox tmux [dev|start|attach|status|logs|stop|reset|help]",
       "",
-      "  dev              (default) start/reuse the HMR lane and remain its cleanup owner",
-      "  start            start/reuse the HMR lane and return",
-      "  attach           attach an ordinary client to the private base session",
+      "  dev              (default) build, start/reuse, attach, and clean up on detach",
+      "  start            start/reuse the HMR lane and return (non-interactive automation)",
+      "  attach           attach without taking cleanup ownership",
       "  status           inspect only the private manifest/server/socket/process evidence",
       "  logs [--follow]  show wrapper, popup, Observer, CLI, TUI, and Host logs",
       "  stop             stop recorded private resources and remove the disposable root",
       "  reset --yes      recover a verified partial/stale lane and remove its root",
       "  help             show this nested grammar",
       "",
-      "Inside the attached client, press Ctrl-b Space to open or toggle Station.",
-      "Package/CLI/Observer changes require: stop → pnpm build → tmux dev.",
+      "Inside the client, press Ctrl-b Space to open or toggle Station.",
+      "With `dev`, press Ctrl-b d to leave and clean up the private lane.",
+      "Use `start` for non-interactive automation.",
+      "Package/CLI/Observer changes require a fresh `tmux dev` build boundary.",
       "",
     ].join("\n"),
   );
 }
 
-async function ensureLaneStarted() {
+async function ensureLaneStarted(options = {}) {
   const prerequisites = resolvePrerequisites();
   if (existsSync(privateRoot)) {
     let manifest = readManifest();
@@ -355,6 +444,9 @@ async function ensureLaneStarted() {
       throw staleLaneError(manifest);
     }
     if (!observerIdentityAlive(manifest, manifest.observerIdentity)) {
+      if (options.expectedObserverVersion !== undefined) {
+        throw staleLaneError(manifest);
+      }
       startObserver(manifest);
       manifest = {
         ...manifest,
@@ -362,7 +454,28 @@ async function ensureLaneStarted() {
       };
       writeManifest(manifest);
     }
-    return manifest;
+    if (
+      options.expectedObserverVersion === undefined ||
+      manifest.observerIdentity?.version === options.expectedObserverVersion
+    ) {
+      return manifest;
+    }
+
+    manifest = readManifest();
+    assertNoLiveForegroundOwner(manifest);
+    const attachedClients = privateAttachedClientCount(manifest);
+    if (attachedClients > 0) {
+      throw new Error(
+        `The private tmux lane uses Observer build ${manifest.observerIdentity?.version ?? "<unknown>"} ` +
+          `but ${attachedClients} client(s) are attached. Detach them, then run: ` +
+          "pnpm station:devbox tmux stop",
+      );
+    }
+    log(
+      `Recycling unowned private lane from Observer build ${manifest.observerIdentity?.version ?? "<unknown>"} ` +
+        `to ${options.expectedObserverVersion}.`,
+    );
+    await cleanupLane(manifest);
   }
 
   mkdirSync(privateRoot, { mode: 0o700 });
@@ -816,6 +929,9 @@ function validateManifest(manifest) {
   ) {
     throw new Error("Private tmux manifest contains an invalid owner start time.");
   }
+  if ((manifest.devOwnerPid === null) !== (manifest.devOwnerStartTime === null)) {
+    throw new Error("Private tmux manifest contains an incomplete foreground owner identity.");
+  }
   if (manifest.observerIdentity !== null) {
     validateObserverIdentity(manifest.observerIdentity, manifest.observerSocketPath);
   }
@@ -923,13 +1039,13 @@ function collectEvidence(manifest) {
   const hiddenPid = panePidFromEvidence(hiddenPane);
   const hiddenProcess =
     hiddenPid === undefined ? undefined : records.find((record) => record.pid === hiddenPid);
-  const processTree =
-    hiddenPid === undefined
-      ? []
-      : [
-          ...(hiddenProcess === undefined ? [] : [hiddenProcess]),
-          ...descendantRecords(records, hiddenPid),
-        ];
+  const processTree = [];
+  if (hiddenProcess !== undefined) {
+    processTree.push(hiddenProcess);
+  }
+  if (hiddenPid !== undefined) {
+    processTree.push(...descendantRecords(records, hiddenPid));
+  }
   const cli = processTree.find(
     (record) =>
       record.command.includes(cliPath) &&
@@ -1201,59 +1317,221 @@ function assertHostOwnership(manifest, host) {
   }
 }
 
-async function waitAsForegroundOwner() {
-  await new Promise((resolveWait, rejectWait) => {
-    let finishing = false;
-    const handlers = new Map();
-    const timer = setInterval(() => {
-      if (!existsSync(manifestPath)) {
-        finish();
-        resolveWait();
+async function stopLane(manifest) {
+  const owner = verifiedLiveForegroundOwner(manifest);
+  if (owner === undefined) {
+    await cleanupLane(manifest);
+    return;
+  }
+
+  // A live interactive owner is the sole cleanup authority, so stop signals it instead of racing teardown.
+  try {
+    process.kill(owner.pid, "SIGTERM");
+  } catch (error) {
+    if (error?.code !== "ESRCH") {
+      throw error;
+    }
+  }
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (!existsSync(privateRoot)) {
+      return;
+    }
+    await delay(100);
+  }
+  throw new Error(
+    `Foreground owner ${owner.pid} did not remove ${privateRoot}; retained it for diagnosis.`,
+  );
+}
+
+function verifiedLiveForegroundOwner(manifest) {
+  if (manifest.devOwnerPid === null || manifest.devOwnerStartTime === null) {
+    return undefined;
+  }
+  const record = processRecord(manifest.devOwnerPid);
+  if (record === undefined || record.startTime !== manifest.devOwnerStartTime) {
+    return undefined;
+  }
+  if (!record.command.includes(backendScriptPath)) {
+    throw new Error(
+      `Foreground owner ${record.pid} no longer belongs to ${backendScriptPath}; ` +
+        `retained ${manifest.root} for diagnosis.`,
+    );
+  }
+  return record;
+}
+
+function requireCurrentOwner(claimedManifest) {
+  if (!existsSync(privateRoot)) {
+    throw new Error(`The owned private tmux root disappeared before cleanup: ${privateRoot}`);
+  }
+  const current = readManifest();
+  if (
+    current.devOwnerPid !== claimedManifest.devOwnerPid ||
+    current.devOwnerStartTime !== claimedManifest.devOwnerStartTime
+  ) {
+    throw new Error(
+      `Private tmux foreground ownership changed from ${claimedManifest.devOwnerPid}; ` +
+        `retained ${current.root} for diagnosis.`,
+    );
+  }
+  return current;
+}
+
+async function runInteractiveLifecycle(manifest, preparation) {
+  let child;
+  try {
+    child = spawn(preparation.command, preparation.args, {
+      cwd: preparation.cwd,
+      env: preparation.env,
+      stdio: "inherit",
+    });
+  } catch (error) {
+    await cleanupClaimedLaneAfterFailure(manifest, error);
+  }
+
+  return await new Promise((resolveWait, rejectWait) => {
+    let finalizationStarted = false;
+    let childResult;
+    let resolveChildExit;
+    const childExit = new Promise((resolveExit) => {
+      resolveChildExit = resolveExit;
+    });
+    const signalHandlers = new Map();
+    let timer;
+
+    const stopMonitoring = () => {
+      clearInterval(timer);
+      for (const [signal, handler] of signalHandlers) {
+        process.off(signal, handler);
+      }
+    };
+
+    const complete = async (trigger) => {
+      try {
+        if (trigger.kind === "ownership-drift") {
+          throw trigger.error;
+        }
+
+        const rootWasRemoved = !existsSync(privateRoot);
+        if (!rootWasRemoved) {
+          await cleanupLane(requireCurrentOwner(manifest));
+        }
+        await waitForAttachedChildExit(child, childExit, () => childResult);
+
+        if (rootWasRemoved && trigger.kind !== "signal") {
+          resolveWait(0);
+          return;
+        }
+        if (trigger.kind === "client-error") {
+          throw trigger.error;
+        }
+        if (trigger.kind === "external-stop") {
+          resolveWait(0);
+          return;
+        }
+        if (trigger.kind === "signal") {
+          resolveWait(signalExitCodes[trigger.signal]);
+          return;
+        }
+        if (trigger.kind === "client-exit") {
+          resolveWait(
+            trigger.code ?? (trigger.signal === null ? 1 : (signalExitCodes[trigger.signal] ?? 1)),
+          );
+          return;
+        }
+        resolveWait(1);
+      } catch (error) {
+        try {
+          await waitForAttachedChildExit(child, childExit, () => childResult);
+          rejectWait(error);
+        } catch (childError) {
+          rejectWait(
+            new AggregateError(
+              [error, childError],
+              "Interactive tmux finalization failed while releasing its attached client.",
+            ),
+          );
+        }
+      }
+    };
+
+    const finalize = (trigger) => {
+      // Client exit, signals, and owner polling share one gate so cleanup can execute only once.
+      if (finalizationStarted) {
+        return;
+      }
+      finalizationStarted = true;
+      stopMonitoring();
+      void complete(trigger);
+    };
+
+    child.once("error", (error) => {
+      childResult = { error };
+      resolveChildExit(childResult);
+      finalize({ kind: "client-error", error });
+    });
+    child.once("exit", (code, signal) => {
+      childResult = { code, signal };
+      resolveChildExit(childResult);
+      finalize({ kind: "client-exit", code, signal });
+    });
+
+    timer = setInterval(() => {
+      if (!existsSync(privateRoot)) {
+        finalize({ kind: "external-stop" });
         return;
       }
       try {
-        const manifest = readManifest();
-        if (manifest.devOwnerPid !== process.pid) {
-          finish();
-          resolveWait();
-        }
-      } catch (error) {
-        finish();
-        rejectWait(error);
-      }
-    }, 500);
-    const finish = () => {
-      if (finishing) {
-        return false;
-      }
-      finishing = true;
-      clearInterval(timer);
-      for (const [signal, handler] of handlers) {
-        process.off(signal, handler);
-      }
-      return true;
-    };
-    for (const signal of Object.keys(signalExitCodes)) {
-      const handler = () => {
-        if (!finish()) {
+        const current = readManifest();
+        if (
+          current.devOwnerPid !== manifest.devOwnerPid ||
+          current.devOwnerStartTime !== manifest.devOwnerStartTime
+        ) {
+          finalize({
+            kind: "ownership-drift",
+            error: new Error(
+              `Private tmux foreground ownership changed from ${manifest.devOwnerPid}; ` +
+                `retained ${current.root} for diagnosis.`,
+            ),
+          });
           return;
         }
-        void (async () => {
-          try {
-            if (existsSync(privateRoot)) {
-              await cleanupLane(readManifest());
-            }
-            process.exitCode = signalExitCodes[signal];
-            resolveWait();
-          } catch (error) {
-            rejectWait(error);
-          }
-        })();
-      };
-      handlers.set(signal, handler);
+        if (!privateServerAlive(current) || !privateSessionExists(current, current.baseSession)) {
+          finalize({ kind: "base-session-exit" });
+        }
+      } catch (error) {
+        finalize({ kind: "ownership-drift", error });
+      }
+    }, 500);
+
+    for (const signal of Object.keys(signalExitCodes)) {
+      const handler = () => finalize({ kind: "signal", signal });
+      signalHandlers.set(signal, handler);
       process.on(signal, handler);
     }
   });
+}
+
+async function waitForAttachedChildExit(child, childExit, getResult) {
+  if (getResult() !== undefined) {
+    return;
+  }
+  if (await waitForPromise(childExit, 5_000)) {
+    return;
+  }
+  child.kill("SIGTERM");
+  if (await waitForPromise(childExit, 2_000)) {
+    return;
+  }
+  child.kill("SIGKILL");
+  if (!(await waitForPromise(childExit, 2_000))) {
+    throw new Error(`Attached private tmux client ${child.pid ?? "<unknown>"} did not exit.`);
+  }
+}
+
+async function waitForPromise(promise, timeoutMs) {
+  return await Promise.race([promise.then(() => true), delay(timeoutMs).then(() => false)]);
 }
 
 function observerIdentityAlive(manifest, identity) {
@@ -1291,6 +1569,19 @@ function privateSessionExists(manifest, sessionName) {
       timeoutMs: 5_000,
     }).status === 0
   );
+}
+
+function privateAttachedClientCount(manifest) {
+  const result = run(manifest.tmuxWrapper, ["list-clients", "-F", "#{client_pid}"], {
+    cwd: manifest.root,
+    env: laneEnvironment(manifest),
+    check: false,
+    timeoutMs: 5_000,
+  });
+  if (result.status !== 0) {
+    throw new Error(`Could not inspect attached clients for ${manifest.tmuxLabel}.`);
+  }
+  return result.stdout.split(/\r?\n/u).filter(Boolean).length;
 }
 
 function privateTmuxOutput(manifest, args, check = true) {

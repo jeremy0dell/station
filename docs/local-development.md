@@ -238,24 +238,36 @@ the native Station workspace:
 
 ```bash
 # prerequisites for this checkout
-pnpm build
+pnpm install
 cd station && bun install && cd ..
 
-# terminal A: start/reuse and remain the cleanup owner
 pnpm station:devbox tmux dev
-
-# terminal B: attach an ordinary client to the private base session
-pnpm station:devbox tmux attach
-# inside it: Ctrl-b Space opens/toggles the production Station popup
+# Ctrl-b Space opens/toggles the production Station popup
+# Ctrl-b d detaches and cleans up the private runtime
 ```
 
-`tmux dev` prints the checkout identity, disposable root, exact tmux binary,
-private label/socket/wrapper, `/dev/null` config, Station config/state/socket
-paths, base and `_station-ui` sessions, discovered CLI/renderer/Observer/Host
-owners, and the exact attach/log/stop commands. `tmux start` creates the same
-HMR-enabled lane but returns immediately.
+`tmux dev` builds the checkout through the Turbo-cached root build, safely starts
+or reuses the isolated runtime, claims foreground ownership, and attaches the
+invoking terminal. It prints the checkout identity, disposable root, exact tmux
+binary, private label/socket/wrapper, `/dev/null` config, Station
+config/state/socket paths, base and `_station-ui` sessions, and discovered
+CLI/renderer/Observer/Host owners. Detaching with `Ctrl-b d` ends this temporary
+interactive lane and removes its private runtime.
 
-The ordinary attach command preserves a caller `TERM` whose terminfo provides
+For persistent or headless control, use the split commands instead:
+
+```bash
+pnpm station:devbox tmux start
+pnpm station:devbox tmux attach
+# detach leaves this lane running
+pnpm station:devbox tmux stop
+```
+
+`start` creates or reuses the same HMR-enabled lane and returns immediately;
+standalone `attach` never takes cleanup ownership. `status`, `logs`, `stop`, and
+`reset` remain the diagnostic and recovery surface.
+
+Both interactive `dev` and the ordinary `attach` command preserve a caller `TERM` whose terminfo provides
 `clear` and `cup` inside the private environment. It does not import external
 `TERMINFO`, `TERMINFO_DIRS`, or XDG data paths; if the caller value is absent or
 cannot satisfy tmux there, attach names any rejected value and uses
@@ -284,11 +296,11 @@ channel, Observer, visible nested client, and optional Host remain stable.
 React/OpenTUI renderer resources, the dashboard store, Station client/source,
 and popup listeners are disposed and recreated inside that Bun process.
 
-Changes outside that source-only boundary need a coherent restart:
+Changes outside that source-only boundary need a coherent restart. Detach the
+interactive lane (or stop a split lane), then rerun `dev`; it rebuilds before
+startup:
 
 ```bash
-pnpm station:devbox tmux stop
-pnpm build
 pnpm station:devbox tmux dev
 ```
 
@@ -306,11 +318,14 @@ pnpm station:devbox tmux stop
 pnpm station:devbox tmux reset --yes
 ```
 
-`status` is private/read-only. `stop`, Ctrl-C, SIGHUP, and SIGTERM kill only the
-recorded private server, then validate Observer/Host socket, pidfile, `lsof`,
-process command, and start-time evidence before escalating. If ownership cannot
-be proven gone, cleanup retains the root and wrapper as evidence instead of
-using `pkill` or broad/default-server operations.
+`status` is private/read-only. `Ctrl-b d` cleans up an interactive `dev`; an
+external `stop` signals a verified live foreground owner and waits for that
+owner to perform cleanup rather than racing it. Without a live owner, `stop`
+cleans directly. These paths, Ctrl-C, SIGHUP, and SIGTERM kill only the recorded
+private server, then validate Observer/Host socket, pidfile, `lsof`, process
+command, and start-time evidence before escalating. If ownership cannot be
+proven gone, cleanup retains the root and wrapper as evidence instead of using
+`pkill` or broad/default-server operations.
 
 Manual popup acceptance and HMR check:
 
@@ -333,13 +348,25 @@ Manual popup acceptance and HMR check:
    Observer, nested client, and optional Host PIDs remain stable; then revert it.
 6. Press Esc, reopen with `Ctrl-b Space`, and confirm the hidden CLI/renderer
    and Observer are reused.
-7. Detach and stop the lane; `status` should report stopped, the private root and
-   sockets should be absent, and the failing bare-tmux audit log should not exist.
+7. Press `Ctrl-b d`; the owner command should return after cleanup, `status`
+   should report stopped, the private root and sockets should be absent, and the
+   failing bare-tmux audit log should not exist.
 
 The opt-in automated version is `pnpm station:devbox:tmux:smoke`. It temporarily
 edits that component in place, restores its exact bytes in `finally`, audits
-every wrapper call, and verifies startup rollback plus SIGINT/SIGHUP/SIGTERM
-cleanup.
+every wrapper call, and verifies non-interactive refusal, split-command control,
+attach rollback, detach cleanup, coordinated external stop, and
+SIGINT/SIGHUP/SIGTERM cleanup through a real PTY.
+
+The root command is backend-shaped for future multiplexer lanes:
+
+```text
+station:devbox <backend> dev
+station:devbox <backend> start|attach|status|logs|stop|reset
+```
+
+Tmux process, socket, terminfo, popup, and cleanup authority remains in the tmux
+backend script. Zellij is a future backend and is not implemented here.
 
 ---
 
