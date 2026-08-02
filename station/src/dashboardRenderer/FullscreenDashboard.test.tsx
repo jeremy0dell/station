@@ -5,6 +5,10 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import {
+  DashboardSurfaceProvider,
+  TERMINAL_DEFAULT_SURFACES,
+} from "../station/view/dashboardSurfaceContext.js";
 import { STATION_COLORS } from "../station/view/theme.js";
 import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
@@ -22,6 +26,58 @@ afterEach(async () => {
   for (const teardown of teardowns.splice(0)) {
     await teardown();
   }
+});
+
+describe("FullscreenDashboard surface ownership", () => {
+  it("uses terminal-default background intent for its canvas and title chrome", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+
+    expectTerminalDefaultBackground(setup, "station · overview");
+    const bottomRight = spanAtFrameCell(
+      setup.captureSpans(),
+      SURFACE.height - 1,
+      SURFACE.width - 1,
+    );
+    expect(bottomRight?.bg.intent).toBe("default");
+  });
+
+  for (const testCase of [
+    { name: "prompt", keys: ["R"], needle: "Rename:" },
+    { name: "bottom sheet", keys: ["C"], needle: "Collapse Project" },
+    { name: "Help overlay", keys: ["H"], needle: "station help" },
+    { name: "widget settings", keys: ["W"], needle: "saved to config.toml" },
+    { name: "project settings", keys: ["P", "1"], needle: "Project settings" },
+  ] as const) {
+    it(`uses terminal-default background intent for the ${testCase.name}`, async () => {
+      const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+      const setup = await render(fixture.store);
+
+      await actOn(async () => {
+        for (const input of testCase.keys) {
+          fixture.store.getState().handleKey({ input });
+        }
+        await setup.flush();
+      });
+
+      expectTerminalDefaultBackground(setup, testCase.needle);
+    });
+  }
+
+  it("uses terminal-default background intent for dashboard toasts", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+
+    await actOn(async () => {
+      fixture.store.getState().pushToast({
+        kind: "error",
+        message: "Surface ownership notice",
+      });
+      await setup.flush();
+    });
+
+    expectTerminalDefaultBackground(setup, "Surface ownership notice");
+  });
 });
 
 describe("FullscreenDashboard mouse composition", () => {
@@ -383,7 +439,9 @@ async function render(
   effects: DashboardRendererEffects = TEST_EFFECTS,
 ) {
   const setup = await testRender(
-    <FullscreenDashboard store={store} effects={effects} onCopyNotice={() => {}} />,
+    <DashboardSurfaceProvider value={TERMINAL_DEFAULT_SURFACES}>
+      <FullscreenDashboard store={store} effects={effects} onCopyNotice={() => {}} />
+    </DashboardSurfaceProvider>,
     size,
   );
   await setup.flush();
@@ -418,6 +476,16 @@ function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
 
 function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.bg === undefined ? undefined : rgbToHex(span.bg);
+}
+
+function expectTerminalDefaultBackground(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  needle: string,
+): void {
+  const cell = cellFor(setup.captureCharFrame(), needle);
+  const span = spanAtFrameCell(setup.captureSpans(), cell.row, cell.col);
+  expect(span?.bg.intent).toBe("default");
+  expect(spanBgHex(span)).toBe(STATION_COLORS.background);
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

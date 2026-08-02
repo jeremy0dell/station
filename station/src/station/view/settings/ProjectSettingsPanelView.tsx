@@ -18,6 +18,7 @@ import {
   type TuiScreen,
   type TuiSelectionState,
 } from "@station/dashboard-core";
+import { useDashboardSurfaces } from "../dashboardSurfaceContext.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
 import { fit, SheetLine } from "../sheets/parts.js";
@@ -47,6 +48,7 @@ export function ProjectSettingsPanelView({
   rows,
   localRows,
 }: ProjectSettingsPanelViewProps) {
+  const { surfaceBackground } = useDashboardSurfaces();
   const dispatch = useStationMouse();
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
 
@@ -72,7 +74,7 @@ export function ProjectSettingsPanelView({
       zIndex={10}
       border
       borderColor={STATION_COLORS.hairline}
-      backgroundColor={STATION_COLORS.background}
+      backgroundColor={surfaceBackground}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >

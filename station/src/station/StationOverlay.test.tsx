@@ -23,6 +23,24 @@ describe("StationOverlay", () => {
     }
   });
 
+  it("keeps native dashboard surfaces on the current Station RGB colors", async () => {
+    const { store } = makeStationTestStore();
+    const setup = await renderOverlay(() => true, store);
+    const title = cellFor(setup.captureCharFrame(), "station · overview");
+    let span = spanAtFrameCell(setup.captureSpans(), title.row, title.col);
+    expect(span?.bg.intent).toBe("rgb");
+    expect(spanBgHex(span)).toBe(STATION_COLORS.background);
+
+    await act(async () => {
+      store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+    const help = cellFor(setup.captureCharFrame(), "station help");
+    span = spanAtFrameCell(setup.captureSpans(), help.row, help.col);
+    expect(span?.bg.intent).toBe("rgb");
+    expect(spanBgHex(span)).toBe(STATION_COLORS.overlayBackdrop);
+  });
+
   it("routes primary clicks outside the popup through the STATION backdrop target", async () => {
     const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
     const setup = await renderOverlay((target, event) => {

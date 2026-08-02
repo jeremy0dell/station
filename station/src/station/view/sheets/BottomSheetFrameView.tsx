@@ -7,6 +7,7 @@ import {
   bottomSheetContentWidth,
   bottomSheetFrameLayout,
 } from "@station/dashboard-core";
+import { useDashboardSurfaces } from "../dashboardSurfaceContext.js";
 import { STATION_COLORS } from "../theme.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
 import { SheetText } from "./parts.js";
@@ -30,6 +31,7 @@ export function BottomSheetFrameView({
   width,
   children,
 }: BottomSheetFrameViewProps) {
+  const { surfaceBackground } = useDashboardSurfaces();
   const dispatch = useStationMouse();
   const layout = bottomSheetFrameLayout({
     columns,
@@ -48,7 +50,7 @@ export function BottomSheetFrameView({
       zIndex={10}
       border
       borderColor={STATION_COLORS.hairline}
-      backgroundColor={STATION_COLORS.background}
+      backgroundColor={surfaceBackground}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >

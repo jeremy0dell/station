@@ -2,6 +2,7 @@
 // dashboard (absolute + zIndex; the dashboard must never reflow for it).
 // Lines come from the shared panel generator over Station's visible help copy.
 import { helpPanelLayout, helpPanelLines } from "@station/dashboard-core";
+import { useDashboardSurfaces } from "./dashboardSurfaceContext.js";
 import { STATION_COLORS } from "./theme.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
@@ -32,6 +33,7 @@ const STATION_HELP_CONTENT = [
 ] as const;
 
 export function HelpOverlayView({ columns, rows }: { columns: number; rows: number }) {
+  const { overlayBackground } = useDashboardSurfaces();
   const dispatch = useStationMouse();
   const layout = helpPanelLayout(columns, rows, STATION_HELP_CONTENT);
   const panelLines = helpPanelLines(layout.width, layout.height, STATION_HELP_CONTENT);
@@ -45,11 +47,15 @@ export function HelpOverlayView({ columns, rows }: { columns: number; rows: numb
       height={layout.height}
       zIndex={10}
       flexDirection="column"
-      backgroundColor={STATION_COLORS.overlayBackdrop}
+      backgroundColor={overlayBackground}
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
       {panelLines.map((line, index) => (
-        <text key={`${index}:${line}`} fg={STATION_COLORS.foreground} bg={STATION_COLORS.overlayBackdrop}>
+        <text
+          key={`${index}:${line}`}
+          fg={STATION_COLORS.foreground}
+          bg={overlayBackground}
+        >
           {line}
         </text>
       ))}

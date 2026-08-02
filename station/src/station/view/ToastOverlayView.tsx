@@ -10,6 +10,7 @@ import {
   type TuiToastEntry,
 } from "@station/dashboard-core";
 import { useEffect, useState } from "react";
+import { useDashboardSurfaces } from "./dashboardSurfaceContext.js";
 import { STATION_COLORS, toastBorderColorHex } from "./theme.js";
 import {
   useStationHoverState,
@@ -34,6 +35,7 @@ export function ToastOverlayView({
   hiddenByScreen,
   onCopyNotice,
 }: ToastOverlayViewProps) {
+  const { surfaceBackground } = useDashboardSurfaces();
   if (hiddenByScreen || toast === undefined) {
     return null;
   }
@@ -59,7 +61,7 @@ export function ToastOverlayView({
       border
       overflow="hidden"
       borderColor={toastBorderColorHex(toastBorderColor(toast))}
-      backgroundColor={STATION_COLORS.background}
+      backgroundColor={surfaceBackground}
       flexDirection="column"
     >
       <box width="100%" flexDirection="column" paddingLeft={1} paddingRight={1}>

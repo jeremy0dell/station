@@ -8,6 +8,7 @@ import { normalizeStationMouseEvent } from "../input/mouse.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import { DashboardFrameTitle } from "../station/view/DashboardFrameTitle.js";
 import { DashboardRoot } from "../station/view/DashboardRoot.js";
+import { useDashboardSurfaces } from "../station/view/dashboardSurfaceContext.js";
 import {
   StationHoverProvider,
   StationMouseProvider,
@@ -37,6 +38,7 @@ export function FullscreenDashboard({
   onCopyNotice: (text: string) => void;
   hoverEnabled?: boolean;
 }) {
+  const { surfaceBackground } = useDashboardSurfaces();
   const { width, height } = useTerminalDimensions();
   const widgets = useStore(store, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets);
@@ -49,7 +51,12 @@ export function FullscreenDashboard({
   return (
     <StationHoverProvider value={hoverEnabled}>
       <StationMouseProvider value={dispatch}>
-        <box width={width} height={height} flexDirection="column">
+        <box
+          width={width}
+          height={height}
+          flexDirection="column"
+          backgroundColor={surfaceBackground}
+        >
           <DashboardRoot
             store={store}
             columns={width}

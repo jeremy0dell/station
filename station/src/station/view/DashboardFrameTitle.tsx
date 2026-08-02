@@ -11,6 +11,7 @@ import {
 } from "@station/dashboard-core";
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
+import { useDashboardSurfaces } from "./dashboardSurfaceContext.js";
 import { STATION_COLORS } from "./theme.js";
 import {
   stationMouseProps,
@@ -43,6 +44,7 @@ export function DashboardFrameTitle({
   topRowWidgets = [],
   zIndex,
 }: DashboardFrameTitleProps) {
+  const { surfaceBackground } = useDashboardSurfaces();
   const dispatch = useStationMouse();
   const [hovered, setHover] = useStationHoverState();
   const snapshot = useStore(store, (state) => state.snapshot);
@@ -77,7 +79,7 @@ export function DashboardFrameTitle({
         left={frame.left + EDGE}
         top={frame.top}
         zIndex={zIndex}
-        bg={STATION_COLORS.background}
+        bg={surfaceBackground}
       >
         <span fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>
           {` ${PRODUCT_LABEL} `}
@@ -92,11 +94,11 @@ export function DashboardFrameTitle({
         flexDirection="row"
       >
         {strip.length > 0 ? (
-          <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>{` ${strip}`}</text>
+          <text fg={STATION_COLORS.gray} bg={surfaceBackground}>{` ${strip}`}</text>
         ) : null}
         <text
           fg={hover ? STATION_COLORS.cyan : STATION_COLORS.gray}
-          bg={STATION_COLORS.background}
+          bg={surfaceBackground}
           {...stationMouseProps(dispatch, { kind: "widgetSettingsOpen" })}
           onMouseOver={() => setHover(true)}
           onMouseOut={() => setHover(false)}
