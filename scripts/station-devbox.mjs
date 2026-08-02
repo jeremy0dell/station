@@ -23,16 +23,21 @@ const HOST_SOCK = join(SOCKET_DIR, "station-host.sock");
 const LOG_DIR = join(DS, "observer", "logs");
 const STATION_DIR = join(repoRoot, "station");
 const ISOLATED_SCRIPT = join(repoRoot, "station", "scripts", "station-isolated.sh");
-const TMUX_DEVBOX_SCRIPT = join(repoRoot, "scripts", "station-tmux-devbox.mjs");
+const BACKEND_SCRIPTS = new Map([["tmux", join(repoRoot, "scripts", "station-tmux-devbox.mjs")]]);
 
 const handlers = { start, dev, restart, status, logs, stop, reset, help };
 
 const [rawVerb = "start", ...rest] = process.argv.slice(2);
-const verb =
-  rawVerb === "-h" || rawVerb === "--help" ? "help" : rawVerb === "--hot" ? "dev" : rawVerb;
-if (verb === "tmux") {
+let verb = rawVerb;
+if (rawVerb === "-h" || rawVerb === "--help") {
+  verb = "help";
+} else if (rawVerb === "--hot") {
+  verb = "dev";
+}
+const backendScript = BACKEND_SCRIPTS.get(verb);
+if (backendScript !== undefined) {
   try {
-    process.exitCode = await delegateTmux(rest);
+    process.exitCode = await delegateBackend(backendScript, rest);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
@@ -159,8 +164,9 @@ function help() {
   );
 }
 
-async function delegateTmux(args) {
-  const child = spawn(process.execPath, [TMUX_DEVBOX_SCRIPT, ...args], {
+async function delegateBackend(backendScript, args) {
+  // Backend scripts retain backend-specific process and cleanup authority; this router only delegates.
+  const child = spawn(process.execPath, [backendScript, ...args], {
     cwd: repoRoot,
     stdio: "inherit",
   });
@@ -178,13 +184,24 @@ async function delegateTmux(args) {
           resolve(code);
           return;
         }
-        resolve(signal === "SIGHUP" ? 129 : signal === "SIGINT" ? 130 : 143);
+        resolve(signalExitCode(signal));
       });
     });
   } finally {
     for (const [signal, handler] of signalHandlers) {
       process.off(signal, handler);
     }
+  }
+}
+
+function signalExitCode(signal) {
+  switch (signal) {
+    case "SIGHUP":
+      return 129;
+    case "SIGINT":
+      return 130;
+    default:
+      return 143;
   }
 }
 

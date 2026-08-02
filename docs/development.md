@@ -49,22 +49,21 @@ provider homes are checkout-local. See the copy-paste recipe in
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
 - Before Observer startup, `station:devbox` creates or repairs only its checkout-keyed socket directory to mode `0700`. It refuses symlinks, non-directories, and directories owned by another user; it never repairs or replaces socket and claim files.
 - If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
-- `pnpm station:devbox tmux dev` starts a checkout-keyed private tmux server and isolated live Observer, then keeps the foreground command as the signal-cleanup owner. Attach with `pnpm station:devbox tmux attach`; inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`.
+- `pnpm station:devbox tmux dev` builds the checkout, starts or safely reuses a checkout-keyed private tmux server and isolated live Observer, claims cleanup ownership, and attaches the invoking terminal. Inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`; `Ctrl-b d` detaches and cleans up the owned lane. Use `tmux start` plus `tmux attach` when automation needs a persistent lane that is stopped explicitly.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
 
 ### Private tmux popup devbox
 
-Install the root and Station dependencies, then build once before starting:
+Install the root and Station dependencies, then start the interactive lane:
 
 ```bash
 pnpm install
-pnpm build
 cd station && bun install && cd ..
 
 pnpm station:devbox tmux dev
-# another terminal:
-pnpm station:devbox tmux attach
+# Ctrl-b Space opens Station
+# Ctrl-b d exits and cleans up
 ```
 
 The lane creates `/tmp/stn-dbx-<checkout-hash>` at mode `0700`, one private
@@ -85,16 +84,19 @@ fallback diagnostic, so the documented attach command never needs a manual
 Use `Ctrl-b Space` in the attached base session. The binding enters the built
 CLI's production `popup` command; `_station-ui` owns the long-lived CLI parent,
 which retains the renderer-control IPC channel while the Bun renderer reloads
-in place. `dev` remains in the foreground so Ctrl-C, SIGHUP, or SIGTERM performs
-the same scoped cleanup as `stop`. Use `start` instead when automation needs the
-lane to return immediately.
+in place. `dev` remains in the foreground, owns its attached client, and performs
+the same scoped cleanup after `Ctrl-b d`, Ctrl-C, SIGHUP, SIGTERM, or a coordinated
+external `stop`. Use `start` instead when automation needs the lane to return
+immediately; a standalone `attach` never takes cleanup ownership. Detach any
+split-command clients before switching to `dev`, which refuses before rebuilding
+an attached persistent lane.
 
 | Changed surface | Required action |
 | --- | --- |
 | Dashboard-imported `station/src/**` | Bun HMR only |
-| Linked `packages/*` output, CLI, Observer, providers, protocol, or tmux integration | `tmux stop` → `pnpm build` → `tmux dev` |
-| Station Host or PTY runtime | Full `tmux stop` / `tmux dev` |
-| Dependencies or Station package links | Stop, install/relink, then start |
+| Linked `packages/*` output, CLI, Observer, providers, protocol, or tmux integration | Detach/stop → `tmux dev` (builds before startup) |
+| Station Host or PTY runtime | Full detach/stop → `tmux dev` |
+| Dependencies or Station package links | Detach/stop, install/relink, then `tmux dev` |
 | Generated root/config/wrapper ownership | `tmux reset --yes` → `tmux dev` |
 
 There is intentionally no `tmux restart`: a rebuild boundary must replace the
