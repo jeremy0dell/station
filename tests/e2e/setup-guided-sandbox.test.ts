@@ -83,6 +83,10 @@ describe("manual guided setup sandbox", () => {
         expect(result.stdout).toContain(`Starting: Install ${label}.`);
         expect(result.stdout).toContain(`Finished: Install ${label}.`);
       }
+      expect(result.stdout).not.toContain("Tmux popup binding was not persisted.");
+      expect(await readFile(join(root, "home", ".tmux.conf"), "utf8")).toContain(
+        join(process.cwd(), "integrations", "terminal", "tmux", "bin", "stn-popup"),
+      );
       for (const command of ["claude", "codex", "agent", "opencode", "pi"]) {
         await expect(access(join(root, "bin", command))).resolves.toBeUndefined();
       }
