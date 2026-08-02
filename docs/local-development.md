@@ -439,13 +439,19 @@ input file and it reloads in place. The split:
   the worktree UI must also be on a compatible commit.) The host runs the
   observer's checkout too, so host changes need that rebuild — not just the UI reload.
 
+Real-state source development stops at this native lane. There is intentionally
+no supported workflow that registers checkout popup code in the normal tmux
+server against the live runtime. Use `pnpm station:devbox tmux dev` when the
+behavior under test is popup transport, geometry, HMR, or lifecycle; its private
+state avoids Observer handoff and popup-registration risk.
+
 ---
 
 ## 3. Launching via the CLI (`stn tui`)
 
 ```bash
 pnpm dev                                  # rebuild @station/cli on change, isolated by default
-pnpm dev --config /abs/other-config.toml  # ...against a specific observer/config
+pnpm dev --config /abs/other-config.toml  # ...against a controlled development config
 node apps/cli/dist/main.js --config /abs/iso-config.toml tui   # one-shot, no watcher
 ```
 
@@ -459,9 +465,10 @@ opens the **read-only dashboard** in a tmux popup (tmux owns the panes there). I
 passes explicit `--config` choices straight through, and `stn tui` auto-starts
 the observer for the configured socket. The generated default config uses
 `terminal = "noop-terminal"`, so it avoids machine-global tmux pane discovery.
-If you pass an explicit config with `terminal = "tmux"` for tmux-integration
-testing, the popup dashboard can still show your real tmux agents (see the tmux
-gotcha in §1).
+Treat explicit `--config` as a selector for a controlled development fixture,
+not as a safe way to point checkout popup code at the normal live runtime. The
+CLI retains ordinary Observer startup and handoff behavior, so it does not
+provide the no-replacement contract required around a live Observer and Host.
 
 > `pnpm dev` rebuilds the **Node CLI**, not the Bun renderer. To hot-reload the
 > Station UI itself as you edit `station/src/**`, use `pnpm station:ui-dev` from §2b.
