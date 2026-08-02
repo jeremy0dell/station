@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { nativeStationTheme, rgbColor } from "../../theme/index.js";
 import { waitFor } from "../testing/waitFor.js";
 import { createStationVtScreen, type StationVtScreen } from "./screen.js";
 
@@ -151,6 +152,22 @@ describe("createStationVtScreen", () => {
     await waitFor(() => /\x1b\[1;3R/.test(responses.join("")));
   });
 
+  it("builds ANSI-256 colors from the selected terminal theme", async () => {
+    const [, ...ansiTail] = nativeStationTheme.terminal.ansi16;
+    const screen = track(
+      createStationVtScreen({
+        size: { cols: 20, rows: 5 },
+        theme: {
+          ...nativeStationTheme.terminal,
+          ansi16: [rgbColor("#010203"), ...ansiTail],
+        },
+      }),
+    );
+    screen.feed("\x1b[30mX");
+    await screen.whenIdle();
+    expect(screen.buildRows({ cursorVisible: false })[0]?.spans[0]?.fg).toBe("#010203");
+  });
+
   // Executable proof of the headless gap: xterm's browser ThemeService is the
   // only OSC color responder upstream, so the store must answer itself.
   it("answers osc 10/11 color queries with theme colors", async () => {
@@ -159,9 +176,9 @@ describe("createStationVtScreen", () => {
       createStationVtScreen({
         size: { cols: 20, rows: 5 },
         theme: {
-          foreground: "#d4d4d8",
-          background: "#101316",
-          ansi16: Array.from({ length: 16 }, () => "#000000"),
+          ...nativeStationTheme.terminal,
+          defaultForeground: rgbColor("#010203"),
+          defaultBackground: rgbColor("#040506"),
         },
         onResponse: (data) => {
           responses.push(data);
@@ -169,8 +186,8 @@ describe("createStationVtScreen", () => {
       }),
     );
     screen.feed("\x1b]10;?\x07\x1b]11;?\x07");
-    await waitFor(() => responses.join("").includes("]10;rgb:d4d4/d4d4/d8d8"));
-    await waitFor(() => responses.join("").includes("]11;rgb:1010/1313/1616"));
+    await waitFor(() => responses.join("").includes("]10;rgb:0101/0202/0303"));
+    await waitFor(() => responses.join("").includes("]11;rgb:0404/0505/0606"));
   });
 
   it("does not intercept osc color set operations", async () => {

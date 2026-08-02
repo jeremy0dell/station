@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import type { StoreApi } from "zustand/vanilla";
 import { createInitialTuiState, type TuiStore } from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
@@ -62,12 +63,14 @@ async function renderRoot(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
 ) {
   const setup = await testRender(
-    <ContextMenuRoot
-      store={store}
-      stationViewStore={emptyStationStore()}
-      dispatchMouse={dispatchMouse}
-      automations={[]}
-    />,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <ContextMenuRoot
+        store={store}
+        stationViewStore={emptyStationStore()}
+        dispatchMouse={dispatchMouse}
+        automations={[]}
+      />
+    </StationThemeProvider>,
     { width: 40, height: 10 },
   );
   await setup.flush();

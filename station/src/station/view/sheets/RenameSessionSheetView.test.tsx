@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
 import { createEditableTextInputState } from "@station/dashboard-core";
 import { act } from "react";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
@@ -18,22 +19,24 @@ describe("RenameSessionSheetView", () => {
   it("renders Rename as a bounded semantic button", async () => {
     const targets: StationMouseTarget[] = [];
     const setup = await testRender(
-      <StationHoverProvider value>
-        <StationMouseProvider value={(target) => targets.push(target)}>
-          <RenameSessionSheetView
-            state={{
-              name: "renameSession",
-              step: "editName",
-              rowId: "ses_example",
-              sessionId: "ses_example",
-              currentTitle: "Current title",
-              draftTitle: createEditableTextInputState("Updated title"),
-            }}
-            columns={80}
-            rows={20}
-          />
-        </StationMouseProvider>
-      </StationHoverProvider>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationHoverProvider value>
+          <StationMouseProvider value={(target) => targets.push(target)}>
+            <RenameSessionSheetView
+              state={{
+                name: "renameSession",
+                step: "editName",
+                rowId: "ses_example",
+                sessionId: "ses_example",
+                currentTitle: "Current title",
+                draftTitle: createEditableTextInputState("Updated title"),
+              }}
+              columns={80}
+              rows={20}
+            />
+          </StationMouseProvider>
+        </StationHoverProvider>
+      </StationThemeProvider>,
       { width: 80, height: 20 },
     );
     teardowns.push(() => setup.renderer.destroy());

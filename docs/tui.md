@@ -213,6 +213,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 ## Surface Rules
 
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
+- Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
@@ -252,8 +253,8 @@ session row or empty-project action is inert. Remove, rename, and fork row choos
 session-only traversal, as do slot keys and next-needs-me. `N` continues to open the session flow
 without changing dashboard focus. Gaps and optimistic create rows remain non-focusable.
 
-Focused compact controls use the stronger bounded fill from
-`STATION_COLORS.compactFocusBackground`. A project header's primary segment covers the rendered
+Focused compact controls use the canonical theme's stronger bounded
+`interaction.compactFocus` fill. A project header's primary segment covers the rendered
 disclosure/name/summary text without painting flexible trailing whitespace, while each trailing
 control owns exactly its label cells and separator spaces remain inert. An empty project's fill and
 pointer target cover only `[ + add session ]`; its explanatory text and surrounding whitespace

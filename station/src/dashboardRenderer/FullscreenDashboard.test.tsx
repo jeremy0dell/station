@@ -5,10 +5,10 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import { STATION_COLORS } from "../station/view/theme.js";
-import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
+import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
+import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
-import { FullscreenDashboard } from "./FullscreenDashboard.js";
+import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 
 const SURFACE = { width: 80, height: 24 };
 const WIDGET_SURFACE = { width: 99, height: 25 };
@@ -22,6 +22,82 @@ afterEach(async () => {
   for (const teardown of teardowns.splice(0)) {
     await teardown();
   }
+});
+
+describe("FullscreenDashboard surface ownership", () => {
+  it("uses terminal-default background intent for its canvas and title chrome", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+
+    expectTerminalDefaultBackground(setup, "station · overview");
+    const bottomRight = spanAtFrameCell(
+      setup.captureSpans(),
+      SURFACE.height - 1,
+      SURFACE.width - 1,
+    );
+    expect(bottomRight?.bg.intent).toBe("default");
+  });
+
+  for (const testCase of [
+    { name: "prompt", keys: ["R"], needle: "Rename:" },
+    { name: "bottom sheet", keys: ["C"], needle: "Collapse Project" },
+    { name: "Help overlay", keys: ["H"], needle: "station help" },
+    { name: "widget settings", keys: ["W"], needle: "saved to config.toml" },
+    { name: "project settings", keys: ["P", "1"], needle: "Project settings" },
+  ] as const) {
+    it(`uses terminal-default background intent for the ${testCase.name}`, async () => {
+      const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+      const setup = await render(fixture.store);
+
+      await actOn(async () => {
+        for (const input of testCase.keys) {
+          fixture.store.getState().handleKey({ input });
+        }
+        await setup.flush();
+      });
+
+      expectTerminalDefaultBackground(setup, testCase.needle);
+    });
+  }
+
+  it("uses terminal-default background intent for dashboard toasts", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+
+    await actOn(async () => {
+      fixture.store.getState().pushToast({
+        kind: "error",
+        message: "Surface ownership notice",
+      });
+      await setup.flush();
+    });
+
+    expectTerminalDefaultBackground(setup, "Surface ownership notice");
+  });
+
+  it("obscures dashboard cells with an opaque default background and restores them", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.store);
+    const before = setup.captureCharFrame();
+
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+
+    const after = setup.captureCharFrame();
+    const obscured = findObscuredHelpCell(before, after);
+    const span = spanAtFrameCell(setup.captureSpans(), obscured.row, obscured.col);
+    expect(frameChar(after, obscured.row, obscured.col)).toBe(" ");
+    expect(span?.bg.intent).toBe("default");
+
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "Q" });
+      await setup.flush();
+    });
+
+    expect(frameChar(setup.captureCharFrame(), obscured.row, obscured.col)).toBe(obscured.original);
+  });
 });
 
 describe("FullscreenDashboard mouse composition", () => {
@@ -71,7 +147,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).not.toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(async () => {
@@ -81,7 +157,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanHex(spanAtFrameCell(setup.captureSpans(), titleAction.row, titleAction.col))).toBe(
-      STATION_COLORS.gray,
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
     );
 
     await actOn(async () => {
@@ -101,9 +177,7 @@ describe("FullscreenDashboard mouse composition", () => {
       await setup.flush();
     });
 
-    await actOn(() =>
-      setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT),
-    );
+    await actOn(() => setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT));
 
     expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
     expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
@@ -141,7 +215,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), addWidget.row, addWidget.col))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
@@ -168,7 +242,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
@@ -383,7 +457,7 @@ async function render(
   effects: DashboardRendererEffects = TEST_EFFECTS,
 ) {
   const setup = await testRender(
-    <FullscreenDashboard store={store} effects={effects} onCopyNotice={() => {}} />,
+    <StandaloneDashboardApp store={store} effects={effects} onCopyNotice={() => {}} />,
     size,
   );
   await setup.flush();
@@ -412,12 +486,47 @@ function cellFor(frame: string, needle: string): { col: number; row: number } {
   return { col, row };
 }
 
+function findObscuredHelpCell(
+  before: string,
+  after: string,
+): { row: number; col: number; original: string } {
+  const lines = after.split("\n");
+  const top = lines.findIndex((line) => line.includes("╭") && line.includes("╮"));
+  const topCells = [...(lines[top] ?? "")];
+  const left = topCells.indexOf("╭");
+  const right = topCells.lastIndexOf("╮");
+  const bottom = lines.findIndex((line, row) => row > top && frameChar(line, 0, left) === "╰");
+  if (top < 0 || left < 0 || right <= left || bottom <= top) {
+    throw new Error(`Could not locate Help bounds in frame:\n${after}`);
+  }
+
+  for (let row = top + 1; row < bottom; row += 1) {
+    for (let col = left + 1; col < right; col += 1) {
+      const original = frameChar(before, row, col);
+      if (/^[A-Za-z0-9]$/u.test(original) && frameChar(after, row, col) === " ") {
+        return { row, col, original };
+      }
+    }
+  }
+  throw new Error(`Help did not obscure a stable dashboard character:\n${after}`);
+}
+
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.fg === undefined ? undefined : rgbToHex(span.fg);
 }
 
 function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.bg === undefined ? undefined : rgbToHex(span.bg);
+}
+
+function expectTerminalDefaultBackground(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  needle: string,
+): void {
+  const cell = cellFor(setup.captureCharFrame(), needle);
+  const span = spanAtFrameCell(setup.captureSpans(), cell.row, cell.col);
+  expect(span?.bg.intent).toBe("default");
+  expect(spanBgHex(span)).toBe(stationColorSnapshotValue(nativeStationTheme.text.inverse));
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

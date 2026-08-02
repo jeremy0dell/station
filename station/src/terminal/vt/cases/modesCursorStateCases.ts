@@ -1,3 +1,4 @@
+import { nativeStationTheme } from "../../../theme/index.js";
 import type { VtCase } from "./types.js";
 
 export const modesCursorStateCases: readonly VtCase[] = [
@@ -6,7 +7,13 @@ export const modesCursorStateCases: readonly VtCase[] = [
     feed: "\x1b[2;3H\x1b[31m\x1b7\x1b[5;1H\x1b[0mplain\x1b8X",
     expect: {
       // X lands at the saved position with the saved red pen.
-      cells: [{ at: [1, 2], char: "X", fg: "#cd3131" }],
+      cells: [
+        {
+          at: [1, 2],
+          char: "X",
+          fg: nativeStationTheme.terminal.ansi16[1].value,
+        },
+      ],
       cursor: { x: 3, y: 1 },
     },
   },

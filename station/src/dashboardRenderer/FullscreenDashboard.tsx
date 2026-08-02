@@ -8,6 +8,7 @@ import { normalizeStationMouseEvent } from "../input/mouse.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import { DashboardFrameTitle } from "../station/view/DashboardFrameTitle.js";
 import { DashboardRoot } from "../station/view/DashboardRoot.js";
+import { toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import {
   StationHoverProvider,
   StationMouseProvider,
@@ -26,17 +27,20 @@ import { routeDashboardMouse } from "./dashboardMouse.js";
  * Mouse targets route through the standalone dashboard adapter, which reuses
  * shared dashboard actions and delegates terminal effects to its environment.
  */
+export type FullscreenDashboardProps = {
+  store: StoreApi<TuiStore>;
+  effects: DashboardRendererEffects;
+  onCopyNotice: (text: string) => void;
+  hoverEnabled?: boolean;
+};
+
 export function FullscreenDashboard({
   store,
   effects,
   onCopyNotice,
   hoverEnabled = true,
-}: {
-  store: StoreApi<TuiStore>;
-  effects: DashboardRendererEffects;
-  onCopyNotice: (text: string) => void;
-  hoverEnabled?: boolean;
-}) {
+}: FullscreenDashboardProps) {
+  const theme = useStationTheme();
   const { width, height } = useTerminalDimensions();
   const widgets = useStore(store, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets);
@@ -49,7 +53,12 @@ export function FullscreenDashboard({
   return (
     <StationHoverProvider value={hoverEnabled}>
       <StationMouseProvider value={dispatch}>
-        <box width={width} height={height} flexDirection="column">
+        <box
+          width={width}
+          height={height}
+          flexDirection="column"
+          backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
+        >
           <DashboardRoot
             store={store}
             columns={width}
