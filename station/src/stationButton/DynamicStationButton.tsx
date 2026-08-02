@@ -7,7 +7,7 @@ import {
   type StationMouseEvent,
 } from "../input/mouse.js";
 import { useHoverPointer } from "../useHoverPointer.js";
-import { STATION_COLORS } from "../station/view/theme.js";
+import { stationRgbValue, toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import { Throbber } from "../station/view/Throbber.js";
 import { lerpColor, type StationButtonStateColors, stationButtonColors } from "./colors.js";
 import type { ProjectRollupEntry, ProjectRollupStatus } from "./status.js";
@@ -55,6 +55,7 @@ export type DynamicStationButtonProps = {
 };
 
 export function DynamicStationButton(props: DynamicStationButtonProps): ReactNode {
+  const theme = useStationTheme();
   const { input, onHoverChange } = props;
   const attention = input.status.attention;
   const [internalHover, setInternalHover] = useState(false);
@@ -75,8 +76,8 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
 
   // Border/icon morph between the two state colors; expanded text fades up from
   // the background while collapsed marks/icon stay fully visible.
-  const from = stationButtonColors(attention, false);
-  const to = stationButtonColors(attention, true);
+  const from = stationButtonColors(theme, attention, false);
+  const to = stationButtonColors(theme, attention, true);
   const border = lerpColor(from.border, to.border, open);
   const icon = lerpColor(from.icon, to.icon, open);
   const color: StationButtonStateColors = expanded
@@ -121,7 +122,7 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
       borderColor={color.border}
       flexDirection="column"
       // Opaque in every state so the resize transition never flashes panes through it.
-      backgroundColor={STATION_COLORS.background}
+      backgroundColor={toOpenTuiOpaqueColor(theme.island.background)}
       {...pointerProps}
       onMouseDown={handleMouseDown}
     >
@@ -245,6 +246,7 @@ function GradientText({
   reveal: number;
   color: string;
 }): ReactNode {
+  const theme = useStationTheme();
   if (reveal >= 1) {
     return <text fg={color}>{text}</text>;
   }
@@ -255,7 +257,10 @@ function GradientText({
         const local = Math.min(1, Math.max(0, (front - i) / GRADIENT_EDGE));
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length static string
-          <text key={i} fg={lerpColor(STATION_COLORS.background, color, local)}>
+          <text
+            key={i}
+            fg={lerpColor(stationRgbValue(theme.text.inverse), color, local)}
+          >
             {char}
           </text>
         );
@@ -300,6 +305,7 @@ function CollapsedCounts(props: {
   working: number;
   ready: number;
 }): ReactNode {
+  const theme = useStationTheme();
   return (
     <box flexDirection="row" paddingLeft={ICON_PAD}>
       <IconGlyph color={props.iconColor} />
@@ -307,13 +313,13 @@ function CollapsedCounts(props: {
         <span> </span>
         {props.working > 0 ? (
           <>
-            <Throbber variant="braille" fg={STATION_COLORS.blue} />
-            <span fg={STATION_COLORS.blue}>{paintedCount(props.working)}</span>
+            <Throbber variant="braille" fg={stationRgbValue(theme.status.working)} />
+            <span fg={stationRgbValue(theme.status.working)}>{paintedCount(props.working)}</span>
           </>
         ) : null}
         {props.working > 0 && props.ready > 0 ? <span> </span> : null}
         {props.ready > 0 ? (
-          <span fg={STATION_COLORS.green}>{`●${paintedCount(props.ready)}`}</span>
+          <span fg={stationRgbValue(theme.status.success)}>{`●${paintedCount(props.ready)}`}</span>
         ) : null}
       </text>
     </box>
@@ -329,13 +335,15 @@ function CollapsedCelebration({
   color: StationButtonStateColors;
   reveal: number;
 }): ReactNode {
+  const theme = useStationTheme();
+  const success = stationRgbValue(theme.status.success);
   return (
     <box flexDirection="row" paddingLeft={ICON_PAD}>
-      <IconGlyph color={lerpColor(color.icon, STATION_COLORS.green, reveal)} />
+      <IconGlyph color={lerpColor(color.icon, success, reveal)} />
       <GradientText
         text={` ${celebrationText(celebration)}`}
         reveal={reveal}
-        color={STATION_COLORS.green}
+        color={success}
       />
     </box>
   );
@@ -369,23 +377,23 @@ function ExpandedBase(props: {
   );
 }
 
-const ROLLUP_MARKS: Record<Exclude<ProjectRollupStatus, "working">, { glyph: string; color: string }> = {
-  needsYou: { glyph: "!", color: STATION_COLORS.red },
-  ready: { glyph: "●", color: STATION_COLORS.green },
-  idle: { glyph: "○", color: STATION_COLORS.gray },
-};
-
 function RollupGlyph({ status }: { status: ProjectRollupStatus }): ReactNode {
+  const theme = useStationTheme();
   if (status === "working") {
     return (
       <text>
-        <Throbber variant="braille" fg={STATION_COLORS.blue} />
+        <Throbber variant="braille" fg={stationRgbValue(theme.status.working)} />
         <span> </span>
       </text>
     );
   }
-  const mark = ROLLUP_MARKS[status];
-  return <text fg={mark.color}>{`${mark.glyph} `}</text>;
+  const mark =
+    status === "needsYou"
+      ? { glyph: "!", color: theme.status.danger }
+      : status === "ready"
+        ? { glyph: "●", color: theme.status.success }
+        : { glyph: "○", color: theme.status.neutral };
+  return <text fg={stationRgbValue(mark.color)}>{`${mark.glyph} `}</text>;
 }
 
 function ExpandedRollup(props: {

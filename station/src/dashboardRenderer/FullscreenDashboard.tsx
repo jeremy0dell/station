@@ -8,7 +8,7 @@ import { normalizeStationMouseEvent } from "../input/mouse.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import { DashboardFrameTitle } from "../station/view/DashboardFrameTitle.js";
 import { DashboardRoot } from "../station/view/DashboardRoot.js";
-import { useDashboardSurfaces } from "../station/view/dashboardSurfaceContext.js";
+import { toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import {
   StationHoverProvider,
   StationMouseProvider,
@@ -40,7 +40,7 @@ export function FullscreenDashboard({
   onCopyNotice,
   hoverEnabled = true,
 }: FullscreenDashboardProps) {
-  const { surfaceBackground } = useDashboardSurfaces();
+  const theme = useStationTheme();
   const { width, height } = useTerminalDimensions();
   const widgets = useStore(store, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets);
@@ -57,7 +57,7 @@ export function FullscreenDashboard({
           width={width}
           height={height}
           flexDirection="column"
-          backgroundColor={surfaceBackground}
+          backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
         >
           <DashboardRoot
             store={store}

@@ -13,7 +13,7 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { STATION_COLORS } from "../theme.js";
+import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
 import { AddProjectSheetView } from "./AddProjectSheetView.js";
 
 const teardowns: Array<() => void> = [];
@@ -70,7 +70,7 @@ describe("AddProjectSheetView", () => {
     const shortcutCol = lines[row]?.indexOf("A)") ?? -1;
     const shortcutSpan = spanAtFrameCell(setup.captureSpans(), row, shortcutCol);
     expect(shortcutSpan?.fg === undefined ? undefined : rgbToHex(shortcutSpan.fg)).toBe(
-      STATION_COLORS.yellow,
+      stationRgbValue(nativeStationTheme.status.warning),
     );
 
     await act(async () => {
@@ -79,12 +79,12 @@ describe("AddProjectSheetView", () => {
     });
     await setup.flush();
     const span = spanAtFrameCell(setup.captureSpans(), row, col);
-    expect(span?.fg === undefined ? undefined : rgbToHex(span.fg)).toBe(STATION_COLORS.background);
-    expect(span?.bg === undefined ? undefined : rgbToHex(span.bg)).toBe(STATION_COLORS.cyan);
+    expect(span?.fg === undefined ? undefined : rgbToHex(span.fg)).toBe(stationRgbValue(nativeStationTheme.text.inverse));
+    expect(span?.bg === undefined ? undefined : rgbToHex(span.bg)).toBe(stationRgbValue(nativeStationTheme.action.primary));
     const gapCol = (lines[row]?.indexOf("Edit id") ?? 0) - 1;
     const gapSpan = spanAtFrameCell(setup.captureSpans(), row, gapCol);
     expect(gapSpan?.bg === undefined ? undefined : rgbToHex(gapSpan.bg)).not.toBe(
-      STATION_COLORS.cyan,
+      stationRgbValue(nativeStationTheme.action.primary),
     );
 
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);

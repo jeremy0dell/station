@@ -3,7 +3,7 @@ import type { RowSegment } from "@station/dashboard-core";
 import stringWidth from "string-width";
 import { useHoverPointer } from "../../useHoverPointer.js";
 import { type StationMouseTarget } from "../input/stationMouse.js";
-import { rowColorToHex } from "./theme.js";
+import { rowColor, stationRgbValue, useStationTheme } from "../../theme/index.js";
 import { Throbber } from "./Throbber.js";
 import {
   useStationHoverEnabled,
@@ -50,11 +50,13 @@ export function SegmentLinkTargets({ segments }: { segments: readonly RowSegment
 }
 
 function SegmentLinkTarget({ link }: { link: SegmentLink }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const pointerProps = useHoverPointer({ enabled: useStationHoverEnabled() });
   const { left, segment, url, width } = link;
   const attributes = textSegmentAttributes(segment);
-  const fg = rowColorToHex(segment.color);
+  const color = rowColor(theme, segment.color);
+  const fg = color === undefined ? undefined : stationRgbValue(color);
   const target: StationMouseTarget = { kind: "link", url };
   return (
     <text
@@ -74,12 +76,15 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
 }
 
 function Segment({ segment }: { segment: RowSegment }) {
+  const theme = useStationTheme();
   if (segment.kind === "throbber") {
-    const fg = rowColorToHex(segment.color);
+    const color = rowColor(theme, segment.color);
+    const fg = color === undefined ? undefined : stationRgbValue(color);
     return <Throbber variant={segment.variant} {...(fg === undefined ? {} : { fg })} />;
   }
   const attributes = textSegmentAttributes(segment);
-  const fg = rowColorToHex(segment.color);
+  const color = rowColor(theme, segment.color);
+  const fg = color === undefined ? undefined : stationRgbValue(color);
   return (
     <span {...(fg === undefined ? {} : { fg })} attributes={attributes}>
       {segment.text}

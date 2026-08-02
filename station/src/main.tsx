@@ -36,6 +36,7 @@ import { openExternalUrl } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
+import { NativeStationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
 
 export type RunStationMainOptions = {
@@ -305,13 +306,18 @@ async function startStationMain(
     ? createRenderProfiler(devRenderProfilePath())
     : undefined;
   station.start();
+  const stationApp = (
+    <NativeStationThemeProvider>
+      <StationApp {...station.viewProps} />
+    </NativeStationThemeProvider>
+  );
   root.render(
     onRenderProfile ? (
       <Profiler id="station" onRender={onRenderProfile}>
-        <StationApp {...station.viewProps} />
+        {stationApp}
       </Profiler>
     ) : (
-      <StationApp {...station.viewProps} />
+      stationApp
     ),
   );
 

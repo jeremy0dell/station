@@ -1,5 +1,9 @@
 import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core";
-import { providerHealthStatusColor, STATION_COLORS } from "../theme.js";
+import {
+  providerHealthColor,
+  stationRgbValue,
+  useStationTheme,
+} from "../../../theme/index.js";
 import { SheetChoiceLine } from "./parts.js";
 
 export type AgentChoiceListViewProps = {
@@ -20,6 +24,7 @@ export function AgentChoiceListView({
   selectedId,
   pending = false,
 }: AgentChoiceListViewProps) {
+  const theme = useStationTheme();
   return (
     <>
       {choices.map((choice) => {
@@ -42,8 +47,8 @@ export function AgentChoiceListView({
             }
             color={
               update === undefined
-                ? providerHealthStatusColor(choice.value.status)
-                : STATION_COLORS.green
+                ? stationRgbValue(providerHealthColor(theme, choice.value.status))
+                : stationRgbValue(theme.status.success)
             }
             width={width}
             current={current}

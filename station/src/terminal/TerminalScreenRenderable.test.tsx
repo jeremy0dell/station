@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { getLinkId } from "@opentui/core";
+import { getLinkId, rgbToHex } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
+import { spanAtFrameCell } from "./testing/frameProbe.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
 
@@ -44,6 +46,20 @@ describe("TerminalScreenRenderable selection", () => {
       await setup.renderOnce();
       expect(getLinkId(setup.renderer.currentRenderBuffer.buffers.attributes[0] ?? 0)).toBeGreaterThan(
         0,
+      );
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("paints selection with the canonical pane role", async () => {
+    const { setup, screen } = await renderPane("hello world");
+    try {
+      await setup.mockMouse.drag(0, 0, 4, 0);
+      await setup.renderOnce();
+      const selected = spanAtFrameCell(setup.captureSpans(), 0, 0);
+      expect(selected?.bg === undefined ? undefined : rgbToHex(selected.bg)).toBe(
+        stationRgbValue(nativeStationTheme.pane.selection),
       );
     } finally {
       await teardown(setup, screen);

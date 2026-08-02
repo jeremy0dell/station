@@ -6,7 +6,7 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { STATION_COLORS } from "../theme.js";
+import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
 import {
   responsiveSheetFooterText,
   responsiveSheetText,
@@ -116,9 +116,9 @@ describe("SheetButtonRow", () => {
 
     const inside = spanAtFrameCell(setup.captureSpans(), 0, 2);
     const trailing = spanAtFrameCell(setup.captureSpans(), 0, 20);
-    expect(inside?.bg === undefined ? undefined : rgbToHex(inside.bg)).toBe(STATION_COLORS.cyan);
+    expect(inside?.bg === undefined ? undefined : rgbToHex(inside.bg)).toBe(stationRgbValue(nativeStationTheme.action.primary));
     expect(trailing?.bg === undefined ? undefined : rgbToHex(trailing.bg)).not.toBe(
-      STATION_COLORS.cyan,
+      stationRgbValue(nativeStationTheme.action.primary),
     );
   });
 });

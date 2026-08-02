@@ -10,8 +10,13 @@ import {
   type TuiToastEntry,
 } from "@station/dashboard-core";
 import { useEffect, useState } from "react";
-import { useDashboardSurfaces } from "./dashboardSurfaceContext.js";
-import { STATION_COLORS, toastBorderColorHex } from "./theme.js";
+import {
+  stationRgbValue,
+  toastBorderColor as toastBorderThemeColor,
+  toOpenTuiOpaqueColor,
+  useStationTheme,
+  type StationTheme,
+} from "../../theme/index.js";
 import {
   useStationHoverState,
   useStationMouse,
@@ -35,7 +40,8 @@ export function ToastOverlayView({
   hiddenByScreen,
   onCopyNotice,
 }: ToastOverlayViewProps) {
-  const { surfaceBackground } = useDashboardSurfaces();
+  const theme = useStationTheme();
+  const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.toast);
   if (hiddenByScreen || toast === undefined) {
     return null;
   }
@@ -60,7 +66,7 @@ export function ToastOverlayView({
       zIndex={20}
       border
       overflow="hidden"
-      borderColor={toastBorderColorHex(toastBorderColor(toast))}
+      borderColor={stationRgbValue(toastBorderThemeColor(theme, toastBorderColor(toast)))}
       backgroundColor={surfaceBackground}
       flexDirection="column"
     >
@@ -69,7 +75,7 @@ export function ToastOverlayView({
           <text
             flexGrow={1}
             flexShrink={1}
-            fg={STATION_COLORS.foreground}
+            fg={stationRgbValue(theme.text.primary)}
             attributes={TextAttributes.BOLD}
             wrapMode="word"
             selectable
@@ -84,11 +90,11 @@ export function ToastOverlayView({
           <text selectable={false}> </text>
           <ToastDismissControl />
         </box>
-        <text fg={STATION_COLORS.foreground} wrapMode="word" selectable>
+        <text fg={stationRgbValue(theme.text.primary)} wrapMode="word" selectable>
           {toast.toast.message}
         </text>
         {detail === undefined ? null : (
-          <text fg={STATION_COLORS.gray} wrapMode="word" selectable>
+          <text fg={stationRgbValue(theme.text.muted)} wrapMode="word" selectable>
             {detail}
           </text>
         )}
@@ -98,10 +104,11 @@ export function ToastOverlayView({
 }
 
 function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+  const theme = useStationTheme();
   const [hover, setHover] = useStationHoverState();
   const [copyFeedbackToken, setCopyFeedbackToken] = useState(0);
   const copied = copyFeedbackToken > 0;
-  const style = toastCopyControlStyle(copied, hover);
+  const style = toastCopyControlStyle(theme, copied, hover);
   useEffect(() => {
     if (!copied) {
       return;
@@ -131,24 +138,28 @@ function ToastCopyControl({ text, onCopy }: { text: string; onCopy: (text: strin
   );
 }
 
-function toastCopyControlStyle(copied: boolean, hover: boolean) {
+function toastCopyControlStyle(theme: StationTheme, copied: boolean, hover: boolean) {
   if (copied) {
-    return { fg: STATION_COLORS.green };
+    return { fg: stationRgbValue(theme.status.success) };
   }
   if (hover) {
-    return { fg: STATION_COLORS.background, bg: STATION_COLORS.cyan };
+    return {
+      fg: stationRgbValue(theme.text.inverse),
+      bg: stationRgbValue(theme.action.primary),
+    };
   }
-  return { fg: STATION_COLORS.cyan };
+  return { fg: stationRgbValue(theme.action.primary) };
 }
 
 function ToastDismissControl() {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   return (
     <text
       flexShrink={0}
-      fg={hover ? STATION_COLORS.background : STATION_COLORS.gray}
-      {...(hover ? { bg: STATION_COLORS.red } : {})}
+      fg={stationRgbValue(hover ? theme.text.inverse : theme.text.muted)}
+      {...(hover ? { bg: stationRgbValue(theme.status.danger) } : {})}
       selectable={false}
       {...stationMouseProps(dispatch, { kind: "toast" })}
       onMouseOver={() => setHover(true)}

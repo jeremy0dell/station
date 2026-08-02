@@ -7,7 +7,7 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { STATION_COLORS } from "../theme.js";
+import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
 import { RemoveSessionSheetView } from "./RemoveSessionSheetView.js";
 
 type RemoveConfirmScreen = Extract<
@@ -62,10 +62,10 @@ describe("RemoveSessionSheetView", () => {
     const deleteSpan = spanAtFrameCell(setup.captureSpans(), row, deleteCol);
     const keepSpan = spanAtFrameCell(setup.captureSpans(), row, keepCol);
     expect(deleteSpan?.fg === undefined ? undefined : rgbToHex(deleteSpan.fg)).toBe(
-      STATION_COLORS.red,
+      stationRgbValue(nativeStationTheme.status.danger),
     );
     expect(keepSpan?.bg === undefined ? undefined : rgbToHex(keepSpan.bg)).toBe(
-      STATION_COLORS.focusBackground,
+      stationRgbValue(nativeStationTheme.interaction.keyboardFocus),
     );
   });
 
@@ -83,7 +83,7 @@ describe("RemoveSessionSheetView", () => {
     await setup.flush();
     const deleteSpan = spanAtFrameCell(setup.captureSpans(), row, deleteCol);
     expect(deleteSpan?.bg === undefined ? undefined : rgbToHex(deleteSpan.bg)).toBe(
-      STATION_COLORS.red,
+      stationRgbValue(nativeStationTheme.status.danger),
     );
 
     await setup.mockMouse.click(deleteCol, row, MouseButtons.LEFT);

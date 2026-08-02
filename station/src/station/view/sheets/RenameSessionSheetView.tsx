@@ -3,7 +3,7 @@ import { bottomSheetContentWidth } from "@station/dashboard-core";
 import { truncateCells } from "@station/dashboard-core";
 import type { TuiScreen } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { STATION_COLORS } from "../theme.js";
+import { stationRgbValue, useStationTheme } from "../../../theme/index.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   SheetButtonRow,
@@ -20,6 +20,7 @@ export type RenameSessionSheetViewProps = {
 };
 
 export function RenameSessionSheetView({ state, columns, rows }: RenameSessionSheetViewProps) {
+  const theme = useStationTheme();
   const contentWidth = bottomSheetContentWidth(columns);
   const footer = state.returnTo === "dashboard" ? "Enter:rename   Esc:cancel" : "Enter:rename   Esc:back";
   return (
@@ -38,7 +39,7 @@ export function RenameSessionSheetView({ state, columns, rows }: RenameSessionSh
         value={<EditableTextInputView {...state.draftTitle} placeholder={state.currentTitle} />}
       />
       {state.validationError === undefined ? null : (
-        <SheetText fg={STATION_COLORS.red}>
+        <SheetText fg={stationRgbValue(theme.status.danger)}>
           {truncateCells(` ${state.validationError}`, contentWidth)}
         </SheetText>
       )}

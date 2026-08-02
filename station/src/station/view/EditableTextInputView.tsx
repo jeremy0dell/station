@@ -1,16 +1,17 @@
 // OpenTUI port of apps/tui's EditableTextInput + TuiCursor: value split at
 // the cursor with a blinking "|" cell between (style-only blink; layout
 // stays stable because the cursor cell is always one column wide).
+import type { ColorInput } from "@opentui/core";
 import { useEffect, useState } from "react";
 import {
   clampEditableTextCursor,
   type EditableTextInputState,
 } from "@station/dashboard-core";
-import { STATION_COLORS } from "./theme.js";
+import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 
 export type EditableTextInputViewProps = EditableTextInputState & {
   placeholder?: string;
-  placeholderColor?: string;
+  placeholderColor?: ColorInput;
   /** False keeps the value readable while another editor action owns focus. */
   active?: boolean;
 };
@@ -19,17 +20,19 @@ export function EditableTextInputView({
   value,
   cursor,
   placeholder,
-  placeholderColor = STATION_COLORS.gray,
+  placeholderColor,
   active = true,
 }: EditableTextInputViewProps) {
+  const theme = useStationTheme();
+  const resolvedPlaceholderColor = placeholderColor ?? toOpenTuiColor(theme.text.muted);
   if (value.length === 0 && placeholder !== undefined) {
     if (!active) {
-      return <span fg={placeholderColor}>{placeholder}</span>;
+      return <span fg={resolvedPlaceholderColor}>{placeholder}</span>;
     }
     return (
       <span>
         <BlinkingCursor />
-        <span fg={placeholderColor}>{placeholder}</span>
+        <span fg={resolvedPlaceholderColor}>{placeholder}</span>
       </span>
     );
   }

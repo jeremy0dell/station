@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { TextAttributes } from "@opentui/core";
+import { nativeStationTheme, stationRgbValue } from "../../theme/index.js";
 import { buildVisibleRows } from "./rows.js";
 import { createStationVtScreen, type StationVtScreen } from "./screen.js";
 
@@ -30,7 +31,7 @@ describe("buildVisibleRows", () => {
     expect(rows[0]?.spans[0]).toEqual({
       text: "abc",
       width: 3,
-      fg: "#cd3131",
+      fg: stationRgbValue(nativeStationTheme.terminal.ansi16[1]),
       attributes: 0,
     });
     expect(rows[0]?.spans[1]).toEqual({ text: "def", width: 3, attributes: 0 });
@@ -134,7 +135,7 @@ describe("buildVisibleRows", () => {
     expect(spans[0]).toEqual({
       text: "  ",
       width: 2,
-      bg: "#2472c8",
+      bg: stationRgbValue(nativeStationTheme.terminal.ansi16[4]),
       attributes: 0,
     });
   });

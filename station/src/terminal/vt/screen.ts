@@ -21,8 +21,13 @@ import {
   type MouseTrackingValue,
 } from "../protocol/mouse.js";
 import type { StationTerminalSize } from "../types.js";
+import {
+  nativeStationTheme,
+  stationRgbValue,
+  type StationTerminalTheme,
+} from "../../theme/index.js";
+import { buildVtPalette256 } from "./palette.js";
 import { buildVisibleRows, type VtRow } from "./rows.js";
-import { type StationVtTheme, stationVtTheme } from "./theme.js";
 
 const DEFAULT_FLUSH_INTERVAL_MS = 33;
 const SYNC_OUTPUT_HOLD_MAX_MS = 1000;
@@ -52,7 +57,7 @@ export type StationVtScreenOptions = {
   flushIntervalMs?: number;
   /** Max hold for an open synchronized frame before the escape hatch flushes; injectable for tests. */
   syncHoldMaxMs?: number;
-  theme?: StationVtTheme;
+  theme?: StationTerminalTheme;
   /**
    * Terminal query replies (DA1/DA2/DSR/CPR/DECRQM from xterm, OSC 10/11 from
    * this store). These must be written back to the PTY verbatim: TUIs block
@@ -211,7 +216,10 @@ export type StationVtScreen = {
 };
 
 export function createStationVtScreen(options: StationVtScreenOptions): StationVtScreen {
-  const theme = options.theme ?? stationVtTheme;
+  const theme = options.theme ?? nativeStationTheme.terminal;
+  const palette = buildVtPalette256(theme.ansi16.map(stationRgbValue));
+  const defaultForeground = stationRgbValue(theme.defaultForeground);
+  const defaultBackground = stationRgbValue(theme.defaultBackground);
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const syncHoldMaxMs = options.syncHoldMaxMs ?? SYNC_OUTPUT_HOLD_MAX_MS;
   const requestedScrollback = options.scrollback ?? DEFAULT_SCROLLBACK_LINES;
@@ -407,14 +415,14 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     if (data !== "?") {
       return false;
     }
-    emitResponse(`\x1b]10;${toOscRgb(theme.foreground)}\x07`);
+    emitResponse(`\x1b]10;${toOscRgb(defaultForeground)}\x07`);
     return true;
   });
   terminal.parser.registerOscHandler(11, (data) => {
     if (data !== "?") {
       return false;
     }
-    emitResponse(`\x1b]11;${toOscRgb(theme.background)}\x07`);
+    emitResponse(`\x1b]11;${toOscRgb(defaultBackground)}\x07`);
     return true;
   });
 
@@ -645,6 +653,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       buildVisibleRows(terminal, {
         cursorVisible: rowOptions?.cursorVisible ?? cursorVisible,
         offset: scrollOffset,
+        palette,
       }),
     scrollBy: (deltaLines) => {
       if (disposed || deltaLines === 0) {

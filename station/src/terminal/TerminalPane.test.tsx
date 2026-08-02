@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { getLinkId, rgbToHex, TextAttributes } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { MAIN_PANE_ID } from "../state/types.js";
+import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
 import { PaneRegistryProvider } from "./registry/paneTerminalContext.js";
 import { createPtyRegistry, type PtyRegistry } from "./registry/ptyRegistry.js";
 import { TerminalPane } from "./TerminalPane.js";
@@ -115,7 +116,9 @@ describe("TerminalPane frame rendering", () => {
     const frame = pane.setup.captureSpans();
     const span = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x);
     expect(span?.text).toContain("hello station");
-    expect(rgbToHex(span?.fg as Parameters<typeof rgbToHex>[0])).toBe("#d4d4d8");
+    expect(rgbToHex(span?.fg as Parameters<typeof rgbToHex>[0])).toBe(
+      stationRgbValue(nativeStationTheme.terminal.defaultForeground),
+    );
   });
 
   it("renders sgr colors and attributes as styled cells", async () => {
@@ -125,7 +128,9 @@ describe("TerminalPane frame rendering", () => {
     const frame = pane.setup.captureSpans();
     const errSpan = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x);
     expect(errSpan?.text).toContain("ERR");
-    expect(rgbToHex(errSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe("#cd3131");
+    expect(rgbToHex(errSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe(
+      stationRgbValue(nativeStationTheme.terminal.ansi16[1]),
+    );
     expect((errSpan?.attributes ?? 0) & TextAttributes.BOLD).toBe(TextAttributes.BOLD);
     const okSpan = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 4);
     expect(rgbToHex(okSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe("#010203");

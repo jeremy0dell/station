@@ -7,7 +7,7 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { STATION_COLORS } from "../theme.js";
+import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
 import { ForkSessionSheetView } from "./ForkSessionSheetView.js";
 
 type ForkDetailsScreen = Extract<TuiScreen, { name: "fork"; step: "details" }>;
@@ -98,10 +98,10 @@ describe("ForkSessionSheetView", () => {
     const inside = spanAtFrameCell(setup.captureSpans(), row, copyCol);
     const trailing = spanAtFrameCell(setup.captureSpans(), row, 58);
     expect(inside?.bg === undefined ? undefined : rgbToHex(inside.bg)).toBe(
-      STATION_COLORS.hoverBackground,
+      stationRgbValue(nativeStationTheme.interaction.hover),
     );
     expect(trailing?.bg === undefined ? undefined : rgbToHex(trailing.bg)).not.toBe(
-      STATION_COLORS.hoverBackground,
+      stationRgbValue(nativeStationTheme.interaction.hover),
     );
   });
 

@@ -18,7 +18,8 @@ import {
 } from "../state/types.js";
 import { usePaneRegistry } from "./registry/paneTerminalContext.js";
 import type { PtyRegistryView } from "./registry/ptyRegistry.js";
-import { PANE_BORDER_ACTIVE, PANE_BORDER_INACTIVE, TerminalPane } from "./TerminalPane.js";
+import { stationRgbValue, useStationTheme, type StationTheme } from "../theme/index.js";
+import { TerminalPane } from "./TerminalPane.js";
 
 export type PaneGridProps = {
   store: StationStore;
@@ -86,8 +87,9 @@ function renderNode(node: PaneNode, ctx: RenderCtx): ReactNode {
 }
 
 function PaneLeaf({ paneId, ctx }: { paneId: PaneId; ctx: RenderCtx }): ReactNode {
+  const theme = useStationTheme();
   const active = paneId === ctx.activePaneId;
-  const presentation = panePresentation(paneId, active, ctx);
+  const presentation = panePresentation(theme, paneId, active, ctx);
   // A transparent (no border/padding) mouse-capturing wrapper keeps focus/menu
   // routing per pane while TerminalPane keeps its own 4-cell chrome. Clicking
   // anywhere in the pane focuses it; right-click opens its context menu.
@@ -131,13 +133,6 @@ type PaneAccent = {
   inactive: string;
 };
 
-const SHELL_ACCENTS: readonly PaneAccent[] = [
-  { active: "#34d399", inactive: "#14532d" },
-  { active: "#c084fc", inactive: "#581c87" },
-  { active: "#fbbf24", inactive: "#713f12" },
-  { active: "#22d3ee", inactive: "#164e63" },
-];
-
 function useStationSnapshot(store: StoreApi<TuiStore> | undefined): StationSnapshot | undefined {
   const subscribe = useCallback(
     (listener: () => void) => (store === undefined ? () => {} : store.subscribe(listener)),
@@ -148,13 +143,14 @@ function useStationSnapshot(store: StoreApi<TuiStore> | undefined): StationSnaps
 }
 
 function panePresentation(
+  theme: StationTheme,
   paneId: PaneId,
   active: boolean,
   ctx: Pick<RenderCtx, "workspace" | "snapshot">,
 ): { borderColor: string; title: string | undefined } {
   const record = paneRecord(ctx.workspace.panes, paneId);
   const title = paneSemanticTitle(paneId, ctx.workspace, ctx.snapshot);
-  const accent = paneAccent(paneId, record);
+  const accent = paneAccent(theme, paneId, record);
   return { borderColor: active ? accent.active : accent.inactive, title };
 }
 
@@ -162,12 +158,20 @@ function paneRecord(panes: readonly PaneRecord[], paneId: PaneId): PaneRecord | 
   return panes.find((candidate) => candidate.id === paneId);
 }
 
-function paneAccent(paneId: PaneId, record: PaneRecord | undefined): PaneAccent {
-  if (record?.role === "primary-agent" || paneId === MAIN_PANE_ID) {
-    return { active: PANE_BORDER_ACTIVE, inactive: PANE_BORDER_INACTIVE };
-  }
-  // stableIndex returns hash % length, always in range for the fixed array.
-  return SHELL_ACCENTS[stableIndex(paneId, SHELL_ACCENTS.length)]!;
+function paneAccent(
+  theme: StationTheme,
+  paneId: PaneId,
+  record: PaneRecord | undefined,
+): PaneAccent {
+  const accent =
+    record?.role === "primary-agent" || paneId === MAIN_PANE_ID
+      ? theme.pane.primary
+      : // stableIndex returns hash % length, always in range for the fixed array.
+        theme.pane.shells[stableIndex(paneId, theme.pane.shells.length)]!;
+  return {
+    active: stationRgbValue(accent.active),
+    inactive: stationRgbValue(accent.inactive),
+  };
 }
 
 function stableIndex(value: string, size: number): number {

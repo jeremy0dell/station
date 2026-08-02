@@ -7,8 +7,11 @@ import {
   bottomSheetContentWidth,
   bottomSheetFrameLayout,
 } from "@station/dashboard-core";
-import { useDashboardSurfaces } from "../dashboardSurfaceContext.js";
-import { STATION_COLORS } from "../theme.js";
+import {
+  stationRgbValue,
+  toOpenTuiOpaqueColor,
+  useStationTheme,
+} from "../../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
 import { SheetText } from "./parts.js";
 
@@ -31,7 +34,8 @@ export function BottomSheetFrameView({
   width,
   children,
 }: BottomSheetFrameViewProps) {
-  const { surfaceBackground } = useDashboardSurfaces();
+  const theme = useStationTheme();
+  const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.sheet);
   const dispatch = useStationMouse();
   const layout = bottomSheetFrameLayout({
     columns,
@@ -49,12 +53,12 @@ export function BottomSheetFrameView({
       height={layout.height}
       zIndex={10}
       border
-      borderColor={STATION_COLORS.hairline}
+      borderColor={stationRgbValue(theme.interaction.hairline)}
       backgroundColor={surfaceBackground}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <SheetText fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{` ${title}`}</SheetText>
+      <SheetText fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.BOLD}>{` ${title}`}</SheetText>
       <box
         flexDirection="column"
         width={bottomSheetContentWidth(layout.width)}

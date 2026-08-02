@@ -13,7 +13,7 @@ import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { STATION_COLORS } from "../theme.js";
+import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
 import { NewSessionSheetView } from "./NewSessionSheetView.js";
 
 const teardowns: Array<() => void> = [];
@@ -75,7 +75,7 @@ describe("NewSessionSheetView", () => {
     const shortcutCol = lines[projectRow]?.indexOf("P)") ?? -1;
     const shortcutSpan = spanAtFrameCell(setup.captureSpans(), projectRow, shortcutCol);
     expect(shortcutSpan?.fg === undefined ? undefined : rgbToHex(shortcutSpan.fg)).toBe(
-      STATION_COLORS.yellow,
+      stationRgbValue(nativeStationTheme.status.warning),
     );
 
     const agentRow = lines.findIndex((line) => line.includes("Agent (A)"));
@@ -83,7 +83,7 @@ describe("NewSessionSheetView", () => {
     expect(lines[agentRow]).toContain("codex ● healthy");
     const healthSpan = spanAtFrameCell(setup.captureSpans(), agentRow, healthCol);
     expect(healthSpan?.fg === undefined ? undefined : rgbToHex(healthSpan.fg)).toBe(
-      STATION_COLORS.green,
+      stationRgbValue(nativeStationTheme.status.success),
     );
 
     const createRow = lines.findIndex((line) => line.includes("Create session (C)"));

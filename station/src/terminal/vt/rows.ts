@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import type { IBufferCell, Terminal } from "@xterm/headless";
-import { rgbToHexColor, stationVtPalette256 } from "./theme.js";
+import { nativeStationTheme, stationRgbValue } from "../../theme/index.js";
+import { buildVtPalette256, rgbToHexColor } from "./palette.js";
 import { resolveXtermCellHyperlink } from "./xtermHyperlinks.js";
 
 export type VtSpan = {
@@ -38,7 +39,8 @@ export function buildVisibleRows(
   options: BuildVisibleRowsOptions = {},
 ): VtRow[] {
   const buffer = terminal.buffer.active;
-  const palette = options.palette ?? stationVtPalette256;
+  const palette =
+    options.palette ?? buildVtPalette256(nativeStationTheme.terminal.ansi16.map(stationRgbValue));
   // Clamp defensively: callers track scrollback bounds, but reflow can shrink
   // baseY between a scroll and the next paint.
   const offset = Math.max(0, Math.min(options.offset ?? 0, buffer.baseY));

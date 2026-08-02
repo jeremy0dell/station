@@ -6,7 +6,7 @@ import type { MouseTargetRef } from "../input/router.js";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import { PaneGrid } from "./PaneGrid.js";
-import { PANE_BORDER_ACTIVE, PANE_BORDER_INACTIVE } from "./TerminalPane.js";
+import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
 import { PaneRegistryProvider } from "./registry/paneTerminalContext.js";
 import { createPtyRegistry } from "./registry/ptyRegistry.js";
 import { spanAtFrameCell } from "./testing/frameProbe.js";
@@ -17,6 +17,8 @@ import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 
 const SURFACE = { width: 40, height: 12 };
+const PRIMARY_BORDER_ACTIVE = stationRgbValue(nativeStationTheme.pane.primary.active);
+const PRIMARY_BORDER_INACTIVE = stationRgbValue(nativeStationTheme.pane.primary.inactive);
 // One pane filling the surface: TerminalPane border + padding eat 2 cells each side.
 const FULL_INTERIOR = { cols: SURFACE.width - 4, rows: SURFACE.height - 4 };
 
@@ -171,19 +173,19 @@ describe("PaneGrid", () => {
   it("highlights the active pane border and dims inactive panes", async () => {
     const { setup, store } = await renderGrid();
     // Single pane: main is active, so its border uses the active accent.
-    expect(allForegroundHexes(setup).has(PANE_BORDER_ACTIVE)).toBe(true);
+    expect(allForegroundHexes(setup).has(PRIMARY_BORDER_ACTIVE)).toBe(true);
 
     store.actions.createPane("pane-split-0", {
       split: { anchorPaneId: MAIN_PANE_ID, direction: "right" },
     });
     await pumpUntil(setup, () => store.getState().workspace.activePaneId === "pane-split-0");
     // Let the reshaped layout settle into a frame.
-    await pumpUntil(setup, () => allForegroundHexes(setup).has(PANE_BORDER_INACTIVE));
+    await pumpUntil(setup, () => allForegroundHexes(setup).has(PRIMARY_BORDER_INACTIVE));
 
     const hexes = allForegroundHexes(setup);
-    expect(hexes.has(PANE_BORDER_ACTIVE)).toBe(false); // the active split shell is not blue
-    expect(hexes.has(PANE_BORDER_INACTIVE)).toBe(true); // the dimmed original
-    expect([...hexes].some((hex) => hex !== PANE_BORDER_INACTIVE)).toBe(true);
+    expect(hexes.has(PRIMARY_BORDER_ACTIVE)).toBe(false); // the active split shell is not blue
+    expect(hexes.has(PRIMARY_BORDER_INACTIVE)).toBe(true); // the dimmed original
+    expect([...hexes].some((hex) => hex !== PRIMARY_BORDER_INACTIVE)).toBe(true);
   });
 
   it("titles a primary-agent pane from the STATION session and harness", async () => {
@@ -265,7 +267,7 @@ describe("PaneGrid", () => {
     // session contributes no (dimmed) border to the frame.
     await pumpUntil(setup, () => {
       const hexes = allForegroundHexes(setup);
-      return hexes.has(PANE_BORDER_ACTIVE) && !hexes.has(PANE_BORDER_INACTIVE);
+      return hexes.has(PRIMARY_BORDER_ACTIVE) && !hexes.has(PRIMARY_BORDER_INACTIVE);
     });
 
     expect(spawnSizes.length).toBe(2); // no third spawn — the PTY was reused

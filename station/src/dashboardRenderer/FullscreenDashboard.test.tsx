@@ -5,7 +5,7 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import { STATION_COLORS } from "../station/view/theme.js";
+import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
 import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
@@ -149,7 +149,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).not.toBe(
-      STATION_COLORS.hoverBackground,
+      stationRgbValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(async () => {
@@ -159,7 +159,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanHex(spanAtFrameCell(setup.captureSpans(), titleAction.row, titleAction.col))).toBe(
-      STATION_COLORS.gray,
+      stationRgbValue(nativeStationTheme.text.muted),
     );
 
     await actOn(async () => {
@@ -219,7 +219,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), addWidget.row, addWidget.col))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationRgbValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
@@ -246,7 +246,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationRgbValue(nativeStationTheme.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
@@ -532,7 +532,7 @@ function expectTerminalDefaultBackground(
   const cell = cellFor(setup.captureCharFrame(), needle);
   const span = spanAtFrameCell(setup.captureSpans(), cell.row, cell.col);
   expect(span?.bg.intent).toBe("default");
-  expect(spanBgHex(span)).toBe(STATION_COLORS.background);
+  expect(spanBgHex(span)).toBe(stationRgbValue(nativeStationTheme.text.inverse));
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

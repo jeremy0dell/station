@@ -1,7 +1,12 @@
-import type { MouseEvent } from "@opentui/core";
+import type { ColorInput, MouseEvent } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
-import { MENU_COLORS } from "../station/view/theme.js";
+import {
+  toOpenTuiColor,
+  toOpenTuiOpaqueColor,
+  useStationTheme,
+  type StationTheme,
+} from "../theme/index.js";
 import type { ContextMenuItem } from "./types.js";
 
 export type ContextMenuSurfaceProps = {
@@ -19,20 +24,21 @@ export function ContextMenuSurface({
   height,
   dispatchMouse,
 }: ContextMenuSurfaceProps) {
+  const theme = useStationTheme();
   const contentWidth = Math.max(1, width - 2);
   const visibleRows = Math.max(0, height - 2);
   return (
     <box
       width={width}
       height={height}
-      backgroundColor={MENU_COLORS.surface}
+      backgroundColor={toOpenTuiOpaqueColor(theme.contextMenu.surface)}
       flexDirection="column"
       overflow="hidden"
       onMouseDown={(event: MouseEvent) => {
         event.stopPropagation();
       }}
     >
-      <text fg={MENU_COLORS.borderText}>{borderLine(contentWidth)}</text>
+      <text fg={toOpenTuiColor(theme.contextMenu.border)}>{borderLine(contentWidth)}</text>
       {items.slice(0, visibleRows).map((item, index) => {
         const active = index === activeIndex;
         const disabled = item.disabled === true;
@@ -61,17 +67,23 @@ export function ContextMenuSurface({
             key={item.id}
             width="100%"
             height={1}
-            backgroundColor={active ? MENU_COLORS.selected : MENU_COLORS.surface}
+            backgroundColor={toOpenTuiColor(
+              active ? theme.contextMenu.selected : theme.contextMenu.surface,
+            )}
             onMouseDown={onItemMouseDown}
             onMouseMove={onItemMouseMove}
           >
-            <text fg={rowColor(item, disabled)} onMouseDown={onItemMouseDown} onMouseMove={onItemMouseMove}>
+            <text
+              fg={menuRowColor(theme, item, disabled)}
+              onMouseDown={onItemMouseDown}
+              onMouseMove={onItemMouseMove}
+            >
               {`|${fitLabel(item.label, contentWidth)}|`}
             </text>
           </box>
         );
       })}
-      <text fg={MENU_COLORS.borderText}>{borderLine(contentWidth)}</text>
+      <text fg={toOpenTuiColor(theme.contextMenu.border)}>{borderLine(contentWidth)}</text>
     </box>
   );
 }
@@ -80,11 +92,15 @@ function borderLine(width: number): string {
   return `+${"-".repeat(width)}+`;
 }
 
-function rowColor(item: ContextMenuItem, disabled: boolean): string {
+function menuRowColor(
+  theme: StationTheme,
+  item: ContextMenuItem,
+  disabled: boolean,
+): ColorInput {
   if (disabled) {
-    return MENU_COLORS.disabledText;
+    return toOpenTuiColor(theme.text.disabled);
   }
-  return item.danger === true ? MENU_COLORS.danger : MENU_COLORS.text;
+  return toOpenTuiColor(item.danger === true ? theme.status.danger : theme.text.menu);
 }
 
 function fitLabel(label: string, width: number): string {

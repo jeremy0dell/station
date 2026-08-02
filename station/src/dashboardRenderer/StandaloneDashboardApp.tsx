@@ -1,7 +1,4 @@
-import {
-  DashboardSurfaceProvider,
-  TERMINAL_DEFAULT_SURFACES,
-} from "../station/view/dashboardSurfaceContext.js";
+import { EmbeddedStationThemeProvider } from "../theme/index.js";
 import {
   FullscreenDashboard,
   type FullscreenDashboardProps,
@@ -10,8 +7,8 @@ import {
 /** Production composition root for the standalone and popup dashboard renderer. */
 export function StandaloneDashboardApp(props: FullscreenDashboardProps) {
   return (
-    <DashboardSurfaceProvider value={TERMINAL_DEFAULT_SURFACES}>
+    <EmbeddedStationThemeProvider>
       <FullscreenDashboard {...props} />
-    </DashboardSurfaceProvider>
+    </EmbeddedStationThemeProvider>
   );
 }

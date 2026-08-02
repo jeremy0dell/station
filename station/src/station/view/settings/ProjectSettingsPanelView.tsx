@@ -18,7 +18,6 @@ import {
   type TuiScreen,
   type TuiSelectionState,
 } from "@station/dashboard-core";
-import { useDashboardSurfaces } from "../dashboardSurfaceContext.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
 import { fit, SheetLine } from "../sheets/parts.js";
@@ -27,7 +26,11 @@ import {
   useStationMouse,
   stationMouseProps,
 } from "../stationMouseContext.js";
-import { STATION_COLORS } from "../theme.js";
+import {
+  stationRgbValue,
+  toOpenTuiOpaqueColor,
+  useStationTheme,
+} from "../../../theme/index.js";
 
 type ProjectSettingsScreen = Extract<TuiScreen, { name: "projectSettings" }>;
 
@@ -48,7 +51,8 @@ export function ProjectSettingsPanelView({
   rows,
   localRows,
 }: ProjectSettingsPanelViewProps) {
-  const { surfaceBackground } = useDashboardSurfaces();
+  const theme = useStationTheme();
+  const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.settings);
   const dispatch = useStationMouse();
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
 
@@ -73,12 +77,12 @@ export function ProjectSettingsPanelView({
       height={height}
       zIndex={10}
       border
-      borderColor={STATION_COLORS.hairline}
+      borderColor={stationRgbValue(theme.interaction.hairline)}
       backgroundColor={surfaceBackground}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{fit(` ${title}`, innerWidth)}</text>
+      <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.BOLD}>{fit(` ${title}`, innerWidth)}</text>
       <box flexDirection="row" width={innerWidth} height={contentHeight}>
         <box flexDirection="column" width={leftWidth}>
           <ItemList
@@ -100,7 +104,7 @@ export function ProjectSettingsPanelView({
           />
         </box>
       </box>
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(` ${footer}`, innerWidth)}</text>
+      <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(` ${footer}`, innerWidth)}</text>
     </box>
   );
 }
@@ -140,12 +144,13 @@ function SettingsItemRow({
   active: boolean;
   width: number;
 }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   return (
     <text
-      fg={active ? STATION_COLORS.cyan : STATION_COLORS.foreground}
-      {...(hover ? { bg: STATION_COLORS.hoverBackground } : {})}
+      fg={stationRgbValue(active ? theme.action.primary : theme.text.primary)}
+      {...(hover ? { bg: stationRgbValue(theme.interaction.hover) } : {})}
       {...stationMouseProps(dispatch, { kind: "projectSettingsItem", itemId: item.id })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -200,6 +205,7 @@ function AgentDetail({
   localRows: TuiLocalRows;
   selectedAgentId?: ProviderId;
 }) {
+  const theme = useStationTheme();
   const project = snapshot.projects.find((candidate) => candidate.id === screen.projectId);
   const choices = project === undefined ? [] : selectNewSessionHarnessChoices(snapshot, project);
   const currentDefault =
@@ -208,7 +214,7 @@ function AgentDetail({
     <>
       <PaneHeader label="Default agent" width={width} focused={focused} />
       {choices.length === 0 ? (
-        <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(" No agents available", width)}</text>
+        <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(" No agents available", width)}</text>
       ) : (
         <>
           <AgentChoiceListView
@@ -219,7 +225,7 @@ function AgentDetail({
             pending={currentDefault?.pending ?? false}
           />
           <SheetLine width={width}> </SheetLine>
-          <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(" ✓ current · ↑↓ ↵ · 1-9/a-z", width)}</text>
+          <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(" ✓ current · ↑↓ ↵ · 1-9/a-z", width)}</text>
         </>
       )}
     </>
@@ -235,16 +241,17 @@ function RemoveDetail({
   width: number;
   focused: boolean;
 }) {
+  const theme = useStationTheme();
   const armed = isRemoveProjectArmed(screen);
   const phrase = removeProjectConfirmPhrase(screen.projectId);
   return (
     <>
       <PaneHeader label="Remove project" width={width} focused={focused} danger />
-      <text fg={STATION_COLORS.foreground}>{fit(" Removes it from Station.", width)}</text>
-      <text fg={STATION_COLORS.foreground}>{fit(" Worktrees & files stay on disk.", width)}</text>
+      <text fg={stationRgbValue(theme.text.primary)}>{fit(" Removes it from Station.", width)}</text>
+      <text fg={stationRgbValue(theme.text.primary)}>{fit(" Worktrees & files stay on disk.", width)}</text>
       <SheetLine width={width}> </SheetLine>
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>{fit(` Type "${phrase}" to confirm`, width)}</text>
-      <text fg={STATION_COLORS.foreground}>
+      <text fg={stationRgbValue(theme.text.primary)} attributes={TextAttributes.DIM}>{fit(` Type "${phrase}" to confirm`, width)}</text>
+      <text fg={stationRgbValue(theme.text.primary)}>
         {" ▸ "}
         <EditableTextInputView {...screen.removeDraft} placeholder={phrase} />
       </text>
@@ -260,6 +267,7 @@ function RemoveDetail({
 // is truncated (never padded) to width minus the indent so it cannot overflow a
 // narrow pane while the highlight still hugs the visible text.
 function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const hot = armed && hover;
@@ -268,9 +276,11 @@ function RemoveButton({ armed, width }: { armed: boolean; width: number }) {
     <box flexDirection="row">
       <text>{" "}</text>
       <text
-        fg={hot ? STATION_COLORS.background : armed ? STATION_COLORS.red : STATION_COLORS.gray}
+        fg={stationRgbValue(
+          hot ? theme.text.inverse : armed ? theme.status.danger : theme.text.muted,
+        )}
         attributes={armed ? TextAttributes.BOLD : TextAttributes.DIM}
-        {...(hot ? { bg: STATION_COLORS.red } : {})}
+        {...(hot ? { bg: stationRgbValue(theme.status.danger) } : {})}
         {...stationMouseProps(dispatch, { kind: "projectSettingsConfirmRemove" })}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -295,17 +305,22 @@ function PaneHeader({
   focused: boolean;
   danger?: boolean;
 }) {
-  const accent = danger ? STATION_COLORS.red : STATION_COLORS.cyan;
+  const theme = useStationTheme();
+  const accent = danger ? theme.status.danger : theme.action.primary;
   if (focused) {
     return (
-      <text fg={STATION_COLORS.background} bg={accent} attributes={TextAttributes.BOLD}>
+      <text
+        fg={stationRgbValue(theme.text.inverse)}
+        bg={stationRgbValue(accent)}
+        attributes={TextAttributes.BOLD}
+      >
         {fit(` ${label}`, width)}
       </text>
     );
   }
   return (
     <text
-      fg={danger ? STATION_COLORS.red : STATION_COLORS.foreground}
+      fg={stationRgbValue(danger ? theme.status.danger : theme.text.primary)}
       attributes={TextAttributes.BOLD}
     >
       {fit(` ${label}`, width)}
@@ -316,10 +331,11 @@ function PaneHeader({
 // One-column gray rule between the two panes. Stays width 1 so the layout's
 // reserved spacer column (rightWidth = innerWidth - leftWidth - 1) is unchanged.
 function VerticalDivider({ height }: { height: number }) {
+  const theme = useStationTheme();
   return (
     <box flexDirection="column" width={1}>
       {Array.from({ length: height }, (_, row) => (
-        <text key={row} fg={STATION_COLORS.gray}>
+        <text key={row} fg={stationRgbValue(theme.text.muted)}>
           │
         </text>
       ))}

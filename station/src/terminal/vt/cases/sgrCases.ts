@@ -1,4 +1,5 @@
 import { TextAttributes } from "@opentui/core";
+import { nativeStationTheme, stationRgbValue } from "../../../theme/index.js";
 import type { VtCase } from "./types.js";
 
 export const sgrCases: readonly VtCase[] = [
@@ -7,14 +8,14 @@ export const sgrCases: readonly VtCase[] = [
     feed: "\x1b[31mred",
     expect: {
       rows: ["red"],
-      cells: [{ at: [0, 0], char: "r", fg: "#cd3131" }],
+      cells: [{ at: [0, 0], char: "r", fg: stationRgbValue(nativeStationTheme.terminal.ansi16[1]) }],
     },
   },
   {
     name: "sgr bright foreground maps to the bright palette",
     feed: "\x1b[92mok",
     expect: {
-      cells: [{ at: [0, 0], fg: "#23d18b" }],
+      cells: [{ at: [0, 0], fg: stationRgbValue(nativeStationTheme.terminal.ansi16[10]) }],
     },
   },
   {
@@ -82,7 +83,7 @@ export const sgrCases: readonly VtCase[] = [
       cells: [
         {
           at: [0, 0],
-          fg: "#cd3131",
+          fg: stationRgbValue(nativeStationTheme.terminal.ansi16[1]),
           attributes: TextAttributes.BOLD | TextAttributes.UNDERLINE,
         },
         { at: [0, 2], char: "c", fgDefault: true, attributes: 0 },
@@ -94,7 +95,7 @@ export const sgrCases: readonly VtCase[] = [
     feed: "\x1b[1;31mAB\x1b[0mCD",
     expect: {
       cells: [
-        { at: [0, 0], fg: "#cd3131", attributes: TextAttributes.BOLD },
+        { at: [0, 0], fg: stationRgbValue(nativeStationTheme.terminal.ansi16[1]), attributes: TextAttributes.BOLD },
         { at: [0, 2], char: "C", fgDefault: true, attributes: 0 },
       ],
     },
@@ -104,7 +105,7 @@ export const sgrCases: readonly VtCase[] = [
     feed: ["\x1b[3", "1mred"],
     expect: {
       rows: ["red"],
-      cells: [{ at: [0, 0], fg: "#cd3131" }],
+      cells: [{ at: [0, 0], fg: stationRgbValue(nativeStationTheme.terminal.ansi16[1]) }],
     },
   },
 ];

@@ -13,7 +13,7 @@ import { buildMouseReportSequence } from "./input/mouseReport.js";
 import { type MouseButtonName, MouseTracking } from "./protocol/mouse.js";
 import type { VtRow } from "./vt/rows.js";
 import type { MouseProtocol, StationVtScreen } from "./vt/screen.js";
-import { stationVtTheme } from "./vt/theme.js";
+import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
 import {
   type CellPoint,
   type CellSelection,
@@ -28,7 +28,6 @@ const MIN_ROWS = 1;
 type MouseModifiers = { shift: boolean; alt: boolean; ctrl: boolean };
 // Consecutive clicks within this window expand to word (2) / line (3).
 const MULTI_CLICK_MS = 400;
-const SELECTION_BG = "#264f78";
 
 export type TerminalScreenOptions = RenderableOptions<TerminalScreenRenderable> & {
   screen?: StationVtScreen | null;
@@ -453,8 +452,10 @@ export class TerminalScreenRenderable extends Renderable {
       this.#rowsVersion = version;
     }
 
-    const defaultFg = rgbaForHex(stationVtTheme.foreground);
-    const selectionBg = rgbaForHex(SELECTION_BG);
+    const defaultFg = rgbaForHex(
+      stationRgbValue(nativeStationTheme.terminal.defaultForeground),
+    );
+    const selectionBg = rgbaForHex(stationRgbValue(nativeStationTheme.pane.selection));
     // Order the selection once per frame, not once per row.
     const orderedSelection = this.#selection === null ? null : orderSelection(this.#selection);
     const rowLimit = Math.min(this.#rows.length, this.height);

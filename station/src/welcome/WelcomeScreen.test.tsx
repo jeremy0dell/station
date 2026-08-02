@@ -5,7 +5,8 @@ import { testRender } from "@opentui/react/test-utils";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
-import { WelcomeScreen, WELCOME_BUTTON_SHIMMER_BG } from "./WelcomeScreen.js";
+import { nativeStationTheme, stationRgbValue } from "../theme/index.js";
+import { WelcomeScreen } from "./WelcomeScreen.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
@@ -83,7 +84,7 @@ describe("WelcomeScreen", () => {
           backgrounds.add(rgbToHex(bg as Parameters<typeof rgbToHex>[0]));
         }
       }
-      expect(backgrounds.has(WELCOME_BUTTON_SHIMMER_BG)).toBe(true);
+      expect(backgrounds.has(stationRgbValue(nativeStationTheme.welcome.shimmer))).toBe(true);
     } finally {
       setup.renderer.destroy();
     }

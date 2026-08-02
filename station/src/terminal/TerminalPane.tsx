@@ -1,11 +1,8 @@
 import { basename } from "node:path";
 import "./TerminalScreenRenderable.js";
 import type { PaneId } from "../state/types.js";
+import { stationRgbValue, useStationTheme } from "../theme/index.js";
 import { usePaneTerminal } from "./registry/paneTerminalContext.js";
-
-/** Primary-agent blue; split shells use non-blue accents from PaneGrid. */
-export const PANE_BORDER_INACTIVE = "#1d4ed8";
-export const PANE_BORDER_ACTIVE = "#60a5fa";
 
 export type TerminalPaneProps = {
   paneId: PaneId;
@@ -30,17 +27,20 @@ export function TerminalPane({
   paneId,
   onCopySelection,
   onForwardInput,
-  borderColor = PANE_BORDER_INACTIVE,
+  borderColor,
   title,
 }: TerminalPaneProps) {
+  const theme = useStationTheme();
   const term = usePaneTerminal(paneId);
+  const resolvedBorderColor =
+    borderColor ?? stationRgbValue(theme.pane.primary.inactive);
 
   return (
     <box
       width="100%"
       flexGrow={1}
       border
-      borderColor={borderColor}
+      borderColor={resolvedBorderColor}
       title={paneTitle(title, term.status, term.oscTitle, term.cwd)}
       padding={1}
     >
