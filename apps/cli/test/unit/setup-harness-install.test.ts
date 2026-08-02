@@ -61,6 +61,7 @@ describe("guided agent installers", () => {
     const result = await applySetupPlan(testPlan(actions), {
       env: {
         HOME: homeDir,
+        CODEX_HOME: join(homeDir, ".codex"),
         PATH: `${binDir}:/usr/bin:/bin`,
         FAKE_INSTALLER_DIR: fixtureDir,
         FAKE_RESULTS: resultDir,
