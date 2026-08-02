@@ -79,6 +79,8 @@
     "test:agent:scripted": "vitest run --config config/vitest/vitest.agent-scripted.config.ts",
     "test:agent:real": "pnpm test:e2e:codex:real",
     "test:agent:nightly": "STATION_REAL_CLAUDE=1 pnpm test:e2e:claude:real",
+    "benchmark:typecheck": "tsc -p benchmark/tsconfig.json --noEmit",
+    "benchmark:real-incident-debugging": "sh -c 'phase=run; if [ \"${1:-}\" = \"--\" ]; then shift; fi; if [ \"${1:-}\" = \"--phase\" ]; then phase=\"$2\"; shift 2; fi; STATION_REAL_INCIDENT_DEBUG_AB_PHASE=\"$phase\" exec vitest run --config benchmark/vitest.config.ts \"$@\"' --",
     "smoke:release": "node scripts/test-runners/run-release-smoke.mjs",
     "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
     "test:ci:fast": "pnpm build && pnpm test:unit && pnpm test:contracts && pnpm test:diagnostics && pnpm test:agent:scripted",

@@ -855,6 +855,28 @@ CI=true pnpm install --frozen-lockfile --ignore-scripts
 pnpm test:all
 ```
 
+## Research Benchmarks
+
+Reusable research infrastructure lives under `benchmark/` and is excluded from
+ordinary CI and `test:all`. The real-incident debugging benchmark compares
+frozen base, candidate, and raw-evidence arms with strict corpus, schedule,
+execution, blinding, citation, and scoring contracts:
+
+```bash
+pnpm benchmark:typecheck
+pnpm benchmark:real-incident-debugging
+```
+
+The default command runs only deterministic harness tests; the real benchmark
+test is skipped unless `STATION_REAL_INCIDENT_DEBUG_AB=1` is set. Before a
+private preflight or paid phase, follow
+[`benchmark/real-incident-debugging/README.md`](../benchmark/real-incident-debugging/README.md)
+in order. Keep corpora, gold, review records, executable builds, auth, model
+output, schedules, unblinding maps, and study results in a private ignored state
+directory. Never add benchmark execution to `test:all`, reuse an executed
+incident as fresh acceptance evidence, or change a frozen gate after
+unblinding.
+
 ## Real And E2E Lanes
 
 Real provider and broader e2e lanes are opt-in:
