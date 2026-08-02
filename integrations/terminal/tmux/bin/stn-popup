@@ -167,6 +167,8 @@ fi
 "$tmux_bin" set-option -gq @station_popup_client "$client_id" || exit 1
 "$tmux_bin" set-option -gq @station_popup_focus_client "$client_id" || exit 1
 "$tmux_bin" set-option -t "$session_name" mouse on >/dev/null 2>&1 || true
+# Keep this session-scoped so the invoking tmux session retains the user's status setting.
+"$tmux_bin" set-option -t "$session_name" status off >/dev/null 2>&1 || true
 
 width=${STATION_POPUP_WIDTH:-50%}
 height=${STATION_POPUP_HEIGHT:-50%}

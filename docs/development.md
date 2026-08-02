@@ -34,10 +34,10 @@ provider homes are checkout-local. See the copy-paste recipe in
 - Source popup registrations are scoped to the canonical checkout root that
   created them. Compiled registrations are scoped to the canonical installed
   binary directory instead; neither path may register filesystem root `/`.
-- With default popup geometry, the optional binding installed by a compiled
-  `stn setup` uses the generated direct tmux fast path. Custom geometry uses the
-  config-aware exact sibling `stn-tmux-popup` alias instead, as does setup run
-  with an explicit `--config` path. The fast path's
+- With default popup settings, the optional binding installed by a compiled
+  `stn setup` uses the generated direct tmux fast path. Custom geometry, client
+  scope, or an enabled popup status bar uses the config-aware exact sibling
+  `stn-tmux-popup` alias instead, as does setup run with an explicit `--config` path. The fast path's
   first use can enter that alias, while a valid warm use attaches, toggles, or
   transfers the existing `_station-ui` session without Bun, config loading, or
   Observer startup. Build the binary with

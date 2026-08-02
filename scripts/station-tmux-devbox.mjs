@@ -86,6 +86,8 @@ const lanePassthroughEnvironmentVariables = new Set([
   "USER",
 ]);
 const signalExitCodes = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
+const observerProcessTokenPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
 
 const [rawCommand = "dev", ...commandArgs] = process.argv.slice(2);
@@ -171,7 +173,8 @@ function attach() {
   }
   const result = run(manifest.tmuxWrapper, ["attach-session", "-t", manifest.baseSession], {
     cwd: manifest.projectRoot,
-    env: laneEnvironment(manifest),
+    // The isolated XDG home omits caller-specific terminfo such as Ghostty's app bundle.
+    env: laneEnvironment(manifest, { TERM: "xterm-256color" }),
     stdio: "inherit",
     check: false,
     timeoutMs: undefined,
@@ -777,11 +780,14 @@ function writeManifest(manifest) {
 function validateObserverIdentity(identity, socketPath) {
   const keys = Object.keys(identity).sort();
   if (
-    JSON.stringify(keys) !== JSON.stringify(["osStartTime", "pid", "socketPath", "version"]) ||
+    JSON.stringify(keys) !==
+      JSON.stringify(["osStartTime", "pid", "processToken", "socketPath", "version"]) ||
     !Number.isInteger(identity.pid) ||
     identity.pid <= 0 ||
     typeof identity.osStartTime !== "string" ||
     identity.osStartTime.length === 0 ||
+    typeof identity.processToken !== "string" ||
+    !observerProcessTokenPattern.test(identity.processToken) ||
     typeof identity.version !== "string" ||
     identity.version.length === 0 ||
     identity.socketPath !== socketPath
@@ -1060,7 +1066,8 @@ function assertObserverOwnership(manifest, identity) {
     record.startTime !== identity.osStartTime ||
     !record.command.includes("observerMain.js") ||
     !record.command.includes(`--socket ${manifest.observerSocketPath}`) ||
-    !record.command.includes(`--state-dir ${manifest.stateDir}`)
+    !record.command.includes(`--state-dir ${manifest.stateDir}`) ||
+    !record.command.includes(`--process-token ${identity.processToken}`)
   ) {
     throw new Error(`Private Observer process evidence no longer matches pid ${identity.pid}.`);
   }
