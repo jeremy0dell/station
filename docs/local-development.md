@@ -264,7 +264,9 @@ pnpm station:devbox tmux stop
 ```
 
 `start` creates or reuses the same HMR-enabled lane and returns immediately;
-standalone `attach` never takes cleanup ownership. `status`, `logs`, `stop`, and
+standalone `attach` never takes cleanup ownership. Detach every split-command
+client before switching to `dev`; it refuses before rebuilding rather than
+adopting or mutating an attached persistent lane. `status`, `logs`, `stop`, and
 `reset` remain the diagnostic and recovery surface.
 
 Both interactive `dev` and the ordinary `attach` command preserve a caller `TERM` whose terminfo provides

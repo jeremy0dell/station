@@ -87,7 +87,9 @@ which retains the renderer-control IPC channel while the Bun renderer reloads
 in place. `dev` remains in the foreground, owns its attached client, and performs
 the same scoped cleanup after `Ctrl-b d`, Ctrl-C, SIGHUP, SIGTERM, or a coordinated
 external `stop`. Use `start` instead when automation needs the lane to return
-immediately; a standalone `attach` never takes cleanup ownership.
+immediately; a standalone `attach` never takes cleanup ownership. Detach any
+split-command clients before switching to `dev`, which refuses before rebuilding
+an attached persistent lane.
 
 | Changed surface | Required action |
 | --- | --- |

@@ -25,6 +25,8 @@ const hmrTargetRelative = "station/src/dashboardRenderer/FullscreenDashboard.tsx
 const checkoutKey = createHash("sha256").update(resolve(repoRoot)).digest("hex").slice(0, 12);
 const privateRoot = join("/tmp", `stn-dbx-${checkoutKey}`);
 const manifestPath = join(privateRoot, "manifest.json");
+const laneAuthorityPath = join(privateRoot, "lifecycle-authority.json");
+const backendScriptPath = join(repoRoot, "scripts", "station-tmux-devbox.mjs");
 const probe = "tmux-devbox-hmr-probe";
 const timeoutMs = Number(process.env.STATION_TMUX_DEVBOX_SMOKE_TIMEOUT_MS ?? 180_000);
 const ptyBridgeScript = `
@@ -189,6 +191,7 @@ try {
   );
   assertPrivateServerEnvironment(splitManifest);
   await proveBaseShellIsolation(splitManifest);
+  await proveAttachedLaneDevRefusal(splitManifest);
   await ptyClient.close();
   ptyClient = undefined;
   devbox(["tmux", "stop"]);
@@ -332,6 +335,7 @@ try {
   await proveBaseDescendantCleanup();
   await proveVerifiedPartialReset();
   await proveFailedStartupRollback();
+  await provePreAttachSignalCleanup();
   await proveAttachFailureRollback();
   await proveExternalStopCoordination();
   await proveSignals();
@@ -396,6 +400,17 @@ function proveManifestAndIsolation(manifest) {
   const manifestStat = statSync(manifestPath);
   assert((rootStat.mode & 0o077) === 0, "private root is not mode 0700");
   assert((manifestStat.mode & 0o077) === 0, "manifest is not mode 0600");
+  if (manifest.devOwnerPid === null) {
+    assert(!existsSync(laneAuthorityPath), "ownerless lane retained lifecycle authority");
+  } else {
+    const authority = readJsonFile(laneAuthorityPath, "private tmux lifecycle authority");
+    assert(authority.role === "foreground", "interactive lane lacks foreground authority");
+    assert(authority.pid === manifest.devOwnerPid, "authority PID differs from manifest owner");
+    assert(
+      authority.startTime === manifest.devOwnerStartTime,
+      "authority start time differs from manifest owner",
+    );
+  }
   for (const key of [
     "configPath",
     "homeDir",
@@ -510,6 +525,44 @@ async function proveBaseShellIsolation(manifest) {
   );
 }
 
+async function proveAttachedLaneDevRefusal(manifest) {
+  const shimDir = join(outerRoot, "attached-lane-bin");
+  const buildMarker = join(outerRoot, "attached-lane-build.marker");
+  mkdirSync(shimDir, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(shimDir, "pnpm"),
+    ["#!/bin/sh", `: > ${shellQuote(buildMarker)}`, "exit 97", ""].join("\n"),
+    "utf8",
+  );
+  chmodSync(join(shimDir, "pnpm"), 0o700);
+
+  const client = spawnPtyCommand("dev", {
+    term: "xterm",
+    env: { ...outerEnv, PATH: `${shimDir}:${outerEnv.PATH}` },
+  });
+  try {
+    const result = await withTimeout(client.exit, 30_000, "attached-lane dev did not refuse");
+    assert(
+      result.code !== 0 && result.signal === null,
+      `attached-lane dev exited as ${JSON.stringify(result)}\n${client.output}`,
+    );
+    assertIncludes(client.output, "attached client(s)", "attached-lane refusal");
+    assert(!existsSync(buildMarker), "attached-lane refusal ran pnpm build");
+    const after = readManifest();
+    assert(
+      after.tmuxServerPid === manifest.tmuxServerPid &&
+        JSON.stringify(after.observerIdentity) === JSON.stringify(manifest.observerIdentity),
+      "attached-lane refusal replaced the persistent runtime",
+    );
+    assert(
+      privateSessionExists(manifest, manifest.baseSession),
+      "attached-lane refusal stopped tmux",
+    );
+  } finally {
+    await client.close();
+  }
+}
+
 async function proveBaseDescendantCleanup() {
   devbox(["tmux", "start"]);
   const manifest = readManifest();
@@ -563,6 +616,80 @@ async function proveFailedStartupRollback() {
   });
   assert(failed.status !== 0, "fake tmux startup unexpectedly succeeded");
   assert(!existsSync(privateRoot), "failed startup retained private resources");
+}
+
+async function provePreAttachSignalCleanup() {
+  const realTput = checked("/bin/sh", ["-c", "command -v tput"], { env: outerEnv }).stdout.trim();
+  assert(realTput.startsWith("/"), `could not resolve the real tput executable: ${realTput}`);
+  const shimDir = join(outerRoot, "pre-attach-signal-bin");
+  const tputMarker = join(outerRoot, "pre-attach-tput.marker");
+  mkdirSync(shimDir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(shimDir, "pnpm"), "#!/bin/sh\nexit 0\n", "utf8");
+  writeFileSync(
+    join(shimDir, "tput"),
+    [
+      "#!/bin/sh",
+      `: > ${shellQuote(tputMarker)}`,
+      "/bin/sleep 30",
+      `exec ${shellQuote(realTput)} "$@"`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  chmodSync(join(shimDir, "pnpm"), 0o700);
+  chmodSync(join(shimDir, "tput"), 0o700);
+
+  const client = spawnPtyCommand("dev", {
+    term: "xterm",
+    env: { ...outerEnv, PATH: `${shimDir}:${outerEnv.PATH}` },
+  });
+  try {
+    await waitFor(
+      () => existsSync(tputMarker) && existsSync(manifestPath),
+      `pre-attach signal probe did not reach terminal negotiation\n${client.output}`,
+      60_000,
+    );
+    const manifest = readManifest();
+    const owner = manifest.devOwnerPid;
+    assert(Number.isInteger(owner) && owner > 0, "pre-attach signal owner is missing");
+    const records = processRecords();
+    const blocker = records.find((record) => record.command.includes(join(shimDir, "tput")));
+    assert(blocker !== undefined, "pre-attach tput blocker was not found");
+    const blockerTree = [blocker, ...descendants(records, blocker.pid)];
+    assert(
+      processRecords().some(
+        (record) => record.pid === owner && record.command.includes(backendScriptPath),
+      ),
+      "pre-attach owner is not the tmux backend",
+    );
+    process.kill(owner, "SIGTERM");
+    for (const record of blockerTree.toReversed()) {
+      if (processExists(record.pid)) {
+        process.kill(record.pid, "SIGTERM");
+      }
+    }
+    let result;
+    try {
+      result = await withTimeout(client.exit, 60_000, "pre-attach signal owner did not exit");
+    } catch (error) {
+      throw new Error(`${error.message}\n${client.output}`, { cause: error });
+    }
+    assert(
+      result.code === 143 && result.signal === null,
+      `pre-attach signal exited as ${JSON.stringify(result)}\n${client.output}`,
+    );
+    assert(!existsSync(privateRoot), "pre-attach signal retained private resources");
+  } finally {
+    for (const record of processRecords().filter((entry) => entry.command.includes(shimDir))) {
+      if (processExists(record.pid)) {
+        process.kill(record.pid, "SIGKILL");
+      }
+    }
+    if (existsSync(privateRoot)) {
+      devbox(["tmux", "stop"], { check: false });
+    }
+    await client.close();
+  }
 }
 
 async function proveAttachFailureRollback() {
@@ -641,17 +768,49 @@ async function proveSignals() {
     ["SIGTERM", 143],
   ]) {
     const client = await startPtyDev({ term: "xterm", expectedTerminal: "xterm" });
-    const owner = readManifest().devOwnerPid;
+    const manifest = readManifest();
+    const owner = manifest.devOwnerPid;
     assert(Number.isInteger(owner) && owner > 0, `${signal} owner identity is missing`);
-    process.kill(owner, signal);
-    const result = await withTimeout(client.exit, 30_000, `${signal} owner did not exit`);
-    assert(
-      result.code === expectedCode && result.signal === null,
-      `${signal} owner exited as ${JSON.stringify(result)}\n${client.output}`,
-    );
-    assert(!existsSync(privateRoot), `${signal} cleanup retained ${privateRoot}`);
-    await client.close();
+    let stubbornPid;
+    try {
+      if (signal === "SIGTERM") {
+        stubbornPid = await startStubbornBaseDescendant(manifest);
+      }
+      process.kill(owner, signal);
+      if (stubbornPid !== undefined) {
+        await delay(200);
+        assert(processExists(owner), "SIGTERM owner exited before repeated-signal proof");
+        process.kill(owner, signal);
+      }
+      const result = await withTimeout(client.exit, 30_000, `${signal} owner did not exit`);
+      assert(
+        result.code === expectedCode && result.signal === null,
+        `${signal} owner exited as ${JSON.stringify(result)}\n${client.output}`,
+      );
+      assert(!existsSync(privateRoot), `${signal} cleanup retained ${privateRoot}`);
+    } finally {
+      if (stubbornPid !== undefined && processExists(stubbornPid)) {
+        process.kill(stubbornPid, "SIGKILL");
+      }
+      await client.close();
+    }
   }
+}
+
+async function startStubbornBaseDescendant(manifest) {
+  const pidPath = join(manifest.root, "stubborn-base-descendant.pid");
+  tmux(manifest, [
+    "send-keys",
+    "-t",
+    `${manifest.baseSession}:0.0`,
+    `/usr/bin/nohup /bin/sh -c 'trap "" TERM; /bin/sleep 300' >/dev/null 2>&1 & echo $! > ${pidPath}`,
+    "Enter",
+  ]);
+  await waitFor(() => existsSync(pidPath), "stubborn base descendant pid did not appear");
+  const pid = positiveInteger(readFileSync(pidPath, "utf8"), "stubborn base descendant pid");
+  await waitFor(() => processExists(pid), "stubborn base descendant did not start");
+  await delay(100);
+  return pid;
 }
 
 function popupProcesses(records, hiddenPanePid) {
