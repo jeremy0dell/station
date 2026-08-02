@@ -255,6 +255,12 @@ paths, base and `_station-ui` sessions, discovered CLI/renderer/Observer/Host
 owners, and the exact attach/log/stop commands. `tmux start` creates the same
 HMR-enabled lane but returns immediately.
 
+The ordinary attach command preserves a caller `TERM` whose terminfo provides
+`clear` and `cup` inside the private environment. It does not import external
+`TERMINFO`, `TERMINFO_DIRS`, or XDG data paths; if the caller value is absent or
+cannot satisfy tmux there, attach names any rejected value and uses
+`xterm-256color`. Do not add a manual `TERM` prefix to the command.
+
 The disposable root is `/tmp/stn-dbx-<checkout-hash>` and contains:
 
 - isolated `HOME`, XDG, runtime, temp, config, state, layout, log, spool, and
