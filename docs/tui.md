@@ -213,6 +213,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 ## Surface Rules
 
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
+- Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
@@ -252,8 +253,8 @@ session row or empty-project action is inert. Remove, rename, and fork row choos
 session-only traversal, as do slot keys and next-needs-me. `N` continues to open the session flow
 without changing dashboard focus. Gaps and optimistic create rows remain non-focusable.
 
-Focused compact controls use the stronger bounded fill from
-`STATION_COLORS.compactFocusBackground`. A project header's primary segment covers the rendered
+Focused compact controls use the canonical theme's stronger bounded
+`interaction.compactFocus` fill. A project header's primary segment covers the rendered
 disclosure/name/summary text without painting flexible trailing whitespace, while each trailing
 control owns exactly its label cells and separator spaces remain inert. An empty project's fill and
 pointer target cover only `[ + add session ]`; its explanatory text and surrounding whitespace
@@ -374,7 +375,7 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 - Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
 - Attachment-unavailable state is not process exit: version and exhausted-reconnect failures stop pane input and resize forwarding and show `attachment unavailable`, while only proven Host absence, an exited acknowledgement, or an exit frame reaches the pane-exit lifecycle. Lost historical replay fidelity keeps the pane attached and logs a typed degraded-snapshot diagnostic instead.
 - In `@station/dashboard-core`: `selectors/` for snapshot-to-view grouping/filtering, `state/commandBuilders.ts` for typed observer command construction, `state/screens/*` for pure screen-owned key transitions, `state/observerBridge.ts` and `state/operations/*` for command/operation flow, and `components/`/`widgets/` for shared layout/content logic.
-- Station may import only the linked `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`); it must never import `apps/tui` or `ink` (enforced by `station/src/station/importBoundaries.test.ts`).
+- The dashboard surface under `station/src/station/` may import only its linked dashboard-facing `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`). Other Station subsystems use only the additional packages named by the link script at their owned composition boundaries. Production Station source must never import `apps/tui`, `ink`, providers, or integrations (enforced by `station/src/station/importBoundaries.test.ts`).
 
 ## Testing
 
@@ -390,7 +391,7 @@ Station uses `bun test` (colocated `*.test.ts` / `*.test.tsx`), not vitest. `@st
 - Live command dispatch through the shared client (focus, jump-to-session, convergence, recovery) lives in `station/src/station/store/stationCommandDispatch.test.ts`.
 - Rendering correctness uses golden frames: `station/src/station/view/dashboard.golden.test.tsx` (scenario × size matrix) and `view/modals.golden.test.tsx`. Use golden frames when exact terminal text, spacing, layout, footer placement, or clipping matters.
 - Production popup acceptance lives in `integrations/terminal/tmux/test/integration/popup-real.test.ts`. Popup input and resize assertions must enter through an attached outer PTY, then prove the visible captured frame and converged nested-client/pane/renderer geometry; an internal store transition or command receipt is not sufficient evidence.
-- Isolation is enforced by `station/src/station/importBoundaries.test.ts` (no `apps/tui`/`ink` imports, only linked `@station` packages, no local ported fork, no `focusable`).
+- Isolation is enforced by `station/src/station/importBoundaries.test.ts`. It scans all production `station/src` modules for forbidden UI/provider imports and keeps exact, shrink-only inventories of temporary raw dashboard store imports, mutable store references, direct mutations, and runtime/operation internals. Dashboard-surface checks additionally enforce its linked `@station` package set, no local ported fork, and no `focusable`.
 - PTY/terminal behavior is tested under `station/src/terminal/` (VT conformance/stress) and via the smoke probes in the `test:pty` / `test:agents` scripts.
 
 Useful focused commands:

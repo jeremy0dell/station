@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { TextRenderable, type BaseRenderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import type { StoreApi } from "zustand/vanilla";
 import {
   attentionAndFailuresSnapshot,
@@ -75,7 +76,15 @@ const CASES: ModalCase[] = [
   {
     name: "help overlay",
     keys: [{ input: "H" }],
-    expect: ["station help", "Ctrl-\\", "split pane right", "1-9/a-z", "open visible session", "╭", "╰"],
+    expect: [
+      "station help",
+      "Ctrl-\\",
+      "split pane right",
+      "1-9/a-z",
+      "open visible session",
+      "╭",
+      "╰",
+    ],
   },
   {
     name: "search prompt",
@@ -171,11 +180,7 @@ const CASES: ModalCase[] = [
     name: "remove confirm narrow",
     keys: [{ input: "X" }, { input: "1" }],
     size: { width: 40, height: 16 },
-    expect: [
-      "Delete (Y)",
-      "▸ Keep session (N)",
-      "←→ · Enter activate · Esc cancel",
-    ],
+    expect: ["Delete (Y)", "▸ Keep session (N)", "←→ · Enter activate · Esc cancel"],
   },
   {
     name: "external agent removal information",
@@ -280,11 +285,7 @@ const CASES: ModalCase[] = [
   },
   {
     name: "new session review name focus",
-    keys: [
-      { input: "N" },
-      { input: "", downArrow: true },
-      { input: "", downArrow: true },
-    ],
+    keys: [{ input: "N" }, { input: "", downArrow: true }, { input: "", downArrow: true }],
     expect: ["▸ Name (N)", "Enter edit name"],
   },
   {
@@ -342,7 +343,12 @@ const CASES: ModalCase[] = [
   {
     name: "new session pick project",
     keys: [{ input: "N" }, { input: "P" }],
-    expect: ["Choose Project", "↑↓ move   ↵ select   1-9/a-z jump   Esc back", "station", "observer"],
+    expect: [
+      "Choose Project",
+      "↑↓ move   ↵ select   1-9/a-z jump   Esc back",
+      "station",
+      "observer",
+    ],
   },
   {
     name: "new session pick agent",
@@ -402,7 +408,12 @@ const CASES: ModalCase[] = [
     name: "add project Git recovery",
     keys: [],
     prepare: (store) => openAddProjectReview(store, false),
-    expect: ["Git root", "not detected", "Choose a folder inside an existing Git repository", "▸ Choose folder (B)"],
+    expect: [
+      "Git root",
+      "not detected",
+      "Choose a folder inside an existing Git repository",
+      "▸ Choose folder (B)",
+    ],
   },
   {
     name: "add project id editor actions",
@@ -440,7 +451,12 @@ const CASES: ModalCase[] = [
         ),
       );
     },
-    expect: ["Add Project Failed", "Could not add this project", "▸ Retry (R)", "Choose folder (B)"],
+    expect: [
+      "Add Project Failed",
+      "Could not add this project",
+      "▸ Retry (R)",
+      "Choose folder (B)",
+    ],
   },
   {
     name: "add project narrow actions",
@@ -475,7 +491,15 @@ const CASES: ModalCase[] = [
     name: "widget settings picker",
     keys: [{ input: "W" }, { input: "a" }],
     trimSnapshotTrailingWhitespace: true,
-    expect: ["add widget", "weather and tz require config.toml", "time", "fleet", "open PRs", "moon", "↵ add   esc back"],
+    expect: [
+      "add widget",
+      "weather and tz require config.toml",
+      "time",
+      "fleet",
+      "open PRs",
+      "moon",
+      "↵ add   esc back",
+    ],
   },
 ];
 
@@ -510,12 +534,14 @@ describe("modal flow golden frames", () => {
       modal.prepare?.(store);
       const size = modal.size ?? SIZE;
       const setup = await testRender(
-        <DashboardRoot
-          store={store}
-          columns={size.width}
-          rows={size.height}
-          onCopyNotice={() => {}}
-        />,
+        <StationThemeProvider theme={nativeStationTheme}>
+          <DashboardRoot
+            store={store}
+            columns={size.width}
+            rows={size.height}
+            onCopyNotice={() => {}}
+          />
+        </StationThemeProvider>,
         size,
       );
       teardowns.push(() => {
@@ -524,7 +550,9 @@ describe("modal flow golden frames", () => {
       await setup.renderOnce();
       // The generated session name is uuid-seeded (stableNameHash over a
       // random token); scrub it so the goldens stay deterministic.
-      const capturedFrame = setup.captureCharFrame().replace(/station-[0-9a-z]{6}/g, "station-XXXXXX");
+      const capturedFrame = setup
+        .captureCharFrame()
+        .replace(/station-[0-9a-z]{6}/g, "station-XXXXXX");
       const frame =
         modal.trimSnapshotTrailingWhitespace === true
           ? capturedFrame.replace(/[ \t]+$/gm, "")
@@ -541,15 +569,17 @@ describe("modal flow golden frames", () => {
 
   it("keeps widget settings text out of OpenTUI selection", async () => {
     const setup = await testRender(
-      <StationMouseProvider value={() => {}}>
-        <WidgetSettingsPanelView
-          screen={{ name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 }}
-          widgets={[{ type: "time" }, { type: "moon", enabled: false }]}
-          widgetsPersisted
-          columns={SIZE.width}
-          rows={SIZE.height}
-        />
-      </StationMouseProvider>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <StationMouseProvider value={() => {}}>
+          <WidgetSettingsPanelView
+            screen={{ name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 }}
+            widgets={[{ type: "time" }, { type: "moon", enabled: false }]}
+            widgetsPersisted
+            columns={SIZE.width}
+            rows={SIZE.height}
+          />
+        </StationMouseProvider>
+      </StationThemeProvider>,
       SIZE,
     );
     teardowns.push(() => {

@@ -1,3 +1,4 @@
+import type { ColorInput } from "@opentui/core";
 import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import {
@@ -11,7 +12,7 @@ import {
   type TuiState,
   type TuiStore,
 } from "@station/dashboard-core";
-import { STATION_COLORS } from "./theme.js";
+import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 
 export type DashboardFooterViewProps = {
   store: StoreApi<TuiStore>;
@@ -19,6 +20,7 @@ export type DashboardFooterViewProps = {
 };
 
 export function DashboardFooterView({ store, columns }: DashboardFooterViewProps) {
+  const theme = useStationTheme();
   const snapshot = useStore(store, (state) => state.snapshot);
   const quitHint = useStore(store, selectFooterQuitHint);
   const contentColumns = Math.max(1, Math.floor(columns));
@@ -30,16 +32,16 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
   });
 
   return (
-    <text fg={dashboardFooterColor(model)}>{truncateCells(model.text, contentColumns)}</text>
+    <text fg={dashboardFooterColor(theme, model)}>{truncateCells(model.text, contentColumns)}</text>
   );
 }
 
-function dashboardFooterColor(model: DashboardFooterModel): string {
+function dashboardFooterColor(theme: StationTheme, model: DashboardFooterModel): ColorInput {
   switch (model.kind) {
     case "loading":
-      return STATION_COLORS.gray;
+      return toOpenTuiColor(theme.text.muted);
     case "dashboard":
-      return STATION_COLORS.foreground;
+      return toOpenTuiColor(theme.text.primary);
     default:
       return assertNeverDashboardFooterModel(model);
   }

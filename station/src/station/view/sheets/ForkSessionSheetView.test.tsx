@@ -7,7 +7,11 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";
-import { STATION_COLORS } from "../theme.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../../theme/index.js";
 import { ForkSessionSheetView } from "./ForkSessionSheetView.js";
 
 type ForkDetailsScreen = Extract<TuiScreen, { name: "fork"; step: "details" }>;
@@ -37,11 +41,13 @@ function detailsScreen(focus: ForkDetailsScreen["focus"]): ForkDetailsScreen {
 async function render(focus: ForkDetailsScreen["focus"], width = 80) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
-    <StationHoverProvider value>
-      <StationMouseProvider value={(target) => targets.push(target)}>
-        <ForkSessionSheetView screen={detailsScreen(focus)} columns={width} rows={16} />
-      </StationMouseProvider>
-    </StationHoverProvider>,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationHoverProvider value>
+        <StationMouseProvider value={(target) => targets.push(target)}>
+          <ForkSessionSheetView screen={detailsScreen(focus)} columns={width} rows={16} />
+        </StationMouseProvider>
+      </StationHoverProvider>
+    </StationThemeProvider>,
     { width, height: 16 },
   );
   teardowns.push(() => setup.renderer.destroy());
@@ -98,10 +104,10 @@ describe("ForkSessionSheetView", () => {
     const inside = spanAtFrameCell(setup.captureSpans(), row, copyCol);
     const trailing = spanAtFrameCell(setup.captureSpans(), row, 58);
     expect(inside?.bg === undefined ? undefined : rgbToHex(inside.bg)).toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
     expect(trailing?.bg === undefined ? undefined : rgbToHex(trailing.bg)).not.toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
   });
 
