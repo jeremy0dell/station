@@ -5,7 +5,18 @@ import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
+import {
+  resolveStationTheme,
+  stationColorSnapshotValue,
+  type StationColor,
+  type StationTheme,
+  type StationThemeSource,
+} from "../theme/index.js";
+import { parseStationTerminalPaletteObservation } from "../theme/terminalPaletteObservation.js";
+import {
+  darkTerminalColors,
+  lightTerminalColors,
+} from "../theme/test/terminalPaletteFixtures.js";
 import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
@@ -16,6 +27,48 @@ const TEST_EFFECTS: DashboardRendererEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
+
+function fixtureTheme(value: unknown): StationTheme {
+  const observation = parseStationTerminalPaletteObservation(value);
+  if (observation === null) {
+    throw new Error("Expected complete terminal palette fixture.");
+  }
+  return resolveStationTheme({
+    context: "embedded-dashboard",
+    preference: "auto",
+    observation,
+  });
+}
+
+const DARK_THEME = fixtureTheme(darkTerminalColors);
+const LIGHT_THEME = fixtureTheme(lightTerminalColors);
+const DARK_THEME_SOURCE: StationThemeSource = {
+  getSnapshot: () => DARK_THEME,
+  subscribe: () => () => {},
+};
+
+class MutableThemeSource implements StationThemeSource {
+  private snapshot: StationTheme;
+  private readonly listeners = new Set<() => void>();
+
+  constructor(snapshot: StationTheme) {
+    this.snapshot = snapshot;
+  }
+
+  readonly getSnapshot = (): StationTheme => this.snapshot;
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  setSnapshot(snapshot: StationTheme): void {
+    this.snapshot = snapshot;
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+}
+
 const teardowns: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
@@ -36,6 +89,58 @@ describe("FullscreenDashboard surface ownership", () => {
       SURFACE.width - 1,
     );
     expect(bottomRight?.bg.intent).toBe("default");
+  });
+
+  it("renders a coherent light terminal canvas", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.store, SURFACE, TEST_EFFECTS, lightSource);
+
+    expectTerminalDefaultBackground(setup, "station · overview", LIGHT_THEME);
+    expect(themeContrast(LIGHT_THEME.text.primary, LIGHT_THEME.surfaces.canvas)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+    expect(themeContrast(LIGHT_THEME.text.muted, LIGHT_THEME.surfaces.canvas)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+    expect(themeContrast(LIGHT_THEME.status.danger, LIGHT_THEME.surfaces.canvas)).toBeGreaterThanOrEqual(
+      4.5,
+    );
+
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "H" });
+      await setup.flush();
+    });
+    const help = cellFor(setup.captureCharFrame(), "station help");
+    const helpSpan = spanAtFrameCell(setup.captureSpans(), help.row, help.col);
+    expect(helpSpan?.bg.intent).toBe("default");
+    expect(helpSpan?.bg.toInts()[3]).toBe(255);
+  });
+
+  it("repaints in place when the external theme source changes", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const source = new MutableThemeSource(DARK_THEME);
+    const setup = await render(fixture.store, SURFACE, TEST_EFFECTS, source);
+    const title = cellFor(setup.captureCharFrame(), "station · overview");
+    const darkBackground = spanBgHex(
+      spanAtFrameCell(setup.captureSpans(), title.row, title.col),
+    );
+
+    await actOn(async () => {
+      source.setSnapshot(LIGHT_THEME);
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const lightBackground = spanBgHex(
+      spanAtFrameCell(setup.captureSpans(), title.row, title.col),
+    );
+    expect(darkBackground).toBe(darkTerminalColors.defaultBackground);
+    expect(lightBackground).toBe(lightTerminalColors.defaultBackground);
+    expect(setup.captureCharFrame()).toContain("station · overview");
   });
 
   for (const testCase of [
@@ -147,7 +252,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).not.toBe(
-      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+      stationColorSnapshotValue(DARK_THEME.interaction.hover),
     );
 
     await actOn(async () => {
@@ -157,7 +262,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanHex(spanAtFrameCell(setup.captureSpans(), titleAction.row, titleAction.col))).toBe(
-      stationColorSnapshotValue(nativeStationTheme.text.muted),
+      stationColorSnapshotValue(DARK_THEME.text.muted),
     );
 
     await actOn(async () => {
@@ -215,7 +320,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), addWidget.row, addWidget.col))).toBe(
-      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+      stationColorSnapshotValue(DARK_THEME.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
@@ -242,7 +347,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).toBe(
-      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+      stationColorSnapshotValue(DARK_THEME.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
@@ -455,9 +560,15 @@ async function render(
   store: ReturnType<typeof makeStationTestStore>["store"],
   size: { width: number; height: number } = SURFACE,
   effects: DashboardRendererEffects = TEST_EFFECTS,
+  themeSource: StationThemeSource = DARK_THEME_SOURCE,
 ) {
   const setup = await testRender(
-    <StandaloneDashboardApp store={store} effects={effects} onCopyNotice={() => {}} />,
+    <StandaloneDashboardApp
+      store={store}
+      effects={effects}
+      onCopyNotice={() => {}}
+      themeSource={themeSource}
+    />,
     size,
   );
   await setup.flush();
@@ -515,6 +626,23 @@ function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.fg === undefined ? undefined : rgbToHex(span.fg);
 }
 
+function themeContrast(first: StationColor, second: StationColor): number {
+  const luminance = (color: StationColor): number => {
+    const value = stationColorSnapshotValue(color);
+    const channels = [value.slice(1, 3), value.slice(3, 5), value.slice(5, 7)].map((part) => {
+      const channel = Number.parseInt(part, 16) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * (channels[0] ?? 0) + 0.7152 * (channels[1] ?? 0) + 0.0722 * (channels[2] ?? 0);
+  };
+  const firstLuminance = luminance(first);
+  const secondLuminance = luminance(second);
+  return (
+    (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05)
+  );
+}
+
 function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.bg === undefined ? undefined : rgbToHex(span.bg);
 }
@@ -522,11 +650,12 @@ function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined
 function expectTerminalDefaultBackground(
   setup: Awaited<ReturnType<typeof testRender>>,
   needle: string,
+  theme: StationTheme = DARK_THEME,
 ): void {
   const cell = cellFor(setup.captureCharFrame(), needle);
   const span = spanAtFrameCell(setup.captureSpans(), cell.row, cell.col);
   expect(span?.bg.intent).toBe("default");
-  expect(spanBgHex(span)).toBe(stationColorSnapshotValue(nativeStationTheme.text.inverse));
+  expect(spanBgHex(span)).toBe(stationColorSnapshotValue(theme.text.inverse));
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

@@ -15,6 +15,7 @@ const allowedFiles = new Set([
   // Contract/protocol expectations intentionally stay independent from theme ownership.
   "station/src/theme/builtInTheme.test.ts",
   "station/src/theme/openTuiColor.test.ts",
+  "station/src/theme/test/terminalPaletteFixtures.ts",
   "station/src/theme/types.test.ts",
   // Synthetic intent fixtures must not derive snapshots from the built-in palette.
   "station/src/contextMenu/ContextMenuSurface.test.tsx",

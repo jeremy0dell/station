@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { alphaColor, indexedColor, rgbColor, terminalDefaultColor } from "./types.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
+import { resolveStationTheme } from "./resolveStationTheme.js";
+import { parseStationTerminalPaletteObservation } from "./terminalPaletteObservation.js";
+import { darkTerminalColors } from "./test/terminalPaletteFixtures.js";
 
 function rgba(value: ReturnType<typeof toOpenTuiColor>) {
   if (typeof value === "string") {
@@ -22,10 +25,40 @@ describe("OpenTUI Station color adapter", () => {
     expect(rgbToHex(value)).toBe("#cd3131");
   });
 
-  it("preserves terminal-default intent and snapshot", () => {
-    const value = rgba(toOpenTuiColor(terminalDefaultColor("background", rgbColor("#101316"))));
-    expect(value.intent).toBe("default");
-    expect(rgbToHex(value)).toBe("#101316");
+  it("preserves terminal-default foreground and background intent with snapshots", () => {
+    const foreground = rgba(
+      toOpenTuiColor(terminalDefaultColor("foreground", rgbColor("#f4f4f5"))),
+    );
+    const background = rgba(
+      toOpenTuiColor(terminalDefaultColor("background", rgbColor("#101316"))),
+    );
+    expect(foreground.intent).toBe("default");
+    expect(rgbToHex(foreground)).toBe("#f4f4f5");
+    expect(background.intent).toBe("default");
+    expect(rgbToHex(background)).toBe("#101316");
+  });
+
+  it("retains resolver-produced indexed and default intent with observed snapshots", () => {
+    const observation = parseStationTerminalPaletteObservation(darkTerminalColors);
+    if (observation === null) {
+      throw new Error("Expected a complete terminal fixture.");
+    }
+    const theme = resolveStationTheme({
+      context: "embedded-dashboard",
+      preference: "auto",
+      observation,
+    });
+    const action = rgba(toOpenTuiColor(theme.action.primary));
+    const foreground = rgba(toOpenTuiColor(theme.text.primary));
+    const background = rgba(toOpenTuiOpaqueColor(theme.surfaces.canvas));
+
+    expect(action.intent).toBe("indexed");
+    expect(action.slot).toBe(14);
+    expect(rgbToHex(action)).toBe(darkTerminalColors.palette[14]);
+    expect(foreground.intent).toBe("default");
+    expect(rgbToHex(foreground)).toBe(darkTerminalColors.defaultForeground);
+    expect(background.intent).toBe("default");
+    expect(rgbToHex(background)).toBe(darkTerminalColors.defaultBackground);
   });
 
   it("preserves alpha intent as RGBA", () => {

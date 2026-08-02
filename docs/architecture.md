@@ -71,10 +71,14 @@ When these disagree, reconcile from config, providers, and current observer stat
 - Station resolves managed-terminal attachments through its own host attacher. An absent attachment permits the existing local launch; an advertised attachment that cannot resolve fails visibly and must never fall through to a local spawn.
 - The Station UI is a client. It renders snapshots/events and dispatches typed commands; it must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.
 - The outer terminal environment is authoritative only for Station's OpenTUI
-  renderer. Every Station-owned child PTY receives Station's terminal identity
-  and supported capabilities at the final native spawn boundary; local bridge,
-  Bun, and Station Host paths must not expose outer-emulator identity as child
-  capability evidence. A persistent Station Host process is never renderer
+  renderer. Its strictly observed palette is appearance authority only for the
+  embedded standalone/tmux dashboard; Station resolves that evidence into one
+  complete provider-neutral theme, and terminal providers do not participate in
+  appearance selection. Native `auto` remains Station-owned and does not query
+  the outer palette. Every Station-owned child PTY receives Station's terminal
+  identity and supported capabilities at the final native spawn boundary; local
+  bridge, Bun, and Station Host paths must not expose outer-emulator identity as
+  child capability evidence. A persistent Station Host process is never renderer
   provenance, so Host PTYs fail closed on inherited and launch-plan tmux
   context and on daemon-inherited color controls; only color controls carried
   by the explicit launch request are authoritative.

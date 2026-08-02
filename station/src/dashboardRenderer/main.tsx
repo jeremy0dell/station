@@ -19,6 +19,10 @@ import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import {
+  createStationThemeController,
+  type StationThemeController,
+} from "../theme/index.js";
+import {
   executeDashboardControlIntent,
   type DashboardRendererEffects,
 } from "./dashboardEffects.js";
@@ -134,6 +138,7 @@ export async function runDashboardMain(): Promise<void> {
   let disposed = false;
   let renderer: DashboardHotRenderer | undefined;
   let root: DashboardHotRoot | undefined;
+  let themeController: StationThemeController | undefined;
   const onProcessExit = (): void => disposeResources();
   disposeResources = (): void => {
     if (disposed) {
@@ -141,6 +146,7 @@ export async function runDashboardMain(): Promise<void> {
     }
     disposed = true;
     root?.unmount();
+    themeController?.dispose();
     popupRuntime.dispose();
     void widgetConfigWrites?.dispose();
     detachSource();
@@ -175,6 +181,10 @@ export async function runDashboardMain(): Promise<void> {
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
     renderer = nextRenderer;
+    const nextThemeController = createStationThemeController(nextRenderer);
+    themeController = nextThemeController;
+    // The controller begins on the complete fallback; palette I/O must not block the first frame.
+    void nextThemeController.start();
     if (popupRenderer) {
       // OpenTUI keeps 1002 drag tracking on when 1003 movement is off; popups need click-only 1000 + 1006.
       process.stdout.write("\u001b[?1002l\u001b[?1000h");
@@ -197,6 +207,7 @@ export async function runDashboardMain(): Promise<void> {
         effects={rendererEffects}
         onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}
+        themeSource={nextThemeController}
       />,
     );
     process.on("exit", onProcessExit);

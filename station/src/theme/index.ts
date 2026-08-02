@@ -2,11 +2,23 @@ import type { ProviderHealth } from "@station/contracts";
 import type { RowColor, ToastBorderColorName } from "@station/dashboard-core";
 import type { StationSemanticColor, StationTheme } from "./types.js";
 
-export { embeddedStationTheme, nativeStationTheme } from "./builtInTheme.js";
+export { nativeStationTheme } from "./builtInTheme.js";
 export { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
-export { StationThemeProvider, useStationTheme } from "./themeContext.js";
+export { resolveStationTheme } from "./resolveStationTheme.js";
+export { parseStationTerminalPaletteObservation } from "./terminalPaletteObservation.js";
+export type { StationTerminalPaletteObservation } from "./terminalPaletteObservation.js";
+export { createStationThemeController } from "./themeController.js";
+export type { StationThemeController, StationThemeRenderer } from "./themeController.js";
+export {
+  StationThemeProvider,
+  useStationTheme,
+  useStationThemeSource,
+} from "./themeContext.js";
+export type { StationThemeSource } from "./themeContext.js";
 export { rgbColor, stationColorSnapshotValue } from "./types.js";
 export type {
+  StationAppearanceContext,
+  StationAppearancePreference,
   StationColor,
   StationForegroundColor,
   StationSemanticColor,

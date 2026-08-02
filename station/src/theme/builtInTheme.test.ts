@@ -1,14 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { embeddedStationTheme, nativeStationTheme } from "./builtInTheme.js";
+import { nativeStationTheme } from "./builtInTheme.js";
 import type { StationTheme } from "./types.js";
 
 const rgb = (value: `#${string}`) => ({ kind: "rgb" as const, value });
-const defaultBackground = (value: `#${string}`) => ({
-  kind: "terminal-default" as const,
-  channel: "background" as const,
-  snapshot: rgb(value),
-});
-
 const terminal = {
   defaultForeground: rgb("#d4d4d8"),
   defaultBackground: rgb("#101316"),
@@ -111,33 +105,8 @@ const expectedNativeTheme = {
   },
 } as const satisfies StationTheme;
 
-const expectedEmbeddedTheme = {
-  ...sharedRoles,
-  surfaces: {
-    canvas: defaultBackground("#101316"),
-    panel: defaultBackground("#101316"),
-    prompt: defaultBackground("#101316"),
-    help: defaultBackground("#101316"),
-    sheet: defaultBackground("#101316"),
-    settings: defaultBackground("#101316"),
-    toast: defaultBackground("#101316"),
-  },
-  contextMenu: {
-    ...sharedRoles.contextMenu,
-    surface: defaultBackground("#15191e"),
-  },
-  island: {
-    ...sharedRoles.island,
-    background: defaultBackground("#101316"),
-  },
-} as const satisfies StationTheme;
-
 describe("built-in Station themes", () => {
   it("preserves every native role and RGB value", () => {
     expect(nativeStationTheme).toEqual(expectedNativeTheme);
-  });
-
-  it("preserves every embedded role, intent, channel, and snapshot", () => {
-    expect(embeddedStationTheme).toEqual(expectedEmbeddedTheme);
   });
 });
