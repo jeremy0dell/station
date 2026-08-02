@@ -443,22 +443,11 @@ async function exactProcessAndSocketExited(
     timeoutMs: remainingHandoffMs(deadline, now),
   });
   const currentStartToken = deps.evidence.processStartToken(identity.pid);
-  const exactEntry = deps.evidence
-    .listObserverProcesses()
-    .find(
-      (entry) =>
-        entry.pid === identity.pid &&
-        entry.startToken === identity.osStartTime &&
-        entry.processToken === identity.processToken &&
-        entry.buildVersion === identity.version &&
-        entry.socketPath === socketPath,
-    );
-  // A missing ps token is ambiguous; only ESRCH proves absence. A different
-  // start time or launch nonce proves the exact PID generation exited.
+  // Exit proof uses the incumbent PID only because global listings include the live successor.
   const exactProcessExited =
     currentStartToken === undefined
       ? deps.evidence.signal(identity.pid, 0) === "absent"
-      : currentStartToken !== identity.osStartTime || exactEntry === undefined;
+      : currentStartToken !== identity.osStartTime;
   return !listening && exactProcessExited;
 }
 

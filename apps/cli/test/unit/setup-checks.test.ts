@@ -330,6 +330,10 @@ describe("setup dependency checks", () => {
       label: "client popup scope",
       popup: { popupScope: "client" as const },
     },
+    {
+      label: "visible popup status bar",
+      popup: { popupStatusBar: true },
+    },
   ])("uses the config-aware popup alias for compiled bindings with $label", async ({ popup }) => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -1206,6 +1210,7 @@ scroll_on_output = "teleport"
     );
 
     expect(command).toContain("STATION_CONFIG_PATH='/tmp/station-##{session_name}/config.toml'");
+    expect(command).toContain("STATION_DISABLE_FAST_POPUP=1");
     expect(command).toContain("--config '/tmp/station-##{session_name}/config.toml'");
   });
 
@@ -1644,6 +1649,7 @@ scroll_on_output = "teleport"
       checkSetupTmuxBinding({
         homeDir,
         launcherCommand,
+        env: {},
         fs: readOnlyFs({
           [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock(launcherCommand),
         }),
@@ -2367,6 +2373,7 @@ function configToml(
     popupHeight?: string;
     popupPosition?: string;
     popupScope?: "server" | "client";
+    popupStatusBar?: boolean;
   } = {},
 ): string {
   const lines = [
@@ -2402,7 +2409,8 @@ function configToml(
     options.popupWidth !== undefined ||
     options.popupHeight !== undefined ||
     options.popupPosition !== undefined ||
-    options.popupScope !== undefined
+    options.popupScope !== undefined ||
+    options.popupStatusBar !== undefined
   ) {
     lines.push("[terminal.tmux]");
     if (options.popupWidth !== undefined) {
@@ -2416,6 +2424,9 @@ function configToml(
     }
     if (options.popupScope !== undefined) {
       lines.push(`popup_scope = ${JSON.stringify(options.popupScope)}`);
+    }
+    if (options.popupStatusBar !== undefined) {
+      lines.push(`popup_status_bar = ${options.popupStatusBar ? "true" : "false"}`);
     }
     lines.push("");
   }

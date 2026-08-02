@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderProjectConfig } from "@station/contracts";
@@ -617,7 +617,8 @@ describe("WorktrunkProvider", () => {
     const commonDir = (
       await git(srcPath, "rev-parse", "--path-format=absolute", "--git-common-dir")
     ).stdout.trim();
-    expect(commonDir.replace(/^\/private(?=\/var\/)/, "").startsWith(root)).toBe(true);
+    const physicalRoot = await realpath(root);
+    expect(commonDir.startsWith(physicalRoot)).toBe(true);
     await writeFile(join(srcPath, "tracked.txt"), "base\n");
     await writeFile(join(srcPath, "staged.txt"), "base\n");
     await writeFile(join(srcPath, "deleteme.txt"), "bye\n");

@@ -334,7 +334,8 @@ function usesManagedFastPopupDefaults(config: SetupConfigFact): boolean {
     tmux.popupScope === "server" &&
     tmux.popupWidth === defaultTmuxWorkbenchConfig.popupWidth &&
     tmux.popupHeight === defaultTmuxWorkbenchConfig.popupHeight &&
-    tmux.popupPosition === defaultTmuxWorkbenchConfig.popupPosition
+    tmux.popupPosition === defaultTmuxWorkbenchConfig.popupPosition &&
+    tmux.popupStatusBar === defaultTmuxWorkbenchConfig.popupStatusBar
   );
 }
 

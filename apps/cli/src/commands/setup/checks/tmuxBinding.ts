@@ -152,7 +152,10 @@ export function tmuxPopupRunShellCommand(
   }
   const command = ["env"];
   if (configPath !== undefined) {
-    command.push(`STATION_CONFIG_PATH=${quoteShellValue(escapeTmuxFormat(configPath))}`);
+    command.push(
+      `STATION_CONFIG_PATH=${quoteShellValue(escapeTmuxFormat(configPath))}`,
+      "STATION_DISABLE_FAST_POPUP=1",
+    );
   }
   command.push(
     "STATION_FOCUS_PROVIDER=tmux",

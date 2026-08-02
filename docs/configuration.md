@@ -139,6 +139,7 @@ Worktrunk, and recreate it under the managed root.
 | `window_naming` | `project-branch` | Single-value enum. |
 | `primary_agent_pane` | bool | |
 | `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. |
+| `popup_status_bar` | bool | Show the persistent popup's nested tmux status bar. Defaults to `false`; this never changes the invoking tmux session's status bar. Rerun `stn setup` after changing it so an installed popup binding uses the config-aware launch path when needed. |
 | `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
 
 ### `[harness.<id>]` — agent harnesses (optional)
@@ -399,6 +400,7 @@ Strict boolean record. Unknown flag names are rejected.
 | --- | --- | --- | --- |
 | `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. Session migration requires this to already be enabled in the running target Observer; migration never edits the config. |
 | `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. Session migration requires the running target to report persistent native launch capability. |
+| `dashboard_persistent_filter` | bool | `false` | Temporary TUI-only search-experience selection. Read at renderer composition/startup; behavior remains equivalent until #395. |
 
 ---
 

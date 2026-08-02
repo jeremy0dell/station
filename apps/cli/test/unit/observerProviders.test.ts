@@ -16,7 +16,8 @@ import { createOpenCodeHarnessProvider, openCodeHookAdapter } from "@station/ope
 import { createPiHarnessProvider } from "@station/pi";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
 import { createStationHostController } from "@station/terminal";
-import { describe, expect, it, vi } from "vitest";
+import { assertPathInsideTestMachineRoot } from "@station/testing";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProviderRegistry, probeHarnessHooksStatus } from "../../src/observerProviders";
 
 vi.mock("@station/claude", async (importOriginal) => {
@@ -68,24 +69,21 @@ vi.mock("@station/pi", async (importOriginal) => {
 });
 
 const now = "2026-05-21T12:00:00.000Z";
+const usesSharedTestMachine = process.env.STATION_TEST_MACHINE_ROOT !== undefined;
+
+if (!usesSharedTestMachine) {
+  // Focused test runners can execute this file without loading the suite-level setup.
+  afterEach(() => vi.unstubAllEnvs());
+}
 
 describe("observer providers", () => {
   it("supplies a finalized source host command from CLI composition", () => {
-    const previousBun = process.env.STATION_BUN;
-    const previousEntry = process.env.STATION_HOST_ENTRY;
-    process.env.STATION_BUN = "/opt/station/bun";
-    process.env.STATION_HOST_ENTRY = "/opt/station/hostMain.ts";
-    try {
-      createProviderRegistry({
-        ...config,
-        featureFlags: { stationPersistentAgents: true },
-      });
-    } finally {
-      if (previousBun === undefined) delete process.env.STATION_BUN;
-      else process.env.STATION_BUN = previousBun;
-      if (previousEntry === undefined) delete process.env.STATION_HOST_ENTRY;
-      else process.env.STATION_HOST_ENTRY = previousEntry;
-    }
+    vi.stubEnv("STATION_BUN", "/opt/station/bun");
+    vi.stubEnv("STATION_HOST_ENTRY", "/opt/station/hostMain.ts");
+    createProviderRegistry({
+      ...config,
+      featureFlags: { stationPersistentAgents: true },
+    });
 
     expect(vi.mocked(createStationHostController)).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -665,42 +663,36 @@ describe("observer providers", () => {
       "utf8",
     );
 
-    const previousCursorHome = process.env.STATION_CURSOR_HOME;
-    process.env.STATION_CURSOR_HOME = root;
-    try {
-      await installCursorHooks({
-        hookBin: ingressLauncher,
-        stationConfigPath: configPath,
-        observerSocketPath,
-        stateDir,
-        hookSpoolDir,
-        autoStartFromHooks: false,
-      });
+    stubCursorTestHome(root);
+    await installCursorHooks({
+      hookBin: ingressLauncher,
+      stationConfigPath: configPath,
+      observerSocketPath,
+      stateDir,
+      hookSpoolDir,
+      autoStartFromHooks: false,
+    });
 
-      await expect(
-        probeHarnessHooksStatus("cursor", configPath, { ingressLauncher }),
-      ).resolves.toMatchObject({
-        provider: "cursor",
-        requested: true,
-        installed: true,
-      });
-      const loaded = await loadConfig(configPath);
-      const provider = createProviderRegistry(loaded.config, {
-        configPath: loaded.configPath,
-        providerHookIngressLauncher: ingressLauncher,
-      }).harnesses.get("cursor");
-      await expect(
-        provider?.hooksStatus?.({ stationConfigPath: loaded.configPath }),
-      ).resolves.toMatchObject({
-        provider: "cursor",
-        requested: true,
-        installed: true,
-      });
-      await expect(probeHarnessHooksStatus("pi", configPath)).resolves.toBeUndefined();
-    } finally {
-      if (previousCursorHome === undefined) delete process.env.STATION_CURSOR_HOME;
-      else process.env.STATION_CURSOR_HOME = previousCursorHome;
-    }
+    await expect(
+      probeHarnessHooksStatus("cursor", configPath, { ingressLauncher }),
+    ).resolves.toMatchObject({
+      provider: "cursor",
+      requested: true,
+      installed: true,
+    });
+    const loaded = await loadConfig(configPath);
+    const provider = createProviderRegistry(loaded.config, {
+      configPath: loaded.configPath,
+      providerHookIngressLauncher: ingressLauncher,
+    }).harnesses.get("cursor");
+    await expect(
+      provider?.hooksStatus?.({ stationConfigPath: loaded.configPath }),
+    ).resolves.toMatchObject({
+      provider: "cursor",
+      requested: true,
+      installed: true,
+    });
+    await expect(probeHarnessHooksStatus("pi", configPath)).resolves.toBeUndefined();
   });
 
   it("normalizes setup hook probe failures", async () => {
@@ -773,6 +765,7 @@ describe("observer providers", () => {
     const hookScriptPath = join(stateDir, "hooks", "station-cursor-hook.sh");
     const configPath = join(root, "station.config.toml");
 
+    stubCursorTestHome(root);
     await installCursorHooks({
       hookScriptPath,
       stationConfigPath: configPath,
@@ -783,44 +776,34 @@ describe("observer providers", () => {
       homeDir: root,
     });
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
-    try {
-      const registry = createProviderRegistry(
-        {
-          ...config,
-          observer: {
-            stateDir,
-            socketPath: observerSocketPath,
-            autoStartFromHooks: false,
-          },
-          defaults: {
-            ...config.defaults,
-            harness: "cursor",
-          },
-          harness: {
-            cursor: {
-              installHooks: true,
-            },
+    const registry = createProviderRegistry(
+      {
+        ...config,
+        observer: {
+          stateDir,
+          socketPath: observerSocketPath,
+          autoStartFromHooks: false,
+        },
+        defaults: {
+          ...config.defaults,
+          harness: "cursor",
+        },
+        harness: {
+          cursor: {
+            installHooks: true,
           },
         },
-        { configPath },
-      );
-      const provider = registry.harnesses.get("cursor");
+      },
+      { configPath },
+    );
+    const provider = registry.harnesses.get("cursor");
 
-      await expect(provider?.doctorChecks?.()).resolves.toContainEqual(
-        expect.objectContaining({
-          name: "cursor-hooks",
-          status: "ok",
-        }),
-      );
-    } finally {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    }
+    await expect(provider?.doctorChecks?.()).resolves.toContainEqual(
+      expect.objectContaining({
+        name: "cursor-hooks",
+        status: "ok",
+      }),
+    );
   });
 
   it("passes Codex config defaults into the Codex harness provider", async () => {
@@ -1210,6 +1193,13 @@ const config: StationConfig = {
     },
   ],
 };
+
+function stubCursorTestHome(root: string): void {
+  if (!usesSharedTestMachine) vi.stubEnv("STATION_TEST_MACHINE_ROOT", root);
+  assertPathInsideTestMachineRoot(root, "Cursor test home");
+  vi.stubEnv("STATION_CURSOR_HOME", root);
+  vi.stubEnv("STATION_CURSOR_HOOKS_PATH", "");
+}
 
 function launchRequest(harness: string): Parameters<contracts.HarnessProvider["buildLaunch"]>[0] {
   const project = firstProject();

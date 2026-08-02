@@ -36,6 +36,7 @@ primary_agent_pane = true
 popup_width = "50%"
 popup_height = "50%"
 popup_position = "C"
+popup_status_bar = false         # true restores the nested tmux status bar inside the popup
 popup_scope = "server"           # "server" moves one popup between clients; "client" isolates one per client
 
 [harness.claude]

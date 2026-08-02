@@ -85,6 +85,7 @@ function normalizeTmuxConfig(value: unknown): unknown {
     popup_height: "popupHeight",
     popup_position: "popupPosition",
     popup_scope: "popupScope",
+    popup_status_bar: "popupStatusBar",
   });
 }
 
@@ -112,6 +113,7 @@ function normalizeHarnessProviderConfig(value: unknown): unknown {
 
 function normalizeFeatureFlagsConfig(value: unknown): unknown {
   return normalizeObject(value, {
+    dashboard_persistent_filter: "dashboardPersistentFilter",
     session_resume_agent: "sessionResumeAgent",
     station_persistent_agents: "stationPersistentAgents",
   });
