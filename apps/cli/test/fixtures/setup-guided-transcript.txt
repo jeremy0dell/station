@@ -26,14 +26,14 @@
 │  Codex
 │
 ◆  Link STATION launchers globally?
-│  Runs: pnpm --dir <CHECKOUT> station:link
-│  Exposes stn, stn-ingress, and stn-tmux-popup. Does not edit shell startup files.
+│  Makes stn, stn-ingress, and stn-tmux-popup available from any shell.
+│  Runs this checkout’s station:link package script. Does not edit shell startup files.
 │  ○ Yes / ● No
 └
 
 ◇  Link STATION launchers globally?
-│  Runs: pnpm --dir <CHECKOUT> station:link
-│  Exposes stn, stn-ingress, and stn-tmux-popup. Does not edit shell startup files.
+│  Makes stn, stn-ingress, and stn-tmux-popup available from any shell.
+│  Runs this checkout’s station:link package script. Does not edit shell startup files.
 │  No
 │
 ◆  Install Worktrunk lifecycle hooks?
@@ -81,14 +81,16 @@
 │  Yes
 │
 ◆  Install or load tmux popup binding?
-│  Ensures Station’s prefix + Space binding is saved in ~/.tmux.conf and loaded into the current
-│  tmux server when available. Other tmux configuration is preserved.
+│  Assigns tmux prefix + Space to open Station.
+│  Saves Station’s managed binding in ~/.tmux.conf and loads it now when tmux is running. A
+│  user-configured prefix + Space binding is never replaced.
 │  ○ Yes / ● No
 └
 
 ◇  Install or load tmux popup binding?
-│  Ensures Station’s prefix + Space binding is saved in ~/.tmux.conf and loaded into the current
-│  tmux server when available. Other tmux configuration is preserved.
+│  Assigns tmux prefix + Space to open Station.
+│  Saves Station’s managed binding in ~/.tmux.conf and loads it now when tmux is running. A
+│  user-configured prefix + Space binding is never replaced.
 │  No
 │
 ◇  Selected changes ──────────────────╮

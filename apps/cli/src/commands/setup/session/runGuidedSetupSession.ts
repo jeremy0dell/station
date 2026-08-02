@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { SafeError } from "@station/contracts";
 import {
   assessSetupPlan,
@@ -283,7 +284,10 @@ async function driveGuidedSession(
   let linkStationLaunchers = false;
   const launcherFacts = requireFacts(composition);
   if (shouldPromptLauncherLink(launcherFacts)) {
-    const answer = await confirm(composition, launcherLinkPrompt(launcherFacts, presenter));
+    const answer = await confirm(
+      composition,
+      presenter.prompt(setupMessageRef("guided.launcher-link-prompt")),
+    );
     if (answer.kind === "cancelled") return { code: 1 };
     linkStationLaunchers = answer.value;
   }
@@ -795,20 +799,9 @@ function renderTmuxFeedback(composition: SetupComposition, requested: boolean): 
   );
 }
 
-function launcherLinkPrompt(facts: SetupFacts, presenter: TextSetupPresenter): string {
-  const command = formatCommand(["pnpm", "--dir", facts.launchers.packageRoot, "station:link"]);
-  return presenter.prompt(setupMessageRef("guided.launcher-link-prompt", { command }));
-}
-
 function worktrunkShellPrompt(facts: SetupFacts, presenter: TextSetupPresenter): string {
   const integration = facts.worktrunkShellIntegration;
-  const baseCommand = [
-    facts.worktrunk.resolvedPath ?? facts.worktrunk.command,
-    "-y",
-    "config",
-    "shell",
-    "install",
-  ];
+  const baseCommand = [basename(facts.worktrunk.command), "-y", "config", "shell", "install"];
   const command =
     integration.shell === undefined ? baseCommand : [...baseCommand, integration.shell];
   return presenter.prompt(
@@ -853,15 +846,12 @@ function renderRequiredToolsReview(
   const proposedChanges = operations.flatMap((operation) => {
     const action = actionsByOperationId.get(operation.id);
     const description =
-      action === undefined
-        ? operationLabel(composition, operation)
-        : presenter.text(action.explanation);
-    const source = presenter.text(
-      setupMessageRef("guided.required-tool-source", {
-        url: homebrewFormulaUrls[operation.tool],
-      }),
+      action === undefined ? operationLabel(composition, operation) : presenter.text(action.label);
+    const sourceLabel = presenter.text(setupMessageRef("guided.required-tool-source"));
+    const source = presenter.detail(
+      presenter.link({ label: sourceLabel, url: homebrewFormulaUrls[operation.tool] }),
     );
-    return [`- ${description}`, source];
+    return [`- ${description}  ${source}`];
   });
   const body = [
     presenter.text(setupMessageRef("guided.required-tools-intro")),

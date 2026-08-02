@@ -1,3 +1,8 @@
+export type SetupLink = {
+  readonly label: string;
+  readonly url: string;
+};
+
 export type SetupTheme = {
   bold(value: string): string;
   dim(value: string): string;
@@ -5,10 +10,12 @@ export type SetupTheme = {
   green(value: string): string;
   red(value: string): string;
   yellow(value: string): string;
+  link(input: SetupLink): string;
 };
 
 export type SetupRenderOptions = {
   color?: boolean;
+  hyperlinks?: boolean;
 };
 
 const ansi = {
@@ -19,7 +26,10 @@ const ansi = {
   green: "\u001B[32m",
   red: "\u001B[31m",
   yellow: "\u001B[33m",
+  underline: "\u001B[4m",
 } as const;
+
+const osc8Close = "\u001B]8;;\u001B\\";
 
 export function setupTheme(options: SetupRenderOptions = {}): SetupTheme {
   if (options.color !== true) {
@@ -30,15 +40,21 @@ export function setupTheme(options: SetupRenderOptions = {}): SetupTheme {
       green: identity,
       red: identity,
       yellow: identity,
+      link: (input) => terminalLink({ ...input, enabled: options.hyperlinks === true }),
     };
   }
   return {
-    bold: (value) => colorize(ansi.bold, value),
-    dim: (value) => colorize(ansi.dim, value),
-    cyan: (value) => colorize(ansi.cyan, value),
-    green: (value) => colorize(ansi.green, value),
-    red: (value) => colorize(ansi.red, value),
-    yellow: (value) => colorize(ansi.yellow, value),
+    bold: (value) => colorize({ code: ansi.bold, value }),
+    dim: (value) => colorize({ code: ansi.dim, value }),
+    cyan: (value) => colorize({ code: ansi.cyan, value }),
+    green: (value) => colorize({ code: ansi.green, value }),
+    red: (value) => colorize({ code: ansi.red, value }),
+    yellow: (value) => colorize({ code: ansi.yellow, value }),
+    link: (input) =>
+      colorize({
+        code: `${ansi.cyan}${ansi.underline}`,
+        value: terminalLink({ ...input, enabled: options.hyperlinks === true }),
+      }),
   };
 }
 
@@ -46,6 +62,12 @@ function identity(value: string): string {
   return value;
 }
 
-function colorize(code: string, value: string): string {
-  return `${code}${value}${ansi.reset}`;
+function colorize(input: { readonly code: string; readonly value: string }): string {
+  return `${input.code}${input.value}${ansi.reset}`;
+}
+
+function terminalLink(input: SetupLink & { readonly enabled: boolean }): string {
+  if (!input.enabled) return `${input.label} (${input.url})`;
+  // OSC 8 keeps the visible source label compact while preserving its destination.
+  return `\u001B]8;;${input.url}\u001B\\${input.label}${osc8Close}`;
 }

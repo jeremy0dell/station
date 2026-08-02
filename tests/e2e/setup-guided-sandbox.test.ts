@@ -86,10 +86,13 @@ describe("manual guided setup sandbox", () => {
       expect(opening).toContain("Set up Station for this project.");
       expect(opening).toContain("Checking this project and its tools...");
       expect(opening).toContain("Required tools");
-      expect(opening).toContain("Install Worktrunk with Homebrew.");
-      expect(opening).toContain("Install git-delta with Homebrew.");
+      expect(opening).toContain("Install Worktrunk");
+      expect(opening).toContain("Install git-delta");
+      expect(opening.match(/Official formula ↗/g)).toHaveLength(5);
       for (const formula of ["worktrunk", "tmux", "bun", "diffnav", "git-delta"]) {
-        expect(opening).toContain(`https://formulae.brew.sh/formula/${formula}`);
+        expect(result.rawOutput).toContain(
+          `\u001b]8;;https://formulae.brew.sh/formula/${formula}\u001b\\`,
+        );
       }
       expect(opening).not.toContain("Agent selection: unresolved");
       expect(opening).not.toContain("STATION state directory");
@@ -100,10 +103,11 @@ describe("manual guided setup sandbox", () => {
       expect(result.stdout).toContain("Does not edit shell startup files.");
       expect(result.stdout).toContain("Writes selected settings to ~/.config/station/config.toml");
       expect(result.stdout).toContain("Does not add the current repository as a project.");
-      expect(result.stdout).toContain(
-        "May update ~/.zshrc. Station will not create it if missing.",
-      );
-      expect(result.stdout).toContain("Other tmux configuration is preserved.");
+      expect(result.stdout).toContain("Adds Worktrunk shell helpers to ~/.zshrc.");
+      expect(result.stdout).toContain("Runs: wt -y config shell install zsh");
+      expect(result.stdout).toContain("Does not create ~/.zshrc if it is missing.");
+      expect(result.stdout).toContain("Assigns tmux prefix + Space to open Station.");
+      expect(result.stdout).toContain("user-configured prefix + Space binding is never replaced.");
       expect(result.stdout).toContain("Does not sign in, bypass provider trust");
       expect(result.stdout).toContain("unrelated hooks.");
       for (const label of ["Claude Code", "Codex", "Cursor Agent", "OpenCode", "Pi"]) {

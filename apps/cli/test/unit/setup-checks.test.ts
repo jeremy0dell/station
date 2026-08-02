@@ -1247,6 +1247,43 @@ scroll_on_output = "teleport"
     );
   });
 
+  it.each([
+    "bind-key Space display-message 'custom action'\n",
+    "bind -r Space display-message 'custom action'\n",
+    "bind-key -N 'Custom action' -T prefix Space display-message 'custom action'\n",
+  ])("refuses to replace a user-configured prefix + Space binding", async (source) => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+
+    await expect(
+      checkSetupTmuxBinding({
+        homeDir,
+        fs: readOnlyFs({ [join(homeDir, ".tmux.conf")]: source }),
+      }),
+    ).resolves.toMatchObject({
+      status: "conflict",
+      message: expect.stringContaining("setup will not replace it"),
+    });
+  });
+
+  it("allows a freed prefix + Space key while ignoring root-table assignments", async () => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const source = [
+      "bind-key -T root Space display-message 'root action'",
+      "bind-key Space display-message 'old prefix action'",
+      "unbind-key Space",
+      "",
+    ].join("\n");
+
+    await expect(
+      checkSetupTmuxBinding({
+        homeDir,
+        fs: readOnlyFs({ [join(homeDir, ".tmux.conf")]: source }),
+      }),
+    ).resolves.toMatchObject({ status: "missing", bindingKey: "Space" });
+  });
+
   it("marks a binding stale when an explicit config path is added", async () => {
     const root = await tempRoot(tempRoots);
     const homeDir = join(root, "home");
@@ -1618,6 +1655,37 @@ scroll_on_output = "teleport"
     });
   });
 
+  it.each([
+    { command: "next-layout", status: "missing" },
+    { command: "display-message 'custom action'", status: "conflict" },
+  ] as const)("reports tmux's live prefix + Space $command binding as $status", async ({
+    command,
+    status,
+  }) => {
+    const root = await tempRoot(tempRoots);
+    const homeDir = join(root, "home");
+    const runner = vi.fn<ExternalCommandRunner>(async (input) => ({
+      command: input.command,
+      args: input.args ?? [],
+      stdout: `bind-key -T prefix Space ${command}\n`,
+      stderr: "",
+      exitCode: 0,
+    }));
+
+    const binding = await checkSetupTmuxBinding({
+      homeDir,
+      env: { TMUX: "/tmp/tmux.sock,1,0" },
+      runner,
+      fs: readOnlyFs({}),
+    });
+
+    expect(binding.status).toBe(status);
+    if (status === "conflict") {
+      expect(binding).toMatchObject({ message: expect.stringContaining("will not replace it") });
+    }
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
   it("checks the exact live binding and launcher startup in the tmux server", async () => {
     const root = await tempRoot(tempRoots);
     const homeDir = join(root, "home");
@@ -1795,7 +1863,7 @@ scroll_on_output = "teleport"
     }
   });
 
-  it("treats a legacy live bare binding that would exit 127 as not loaded", async () => {
+  it("refuses to replace a legacy live bare binding", async () => {
     const root = await tempRoot(tempRoots);
     const homeDir = join(root, "home");
     const launcherCommand = "/tmp/bin/stn-tmux-popup";
@@ -1822,7 +1890,11 @@ scroll_on_output = "teleport"
       }),
     });
 
-    expect(binding).toMatchObject({ status: "ok", liveStatus: "missing" });
+    expect(binding).toMatchObject({
+      status: "conflict",
+      liveStatus: "unknown",
+      message: expect.stringContaining("setup will not replace it"),
+    });
     expect(calls).toHaveLength(1);
   });
 

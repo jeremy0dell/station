@@ -181,7 +181,7 @@ export type SetupMessageArguments = {
   "guided.invalid-selection": undefined;
   "guided.required-tools-title": undefined;
   "guided.required-tools-intro": undefined;
-  "guided.required-tool-source": { url: string };
+  "guided.required-tool-source": undefined;
   "guided.tools-prompt": undefined;
   "guided.no-changes": undefined;
   "guided.harness-select-prompt": undefined;
@@ -228,7 +228,7 @@ export type SetupMessageArguments = {
   "guided.homebrew-core-required": undefined;
   "guided.homebrew-url": undefined;
   "guided.command-line-tools-hint": undefined;
-  "guided.launcher-link-prompt": { command: string };
+  "guided.launcher-link-prompt": undefined;
   "guided.launcher-link-failed": undefined;
   "guided.worktrunk-hooks-prompt": { path: string };
   "guided.tracking-consent-prompt": { label: string };

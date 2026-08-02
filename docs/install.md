@@ -162,11 +162,11 @@ stn tui
 
 Setup uses immediate Y/N controls and navigable agent menus. Guided output starts with a compact
 read-only inspection step, then shows only the current decision or blocker. Before installing
-required tools, it names the selected installations, links their official Homebrew Formulae pages,
-and identifies the installation mechanism; the complete machine inventory remains available
-through `stn setup check`. Later consent prompts name the command or home-relative target they may
-change and call out important non-effects such as preserving shell files, provider trust, unrelated
-hooks, and explicit project selection. Station asks before installing tools or updating Station,
+required tools, it names the selected installations and presents each official Homebrew Formulae
+page as a compact terminal hyperlink; the complete machine inventory remains available through
+`stn setup check`. Later consent prompts keep the decision as the primary line and visually subdue
+the command, home-relative target, bounded effect, and important non-effects. Station asks before
+installing tools or updating Station,
 provider, shell, or tmux configuration. Ctrl-C cancels safely: completed
 bootstrap, installer, config, hook, shell, or tmux changes remain committed, and rerunning setup
 inspects the current state before continuing. Native Homebrew and agent-installer output remains
@@ -176,8 +176,10 @@ the terminal.
 Setup checks or offers to install or upgrade Worktrunk, tmux, diffnav, and git-delta;
 requires a runnable supported agent CLI; writes a valid zero-project
 `~/.config/station/config.toml`; starts or restarts the Observer; and offers
-Worktrunk shell integration and the `Ctrl-b Space` tmux popup binding. With no
-config, exactly one runnable agent CLI is inferred and identified; several
+Worktrunk shell integration and the `Ctrl-b Space` tmux popup binding. Setup may replace tmux's
+built-in `next-layout` action on that key, but it refuses to replace a user-configured prefix-table
+binding found in `~/.tmux.conf` or the current tmux server. With no config, exactly one runnable
+agent CLI is inferred and identified; several
 runnable CLIs require explicit guided selection. When multiple CLIs are selected for a new config,
 setup asks which selected CLI should be the default. Check, plan, dry-run, and noninteractive apply
 never choose the catalog-first CLI in an ambiguous case. An existing config always preserves and

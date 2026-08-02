@@ -23,10 +23,13 @@ Real-PTY coverage proves immediate Y/N, empty-selection reprompting, narrow-term
 explicit default selection, terminal restoration, and normalized human-only output. The guided
 opening must present a compact inspection step and only selected prerequisite changes; it must not
 render the Core/Recommended/Actions/Next diagnostic matrix owned by the read-only
-`stn setup check` and `stn setup plan` surfaces. Selected Homebrew tools link only to their
-allowlisted official Formulae pages. Later consent prompts expose a shell-safe command or
-home-relative target and bounded effect, while continuing to reject raw operation payloads and
-machine-specific home paths from reviewed transcripts. Non-TTY coverage proves guided setup exits
+`stn setup check` and `stn setup plan` surfaces. Selected Homebrew tools use compact OSC 8 labels
+that link only to their allowlisted official Formulae pages. The first line remains the primary
+prompt while later consent details are visually subdued; stable command names replace resolved
+temporary shim paths. Tmux checks allow its built-in `next-layout` action to be replaced but reject
+user-configured assignments of the selected prefix key in `~/.tmux.conf` or the current server.
+Guided transcripts continue to reject raw operation payloads and machine-specific home paths.
+Non-TTY coverage proves guided setup exits
 before inspection or mutation.
 
 Manual interaction uses the same isolation goals without scripted input:

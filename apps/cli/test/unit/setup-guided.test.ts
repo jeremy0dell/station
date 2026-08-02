@@ -1106,6 +1106,60 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain("Direct fallback: stn popup");
   }, 15_000);
 
+  it("does not offer or replace a user-configured tmux prefix key", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const tmuxConfigPath = join(homeDir, ".tmux.conf");
+    const originalTmuxConfig = "bind-key Space display-message 'custom action'\n";
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [tmuxConfigPath]: originalTmuxConfig });
+    const prompts: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            prompts.push(message);
+            return message.startsWith("Write and activate core Station config?");
+          },
+          async selectMany() {
+            return ["codex"];
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(fs.files[tmuxConfigPath]).toBe(originalTmuxConfig);
+    expect(prompts.some((message) => message.startsWith("Install or load tmux"))).toBe(false);
+  });
+
   it("preserves a customized tmux key while replacing Station's command", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
@@ -1983,8 +2037,8 @@ describe("guided setup command", () => {
     expect(output).toContain("It will ask before installing tools or updating configuration.");
     expect(output).toContain("Checking this project and its tools...");
     expect(output).toContain("Required tools");
-    expect(output).toContain("Homebrew will install:\n- Install diffnav with Homebrew.");
-    expect(output).toContain("Source: https://formulae.brew.sh/formula/diffnav");
+    expect(output).toContain("Homebrew will install:\n- Install diffnav");
+    expect(output).toContain("Official formula ↗ (https://formulae.brew.sh/formula/diffnav)");
     expect(output).not.toContain("Agent selection: unresolved");
     expect(output).not.toContain("STATION state directory");
     expect(output).not.toContain("MISSING");

@@ -13,10 +13,13 @@ const defaultWriteStdout = promisify(process.stdout.write.bind(process.stdout)) 
 ) => Promise<void>;
 
 export function renderOptions(deps: SetupCommandDeps): SetupRenderOptions {
-  if (deps.writeStdout !== undefined) return { color: false };
+  if (deps.writeStdout !== undefined) return { color: false, hyperlinks: false };
   const env = deps.env ?? process.env;
-  if (env.NO_COLOR !== undefined || env.TERM === "dumb") return { color: false };
-  return { color: process.stdout.isTTY === true };
+  const interactive = process.stdout.isTTY === true && env.TERM !== "dumb";
+  return {
+    color: interactive && env.NO_COLOR === undefined,
+    hyperlinks: interactive,
+  };
 }
 
 export function setupPresenter(deps: SetupCommandDeps): TextSetupPresenter {

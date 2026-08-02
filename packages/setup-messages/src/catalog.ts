@@ -327,7 +327,7 @@ export const setupMessageCatalog = {
   "guided.invalid-selection": { terminal: "Choose only values shown in this list." },
   "guided.required-tools-title": { terminal: "Required tools" },
   "guided.required-tools-intro": { terminal: "Homebrew will install:" },
-  "guided.required-tool-source": { terminal: "  Source: {url}" },
+  "guided.required-tool-source": { terminal: "Official formula ↗" },
   "guided.tools-prompt": { terminal: "Install these required tools?" },
   "guided.no-changes": { terminal: "Required tool changes were declined." },
   "guided.harness-select-prompt": { terminal: "Select agent CLIs to prepare." },
@@ -368,11 +368,11 @@ export const setupMessageCatalog = {
   },
   "guided.worktrunk-shell-prompt": {
     terminal:
-      "Install Worktrunk shell integration?\nRuns: {command}\nMay update {path}. Station will not create it if missing.",
+      "Install Worktrunk shell integration?\nAdds Worktrunk shell helpers to {path}.\nRuns: {command}\nDoes not create {path} if it is missing.",
   },
   "guided.tmux-popup-prompt": {
     terminal:
-      "Install or load tmux popup binding?\nEnsures Station’s prefix + {key} binding is saved in {path} and loaded into the current tmux server when available. Other tmux configuration is preserved.",
+      "Install or load tmux popup binding?\nAssigns tmux prefix + {key} to open Station.\nSaves Station’s managed binding in {path} and loads it now when tmux is running. A user-configured prefix + {key} binding is never replaced.",
   },
   "guided.tmux-not-changed": { terminal: "The tmux popup binding was not changed." },
   "guided.tmux-not-persisted": {
@@ -434,7 +434,7 @@ export const setupMessageCatalog = {
   },
   "guided.launcher-link-prompt": {
     terminal:
-      "Link STATION launchers globally?\nRuns: {command}\nExposes stn, stn-ingress, and stn-tmux-popup. Does not edit shell startup files.",
+      "Link STATION launchers globally?\nMakes stn, stn-ingress, and stn-tmux-popup available from any shell.\nRuns this checkout’s station:link package script. Does not edit shell startup files.",
   },
   "guided.launcher-link-failed": {
     terminal: "STATION launcher link failed. Continuing with checkout launcher paths.",
