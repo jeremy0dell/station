@@ -14,12 +14,6 @@ const candidates: DashboardPersistentFilterCandidate[] = [
       agent: "Codex",
       activity: "working",
     },
-    hiddenFields: {
-      branch: "feature/alpha",
-      status: "needs_attention",
-      reason: "Agent needs approval.",
-      terminal: "tmux",
-    },
   },
   {
     kind: "optimistic",
@@ -102,63 +96,19 @@ describe("dashboard persistent filter selector", () => {
     expect(byProject?.projects.get("web")?.labelRanges).toEqual([{ start: 4, end: 11 }]);
   });
 
-  it("selects exactly one hidden-only explanation in branch, status, reason, terminal order", () => {
-    const byBranch = selectDashboardPersistentFilter({
+  it("matches only the visible row and project fields supplied by the viewport", () => {
+    const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
       screen: { name: "dashboard" },
       applied: { query: "feature" },
     });
-    const byStatus = selectDashboardPersistentFilter({
-      candidates,
-      projects,
-      screen: { name: "dashboard" },
-      applied: { query: "attention" },
-    });
-    const byReason = selectDashboardPersistentFilter({
-      candidates,
-      projects,
-      screen: { name: "dashboard" },
-      applied: { query: "approval" },
-    });
-    const byTerminal = selectDashboardPersistentFilter({
-      candidates,
-      projects,
-      screen: { name: "dashboard" },
-      applied: { query: "tmux" },
-    });
 
-    expect(byBranch?.rows.get("session:alpha")?.reason).toEqual({
-      field: "branch",
-      value: "feature/alpha",
-      ranges: [{ start: 0, end: 7 }],
+    expect(projection).toMatchObject({ matchCount: 0, totalCount: 2, zeroMatches: true });
+    expect(projection?.rows.get("session:alpha")).toMatchObject({
+      matched: false,
+      dimmed: true,
     });
-    expect(byStatus?.rows.get("session:alpha")?.reason).toEqual({
-      field: "status",
-      value: "needs_attention",
-      ranges: [{ start: 6, end: 15 }],
-    });
-    expect(byReason?.rows.get("session:alpha")?.reason).toEqual({
-      field: "reason",
-      value: "Agent needs approval.",
-      ranges: [{ start: 12, end: 20 }],
-    });
-    expect(byTerminal?.rows.get("session:alpha")?.reason).toEqual({
-      field: "terminal",
-      value: "tmux",
-      ranges: [{ start: 0, end: 4 }],
-    });
-  });
-
-  it("does not explain a hidden-field match when a visible field also matches", () => {
-    const projection = selectDashboardPersistentFilter({
-      candidates,
-      projects,
-      screen: { name: "dashboard" },
-      applied: { query: "alpha" },
-    });
-
-    expect(projection?.rows.get("session:alpha")?.reason).toBeUndefined();
   });
 
   it("maps expanded and non-ASCII folds back to source-string offsets", () => {

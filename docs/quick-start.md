@@ -71,11 +71,11 @@ dashboard_persistent_filter = true
 ```
 
 Press `/` to edit a soft preview: rows stay in place while matches highlight and nonmatches dim.
-Press `Enter` to apply a hard filter that keeps only matching project context and sessions. Matches
-inside collapsed projects appear temporarily without changing the saved collapse state. A match
-found only in branch, raw status, status reason, or terminal provider gets one `↳ field: value`
-explanation. Use `/ edit` or `Esc clear` from the footer with either keyboard or pointer. `Q` closes
-while retaining the applied filter for the next warm reopen.
+The filter searches only text visible in dashboard project headers and session rows. Press `Enter`
+to apply a hard filter that keeps only matching project context and sessions. Matches inside
+collapsed projects appear temporarily without changing the saved collapse state. Use `/ edit` or
+`Esc clear` from the footer with either keyboard or pointer. `Q` closes while retaining the applied
+filter for the next warm reopen.
 
 ## 6. Leave and Return
 

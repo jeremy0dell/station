@@ -581,12 +581,12 @@ describe("dashboard viewport selector", () => {
     ]);
   });
 
-  it("temporarily reveals collapsed hidden-field matches with one inert explanation row", () => {
+  it("temporarily reveals collapsed visible matches without adding synthetic rows", () => {
     const base = createDashboardSnapshot();
     const snapshot = {
       ...base,
       rows: base.rows.map((row) =>
-        row.id === "wt_web_idle" ? { ...row, title: "Readable task" } : row,
+        row.id === "wt_web_idle" ? { ...row, title: "Readable fix-nav task" } : row,
       ),
     };
     const viewport = selectDashboardViewport(
@@ -602,17 +602,8 @@ describe("dashboard viewport selector", () => {
     expect(viewport.items.map((item) => item.id)).toEqual([
       "project:web",
       "session:ses_wt_web_idle",
-      "reason:session:ses_wt_web_idle",
     ]);
     expect(viewport.items[0]).toMatchObject({ type: "projectHeader", collapsed: true });
-    expect(viewport.items[2]).toMatchObject({
-      type: "matchReason",
-      reason: {
-        field: "branch",
-        value: "fix-nav-mobile",
-        ranges: [{ start: 0, end: 7 }],
-      },
-    });
     expect(viewport.displayRowChoices.map((choice) => choice.value.id)).toEqual([
       "ses_wt_web_idle",
     ]);
@@ -654,7 +645,7 @@ describe("dashboard viewport selector", () => {
     });
   });
 
-  it("hard-projects an optimistic row retained only by its hidden branch", () => {
+  it("ignores optimistic branch values that are not rendered", () => {
     const snapshot = createDashboardSnapshot();
     const viewport = selectDashboardViewport(
       snapshot,
@@ -678,16 +669,9 @@ describe("dashboard viewport selector", () => {
       }),
     );
 
-    expect(viewport.items.map((item) => item.id)).toEqual([
-      "project:web",
-      "create:local_hidden_branch",
-      "reason:create:local_hidden_branch",
-    ]);
-    expect(viewport.items[2]).toMatchObject({
-      type: "matchReason",
-      reason: { field: "branch", value: "station-e91f2b" },
-    });
-    expect(viewport.sessionOverflow.total).toBe(1);
+    expect(viewport.persistentFilter).toMatchObject({ matchCount: 0, zeroMatches: true });
+    expect(viewport.items).toEqual([]);
+    expect(viewport.sessionOverflow.total).toBe(0);
     expect(viewport.rowChoices).toEqual([]);
   });
 

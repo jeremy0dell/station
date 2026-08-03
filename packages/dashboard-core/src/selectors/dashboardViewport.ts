@@ -10,8 +10,6 @@ import type {
 import type { TuiScreen, TuiViewState } from "../state/types.js";
 import {
   type DashboardPersistentFilterCandidate,
-  type DashboardPersistentFilterHiddenFields,
-  type DashboardPersistentFilterMatchReason,
   type DashboardPersistentFilterProjection,
   type DashboardPersistentFilterProjectMatch,
   type DashboardPersistentFilterRowMatch,
@@ -74,13 +72,7 @@ export type DashboardViewportItem =
       project: ProjectView;
     }
   | DashboardSessionViewportItem
-  | DashboardCreateLocalViewportItem
-  | {
-      type: "matchReason";
-      id: string;
-      rowId: string;
-      reason: DashboardPersistentFilterMatchReason;
-    };
+  | DashboardCreateLocalViewportItem;
 
 export type DashboardViewport = {
   bodyRows: number;
@@ -305,19 +297,9 @@ function flattenAppliedDashboardGroups(
       }
       return items;
     }
-    for (const child of matchingChildren) {
-      const matchedChild = attachPersistentFilterRowMatch(child, projection);
-      items.push(matchedChild);
-      const reason = matchedChild.persistentFilterMatch?.reason;
-      if (reason !== undefined) {
-        items.push({
-          type: "matchReason",
-          id: `reason:${child.id}`,
-          rowId: child.id,
-          reason,
-        });
-      }
-    }
+    items.push(
+      ...matchingChildren.map((child) => attachPersistentFilterRowMatch(child, projection)),
+    );
     return items;
   });
 }
@@ -390,37 +372,12 @@ function createLocalViewportItem(
 function persistentFilterCandidate(
   item: DashboardRowViewportItem,
 ): DashboardPersistentFilterCandidate {
-  const candidate: DashboardPersistentFilterCandidate = {
+  return {
     kind: item.type === "session" ? "session" : "optimistic",
     id: item.id,
     projectId: item.type === "session" ? item.row.worktree.projectId : item.row.projectId,
     visibleFields: item.presentation,
   };
-  const hiddenFields = persistentFilterHiddenFields(item);
-  if (hiddenFields !== undefined) {
-    candidate.hiddenFields = hiddenFields;
-  }
-  return candidate;
-}
-
-function persistentFilterHiddenFields(
-  item: DashboardRowViewportItem,
-): DashboardPersistentFilterHiddenFields | undefined {
-  const fields: DashboardPersistentFilterHiddenFields = {};
-  const branch = item.type === "session" ? item.row.worktree.branch : item.row.branch;
-  if (branch !== item.presentation.title) {
-    fields.branch = branch;
-  }
-  if (item.type === "session") {
-    fields.status = item.row.session.status.value;
-    if (item.row.session.status.reason !== undefined) {
-      fields.reason = item.row.session.status.reason;
-    }
-    if (item.row.session.terminal?.provider !== undefined) {
-      fields.terminal = item.row.session.terminal.provider;
-    }
-  }
-  return Object.keys(fields).length === 0 ? undefined : fields;
 }
 
 function attachPersistentFilterRowMatch(

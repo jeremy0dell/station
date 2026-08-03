@@ -300,13 +300,6 @@ function DashboardViewportRow({
           <Segments segments={layout.segments} />
         </text>
       );
-    case "matchReason":
-      // Explanations are physical viewport rows but deliberately expose no interaction target.
-      return layout === undefined ? null : (
-        <text width="100%" fg={toOpenTuiColor(theme.text.muted)}>
-          <Segments segments={layout.segments} />
-        </text>
-      );
   }
 }
 

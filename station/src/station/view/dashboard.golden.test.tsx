@@ -228,7 +228,7 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("Esc clear");
   });
 
-  it("renders one inert hidden-field explanation under the retained session", async () => {
+  it("ignores branch metadata that is not visible in the dashboard row", async () => {
     const base = manyProjectsSnapshot();
     const snapshot = {
       ...base,
@@ -251,14 +251,10 @@ describe("dashboard golden frames", () => {
     await setup.flush();
 
     const frame = setup.captureCharFrame();
-    expect(frame).toMatchSnapshot();
-    expect(frame).toContain("Readable CLI task");
-    expect(frame).toContain("↳ branch: cli-help-man");
-    const reasonRow = frame.split("\n").findIndex((line) => line.includes("↳ branch:"));
-    const matchColumn = frame.split("\n")[reasonRow]?.indexOf("cli-help-man") ?? -1;
-    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), reasonRow, matchColumn))).toBe(
-      stationColorSnapshotValue(nativeStationTheme.filter.matchBackground),
-    );
+    expect(frame).toContain("FILTER cli-help-man");
+    expect(frame).toContain("0/10 matches");
+    expect(frame).not.toContain("Readable CLI task");
+    expect(frame).not.toContain("↳");
   });
 
   it("clips a long persistent draft at minimum dashboard size", async () => {

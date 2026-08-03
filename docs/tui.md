@@ -254,11 +254,10 @@ match retains only its project context and matching children. Matching children 
 project are temporarily visible while the disclosure marker and `collapsedProjectIds` stay
 unchanged; clearing restores the collapsed view.
 
-Applied matching also searches a distinct hidden branch, raw status value, status reason, and
-terminal provider. A row retained only by one of those fields receives one inert `↳ field: value`
-line, selected in branch → status → reason → terminal order with the exact match highlighted. These
-physical explanation lines affect viewport scrolling but never session counts, overflow totals,
-slots, focus, links, or activation.
+Matching is intentionally limited to text visible in project headers and session rows: project
+label, displayed title, agent, and activity. Hidden branch values, provider identifiers, raw status
+values, and generated diagnostic reasons are not searched because they cannot provide a stable,
+user-verifiable result.
 
 Editing `Esc` discards the draft and reconciles back to the prior applied projection. On the
 dashboard, `Esc` clears an applied filter before the existing popup-dismiss path; `Q` closes or
@@ -275,7 +274,7 @@ preserve the applied filter; covered footer targets remain inert outside dashboa
 | Editing `Esc` | Cancels legacy draft | Restores the prior hard applied projection |
 | `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
 | Zero matches | Legacy projection behavior | Amber, recoverable soft preview; applying yields an empty dashboard projection |
-| Hidden-only match | Legacy search may retain the row without explanation | Retains the row with one inert highlighted explanation |
+| Hidden metadata only | Legacy search may retain the row | Ignores metadata that is not rendered in the dashboard |
 | Applied footer pointer | No persistent controls | `/ edit` and `Esc clear` share the keyboard transitions |
 | `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining the applied query |
 

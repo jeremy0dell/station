@@ -474,34 +474,6 @@ FILTER working                                 2/10 matches
 "
 `;
 
-exports[`dashboard golden frames renders one inert hidden-field explanation under the retained session 1`] = `
-"                                                                                
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
-─────────────────────────────────────────────────────────────────────────────── 
-FILTER cli-help-man                                                  1/10 match 
-▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
- [1] ○ Readable CLI task                    codex     idle         +14 -6 #70 ✓ 
-       ↳ branch: cli-help-man                                                   
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-─────────────────────────────────────────────────────────────────────────────── 
-/ edit  Esc clear  ↵ activate  N new  Q:close                                   
-"
-`;
-
 exports[`dashboard golden frames clips a long persistent draft at minimum dashboard size 1`] = `
 "                                        
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      

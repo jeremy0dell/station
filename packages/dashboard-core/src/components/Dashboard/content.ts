@@ -9,7 +9,6 @@ import type {
 import type { DashboardFocus, TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
 import type { RowGridRowInput } from "../WorktreeRow/layout.js";
 import {
-  persistentFilterMatchReasonRowGridInput,
   type WorktreeRowTextHighlights,
   worktreeRowGridInput,
   worktreeStyleRowGridInput,
@@ -134,9 +133,6 @@ export function rowGridInputForViewportItem(
   keyByRow: ReadonlyMap<string, string>,
   dashboardFocus?: DashboardFocus,
 ): RowGridRowInput | undefined {
-  if (item.type === "matchReason") {
-    return persistentFilterMatchReasonRowGridInput({ id: item.id, reason: item.reason });
-  }
   if (item.type !== "session" && item.type !== "createLocalRow") {
     return undefined;
   }
