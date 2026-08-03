@@ -133,8 +133,6 @@ export const ImportRecoveryHandlePayloadSchema = z
   })
   .strict();
 
-export type ImportRecoveryHandlePayload = z.infer<typeof ImportRecoveryHandlePayloadSchema>;
-
 export const ForkSessionPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,

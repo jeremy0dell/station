@@ -3,10 +3,10 @@ import {
   chooseNewSessionProjectById,
   createNewSessionFlow,
   createNewSessionNameToken,
-  harnessOptions,
   newSessionActionEnabled,
   newSessionIntentForAction,
   newSessionIntentForInput,
+  selectNewSessionHarnessOptions,
   transitionNewSessionFlow,
   validateNewSessionCreate,
 } from "@station/dashboard-core";
@@ -437,7 +437,7 @@ describe("new session flow", () => {
     const api = snapshot.projects.find((project) => project.id === "api");
     if (api === undefined) throw new Error("missing api project");
 
-    expect(harnessOptions(snapshot, api).map((option) => option.id)).toEqual([
+    expect(selectNewSessionHarnessOptions(snapshot, api).map((option) => option.id)).toEqual([
       "codex",
       "opencode",
       "scripted",

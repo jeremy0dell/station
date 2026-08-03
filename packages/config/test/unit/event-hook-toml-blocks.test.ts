@@ -1,6 +1,5 @@
 import {
   appendObserverEventHookBlock,
-  removeObserverEventHookBlocksById,
   removeObserverEventHookBlocksByIdPredicate,
 } from "@station/config";
 import { describe, expect, it } from "vitest";
@@ -29,64 +28,6 @@ describe("observer event hook TOML blocks", () => {
         "",
       ].join("\n"),
     );
-  });
-
-  it("removes every observer event hook block with the requested id", () => {
-    const source = [
-      "schema_version = 1",
-      "projects = []",
-      "",
-      "[[hooks.event]]",
-      'id = "notify-agent-state"',
-      'command = "osascript"',
-      "",
-      "[hooks.event.filter]",
-      'agent_state = "idle"',
-      "",
-      "[[hooks.event]]",
-      "id = 'notify-agent-state'",
-      'command = "stn"',
-      "",
-      "[hooks.event.filter]",
-      'change_source = "harness_event_report"',
-      "",
-      "[[hooks.event]]",
-      'id = "keep-me"',
-      'command = "stn"',
-      "",
-      "[observer]",
-      'state_dir = "/tmp/station"',
-      "",
-    ].join("\n");
-
-    const result = removeObserverEventHookBlocksById(source, "notify-agent-state");
-
-    expect(result).toBe(
-      [
-        "schema_version = 1",
-        "projects = []",
-        "",
-        "[[hooks.event]]",
-        'id = "keep-me"',
-        'command = "stn"',
-        "",
-        "[observer]",
-        'state_dir = "/tmp/station"',
-      ].join("\n"),
-    );
-  });
-
-  it("leaves the source unchanged when the hook id is absent", () => {
-    const source = [
-      "schema_version = 1",
-      "",
-      "[[hooks.event]]",
-      'id = "keep-me"',
-      'command = "stn"',
-      "",
-    ].join("\n");
-
-    expect(removeObserverEventHookBlocksById(source, "missing")).toBe(source);
   });
 
   it("removes observer event hook blocks selected by id predicate", () => {
