@@ -5,7 +5,7 @@ import {
   sessionRowDisplayTitle,
 } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
-import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
+import { buildRemoveWorktreeCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import { addPendingRemoveWorktreeRow } from "../localRows.js";
@@ -234,7 +234,8 @@ function deleteRemoveWorktree(
 
 function removeWorktreeForceRequired(row: DashboardSessionRow, snapshot: StationSnapshot): boolean {
   return (
-    cleanupForceRequired(row.worktree, "remove-worktree") ||
+    row.worktree.worktree.dirty === true ||
+    isRunningAgentState(row.worktree.agent?.state) ||
     snapshot.sessions.some(
       (session) =>
         session.worktreeId === row.worktree.id && isRunningAgentState(session.status.value),
