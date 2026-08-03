@@ -1,5 +1,5 @@
-import { constants as fsConstants } from "node:fs";
-import { access as nodeAccess } from "node:fs/promises";
+import { constants } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { resolveObserverPaths } from "@station/config";
@@ -345,7 +345,7 @@ async function canExecute(
 ): Promise<boolean> {
   try {
     if (injectedAccess === undefined) {
-      await nodeAccess(path, fsConstants.X_OK);
+      await fsPromises.access(path, constants.X_OK);
     } else {
       await injectedAccess(path);
     }

@@ -1,17 +1,17 @@
 import { dirname } from "node:path";
 import type { SetupConfigMutationPlan } from "@station/config";
 import {
+  type CliSetupAction,
+  type CliSetupCheck,
   CliSetupHarnessIdSchema,
   type CliSetupPlan,
   CliSetupPlanSchema,
   type ProviderHookArtifactOwnership,
-  type CliSetupAction as SetupAction,
-  type CliSetupCheck as SetupCheck,
 } from "@station/contracts";
 import type {
-  SetupPlan as CoreSetupPlan,
   HarnessTrackingAssessment,
   SetupOperation,
+  SetupPlan,
   SupportedHarnessId,
 } from "@station/setup-core";
 import { stationUiInstallHint } from "../../../stationWorkspace.js";
@@ -27,7 +27,7 @@ type SetupHarnessSelection = {
 };
 
 export type JsonSetupPresenterInput = {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly configMutation?: SetupConfigMutationPlan;
 };
@@ -81,7 +81,7 @@ function projectJsonSetupPlan(input: JsonSetupPresenterInput): CliSetupPlan {
   });
 }
 
-function assertMachineProjectionCounts(plan: CoreSetupPlan, checks: readonly SetupCheck[]): void {
+function assertMachineProjectionCounts(plan: SetupPlan, checks: readonly CliSetupCheck[]): void {
   const requiredMissing = checks.filter(
     (check) => check.tier === "required" && check.status !== "ok",
   ).length;
@@ -92,7 +92,7 @@ function assertMachineProjectionCounts(plan: CoreSetupPlan, checks: readonly Set
   }
 }
 
-function projectHarnessSelection(plan: CoreSetupPlan): SetupHarnessSelection {
+function projectHarnessSelection(plan: SetupPlan): SetupHarnessSelection {
   if (plan.selection.outcome !== "selected") {
     return { requiredHarnessIds: [], source: "unresolved" };
   }
@@ -104,10 +104,10 @@ function projectHarnessSelection(plan: CoreSetupPlan): SetupHarnessSelection {
 }
 
 function setupChecks(
-  plan: CoreSetupPlan,
+  plan: SetupPlan,
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
-): SetupCheck[] {
+): CliSetupCheck[] {
   return [
     stateDirCheck(facts),
     socketEvidenceCheck(facts),
@@ -157,7 +157,7 @@ function setupChecks(
   ];
 }
 
-function socketEvidenceCheck(facts: SetupFacts): SetupCheck {
+function socketEvidenceCheck(facts: SetupFacts): CliSetupCheck {
   const details = { command: facts.socketEvidence.command };
   if (facts.socketEvidence.status === "ok") {
     return {
@@ -179,7 +179,7 @@ function socketEvidenceCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function tmuxPopupBindingCheck(facts: SetupFacts): SetupCheck {
+function tmuxPopupBindingCheck(facts: SetupFacts): CliSetupCheck {
   const base = {
     id: "tmux-popup-binding",
     tier: "recommended",
@@ -239,7 +239,7 @@ function tmuxPopupBindingCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function stateDirCheck(facts: SetupFacts): SetupCheck {
+function stateDirCheck(facts: SetupFacts): CliSetupCheck {
   return {
     id: "state-dir",
     tier: "required",
@@ -253,7 +253,7 @@ function stateDirCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function launcherCheck(facts: SetupFacts): SetupCheck {
+function launcherCheck(facts: SetupFacts): CliSetupCheck {
   const launchers = [facts.launchers.station, facts.launchers.ingress, facts.launchers.tmuxPopup];
   const missing = launchers.filter((launcher) => launcher.status === "missing");
   const launcherEntries = [
@@ -312,12 +312,12 @@ function launcherCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function worktrunkShellIntegrationCheck(facts: SetupFacts): SetupCheck {
+function worktrunkShellIntegrationCheck(facts: SetupFacts): CliSetupCheck {
   const integration = facts.worktrunkShellIntegration;
   const details: Record<string, string> = {};
   if (integration.shell !== undefined) details.shell = integration.shell;
   if (integration.rcPath !== undefined) details.rcPath = integration.rcPath;
-  const check: SetupCheck = {
+  const check: CliSetupCheck = {
     id: "worktrunk-shell-integration",
     tier: "recommended",
     status: integration.status,
@@ -328,7 +328,7 @@ function worktrunkShellIntegrationCheck(facts: SetupFacts): SetupCheck {
   return check;
 }
 
-function stationUiCheck(facts: SetupFacts): SetupCheck {
+function stationUiCheck(facts: SetupFacts): CliSetupCheck {
   if (facts.stationUi.status === "installed") {
     return {
       id: "station-ui",
@@ -356,7 +356,7 @@ function stationUiCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function worktrunkHooksCheck(facts: SetupFacts): SetupCheck {
+function worktrunkHooksCheck(facts: SetupFacts): CliSetupCheck {
   if (facts.worktrunk.status !== "ok") {
     return {
       id: "worktrunk-hooks",
@@ -409,10 +409,10 @@ function worktrunkAutomationDetails(
 }
 
 function harnessTrackingChecks(
-  plan: CoreSetupPlan,
+  plan: SetupPlan,
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
-): SetupCheck[] {
+): CliSetupCheck[] {
   const harnessIds = plan.evidence.harnessTracking.map((tracking) => tracking.harnessId);
   const required = new Set(harnessSelection.requiredHarnessIds);
   return harnessIds.map((harnessId) =>
@@ -421,12 +421,12 @@ function harnessTrackingChecks(
 }
 
 function harnessTrackingCheck(
-  plan: CoreSetupPlan,
+  plan: SetupPlan,
   facts: SetupFacts,
   harnessId: SupportedHarnessId,
   required: boolean,
   selectionSource: SetupHarnessSelection["source"],
-): SetupCheck {
+): CliSetupCheck {
   const harnessLabel =
     facts.harnesses.find((candidate) => candidate.id === harnessId)?.label ?? harnessId;
   const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
@@ -470,7 +470,7 @@ function harnessTrackingPresentation(
   harnessId: SupportedHarnessId,
   harnessLabel: string,
   required: boolean,
-): Pick<SetupCheck, "status" | "message"> {
+): Pick<CliSetupCheck, "status" | "message"> {
   const unavailableStatus = required ? "missing" : "warning";
   switch (assessment.state) {
     case "not-applicable":
@@ -522,7 +522,7 @@ function addHookOwnershipDetails(
   }
 }
 
-function xcodeChecks(facts: SetupFacts): SetupCheck[] {
+function xcodeChecks(facts: SetupFacts): CliSetupCheck[] {
   // Only surface a row when there is something to fix: a macOS host missing the
   // Command Line Tools. Healthy or non-macOS hosts add no noise to the plan.
   if (facts.xcode.status !== "missing") return [];
@@ -542,7 +542,7 @@ function dependencyCheck(input: {
   label: string;
   missingMessage: string;
   dependency: SetupFacts["worktrunk"];
-}): SetupCheck {
+}): CliSetupCheck {
   const details: Record<string, string> = { command: input.dependency.command };
   if (input.dependency.version !== undefined) details.version = input.dependency.version;
   if (input.dependency.resolvedPath !== undefined) {
@@ -559,7 +559,7 @@ function dependencyCheck(input: {
   };
 }
 
-function diffnavCheck(facts: SetupFacts): SetupCheck {
+function diffnavCheck(facts: SetupFacts): CliSetupCheck {
   const details: Record<string, string> = { command: facts.diffnav.command };
   if (facts.diffnav.resolvedPath !== undefined) details.resolvedPath = facts.diffnav.resolvedPath;
   if (facts.diffnav.status === "ok") {
@@ -584,7 +584,7 @@ function diffnavCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function gitDeltaCheck(facts: SetupFacts): SetupCheck {
+function gitDeltaCheck(facts: SetupFacts): CliSetupCheck {
   const details: Record<string, string> = { command: facts.gitDelta.command };
   if (facts.gitDelta.resolvedPath !== undefined) details.resolvedPath = facts.gitDelta.resolvedPath;
   if (facts.gitDelta.status === "ok") {
@@ -610,9 +610,9 @@ function gitDeltaCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-type GitCheckAssessment = Pick<SetupCheck, "status" | "message" | "details">;
+type GitCheckAssessment = Pick<CliSetupCheck, "status" | "message" | "details">;
 
-function gitCheck(facts: SetupFacts): SetupCheck {
+function gitCheck(facts: SetupFacts): CliSetupCheck {
   const assessment = assessGit(facts.git);
   return {
     id: "git-project",
@@ -644,7 +644,7 @@ function assessGit(git: SetupFacts["git"]): GitCheckAssessment {
   };
 }
 
-function harnessCheck(facts: SetupFacts, harnessSelection: SetupHarnessSelection): SetupCheck {
+function harnessCheck(facts: SetupFacts, harnessSelection: SetupHarnessSelection): CliSetupCheck {
   const available = facts.harnesses.filter((harness) => harness.status === "ok");
   const details: Record<string, string> = {
     available: available.map((harness) => harness.id).join(","),
@@ -734,7 +734,7 @@ function selectedHarnessMessage(
   return `${selectedLabels[0]} is preserved as the configured default agent CLI.`;
 }
 
-function configCheck(facts: SetupFacts): SetupCheck {
+function configCheck(facts: SetupFacts): CliSetupCheck {
   if (facts.config.status === "missing") {
     return {
       id: "config",
@@ -785,7 +785,7 @@ function configCheck(facts: SetupFacts): SetupCheck {
   };
 }
 
-function configDiagnosticsChecks(facts: SetupFacts): SetupCheck[] {
+function configDiagnosticsChecks(facts: SetupFacts): CliSetupCheck[] {
   if (facts.config.status !== "valid") {
     return [];
   }
@@ -831,8 +831,8 @@ function setupActions(
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
   configWrite: SetupConfigMutationPlan | undefined,
-): SetupAction[] {
-  const actions: SetupAction[] = [];
+): CliSetupAction[] {
+  const actions: CliSetupAction[] = [];
   for (const operation of operations) {
     switch (operation.kind) {
       case "install-tool": {
@@ -965,7 +965,7 @@ function installToolPresentation(tool: Extract<SetupOperation, { kind: "install-
   }
 }
 
-function persistedTmuxPopupAction(facts: SetupFacts, selected: boolean): SetupAction {
+function persistedTmuxPopupAction(facts: SetupFacts, selected: boolean): CliSetupAction {
   if (facts.tmuxBinding.status === "conflict") {
     throw new Error("A conflicting tmux popup binding cannot be persisted.");
   }
@@ -988,7 +988,7 @@ function persistedTmuxPopupAction(facts: SetupFacts, selected: boolean): SetupAc
   };
 }
 
-function liveTmuxPopupAction(facts: SetupFacts, selected: boolean): SetupAction {
+function liveTmuxPopupAction(facts: SetupFacts, selected: boolean): CliSetupAction {
   if (facts.tmuxBinding.status === "conflict") {
     throw new Error("A conflicting tmux popup binding cannot be loaded.");
   }
@@ -1032,8 +1032,8 @@ function installAction(
   formula: string,
   brew: SetupFacts["brew"],
   selected: boolean,
-): SetupAction {
-  const action: SetupAction = {
+): CliSetupAction {
+  const action: CliSetupAction = {
     id,
     kind: brew.status === "ok" ? "brew-install" : "noop",
     tier: "required",
@@ -1052,7 +1052,7 @@ function installAction(
 function configWriteActions(
   configWrite: SetupConfigMutationPlan | undefined,
   hasSelectedHarness: boolean,
-): SetupAction[] {
+): CliSetupAction[] {
   if (!hasSelectedHarness) return [];
   if (configWrite === undefined || configWrite.operation === "none") {
     return [];
@@ -1070,7 +1070,7 @@ function configWriteActions(
       },
     ];
   }
-  const mkdirAction: SetupAction = {
+  const mkdirAction: CliSetupAction = {
     id: "mkdir-config-dir",
     kind: "mkdir",
     tier: "required",
@@ -1079,7 +1079,7 @@ function configWriteActions(
     message: "Create the parent directory for the STATION config file.",
     path: configWrite.path,
   };
-  const writeAction: SetupAction = {
+  const writeAction: CliSetupAction = {
     id: configWrite.operation === "create" ? "write-config" : "update-config",
     kind: "write-config",
     tier: "required",

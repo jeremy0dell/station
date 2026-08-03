@@ -4,15 +4,14 @@ import {
   createObserverReap,
   type ObserverDuplicateCleanupExclusion,
   type ObserverDuplicateProcessEvidenceSource,
+  type ObserverProcessEntry,
   type ObserverReap,
-  type ObserverReapOutcome as ReapOutcome,
-  type ObserverReapTarget as ReapTarget,
-  type ObserverProcessEntry as SharedObserverProcessEntry,
+  type ObserverReapOutcome,
+  type ObserverReapTarget,
 } from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
 
-export type ObserverProcessEntry = SharedObserverProcessEntry;
-export type { ReapOutcome, ReapTarget };
+export type { ObserverProcessEntry, ObserverReapOutcome, ObserverReapTarget };
 
 export type ObserverReapDeps = {
   listObserverProcesses?: () => ObserverProcessEntry[];
@@ -61,7 +60,7 @@ export function runObserverReap(
   socketPath: string,
   options: { force: boolean; graceMs?: number },
   reap: ObserverReap,
-): Promise<ReapOutcome> {
+): Promise<ObserverReapOutcome> {
   return reap(socketPath, options);
 }
 

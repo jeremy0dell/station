@@ -12,8 +12,8 @@ import {
 import {
   createLocalObserverReap,
   type ObserverReapDeps,
-  type ReapOutcome,
-  type ReapTarget,
+  type ObserverReapOutcome,
+  type ObserverReapTarget,
   runObserverReap,
 } from "../observerReap.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
@@ -21,7 +21,7 @@ import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
 export type ObserverCommandResult =
   | ObserverStatus
   | ObserverStopReceipt
-  | ReapOutcome
+  | ObserverReapOutcome
   | {
       status: "foreground-exited";
       code: number;
@@ -138,8 +138,8 @@ export function observerCommandSummary(result: ObserverCommandResult): unknown {
       socketPath: plan.socketPath,
       keeper: plan.keeper ?? null,
       duplicates: plan.duplicates,
-      targets: plan.targets.map((target: ReapTarget) => target.pid),
-      automaticEligibility: plan.targets.map((target: ReapTarget) => ({
+      targets: plan.targets.map((target: ObserverReapTarget) => target.pid),
+      automaticEligibility: plan.targets.map((target: ObserverReapTarget) => ({
         pid: target.pid,
         ...target.automaticEligibility,
       })),

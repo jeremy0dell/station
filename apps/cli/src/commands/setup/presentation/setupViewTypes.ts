@@ -1,9 +1,5 @@
 import type { CliSetupAction, CliSetupCheck, CliSetupPlan } from "@station/contracts";
-import type {
-  SetupPlan as CoreSetupPlan,
-  SetupOperation,
-  SupportedHarnessId,
-} from "@station/setup-core";
+import type { SetupOperation, SetupPlan, SupportedHarnessId } from "@station/setup-core";
 import type { SetupMessageRef } from "@station/setup-messages";
 
 export type SetupDisplayDetail = {
@@ -67,7 +63,7 @@ export type SetupApplyPresentation =
   | { readonly kind: "message"; readonly message: SetupMessageRef }
   | { readonly kind: "config-write-failed"; readonly message: SetupMessageRef };
 
-export type SetupViewResult = CoreSetupPlan["result"] & {
+export type SetupViewResult = SetupPlan["result"] & {
   readonly apply: SetupApplyPresentation;
 };
 
@@ -79,7 +75,7 @@ export type SetupPresentationHarnessSelection = {
 
 export type ProjectSetupView = {
   readonly generatedAt: string;
-  readonly mode: CoreSetupPlan["mode"];
+  readonly mode: SetupPlan["mode"];
   readonly title: SetupMessageRef;
   readonly selection: {
     readonly source: SetupPresentationHarnessSelection["source"];

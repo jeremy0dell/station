@@ -8,9 +8,9 @@ import type {
   StationEvent,
   StationSnapshot,
 } from "@station/contracts";
-import type { TuiCommandCompletion, TuiObserverService } from "@station/dashboard-core";
+import type { ObserverService, StationClientCommandCompletion } from "@station/dashboard-core";
 
-export class FakeTuiObserverService implements TuiObserverService {
+export class FakeTuiObserverService implements ObserverService {
   readonly dispatched: StationCommand[] = [];
   readonly events: StationEvent[] = [];
   readonly reconcileReasons: Array<string | undefined> = [];
@@ -24,7 +24,7 @@ export class FakeTuiObserverService implements TuiObserverService {
     accepted: true,
     status: "accepted",
   };
-  nextCompletion: TuiCommandCompletion = {
+  nextCompletion: StationClientCommandCompletion = {
     status: "succeeded",
     commandId: "cmd_tui_1",
   };
@@ -71,7 +71,7 @@ export class FakeTuiObserverService implements TuiObserverService {
     return this.nextReceipt;
   }
 
-  async waitForCommandCompletion(commandId: string): Promise<TuiCommandCompletion> {
+  async waitForCommandCompletion(commandId: string): Promise<StationClientCommandCompletion> {
     this.waitedForCommandIds.push(commandId);
     return this.nextCompletion;
   }

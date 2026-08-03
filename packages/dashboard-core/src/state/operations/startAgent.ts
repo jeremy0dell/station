@@ -8,7 +8,7 @@ import {
 } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
-import type { TuiObserverService } from "../../services/types.js";
+import type { ObserverService } from "../../services/types.js";
 import { bindPendingStartAgentRow } from "../localRows.js";
 import { replaceSnapshot } from "../screen.js";
 import type { DashboardState } from "../types.js";
@@ -19,7 +19,7 @@ export type FocusStartedAgentRow = (snapshot: StationSnapshot, row: WorktreeRow)
 
 export async function runStartAgentOperation(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   runtime: CommandRuntimeOptions,
   operation: StartAgentOperation | ResumeAgentOperation,
   markStartAgentRowFailed: (localId: string) => void,
@@ -82,7 +82,7 @@ export async function runStartAgentOperation(
 
 async function focusStartedAgentAfterSnapshotCatchup(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   operation: StartAgentOperation | ResumeAgentOperation,
   clearPendingStartAgentRow: (localId: string) => void,
   focusStartedAgentRow: FocusStartedAgentRow,

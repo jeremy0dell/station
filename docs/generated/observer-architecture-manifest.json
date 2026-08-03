@@ -2966,16 +2966,13 @@
           "specifier": "@station/observability",
           "resolvedPath": "packages/observability/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "createErrorEnvelope as createObservabilityErrorEnvelope",
-            "toSafeError as toObservabilitySafeError"
-          ]
+          "bindings": ["* as observability"]
         },
         {
           "specifier": "@station/observability",
           "resolvedPath": "packages/observability/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ErrorEnvelopeInput", "SafeErrorFallback"]
+          "bindings": ["ErrorEnvelopeInput"]
         }
       ]
     },
@@ -5059,12 +5056,6 @@
           "purpose": null
         },
         {
-          "name": "ReconcileWorktreeDisplayTitleInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "RecordProviderObservationInput",
           "kind": "type",
           "role": null,
@@ -6806,8 +6797,7 @@
             "ObserverIdFactory",
             "PersistReconcileResultInput",
             "PersistedSession",
-            "PersistedWorktreeDisplayTitle",
-            "ReconcileWorktreeDisplayTitleInput"
+            "PersistedWorktreeDisplayTitle"
           ]
         },
         {
@@ -7176,12 +7166,6 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
-        },
-        {
-          "name": "ReconcileWorktreeDisplayTitleInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
         },
         {
           "name": "RecordProviderObservationInput",
@@ -8279,12 +8263,6 @@
           "purpose": null
         },
         {
-          "name": "ReconcileWorktreeDisplayTitleInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "RecordProviderObservationInput",
           "kind": "type",
           "role": null,
@@ -8407,7 +8385,7 @@
           "specifier": "./types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
-          "bindings": ["PersistedWorktreeDisplayTitle", "ReconcileWorktreeDisplayTitleInput"]
+          "bindings": ["PersistedWorktreeDisplayTitle"]
         },
         {
           "specifier": "../sqlite/driver.js",
@@ -8985,8 +8963,8 @@
             "PersistedProviderObservation",
             "PersistedSessionHarnessExecution",
             "PersistedSessionTurnReadiness",
+            "PersistedWorktreeDisplayTitle",
             "ReconcileStore",
-            "ReconcileWorktreeDisplayTitleInput",
             "SessionHarnessDerivedStateRepair",
             "SessionStore",
             "WorktreeMetadataStore"

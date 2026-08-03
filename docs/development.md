@@ -1088,6 +1088,10 @@ terminal adapter.
 
 ## TypeScript And Data Rules
 
+- Use canonical symbol names. The Biome `no-one-to-one-aliases` plugin rejects
+  direct named type aliases and renamed named imports or exports. Namespace
+  imports and constructed types remain valid; a compatibility boundary must use
+  a local `biome-ignore lint/plugin` suppression with a concrete reason.
 - `exactOptionalPropertyTypes` is intentional. Preserve the difference between an absent optional field and a field set to `undefined`.
 - For complex mappers, persistence row conversion, diagnostics construction, error shaping, and provider payload parsing, prefer typed local builders with explicit `if` assignments.
 - Small conditional spreads are acceptable when local and obvious.

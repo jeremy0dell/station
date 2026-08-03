@@ -1,4 +1,4 @@
-import { setTimeout as sleep } from "node:timers/promises";
+import * as timers from "node:timers/promises";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { describe, expect, it } from "vitest";
 import {
@@ -802,7 +802,7 @@ describe("tmux popup", () => {
       openTmuxPopup({
         env: {},
         runner: async (input) => {
-          if (input.args?.[0] === "display-popup") await sleep(10);
+          if (input.args?.[0] === "display-popup") await timers.setTimeout(10);
           if (input.args?.includes("@station_popup_ui_signature")) {
             return tmuxCommandResult(input, `${defaultSignature}\n`);
           }

@@ -29,17 +29,15 @@ import {
   toIsoTimestamp,
 } from "@station/runtime";
 import { normalizeWorktrunkLifecycleEvent } from "@station/worktrunk";
+import type { ExecutableArgv } from "../selfExec.js";
 import { deliverProviderHookWithSpooling, type ProviderDeliveryAttempt } from "./deliveryPolicy.js";
-import type {
-  ProviderHookObserverCommand,
-  ProviderHookObserverStartupDeps,
-} from "./observerStartup.js";
+import type { ProviderHookObserverStartupDeps } from "./observerStartup.js";
 import { writeProviderHookSpoolRecord } from "./spool.js";
 
 export type ProviderHookSenderOptions = {
   paths: ObserverPaths;
   configPath?: string;
-  observerCommand?: ProviderHookObserverCommand;
+  observerCommand?: ExecutableArgv;
   autoStart?: boolean;
   deliveryTimeoutMs?: number;
   startupTimeoutMs?: number;

@@ -31,12 +31,6 @@ const maximumProviderHookHealthRequestTimeoutMs = 5000;
 const defaultProviderHookClientTimeoutMs = 500;
 const providerHookHealthRetryIntervalMs = 25;
 
-/**
- * An executable and fixed observer entry prefix forwarded unchanged until
- * startup appends observer socket, state, and config flags.
- */
-export type ProviderHookObserverCommand = ExecutableArgv;
-
 export type ProviderHookObserverStatus =
   | {
       status: "running";
@@ -64,7 +58,7 @@ export type ProviderHookObserverStartupDeps = {
 
 export type SpawnProviderHookObserverInput = {
   paths: ObserverPaths;
-  observerCommand?: ProviderHookObserverCommand;
+  observerCommand?: ExecutableArgv;
   configPath?: string;
 };
 
@@ -74,7 +68,7 @@ export type ChildProcessLike = Pick<ChildProcess, "pid" | "unref"> & {
 
 export type ProviderHookObserverStartupOptions = {
   configPath?: string;
-  observerCommand?: ProviderHookObserverCommand;
+  observerCommand?: ExecutableArgv;
   paths: ObserverPaths;
   timeoutMs?: number;
   /** Absolute startup deadline shared across provider-hook readiness phases. */

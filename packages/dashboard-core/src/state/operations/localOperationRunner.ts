@@ -2,7 +2,7 @@ import type { CommandId, SafeError, StationCommand, StationEvent } from "@statio
 import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
 import type { TuiFolderService } from "../../services/folderService.js";
-import type { TuiObserverService } from "../../services/types.js";
+import type { ObserverService } from "../../services/types.js";
 import {
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
@@ -126,7 +126,7 @@ function addRenameSuccessToast(store: StoreApi<DashboardState>): void {
 
 export function createTuiLocalOperationRunner(input: {
   getStore: () => StoreApi<DashboardState>;
-  service: TuiObserverService;
+  service: ObserverService;
   folderService: TuiFolderService;
   runtime: CommandRuntimeOptions;
   clientLabel: string;
@@ -272,7 +272,7 @@ export function createTuiLocalOperationRunner(input: {
 
 async function runSetProjectDefaultHarnessOperation(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   command: Extract<StationCommand, { type: "project.setDefaultHarness" }>,
   clientLabel: string,
   markCommandFailureHandled: (commandId: CommandId) => void,
@@ -320,7 +320,7 @@ async function runSetProjectDefaultHarnessOperation(
 
 async function runRemoveProjectOperation(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   command: Extract<StationCommand, { type: "project.remove" }>,
   clientLabel: string,
   markCommandFailureHandled: (commandId: CommandId) => void,
@@ -411,7 +411,7 @@ async function runSearchProjectDirectoriesOperation(
 
 async function runForkSessionOperation(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   command: Extract<StationCommand, { type: "session.fork" }>,
   clientLabel: string,
 ): Promise<void> {
@@ -443,7 +443,7 @@ async function runForkSessionOperation(
 
 async function runAddProjectOperation(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   command: Extract<StationCommand, { type: "project.add" }>,
   clientLabel: string,
 ): Promise<void> {

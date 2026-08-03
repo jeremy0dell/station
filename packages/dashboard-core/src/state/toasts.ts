@@ -1,8 +1,8 @@
-import type { TuiToast } from "../services/types.js";
+import type { ClientNotice } from "../services/types.js";
 import { toastExpiryMs } from "./timing.js";
 import type { DashboardScreenView, DashboardStateView, TuiState, TuiToastEntry } from "./types.js";
 
-export function addTuiToast(state: TuiState, toast: TuiToast, nowMs = Date.now()): TuiState {
+export function addTuiToast(state: TuiState, toast: ClientNotice, nowMs = Date.now()): TuiState {
   const current = expireTuiToasts(state, nowMs);
   const active = activeTuiToast(current);
 
@@ -25,7 +25,7 @@ export function addTuiToast(state: TuiState, toast: TuiToast, nowMs = Date.now()
 
 export function addTuiToasts(
   state: TuiState,
-  toasts: readonly TuiToast[],
+  toasts: readonly ClientNotice[],
   nowMs = Date.now(),
 ): TuiState {
   if (toasts.length === 0) {
@@ -88,7 +88,7 @@ export function nextTuiToastExpiry(state: Pick<DashboardStateView, "toasts">): n
   }, undefined);
 }
 
-export function toastKey(toast: TuiToast): string {
+export function toastKey(toast: ClientNotice): string {
   return JSON.stringify([
     toast.kind,
     toast.message,
@@ -99,13 +99,13 @@ export function toastKey(toast: TuiToast): string {
   ]);
 }
 
-function toastEntryId(toast: TuiToast, nowMs: number): string {
+function toastEntryId(toast: ClientNotice, nowMs: number): string {
   return `${nowMs}:${toastKey(toast)}`;
 }
 
 function createToastEntry(
   id: string,
-  toast: TuiToast,
+  toast: ClientNotice,
   createdAt: number,
   updatedAt: number,
 ): TuiToastEntry {

@@ -1,5 +1,5 @@
 import type { SetupConfigMutationPlan } from "@station/config";
-import type { SetupPlan as CoreSetupPlan } from "@station/setup-core";
+import type { SetupPlan } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
@@ -29,7 +29,7 @@ export type {
 } from "./setupViewTypes.js";
 
 export type ProjectSetupViewInput = {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly configMutation?: SetupConfigMutationPlan;
 };
@@ -78,7 +78,7 @@ export function projectSetupView(input: ProjectSetupViewInput): ProjectSetupView
   };
 }
 
-function assertPresentationCounts(plan: CoreSetupPlan, checks: readonly SetupViewCheck[]): void {
+function assertPresentationCounts(plan: SetupPlan, checks: readonly SetupViewCheck[]): void {
   const requiredMissing = checks.filter(
     (check) => check.tier === "required" && check.status !== "ok",
   ).length;
@@ -89,10 +89,7 @@ function assertPresentationCounts(plan: CoreSetupPlan, checks: readonly SetupVie
   }
 }
 
-function projectRecovery(
-  plan: CoreSetupPlan,
-  facts: SetupFacts,
-): readonly SetupRecoveryInstruction[] {
+function projectRecovery(plan: SetupPlan, facts: SetupFacts): readonly SetupRecoveryInstruction[] {
   if (plan.result.readiness.requiredMissing === 0) {
     return [
       { kind: "command", command: [facts.launchers.station.command, "doctor"] },

@@ -3,7 +3,7 @@ import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
-import type { TuiToast } from "@station/dashboard-core";
+import type { ClientNotice } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
@@ -12,7 +12,7 @@ import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.j
 import { DashboardRoot } from "./DashboardRoot.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
-const NOTICE: TuiToast = {
+const NOTICE: ClientNotice = {
   kind: "error",
   message:
     "Worktrunk failed to remove the selected checkout because the main worktree cannot be removed while Station is running there.",

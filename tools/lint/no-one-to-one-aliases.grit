@@ -1,0 +1,13 @@
+language js(typescript)
+
+or {
+  TsTypeAliasDeclaration(ty=$reference) as $violation where {
+    $reference <: TsReferenceType(),
+    not $reference <: TsReferenceType(type_arguments=TsTypeArguments())
+  },
+  JsNamedImportSpecifier() as $violation,
+  JsExportNamedSpecifier() as $violation,
+  JsExportNamedFromSpecifier(export_as=JsExportAsClause()) as $violation
+} where {
+  register_diagnostic(span=$violation, message="Use the canonical symbol name instead of a one-to-one alias.")
+}

@@ -7,8 +7,9 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!station"]
+    "includes": ["**"]
   },
+  "plugins": ["./tools/lint/no-one-to-one-aliases.grit"],
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -19,5 +20,29 @@
     "rules": {
       "recommended": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["station/**"],
+      "formatter": {
+        "enabled": false
+      },
+      "linter": {
+        "rules": {
+          "recommended": false,
+          "a11y": "off",
+          "complexity": "off",
+          "correctness": "off",
+          "nursery": "off",
+          "performance": "off",
+          "security": "off",
+          "style": "off",
+          "suspicious": "off"
+        }
+      },
+      "assist": {
+        "enabled": false
+      }
+    }
+  ]
 }

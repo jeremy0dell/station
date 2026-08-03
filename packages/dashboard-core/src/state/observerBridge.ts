@@ -2,7 +2,7 @@ import type { StationClientRuntime, StationClientRuntimeHooks } from "@station/c
 import type { SafeError, StationSnapshot } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast } from "../services/errors/errors.js";
-import type { TuiObserverService } from "../services/types.js";
+import type { ObserverService } from "../services/types.js";
 import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import type { TuiLocalOperationRunner } from "./operations/localOperationRunner.js";
 import { replaceSnapshot } from "./screen.js";
@@ -73,9 +73,9 @@ export function createObserverBridgeHooks(deps: {
 // base stays converged with what lands in the store; a snapshot applied around
 // the runtime would be silently reverted by the next incremental event.
 export function bridgeOperationService(
-  service: TuiObserverService,
+  service: ObserverService,
   clientRuntime: StationClientRuntime,
-): TuiObserverService {
+): ObserverService {
   return {
     loadSnapshot: async () => {
       await clientRuntime.refresh("tui.operation");

@@ -1,7 +1,7 @@
 import type { ProjectId, SafeError, SessionId } from "@station/contracts";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
-import type { TuiToast } from "../services/types.js";
+import type { ClientNotice } from "../services/types.js";
 import { focusDashboardProjectHeader } from "./dashboardFocus.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
@@ -68,7 +68,7 @@ export type DashboardActions = {
   /** Remove transient row focus without changing other dashboard state. */
   clearDashboardFocus(): void;
   /** Surface a client-side toast (e.g. an unresolved-harness notice). */
-  pushToast(toast: TuiToast): void;
+  pushToast(toast: ClientNotice): void;
   dismissToasts(): void;
   expireToasts(nowMs?: number): void;
   refreshActiveToastExpiry(nowMs?: number): void;

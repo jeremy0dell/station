@@ -38,7 +38,7 @@ const fileStatusSchema = z.enum([
   "read_error",
   "budget_exhausted",
 ]);
-const exitDispositionSchema = z.discriminatedUnion("type", [
+const BinarySmokeExitDispositionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("code"), code: z.number().int() }).strict(),
   z.object({ type: z.literal("signal"), signal: z.string().min(1) }).strict(),
   z.object({ type: z.literal("spawn_error"), message: z.string() }).strict(),
@@ -92,7 +92,7 @@ const runtimePidfileSchema = z
     buildIdentity: z.string().min(12).optional(),
   })
   .strict();
-const manifestSchema = z
+const BinarySmokeEvidenceManifestSchema = z
   .object({
     schemaVersion: z.literal(1),
     kind: z.literal("station-binary-smoke-failure"),
@@ -119,7 +119,7 @@ const manifestSchema = z
                 .object({ artifact: z.string().min(1), argv: z.array(z.string()) })
                 .strict()
                 .optional(),
-              exitDisposition: exitDispositionSchema,
+              exitDisposition: BinarySmokeExitDispositionSchema,
             })
             .strict(),
           artifacts: z
@@ -181,10 +181,7 @@ const allowedLogAttributes = new Set([
   "version",
 ]);
 
-export {
-  exitDispositionSchema as BinarySmokeExitDispositionSchema,
-  manifestSchema as BinarySmokeEvidenceManifestSchema,
-};
+export { BinarySmokeEvidenceManifestSchema, BinarySmokeExitDispositionSchema };
 
 export async function captureBinarySmokeEvidence(input) {
   validateEvidenceSources(input.stateDir, input.socketPath, input.smokeRoot);
@@ -231,7 +228,7 @@ export async function captureBinarySmokeEvidence(input) {
   }
 
   const redaction = mergeRedactionReports(state.redactionReports, capturedAt);
-  const manifest = manifestSchema.parse({
+  const manifest = BinarySmokeEvidenceManifestSchema.parse({
     schemaVersion: 1,
     kind: "station-binary-smoke-failure",
     status: input.status,
@@ -300,13 +297,13 @@ export async function finalizeBinarySmokeEvidence(input) {
   if (Buffer.byteLength(source) > manifestMaxBytes) {
     throw new Error("Binary smoke evidence manifest exceeds its read limit.");
   }
-  const manifest = manifestSchema.parse(JSON.parse(source));
+  const manifest = BinarySmokeEvidenceManifestSchema.parse(JSON.parse(source));
   const [round] = manifest.rounds;
   if (round === undefined) throw new Error("Binary smoke evidence manifest has no round.");
   round.cleanup = cleanupSchema.parse(input.cleanup);
   round.runtime.processes = input.processes.map((process) => runtimeProcessSchema.parse(process));
   manifest.warnings.push(...input.warnings.map((warning) => boundedText(warning, 1_000)));
-  const bytes = jsonBytes(manifestSchema.parse(manifest));
+  const bytes = jsonBytes(BinarySmokeEvidenceManifestSchema.parse(manifest));
   if (bytes.length > manifestMaxBytes) {
     throw new Error(`Binary smoke evidence manifest exceeded ${manifestMaxBytes} bytes.`);
   }
@@ -338,7 +335,7 @@ function failureRecord(input, state) {
   collectCorrelations(redactedMessage, state.correlations);
   const result = {
     message: boundedText(redactedMessage, 16_384),
-    exitDisposition: exitDispositionSchema.parse(
+    exitDisposition: BinarySmokeExitDispositionSchema.parse(
       redactValue(input.failure?.exitDisposition ?? { type: "unavailable" }, state),
     ),
   };

@@ -10,7 +10,7 @@ import type {
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
 import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
-import type { TuiToast } from "../services/types.js";
+import type { ClientNotice } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
 import type { ReadonlyDeep } from "./readonly.js";
 import type { TuiSelectionState } from "./selection/types.js";
@@ -76,6 +76,7 @@ export type DashboardState = TuiViewState & {
 };
 
 /** Temporary private reducer/store alias retained while pure reducer naming is migrated. */
+// biome-ignore lint/plugin: retained compatibility boundary during the reducer naming migration
 export type TuiState = DashboardState;
 
 /** Recursively readonly public projection of the private dashboard store model. */
@@ -92,7 +93,7 @@ export type DashboardViewState = ReadonlyDeep<TuiViewState>;
 
 export type TuiToastEntry = {
   id: string;
-  toast: TuiToast;
+  toast: ClientNotice;
   createdAt: number;
   updatedAt: number;
   expiresAt?: number;

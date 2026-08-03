@@ -8,9 +8,9 @@ import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import {
+  type ClientNotice,
   persistentFilterExperience,
   type DashboardSearchExperience,
-  type TuiToast,
 } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
@@ -69,7 +69,7 @@ const WORKTREE_ERROR_MESSAGE =
   "Worktrunk failed to remove the selected checkout because the main worktree cannot be removed while Station is running there.";
 const WORKTREE_ERROR_HINT =
   "Open a different linked checkout, select the session again, and retry after confirming the worktree path and branch.";
-const WORKTREE_ERROR: TuiToast = {
+const WORKTREE_ERROR: ClientNotice = {
   kind: "error",
   message: WORKTREE_ERROR_MESSAGE,
   hint: WORKTREE_ERROR_HINT,
@@ -92,7 +92,7 @@ describe("dashboard golden frames", () => {
     connection?: StationClientConnectionState;
     dispatchMouse?: (target: StationMouseTarget) => void;
     hoverEnabled?: boolean;
-    toast?: TuiToast;
+    toast?: ClientNotice;
     theme?: StationTheme;
     dashboardSearchExperience?: DashboardSearchExperience;
   }): Promise<RenderedDashboard> {

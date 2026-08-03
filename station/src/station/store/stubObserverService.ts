@@ -2,7 +2,7 @@
 // with mock-mode SafeError (so production code paths run, not bespoke demo state).
 import type { CommandId, SafeError, StationEvent } from "@station/contracts";
 import type { StationStateSource } from "../../sources/types.js";
-import type { TuiObserverService } from "@station/dashboard-core";
+import type { ObserverService } from "@station/dashboard-core";
 
 export const STUB_DISPATCH_DELAY_MS = 900;
 
@@ -14,7 +14,7 @@ export type StationStubObserverServiceOptions = {
 export function createStationStubObserverService(
   source: StationStateSource,
   options: StationStubObserverServiceOptions = {},
-): TuiObserverService {
+): ObserverService {
   const dispatchDelayMs = options.dispatchDelayMs ?? STUB_DISPATCH_DELAY_MS;
   let stubCommandCounter = 0;
 

@@ -15,7 +15,7 @@ import {
 } from "../station/fixtures/scenarios.js";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
-import { routeDashboardMouse as routeDashboardMouseWithEffects } from "./dashboardMouse.js";
+import * as dashboardMouse from "./dashboardMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -78,7 +78,7 @@ function routeDashboardMouse(
   store: DashboardRuntime,
   effects: DashboardRendererEffects = TEST_EFFECTS,
 ): void {
-  routeDashboardMouseWithEffects(target, event, store, effects);
+  dashboardMouse.routeDashboardMouse(target, event, store, effects);
 }
 
 function makeStore(

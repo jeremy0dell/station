@@ -1,5 +1,5 @@
-import { constants as fsConstants } from "node:fs";
-import { access as nodeAccess, stat as nodeStat, realpath } from "node:fs/promises";
+import { constants } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CliEnv } from "../../../env.js";
@@ -109,7 +109,7 @@ async function checkRuntimeLauncher(
 export async function setupLauncherPathsMatch(left: string, right: string): Promise<boolean> {
   if (resolve(left) === resolve(right)) return true;
   try {
-    return (await realpath(left)) === (await realpath(right));
+    return (await fsPromises.realpath(left)) === (await fsPromises.realpath(right));
   } catch {
     return false;
   }
@@ -185,8 +185,8 @@ async function resolveOnPath(
 }
 
 async function executableAccess(path: string): Promise<void> {
-  if (!(await nodeStat(path)).isFile()) {
+  if (!(await fsPromises.stat(path)).isFile()) {
     throw new Error(`${path} is not a regular file.`);
   }
-  await nodeAccess(path, fsConstants.X_OK);
+  await fsPromises.access(path, constants.X_OK);
 }

@@ -47,7 +47,7 @@ export function rowColor(
 }
 
 /** Resolves dashboard-core toast border names without giving core concrete colors. */
-export function toastBorderColor(
+export function toastBorderThemeColor(
   theme: StationTheme,
   name: ToastBorderColorName,
 ): StationSemanticColor {

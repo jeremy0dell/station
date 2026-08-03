@@ -1,4 +1,4 @@
-import { normalize as normalizePath } from "node:path";
+import { normalize } from "node:path";
 import { z } from "zod";
 import { ProviderIdSchema } from "./ids.js";
 import type {
@@ -183,7 +183,7 @@ export function sameObservedPath(left: string, right: string): boolean {
 }
 
 export function normalizeObservedPath(value: string): string {
-  const normalized = normalizePath(value.trim());
+  const normalized = normalize(value.trim());
   const withoutTrailingSlash = normalized.length > 1 ? normalized.replace(/\/+$/g, "") : normalized;
   return withoutTrailingSlash.startsWith("/private/var/")
     ? `/var/${withoutTrailingSlash.slice("/private/var/".length)}`

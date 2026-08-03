@@ -24,7 +24,6 @@ import type {
   PersistedSession,
   PersistedWorktreeDisplayTitle,
   PersistReconcileResultInput,
-  ReconcileWorktreeDisplayTitleInput,
 } from "./types.js";
 import {
   deleteWorktreeDisplayTitle,
@@ -349,7 +348,7 @@ function resolveReconcileWorktreeDisplayTitles(
   database: SqlDatabase,
   input: PersistReconcileResultInput,
   observedAt: string,
-): ReconcileWorktreeDisplayTitleInput[] {
+): PersistedWorktreeDisplayTitle[] {
   if (input.worktreeDisplayTitles !== undefined) return input.worktreeDisplayTitles;
 
   const canonicalTitles = listWorktreeDisplayTitles(database);

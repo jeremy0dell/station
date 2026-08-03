@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { SetupConfigMutationPlan as ConfigWritePlan } from "@station/config";
+import type { SetupConfigMutationPlan } from "@station/config";
 import {
   type HarnessSelectionFacts,
   type HarnessSelectionResolution,
@@ -19,7 +19,7 @@ import { projectSetupView } from "../../src/commands/setup/presentation/projectS
 import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
 
 type BuildSetupPlanOptions = {
-  readonly configWrite?: ConfigWritePlan;
+  readonly configWrite?: SetupConfigMutationPlan;
   readonly harnessSelection?: HarnessSelectionResolution;
   readonly harnessTrackingSelection?: SetupPlanningIntent["harnessTrackingSelection"];
   readonly linkStationLaunchers?: boolean;
@@ -1522,7 +1522,7 @@ function harnesses(available: readonly SupportedHarnessId[]): SetupHarnessFact[]
   }));
 }
 
-function createConfigWrite(): ConfigWritePlan {
+function createConfigWrite(): SetupConfigMutationPlan {
   return {
     operation: "create",
     path: "/tmp/config.toml",

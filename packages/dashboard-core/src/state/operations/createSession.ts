@@ -1,7 +1,7 @@
 import type { CommandId, SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
-import type { TuiObserverService } from "../../services/types.js";
+import type { ObserverService } from "../../services/types.js";
 import { bindPendingCreateSessionRow, removeCreateSessionLocalRow } from "../localRows.js";
 import type { DashboardState } from "../types.js";
 import {
@@ -12,7 +12,7 @@ import type { CreateSessionOperation } from "./types.js";
 
 export async function runCreateSessionOperation(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   runtime: CommandRuntimeOptions,
   operation: CreateSessionOperation,
   markCreateSessionRowFailed: (localId: string, error: SafeError) => void,

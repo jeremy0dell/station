@@ -1,4 +1,4 @@
-import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
+import type { WorktreeRow } from "@station/contracts";
 import { type TextMatchRange, textMatchSegments } from "../TextMatch/segments.js";
 import {
   type RowColor,
@@ -35,7 +35,7 @@ export function worktreeRowGridInput({
   dimmed,
 }: {
   id?: string;
-  row: WorktreeRowModel;
+  row: WorktreeRow;
   slot: string | undefined;
   title?: string | undefined;
   presentation?: WorktreeRowPresentation | undefined;
@@ -225,7 +225,7 @@ function identitySegments(
 }
 
 export function worktreeRowVisibleFields(
-  row: WorktreeRowModel,
+  row: WorktreeRow,
   title?: string,
 ): WorktreeRowPresentation {
   return {
@@ -235,7 +235,7 @@ export function worktreeRowVisibleFields(
   };
 }
 
-function activityCellForRow(row: WorktreeRowModel): {
+function activityCellForRow(row: WorktreeRow): {
   text: string;
   importance: RowGridCellImportance;
 } {
@@ -259,7 +259,7 @@ function activityCellForRow(row: WorktreeRowModel): {
 
 // Keep the branch order in sync with statusMarker's ladder.
 function rowStatusTone(
-  row: WorktreeRowModel,
+  row: WorktreeRow,
   ready: boolean,
   state: string,
 ): "red" | "yellow" | "green" | "blue" | "gray" {
@@ -270,7 +270,7 @@ function rowStatusTone(
   return "gray";
 }
 
-export function statusMarker(row: WorktreeRowModel): RowMarker {
+export function statusMarker(row: WorktreeRow): RowMarker {
   const state = row.agent?.state ?? "none";
   if (state === "needs_attention" || state === "stuck") return { kind: "text", text: "!" };
   if (state === "working") return { kind: "throbber", variant: "braille" };
@@ -282,21 +282,19 @@ export function statusMarker(row: WorktreeRowModel): RowMarker {
   return { kind: "text", text: "-" };
 }
 
-export function isReadyToRead(row: WorktreeRowModel): boolean {
+export function isReadyToRead(row: WorktreeRow): boolean {
   return row.agent?.state === "idle" && row.agent.turnReadiness?.state === "ready_to_read";
 }
 
 type MetadataSegment = {
   text: string;
   stale: boolean;
-  color?: MetadataColor;
+  color?: RowColor;
   underline?: true;
   url?: string;
 };
 
-type MetadataColor = RowColor;
-
-export function metadataSegments(row: WorktreeRowModel): MetadataSegment[] {
+export function metadataSegments(row: WorktreeRow): MetadataSegment[] {
   const segments: MetadataSegment[] = [];
   const { changeSummary, pr, checks } = row.worktree;
   if (changeSummary !== undefined && (changeSummary.additions > 0 || changeSummary.deletions > 0)) {
@@ -335,7 +333,7 @@ export function metadataSegments(row: WorktreeRowModel): MetadataSegment[] {
   return segments;
 }
 
-function metadataGroups(row: WorktreeRowModel): WorktreeRowMetadataGroups {
+function metadataGroups(row: WorktreeRow): WorktreeRowMetadataGroups {
   const segments = metadataSegments(row).map(rowSegmentFromMetadata);
   const diffCount = diffMetadataSegmentCount(row);
   return {
@@ -364,7 +362,7 @@ function rowSegmentFromMetadata(segment: MetadataSegment): RowSegment {
   });
 }
 
-function diffMetadataSegmentCount(row: WorktreeRowModel): number {
+function diffMetadataSegmentCount(row: WorktreeRow): number {
   const { changeSummary } = row.worktree;
   if (changeSummary === undefined) {
     return 0;
@@ -375,7 +373,7 @@ function diffMetadataSegmentCount(row: WorktreeRowModel): number {
   return count;
 }
 
-function checksStateGlyph(checks: NonNullable<WorktreeRowModel["worktree"]["checks"]>) {
+function checksStateGlyph(checks: NonNullable<WorktreeRow["worktree"]["checks"]>) {
   if (checks.state === "pass") return "✓";
   if (checks.state === "fail") return failedChecksGlyph(checks.failed);
   if (checks.state === "cancelled") return failedChecksGlyph(checks.cancelled);
@@ -383,7 +381,7 @@ function checksStateGlyph(checks: NonNullable<WorktreeRowModel["worktree"]["chec
   return "-";
 }
 
-function prMetadataColor(pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>): MetadataColor {
+function prMetadataColor(pr: NonNullable<WorktreeRow["worktree"]["pr"]>): RowColor {
   return pr.state === "merged" ? "purple" : "blue";
 }
 
@@ -392,9 +390,9 @@ function failedChecksGlyph(count: number | undefined): string {
 }
 
 function checksStateColor(
-  checks: NonNullable<WorktreeRowModel["worktree"]["checks"]>,
-  pr: NonNullable<WorktreeRowModel["worktree"]["pr"]>,
-): MetadataColor {
+  checks: NonNullable<WorktreeRow["worktree"]["checks"]>,
+  pr: NonNullable<WorktreeRow["worktree"]["pr"]>,
+): RowColor {
   if (pr.state === "merged" && checks.state === "pass") return "purple";
   if (checks.state === "pass") return "green";
   if (checks.state === "fail" || checks.state === "cancelled") return "red";

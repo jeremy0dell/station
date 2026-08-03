@@ -10,12 +10,12 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { sessionForWorktreeRow } from "../selectors/dashboardSessionRows.js";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
-import type { TuiObserverService, TuiToast } from "../services/types.js";
+import type { ClientNotice, ObserverService } from "../services/types.js";
 import { type DashboardActionResult, type DashboardActions, handleTuiAction } from "./actions.js";
 import { buildFocusCommand } from "./commandBuilders.js";
 import {
-  clearDashboardFocus as clearDashboardFocusState,
-  focusDashboardSession as focusDashboardSessionState,
+  clearDashboardFocus,
+  focusDashboardSession,
   reconcileDashboardFocus,
 } from "./dashboardFocus.js";
 import {
@@ -65,7 +65,7 @@ export type DashboardStateSource = {
 
 /** Construction options for a dashboard runtime and its private state store. */
 export type DashboardRuntimeOptions = {
-  service: TuiObserverService;
+  service: ObserverService;
   source?: TuiSnapshotSource;
   initialSnapshot?: StationSnapshot;
   initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot" | "runtime">;
@@ -200,15 +200,12 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
     },
     focusDashboardSession: (sessionId): void => {
       store.setState(
-        (current) => replaceDashboardFocusState(focusDashboardSessionState(current, sessionId)),
+        (current) => replaceDashboardFocusState(focusDashboardSession(current, sessionId)),
         true,
       );
     },
     clearDashboardFocus: (): void => {
-      store.setState(
-        (current) => replaceDashboardFocusState(clearDashboardFocusState(current)),
-        true,
-      );
+      store.setState((current) => replaceDashboardFocusState(clearDashboardFocus(current)), true);
     },
     pushToast: (toast): void => {
       store.setState(addTuiToast(store.getState(), toast), true);
@@ -407,7 +404,7 @@ function createRuntimeOptions(options: DashboardRuntimeOptions): RuntimeOptions 
 
 function applyTransition(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   clientRuntime: StationClientRuntime | undefined,
   runtime: RuntimeOptions,
   operations: TuiLocalOperationRunner,
@@ -433,7 +430,7 @@ function applyTransition(
 
 async function applyTransitionEffects(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   clientRuntime: StationClientRuntime | undefined,
   runtime: RuntimeOptions,
   operations: TuiLocalOperationRunner,
@@ -469,7 +466,7 @@ async function applyTransitionEffects(
 
 async function reconcileSnapshot(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   clientRuntime: StationClientRuntime | undefined,
   reason: string,
   runtime: Pick<RuntimeOptions, "clientLabel">,
@@ -498,7 +495,7 @@ async function reconcileSnapshot(
 
 async function dispatchCommand(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   command: StationCommand,
   runtime: Pick<RuntimeOptions, "clientLabel">,
 ): Promise<void> {
@@ -517,7 +514,7 @@ async function dispatchCommand(
 
 async function dispatchCommandAndWaitForCompletion(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   command: StationCommand,
   runtime: Pick<RuntimeOptions, "clientLabel">,
 ): Promise<boolean> {
@@ -577,7 +574,7 @@ function buildStartedAgentFocusCommand(
 
 async function dispatchFocusWithLifecycle(
   store: StoreApi<DashboardState>,
-  service: TuiObserverService,
+  service: ObserverService,
   command: Extract<StationCommand, { type: "terminal.focus" }>,
   runtime: RuntimeOptions,
 ): Promise<void> {
@@ -684,7 +681,7 @@ async function dismissPersistentPopup(
 function rejectedCommandToast(
   command: StationCommand,
   receipt: CommandReceipt,
-): TuiToast | undefined {
+): ClientNotice | undefined {
   const receiptError = receipt.error;
   if (!receipt.accepted && receiptError !== undefined) {
     return safeErrorToToast(receiptError);
@@ -698,7 +695,7 @@ function rejectedCommandToast(
   return undefined;
 }
 
-function queuedCommandToast(command: StationCommand, receipt: CommandReceipt): TuiToast {
+function queuedCommandToast(command: StationCommand, receipt: CommandReceipt): ClientNotice {
   return {
     kind: "success",
     message: `${command.type} queued`,
@@ -707,6 +704,6 @@ function queuedCommandToast(command: StationCommand, receipt: CommandReceipt): T
   };
 }
 
-function addToast(store: StoreApi<DashboardState>, toast: TuiToast): void {
+function addToast(store: StoreApi<DashboardState>, toast: ClientNotice): void {
   store.setState(addTuiToast(store.getState(), toast));
 }

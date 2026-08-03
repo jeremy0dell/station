@@ -1,4 +1,4 @@
-import type { MouseEvent as OpenTuiMouseEvent } from "@opentui/core";
+import type { MouseEvent } from "@opentui/core";
 import { type ReactNode, useState } from "react";
 import {
   isPrimaryMouseEvent,
@@ -96,7 +96,7 @@ export function DynamicStationButton(props: DynamicStationButtonProps): ReactNod
   const iconPadX = Math.round(lerp(Math.floor((collapsedCols - 2 - ICON_COLS) / 2), 0, open));
   const iconPadY = Math.round(lerp(attention ? 1 : 0, 0, open));
 
-  const handleMouseDown = (event: OpenTuiMouseEvent): void => {
+  const handleMouseDown = (event: MouseEvent): void => {
     // Outer box and the full-cover overlay child both bind this handler; stop the down bubbling
     // child->parent so one click toggles once (otherwise open+close net to a no-op).
     event.stopPropagation();
@@ -257,7 +257,6 @@ function GradientText({
       {Array.from(text, (char, i) => {
         const local = Math.min(1, Math.max(0, (front - i) / GRADIENT_EDGE));
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length static string
           <text key={i} fg={toOpenTuiColor(tweenStationColor(theme.text.inverse, color, local))}>
             {char}
           </text>

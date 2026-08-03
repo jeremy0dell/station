@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import * as timers from "node:timers/promises";
 import { runCli } from "@station/cli";
 import { observerRuntimeFreshnessCheck, rendererRuntimeCheck } from "@station/cli/internal";
 import type {
@@ -208,7 +208,7 @@ describe("CLI diagnostic commands", () => {
             version: observerBuildVersion,
           }),
           collectDiagnostics: async () => {
-            await sleep(1100);
+            await timers.setTimeout(1100);
             return diagnosticSnapshot();
           },
         }) as never,

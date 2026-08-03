@@ -1,5 +1,5 @@
 import type {
-  SetupPlan as CoreSetupPlan,
+  SetupPlan,
   SetupSessionOperationOutcome,
   SupportedHarnessId,
 } from "@station/setup-core";
@@ -17,7 +17,7 @@ import type {
 } from "./setupViewTypes.js";
 
 export function projectSetupResult(input: {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly selection: SetupPresentationHarnessSelection;
   readonly checks: readonly SetupViewCheck[];
@@ -64,7 +64,7 @@ function withUpdatedActions(input: {
 }
 
 function projectApplyPresentation(input: {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly selection: SetupPresentationHarnessSelection;
   readonly checks: readonly SetupViewCheck[];
@@ -159,7 +159,7 @@ function projectApplyPresentation(input: {
 }
 
 function preparedHarnesses(input: {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
 }): readonly { readonly id: SupportedHarnessId; readonly label: string }[] {
   const { plan, facts } = input;

@@ -1,8 +1,4 @@
-import type {
-  SetupPlan as CoreSetupPlan,
-  HarnessTrackingAssessment,
-  SupportedHarnessId,
-} from "@station/setup-core";
+import type { HarnessTrackingAssessment, SetupPlan, SupportedHarnessId } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type {
@@ -11,9 +7,7 @@ import type {
   SetupViewCheck,
 } from "./setupViewTypes.js";
 
-export function projectSetupHarnessSelection(
-  plan: CoreSetupPlan,
-): SetupPresentationHarnessSelection {
+export function projectSetupHarnessSelection(plan: SetupPlan): SetupPresentationHarnessSelection {
   if (plan.selection.outcome !== "selected") {
     return { requiredHarnessIds: [], source: "unresolved" };
   }
@@ -25,7 +19,7 @@ export function projectSetupHarnessSelection(
 }
 
 export function projectSetupHarnessChecks(input: {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly selection: SetupPresentationHarnessSelection;
 }): readonly SetupViewCheck[] {
@@ -74,7 +68,7 @@ export function projectSetupHarnessChecks(input: {
 }
 
 function projectHarnessCheck(input: {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly selection: SetupPresentationHarnessSelection;
   readonly available: readonly SetupFacts["harnesses"][number][];
@@ -137,7 +131,7 @@ function projectHarnessCheck(input: {
 }
 
 function projectHarnessTrackingCheck(input: {
-  readonly plan: CoreSetupPlan;
+  readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly selection: SetupPresentationHarnessSelection;
   readonly harnessId: SupportedHarnessId;
