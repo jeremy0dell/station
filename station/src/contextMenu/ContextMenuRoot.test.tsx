@@ -82,7 +82,7 @@ function emptyStationStore(): StoreApi<TuiStore> {
     ...createInitialTuiState(),
     start: () => () => {},
     handleKey: () => ({ dismissPopup: false }),
-    handleAction: () => ({ dismissPopup: false }),
+    dispatch: () => ({ dismissPopup: false }),
     createQuickSession: () => {},
     setTerminalRows: () => {},
     focusDashboardSession: () => {},
@@ -91,6 +91,9 @@ function emptyStationStore(): StoreApi<TuiStore> {
     dismissToasts: () => {},
     expireToasts: () => {},
     refreshActiveToastExpiry: () => {},
+    addPendingCreateSession: () => {},
+    failPendingCreateSession: () => {},
+    removePendingCreateSession: () => {},
   } satisfies TuiStore;
   return {
     getState: () => state,

@@ -1,18 +1,9 @@
 import type { TuiStore } from "@station/dashboard-core";
 import {
   deriveTuiInputMode,
-  focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
-  openWidgetSettings,
-  scrollDashboard,
-  selectAddProjectRow,
   selectDashboardViewport,
-  tuiScreenBehavior,
-  widgetSettingsAddFromPicker,
-  widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
   type ProjectHeaderControl,
   type TuiInputMode,
 } from "@station/dashboard-core";
@@ -55,7 +46,10 @@ export function routeDashboardMouse(
       target.kind !== "sheetBackdrop" &&
       ROW_INTERACTIVE_MODES.has(mode)
     ) {
-      store.getState().handleKey({ input: "", mouseScroll: scrollDirection });
+      store.getState().dispatch({
+        type: "dashboard.scroll",
+        delta: scrollDirection === "up" ? -1 : 1,
+      });
     }
     return;
   }
@@ -105,7 +99,7 @@ function routeSurfaceClick(
       return true;
     case "firstProjectAdd":
       if (mode === "dashboard") {
-        store.getState().handleAction({ type: "dashboard.addProject" });
+        store.getState().dispatch({ type: "dashboard.addProject" });
       }
       return true;
     case "scrollIndicator":
@@ -137,7 +131,7 @@ function activateProjectHeaderInMode(
   if (mode !== "dashboard") {
     return;
   }
-  const result = store.getState().handleAction({
+  const result = store.getState().dispatch({
     type: "dashboard.projectHeader.activate",
     projectId,
     actionId,
@@ -156,7 +150,7 @@ function activateEmptyProjectInMode(
   if (mode !== "dashboard") {
     return;
   }
-  const result = store.getState().handleAction({
+  const result = store.getState().dispatch({
     type: "dashboard.emptyProject.activate",
     projectId,
   });
@@ -186,9 +180,10 @@ function pageInMode(store: StoreApi<TuiStore>, direction: "up" | "down", mode: T
   if (!ROW_INTERACTIVE_MODES.has(mode)) {
     return;
   }
-  store.setState(
-    scrollDashboard(store.getState(), direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS),
-  );
+  store.getState().dispatch({
+    type: "dashboard.scroll",
+    delta: direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
+  });
 }
 
 function routeModalClick(
@@ -200,11 +195,7 @@ function routeModalClick(
     return true;
   }
   if (target.kind === "screenBackdrop") {
-    const state = store.getState();
-    const clickAway = tuiScreenBehavior(state.screen).clickAway;
-    if (clickAway !== undefined) {
-      store.setState(clickAway(state));
-    }
+    store.getState().dispatch({ type: "screen.clickAway" });
     return true;
   }
   switch (target.kind) {
@@ -214,14 +205,17 @@ function routeModalClick(
       }
       return true;
     case "removeWorktreeAction":
-      store.getState().handleAction({
+      store.getState().dispatch({
         type: "removeWorktree.activate",
         actionId: target.actionId,
       });
       return true;
     case "projectSettingsItem":
       if (mode === "projectSettings") {
-        store.setState(focusProjectSettingsItem(store.getState(), target.itemId));
+        store.getState().dispatch({
+          type: "projectSettings.focusItem",
+          itemId: target.itemId,
+        });
       }
       return true;
     case "projectSettingsConfirmRemove":
@@ -229,23 +223,23 @@ function routeModalClick(
       return true;
     case "addProjectRow":
       if (ADD_PROJECT_ROW_MODES.has(mode)) {
-        store.setState(selectAddProjectRow(store.getState(), target.index));
+        store.getState().dispatch({ type: "addProject.selectRow", index: target.index });
       }
       return true;
     case "addProjectAction":
-      store.getState().handleAction({
+      store.getState().dispatch({
         type: "addProject.activate",
         actionId: target.actionId,
       });
       return true;
     case "newSessionAction":
-      store.getState().handleAction({
+      store.getState().dispatch({
         type: "newSession.activate",
         actionId: target.actionId,
       });
       return true;
     case "forkSessionAction":
-      store.getState().handleAction({
+      store.getState().dispatch({
         type: "forkSession.activate",
         actionId: target.actionId,
       });
@@ -274,27 +268,29 @@ function routeWidgetClick(
   switch (target.kind) {
     case "widgetSettingsOpen":
       if (mode === "dashboard") {
-        store.setState(openWidgetSettings(store.getState()));
+        store.getState().dispatch({ type: "widgetSettings.open" });
       }
       return true;
     case "widgetSettingsRow":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsToggleAt(store.getState(), target.index));
+        store.getState().dispatch({ type: "widgetSettings.toggle", index: target.index });
       }
       return true;
     case "widgetSettingsRemove":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsRemoveAt(store.getState(), target.index));
+        store.getState().dispatch({ type: "widgetSettings.remove", index: target.index });
       }
       return true;
     case "widgetSettingsAdd":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsOpenPicker(store.getState()));
+        store.getState().dispatch({ type: "widgetSettings.openPicker" });
       }
       return true;
     case "widgetSettingsPickerChoice":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsAddFromPicker(store.getState(), target.index));
+        store
+          .getState()
+          .dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
       }
       return true;
     default:
