@@ -386,7 +386,7 @@ exports[`dashboard golden frames renders the persistent filter soft-preview edit
 "                                                                                                                        
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle     4 projects · 10 sessions · 9 agents 
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-▏ FILTER /cli▏                                                                                               1/10 match 
+ ▏ FILTER /cli▏                                                                                             1/10 match  
 ▼ station  5 sessions · 4 agents                                                            [shell] [quick session] [▾] 
  [1] ○ cli-help-man                              codex     idle                                            +14 -6 #70 ✓ 
  [2] - docs-cleanup                              codex     no agent                                                     
@@ -430,7 +430,7 @@ exports[`dashboard golden frames renders a recoverable zero-match persistent pre
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
-▏ FILTER /no-such-session▏                                         0/10 matches 
+ ▏ FILTER /no-such-session▏                                       0/10 matches  
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       codex     no agent                    
@@ -458,7 +458,7 @@ exports[`dashboard golden frames renders an applied persistent summary at compac
 "                                                            
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown   
 ─────────────────────────────────────────────────────────── 
-FILTER working                                 2/10 matches 
+ FILTER working                               2/10 matches  
 ▼ station  5 sessions · 4 agents              [sh] [qs] [▾] 
  [1] ⠋ station-overlay         codex     working      #76 … 
                                                             
@@ -478,7 +478,7 @@ exports[`dashboard golden frames clips a long persistent draft at minimum dashbo
 "                                        
 FLEET  ● 0 ready  ⠋ 2 working  ! 0      
 ─────────────────────────────────────── 
-▏ FILTER /t-filter-draft▏  0/10 matches 
+ ▏ FILTER /filter-draft▏  0/10 matches  
 ▼ station  5 sessions · … [sh] [qs] [▾] 
  [1] ○ cli-help-man        idle         
  [2] - docs-cleanup        no agent     

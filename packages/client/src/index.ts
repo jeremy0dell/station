@@ -20,4 +20,6 @@ export type {
   StationClientRefreshOutcome,
   StationClientRuntime,
   StationClientRuntimeHooks,
+  StationClientState,
+  StationClientStateSource,
 } from "./types.js";

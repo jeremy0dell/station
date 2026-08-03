@@ -43,7 +43,7 @@ describe("split cwd resolution along the anchor chain", () => {
       ...baseSnapshot,
       rows: [{ ...worktree, path: worktreeRoot }],
     };
-    const dashboardState = makeStationTestRuntime({ snapshot }).runtime.state;
+    const clientState = makeStationTestRuntime({ snapshot }).source;
     const store = createStationStore({ boot: "empty" });
     const agentPaneId = agentWorktreePaneId(worktreeId);
     store.actions.createPane(agentPaneId, { role: "primary-agent" });
@@ -69,7 +69,7 @@ describe("split cwd resolution along the anchor chain", () => {
 
     const effects = createPaneEffects({
       store,
-      dashboardState,
+      clientState,
       registry,
       resolveAuxShellPlacement: undefined,
       autoCloseOverlay: false,

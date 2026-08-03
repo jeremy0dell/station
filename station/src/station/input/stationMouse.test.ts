@@ -9,13 +9,15 @@ import {
   persistentFilterExperience,
   removeProjectConfirmPhrase,
   selectDashboardViewport,
-  type DashboardRuntime,
   type DashboardRuntimeOptions,
 } from "@station/dashboard-core";
 import { agentWorktreePaneId } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
-import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
+import {
+  makeStationTestRuntime,
+  type StationTestDashboardRuntime,
+} from "../test/support/makeStationTestRuntime.js";
 import { resolveKeyRowAgentTarget, resolveRowAgentTarget } from "./stationActions.js";
 import { routeStationMouse } from "./stationMouse.js";
 
@@ -64,7 +66,7 @@ const SCROLL_UP: StationMouseEvent = {
 function makeStore(
   snapshot?: StationSnapshot,
   initialState?: DashboardRuntimeOptions["initialState"],
-): DashboardRuntime {
+): StationTestDashboardRuntime {
   // Enough rows to keep the same visible window as before the pinned fleet bar +
   // column header, so the station-project rows stay slot-addressable.
   return makeStationTestRuntime({
@@ -599,6 +601,29 @@ describe("routeStationMouse", () => {
     });
   });
 
+  it("resolves native shell targets from client truth when dashboard projection is stale", () => {
+    const fixture = makeStationTestRuntime({ terminalRows: 14 });
+    const canonical = manyProjectsSnapshot();
+    const canonicalPath = "/canonical/station/pty-buffer";
+    fixture.source.setSnapshot({
+      ...canonical,
+      rows: canonical.rows.map((row) =>
+        row.id === "wt_station_idle" ? { ...row, path: canonicalPath } : row,
+      ),
+    });
+
+    const outcome = routeStationMouse(
+      { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      fixture.runtime,
+    );
+
+    expect(fixture.runtime.state.getState().snapshot?.rows.find(
+      (row) => row.id === "wt_station_idle",
+    )?.path).not.toBe(canonicalPath);
+    expect(outcome).toMatchObject({ kind: "open-pane", cwd: canonicalPath });
+  });
+
   it("opens a shell pane for a project header click at the project root", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
@@ -932,7 +957,7 @@ describe("resolveKeyRowAgentTarget", () => {
   });
 });
 
-function pendingStartIds(store: DashboardRuntime): string[] {
+function pendingStartIds(store: StationTestDashboardRuntime): string[] {
   return store.state.getState().localRows.pendingStart.map((row) => row.localId);
 }
 
@@ -955,7 +980,7 @@ function projectRoot(projectId: string): string {
   return root;
 }
 
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
@@ -981,7 +1006,7 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe("routeStationMouse widget settings", () => {
-  function panelStore(): DashboardRuntime {
+  function panelStore(): StationTestDashboardRuntime {
     const store = makeStore(undefined, { widgets: [{ type: "time" }, { type: "moon" }] });
     store.actions.handleKey({ input: "W" });
     return store;
