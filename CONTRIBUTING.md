@@ -5,9 +5,7 @@ corrections, focused code changes, and thoughtful design feedback are all useful
 You do not need to understand the entire system before contributing to one part
 of it.
 
-Station is experimental pre-alpha software. Expect active development, but do
-not treat that status as permission to be careless with user state, compatibility
-claims, or review quality.
+Station is experimental pre-alpha software. Expect active development.
 
 ## Ways to Contribute
 
@@ -17,8 +15,7 @@ claims, or review quality.
 - Improve one provider, Observer flow, CLI command, or TUI interaction.
 - Share a use case that the current workflow does not serve well.
 
-Small improvements are welcome. A documentation correction does not need a
-companion feature, and a useful bug report does not need a root-cause diagnosis.
+Small improvements are welcome.
 
 ## Before You Start
 
@@ -60,21 +57,6 @@ cd station && bun install && cd ..
 Read [Development](docs/development.md) before choosing a test command. Use
 [Local development](docs/local-development.md) for isolated Observer, TUI, and
 tmux workflows; provider-backed and real-agent lanes require additional care.
-
-## Choose the Right Boundary
-
-Station keeps external tools behind explicit provider and integration boundaries.
-Before changing a subsystem, use its governing guide:
-
-- [Architecture](docs/architecture.md) for repository-wide ownership and dependency direction.
-- [Observer architecture](docs/observer-architecture.md) for Observer ports, adapters, use cases, policies, composition, or persistence.
-- [TUI development](docs/tui.md) for OpenTUI components, keymaps, layout, and renderer behavior.
-- [Harness authoring](docs/harness-authoring.md) for a new or upgraded agent integration.
-- [Configuration](docs/configuration.md) for runtime TOML and environment variables.
-
-Backend and connector changes should update the JSDoc that protects architectural
-roles, boundary translations, and non-obvious invariants. Do not add comments
-that merely restate names or types.
 
 ## Test Your Change
 
