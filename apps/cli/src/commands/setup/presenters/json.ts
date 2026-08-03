@@ -57,7 +57,7 @@ function projectJsonSetupPlan(input: JsonSetupPresenterInput): CliSetupPlan {
     input.configMutation,
   );
   const { readiness } = input.plan.result;
-  assertCompatibilityCounts(input.plan, checks);
+  assertMachineProjectionCounts(input.plan, checks);
   const summary = {
     launchReady: readiness.launchReady,
     workflowReady: readiness.workflowReady,
@@ -81,13 +81,13 @@ function projectJsonSetupPlan(input: JsonSetupPresenterInput): CliSetupPlan {
   });
 }
 
-function assertCompatibilityCounts(plan: CoreSetupPlan, checks: readonly SetupCheck[]): void {
+function assertMachineProjectionCounts(plan: CoreSetupPlan, checks: readonly SetupCheck[]): void {
   const requiredMissing = checks.filter(
     (check) => check.tier === "required" && check.status !== "ok",
   ).length;
   if (plan.result.readiness.requiredMissing !== requiredMissing) {
     throw new Error(
-      `Semantic setup required count does not match the CLI compatibility projection: ${plan.result.readiness.requiredMissing}/${requiredMissing}.`,
+      `Semantic setup required count does not match the machine projection: ${plan.result.readiness.requiredMissing}/${requiredMissing}.`,
     );
   }
 }
@@ -498,6 +498,8 @@ function harnessTrackingPresentation(
         status: "ok",
         message: `${harnessLabel} Station tracking artifacts are prepared on disk.`,
       };
+    default:
+      return assertNever(assessment);
   }
 }
 
@@ -836,7 +838,13 @@ function setupActions(
       case "install-tool": {
         const presentation = installToolPresentation(operation.tool);
         actions.push(
-          installAction(presentation.id, presentation.label, presentation.formula, facts.brew),
+          installAction(
+            presentation.id,
+            presentation.label,
+            presentation.formula,
+            facts.brew,
+            operation.selected,
+          ),
         );
         break;
       }
@@ -845,7 +853,7 @@ function setupActions(
           id: "link-station-launchers",
           kind: "run-command",
           tier: "recommended",
-          selected: false,
+          selected: operation.selected,
           label: "Link STATION launchers",
           message: "Link stn, stn-ingress, and stn-tmux-popup globally for bare terminal commands.",
           command: ["pnpm", "--dir", facts.launchers.packageRoot, "station:link"],
@@ -857,7 +865,7 @@ function setupActions(
           id: "worktrunk-shell-integration",
           kind: "run-command",
           tier: "recommended",
-          selected: false,
+          selected: operation.selected,
           label: "Install Worktrunk shell integration",
           message:
             "Run wt config shell install after core setup if you want Worktrunk shell helpers.",
@@ -873,8 +881,8 @@ function setupActions(
       case "configure-tmux-popup":
         actions.push(
           operation.scope === "persisted"
-            ? persistedTmuxPopupAction(facts)
-            : liveTmuxPopupAction(facts),
+            ? persistedTmuxPopupAction(facts, operation.selected)
+            : liveTmuxPopupAction(facts, operation.selected),
         );
         break;
       case "prepare-worktrunk-tracking":
@@ -905,7 +913,7 @@ function setupActions(
           id: `${operation.harnessId}-hooks`,
           kind: "run-command",
           tier: operation.tier,
-          selected: true,
+          selected: operation.selected,
           label: `Install ${harnessLabel} tracking`,
           message: `Install Station-owned ${harnessLabel} tracking artifacts.`,
           command: harnessHookInstallCommand(facts, operation.harnessId),
@@ -917,13 +925,15 @@ function setupActions(
         actions.push(...configWriteActions(configWrite, true));
         break;
       case "activate-observer-config":
-        // Activation is orchestration-only until the compatibility action contract is retired.
+        // Observer activation has no representation in the frozen machine action schema.
         break;
       case "install-harness":
       case "install-homebrew":
       case "install-xcode-command-line-tools":
-        // Guided and system-only installers are projected by their existing compatibility helpers.
+        // Guided and system-only installers are not exposed by read-only machine plans.
         break;
+      default:
+        assertNever(operation);
     }
   }
   if (configWrite?.operation === "blocked") {
@@ -955,7 +965,7 @@ function installToolPresentation(tool: Extract<SetupOperation, { kind: "install-
   }
 }
 
-function persistedTmuxPopupAction(facts: SetupFacts): SetupAction {
+function persistedTmuxPopupAction(facts: SetupFacts, selected: boolean): SetupAction {
   if (facts.tmuxBinding.status === "conflict") {
     throw new Error("A conflicting tmux popup binding cannot be persisted.");
   }
@@ -963,7 +973,7 @@ function persistedTmuxPopupAction(facts: SetupFacts): SetupAction {
     id: "tmux-popup-binding",
     kind: "append-file",
     tier: "recommended",
-    selected: false,
+    selected,
     label: "Install tmux popup binding",
     message: `Install the tmux prefix + ${facts.tmuxBinding.bindingKey} binding for the STATION popup dashboard in ~/.tmux.conf.`,
     path: facts.tmuxBinding.path,
@@ -978,7 +988,7 @@ function persistedTmuxPopupAction(facts: SetupFacts): SetupAction {
   };
 }
 
-function liveTmuxPopupAction(facts: SetupFacts): SetupAction {
+function liveTmuxPopupAction(facts: SetupFacts, selected: boolean): SetupAction {
   if (facts.tmuxBinding.status === "conflict") {
     throw new Error("A conflicting tmux popup binding cannot be loaded.");
   }
@@ -986,7 +996,7 @@ function liveTmuxPopupAction(facts: SetupFacts): SetupAction {
     id: "tmux-live-popup-binding",
     kind: "run-command",
     tier: "recommended",
-    selected: false,
+    selected,
     label: "Load tmux popup binding",
     message: `Install the tmux prefix + ${facts.tmuxBinding.bindingKey} STATION popup binding in the current tmux server.`,
     command: [
@@ -1021,12 +1031,13 @@ function installAction(
   label: string,
   formula: string,
   brew: SetupFacts["brew"],
+  selected: boolean,
 ): SetupAction {
   const action: SetupAction = {
     id,
     kind: brew.status === "ok" ? "brew-install" : "noop",
     tier: "required",
-    selected: brew.status === "ok",
+    selected,
     label: `Install ${label}`,
     message:
       brew.status === "ok"
@@ -1116,6 +1127,10 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
     ];
   }
   return ["Resolve the missing required setup items, then run: stn setup check"];
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported semantic setup value: ${JSON.stringify(value)}`);
 }
 
 function quoteCommandPart(part: string): string {

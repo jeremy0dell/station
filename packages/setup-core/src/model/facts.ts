@@ -60,25 +60,6 @@ export type HarnessTrackingAssessment =
       readonly installed: true;
     };
 
-export type HarnessTrackingRepairFact = {
-  readonly id: SupportedHarnessId;
-  readonly available: boolean;
-  readonly capability: "supported" | "unsupported";
-  readonly prepared: boolean;
-};
-
-export type SetupReadinessFacts = {
-  readonly stateDirectoryWritable: boolean;
-  readonly runtime:
-    | { readonly kind: "compiled" }
-    | {
-        readonly kind: "source";
-        readonly bunAvailable: boolean;
-        readonly stationUiUsable: boolean;
-      };
-  readonly requirements: readonly ("satisfied" | "unsatisfied")[];
-};
-
 export type SetupReadiness = {
   readonly launchReady: boolean;
   readonly workflowReady: boolean;
