@@ -4,6 +4,7 @@ import {
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
 import {
+  DASHBOARD_FILTER_CONDITION_FIELDS,
   dashboardPersistentFilterHasCriteria,
   normalizeDashboardFilterConditions,
 } from "../../selectors/dashboardFilterConditions.js";
@@ -66,6 +67,9 @@ export function handleDashboardPersistentFilterKey(state: TuiState, key: TuiKey)
   }
 
   if (state.screen.conditionEditor !== undefined) {
+    if (isConditionFilterApplyKey(state.screen, key)) {
+      return applyDashboardPersistentFilter(state);
+    }
     return { state: handlePersistentFilterConditionKey(state, key) };
   }
 
@@ -113,7 +117,7 @@ function cancelDashboardPersistentFilter(state: TuiState): TuiTransition {
   return { state: reconcileDashboardFocus(state, next) };
 }
 
-function applyDashboardPersistentFilter(state: TuiState): TuiTransition {
+export function applyDashboardPersistentFilter(state: TuiState): TuiTransition {
   if (state.screen.name !== "persistentFilter") {
     return { state };
   }
@@ -129,6 +133,18 @@ function applyDashboardPersistentFilter(state: TuiState): TuiTransition {
     return { state: reconcileDashboardFocus(state, next) };
   }
   return clearPersistentFilterState(state);
+}
+
+function isConditionFilterApplyKey(
+  screen: Extract<TuiState["screen"], { name: "persistentFilter" }>,
+  key: TuiKey,
+): boolean {
+  const editor = screen.conditionEditor;
+  return (
+    editor?.stage === "field" &&
+    (key.input.toUpperCase() === "F" ||
+      (isReturnKey(key) && editor.cursor === DASHBOARD_FILTER_CONDITION_FIELDS.length))
+  );
 }
 
 function isConditionEditorKey(key: TuiKey): boolean {

@@ -271,7 +271,7 @@ describeReal("real native Station mouse input", () => {
       await ptyClient.write(Buffer.from("\t", "utf8"));
       const conditionFields = await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes("ADD CONDITION") && frame.includes("S Status"),
+        (frame) => frame.includes("FILTER CONDITIONS") && frame.includes("S Status"),
         "Tab did not open the native persistent-filter condition chooser.",
       );
       await writeSgrClick(ptyClient, cellForText(conditionFields, "Status"));
@@ -283,7 +283,7 @@ describeReal("real native Station mouse input", () => {
       await writeSgrClick(ptyClient, cellForText(statusValues, "[←]"));
       const returnedFields = await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes("ADD CONDITION") && frame.includes("S Status"),
+        (frame) => frame.includes("FILTER CONDITIONS") && frame.includes("S Status"),
         "The native condition back control did not return to the field chooser.",
       );
       await writeSgrClick(ptyClient, cellForText(returnedFields, "Status"));
@@ -306,41 +306,41 @@ describeReal("real native Station mouse input", () => {
       );
 
       await ptyClient.write(Buffer.from("\t", "utf8"));
-      const fieldsForCommit = await waitForNativeFrame(
+      const fieldsForBuild = await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes("ADD CONDITION") && frame.includes("S Status"),
-        "The native condition chooser did not reopen for apply.",
+        (frame) => frame.includes("FILTER CONDITIONS") && frame.includes("S Status"),
+        "The native condition chooser did not reopen for staged editing.",
       );
-      await writeSgrClick(ptyClient, cellForText(fieldsForCommit, "Status"));
-      const valuesForCommit = await waitForNativeFrame(
+      await writeSgrClick(ptyClient, cellForText(fieldsForBuild, "Status"));
+      const valuesForBuild = await waitForNativeFrame(
         runtime,
         (frame) => frame.includes("STATUS CONDITION") && frame.includes("Working"),
-        "The native Status values did not reopen for apply.",
+        "The native Status values did not reopen for staged editing.",
       );
-      await writeSgrClick(ptyClient, cellForText(valuesForCommit, "Working"));
-      const selectedForCommit = await waitForNativeFrame(
+      await writeSgrClick(ptyClient, cellForText(valuesForBuild, "Working"));
+      const selectedForBuild = await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes("[✓] Working") && frame.includes("[←]"),
-        "The native Status value did not select before apply.",
+        (frame) => frame.includes("[✓] Working") && frame.includes("Done (Enter)"),
+        "The native Status value did not select before returning to the builder.",
       );
-      await writeSgrClick(ptyClient, cellForTextOnLine(selectedForCommit, "[←]", "[✓]"));
-      await waitForNativeFrame(
+      await writeSgrClick(ptyClient, cellForText(selectedForBuild, "Done (Enter)"));
+      const builtFilter = await waitForNativeFrame(
         runtime,
         (frame) =>
-          frame.includes(`FILTER /${branch}`) &&
-          frame.includes("Status=Working") &&
-          !frame.includes("STATUS CONDITION"),
-        "The native condition apply control did not save the selected value.",
+          frame.includes("FILTER CONDITIONS") &&
+          frame.includes("Working") &&
+          frame.includes("Apply filter (F)"),
+        "The native Done control did not retain the selected Status value.",
       );
-
-      await ptyClient.write(Buffer.from("\x1b", "utf8"));
+      await writeSgrClick(ptyClient, cellForText(builtFilter, "Apply filter (F)"));
       const reapplied = await waitForNativeFrame(
         runtime,
         (frame) =>
           frame.includes(`▶ ${PROJECT_LABEL}`) &&
           !frame.includes(branch) &&
+          frame.includes("Status=Working") &&
           frame.includes("Esc clear"),
-        "Cancelling native filter editing did not restore the applied collapsed project.",
+        "The native Apply filter control did not apply the complete staged filter.",
       );
       await writeSgrClick(ptyClient, cellForText(reapplied, "Esc clear"));
       await waitForNativeFrame(
@@ -542,21 +542,6 @@ function cellForText(frame: string, needle: string): Cell {
   const column = row < 0 ? -1 : (lines[row]?.indexOf(needle) ?? -1);
   if (row < 0 || column < 0) {
     throw new Error(`Native frame does not contain ${JSON.stringify(needle)}.`);
-  }
-  return {
-    column: column + Math.floor(needle.length / 2) + 1,
-    row: row + 1,
-  };
-}
-
-function cellForTextOnLine(frame: string, lineNeedle: string, needle: string): Cell {
-  const lines = frame.split("\n");
-  const row = lines.findIndex((line) => line.includes(lineNeedle));
-  const column = row < 0 ? -1 : (lines[row]?.indexOf(needle) ?? -1);
-  if (row < 0 || column < 0) {
-    throw new Error(
-      `Native frame does not contain ${JSON.stringify(needle)} on the ${JSON.stringify(lineNeedle)} line.`,
-    );
   }
   return {
     column: column + Math.floor(needle.length / 2) + 1,

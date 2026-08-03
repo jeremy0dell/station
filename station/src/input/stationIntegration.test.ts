@@ -266,7 +266,7 @@ describe("station input through the station runtime", () => {
     runtime.handleSequence("\t");
     runtime.handleSequence("S");
     runtime.handleSequence("3");
-    expect(view.getState().screen).toMatchObject({
+    expect(view.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       conditionEditor: {
         stage: "values",
@@ -280,7 +280,7 @@ describe("station input through the station runtime", () => {
       LEFT_DOWN,
     );
 
-    expect(view.getState().screen).toEqual({
+    expect(view.state.getState().screen).toEqual({
       name: "persistentFilter",
       draft: { value: "queue", cursor: 5 },
       draftConditions: [],
@@ -294,7 +294,7 @@ describe("station input through the station runtime", () => {
     runtime.handleSequence("/");
     runtime.handleSequence("\t");
     runtime.handleSequence("S");
-    const before = view.getState().screen;
+    const before = view.state.getState().screen;
 
     for (const target of [
       {
@@ -302,10 +302,10 @@ describe("station input through the station runtime", () => {
         field: "status" as const,
         valueId: "working",
       },
-      { kind: "persistentFilterConditionAction" as const, actionId: "apply" as const },
+      { kind: "persistentFilterConditionAction" as const, actionId: "done" as const },
     ]) {
       runtime.dispatchMouse({ kind: "station", target }, RIGHT_DOWN);
-      expect(view.getState().screen).toEqual(before);
+      expect(view.state.getState().screen).toEqual(before);
       expect(station.getState().input.contextMenu).toBeNull();
     }
   });

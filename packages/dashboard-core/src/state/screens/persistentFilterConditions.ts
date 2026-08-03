@@ -1,18 +1,13 @@
-import type { AgentState, ProjectId, ProviderId } from "@station/contracts";
 import {
   DASHBOARD_FILTER_CONDITION_FIELDS,
+  dashboardFilterConditionFieldForKey,
   dashboardFilterConditionSlot,
-  normalizeDashboardFilterConditions,
+  dashboardFilterConditionsWithSelection,
   selectDashboardFilterConditionOptions,
 } from "../../selectors/dashboardFilterConditions.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
-import type {
-  DashboardFilterCondition,
-  DashboardFilterConditionField,
-  DashboardFilterConditionOption,
-  TuiState,
-} from "../types.js";
+import type { DashboardFilterConditionField, TuiState } from "../types.js";
 
 export function openPersistentFilterConditionEditor(state: TuiState): TuiState {
   if (state.screen.name !== "persistentFilter" || state.screen.conditionEditor !== undefined) {
@@ -33,7 +28,7 @@ export function handlePersistentFilterConditionKey(state: TuiState, key: TuiKey)
   }
   const editor = state.screen.conditionEditor;
   if (editor.stage === "field") {
-    const directField = conditionFieldForKey(key.input);
+    const directField = dashboardFilterConditionFieldForKey(key.input);
     if (directField !== undefined) {
       return selectPersistentFilterConditionField(state, directField);
     }
@@ -74,7 +69,7 @@ export function handlePersistentFilterConditionKey(state: TuiState, key: TuiKey)
       ? state
       : togglePersistentFilterConditionValue(state, editor.field, option.id);
   }
-  return isReturnKey(key) ? applyPersistentFilterCondition(state) : state;
+  return isReturnKey(key) ? donePersistentFilterConditionEditor(state) : state;
 }
 
 export function selectPersistentFilterConditionField(
@@ -143,39 +138,11 @@ export function togglePersistentFilterConditionValue(
 }
 
 export function backPersistentFilterConditionEditor(state: TuiState): TuiState {
-  if (
-    state.screen.name !== "persistentFilter" ||
-    state.screen.conditionEditor?.stage !== "values"
-  ) {
-    return state;
-  }
-  const fieldCursor = DASHBOARD_FILTER_CONDITION_FIELDS.indexOf(state.screen.conditionEditor.field);
-  return {
-    ...state,
-    screen: {
-      ...state.screen,
-      conditionEditor: { stage: "field", cursor: Math.max(0, fieldCursor) },
-    },
-  };
+  return retainPersistentFilterConditionEditor(state);
 }
 
-export function applyPersistentFilterCondition(state: TuiState): TuiState {
-  if (
-    state.screen.name !== "persistentFilter" ||
-    state.screen.conditionEditor?.stage !== "values"
-  ) {
-    return state;
-  }
-  const editor = state.screen.conditionEditor;
-  const retained = state.screen.draftConditions.filter(
-    (condition) => condition.field !== editor.field,
-  );
-  const condition = conditionFromEditor(editor.field, editor.options, editor.selectedIds);
-  const draftConditions = normalizeDashboardFilterConditions(
-    condition === undefined ? retained : [...retained, condition],
-  );
-  const { conditionEditor: _closed, ...screen } = state.screen;
-  return { ...state, screen: { ...screen, draftConditions } };
+export function donePersistentFilterConditionEditor(state: TuiState): TuiState {
+  return retainPersistentFilterConditionEditor(state);
 }
 
 export function cancelPersistentFilterConditionEditor(state: TuiState): TuiState {
@@ -192,7 +159,7 @@ function movePersistentFilterConditionCursor(state: TuiState, delta: -1 | 1): Tu
   }
   const editor = state.screen.conditionEditor;
   const length =
-    editor.stage === "field" ? DASHBOARD_FILTER_CONDITION_FIELDS.length : editor.options.length;
+    editor.stage === "field" ? DASHBOARD_FILTER_CONDITION_FIELDS.length + 1 : editor.options.length;
   if (length === 0) return state;
   const cursor = Math.min(length - 1, Math.max(0, editor.cursor + delta));
   if (cursor === editor.cursor) return state;
@@ -202,42 +169,27 @@ function movePersistentFilterConditionCursor(state: TuiState, delta: -1 | 1): Tu
   };
 }
 
-function conditionFieldForKey(input: string): DashboardFilterConditionField | undefined {
-  switch (input.toUpperCase()) {
-    case "S":
-      return "status";
-    case "P":
-      return "project";
-    case "A":
-      return "agent";
-    default:
-      return undefined;
+function retainPersistentFilterConditionEditor(state: TuiState): TuiState {
+  if (
+    state.screen.name !== "persistentFilter" ||
+    state.screen.conditionEditor?.stage !== "values"
+  ) {
+    return state;
   }
-}
-
-function conditionFromEditor(
-  field: DashboardFilterConditionField,
-  options: readonly DashboardFilterConditionOption[],
-  selectedIds: readonly string[],
-): DashboardFilterCondition | undefined {
-  const selected = new Set(selectedIds);
-  const values = options.filter((option) => selected.has(option.id));
-  if (values.length === 0) return undefined;
-  switch (field) {
-    case "status":
-      return {
-        field,
-        values: values.map((value) => ({ id: value.id as AgentState, label: value.label })),
-      };
-    case "project":
-      return {
-        field,
-        values: values.map((value) => ({ id: value.id as ProjectId, label: value.label })),
-      };
-    case "agent":
-      return {
-        field,
-        values: values.map((value) => ({ id: value.id as ProviderId, label: value.label })),
-      };
-  }
+  const editor = state.screen.conditionEditor;
+  const draftConditions = dashboardFilterConditionsWithSelection(
+    state.screen.draftConditions,
+    editor.field,
+    editor.options,
+    editor.selectedIds,
+  );
+  const fieldCursor = DASHBOARD_FILTER_CONDITION_FIELDS.indexOf(editor.field);
+  return {
+    ...state,
+    screen: {
+      ...state.screen,
+      draftConditions,
+      conditionEditor: { stage: "field", cursor: Math.max(0, fieldCursor) },
+    },
+  };
 }

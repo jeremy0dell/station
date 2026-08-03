@@ -1,4 +1,4 @@
-import type { AgentState, ProjectId, ProviderId, StationSnapshot } from "@station/contracts";
+import type { StationSnapshot } from "@station/contracts";
 import type {
   DashboardFilterCondition,
   DashboardFilterConditionField,
@@ -7,8 +7,6 @@ import type {
   TuiViewState,
 } from "../state/types.js";
 import { SELECTION_KEYS } from "./selectors.js";
-
-export const DASHBOARD_FILTER_CONDITION_FIELDS = ["status", "project", "agent"] as const;
 
 export const DASHBOARD_FILTER_STATUS_VALUES: readonly DashboardFilterStatusConditionValue[] = [
   { id: "needs_attention", label: "Needs attention" },
@@ -21,11 +19,61 @@ export const DASHBOARD_FILTER_STATUS_VALUES: readonly DashboardFilterStatusCondi
   { id: "unknown", label: "Unknown" },
 ];
 
-export type DashboardFilterConditionOptions = Readonly<{
-  status: readonly DashboardFilterConditionOption[];
-  project: readonly DashboardFilterConditionOption[];
-  agent: readonly DashboardFilterConditionOption[];
-}>;
+type DashboardFilterConditionOptionContext = {
+  snapshot: StationSnapshot | undefined;
+  state: Pick<TuiViewState, "localRows">;
+};
+
+type DashboardFilterConditionFieldConfig = {
+  field: DashboardFilterConditionField;
+  key: string;
+  label: string;
+  retainSelectedOptions: boolean;
+  selectOptions: (
+    context: DashboardFilterConditionOptionContext,
+  ) => readonly DashboardFilterConditionOption[];
+  compareValues: (
+    left: DashboardFilterConditionOption,
+    right: DashboardFilterConditionOption,
+  ) => number;
+};
+
+const DASHBOARD_FILTER_CONDITION_CONFIG = [
+  {
+    field: "status",
+    key: "S",
+    label: "Status",
+    retainSelectedOptions: false,
+    selectOptions: selectStatusOptions,
+    compareValues: compareStatusValues,
+  },
+  {
+    field: "project",
+    key: "P",
+    label: "Project",
+    retainSelectedOptions: true,
+    selectOptions: selectProjectOptions,
+    compareValues: compareLabels,
+  },
+  {
+    field: "agent",
+    key: "A",
+    label: "Agent",
+    retainSelectedOptions: true,
+    selectOptions: selectAgentOptions,
+    compareValues: compareLabels,
+  },
+] as const satisfies readonly DashboardFilterConditionFieldConfig[];
+
+export const DASHBOARD_FILTER_CONDITION_FIELDS: readonly DashboardFilterConditionField[] =
+  DASHBOARD_FILTER_CONDITION_CONFIG.map((config) => config.field);
+
+export const DASHBOARD_FILTER_CONDITION_KEYS: readonly string[] =
+  DASHBOARD_FILTER_CONDITION_CONFIG.map((config) => config.key);
+
+export type DashboardFilterConditionOptions = Readonly<
+  Record<DashboardFilterConditionField, readonly DashboardFilterConditionOption[]>
+>;
 
 export type DashboardFilterSummarySegment = {
   text: string;
@@ -40,74 +88,63 @@ export function selectDashboardFilterConditionOptions(
   state: Pick<TuiViewState, "localRows">,
   conditions: readonly DashboardFilterCondition[],
 ): DashboardFilterConditionOptions {
-  const selected = conditionOptionsByField(conditions);
-  const projects = new Map<ProjectId, string>();
-  const agents = new Map<ProviderId, string>();
-
-  for (const project of snapshot?.projects ?? []) {
-    projects.set(project.id, project.label);
-  }
-  for (const harness of snapshot?.harnesses ?? []) {
-    agents.set(harness.id, harness.label);
-  }
-  for (const session of snapshot?.sessions ?? []) {
-    if (!agents.has(session.harness.provider)) {
-      agents.set(session.harness.provider, session.harness.provider);
+  const context: DashboardFilterConditionOptionContext = { snapshot, state };
+  const optionsByField: Partial<
+    Record<DashboardFilterConditionField, readonly DashboardFilterConditionOption[]>
+  > = {};
+  for (const config of DASHBOARD_FILTER_CONDITION_CONFIG) {
+    const candidates = [...config.selectOptions(context)];
+    if (config.retainSelectedOptions) {
+      candidates.push(...conditionValuesForField(conditions, config.field));
     }
-  }
-  for (const row of state.localRows.pendingCreate) {
-    if (row.harnessProvider !== undefined && !agents.has(row.harnessProvider)) {
-      agents.set(row.harnessProvider, row.harnessProvider);
-    }
+    optionsByField[config.field] = uniqueConditionValues(candidates).sort(config.compareValues);
   }
 
-  for (const option of selected.project) {
-    if (!projects.has(option.id as ProjectId)) {
-      projects.set(option.id as ProjectId, option.label);
-    }
-  }
-  for (const option of selected.agent) {
-    if (!agents.has(option.id as ProviderId)) {
-      agents.set(option.id as ProviderId, option.label);
-    }
-  }
-
-  return {
-    status: DASHBOARD_FILTER_STATUS_VALUES,
-    project: sortedOptions(projects),
-    agent: sortedOptions(agents),
-  };
+  return optionsByField as DashboardFilterConditionOptions;
 }
 
 export function dashboardFilterConditionFieldLabel(field: DashboardFilterConditionField): string {
-  switch (field) {
-    case "status":
-      return "Status";
-    case "project":
-      return "Project";
-    case "agent":
-      return "Agent";
-  }
+  return dashboardFilterConditionConfig(field).label;
+}
+
+export function dashboardFilterConditionFieldKey(field: DashboardFilterConditionField): string {
+  return dashboardFilterConditionConfig(field).key;
+}
+
+export function dashboardFilterConditionFieldForKey(
+  input: string,
+): DashboardFilterConditionField | undefined {
+  const key = input.toUpperCase();
+  return DASHBOARD_FILTER_CONDITION_CONFIG.find((config) => config.key === key)?.field;
 }
 
 /** Removes empty/duplicate values and returns Status, Project, Agent in canonical order. */
 export function normalizeDashboardFilterConditions(
   conditions: readonly DashboardFilterCondition[],
 ): DashboardFilterCondition[] {
-  const statuses = uniqueConditionValues(
-    conditions.flatMap((condition) => (condition.field === "status" ? condition.values : [])),
-  ).sort(compareStatusValues);
-  const projects = uniqueConditionValues(
-    conditions.flatMap((condition) => (condition.field === "project" ? condition.values : [])),
-  ).sort(compareLabels);
-  const agents = uniqueConditionValues(
-    conditions.flatMap((condition) => (condition.field === "agent" ? condition.values : [])),
-  ).sort(compareLabels);
   const normalized: DashboardFilterCondition[] = [];
-  if (statuses.length > 0) normalized.push({ field: "status", values: statuses });
-  if (projects.length > 0) normalized.push({ field: "project", values: projects });
-  if (agents.length > 0) normalized.push({ field: "agent", values: agents });
+  for (const config of DASHBOARD_FILTER_CONDITION_CONFIG) {
+    const values = uniqueConditionValues(conditionValuesForField(conditions, config.field)).sort(
+      config.compareValues,
+    );
+    if (values.length > 0) {
+      normalized.push(dashboardFilterConditionFromValues(config.field, values));
+    }
+  }
   return normalized;
+}
+
+export function dashboardFilterConditionsWithSelection(
+  conditions: readonly DashboardFilterCondition[],
+  field: DashboardFilterConditionField,
+  options: readonly DashboardFilterConditionOption[],
+  selectedIds: readonly string[],
+): DashboardFilterCondition[] {
+  const retained = conditions.filter((condition) => condition.field !== field);
+  const condition = dashboardFilterConditionFromSelection(field, options, selectedIds);
+  return normalizeDashboardFilterConditions(
+    condition === undefined ? retained : [...retained, condition],
+  );
 }
 
 export function dashboardPersistentFilterSummarySegments(input: {
@@ -157,24 +194,80 @@ export function dashboardFilterConditionSlot(index: number): string | undefined 
   return SELECTION_KEYS[index];
 }
 
-function conditionOptionsByField(
-  conditions: readonly DashboardFilterCondition[],
-): Record<DashboardFilterConditionField, DashboardFilterConditionOption[]> {
-  const result: Record<DashboardFilterConditionField, DashboardFilterConditionOption[]> = {
-    status: [],
-    project: [],
-    agent: [],
-  };
-  for (const condition of conditions) {
-    result[condition.field].push(...condition.values);
-  }
-  return result;
+function dashboardFilterConditionFromSelection(
+  field: DashboardFilterConditionField,
+  options: readonly DashboardFilterConditionOption[],
+  selectedIds: readonly string[],
+): DashboardFilterCondition | undefined {
+  const selected = new Set(selectedIds);
+  const values = options.filter((option) => selected.has(option.id));
+  if (values.length === 0) return undefined;
+  return dashboardFilterConditionFromValues(field, values);
 }
 
-function sortedOptions<Id extends string>(
-  values: ReadonlyMap<Id, string>,
+function dashboardFilterConditionFromValues(
+  field: DashboardFilterConditionField,
+  values: readonly DashboardFilterConditionOption[],
+): DashboardFilterCondition {
+  const conditionValues = values.map((value) => ({ id: value.id, label: value.label }));
+  // The field config is the source of each option set, so this restores that field/value correlation.
+  const condition = { field, values: conditionValues } as DashboardFilterCondition;
+  return condition;
+}
+
+function dashboardFilterConditionConfig(
+  field: DashboardFilterConditionField,
+): DashboardFilterConditionFieldConfig {
+  const config = DASHBOARD_FILTER_CONDITION_CONFIG.find((candidate) => candidate.field === field);
+  if (config === undefined) {
+    throw new Error(`Unhandled dashboard filter condition field: ${field}`);
+  }
+  return config;
+}
+
+function conditionValuesForField(
+  conditions: readonly DashboardFilterCondition[],
+  field: DashboardFilterConditionField,
 ): DashboardFilterConditionOption[] {
-  return [...values].map(([id, label]) => ({ id, label })).sort(compareLabels);
+  const values: DashboardFilterConditionOption[] = [];
+  for (const condition of conditions) {
+    if (condition.field === field) {
+      values.push(...condition.values);
+    }
+  }
+  return values;
+}
+
+function selectStatusOptions(): readonly DashboardFilterConditionOption[] {
+  return DASHBOARD_FILTER_STATUS_VALUES;
+}
+
+function selectProjectOptions(
+  context: DashboardFilterConditionOptionContext,
+): DashboardFilterConditionOption[] {
+  const options: DashboardFilterConditionOption[] = [];
+  for (const project of context.snapshot?.projects ?? []) {
+    options.push({ id: project.id, label: project.label });
+  }
+  return options;
+}
+
+function selectAgentOptions(
+  context: DashboardFilterConditionOptionContext,
+): DashboardFilterConditionOption[] {
+  const options: DashboardFilterConditionOption[] = [];
+  for (const harness of context.snapshot?.harnesses ?? []) {
+    options.push({ id: harness.id, label: harness.label });
+  }
+  for (const session of context.snapshot?.sessions ?? []) {
+    options.push({ id: session.harness.provider, label: session.harness.provider });
+  }
+  for (const row of context.state.localRows.pendingCreate) {
+    if (row.harnessProvider !== undefined) {
+      options.push({ id: row.harnessProvider, label: row.harnessProvider });
+    }
+  }
+  return options;
 }
 
 function uniqueConditionValues<T extends { id: string; label: string }>(values: readonly T[]): T[] {
@@ -186,13 +279,13 @@ function uniqueConditionValues<T extends { id: string; label: string }>(values: 
 }
 
 function compareStatusValues(
-  left: DashboardFilterStatusConditionValue,
-  right: DashboardFilterStatusConditionValue,
+  left: DashboardFilterConditionOption,
+  right: DashboardFilterConditionOption,
 ): number {
   return statusIndex(left.id) - statusIndex(right.id);
 }
 
-function statusIndex(id: AgentState): number {
+function statusIndex(id: string): number {
   const index = DASHBOARD_FILTER_STATUS_VALUES.findIndex((value) => value.id === id);
   return index < 0 ? DASHBOARD_FILTER_STATUS_VALUES.length : index;
 }

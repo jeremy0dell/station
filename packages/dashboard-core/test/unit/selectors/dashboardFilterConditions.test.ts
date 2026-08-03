@@ -1,6 +1,9 @@
 import {
   createInitialTuiState,
   type DashboardFilterCondition,
+  dashboardFilterConditionFieldForKey,
+  dashboardFilterConditionFieldKey,
+  dashboardFilterConditionFieldLabel,
   dashboardPersistentFilterSummarySegments,
   normalizeDashboardFilterConditions,
   selectDashboardFilterConditionOptions,
@@ -9,6 +12,26 @@ import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("dashboard filter conditions", () => {
+  it("uses one field configuration for labels and shortcut keys", () => {
+    expect(
+      (["status", "project", "agent"] as const).map((field) => ({
+        field,
+        key: dashboardFilterConditionFieldKey(field),
+        label: dashboardFilterConditionFieldLabel(field),
+      })),
+    ).toEqual([
+      { field: "status", key: "S", label: "Status" },
+      { field: "project", key: "P", label: "Project" },
+      { field: "agent", key: "A", label: "Agent" },
+    ]);
+    expect(["s", "P", "a", "x"].map(dashboardFilterConditionFieldForKey)).toEqual([
+      "status",
+      "project",
+      "agent",
+      undefined,
+    ]);
+  });
+
   it("derives normalized status, project, and agent options with retained selections", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({

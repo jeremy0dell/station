@@ -235,18 +235,31 @@ describe("semantic TUI actions", () => {
     );
     expect(valueByAction).toEqual(valueByKey);
 
-    const committedByKey = handleTuiKey(
+    const doneByKey = handleTuiKey(
       valueByKey.state,
       { input: "\r", return: true },
       context,
       persistentFilterExperience,
     );
-    const committedByAction = handleTuiAction(
+    const doneByAction = handleTuiAction(
       valueByAction.state,
-      { type: "persistentFilter.condition.apply" },
+      { type: "persistentFilter.condition.done" },
       context,
     );
-    expect(committedByAction).toEqual(committedByKey);
+    expect(doneByAction).toEqual(doneByKey);
+
+    const appliedByKey = handleTuiKey(
+      doneByKey.state,
+      { input: "F" },
+      context,
+      persistentFilterExperience,
+    );
+    const appliedByAction = handleTuiAction(
+      doneByAction.state,
+      { type: "persistentFilter.applyDraft" },
+      context,
+    );
+    expect(appliedByAction).toEqual(appliedByKey);
 
     const backByKey = handleTuiKey(
       fieldByKey.state,
@@ -260,6 +273,19 @@ describe("semantic TUI actions", () => {
       context,
     );
     expect(backByAction).toEqual(backByKey);
+
+    const closedByKey = handleTuiKey(
+      fieldByKey.state,
+      { input: "", escape: true },
+      context,
+      persistentFilterExperience,
+    );
+    const closedByAction = handleTuiAction(
+      fieldByAction.state,
+      { type: "persistentFilter.condition.close" },
+      context,
+    );
+    expect(closedByAction).toEqual(closedByKey);
   });
 
   it("activates Add Project review controls identically through hotkey, focused Enter, and action", () => {

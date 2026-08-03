@@ -71,6 +71,37 @@ describe("dashboard persistent filter selector", () => {
     expect(projection?.rows.get("create:beta")?.dimmed).toBe(true);
   });
 
+  it("previews the active field selection before it is retained", () => {
+    const projection = selectDashboardPersistentFilter({
+      candidates,
+      projects,
+      screen: {
+        name: "persistentFilter",
+        draft: { value: "", cursor: 0 },
+        draftConditions: [],
+        conditionEditor: {
+          stage: "values",
+          field: "status",
+          cursor: 2,
+          options: [
+            { id: "needs_attention", label: "Needs attention" },
+            { id: "stuck", label: "Stuck" },
+            { id: "working", label: "Working" },
+          ],
+          selectedIds: ["working"],
+        },
+      },
+    });
+
+    expect(projection).toMatchObject({
+      source: "draft",
+      conditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
+      matchCount: 1,
+    });
+    expect(projection?.rows.get("session:alpha")?.matched).toBe(true);
+    expect(projection?.rows.get("create:beta")?.matched).toBe(false);
+  });
+
   it("matches visible agent, status, and project labels for session and optimistic rows", () => {
     const byAgent = selectDashboardPersistentFilter({
       candidates,

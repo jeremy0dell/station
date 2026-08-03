@@ -68,7 +68,7 @@ export type StationMouseTarget =
     }
   | {
       kind: "persistentFilterConditionAction";
-      actionId: "back" | "apply";
+      actionId: "back" | "close" | "done" | "applyFilter";
     }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
@@ -266,16 +266,29 @@ export function routeStationMouse(
           )
         : { kind: "handled" };
     case "persistentFilterConditionAction":
+      if (target.actionId === "close") {
+        return mode === "persistentFilterConditionField" ||
+          mode === "persistentFilterConditionValues"
+          ? fromKeyOutcome(
+              dispatchStationAction(store, { type: "persistentFilter.condition.close" }),
+            )
+          : { kind: "handled" };
+      }
+      if (target.actionId === "applyFilter") {
+        return mode === "persistentFilterConditionField"
+          ? fromKeyOutcome(dispatchStationAction(store, { type: "persistentFilter.applyDraft" }))
+          : { kind: "handled" };
+      }
       if (mode !== "persistentFilterConditionValues") {
         return { kind: "handled" };
       }
-      if (target.actionId === "back") {
-        return fromKeyOutcome(
-          dispatchStationAction(store, { type: "persistentFilter.condition.back" }),
-        );
-      }
       return fromKeyOutcome(
-        dispatchStationAction(store, { type: "persistentFilter.condition.apply" }),
+        dispatchStationAction(store, {
+          type:
+            target.actionId === "back"
+              ? "persistentFilter.condition.back"
+              : "persistentFilter.condition.done",
+        }),
       );
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {

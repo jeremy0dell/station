@@ -182,18 +182,20 @@ describe("terminal palette theme construction", () => {
     });
   });
 
-  it("populates every semantic role without alpha intent", () => {
+  it("populates every semantic role and limits alpha intent to the modal backdrop", () => {
     const theme = terminalTheme(lightTerminalColors);
-    const serialized = JSON.stringify(theme);
+    const { conditionBackdrop, ...opaqueFilter } = theme.filter;
+    const serialized = JSON.stringify({ ...theme, filter: opaqueFilter });
 
     expect(serialized).not.toContain("null");
     expect(serialized).not.toContain('"kind":"alpha"');
+    expect(conditionBackdrop.kind).toBe("alpha");
     expect(Object.values(theme.surfaces)).toHaveLength(7);
     expect(Object.values(theme.text)).toHaveLength(5);
     expect(Object.values(theme.status)).toHaveLength(7);
     expect(Object.values(theme.action)).toHaveLength(4);
     expect(Object.values(theme.interaction)).toHaveLength(5);
-    expect(Object.values(theme.filter)).toHaveLength(6);
+    expect(Object.values(theme.filter)).toHaveLength(9);
     expect(Object.values(theme.welcome)).toHaveLength(9);
     expect(Object.values(theme.contextMenu)).toHaveLength(3);
     expect(Object.values(theme.island)).toHaveLength(5);

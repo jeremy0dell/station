@@ -20,7 +20,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ script│  ↵          open focused session                             │qs] [▾] 
  [9] ○ a│  tab        next session needing you                         │6 #5 x1 
  [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10 
-        │  Tab S/P/A  add Status/Project/Agent filter condition        │        
+        │  Tab S/P/A  build filter conditions · F applies builder      │        
 ▼ empty-│  1-9/a-z    open visible session or toggle condition         │qs] [▾] 
         ╰──────────────────────────────────────────────────────────────╯        
 ─────────────────────────────────────────────────────────────────────────────── 
@@ -90,13 +90,13 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ─────────────────────────────────────────────────────────────────────────────── 
 ▏ FILTER /▏                                                       10/10 matches 
 ┌────────────────────────────────┐                                [sh] [qs] [▾] 
-│ ADD CONDITION                  │        codex     idle           +14 -6 #70 ✓ 
+│ FILTER CONDITIONS           [×]│        codex     idle           +14 -6 #70 ✓ 
 │▸ S Status                 Any ›│        codex     no agent                    
 │  P Project                Any ›│        codex     idle                  #73 ✓ 
 │  A Agent                  Any ›│        codex     starting                    
-└────────────────────────────────┘        codex     working      +412 -96 #76 … 
-                                                                                
-▼ observer  3 sessions · 3 agents                                 [sh] [qs] [▾] 
+│                                │        codex     working      +412 -96 #76 … 
+│  Apply filter (F)              │                                              
+└────────────────────────────────┘                                [sh] [qs] [▾] 
  [6] x batch-export                       opencode  exited                 #8 ✓ 
  [7] ⠋ provider-hooks                     opencode  working        +32 -8 #16 … 
  [8] ○ trace-bundle                       opencode  idle             +1 -1 #4 ✓ 
@@ -108,7 +108,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
- CONDITION   S/P/A choose field  ↑↓ move  Enter select  Esc close               
+ CONDITION   S/P/A edit  ↑↓ move  Enter select  F apply filter  Esc text        
 "
 `;
 
@@ -116,9 +116,9 @@ exports[`modal flow golden frames renders the persistent filter status condition
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
-▏ FILTER /▏                                                       10/10 matches 
+▏ FILTER /▏ Status=Working                                         2/10 matches 
 ┌────────────────────────────────┐                                [sh] [qs] [▾] 
-│ STATUS CONDITION               │        codex     idle           +14 -6 #70 ✓ 
+│[←] STATUS CONDITION         [×]│        codex     idle           +14 -6 #70 ✓ 
 │  1 [ ] Needs attention         │        codex     no agent                    
 │  2 [ ] Stuck                   │        codex     idle                  #73 ✓ 
 │▸ 3 [✓] Working                 │        codex     starting                    
@@ -127,7 +127,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 │  6 [ ] Exited                  │                                [sh] [qs] [▾] 
 │  7 [ ] No agent                │        opencode  exited                 #8 ✓ 
 │  8 [ ] Unknown                 │        opencode  working        +32 -8 #16 … 
-│[←]                          [✓]│        opencode  idle             +1 -1 #4 ✓ 
+│  Done (Enter)                  │        opencode  idle             +1 -1 #4 ✓ 
 └────────────────────────────────┘                                              
 ▼ scripts  2 sessions · 2 agents                                  [sh] [qs] [▾] 
  [9] ○ api-cache                          opencode  idle           +14 -6 #5 x1 
@@ -136,7 +136,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
- CONDITION   ← fields  ↑↓ move  Space/slot toggle  Enter apply  Esc close       
+ CONDITION   ← fields  ↑↓ move  Space/slot toggle  Enter done  Esc close        
 "
 `;
 
@@ -146,13 +146,13 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ─────────────────────────────────────── 
 ▏ FILTER /▏               10/10 matches 
 ┌────────────────────────────────┐] [▾] 
-│ STATUS CONDITION ↑5            │      
+│[←] STATUS CONDITION ↑5      [×]│      
 │  6 [ ] Exited                  │t     
 │▸ 7 [ ] No agent                │      
 │  8 [ ] Unknown                 │g     
-│[←]                          [✓]│      
+│  Done (Enter)                  │      
 └────────────────────────────────┘───── 
- CONDITION  ← menu Sp toggle Esc close  
+ CONDITION  ← fields Sp toggle Esc clo… 
 "
 `;
 

@@ -208,26 +208,36 @@ describe("routeDashboardMouse", () => {
     expect(store.state.getState().scrollOffset).toBe(0);
   });
 
-  it("routes condition back and apply controls through the standalone renderer", () => {
-    const commitStore = makeStationTestRuntime({
+  it("routes condition header and footer controls through the standalone renderer", () => {
+    const doneStore = makeStationTestRuntime({
       terminalRows: 14,
       dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
-    commitStore.actions.handleKey({ input: "/" });
-    commitStore.actions.handleKey({ input: "i", ctrl: true });
-    commitStore.actions.handleKey({ input: "S" });
-    commitStore.actions.handleKey({ input: "3" });
+    doneStore.actions.handleKey({ input: "/" });
+    doneStore.actions.handleKey({ input: "i", ctrl: true });
+    doneStore.actions.handleKey({ input: "S" });
+    doneStore.actions.handleKey({ input: "3" });
 
     routeDashboardMouse(
-      { kind: "persistentFilterConditionAction", actionId: "apply" },
+      { kind: "persistentFilterConditionAction", actionId: "done" },
       LEFT_DOWN,
-      commitStore,
+      doneStore,
     );
-    expect(commitStore.state.getState().screen).toMatchObject({
+    expect(doneStore.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       draftConditions: [
         { field: "status", values: [{ id: "working", label: "Working" }] },
       ],
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
+    routeDashboardMouse(
+      { kind: "persistentFilterConditionAction", actionId: "applyFilter" },
+      LEFT_DOWN,
+      doneStore,
+    );
+    expect(doneStore.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(doneStore.state.getState().persistentFilter).toMatchObject({
+      conditions: [{ field: "status" }],
     });
 
     const backStore = makeStationTestRuntime({

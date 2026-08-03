@@ -20,12 +20,14 @@ import {
 } from "./screens/fork.js";
 import { handleNewSessionAction } from "./screens/newSession.js";
 import {
+  applyDashboardPersistentFilter,
   clearDashboardPersistentFilter,
   openDashboardPersistentFilter,
 } from "./screens/persistentFilter.js";
 import {
-  applyPersistentFilterCondition,
   backPersistentFilterConditionEditor,
+  cancelPersistentFilterConditionEditor,
+  donePersistentFilterConditionEditor,
   selectPersistentFilterConditionField,
   togglePersistentFilterConditionValue,
 } from "./screens/persistentFilterConditions.js";
@@ -45,11 +47,7 @@ import {
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
 } from "./screens/widgetSettings.js";
-import type {
-  TuiControlIntent,
-  TuiRuntimeContext,
-  TuiTransition,
-} from "./transition.js";
+import type { TuiControlIntent, TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
   DashboardFilterConditionField,
   ProjectHeaderControl,
@@ -111,7 +109,9 @@ export type TuiSemanticAction =
       valueId: string;
     }
   | { type: "persistentFilter.condition.back" }
-  | { type: "persistentFilter.condition.apply" }
+  | { type: "persistentFilter.condition.close" }
+  | { type: "persistentFilter.condition.done" }
+  | { type: "persistentFilter.applyDraft" }
   | {
       type: "dashboard.projectHeader.activate";
       projectId: ProjectId;
@@ -170,8 +170,12 @@ export function handleTuiAction(
       );
     case "persistentFilter.condition.back":
       return stateTransition(backPersistentFilterConditionEditor(state));
-    case "persistentFilter.condition.apply":
-      return stateTransition(applyPersistentFilterCondition(state));
+    case "persistentFilter.condition.close":
+      return stateTransition(cancelPersistentFilterConditionEditor(state));
+    case "persistentFilter.condition.done":
+      return stateTransition(donePersistentFilterConditionEditor(state));
+    case "persistentFilter.applyDraft":
+      return applyDashboardPersistentFilter(state);
     case "dashboard.projectHeader.activate":
       return activateProjectHeaderControl(state, action.projectId, action.actionId);
     case "dashboard.emptyProject.activate":

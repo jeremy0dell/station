@@ -1,3 +1,4 @@
+import { DASHBOARD_FILTER_CONDITION_KEYS } from "../../selectors/dashboardFilterConditions.js";
 import type { PersistentFilterActionId } from "../../state/actions.js";
 import {
   dashboardBindingHelp,
@@ -15,6 +16,15 @@ import {
 } from "./segmentLayout.js";
 
 type DashboardPersistentFilterView = NonNullable<DashboardViewState["persistentFilter"]>;
+type FooterShortcut = readonly [id: TuiDashboardBindingId, label: string];
+type FooterHelper = readonly [key: string, description: string];
+type PersistentFilterConditionStage = "field" | "values";
+
+type AppliedFooterShortcut = readonly [
+  id: TuiDashboardBindingId,
+  label: string,
+  action?: PersistentFilterActionId,
+];
 
 export type DashboardFilterFooterSegmentRole = "badge" | "key" | "description" | "spacer";
 
@@ -24,92 +34,172 @@ export type DashboardFilterFooterSegment = {
   action?: PersistentFilterActionId;
 };
 
-export type DashboardFooterModel =
-  | { kind: "loading"; text: string }
-  | { kind: "dashboard"; text: string }
-  | {
-      kind: "persistentFilterApplied";
-      segments: readonly DashboardFilterFooterSegment[];
-    }
-  | {
-      kind: "persistentFilterEditing";
-      segments: readonly DashboardFilterFooterSegment[];
-    }
-  | {
-      kind: "persistentFilterCondition";
-      segments: readonly DashboardFilterFooterSegment[];
-    };
+export type DashboardFooterLoadingModel = {
+  kind: "loading";
+  text: string;
+};
 
-export function dashboardFooterModel({
-  columns,
-  quitHint,
-  hasSnapshot,
-  firstRun,
-  screen,
-  persistentFilter,
-}: {
+export type DashboardFooterDashboardModel = {
+  kind: "dashboard";
+  text: string;
+};
+
+export type DashboardFooterPersistentFilterAppliedModel = {
+  kind: "persistentFilterApplied";
+  segments: readonly DashboardFilterFooterSegment[];
+};
+
+export type DashboardFooterPersistentFilterEditingModel = {
+  kind: "persistentFilterEditing";
+  segments: readonly DashboardFilterFooterSegment[];
+};
+
+export type DashboardFooterPersistentFilterConditionModel = {
+  kind: "persistentFilterCondition";
+  segments: readonly DashboardFilterFooterSegment[];
+};
+
+export type DashboardFooterModel =
+  | DashboardFooterLoadingModel
+  | DashboardFooterDashboardModel
+  | DashboardFooterPersistentFilterAppliedModel
+  | DashboardFooterPersistentFilterEditingModel
+  | DashboardFooterPersistentFilterConditionModel;
+
+export type DashboardFooterModelOptions = {
   columns: number;
   quitHint: string;
   hasSnapshot: boolean;
   firstRun: boolean;
   screen?: DashboardScreenView;
   persistentFilter?: DashboardPersistentFilterView;
-}): DashboardFooterModel {
+};
+
+const FIRST_RUN_FULL_SHORTCUTS: readonly FooterShortcut[] = [
+  ["tui.dashboard.focusActivate", "add first project"],
+  ["tui.dashboard.addProject", "add project"],
+];
+
+const FIRST_RUN_COMPACT_SHORTCUTS: readonly FooterShortcut[] = [
+  ["tui.dashboard.focusActivate", "add first project"],
+];
+
+const DASHBOARD_FULL_SHORTCUTS: readonly FooterShortcut[] = [
+  ["tui.dashboard.focusActivate", "activate"],
+  ["tui.dashboard.newSession", "new"],
+  ["tui.dashboard.addProject", "add"],
+  ["tui.dashboard.nextNeedsMe", "next-needs-me"],
+  ["tui.dashboard.search", "search"],
+  ["tui.dashboard.remove", "delete"],
+  ["tui.dashboard.helpAlias", "help"],
+];
+
+const DASHBOARD_COMPACT_SHORTCUTS: readonly FooterShortcut[] = [
+  ["tui.dashboard.focusActivate", "activate"],
+  ["tui.dashboard.newSession", "new"],
+  ["tui.dashboard.nextNeedsMe", "next"],
+  ["tui.dashboard.search", "search"],
+  ["tui.dashboard.remove", "delete"],
+  ["tui.dashboard.helpAlias", "help"],
+];
+
+const APPLIED_FILTER_FULL_SHORTCUTS: readonly AppliedFooterShortcut[] = [
+  ["tui.dashboard.focusActivate", "activate"],
+  ["tui.dashboard.newSession", "new"],
+  ["tui.dashboard.addProject", "add"],
+  ["tui.dashboard.nextNeedsMe", "next-needs-me"],
+  ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+  ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
+  ["tui.dashboard.remove", "delete"],
+  ["tui.dashboard.helpAlias", "help"],
+];
+
+const APPLIED_FILTER_PRIORITIZED_SHORTCUTS: readonly AppliedFooterShortcut[] = [
+  ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+  ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
+  ["tui.dashboard.focusActivate", "activate"],
+  ["tui.dashboard.newSession", "new"],
+];
+
+const APPLIED_FILTER_ESSENTIAL_SHORTCUTS: readonly AppliedFooterShortcut[] = [
+  ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+  ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
+];
+
+const CONDITION_FIELD_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
+
+const CONDITION_FIELD_HELPERS: readonly FooterHelper[] = [
+  [CONDITION_FIELD_KEY_HINT, "edit"],
+  ["↑↓", "move"],
+  ["Enter", "select"],
+  ["F", "apply filter"],
+  ["Esc", "text"],
+];
+
+const CONDITION_FIELD_COMPACT_HELPERS: readonly FooterHelper[] = [
+  [CONDITION_FIELD_KEY_HINT, "edit"],
+  ["F", "apply"],
+  ["Esc", "text"],
+];
+
+const CONDITION_VALUE_HELPERS: readonly FooterHelper[] = [
+  ["←", "fields"],
+  ["↑↓", "move"],
+  ["Space/slot", "toggle"],
+  ["Enter", "done"],
+  ["Esc", "close"],
+];
+
+const CONDITION_VALUE_COMPACT_HELPERS: readonly FooterHelper[] = [
+  ["←", "fields"],
+  ["Sp", "toggle"],
+  ["Esc", "close"],
+];
+
+export function dashboardFooterModel(options: DashboardFooterModelOptions): DashboardFooterModel {
+  const { columns, quitHint, hasSnapshot, firstRun, screen, persistentFilter } = options;
+
   if (!hasSnapshot) {
-    return { kind: "loading", text: fitFooterCandidates(columns, [quitHint]) };
+    const model: DashboardFooterLoadingModel = {
+      kind: "loading",
+      text: fitFooterCandidates(columns, [quitHint]),
+    };
+    return model;
   }
+
   if (screen?.name === "persistentFilter") {
-    return screen.conditionEditor === undefined
-      ? persistentFilterEditingFooter(columns)
-      : persistentFilterConditionFooter(columns, screen.conditionEditor.stage);
+    if (screen.conditionEditor === undefined) {
+      return persistentFilterEditingFooter(columns);
+    }
+    return persistentFilterConditionFooter(columns, screen.conditionEditor.stage);
   }
+
   if (persistentFilter !== undefined) {
     const appliedQuitHint = quitHint === QUIT_HINT_CLOSE ? QUIT_HINT_FILTER_CLOSE : quitHint;
-    return {
+    const model: DashboardFooterPersistentFilterAppliedModel = {
       kind: "persistentFilterApplied",
       segments: appliedFilterFooter(columns, appliedQuitHint),
     };
+    return model;
   }
-  return {
+
+  const model: DashboardFooterDashboardModel = {
     kind: "dashboard",
     text: dashboardFooter(columns, quitHint, firstRun),
   };
+  return model;
 }
 
 function dashboardFooter(columns: number, quitHint: string, firstRun: boolean): string {
-  const full = firstRun
-    ? footerLine(
-        [
-          ["tui.dashboard.focusActivate", "add first project"],
-          ["tui.dashboard.addProject", "add project"],
-        ],
-        quitHint,
-      )
-    : footerLine(
-        [
-          ["tui.dashboard.focusActivate", "activate"],
-          ["tui.dashboard.newSession", "new"],
-          ["tui.dashboard.addProject", "add"],
-          ["tui.dashboard.nextNeedsMe", "next-needs-me"],
-          ["tui.dashboard.search", "search"],
-          ["tui.dashboard.remove", "delete"],
-          ["tui.dashboard.helpAlias", "help"],
-        ],
-        quitHint,
-      );
-  const compact = firstRun
-    ? footerLine([["tui.dashboard.focusActivate", "add first project"]], quitHint)
-    : footerLine(
-        [
-          ["tui.dashboard.focusActivate", "activate"],
-          ["tui.dashboard.newSession", "new"],
-          ["tui.dashboard.nextNeedsMe", "next"],
-          ["tui.dashboard.search", "search"],
-          ["tui.dashboard.remove", "delete"],
-          ["tui.dashboard.helpAlias", "help"],
-        ],
-        quitHint,
-      );
+  let fullShortcuts = DASHBOARD_FULL_SHORTCUTS;
+  let compactShortcuts = DASHBOARD_COMPACT_SHORTCUTS;
+  if (firstRun) {
+    fullShortcuts = FIRST_RUN_FULL_SHORTCUTS;
+    compactShortcuts = FIRST_RUN_COMPACT_SHORTCUTS;
+  }
+
+  const full = footerLine(fullShortcuts, quitHint);
+  const compact = footerLine(compactShortcuts, quitHint);
   const width = normalizeTextLineWidth(columns);
   if (cellWidth(full) <= width) {
     return full;
@@ -124,68 +214,36 @@ function appliedFilterFooter(
   columns: number,
   quitHint: string,
 ): readonly DashboardFilterFooterSegment[] {
-  const full = appliedFooterSegments(
-    [
-      ["tui.dashboard.focusActivate", "activate"],
-      ["tui.dashboard.newSession", "new"],
-      ["tui.dashboard.addProject", "add"],
-      ["tui.dashboard.nextNeedsMe", "next-needs-me"],
-      ["tui.dashboard.search", "edit", "persistentFilter.edit"],
-      ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
-      ["tui.dashboard.remove", "delete"],
-      ["tui.dashboard.helpAlias", "help"],
-    ],
-    quitHint,
-  );
-  const prioritized = appliedFooterSegments(
-    [
-      ["tui.dashboard.search", "edit", "persistentFilter.edit"],
-      ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
-      ["tui.dashboard.focusActivate", "activate"],
-      ["tui.dashboard.newSession", "new"],
-    ],
-    quitHint,
-  );
-  const essential = appliedFooterSegments(
-    [
-      ["tui.dashboard.search", "edit", "persistentFilter.edit"],
-      ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
-    ],
-    quitHint,
-  );
-  return fitFooterSegmentCandidates(columns, [
-    full,
-    prioritized,
-    essential,
-    [
-      {
-        text: shortcut("tui.dashboard.search", "edit"),
-        role: "key",
-        action: "persistentFilter.edit",
-      },
-      { text: " ", role: "spacer" },
-      {
-        text: shortcut("tui.dashboard.dismissEsc", "clear"),
-        role: "key",
-        action: "persistentFilter.clear",
-      },
-      { text: " Q", role: "description" },
-    ],
-    [
-      { text: "/", role: "key", action: "persistentFilter.edit" },
-      { text: " ", role: "spacer" },
-      { text: "Esc", role: "key", action: "persistentFilter.clear" },
-      { text: " Q", role: "description" },
-    ],
-    [{ text: "Q", role: "description" }],
-  ]);
+  const full = appliedFooterSegments(APPLIED_FILTER_FULL_SHORTCUTS, quitHint);
+  const prioritized = appliedFooterSegments(APPLIED_FILTER_PRIORITIZED_SHORTCUTS, quitHint);
+  const essential = appliedFooterSegments(APPLIED_FILTER_ESSENTIAL_SHORTCUTS, quitHint);
+  const labeledActions = labeledAppliedFilterActions();
+  const keyOnlyActions = keyOnlyAppliedFilterActions();
+  const quitOnly = [footerSegment("Q", "description")];
+  const candidates = [full, prioritized, essential, labeledActions, keyOnlyActions, quitOnly];
+  return fitFooterSegmentCandidates(columns, candidates);
 }
 
-type AppliedFooterShortcut = readonly [
-  id: TuiDashboardBindingId,
-  label: string,
-  action?: PersistentFilterActionId,
-];
+function labeledAppliedFilterActions(): readonly DashboardFilterFooterSegment[] {
+  const edit = footerActionSegment(
+    shortcut("tui.dashboard.search", "edit"),
+    "persistentFilter.edit",
+  );
+  const clear = footerActionSegment(
+    shortcut("tui.dashboard.dismissEsc", "clear"),
+    "persistentFilter.clear",
+  );
+  return [edit, footerSegment(" ", "spacer"), clear, footerSegment(" Q", "description")];
+}
+
+function keyOnlyAppliedFilterActions(): readonly DashboardFilterFooterSegment[] {
+  return [
+    footerActionSegment("/", "persistentFilter.edit"),
+    footerSegment(" ", "spacer"),
+    footerActionSegment("Esc", "persistentFilter.clear"),
+    footerSegment(" Q", "description"),
+  ];
+}
 
 function appliedFooterSegments(
   shortcuts: readonly AppliedFooterShortcut[],
@@ -194,19 +252,18 @@ function appliedFooterSegments(
   const segments: DashboardFilterFooterSegment[] = [];
   shortcuts.forEach(([id, label, action], index) => {
     if (index > 0) {
-      segments.push({ text: "  ", role: "spacer" });
+      segments.push(footerSegment("  ", "spacer"));
     }
-    const segment: DashboardFilterFooterSegment = {
-      text: shortcut(id, label),
-      role: action === undefined ? "description" : "key",
-    };
-    if (action !== undefined) {
-      segment.action = action;
+
+    const text = shortcut(id, label);
+    if (action === undefined) {
+      segments.push(footerSegment(text, "description"));
+    } else {
+      segments.push(footerActionSegment(text, action));
     }
-    segments.push(segment);
   });
-  segments.push({ text: "  ", role: "spacer" });
-  segments.push({ text: quitHint, role: "description" });
+  segments.push(footerSegment("  ", "spacer"));
+  segments.push(footerSegment(quitHint, "description"));
   return segments;
 }
 
@@ -219,10 +276,7 @@ function fitFooterSegmentCandidates(
   return selected ?? clipTextLineSegments(candidates.at(-1) ?? [], width);
 }
 
-function footerLine(
-  shortcuts: readonly (readonly [TuiDashboardBindingId, string])[],
-  quitHint: string,
-): string {
+function footerLine(shortcuts: readonly FooterShortcut[], quitHint: string): string {
   return [...shortcuts.map(([id, label]) => shortcut(id, label)), quitHint].join("  ");
 }
 
@@ -242,7 +296,7 @@ function fitFooterCandidates(columns: number, candidates: readonly string[]): st
 
 function persistentFilterEditingFooter(
   columns: number,
-): Extract<DashboardFooterModel, { kind: "persistentFilterEditing" }> {
+): DashboardFooterPersistentFilterEditingModel {
   const width = normalizeTextLineWidth(columns);
   const candidates: readonly (readonly DashboardFilterFooterSegment[])[] = [
     persistentFilterFooterSegments([
@@ -264,60 +318,44 @@ function persistentFilterEditingFooter(
     ]),
   ];
   const selected = candidates.find((candidate) => textLineSegmentsWidth(candidate) <= width);
-  return {
+  const segments = selected ?? clipTextLineSegments(candidates.at(-1) ?? [], width);
+  const model: DashboardFooterPersistentFilterEditingModel = {
     kind: "persistentFilterEditing",
-    segments: selected ?? clipTextLineSegments(candidates.at(-1) ?? [], width),
+    segments,
   };
+  return model;
 }
 
 function persistentFilterConditionFooter(
   columns: number,
-  stage: "field" | "values",
-): Extract<DashboardFooterModel, { kind: "persistentFilterCondition" }> {
+  stage: PersistentFilterConditionStage,
+): DashboardFooterPersistentFilterConditionModel {
+  let helpers = CONDITION_VALUE_HELPERS;
+  let compactHelpers = CONDITION_VALUE_COMPACT_HELPERS;
+  if (stage === "field") {
+    helpers = CONDITION_FIELD_HELPERS;
+    compactHelpers = CONDITION_FIELD_COMPACT_HELPERS;
+  }
+
   const width = normalizeTextLineWidth(columns);
-  const helpers =
-    stage === "field"
-      ? ([
-          ["S/P/A", "choose field"],
-          ["↑↓", "move"],
-          ["Enter", "select"],
-          ["Esc", "close"],
-        ] as const)
-      : ([
-          ["←", "fields"],
-          ["↑↓", "move"],
-          ["Space/slot", "toggle"],
-          ["Enter", "apply"],
-          ["Esc", "close"],
-        ] as const);
   const full = persistentFilterFooterSegments(helpers, " CONDITION ");
-  const compact = compactConditionFooterSegments(
-    stage === "field"
-      ? [
-          ["S/P/A", "field"],
-          ["↵", "pick"],
-          ["Esc", "close"],
-        ]
-      : [
-          ["←", "menu"],
-          ["Sp", "toggle"],
-          ["Esc", "close"],
-        ],
-  );
-  return {
+  const compact = compactConditionFooterSegments(compactHelpers);
+  const segments = conditionFooterSegmentsForWidth(full, compact, width);
+  const model: DashboardFooterPersistentFilterConditionModel = {
     kind: "persistentFilterCondition",
-    segments: conditionFooterSegmentsForWidth(full, compact, width),
+    segments,
   };
+  return model;
 }
 
 function compactConditionFooterSegments(
-  helpers: readonly (readonly [key: string, description: string])[],
+  helpers: readonly FooterHelper[],
 ): DashboardFilterFooterSegment[] {
-  const segments: DashboardFilterFooterSegment[] = [{ text: " CONDITION ", role: "badge" }];
+  const segments: DashboardFilterFooterSegment[] = [footerSegment(" CONDITION ", "badge")];
   for (const [key, description] of helpers) {
-    segments.push({ text: " ", role: "spacer" });
-    segments.push({ text: key, role: "key" });
-    segments.push({ text: ` ${description}`, role: "description" });
+    segments.push(footerSegment(" ", "spacer"));
+    segments.push(footerSegment(key, "key"));
+    segments.push(footerSegment(` ${description}`, "description"));
   }
   return segments;
 }
@@ -333,14 +371,34 @@ function conditionFooterSegmentsForWidth(
 }
 
 function persistentFilterFooterSegments(
-  helpers: readonly (readonly [key: string, description: string])[],
+  helpers: readonly FooterHelper[],
   badge = " FILTER ",
 ): DashboardFilterFooterSegment[] {
-  const segments: DashboardFilterFooterSegment[] = [{ text: badge, role: "badge" }];
+  const segments: DashboardFilterFooterSegment[] = [footerSegment(badge, "badge")];
   for (const [key, description] of helpers) {
-    segments.push({ text: "  ", role: "spacer" });
-    segments.push({ text: key, role: "key" });
-    segments.push({ text: ` ${description}`, role: "description" });
+    segments.push(footerSegment("  ", "spacer"));
+    segments.push(footerSegment(key, "key"));
+    segments.push(footerSegment(` ${description}`, "description"));
   }
   return segments;
+}
+
+function footerSegment(
+  text: string,
+  role: DashboardFilterFooterSegmentRole,
+): DashboardFilterFooterSegment {
+  const segment: DashboardFilterFooterSegment = { text, role };
+  return segment;
+}
+
+function footerActionSegment(
+  text: string,
+  action: PersistentFilterActionId,
+): DashboardFilterFooterSegment {
+  const segment: DashboardFilterFooterSegment = {
+    text,
+    role: "key",
+    action,
+  };
+  return segment;
 }

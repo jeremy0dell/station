@@ -106,7 +106,7 @@ describe("dashboard persistent filter footer", () => {
       }),
     );
     const valueModel = footer({
-      columns: 60,
+      columns: 80,
       screen: {
         ...FILTER_SCREEN,
         conditionEditor: {
@@ -124,13 +124,16 @@ describe("dashboard persistent filter footer", () => {
     const valueText = valueModel.segments.map((segment) => segment.text).join("");
 
     expect(fieldText).toContain("CONDITION");
-    expect(fieldText).toContain("S/P/A choose field");
+    expect(fieldText).toContain("S/P/A edit");
+    expect(fieldText).toContain("F apply filter");
+    expect(fieldText).toContain("Esc text");
     expect(valueText).toContain("CONDITION");
-    expect(valueText).toContain("← menu");
-    expect(valueText).toContain("Sp toggle");
+    expect(valueText).toContain("← fields");
+    expect(valueText).toContain("Space/slot toggle");
+    expect(valueText).toContain("Enter done");
     expect(valueText).toContain("Esc close");
     expect(valueText).not.toContain("commit");
-    expect(cellWidth(valueText)).toBeLessThanOrEqual(60);
+    expect(cellWidth(valueText)).toBeLessThanOrEqual(80);
   });
 
   it("keeps typed applied-filter controls visible while shedding lower-priority help", () => {

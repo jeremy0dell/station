@@ -21,7 +21,7 @@ function openFilter(): TuiState {
 }
 
 describe("persistent-filter conditions", () => {
-  it("opens the field chooser and commits slot-toggled status values", () => {
+  it("builds status, project, and agent conditions before applying the complete filter", () => {
     const chooser = key(openFilter(), TAB);
     expect(chooser.screen).toMatchObject({
       name: "persistentFilter",
@@ -41,8 +41,14 @@ describe("persistent-filter conditions", () => {
 
     const working = key(values, { input: "3" });
     const starting = key(working, { input: "4" });
-    const committed = key(starting, RETURN);
-    expect(committed.screen).toEqual({
+    const statusDone = key(starting, RETURN);
+    const projectValues = key(statusDone, { input: "P" });
+    const projectSelected = key(projectValues, { input: "1" });
+    const projectDone = key(projectSelected, { input: "", leftArrow: true });
+    const agentValues = key(projectDone, { input: "A" });
+    const agentSelected = key(agentValues, { input: "1" });
+    const built = key(agentSelected, RETURN);
+    expect(built.screen).toEqual({
       name: "persistentFilter",
       draft: { value: "", cursor: 0 },
       draftConditions: [
@@ -53,10 +59,13 @@ describe("persistent-filter conditions", () => {
             { id: "starting", label: "Starting" },
           ],
         },
+        { field: "project", values: [{ id: "api", label: "api" }] },
+        { field: "agent", values: [{ id: "codex", label: "codex" }] },
       ],
+      conditionEditor: { stage: "field", cursor: 2 },
     });
 
-    const applied = key(committed, RETURN);
+    const applied = key(built, { input: "F" });
     expect(applied.screen).toEqual({ name: "dashboard" });
     expect(applied.persistentFilter).toEqual({
       query: "",
@@ -68,7 +77,26 @@ describe("persistent-filter conditions", () => {
             { id: "starting", label: "Starting" },
           ],
         },
+        { field: "project", values: [{ id: "api", label: "api" }] },
+        { field: "agent", values: [{ id: "codex", label: "codex" }] },
       ],
+    });
+  });
+
+  it("focuses Apply filter after the fields and activates it with Enter", () => {
+    const editing = key(openFilter(), { input: "api" });
+    const chooser = key(editing, TAB);
+    const applyFocused = key(
+      key(key(chooser, { input: "", downArrow: true }), { input: "", downArrow: true }),
+      { input: "", downArrow: true },
+    );
+
+    expect(applyFocused.screen).toMatchObject({
+      conditionEditor: { stage: "field", cursor: 3 },
+    });
+    expect(key(applyFocused, RETURN)).toMatchObject({
+      screen: { name: "dashboard" },
+      persistentFilter: { query: "api" },
     });
   });
 
@@ -79,7 +107,7 @@ describe("persistent-filter conditions", () => {
     expect(chooser.screen).toEqual({
       name: "persistentFilter",
       draft: { value: "", cursor: 0 },
-      draftConditions: [],
+      draftConditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
       conditionEditor: { stage: "field", cursor: 0 },
     });
 
@@ -91,7 +119,7 @@ describe("persistent-filter conditions", () => {
     });
   });
 
-  it("discards only uncommitted panel toggles on Esc", () => {
+  it("discards only the active field's unretained toggles on Esc", () => {
     const applied = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       persistentFilter: {
@@ -113,7 +141,7 @@ describe("persistent-filter conditions", () => {
     expect(cancelled.persistentFilter).toBe(applied.persistentFilter);
   });
 
-  it("removes a field when no values are committed", () => {
+  it("removes a field when no values are retained", () => {
     const applied = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       persistentFilter: {
@@ -125,13 +153,16 @@ describe("persistent-filter conditions", () => {
     const values = key(key(opened, TAB), { input: "S" });
     const cleared = key(values, { input: "3" });
 
-    const committed = key(cleared, RETURN);
+    const done = key(cleared, RETURN);
 
-    expect(committed.screen).toMatchObject({ draftConditions: [] });
-    expect(key(committed, RETURN).persistentFilter).toEqual({ query: "api" });
+    expect(done.screen).toMatchObject({
+      draftConditions: [],
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
+    expect(key(done, { input: "F" }).persistentFilter).toEqual({ query: "api" });
   });
 
-  it("Ctrl-U clears text, committed conditions, and the nested editor", () => {
+  it("Ctrl-U clears text, retained conditions, and the nested editor", () => {
     const state = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       persistentFilter: {

@@ -5,7 +5,7 @@ import {
   truncateCells,
   type DashboardFilterConditionPanelAction,
   type DashboardFilterConditionPanelRow,
-  type TuiScreen,
+  type DashboardScreenView,
 } from "@station/dashboard-core";
 import {
   toOpenTuiColor,
@@ -26,7 +26,7 @@ export function DashboardFilterConditionView({
   availableRows,
   top,
 }: {
-  screen: Extract<TuiScreen, { name: "persistentFilter" }>;
+  screen: Extract<DashboardScreenView, { name: "persistentFilter" }>;
   columns: number;
   availableRows: number;
   top: number;
@@ -51,20 +51,13 @@ export function DashboardFilterConditionView({
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text
-        width="100%"
-        fg={toOpenTuiColor(theme.text.primary)}
-        bg={background}
-        attributes={TextAttributes.BOLD}
-      >
-        {fitConditionLine(conditionPanelTitle(model), innerWidth)}
-      </text>
+      <ConditionPanelHeader model={model} width={innerWidth} background={background} />
       {model.emptyMessage === undefined ? (
         model.rows.map((row) => (
           <ConditionPanelRow key={row.id} row={row} width={innerWidth} background={background} />
         ))
       ) : (
-        <text width="100%" fg={toOpenTuiColor(theme.text.muted)} bg={background}>
+        <text width="100%" fg={toOpenTuiColor(theme.text.muted)} bg={background} selectable={false}>
           {fitConditionLine(`  ${model.emptyMessage}`, innerWidth)}
         </text>
       )}
@@ -118,6 +111,7 @@ function ConditionPanelRow({
         width="100%"
         fg={toOpenTuiColor(theme.text.primary)}
         bg={rowBackground}
+        selectable={false}
         {...mouseProps}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
@@ -143,6 +137,7 @@ function ConditionPanelRow({
       width="100%"
       fg={toOpenTuiColor(theme.text.primary)}
       bg={rowBackground}
+      selectable={false}
       {...mouseProps}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -159,30 +154,52 @@ function ConditionPanelRow({
   );
 }
 
-function ConditionPanelActions({
-  actions,
+function ConditionPanelHeader({
+  model,
+  width,
   background,
 }: {
-  actions: readonly DashboardFilterConditionPanelAction[];
+  model: { title: string; hiddenAbove: number; hiddenBelow: number; actions: readonly DashboardFilterConditionPanelAction[] };
+  width: number;
   background: ColorInput;
 }) {
-  const back = actions.find((action) => action.id === "back");
-  const apply = actions.find((action) => action.id === "apply");
-  if (back === undefined || apply === undefined) return null;
+  const theme = useStationTheme();
+  const back = model.actions.find(
+    (action): action is Extract<DashboardFilterConditionPanelAction, { id: "back" | "close" }> =>
+      action.id === "back",
+  );
+  const close = model.actions.find(
+    (action): action is Extract<DashboardFilterConditionPanelAction, { id: "back" | "close" }> =>
+      action.id === "close",
+  );
+  const actionWidth = (back === undefined ? 0 : 3) + (close === undefined ? 0 : 3);
+  const titleWidth = Math.max(1, width - actionWidth);
   return (
     <box width="100%" height={1} flexDirection="row" backgroundColor={background}>
-      <ConditionPanelAction action={back} background={background} />
-      <box flexGrow={1} height={1} backgroundColor={background} />
-      <ConditionPanelAction action={apply} background={background} />
+      {back === undefined ? null : (
+        <ConditionPanelHeaderAction action={back} background={background} />
+      )}
+      <text
+        width={titleWidth}
+        fg={toOpenTuiColor(theme.text.primary)}
+        bg={background}
+        selectable={false}
+        attributes={TextAttributes.BOLD}
+      >
+        {fitConditionLine(conditionPanelTitle(model), titleWidth)}
+      </text>
+      {close === undefined ? null : (
+        <ConditionPanelHeaderAction action={close} background={background} />
+      )}
     </box>
   );
 }
 
-function ConditionPanelAction({
+function ConditionPanelHeaderAction({
   action,
   background,
 }: {
-  action: DashboardFilterConditionPanelAction;
+  action: Extract<DashboardFilterConditionPanelAction, { id: "back" | "close" }>;
   background: ColorInput;
 }) {
   const theme = useStationTheme();
@@ -193,6 +210,7 @@ function ConditionPanelAction({
       width={3}
       fg={toOpenTuiColor(theme.filter.editorRail)}
       bg={hover ? toOpenTuiOpaqueColor(theme.filter.conditionSelected) : background}
+      selectable={false}
       attributes={TextAttributes.BOLD}
       {...stationMouseProps(dispatch, {
         kind: "persistentFilterConditionAction",
@@ -202,6 +220,76 @@ function ConditionPanelAction({
       onMouseOut={() => setHover(false)}
     >
       [{action.label}]
+    </text>
+  );
+}
+
+function ConditionPanelActions({
+  actions,
+  background,
+}: {
+  actions: readonly DashboardFilterConditionPanelAction[];
+  background: ColorInput;
+}) {
+  const action = actions.find(
+    (
+      candidate,
+    ): candidate is Extract<
+      DashboardFilterConditionPanelAction,
+      { id: "done" | "applyFilter" }
+    > => candidate.placement === "footer",
+  );
+  if (action === undefined) return null;
+  const spacerRows = action.id === "applyFilter" ? 1 : 0;
+  return (
+    <box
+      width="100%"
+      height={spacerRows + 1}
+      flexDirection="column"
+      backgroundColor={background}
+    >
+      {spacerRows === 0 ? null : (
+        <box width="100%" height={spacerRows} backgroundColor={background} />
+      )}
+      <ConditionPanelFooterAction action={action} background={background} />
+    </box>
+  );
+}
+
+function ConditionPanelFooterAction({
+  action,
+  background,
+}: {
+  action: Extract<DashboardFilterConditionPanelAction, { id: "done" | "applyFilter" }>;
+  background: ColorInput;
+}) {
+  const theme = useStationTheme();
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useStationHoverState();
+  const selected = hover || action.focused;
+  return (
+    <text
+      width="100%"
+      fg={toOpenTuiColor(theme.text.primary)}
+      bg={selected ? toOpenTuiOpaqueColor(theme.filter.conditionSelected) : background}
+      selectable={false}
+      {...stationMouseProps(dispatch, {
+        kind: "persistentFilterConditionAction",
+        actionId: action.id,
+      })}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
+      <span
+        fg={toOpenTuiColor(action.focused ? theme.filter.editorRail : theme.text.primary)}
+        attributes={action.focused ? TextAttributes.BOLD : TextAttributes.NONE}
+      >
+        {action.focused ? "▸ " : "  "}
+        {action.label}
+      </span>
+      <span fg={toOpenTuiColor(theme.action.warning)} attributes={TextAttributes.BOLD}>
+        {` (${action.shortcut})`}
+      </span>
     </text>
   );
 }

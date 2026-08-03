@@ -6,6 +6,7 @@ import type {
 } from "../state/types.js";
 import {
   type DashboardFilterSummarySegment,
+  dashboardFilterConditionsWithSelection,
   dashboardPersistentFilterHasCriteria,
   dashboardPersistentFilterSummarySegments,
   normalizeDashboardFilterConditions,
@@ -169,9 +170,19 @@ function selectedPersistentFilter(
   applied: DashboardPersistentFilterView | undefined,
 ): { source: "draft" | "applied"; filter: DashboardPersistentFilterView } | undefined {
   if (screen.name === "persistentFilter") {
+    const editor = screen.conditionEditor;
+    const conditions =
+      editor?.stage === "values"
+        ? dashboardFilterConditionsWithSelection(
+            screen.draftConditions,
+            editor.field,
+            editor.options,
+            editor.selectedIds,
+          )
+        : screen.draftConditions;
     return {
       source: "draft",
-      filter: { query: screen.draft.value, conditions: screen.draftConditions },
+      filter: { query: screen.draft.value, conditions },
     };
   }
   return applied === undefined ? undefined : { source: "applied", filter: applied };

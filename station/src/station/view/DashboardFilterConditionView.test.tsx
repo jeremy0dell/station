@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rgbToHex } from "@opentui/core";
+import { type BaseRenderable, rgbToHex, TextRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { TuiScreen } from "@station/dashboard-core";
@@ -67,11 +67,11 @@ async function renderCondition(
 }
 
 describe("DashboardFilterConditionView", () => {
-  it("renders disclosure rows with applied summaries and semantic pointer targets", async () => {
+  it("renders disclosure rows with staged summaries and semantic pointer targets", async () => {
     const { setup, targets } = await renderCondition({ stage: "field", cursor: 0 });
     const frame = setup.captureCharFrame();
 
-    expect(frame).toContain("ADD CONDITION");
+    expect(frame).toContain("FILTER CONDITIONS");
     expect(frame).toContain("S Status");
     expect(frame).toContain("Working ›");
     expect(frame).toContain("P Project");
@@ -91,10 +91,16 @@ describe("DashboardFilterConditionView", () => {
       Array.from({ length: 3 }, () => stationColorSnapshotValue(nativeStationTheme.action.warning)),
     );
 
+    expect(frame).toContain("Apply filter (F)");
+
     await act(async () => {
       await setup.mockMouse.click(4, 2, MouseButtons.LEFT);
+      await setup.mockMouse.click(8, 6, MouseButtons.LEFT);
     });
-    expect(targets).toEqual([{ kind: "persistentFilterConditionField", field: "status" }]);
+    expect(targets).toEqual([
+      { kind: "persistentFilterConditionField", field: "status" },
+      { kind: "persistentFilterConditionAction", actionId: "applyFilter" },
+    ]);
   });
 
   it("keeps a first-value count when it fits and falls back to the count when it does not", async () => {
@@ -123,6 +129,26 @@ describe("DashboardFilterConditionView", () => {
     expect(frame).toMatch(/P Project +2 ›/);
   });
 
+  it("keeps builder and value-menu text out of OpenTUI selection", async () => {
+    const editors: PersistentFilterConditionEditor[] = [
+      { stage: "field", cursor: 0 },
+      {
+        stage: "values",
+        field: "status",
+        cursor: 0,
+        options: [{ id: "working", label: "Working" }],
+        selectedIds: [],
+      },
+    ];
+
+    for (const editor of editors) {
+      const { setup } = await renderCondition(editor);
+      const textRenderables = collectTextRenderables(setup.renderer.root);
+      expect(textRenderables.length).toBeGreaterThan(0);
+      expect(textRenderables.every((renderable) => renderable.selectable === false)).toBe(true);
+    }
+  });
+
   it("renders status values with checked and cursor affordances", async () => {
     const { setup, targets } = await renderCondition({
       stage: "values",
@@ -140,12 +166,14 @@ describe("DashboardFilterConditionView", () => {
     expect(frame).toContain("STATUS CONDITION");
     expect(frame).toContain("▸ 3 [✓] Working");
     expect(frame).toContain("[←]");
-    expect(frame).toContain("[✓]");
+    expect(frame).toContain("[×]");
+    expect(frame).toContain("Done (Enter)");
 
     await act(async () => {
       await setup.mockMouse.click(6, 4, MouseButtons.LEFT);
-      await setup.mockMouse.click(2, 5, MouseButtons.LEFT);
-      await setup.mockMouse.click(31, 5, MouseButtons.LEFT);
+      await setup.mockMouse.click(1, 1, MouseButtons.LEFT);
+      await setup.mockMouse.click(6, 5, MouseButtons.LEFT);
+      await setup.mockMouse.click(30, 1, MouseButtons.LEFT);
     });
     expect(targets).toEqual([
       {
@@ -154,7 +182,16 @@ describe("DashboardFilterConditionView", () => {
         valueId: "working",
       },
       { kind: "persistentFilterConditionAction", actionId: "back" },
-      { kind: "persistentFilterConditionAction", actionId: "apply" },
+      { kind: "persistentFilterConditionAction", actionId: "done" },
+      { kind: "persistentFilterConditionAction", actionId: "close" },
     ]);
   });
 });
+
+function collectTextRenderables(renderable: BaseRenderable): TextRenderable[] {
+  const collected = renderable instanceof TextRenderable ? [renderable] : [];
+  for (const child of renderable.getChildren()) {
+    collected.push(...collectTextRenderables(child));
+  }
+  return collected;
+}

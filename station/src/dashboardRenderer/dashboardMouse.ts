@@ -111,7 +111,7 @@ function routeSurfaceClick(
       return true;
     case "persistentFilterAction":
       if (mode === "dashboard") {
-        store.getState().dispatch({ type: target.actionId });
+        store.actions.dispatch({ type: target.actionId });
       }
       return true;
     case "scrollIndicator":
@@ -221,7 +221,7 @@ function routeModalClick(
   switch (target.kind) {
     case "persistentFilterConditionField":
       if (mode === "persistentFilterConditionField") {
-        store.getState().dispatch({
+        store.actions.dispatch({
           type: "persistentFilter.condition.selectField",
           field: target.field,
         });
@@ -229,7 +229,7 @@ function routeModalClick(
       return true;
     case "persistentFilterConditionValue":
       if (mode === "persistentFilterConditionValues") {
-        store.getState().dispatch({
+        store.actions.dispatch({
           type: "persistentFilter.condition.toggleValue",
           field: target.field,
           valueId: target.valueId,
@@ -237,12 +237,27 @@ function routeModalClick(
       }
       return true;
     case "persistentFilterConditionAction":
+      if (target.actionId === "close") {
+        if (
+          mode === "persistentFilterConditionField" ||
+          mode === "persistentFilterConditionValues"
+        ) {
+          store.actions.dispatch({ type: "persistentFilter.condition.close" });
+        }
+        return true;
+      }
+      if (target.actionId === "applyFilter") {
+        if (mode === "persistentFilterConditionField") {
+          store.actions.dispatch({ type: "persistentFilter.applyDraft" });
+        }
+        return true;
+      }
       if (mode === "persistentFilterConditionValues") {
-        store.getState().dispatch({
+        store.actions.dispatch({
           type:
             target.actionId === "back"
               ? "persistentFilter.condition.back"
-              : "persistentFilter.condition.apply",
+              : "persistentFilter.condition.done",
         });
       }
       return true;

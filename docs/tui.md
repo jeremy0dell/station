@@ -295,29 +295,39 @@ above-viewport context. A valid zero-result draft stays editable and uses an amb
 cue rather than an error state. Long drafts follow the caret horizontally and never wrap into the
 body.
 
-`Tab` opens the condition field chooser beneath the filter row without reflowing dashboard rows.
-Its disclosure rows use the standard shortcut accent for `S`, `P`, and `A`, show each field's
-current values (or `Any`), and use chevrons rather than checklist marks because activation opens a
+`Tab` opens the `FILTER CONDITIONS` builder beneath the filter row without reflowing dashboard
+rows. Its disclosure rows use the standard shortcut accent for `S`, `P`, and `A`, show each field's
+staged values (or `Any`), and use chevrons rather than checklist marks because activation opens a
 value submenu. Multiple values read as the first value plus a count (for example, `Idle +1`) or just
-the count when space is constrained. `S`, `P`, and `A` choose Status, Project, and Agent; arrows move,
-visible `1-9/a-z` slots or `Space`
-toggle values, and `Enter` or the panel's `[✓]` control applies the field. `Left` or `[←]` returns
-to the field chooser without applying the current values. Value slots remain stable while the
-panel is open, and long lists window around the cursor. `Esc` from either stage, or a safe
-click-away, closes the complete condition panel, discards only unapplied panel toggles, and
-returns to text editing. The panel blocks background activation and wheel input, dims only the
-dashboard body, and keeps its distinct `CONDITION` control footer undimmed. Cursor and `[✓]`
+the count when space is constrained. `S`, `P`, and `A` choose Status, Project, and Agent; arrows move
+across those fields and the final Apply action. Visible `1-9/a-z` slots or `Space` toggle values and
+immediately update the soft preview.
+
+A value submenu places `[←]` and `[×]` in its header and `Done (Enter)` at the bottom. `Left`, `[←]`,
+`Enter`, or Done retains the field's current selection and returns to the builder, so Status,
+Project, and Agent can be assembled before one final apply. Reopening a field restores its staged
+values; retaining no values removes that field. The builder places `[×]` in its header and
+`Apply filter (F)` at the bottom. `F`, or `Enter` while Apply is focused, applies free text and all
+staged fields together. `F` is intentionally inactive inside value lists because letters are stable
+value slots there.
+
+Value slots remain stable while a submenu is open, and long lists window around the cursor. `Esc`,
+`[×]`, or a safe click-away closes the complete condition builder and returns to text editing. From
+an active value submenu, closing discards only that field's unretained toggles; fields already
+returned to the builder stay staged. A second `Esc` from text editing cancels the complete draft and
+restores the prior applied filter. The panel blocks background activation and wheel input, dims only
+the dashboard body, and keeps its distinct `CONDITION` control footer undimmed. Cursor and checkbox
 markers ensure mode and selection do not rely on color.
 
-`Enter` applies any draft containing free text or conditions to optional dashboard-local state;
-applying a completely blank draft removes that state. `Ctrl-U` clears both parts of the draft.
-Reopening a field replaces its values, and applying no values removes that field. An applied
-filter is a hard projection: nonmatching sessions, optimistic rows, projects, and orphaned project
-gaps are omitted without changing canonical order. A project-label text match or a Project
-condition retains all of that project's children unless another row condition narrows them, while
-Status and Agent matches retain only matching rows and their project context. Matching children of a collapsed project remain hidden until its disclosure is expanded. Project
-collapse stays interactive while the filter is applied, so the marker and visible children always
-agree; clearing the filter leaves the user's latest collapse choices intact.
+`Enter` from text editing applies any draft containing free text or conditions to optional
+dashboard-local state; applying a completely blank draft removes that state. `Ctrl-U` clears both
+parts of the draft. An applied filter is a hard projection: nonmatching sessions, optimistic rows,
+projects, and orphaned project gaps are omitted without changing canonical order. A project-label
+text match or a Project condition retains all of that project's children unless another row
+condition narrows them, while Status and Agent matches retain only matching rows and their project
+context. Matching children of a collapsed project remain hidden until its disclosure is expanded.
+Project collapse stays interactive while the filter is applied, so the marker and visible children
+always agree; clearing the filter leaves the user's latest collapse choices intact.
 
 Free text is intentionally limited to text visible in project headers and session rows: project
 label, displayed title, agent, and activity. Hidden branch values, provider identifiers, raw status
@@ -345,7 +355,7 @@ applied filter; covered footer targets remain inert outside dashboard mode.
 | `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
 | Zero matches | Legacy projection behavior | Amber, recoverable soft preview; applying yields an empty dashboard projection |
 | Hidden metadata only | Legacy search may retain the row | Ignores metadata that is not rendered in the dashboard |
-| Condition entry | Legacy Tab behavior | `Tab`, `S/P/A`, slots/arrows/Space, `[←]`/Left, `[✓]`/Enter, Esc, and click-away share core transitions |
+| Condition entry | Legacy Tab behavior | `Tab`, `S/P/A`, slots/arrows/Space, header back/close, bottom Done, and final `F` Apply share core transitions |
 | Applied footer pointer | No persistent controls | `/ edit` and `Esc clear` share the keyboard transitions |
 | `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining free text and conditions |
 

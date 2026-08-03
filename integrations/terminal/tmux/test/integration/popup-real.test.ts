@@ -957,7 +957,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     await waitForPaneContent(
       fixture,
       qPopup,
-      (content) => content.includes("ADD CONDITION") && content.includes("P Project"),
+      (content) => content.includes("FILTER CONDITIONS") && content.includes("P Project"),
       "condition field chooser did not open in the tmux popup",
     );
     await fixture.ptyClient.write(Buffer.from("P", "utf8"));
@@ -979,7 +979,14 @@ describeRealTmux("real tmux dev popup routing", () => {
       fixture,
       qPopup,
       (content) => content.includes("Project="),
-      "Project condition did not commit to the tmux filter summary",
+      "Project condition was not retained in the tmux filter builder",
+    );
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("FILTER /") && !content.includes("FILTER CONDITIONS"),
+      "condition builder did not return to tmux filter text editing",
     );
     await fixture.ptyClient.write(Buffer.from("notify-cleanup", "utf8"));
     await fixture.ptyClient.write(Buffer.from("\r", "utf8"));

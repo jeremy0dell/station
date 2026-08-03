@@ -431,18 +431,18 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().persistentFilter).toBeUndefined();
   });
 
-  it("routes condition field, value, and apply clicks through the same transitions as keys", () => {
-    const clicked = makeStationTestStore({
+  it("routes condition building and final apply clicks through the same transitions as keys", () => {
+    const clicked = makeStationTestRuntime({
       terminalRows: 14,
       dashboardSearchExperience: persistentFilterExperience,
-    }).store;
-    const keyed = makeStationTestStore({
+    }).runtime;
+    const keyed = makeStationTestRuntime({
       terminalRows: 14,
       dashboardSearchExperience: persistentFilterExperience,
-    }).store;
+    }).runtime;
     for (const store of [clicked, keyed]) {
-      store.getState().handleKey({ input: "/" });
-      store.getState().handleKey({ input: "i", ctrl: true });
+      store.actions.handleKey({ input: "/" });
+      store.actions.handleKey({ input: "i", ctrl: true });
     }
 
     routeStationMouse(
@@ -450,8 +450,8 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       clicked,
     );
-    keyed.getState().handleKey({ input: "S" });
-    expect(clicked.getState().screen).toEqual(keyed.getState().screen);
+    keyed.actions.handleKey({ input: "S" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
 
     routeStationMouse(
       {
@@ -462,64 +462,80 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       clicked,
     );
-    keyed.getState().handleKey({ input: "3" });
-    expect(clicked.getState().screen).toEqual(keyed.getState().screen);
+    keyed.actions.handleKey({ input: "3" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
 
     routeStationMouse(
-      { kind: "persistentFilterConditionAction", actionId: "apply" },
+      { kind: "persistentFilterConditionAction", actionId: "done" },
       LEFT_DOWN,
       clicked,
     );
-    keyed.getState().handleKey({ input: "\r", return: true });
-    expect(clicked.getState().screen).toEqual(keyed.getState().screen);
-    expect(clicked.getState().screen).toMatchObject({
+    keyed.actions.handleKey({ input: "\r", return: true });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+    expect(clicked.state.getState().screen).toMatchObject({
       draftConditions: [
         { field: "status", values: [{ id: "working", label: "Working" }] },
       ],
+      conditionEditor: { stage: "field", cursor: 0 },
     });
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "applyFilter" },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "F" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+    expect(clicked.state.getState().persistentFilter).toEqual(
+      keyed.state.getState().persistentFilter,
+    );
   });
 
-  it("routes the condition back control to the field chooser while Esc closes the panel", () => {
-    const store = makeStationTestStore({
+  it("routes the top back and close controls independently", () => {
+    const store = makeStationTestRuntime({
       terminalRows: 14,
       dashboardSearchExperience: persistentFilterExperience,
-    }).store;
-    store.getState().handleKey({ input: "/" });
-    store.getState().handleKey({ input: "i", ctrl: true });
-    store.getState().handleKey({ input: "S" });
+    }).runtime;
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    store.actions.handleKey({ input: "S" });
 
     routeStationMouse(
       { kind: "persistentFilterConditionAction", actionId: "back" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       conditionEditor: { stage: "field", cursor: 0 },
     });
 
-    store.getState().handleKey({ input: "", escape: true });
-    expect(store.getState().screen).toEqual({
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "close" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toEqual({
       name: "persistentFilter",
       draft: { value: "", cursor: 0 },
       draftConditions: [],
     });
   });
 
-  it("click-away discards only the uncommitted condition panel", () => {
-    const store = makeStationTestStore({
+  it("click-away discards only the active field's unretained changes", () => {
+    const store = makeStationTestRuntime({
       terminalRows: 14,
       dashboardSearchExperience: persistentFilterExperience,
-    }).store;
-    store.getState().handleKey({ input: "/" });
-    store.getState().handleKey({ input: "draft" });
-    store.getState().handleKey({ input: "i", ctrl: true });
-    store.getState().handleKey({ input: "S" });
-    store.getState().handleKey({ input: "3" });
+    }).runtime;
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "draft" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    store.actions.handleKey({ input: "S" });
+    store.actions.handleKey({ input: "3" });
 
     routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
 
-    expect(store.getState().screen).toEqual({
+    expect(store.state.getState().screen).toEqual({
       name: "persistentFilter",
       draft: { value: "draft", cursor: 5 },
       draftConditions: [],
@@ -546,12 +562,11 @@ describe("routeStationMouse", () => {
   });
 
   it("keeps project disclosure interactive while a persistent filter is applied", () => {
-    const store = makeStore();
-    store.setState({ persistentFilter: { query: "station" } });
-    const snapshot = store.getState().snapshot;
+    const store = makeStore(undefined, { persistentFilter: { query: "station" } });
+    const snapshot = store.state.getState().snapshot;
     if (snapshot === undefined) throw new Error("expected snapshot");
     const visibleSessions = () =>
-      selectDashboardViewport(snapshot, store.getState()).items.filter(
+      selectDashboardViewport(snapshot, store.state.getState()).items.filter(
         (item) => item.type === "session",
       ).length;
 

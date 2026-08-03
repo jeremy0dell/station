@@ -22,7 +22,7 @@ export function DashboardFilterView({ model }: { model: DashboardFilterHeaderMod
       overflow="hidden"
       backgroundColor={toOpenTuiOpaqueColor(background)}
     >
-      <text width="100%">
+      <text width="100%" selectable={false}>
         {model.segments.map((segment, index) => (
           <span
             key={`${segment.role}:${index}`}

@@ -232,7 +232,7 @@ describe("dashboard golden frames", () => {
       setup.store.actions.handleKey({ input: "S" });
       setup.store.actions.handleKey({ input: "3" });
       setup.store.actions.handleKey({ input: "\r", return: true });
-      setup.store.actions.handleKey({ input: "\r", return: true });
+      setup.store.actions.handleKey({ input: "F" });
       await Promise.resolve();
     });
     await setup.flush();

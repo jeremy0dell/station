@@ -176,7 +176,7 @@ shell can't receive them) until `Ctrl-O` closes it.
 - **Slot activation** — `1-9`/`a-z` (or click a row) launches/focuses that worktree's primary agent in a pane.
 - **`[+sh]` shell affordance** — click on a row opens a shell in that worktree's checkout; on a project header opens a shell at the project root.
 - **Clickable PR / checks links** — underlined segments open the GitHub URL in your browser.
-- **Persistent filter (opt-in)** — with `[feature_flags].dashboard_persistent_filter = true`, `/` opens a soft live preview over visible dashboard text; `Tab` opens structured conditions, `S/P/A` chooses Status/Project/Agent, slots or arrows + `Space` toggle values, and `Enter` or `[✓]` applies. `Left` or `[←]` returns to the field chooser; `Esc` closes the complete condition menu. Free text/fields are ANDed and values within a field are ORed. Applying hard-projects matching context and sessions; `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer and condition-panel controls are clickable, and panel click-away discards only unapplied toggles.
+- **Persistent filter (opt-in)** — with `[feature_flags].dashboard_persistent_filter = true`, `/` opens a soft live preview over visible dashboard text; `Tab` opens `FILTER CONDITIONS`, and `S/P/A` chooses Status/Project/Agent. Slots or arrows + `Space` toggle values; header `[←]`/Left or bottom `Done (Enter)` retains that field so the next one can be added. Header `[×]`/`Esc` closes the builder, while bottom `Apply filter (F)` applies free text and all staged fields once. Free text/fields are ANDed and values within a field are ORed. Applying hard-projects matching context and sessions; `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer and condition-panel controls are clickable, and click-away discards only the active field's unretained toggles.
 - **Filtered project disclosure** — matching children remain behind collapsed project headers, and the disclosure keeps showing or hiding them while the filter is applied.
 - **Collapse/fold** — `C` then a slot key folds that project (state persists across toggles).
 - **Refresh snapshot** — `Z` forces a fresh observer snapshot.
@@ -277,6 +277,8 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 | `/`, `Z` | edit filter / refresh snapshot |
 | `Tab`, `S/P/A` | open conditions / choose Status, Project, Agent |
 | slots or `Space` | toggle a condition value |
+| `Left`/`[←]`, `Enter`/Done | retain one field and return to the builder |
+| `F`/Apply filter | apply free text and all staged fields |
 | `H`, `?` | help |
 | `Q`/`Esc` | close / back / cancel |
 

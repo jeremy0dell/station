@@ -42,6 +42,7 @@ function FilterFooterSegment({ segment }: { segment: DashboardFilterFooterSegmen
     <text
       flexShrink={0}
       fg={footerSegmentForeground(theme, segment)}
+      selectable={false}
       attributes={emphasized ? TextAttributes.BOLD : TextAttributes.NONE}
       {...footerSegmentBackground(theme, segment)}
       {...footerSegmentInteraction(dispatch, segment)}
