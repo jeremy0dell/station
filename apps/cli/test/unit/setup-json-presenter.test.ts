@@ -1,19 +1,101 @@
 import { readFileSync } from "node:fs";
+import type { SetupConfigMutationPlan as ConfigWritePlan } from "@station/config";
+import {
+  type HarnessSelectionFacts,
+  type HarnessSelectionResolution,
+  planSetup,
+  resolveHarnessSelection,
+  type SetupPlanningIntent,
+  type SupportedHarnessId,
+} from "@station/setup-core";
 import { resolveSetupMessage } from "@station/setup-messages";
 import { describe, expect, it } from "vitest";
-import { resolveSetupHarnessSelection } from "../../src/commands/setup/harnessSelection.js";
+import { normalizeSetupPlanningFacts } from "../../src/commands/setup/adapters/inspection.js";
 import type {
-  ConfigWritePlan,
   SetupFacts,
   SetupHarnessFact,
-  SupportedHarnessId,
-} from "../../src/commands/setup/model.js";
-import { buildSetupPlan, buildSetupPlans } from "../../src/commands/setup/planner.js";
+} from "../../src/commands/setup/adapters/inspectionTypes.js";
+import { projectSetupView } from "../../src/commands/setup/presentation/projectSetupView.js";
+import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
+
+type BuildSetupPlanOptions = {
+  readonly configWrite?: ConfigWritePlan;
+  readonly harnessSelection?: HarnessSelectionResolution;
+  readonly harnessTrackingSelection?: SetupPlanningIntent["harnessTrackingSelection"];
+  readonly linkStationLaunchers?: boolean;
+  readonly installWorktrunkHooks?: boolean;
+  readonly installWorktrunkShell?: boolean;
+  readonly configureTmuxPopup?: boolean;
+};
+
+function buildSetupPlan(
+  ...arguments_: [SetupFacts, BuildSetupPlanOptions?]
+): ReturnType<ReturnType<typeof createJsonSetupPresenter>["project"]> {
+  return buildSetupPlans(...arguments_).jsonPlan;
+}
+
+function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
+  const [setupFacts, options = {}] = arguments_;
+  const selection =
+    options.harnessSelection ??
+    resolveHarnessSelection(coreSelectionFacts(setupFacts), { kind: "automatic" });
+  const evidence = normalizeSetupPlanningFacts(setupFacts, selection, options.configWrite);
+  const harnessSelection: SetupPlanningIntent["harnessSelection"] =
+    selection.outcome === "selected" && selection.source === "explicit"
+      ? { kind: "explicit", harnessIds: selection.requiredHarnessIds }
+      : { kind: "automatic" };
+  const semanticPlan = planSetup(evidence, {
+    mode: setupFacts.mode,
+    harnessSelection,
+    installBootstrap: false,
+    installHarnesses: [],
+    linkStationLaunchers: options.linkStationLaunchers === true,
+    harnessTrackingSelection: options.harnessTrackingSelection ?? { kind: "automatic" },
+    installWorktrunkHooks: options.installWorktrunkHooks === true,
+    installWorktrunkShell: options.installWorktrunkShell === true,
+    configureTmuxPopup: options.configureTmuxPopup === true,
+  });
+  const projectionInput =
+    options.configWrite === undefined
+      ? { plan: semanticPlan, facts: setupFacts }
+      : { plan: semanticPlan, facts: setupFacts, configMutation: options.configWrite };
+  return {
+    semanticPlan,
+    presentationView: projectSetupView(projectionInput),
+    jsonPlan: createJsonSetupPresenter().project(projectionInput),
+  };
+}
+
+function resolveSetupHarnessSelection(
+  ...arguments_: [setupFacts: SetupFacts, selectedIds?: readonly SupportedHarnessId[]]
+): HarnessSelectionResolution {
+  const [setupFacts, selectedIds] = arguments_;
+  return resolveHarnessSelection(
+    coreSelectionFacts(setupFacts),
+    selectedIds === undefined
+      ? { kind: "automatic" }
+      : { kind: "explicit", harnessIds: selectedIds },
+  );
+}
+
+function coreSelectionFacts(setupFacts: SetupFacts): HarnessSelectionFacts {
+  const config: HarnessSelectionFacts["config"] =
+    setupFacts.config.status === "valid"
+      ? { status: "valid", defaultHarness: setupFacts.config.defaults.harness }
+      : { status: setupFacts.config.status };
+  return {
+    config,
+    harnesses: setupFacts.harnesses.map((harness) => ({
+      id: harness.id,
+      availability: harness.status === "ok" ? "available" : "unavailable",
+    })),
+  };
+}
 
 describe("setup plan projection", () => {
   it("keeps the machine projector independent from human message resolution", () => {
     const source = readFileSync(
-      new URL("../../src/commands/setup/presentation/projectCliSetupPlan.ts", import.meta.url),
+      new URL("../../src/commands/setup/presenters/json.ts", import.meta.url),
       "utf8",
     );
 
@@ -22,7 +104,7 @@ describe("setup plan projection", () => {
     expect(source).not.toContain("ProjectSetupView");
   });
 
-  it("keeps the session JSON presenter independent from legacy and human projectors", () => {
+  it("keeps the session JSON presenter independent from retired and human projectors", () => {
     const source = readFileSync(
       new URL("../../src/commands/setup/presenters/json.ts", import.meta.url),
       "utf8",
@@ -49,16 +131,12 @@ describe("setup plan projection", () => {
         content: "schema_version = 1\n",
       },
     });
-    const boundActionIds = new Set(built.operationBindings.map((binding) => binding.actionId));
-    const mutatingActions = built.compatibilityPlan.actions.filter(
-      (action) => action.kind !== "noop",
-    );
+    const mutatingActions = built.jsonPlan.actions.filter((action) => action.kind !== "noop");
 
     expect(mutatingActions.length).toBeGreaterThan(0);
-    for (const action of mutatingActions) expect(boundActionIds.has(action.id)).toBe(true);
-    expect(
-      built.compatibilityPlan.actions.some((action) => action.id === "activate-observer-config"),
-    ).toBe(false);
+    expect(built.jsonPlan.actions.some((action) => action.id === "activate-observer-config")).toBe(
+      false,
+    );
     expect(
       built.semanticPlan.operations.some(
         (operation) => operation.kind === "activate-observer-config",
@@ -73,7 +151,7 @@ describe("setup plan projection", () => {
         .flatMap((check) => check.details)
         .some((detail) => detail.label.id === "detail.default-agent"),
     ).toBe(true);
-    expect(JSON.parse(JSON.stringify(built.compatibilityPlan))).toEqual(built.compatibilityPlan);
+    expect(JSON.parse(JSON.stringify(built.jsonPlan))).toEqual(built.jsonPlan);
   });
   it("reports all core checks ready and no selected actions", () => {
     const plan = buildSetupPlan(facts());
@@ -275,6 +353,69 @@ describe("setup plan projection", () => {
     ]);
   });
 
+  it("preserves semantic operation selection in machine actions", () => {
+    const baseFacts = facts();
+    const optional = buildSetupPlan(
+      facts({
+        launchers: {
+          ...baseFacts.launchers,
+          station: { ...baseFacts.launchers.station, source: "checkout" },
+        },
+        tmuxBinding: { ...baseFacts.tmuxBinding, insideTmux: true },
+      }),
+      {
+        linkStationLaunchers: true,
+        installWorktrunkShell: true,
+        configureTmuxPopup: true,
+      },
+    );
+    expect(optional.actions.filter((action) => action.selected).map((action) => action.id)).toEqual(
+      expect.arrayContaining([
+        "link-station-launchers",
+        "worktrunk-shell-integration",
+        "tmux-popup-binding",
+        "tmux-live-popup-binding",
+      ]),
+    );
+
+    const gated = buildSetupPlans(
+      facts({
+        worktrunk: { status: "missing", command: "wt", message: "Worktrunk missing." },
+        xcode: {
+          status: "missing",
+          applicable: true,
+          message: "Command Line Tools missing.",
+        },
+      }),
+    );
+    expect([
+      gated.semanticPlan.operations.find((operation) => operation.id === "install:worktrunk")
+        ?.selected,
+      gated.jsonPlan.actions.find((action) => action.id === "install-worktrunk")?.selected,
+    ]).toEqual([false, false]);
+
+    const declined = buildSetupPlans(
+      facts({
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: false,
+            detail: "Codex hooks are absent.",
+          },
+        ],
+      }),
+      { harnessTrackingSelection: { kind: "explicit", harnessIds: [] } },
+    );
+    expect([
+      declined.semanticPlan.operations.find(
+        (operation) => operation.id === "prepare-harness-tracking:codex",
+      )?.selected,
+      declined.jsonPlan.actions.find((action) => action.id === "codex-hooks")?.selected,
+    ]).toEqual([false, false]);
+  });
+
   it("plans a Homebrew install for missing Bun", () => {
     const plan = buildSetupPlan(
       facts({
@@ -423,8 +564,8 @@ describe("setup plan projection", () => {
     });
     const plan = buildSetupPlan(input, {
       harnessSelection: {
+        outcome: "selected",
         defaultHarness: "opencode",
-        selected: input.harnesses.filter((harness) => harness.id === "opencode"),
         requiredHarnessIds: ["opencode"],
         source: "explicit",
       },
@@ -449,9 +590,8 @@ describe("setup plan projection", () => {
     });
 
     expect(resolveSetupHarnessSelection(input, ["codex"])).toEqual({
-      selected: [],
-      requiredHarnessIds: [],
-      source: "unresolved",
+      outcome: "invalid",
+      reason: "unsupported-configured-default",
     });
   });
 
@@ -469,8 +609,8 @@ describe("setup plan projection", () => {
     });
     const plan = buildSetupPlan(input, {
       harnessSelection: {
+        outcome: "selected",
         defaultHarness: "codex",
-        selected: input.harnesses.filter((harness) => harness.status === "ok"),
         requiredHarnessIds: ["codex", "opencode", "pi"],
         source: "explicit",
       },
@@ -1026,6 +1166,7 @@ describe("setup plan projection", () => {
       configWrite: {
         operation: "update",
         path: "/tmp/config.toml",
+        before: "schema_version = 1\n",
         content: "schema_version = 1\n",
       },
     });
@@ -1132,14 +1273,14 @@ describe("setup plan projection", () => {
     });
   });
 
-  it("uses human agent wording without changing the legacy machine message", () => {
+  it("uses human agent wording without changing the frozen machine message", () => {
     const built = buildSetupPlans(
       facts({
         harnesses: harnesses([]),
         config: { status: "missing", path: "/tmp/config.toml", message: "Config missing." },
       }),
     );
-    const machine = built.compatibilityPlan.checks.find((check) => check.id === "harness");
+    const machine = built.jsonPlan.checks.find((check) => check.id === "harness");
     const human = built.presentationView.checks.find((check) => check.id === "harness");
 
     expect(machine?.message).toContain("supported harness CLI");

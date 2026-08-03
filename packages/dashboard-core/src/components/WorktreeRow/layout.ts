@@ -1,6 +1,6 @@
 import stringWidth from "string-width";
 
-// Semantic only — dashboard-core stays hex-free; view/theme.ts resolves to hex.
+// Semantic only — dashboard-core stays color-value-free; renderer theme adapters resolve roles.
 export type RowColor = "blue" | "cyan" | "gray" | "green" | "red" | "yellow" | "purple";
 
 export type RowSegment =
@@ -9,8 +9,8 @@ export type RowSegment =
       text: string;
       color?: RowColor;
       dimColor?: true;
-      dimmedPreview?: true;
-      filterMatch?: true;
+      dimmed?: true;
+      highlighted?: true;
       underline?: true;
       url?: string;
     }
@@ -18,7 +18,7 @@ export type RowSegment =
       kind: "throbber";
       variant: "braille" | "circle";
       color?: RowColor;
-      dimmedPreview?: true;
+      dimmed?: true;
     };
 
 export type RowMarker =
@@ -302,8 +302,8 @@ export function textSegment(
   options: {
     color?: RowColor | undefined;
     dimColor?: true | undefined;
-    dimmedPreview?: true | undefined;
-    filterMatch?: true | undefined;
+    dimmed?: true | undefined;
+    highlighted?: true | undefined;
     underline?: true | undefined;
     url?: string | undefined;
   } = {},
@@ -314,8 +314,8 @@ export function textSegment(
   };
   if (options.color !== undefined) segment.color = options.color;
   if (options.dimColor === true) segment.dimColor = true;
-  if (options.dimmedPreview === true) segment.dimmedPreview = true;
-  if (options.filterMatch === true) segment.filterMatch = true;
+  if (options.dimmed === true) segment.dimmed = true;
+  if (options.highlighted === true) segment.highlighted = true;
   if (options.underline === true) segment.underline = true;
   if (options.url !== undefined) segment.url = options.url;
   return segment;
@@ -782,8 +782,8 @@ function dedupeKeySets(sets: readonly RowGridCellKey[][]): RowGridCellKey[][] {
 function textStyleFromSegments(segments: readonly RowSegment[]): {
   color?: RowColor | undefined;
   dimColor?: true | undefined;
-  dimmedPreview?: true | undefined;
-  filterMatch?: true | undefined;
+  dimmed?: true | undefined;
+  highlighted?: true | undefined;
   underline?: true | undefined;
   url?: string | undefined;
 } {
@@ -794,15 +794,15 @@ function textStyleFromSegments(segments: readonly RowSegment[]): {
   const style: {
     color?: RowColor;
     dimColor?: true;
-    dimmedPreview?: true;
-    filterMatch?: true;
+    dimmed?: true;
+    highlighted?: true;
     underline?: true;
     url?: string;
   } = {};
   if (text.color !== undefined) style.color = text.color;
   if (text.dimColor === true) style.dimColor = true;
-  if (text.dimmedPreview === true) style.dimmedPreview = true;
-  if (text.filterMatch === true) style.filterMatch = true;
+  if (text.dimmed === true) style.dimmed = true;
+  if (text.highlighted === true) style.highlighted = true;
   if (text.underline === true) style.underline = true;
   if (text.url !== undefined) style.url = text.url;
   return style;
@@ -840,8 +840,8 @@ function copyTextSegment(segment: Extract<RowSegment, { kind: "text" }>, text: s
   };
   if (segment.color !== undefined) copied.color = segment.color;
   if (segment.dimColor === true) copied.dimColor = true;
-  if (segment.dimmedPreview === true) copied.dimmedPreview = true;
-  if (segment.filterMatch === true) copied.filterMatch = true;
+  if (segment.dimmed === true) copied.dimmed = true;
+  if (segment.highlighted === true) copied.highlighted = true;
   if (segment.underline === true) copied.underline = true;
   if (segment.url !== undefined) copied.url = segment.url;
   return copied;

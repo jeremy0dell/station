@@ -1,36 +1,35 @@
 import { dirname } from "node:path";
+import type { SetupConfigMutationPlan } from "@station/config";
 import {
+  CliSetupHarnessIdSchema,
   type CliSetupPlan,
   CliSetupPlanSchema,
   type ProviderHookArtifactOwnership,
+  type CliSetupAction as SetupAction,
+  type CliSetupCheck as SetupCheck,
 } from "@station/contracts";
 import type {
   SetupPlan as CoreSetupPlan,
   HarnessTrackingAssessment,
   SetupOperation,
+  SupportedHarnessId,
 } from "@station/setup-core";
 import { stationUiInstallHint } from "../../../stationWorkspace.js";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
+import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "../checks/tmuxBinding.js";
-import {
-  harnessSupportsSetupHooks,
-  isSupportedHarnessId,
-  relevantHarnessTrackingIds,
-  type SetupHarnessSelection,
-} from "../harnessSelection.js";
-import type {
-  ConfigWritePlan,
-  SetupAction,
-  SetupCheck,
-  SetupFacts,
-  SupportedHarnessId,
-} from "../model.js";
-import { SetupHarnessTrackingFactSchema } from "../model.js";
+
+type SetupHarnessSelection = {
+  readonly source: CliSetupPlan["summary"]["selectionSource"];
+  readonly requiredHarnessIds: readonly SupportedHarnessId[];
+  readonly defaultHarness?: SupportedHarnessId;
+};
 
 export type JsonSetupPresenterInput = {
   readonly plan: CoreSetupPlan;
   readonly facts: SetupFacts;
-  readonly configWrite?: ConfigWritePlan;
+  readonly configMutation?: SetupConfigMutationPlan;
 };
 
 export type JsonSetupPresenter = {
@@ -40,7 +39,7 @@ export type JsonSetupPresenter = {
 /**
  * ADAPTER
  *
- * Projects semantic setup evidence into the frozen machine-facing CLI schema without resolving human presentation copy.
+ * Directly projects semantic plans and adapter evidence into the strict frozen CLI schema without resolving human presentation copy.
  */
 export function createJsonSetupPresenter(): JsonSetupPresenter {
   return { project: projectJsonSetupPlan };
@@ -49,11 +48,16 @@ export function createJsonSetupPresenter(): JsonSetupPresenter {
 function projectJsonSetupPlan(input: JsonSetupPresenterInput): CliSetupPlan {
   const { facts } = input;
   SetupHarnessTrackingFactSchema.array().parse(facts.harnessTracking);
-  const harnessSelection = projectHarnessSelection(input.plan, facts);
+  const harnessSelection = projectHarnessSelection(input.plan);
   const checks = setupChecks(input.plan, facts, harnessSelection);
-  const actions = setupActions(input.plan.operations, facts, harnessSelection, input.configWrite);
+  const actions = setupActions(
+    input.plan.operations,
+    facts,
+    harnessSelection,
+    input.configMutation,
+  );
   const { readiness } = input.plan.result;
-  assertCompatibilityCounts(input.plan, checks);
+  assertMachineProjectionCounts(input.plan, checks);
   const summary = {
     launchReady: readiness.launchReady,
     workflowReady: readiness.workflowReady,
@@ -77,29 +81,22 @@ function projectJsonSetupPlan(input: JsonSetupPresenterInput): CliSetupPlan {
   });
 }
 
-function assertCompatibilityCounts(plan: CoreSetupPlan, checks: readonly SetupCheck[]): void {
+function assertMachineProjectionCounts(plan: CoreSetupPlan, checks: readonly SetupCheck[]): void {
   const requiredMissing = checks.filter(
     (check) => check.tier === "required" && check.status !== "ok",
   ).length;
   if (plan.result.readiness.requiredMissing !== requiredMissing) {
     throw new Error(
-      `Semantic setup required count does not match the CLI compatibility projection: ${plan.result.readiness.requiredMissing}/${requiredMissing}.`,
+      `Semantic setup required count does not match the machine projection: ${plan.result.readiness.requiredMissing}/${requiredMissing}.`,
     );
   }
 }
 
-function projectHarnessSelection(plan: CoreSetupPlan, facts: SetupFacts): SetupHarnessSelection {
+function projectHarnessSelection(plan: CoreSetupPlan): SetupHarnessSelection {
   if (plan.selection.outcome !== "selected") {
-    return { selected: [], requiredHarnessIds: [], source: "unresolved" };
+    return { requiredHarnessIds: [], source: "unresolved" };
   }
-  const selected = plan.selection.requiredHarnessIds.flatMap((harnessId) => {
-    const harness = facts.harnesses.find(
-      (candidate) => candidate.id === harnessId && candidate.status === "ok",
-    );
-    return harness === undefined ? [] : [harness];
-  });
   return {
-    selected,
     requiredHarnessIds: plan.selection.requiredHarnessIds,
     source: plan.selection.source,
     defaultHarness: plan.selection.defaultHarness,
@@ -416,7 +413,7 @@ function harnessTrackingChecks(
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
 ): SetupCheck[] {
-  const harnessIds = relevantHarnessTrackingIds(facts, harnessSelection);
+  const harnessIds = plan.evidence.harnessTracking.map((tracking) => tracking.harnessId);
   const required = new Set(harnessSelection.requiredHarnessIds);
   return harnessIds.map((harnessId) =>
     harnessTrackingCheck(plan, facts, harnessId, required.has(harnessId), harnessSelection.source),
@@ -449,7 +446,7 @@ function harnessTrackingCheck(
   const details: Record<string, string> = {
     harness: harnessId,
     selectionSource,
-    capability: harnessSupportsSetupHooks(harnessId) ? "supported" : "unsupported",
+    capability: fact?.capability ?? "supported",
     state: assessment.state,
   };
   if (assessment.state !== "not-applicable") {
@@ -501,6 +498,8 @@ function harnessTrackingPresentation(
         status: "ok",
         message: `${harnessLabel} Station tracking artifacts are prepared on disk.`,
       };
+    default:
+      return assertNever(assessment);
   }
 }
 
@@ -821,7 +820,7 @@ function defaultConfigCoreProblem(
   if (config.defaults.terminal !== "tmux") {
     return `Config defaults use terminal ${config.defaults.terminal}; set defaults.terminal to "tmux" for the setup core path.`;
   }
-  if (!isSupportedHarnessId(config.defaults.harness)) {
+  if (!CliSetupHarnessIdSchema.safeParse(config.defaults.harness).success) {
     return `Config defaults use unsupported harness ${config.defaults.harness}; choose claude, codex, cursor, opencode, or pi for the setup core path.`;
   }
   return undefined;
@@ -831,7 +830,7 @@ function setupActions(
   operations: readonly SetupOperation[],
   facts: SetupFacts,
   harnessSelection: SetupHarnessSelection,
-  configWrite: ConfigWritePlan | undefined,
+  configWrite: SetupConfigMutationPlan | undefined,
 ): SetupAction[] {
   const actions: SetupAction[] = [];
   for (const operation of operations) {
@@ -839,7 +838,13 @@ function setupActions(
       case "install-tool": {
         const presentation = installToolPresentation(operation.tool);
         actions.push(
-          installAction(presentation.id, presentation.label, presentation.formula, facts.brew),
+          installAction(
+            presentation.id,
+            presentation.label,
+            presentation.formula,
+            facts.brew,
+            operation.selected,
+          ),
         );
         break;
       }
@@ -848,7 +853,7 @@ function setupActions(
           id: "link-station-launchers",
           kind: "run-command",
           tier: "recommended",
-          selected: false,
+          selected: operation.selected,
           label: "Link STATION launchers",
           message: "Link stn, stn-ingress, and stn-tmux-popup globally for bare terminal commands.",
           command: ["pnpm", "--dir", facts.launchers.packageRoot, "station:link"],
@@ -860,7 +865,7 @@ function setupActions(
           id: "worktrunk-shell-integration",
           kind: "run-command",
           tier: "recommended",
-          selected: false,
+          selected: operation.selected,
           label: "Install Worktrunk shell integration",
           message:
             "Run wt config shell install after core setup if you want Worktrunk shell helpers.",
@@ -876,8 +881,8 @@ function setupActions(
       case "configure-tmux-popup":
         actions.push(
           operation.scope === "persisted"
-            ? persistedTmuxPopupAction(facts)
-            : liveTmuxPopupAction(facts),
+            ? persistedTmuxPopupAction(facts, operation.selected)
+            : liveTmuxPopupAction(facts, operation.selected),
         );
         break;
       case "prepare-worktrunk-tracking":
@@ -908,7 +913,7 @@ function setupActions(
           id: `${operation.harnessId}-hooks`,
           kind: "run-command",
           tier: operation.tier,
-          selected: true,
+          selected: operation.selected,
           label: `Install ${harnessLabel} tracking`,
           message: `Install Station-owned ${harnessLabel} tracking artifacts.`,
           command: harnessHookInstallCommand(facts, operation.harnessId),
@@ -920,17 +925,21 @@ function setupActions(
         actions.push(...configWriteActions(configWrite, true));
         break;
       case "activate-observer-config":
-        // Activation is orchestration-only until the compatibility action contract is retired.
+        // Observer activation has no representation in the frozen machine action schema.
         break;
       case "install-harness":
       case "install-homebrew":
       case "install-xcode-command-line-tools":
-        // Guided and system-only installers are projected by their existing compatibility helpers.
+        // Guided and system-only installers are not exposed by read-only machine plans.
         break;
+      default:
+        assertNever(operation);
     }
   }
   if (configWrite?.operation === "blocked") {
-    actions.push(...configWriteActions(configWrite, harnessSelection.selected.length > 0));
+    actions.push(
+      ...configWriteActions(configWrite, harnessSelection.requiredHarnessIds.length > 0),
+    );
   }
   return actions;
 }
@@ -956,7 +965,7 @@ function installToolPresentation(tool: Extract<SetupOperation, { kind: "install-
   }
 }
 
-function persistedTmuxPopupAction(facts: SetupFacts): SetupAction {
+function persistedTmuxPopupAction(facts: SetupFacts, selected: boolean): SetupAction {
   if (facts.tmuxBinding.status === "conflict") {
     throw new Error("A conflicting tmux popup binding cannot be persisted.");
   }
@@ -964,7 +973,7 @@ function persistedTmuxPopupAction(facts: SetupFacts): SetupAction {
     id: "tmux-popup-binding",
     kind: "append-file",
     tier: "recommended",
-    selected: false,
+    selected,
     label: "Install tmux popup binding",
     message: `Install the tmux prefix + ${facts.tmuxBinding.bindingKey} binding for the STATION popup dashboard in ~/.tmux.conf.`,
     path: facts.tmuxBinding.path,
@@ -979,7 +988,7 @@ function persistedTmuxPopupAction(facts: SetupFacts): SetupAction {
   };
 }
 
-function liveTmuxPopupAction(facts: SetupFacts): SetupAction {
+function liveTmuxPopupAction(facts: SetupFacts, selected: boolean): SetupAction {
   if (facts.tmuxBinding.status === "conflict") {
     throw new Error("A conflicting tmux popup binding cannot be loaded.");
   }
@@ -987,7 +996,7 @@ function liveTmuxPopupAction(facts: SetupFacts): SetupAction {
     id: "tmux-live-popup-binding",
     kind: "run-command",
     tier: "recommended",
-    selected: false,
+    selected,
     label: "Load tmux popup binding",
     message: `Install the tmux prefix + ${facts.tmuxBinding.bindingKey} STATION popup binding in the current tmux server.`,
     command: [
@@ -1022,12 +1031,13 @@ function installAction(
   label: string,
   formula: string,
   brew: SetupFacts["brew"],
+  selected: boolean,
 ): SetupAction {
   const action: SetupAction = {
     id,
     kind: brew.status === "ok" ? "brew-install" : "noop",
     tier: "required",
-    selected: brew.status === "ok",
+    selected,
     label: `Install ${label}`,
     message:
       brew.status === "ok"
@@ -1040,7 +1050,7 @@ function installAction(
 }
 
 function configWriteActions(
-  configWrite: ConfigWritePlan | undefined,
+  configWrite: SetupConfigMutationPlan | undefined,
   hasSelectedHarness: boolean,
 ): SetupAction[] {
   if (!hasSelectedHarness) return [];
@@ -1083,7 +1093,6 @@ function configWriteActions(
     data: {
       operation: configWrite.operation,
       content: configWrite.content,
-      ...(configWrite.backupPath === undefined ? {} : { backupPath: configWrite.backupPath }),
     },
   };
   return [mkdirAction, writeAction];
@@ -1118,6 +1127,10 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
     ];
   }
   return ["Resolve the missing required setup items, then run: stn setup check"];
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported semantic setup value: ${JSON.stringify(value)}`);
 }
 
 function quoteCommandPart(part: string): string {

@@ -3,12 +3,9 @@ import type {
   SetupSessionOperationOutcome,
 } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { createSetupComposition, type ProjectedSetupSession } from "../composition.js";
-import type { SetupFacts } from "../model.js";
-import {
-  overlaySetupActionStatuses,
-  overlaySetupOperationOutcomes,
-} from "../presentation/projectSetupResult.js";
+import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "../types.js";
 
@@ -38,12 +35,13 @@ export async function runNonInteractiveApply(
       await composition.text.write(`${composition.text.renderInspectionFailure(preview.error)}\n`);
       return { code: 1 };
     }
-    const actions = preview.plan.actions.map((action) =>
-      action.selected ? { ...action, status: "skipped" as const } : action,
-    );
-    await composition.text.write(
-      composition.text.renderPlan(overlaySetupActionStatuses(preview.view, actions)),
-    );
+    const view = {
+      ...preview.view,
+      actions: preview.view.actions.map((action) =>
+        action.selected ? { ...action, status: "skipped" as const } : action,
+      ),
+    };
+    await composition.text.write(composition.text.renderPlan(view));
     return { code: preview.plan.summary.selectionSource === "unresolved" ? 1 : 0 };
   }
 
@@ -58,7 +56,10 @@ export async function runNonInteractiveApply(
     await composition.text.write(`${composition.text.renderInspectionFailure(projection.error)}\n`);
     return { code: 1 };
   }
-  const view = overlaySetupOperationOutcomes(projection.view, projection.session.operationOutcomes);
+  const view = overlaySetupOperationOutcomes({
+    view: projection.view,
+    outcomes: projection.session.operationOutcomes,
+  });
 
   if (finished.status === "blocked") {
     if (finished.reason === "observer-activation-failed" && finished.error !== undefined) {

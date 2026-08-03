@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import {
   textSegment,
   type DashboardTableHeaderModel,
@@ -32,13 +33,13 @@ async function renderHeader(
 ) {
   const header = <DashboardTableHeaderView model={model} />;
   const setup = await testRender(
-    dispatch === undefined ? (
-      header
-    ) : (
-      <StationMouseProvider value={(target) => dispatch(target)}>
-        {header}
-      </StationMouseProvider>
-    ),
+    <StationThemeProvider theme={nativeStationTheme}>
+      {dispatch === undefined ? (
+        header
+      ) : (
+        <StationMouseProvider value={(target) => dispatch(target)}>{header}</StationMouseProvider>
+      )}
+    </StationThemeProvider>,
     { width: 60, height: 2 },
   );
   teardowns.push(() => setup.renderer.destroy());
@@ -98,10 +99,12 @@ describe("DashboardTableHeaderView", () => {
 
   it("reserves one row for the empty state", async () => {
     const setup = await testRender(
-      <box flexDirection="column">
-        <DashboardTableHeaderView model={{ kind: "empty" }} />
-        <text>NEXT</text>
-      </box>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <box flexDirection="column">
+          <DashboardTableHeaderView model={{ kind: "empty" }} />
+          <text>NEXT</text>
+        </box>
+      </StationThemeProvider>,
       { width: 60, height: 2 },
     );
     teardowns.push(() => setup.renderer.destroy());

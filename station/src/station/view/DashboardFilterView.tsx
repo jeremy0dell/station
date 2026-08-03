@@ -3,20 +3,30 @@ import type {
   DashboardFilterHeaderModel,
   DashboardFilterHeaderSegment,
 } from "@station/dashboard-core";
-import { STATION_COLORS } from "./theme.js";
+import {
+  toOpenTuiColor,
+  toOpenTuiOpaqueColor,
+  useStationTheme,
+  type StationColor,
+  type StationTheme,
+} from "../../theme/index.js";
 
 export function DashboardFilterView({ model }: { model: DashboardFilterHeaderModel }) {
+  const theme = useStationTheme();
   const background =
-    model.kind === "editing"
-      ? STATION_COLORS.filterEditorSurface
-      : STATION_COLORS.filterAppliedSurface;
+    model.kind === "editing" ? theme.filter.editorSurface : theme.filter.appliedSurface;
   return (
-    <box width="100%" height={1} overflow="hidden" backgroundColor={background}>
+    <box
+      width="100%"
+      height={1}
+      overflow="hidden"
+      backgroundColor={toOpenTuiOpaqueColor(background)}
+    >
       <text width="100%">
         {model.segments.map((segment, index) => (
           <span
             key={`${segment.role}:${index}`}
-            fg={filterSegmentForeground(segment, model.zeroMatches)}
+            fg={toOpenTuiColor(filterSegmentForeground(theme, segment, model.zeroMatches))}
             attributes={filterSegmentAttributes(segment)}
           >
             {segment.text}
@@ -28,21 +38,22 @@ export function DashboardFilterView({ model }: { model: DashboardFilterHeaderMod
 }
 
 function filterSegmentForeground(
+  theme: StationTheme,
   segment: DashboardFilterHeaderSegment,
   zeroMatches: boolean,
-): string {
+): StationColor {
   switch (segment.role) {
     case "rail":
     case "slash":
     case "caret":
-      return STATION_COLORS.filterEditorRail;
+      return theme.filter.editorRail;
     case "label":
     case "spacer":
-      return STATION_COLORS.gray;
+      return theme.text.muted;
     case "count":
-      return zeroMatches ? STATION_COLORS.filterZeroMatch : STATION_COLORS.gray;
+      return zeroMatches ? theme.filter.zeroMatch : theme.text.muted;
     case "query":
-      return STATION_COLORS.foreground;
+      return theme.text.primary;
   }
 }
 

@@ -386,6 +386,7 @@ describe("dashboard viewport selector", () => {
       snapshot,
       createInitialTuiState({
         initialSnapshot: snapshot,
+        persistentFilter: { query: "removing session..." },
         localRows: {
           pendingCreate: [],
           failedCreate: [],
@@ -408,10 +409,23 @@ describe("dashboard viewport selector", () => {
     );
     expect(item).toMatchObject({
       type: "session",
+      presentation: { activity: "removing session..." },
       pendingRemove: {
         localId: "remove:wt_web_idle",
       },
+      persistentFilterMatch: {
+        matched: true,
+        ranges: { activity: [{ start: 0, end: 19 }] },
+      },
     });
+    if (item === undefined) throw new Error("expected pending remove item");
+    const rowInput = rowGridInputForViewportItem(item, new Map());
+    expect(
+      rowInput?.cells.activity?.segments
+        .filter((segment) => segment.kind === "text")
+        .map((segment) => (segment.kind === "text" ? segment.text : ""))
+        .join(""),
+    ).toBe("removing session...");
     expect(viewport.rowChoices.map((choice) => choice.value.id)).not.toContain("ses_wt_web_idle");
   });
 
@@ -500,6 +514,46 @@ describe("dashboard viewport selector", () => {
     });
     expect(editing.items.find((item) => item.id === "session:ses_wt_web_idle")).toMatchObject({
       persistentFilterMatch: { matched: false, dimmed: true },
+    });
+  });
+
+  it("attaches filter state to expanded, collapsed, and empty project headers", () => {
+    const base = createDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      sessions: base.sessions.filter((session) => session.projectId !== "web"),
+    };
+    const unmatched = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        collapsedProjectIds: ["api"],
+        persistentFilter: { query: "missing" },
+      }),
+    );
+
+    expect(unmatched.items).toContainEqual(
+      expect.objectContaining({ type: "emptyProject", id: "empty:web" }),
+    );
+    expect(unmatched.items.find((item) => item.id === "project:web")).toMatchObject({
+      type: "projectHeader",
+      collapsed: false,
+      persistentFilterMatch: { matched: false, labelRanges: [] },
+    });
+    expect(unmatched.items.find((item) => item.id === "project:api")).toMatchObject({
+      type: "projectHeader",
+      collapsed: true,
+      persistentFilterMatch: { matched: false, labelRanges: [] },
+    });
+
+    const matchedCollapsed = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        collapsedProjectIds: ["api"],
+        persistentFilter: { query: "api" },
+      }),
+    );
+    expect(matchedCollapsed.items.find((item) => item.id === "project:api")).toMatchObject({
+      persistentFilterMatch: { matched: true, labelRanges: [{ start: 0, end: 3 }] },
     });
   });
 

@@ -5,7 +5,6 @@ import {
   type SetupMessageRef,
   setupMessageRef,
 } from "@station/setup-messages";
-import type { SetupAction } from "../model.js";
 import type {
   ProjectSetupView,
   SetupDisplayDetail,
@@ -37,6 +36,8 @@ export type TextSetupSystemView = {
   readonly hints: readonly TextSetupSystemHint[];
 };
 
+type SetupProgressAction = { readonly label: string };
+
 export type TextSetupPresenter = {
   readonly text: (ref: SetupMessageRef) => string;
   readonly prompt: (ref: SetupMessageRef) => string;
@@ -46,9 +47,9 @@ export type TextSetupPresenter = {
   readonly writeMessage: (ref: SetupMessageRef) => Promise<void>;
   readonly renderPlan: (view: ProjectSetupView) => string;
   readonly renderApplyResult: (view: ProjectSetupView) => string;
-  readonly renderProgressStart: (action: Pick<SetupAction, "label">) => string;
-  readonly renderProgressComplete: (action: Pick<SetupAction, "label">) => string;
-  readonly renderProgressFailure: (action: Pick<SetupAction, "label">, error?: SafeError) => string;
+  readonly renderProgressStart: (action: SetupProgressAction) => string;
+  readonly renderProgressComplete: (action: SetupProgressAction) => string;
+  readonly renderProgressFailure: (action: SetupProgressAction, error?: SafeError) => string;
   readonly renderInspectionFailure: (error: SafeError) => string;
   readonly renderActivationStart: () => string;
   readonly renderActivationComplete: () => string;

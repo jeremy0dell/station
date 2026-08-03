@@ -9,14 +9,18 @@ export type DashboardPersistentFilterMatchRange = {
 export type DashboardPersistentFilterVisibleFields = {
   title: string;
   agent?: string;
-  status?: string;
+  activity?: string;
+};
+
+export type DashboardPersistentFilterProjectCandidate = {
+  projectId: ProjectId;
+  projectLabel: string;
 };
 
 export type DashboardPersistentFilterCandidate = {
   kind: "session" | "optimistic";
   id: string;
   projectId: ProjectId;
-  projectLabel: string;
   visibleFields: DashboardPersistentFilterVisibleFields;
 };
 
@@ -26,7 +30,7 @@ export type DashboardPersistentFilterRowMatch = {
   ranges: {
     title: readonly DashboardPersistentFilterMatchRange[];
     agent: readonly DashboardPersistentFilterMatchRange[];
-    status: readonly DashboardPersistentFilterMatchRange[];
+    activity: readonly DashboardPersistentFilterMatchRange[];
     projectLabel: readonly DashboardPersistentFilterMatchRange[];
   };
 };
@@ -38,8 +42,7 @@ export type DashboardPersistentFilterProjectMatch = {
 
 /**
  * Draft text overrides the applied query only while editing, while applied state remains
- * dashboard-local. The #395 projection preserves row order and visibility, and its match
- * metadata identifies every displayed highlight so renderers never infer matching behavior.
+ * dashboard-local.
  */
 export type DashboardPersistentFilterProjection = {
   source: "draft" | "applied";
@@ -54,10 +57,12 @@ export type DashboardPersistentFilterProjection = {
 
 export function selectDashboardPersistentFilter({
   candidates,
+  projects,
   screen,
   applied,
 }: {
   candidates: readonly DashboardPersistentFilterCandidate[];
+  projects: readonly DashboardPersistentFilterProjectCandidate[];
   screen: TuiScreen;
   applied?: DashboardPersistentFilter;
 }): DashboardPersistentFilterProjection | undefined {
@@ -67,48 +72,40 @@ export function selectDashboardPersistentFilter({
   }
 
   const query = selected.query.trim();
-  const normalizedQuery = normalizePersistentFilterText(query);
+  const foldedQuery = foldPersistentFilterText(query).text;
   const projectLabelRanges = new Map<ProjectId, DashboardPersistentFilterMatchRange[]>();
-  for (const candidate of candidates) {
-    if (!projectLabelRanges.has(candidate.projectId)) {
-      projectLabelRanges.set(
-        candidate.projectId,
-        matchRanges(candidate.projectLabel, normalizedQuery),
-      );
-    }
+  for (const project of projects) {
+    projectLabelRanges.set(project.projectId, matchRanges(project.projectLabel, foldedQuery));
   }
 
   const rows = new Map<string, DashboardPersistentFilterRowMatch>();
+  const projectsWithMatchedRows = new Set<ProjectId>();
   let matchCount = 0;
   for (const candidate of candidates) {
     const ranges = {
-      title: matchRanges(candidate.visibleFields.title, normalizedQuery),
-      agent: matchRanges(candidate.visibleFields.agent ?? "", normalizedQuery),
-      status: matchRanges(candidate.visibleFields.status ?? "", normalizedQuery),
+      title: matchRanges(candidate.visibleFields.title, foldedQuery),
+      agent: matchRanges(candidate.visibleFields.agent ?? "", foldedQuery),
+      activity: matchRanges(candidate.visibleFields.activity ?? "", foldedQuery),
       projectLabel: projectLabelRanges.get(candidate.projectId) ?? [],
     };
     const matched =
-      normalizedQuery.length === 0 ||
+      foldedQuery.length === 0 ||
       ranges.title.length > 0 ||
       ranges.agent.length > 0 ||
-      ranges.status.length > 0 ||
+      ranges.activity.length > 0 ||
       ranges.projectLabel.length > 0;
     if (matched) {
       matchCount += 1;
+      projectsWithMatchedRows.add(candidate.projectId);
     }
     rows.set(candidate.id, { matched, dimmed: !matched, ranges });
   }
 
-  const projects = new Map<ProjectId, DashboardPersistentFilterProjectMatch>();
+  const projectMatches = new Map<ProjectId, DashboardPersistentFilterProjectMatch>();
   for (const [projectId, labelRanges] of projectLabelRanges) {
     const matched =
-      normalizedQuery.length === 0 ||
-      labelRanges.length > 0 ||
-      candidates.some(
-        (candidate) =>
-          candidate.projectId === projectId && rows.get(candidate.id)?.matched === true,
-      );
-    projects.set(projectId, { matched, labelRanges });
+      foldedQuery.length === 0 || labelRanges.length > 0 || projectsWithMatchedRows.has(projectId);
+    projectMatches.set(projectId, { matched, labelRanges });
   }
 
   const projection: DashboardPersistentFilterProjection = {
@@ -116,9 +113,9 @@ export function selectDashboardPersistentFilter({
     query,
     matchCount,
     totalCount: candidates.length,
-    zeroMatches: normalizedQuery.length > 0 && matchCount === 0,
+    zeroMatches: foldedQuery.length > 0 && matchCount === 0,
     rows,
-    projects,
+    projects: projectMatches,
   };
   if (screen.name === "persistentFilter") {
     projection.draft = screen.draft;
@@ -136,28 +133,55 @@ function selectedPersistentFilterQuery(
   return applied === undefined ? undefined : { source: "applied", query: applied.query };
 }
 
-function matchRanges(
-  value: string,
-  normalizedQuery: string,
-): DashboardPersistentFilterMatchRange[] {
-  if (normalizedQuery.length === 0) {
+type FoldedSourceOffset = {
+  start: number;
+  end: number;
+};
+
+type FoldedPersistentFilterText = {
+  text: string;
+  sourceOffsets: readonly FoldedSourceOffset[];
+};
+
+function matchRanges(value: string, foldedQuery: string): DashboardPersistentFilterMatchRange[] {
+  if (foldedQuery.length === 0) {
     return [];
   }
-  const normalizedValue = normalizePersistentFilterText(value);
+  const foldedValue = foldPersistentFilterText(value);
   const ranges: DashboardPersistentFilterMatchRange[] = [];
   let from = 0;
-  while (from <= normalizedValue.length - normalizedQuery.length) {
-    const start = normalizedValue.indexOf(normalizedQuery, from);
-    if (start < 0) {
+  while (from <= foldedValue.text.length - foldedQuery.length) {
+    const foldedStart = foldedValue.text.indexOf(foldedQuery, from);
+    if (foldedStart < 0) {
       break;
     }
-    const end = start + normalizedQuery.length;
-    ranges.push({ start, end });
-    from = end;
+    const foldedEnd = foldedStart + foldedQuery.length;
+    const firstOffset = foldedValue.sourceOffsets[foldedStart];
+    const lastOffset = foldedValue.sourceOffsets[foldedEnd - 1];
+    if (firstOffset !== undefined && lastOffset !== undefined) {
+      ranges.push({ start: firstOffset.start, end: lastOffset.end });
+    }
+    from = foldedEnd;
   }
   return ranges;
 }
 
-function normalizePersistentFilterText(value: string): string {
-  return value.toLocaleLowerCase();
+/**
+ * Folds each Unicode scalar independently so matching is locale-neutral and every folded code
+ * unit retains the source span that must be highlighted.
+ */
+function foldPersistentFilterText(value: string): FoldedPersistentFilterText {
+  let text = "";
+  let sourceStart = 0;
+  const sourceOffsets: FoldedSourceOffset[] = [];
+  for (const sourceCharacter of value) {
+    const sourceEnd = sourceStart + sourceCharacter.length;
+    const foldedCharacter = sourceCharacter.toLowerCase();
+    text += foldedCharacter;
+    for (let index = 0; index < foldedCharacter.length; index += 1) {
+      sourceOffsets.push({ start: sourceStart, end: sourceEnd });
+    }
+    sourceStart = sourceEnd;
+  }
+  return { text, sourceOffsets };
 }

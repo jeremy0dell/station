@@ -4,14 +4,17 @@ import {
   planSetupConfigMutation,
   type SetupConfigDesiredState,
   type SetupConfigMutationInput,
+  type SetupConfigMutationPlan,
 } from "@station/config";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
 import type {
+  HarnessSelectionResolution,
   SetupConfigMutationPort,
   SetupConfigWriteOperation,
   SetupOperationOutcome,
+  SupportedHarnessId,
 } from "@station/setup-core";
-import type { SetupFacts } from "../model.js";
+import type { SetupFacts } from "./inspectionTypes.js";
 
 export type SetupConfigAdapterOptions = {
   readonly facts: SetupFacts;
@@ -23,7 +26,7 @@ export type SetupConfigAdapterOptions = {
 /**
  * ADAPTER
  *
- * Translates semantic setup configuration policy into validated config-owned planning and persistence.
+ * Translates semantic setup configuration intent through one shared preview mapper and serializes validated config-owned persistence.
  */
 export function createSetupConfigAdapter(
   options: SetupConfigAdapterOptions,
@@ -70,6 +73,51 @@ export function createSetupConfigAdapter(
       };
     }
   };
+}
+
+export async function planSetupConfigMutationForInspection(input: {
+  readonly facts: SetupFacts;
+  readonly selection: HarnessSelectionResolution;
+  readonly trackingIntent: {
+    readonly harnessIds: readonly SupportedHarnessId[];
+    readonly installWorktrunkHooks: boolean;
+  };
+}): Promise<SetupConfigMutationPlan> {
+  const { facts, selection, trackingIntent } = input;
+  if (facts.config.status === "invalid") {
+    return {
+      operation: "blocked",
+      path: facts.config.path,
+      reason: facts.config.message,
+    };
+  }
+  if (selection.outcome !== "selected") {
+    const multipleHarnessesAvailable =
+      selection.outcome === "ambiguous" ||
+      facts.harnesses.filter((harness) => harness.status === "ok").length > 1;
+    return {
+      operation: "blocked",
+      path: facts.configPath,
+      reason: multipleHarnessesAvailable
+        ? "Multiple supported harness CLIs are available; explicit selection is required."
+        : "No unambiguous supported harness CLI is available; config was not planned.",
+    };
+  }
+  const operation: SetupConfigWriteOperation = {
+    id: "write-config",
+    kind: "write-config",
+    tier: "required",
+    selected: true,
+    change: facts.config.status === "missing" ? "create" : "update",
+    defaultHarnessId: selection.defaultHarness,
+    harnessIds: selection.requiredHarnessIds,
+    trackingHarnessIds: selection.requiredHarnessIds.filter((harnessId) =>
+      trackingIntent.harnessIds.includes(harnessId),
+    ),
+    installWorktrunkTracking: trackingIntent.installWorktrunkHooks,
+  };
+  // Inspection and commit share this mapper so the displayed plan cannot drift from the executed mutation.
+  return planSetupConfigMutation(setupConfigMutationInput(operation, facts));
 }
 
 export function setupConfigMutationInput(

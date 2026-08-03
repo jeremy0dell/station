@@ -1,9 +1,10 @@
 // Legacy prompt renderer for search and existing chooser copy; persistent
 // filtering owns the dashboard header and never enters this absolute layer.
 import { commandPromptLineForScreen, type TuiScreen } from "@station/dashboard-core";
-import { STATION_COLORS } from "./theme.js";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 
 export function CommandPromptView({ screen }: { screen: TuiScreen }) {
+  const theme = useStationTheme();
   const line = commandPromptLineForScreen(screen);
   if (line === undefined) {
     return null;
@@ -11,8 +12,8 @@ export function CommandPromptView({ screen }: { screen: TuiScreen }) {
   return (
     <box position="absolute" left={0} right={0} bottom={3} zIndex={5} flexDirection="column">
       <text
-        fg={line.color === "red" ? STATION_COLORS.red : STATION_COLORS.yellow}
-        bg={STATION_COLORS.background}
+        fg={toOpenTuiColor(line.color === "red" ? theme.status.danger : theme.status.warning)}
+        bg={toOpenTuiOpaqueColor(theme.surfaces.prompt)}
       >
         {line.text}
       </text>

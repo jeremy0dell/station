@@ -22,8 +22,8 @@ import {
   executeDashboardControlIntent,
   type DashboardRendererEffects,
 } from "./dashboardEffects.js";
-import { FullscreenDashboard } from "./FullscreenDashboard.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
+import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 import {
   createPopupRuntime,
   createProcessRendererControlChannel,
@@ -192,7 +192,7 @@ export async function runDashboardMain(): Promise<void> {
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
     nextRoot.render(
-      <FullscreenDashboard
+      <StandaloneDashboardApp
         store={store}
         effects={rendererEffects}
         onCopyNotice={copyNoticeText}

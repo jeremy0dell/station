@@ -14,11 +14,7 @@ import type {
 } from "./model/operations.js";
 import type { SetupSessionInspectionPhase } from "./model/session.js";
 
-export type {
-  SetupOperationCommit,
-  SetupOperationOutcome,
-  SetupPackageTarget,
-} from "./model/operations.js";
+export type { SetupOperationOutcome } from "./model/operations.js";
 
 /** Requests normalized evidence for one revision, lifecycle point, and current desired setup state. */
 export type SetupInspectionRequest = {

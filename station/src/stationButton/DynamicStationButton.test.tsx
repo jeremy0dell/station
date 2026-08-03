@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { useState } from "react";
+import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import { DynamicStationButton } from "./DynamicStationButton.js";
 import {
   ANIM_MS,
@@ -35,7 +36,10 @@ function input(
 }
 
 async function captureFrame(node: Parameters<typeof testRender>[0]): Promise<string> {
-  const setup = await testRender(node, SURFACE);
+  const setup = await testRender(
+    <StationThemeProvider theme={nativeStationTheme}>{node}</StationThemeProvider>,
+    SURFACE,
+  );
   try {
     await setup.flush();
     return setup.captureCharFrame();
@@ -155,7 +159,12 @@ describe("DynamicStationButton", () => {
     const notifiedWidth = targetDims(
       islandDisplay(input({ idleCount: 3 }, { celebration: { prNumber: 42 } }), false),
     ).width;
-    const setup = await testRender(<Harness />, SURFACE);
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <Harness />
+      </StationThemeProvider>,
+      SURFACE,
+    );
     try {
       await setup.flush();
       const setCelebration = updateCelebration;
@@ -207,7 +216,12 @@ describe("DynamicStationButton", () => {
     const secondWidth = targetDims(
       islandDisplay(input({ idleCount: 3 }, { celebration: second }), false),
     ).width;
-    const setup = await testRender(<Harness />, SURFACE);
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <Harness />
+      </StationThemeProvider>,
+      SURFACE,
+    );
     try {
       await setup.flush();
       expect(renderedButtonWidth(setup.captureCharFrame())).toBe(firstWidth);
@@ -219,14 +233,12 @@ describe("DynamicStationButton", () => {
       setCelebration(second);
       const exiting = await waitForButtonFrame(
         setup,
-        ({ frame, width }) =>
-          frame.includes("#42") && width > restingWidth && width < firstWidth,
+        ({ frame, width }) => frame.includes("#42") && width > restingWidth && width < firstWidth,
       );
       expect(exiting.frame).not.toContain("#812");
       const entering = await waitForButtonFrame(
         setup,
-        ({ frame, width }) =>
-          frame.includes("#812") && width > restingWidth && width < secondWidth,
+        ({ frame, width }) => frame.includes("#812") && width > restingWidth && width < secondWidth,
       );
       expect(entering.width).toBeLessThan(secondWidth);
       await waitForButtonFrame(
@@ -263,7 +275,12 @@ describe("DynamicStationButton", () => {
 
     const restingWidth = targetDims(islandDisplay(input(), false)).width;
     const notifiedWidth = targetDims(islandDisplay(input({}, { celebration }), false)).width;
-    const setup = await testRender(<Harness />, SURFACE);
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <Harness />
+      </StationThemeProvider>,
+      SURFACE,
+    );
     try {
       await setup.flush();
       if (setAttention === undefined || setCelebration === undefined) {
@@ -295,7 +312,11 @@ describe("DynamicStationButton", () => {
     function Harness() {
       const [currentCelebration, updateCelebration] = useState<IslandCelebration>();
       setCelebration = updateCelebration;
-      return <DynamicStationButton input={input({ idleCount: 3 }, { celebration: currentCelebration })} />;
+      return (
+        <DynamicStationButton
+          input={input({ idleCount: 3 }, { celebration: currentCelebration })}
+        />
+      );
     }
 
     const restingWidth = targetDims(islandDisplay(input({ idleCount: 3 }), false)).width;
@@ -303,7 +324,12 @@ describe("DynamicStationButton", () => {
     const notifiedWidth = targetDims(
       islandDisplay(input({ idleCount: 3 }, { celebration }), false),
     ).width;
-    const setup = await testRender(<Harness />, SURFACE);
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <Harness />
+      </StationThemeProvider>,
+      SURFACE,
+    );
     try {
       await setup.flush();
       await setup.mockMouse.moveTo(SURFACE.width - 1, 0);
@@ -332,9 +358,9 @@ describe("DynamicStationButton", () => {
         expect(frame).not.toContain("✓");
       }
       expect(closingWidths.at(-1)).toBe(restingWidth);
-      expect(
-        closingWidths.some((width) => width > restingWidth && width < expandedWidth),
-      ).toBe(true);
+      expect(closingWidths.some((width) => width > restingWidth && width < expandedWidth)).toBe(
+        true,
+      );
       expect(
         closingWidths.every(
           (width, index) => index === 0 || width <= (closingWidths[index - 1] ?? width),
@@ -354,9 +380,9 @@ describe("DynamicStationButton", () => {
         }
       }
       expect(enteringWidths.at(-1)).toBe(notifiedWidth);
-      expect(
-        enteringWidths.some((width) => width > restingWidth && width < notifiedWidth),
-      ).toBe(true);
+      expect(enteringWidths.some((width) => width > restingWidth && width < notifiedWidth)).toBe(
+        true,
+      );
       expect(
         enteringWidths.every(
           (width, index) => index === 0 || width >= (enteringWidths[index - 1] ?? width),
@@ -385,7 +411,12 @@ describe("DynamicStationButton", () => {
 
     const surface = { width: 100, height: 20 };
     const notifiedWidth = targetDims(islandDisplay(input({}, { celebration }), false)).width;
-    const setup = await testRender(<Harness />, surface);
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <Harness />
+      </StationThemeProvider>,
+      surface,
+    );
     try {
       await setup.flush();
       await setup.mockMouse.moveTo(60, 1);
@@ -420,7 +451,10 @@ describe("DynamicStationButton", () => {
 
   it("expanded base shows the working/idle summary", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton input={input({ workingCount: 2, readyCount: 5, idleCount: 9 })} hovered />,
+      <DynamicStationButton
+        input={input({ workingCount: 2, readyCount: 5, idleCount: 9 })}
+        hovered
+      />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("2 sessions working");
@@ -485,7 +519,9 @@ describe("DynamicStationButton", () => {
 
   it("switches the mouse pointer to a hand on hover and back on leave", async () => {
     const setup = await testRender(
-      <DynamicStationButton input={input({ workingCount: 1, idleCount: 2 })} />,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DynamicStationButton input={input({ workingCount: 1, idleCount: 2 })} />
+      </StationThemeProvider>,
       SURFACE,
     );
     try {

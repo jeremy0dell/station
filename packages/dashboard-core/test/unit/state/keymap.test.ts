@@ -1,13 +1,12 @@
 import {
   createInitialTuiState,
-  dashboardFooterLabel,
+  dashboardBindingHelp,
   deriveTuiInputMode,
   handleTuiKey,
   isSlotKey,
-  QUIT_HINT_DISMISS_ERROR,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { matchDashboardBinding, TUI_DASHBOARD_BINDINGS } from "../../../src/state/keymap.js";
+import { matchDashboardBinding } from "../../../src/state/keymap.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
@@ -90,110 +89,19 @@ describe("dashboard popup lifecycle keys", () => {
   });
 });
 
-type DashboardFooterVariant =
-  | "full"
-  | "compact"
-  | "firstRunFull"
-  | "firstRunCompact"
-  | "filteredFull"
-  | "filteredCompact";
-
-type DashboardFooterMetadata = {
-  order: number;
-  labels: Partial<Record<DashboardFooterVariant, string>>;
-};
-
-function footerBindingMetadata(
-  binding: (typeof TUI_DASHBOARD_BINDINGS)[number],
-): { keys: string; footer: DashboardFooterMetadata } | undefined {
-  if (!("help" in binding) || !("footer" in binding.help)) {
-    return undefined;
-  }
-  return { keys: binding.help.keys, footer: binding.help.footer };
-}
-
-function shortcutsFromBindingMetadata(variant: DashboardFooterVariant): string {
-  return TUI_DASHBOARD_BINDINGS.flatMap((binding) => {
-    const metadata = footerBindingMetadata(binding);
-    const label = metadata?.footer.labels[variant];
-    return metadata === undefined || label === undefined
-      ? []
-      : [{ order: metadata.footer.order, text: `${metadata.keys} ${label}` }];
-  })
-    .sort((left, right) => left.order - right.order)
-    .map(({ text }) => text)
-    .join("  ");
-}
-
-describe("dashboard footer", () => {
-  it("derives every responsive shortcut variant from binding metadata", () => {
-    expect(shortcutsFromBindingMetadata("full")).toBe(
-      "↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help",
-    );
-    expect(shortcutsFromBindingMetadata("compact")).toBe(
-      "↵ activate  N new  ⇥ next  / search  X delete  ? help",
-    );
-    expect(shortcutsFromBindingMetadata("firstRunFull")).toBe("↵ add first project  A add project");
-    expect(shortcutsFromBindingMetadata("firstRunCompact")).toBe("↵ add first project");
-  });
-
-  it("selects full and compact registry projections without changing footer copy", () => {
-    expect(dashboardFooterLabel({ columns: 120, quitHint: "Q/esc:close" })).toBe(
-      `${shortcutsFromBindingMetadata("full")}  Q/esc:close`,
-    );
-    expect(dashboardFooterLabel({ columns: 80, quitHint: "Q/esc:close" })).toBe(
-      `${shortcutsFromBindingMetadata("compact")}  Q/esc:close`,
-    );
-    expect(dashboardFooterLabel({ columns: 120, quitHint: "Q/esc:close", firstRun: true })).toBe(
-      `${shortcutsFromBindingMetadata("firstRunFull")}  Q/esc:close`,
-    );
-    expect(dashboardFooterLabel({ columns: 40, quitHint: "Q/esc:close", firstRun: true })).toBe(
-      `${shortcutsFromBindingMetadata("firstRunCompact")}  Q/esc:close`,
-    );
-  });
-
-  it("derives applied-filter edit and clear affordances from dashboard binding metadata", () => {
-    expect(
-      dashboardFooterLabel({
-        columns: 140,
-        quitHint: "Q:close",
-        persistentFilter: true,
-      }),
-    ).toBe(
-      "↵ activate  N new  A add  ⇥ next-needs-me  / edit  Esc clear  X delete  ? help  Q:close",
-    );
-    expect(
-      dashboardFooterLabel({
-        columns: 80,
-        quitHint: "Q:close",
-        persistentFilter: true,
-      }),
-    ).toBe("↵ activate  N new  ⇥ next  / edit  Esc clear  X delete  ? help  Q:close");
-  });
-
-  it("keeps visible-error dismissal readable through compact and quit-only fallbacks", () => {
-    expect(dashboardFooterLabel({ columns: 120, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
-      `${shortcutsFromBindingMetadata("full")}  ${QUIT_HINT_DISMISS_ERROR}`,
-    );
-    expect(dashboardFooterLabel({ columns: 80, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
-      `${shortcutsFromBindingMetadata("compact")}  ${QUIT_HINT_DISMISS_ERROR}`,
-    );
-    expect(dashboardFooterLabel({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
-      QUIT_HINT_DISMISS_ERROR,
-    );
-    expect(
-      dashboardFooterLabel({
-        columns: 50,
-        quitHint: QUIT_HINT_DISMISS_ERROR,
-        firstRun: true,
-      }),
-    ).toBe(`${shortcutsFromBindingMetadata("firstRunCompact")}  ${QUIT_HINT_DISMISS_ERROR}`);
-    expect(
-      dashboardFooterLabel({
-        columns: 40,
-        quitHint: QUIT_HINT_DISMISS_ERROR,
-        firstRun: true,
-      }),
-    ).toBe(QUIT_HINT_DISMISS_ERROR);
+describe("dashboard footer binding metadata", () => {
+  it("exposes stable keys and labels without contextual layout policy", () => {
+    expect(dashboardBindingHelp("tui.dashboard.search")).toEqual({
+      keys: "/",
+      label: "search",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.dismissEsc")).toEqual({
+      keys: "Esc",
+      label: "clear persistent filter",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.quit")).toEqual({
+      keys: "Q",
+      label: "quit",
+    });
   });
 });

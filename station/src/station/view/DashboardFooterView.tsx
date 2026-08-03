@@ -1,3 +1,4 @@
+import type { ColorInput } from "@opentui/core";
 import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import {
@@ -11,8 +12,8 @@ import {
   type TuiState,
   type TuiStore,
 } from "@station/dashboard-core";
+import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
-import { STATION_COLORS } from "./theme.js";
 
 export type DashboardFooterViewProps = {
   store: StoreApi<TuiStore>;
@@ -20,6 +21,7 @@ export type DashboardFooterViewProps = {
 };
 
 export function DashboardFooterView({ store, columns }: DashboardFooterViewProps) {
+  const theme = useStationTheme();
   const snapshot = useStore(store, (state) => state.snapshot);
   const screen = useStore(store, (state) => state.screen);
   const persistentFilter = useStore(store, (state) => state.persistentFilter);
@@ -34,15 +36,19 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
   });
 
-  return renderDashboardFooter(model, contentColumns);
-}
-
-function renderDashboardFooter(model: DashboardFooterModel, columns: number) {
   if (model.kind === "persistentFilterEditing") {
     return <DashboardFilterFooterView segments={model.segments} />;
   }
-  const foreground = model.kind === "loading" ? STATION_COLORS.gray : STATION_COLORS.foreground;
-  return <text fg={foreground}>{truncateCells(model.text, columns)}</text>;
+  return (
+    <text fg={dashboardFooterColor(theme, model)}>{truncateCells(model.text, contentColumns)}</text>
+  );
+}
+
+function dashboardFooterColor(
+  theme: StationTheme,
+  model: Exclude<DashboardFooterModel, { kind: "persistentFilterEditing" }>,
+): ColorInput {
+  return toOpenTuiColor(model.kind === "loading" ? theme.text.muted : theme.text.primary);
 }
 
 function selectFooterQuitHint(state: Pick<TuiState, "screen" | "toasts">): string {

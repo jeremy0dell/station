@@ -24,7 +24,7 @@ import {
   useStationHoverEnabled,
 } from "./stationMouseContext.js";
 import { ToastOverlayView } from "./ToastOverlayView.js";
-import { STATION_COLORS } from "./theme.js";
+import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 
 export type DashboardRootProps = {
   store: StoreApi<TuiStore>;
@@ -35,6 +35,7 @@ export type DashboardRootProps = {
 };
 
 export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardRootProps) {
+  const theme = useStationTheme();
   const snapshot = useStore(store, (state) => state.snapshot);
   const loading = useStore(store, (state) => state.loading);
   const screen = useStore(store, (state) => state.screen);
@@ -101,7 +102,9 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
           {snapshotLoadingLines(loading, observerConnectionStatus).map((line, index) => (
             <text
               key={`${index}:${line.text}`}
-              fg={line.color === "gray" ? STATION_COLORS.gray : STATION_COLORS.foreground}
+              fg={toOpenTuiColor(
+                line.color === "gray" ? theme.text.muted : theme.text.primary,
+              )}
             >
               {line.text}
             </text>

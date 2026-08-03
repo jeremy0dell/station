@@ -57,8 +57,6 @@ export const CliSetupPlanSchema = z
   })
   .strict();
 
-export type CliSetupHarnessId = z.infer<typeof CliSetupHarnessIdSchema>;
 export type CliSetupCheck = z.infer<typeof CliSetupCheckSchema>;
 export type CliSetupAction = z.infer<typeof CliSetupActionSchema>;
-export type CliSetupSummary = z.infer<typeof CliSetupSummarySchema>;
 export type CliSetupPlan = z.infer<typeof CliSetupPlanSchema>;

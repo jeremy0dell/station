@@ -18,25 +18,33 @@ export type WorktreeRowTextHighlights = {
   activity?: readonly TextMatchRange[];
 };
 
+export type WorktreeRowPresentation = {
+  title: string;
+  agent: string;
+  activity: string;
+};
+
 export function worktreeRowGridInput({
   id,
   row,
   slot,
   title,
+  presentation,
   focused,
   textHighlights,
-  dimmedPreview,
+  dimmed,
 }: {
   id?: string;
   row: WorktreeRowModel;
   slot: string | undefined;
   title?: string | undefined;
+  presentation?: WorktreeRowPresentation | undefined;
   focused?: boolean | undefined;
   textHighlights?: WorktreeRowTextHighlights | undefined;
-  dimmedPreview?: true | undefined;
+  dimmed?: true | undefined;
 }): RowGridRowInput {
   const marker = statusMarker(row);
-  const visibleFields = worktreeRowVisibleFields(row, title);
+  const visibleFields = presentation ?? worktreeRowVisibleFields(row, title);
   const activity = activityCellForRow(row);
   const ready = isReadyToRead(row);
   const state = row.agent?.state ?? "none";
@@ -46,7 +54,7 @@ export function worktreeRowGridInput({
     marker,
     title: visibleFields.title,
     agent: visibleFields.agent,
-    activity: visibleFields.status,
+    activity: visibleFields.activity,
     activityImportance: activity.importance,
     // Let the status claim the row's trailing slack so it stretches to the end
     // instead of truncating while empty space remains, matching transient rows.
@@ -56,8 +64,8 @@ export function worktreeRowGridInput({
   if (textHighlights !== undefined) {
     input.textHighlights = textHighlights;
   }
-  if (dimmedPreview === true) {
-    input.dimmedPreview = true;
+  if (dimmed === true) {
+    input.dimmed = true;
   }
   // Tone colors the glyph + status label only — the session name must stay
   // foreground in every state (D12/D13).
@@ -91,7 +99,7 @@ export function worktreeStyleRowGridInput(input: {
   metadataGroups?: WorktreeRowMetadataGroups;
   focused?: true;
   textHighlights?: WorktreeRowTextHighlights;
-  dimmedPreview?: true;
+  dimmed?: true;
 }): RowGridRowInput {
   const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
   cells.identity = {
@@ -146,10 +154,10 @@ export function worktreeStyleRowGridInput(input: {
     }
   }
 
-  if (input.dimmedPreview === true) {
+  if (input.dimmed === true) {
     for (const cell of Object.values(cells)) {
       if (cell !== undefined) {
-        cell.segments = cell.segments.map(dimmedPreviewSegment);
+        cell.segments = cell.segments.map(dimmedSegment);
       }
     }
   }
@@ -160,10 +168,10 @@ export function worktreeStyleRowGridInput(input: {
   };
   if (input.metadataGroups !== undefined) {
     row.metadataGroups =
-      input.dimmedPreview === true
+      input.dimmed === true
         ? {
-            diff: input.metadataGroups.diff.map(dimmedPreviewSegment),
-            pr: input.metadataGroups.pr.map(dimmedPreviewSegment),
+            diff: input.metadataGroups.diff.map(dimmedSegment),
+            pr: input.metadataGroups.pr.map(dimmedSegment),
           }
         : input.metadataGroups;
   }
@@ -180,13 +188,13 @@ function highlightedTextSegments(
 ): RowSegment[] {
   return textMatchSegments(text, ranges).map((segment) =>
     segment.matched
-      ? textSegment(segment.text, { color, filterMatch: true })
+      ? textSegment(segment.text, { color, highlighted: true })
       : textSegment(segment.text, { color }),
   );
 }
 
-function dimmedPreviewSegment(segment: RowSegment): RowSegment {
-  return { ...segment, dimmedPreview: true };
+function dimmedSegment(segment: RowSegment): RowSegment {
+  return { ...segment, dimmed: true };
 }
 
 function identitySegments(
@@ -219,11 +227,11 @@ function identitySegments(
 export function worktreeRowVisibleFields(
   row: WorktreeRowModel,
   title?: string,
-): { title: string; agent: string; status: string } {
+): WorktreeRowPresentation {
   return {
     title: title ?? row.branch,
     agent: row.agent?.harness ?? "-",
-    status: activityCellForRow(row).text,
+    activity: activityCellForRow(row).text,
   };
 }
 

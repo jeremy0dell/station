@@ -17,7 +17,7 @@ describe("text setup presenter", () => {
     expect(source).not.toContain("checks.find");
   });
 
-  it("renders the semantic plan without compatibility keys or command payloads", () => {
+  it("renders the semantic plan without machine-only keys or command payloads", () => {
     const presenter = createTextSetupPresenter();
     const view = readyView({
       checks: [

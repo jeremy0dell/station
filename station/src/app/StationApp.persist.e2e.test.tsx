@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,11 +45,16 @@ async function bootStation(layoutPath: string, store: StationStore) {
     createTerminal: () => scripted.terminal,
     layout: { path: layoutPath, debounceMs: 5 },
   });
-  const setup = await testRender(<StationApp {...composition.viewProps} />, {
-    ...SURFACE,
-    prependInputHandlers: [composition.stationInput.handleSequence],
-    kittyKeyboard: false,
-  });
+  const setup = await testRender(
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationApp {...composition.viewProps} />
+    </StationThemeProvider>,
+    {
+      ...SURFACE,
+      prependInputHandlers: [composition.stationInput.handleSequence],
+      kittyKeyboard: false,
+    },
+  );
   teardowns.push(() => {
     composition.dispose();
     setup.renderer.destroy();
@@ -74,7 +80,11 @@ describe("Station layout persistence end-to-end (renderer + disk + restart)", ()
         return snapshot?.panes.length === 3;
       });
       const persisted = readLayoutSnapshotSync(layoutPath);
-      expect(persisted?.panes.map((p) => p.id)).toEqual([MAIN_PANE_ID, "pane-split-0", "pane-split-1"]);
+      expect(persisted?.panes.map((p) => p.id)).toEqual([
+        MAIN_PANE_ID,
+        "pane-split-0",
+        "pane-split-1",
+      ]);
       expect(persisted?.activePaneId).toBe("pane-split-1");
 
       // Tear down boot 1 (real process exit would flush; dispose() does too).

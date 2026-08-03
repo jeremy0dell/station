@@ -92,7 +92,7 @@ describe("worktree row layout and filter semantics", () => {
 
     expect(
       layout.segments
-        .filter((segment) => segment.kind === "text" && segment.filterMatch === true)
+        .filter((segment) => segment.kind === "text" && segment.highlighted === true)
         .map((segment) => (segment.kind === "text" ? segment.text : "")),
     ).toEqual(["alpha", "dex", "work"]);
   });
@@ -105,14 +105,14 @@ describe("worktree row layout and filter semantics", () => {
       title: "beta task",
       agent: "pi",
       activity: "idle",
-      dimmedPreview: true,
+      dimmed: true,
     });
 
     expect(
       Object.values(input.cells)
         .flatMap((cell) => cell?.segments ?? [])
         .filter((segment) => segment.kind === "text" && segment.text.trim().length > 0)
-        .every((segment) => segment.dimmedPreview === true),
+        .every((segment) => segment.dimmed === true),
     ).toBe(true);
   });
 
@@ -134,7 +134,7 @@ describe("worktree row layout and filter semantics", () => {
     expect(
       layout.segments.some(
         (segment) =>
-          segment.kind === "text" && segment.text === "修正" && segment.filterMatch === true,
+          segment.kind === "text" && segment.text === "修正" && segment.highlighted === true,
       ),
     ).toBe(true);
   });

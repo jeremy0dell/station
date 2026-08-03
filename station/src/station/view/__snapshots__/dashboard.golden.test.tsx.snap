@@ -470,7 +470,7 @@ FILTER working                                 2/10 matches
  [6] x batch-export            opencode  exited        #8 ✓ 
 ▼ 4 below · showing 6 of 10                                 
 ─────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / edit  Esc clear  X delete  ? … 
+/ edit  Esc clear  ↵ activate  N new  Q:close               
 "
 `;
 

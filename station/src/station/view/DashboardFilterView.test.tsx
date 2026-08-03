@@ -6,8 +6,12 @@ import {
   type DashboardPersistentFilterProjection,
 } from "@station/dashboard-core";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../theme/index.js";
 import { DashboardFilterView } from "./DashboardFilterView.js";
-import { STATION_COLORS } from "./theme.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
@@ -42,7 +46,12 @@ async function renderFilter(
     projection: projection(input),
     overflow: { above: 0, below: 6, visible: 2, total: 8 },
   });
-  const setup = await testRender(<DashboardFilterView model={model} />, { width, height: 1 });
+  const setup = await testRender(
+    <StationThemeProvider theme={nativeStationTheme}>
+      <DashboardFilterView model={model} />
+    </StationThemeProvider>,
+    { width, height: 1 },
+  );
   teardowns.push(() => setup.renderer.destroy());
   await setup.renderOnce();
   return setup;
@@ -66,10 +75,10 @@ describe("DashboardFilterView", () => {
     const caretColumn = line.lastIndexOf("▏");
     expect(caretColumn).toBeGreaterThan(0);
     expect(foregroundHex(spanAtFrameCell(setup.captureSpans(), 0, caretColumn))).toBe(
-      STATION_COLORS.filterEditorRail,
+      stationColorSnapshotValue(nativeStationTheme.filter.editorRail),
     );
     expect(backgroundHex(spanAtFrameCell(setup.captureSpans(), 0, caretColumn))).toBe(
-      STATION_COLORS.filterEditorSurface,
+      stationColorSnapshotValue(nativeStationTheme.filter.editorSurface),
     );
   });
 
@@ -80,7 +89,7 @@ describe("DashboardFilterView", () => {
 
     expect(countColumn).toBeGreaterThan(0);
     expect(foregroundHex(spanAtFrameCell(setup.captureSpans(), 0, countColumn))).toBe(
-      STATION_COLORS.filterZeroMatch,
+      stationColorSnapshotValue(nativeStationTheme.filter.zeroMatch),
     );
   });
 
@@ -95,7 +104,7 @@ describe("DashboardFilterView", () => {
     expect(line).toContain("FILTER working");
     const queryColumn = line.indexOf("working");
     expect(backgroundHex(spanAtFrameCell(setup.captureSpans(), 0, queryColumn))).toBe(
-      STATION_COLORS.filterAppliedSurface,
+      stationColorSnapshotValue(nativeStationTheme.filter.appliedSurface),
     );
   });
 

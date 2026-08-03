@@ -94,10 +94,33 @@ describe("dashboard persistent filter footer", () => {
     expect(cellWidth(compactText)).toBeLessThanOrEqual(32);
   });
 
-  it("uses the filtered dashboard footer after the query is applied", () => {
-    const model = footer({ persistentFilter: { query: "alpha" } });
+  it("keeps applied-filter controls visible while shedding lower-priority help", () => {
+    const at60 = footer({ columns: 60, persistentFilter: { query: "alpha" } });
+    const at40 = footer({ columns: 40, persistentFilter: { query: "alpha" } });
+    const at20 = footer({ columns: 20, persistentFilter: { query: "alpha" } });
 
-    expect(model.kind).toBe("persistentFilterApplied");
-    expect(model).toMatchObject({ text: expect.stringContaining("/ edit") });
+    expect(at60).toEqual({
+      kind: "persistentFilterApplied",
+      text: "/ edit  Esc clear  ↵ activate  N new  Q:close",
+    });
+    expect(at40).toEqual({
+      kind: "persistentFilterApplied",
+      text: "/ edit  Esc clear  Q:close",
+    });
+    expect(at20).toEqual({
+      kind: "persistentFilterApplied",
+      text: "/ edit Esc clear Q",
+    });
+    for (const [width, model] of [
+      [60, at60],
+      [40, at40],
+      [20, at20],
+    ] as const) {
+      if (model.kind !== "persistentFilterApplied") throw new Error("expected applied filter");
+      expect(cellWidth(model.text)).toBeLessThanOrEqual(width);
+      expect(model.text).toContain("/ edit");
+      expect(model.text).toContain("Esc clear");
+      expect(model.text).toMatch(/Q(?::close)?$/);
+    }
   });
 });

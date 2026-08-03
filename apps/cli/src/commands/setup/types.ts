@@ -6,9 +6,18 @@ import type {
   SupportedHarnessId,
 } from "@station/setup-core";
 import type { CliEnv } from "../../env.js";
-import type { SetupApplyFileSystem } from "./apply.js";
 import type { SetupFileSystemReader } from "./checks/config.js";
 import type { SetupStateDirFileSystem } from "./checks/stateDir.js";
+
+export type SetupApplyFileSystem = {
+  readonly mkdir: (...arguments_: [string, { recursive: true }]) => Promise<void>;
+  readonly readFile: (...arguments_: [string]) => Promise<string>;
+  readonly writeFile: (...arguments_: [string, string]) => Promise<void>;
+  readonly writeFileExclusive?: (...arguments_: [string, string]) => Promise<void>;
+  readonly rename: (...arguments_: [string, string]) => Promise<void>;
+  readonly access: (...arguments_: [string]) => Promise<void>;
+  readonly rm?: (...arguments_: [string, { force: true }]) => Promise<void>;
+};
 
 export type SetupPromptChoice = {
   value: string;

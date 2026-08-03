@@ -6,7 +6,6 @@ import type {
   DashboardViewportItem,
 } from "../../selectors/dashboardViewport.js";
 
-import { dashboardFooterLabel } from "../../state/keymap.js";
 import type { DashboardFocus, TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
 import type { RowGridRowInput } from "../WorktreeRow/layout.js";
 import {
@@ -14,8 +13,6 @@ import {
   worktreeRowGridInput,
   worktreeStyleRowGridInput,
 } from "../WorktreeRow/rowInput.js";
-
-export { dashboardFooterLabel };
 
 export type DashboardHeaderStatus = {
   full: string;
@@ -146,22 +143,20 @@ export function rowGridInputForViewportItem(
         id: item.id,
         slot: undefined,
         marker: { kind: "throbber", variant: "braille" },
-        title: item.displayTitle,
-        activity: "removing session...",
+        title: item.presentation.title,
+        activity: item.presentation.activity ?? "",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
         ...decorations,
       });
     }
     if (item.pendingStart !== undefined) {
-      const activity =
-        item.pendingStart.operation === "resumeAgent" ? "resuming..." : "starting...";
       return worktreeStyleRowGridInput({
         id: item.id,
         slot: keyByRow.get(item.row.id),
         marker: { kind: "throbber", variant: "braille" },
-        title: item.displayTitle,
-        activity,
+        title: item.presentation.title,
+        activity: item.presentation.activity ?? "",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
         ...decorations,
@@ -171,7 +166,11 @@ export function rowGridInputForViewportItem(
       id: item.id,
       row: item.row.presentation,
       slot: keyByRow.get(item.row.id),
-      title: item.displayTitle,
+      presentation: {
+        title: item.presentation.title,
+        agent: item.presentation.agent ?? "",
+        activity: item.presentation.activity ?? "",
+      },
       ...decorations,
     });
   }
@@ -180,8 +179,8 @@ export function rowGridInputForViewportItem(
       id: item.id,
       slot: undefined,
       marker: { kind: "text", text: "!" },
-      title: item.row.title,
-      activity: item.row.error.message,
+      title: item.presentation.title,
+      activity: item.presentation.activity ?? "",
       activityImportance: "meaningful",
       activityOverflow: "rowSlack",
       color: "red",
@@ -192,9 +191,9 @@ export function rowGridInputForViewportItem(
     id: item.id,
     slot: undefined,
     marker: { kind: "throbber", variant: "braille" },
-    title: item.row.title,
-    agent: item.row.harnessProvider ?? "",
-    activity: "starting session...",
+    title: item.presentation.title,
+    agent: item.presentation.agent ?? "",
+    activity: item.presentation.activity ?? "",
     activityImportance: "meaningful",
     activityOverflow: "rowSlack",
     ...decorations,
@@ -209,7 +208,7 @@ type DashboardRowViewportItem = Extract<
 type DashboardRowDecorations = {
   focused?: true;
   textHighlights?: WorktreeRowTextHighlights;
-  dimmedPreview?: true;
+  dimmed?: true;
 };
 
 function rowDecorationsForViewportItem(
@@ -228,7 +227,7 @@ function rowDecorationsForViewportItem(
   if (match !== undefined) {
     decorations.textHighlights = persistentFilterRowHighlights(match);
     if (match.dimmed) {
-      decorations.dimmedPreview = true;
+      decorations.dimmed = true;
     }
   }
   return decorations;
@@ -240,7 +239,7 @@ function persistentFilterRowHighlights(
   return {
     title: match.ranges.title,
     agent: match.ranges.agent,
-    activity: match.ranges.status,
+    activity: match.ranges.activity,
   };
 }
 

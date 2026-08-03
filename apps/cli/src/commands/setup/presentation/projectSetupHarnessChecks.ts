@@ -1,34 +1,35 @@
-import type { SetupPlan as CoreSetupPlan, HarnessTrackingAssessment } from "@station/setup-core";
+import type {
+  SetupPlan as CoreSetupPlan,
+  HarnessTrackingAssessment,
+  SupportedHarnessId,
+} from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
-import { relevantHarnessTrackingIds, type SetupHarnessSelection } from "../harnessSelection.js";
-import type { SetupFacts, SupportedHarnessId } from "../model.js";
-import type { SetupDisplayDetail, SetupViewCheck } from "./setupViewTypes.js";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
+import type {
+  SetupDisplayDetail,
+  SetupPresentationHarnessSelection,
+  SetupViewCheck,
+} from "./setupViewTypes.js";
 
 export function projectSetupHarnessSelection(
   plan: CoreSetupPlan,
-  facts: SetupFacts,
-): SetupHarnessSelection {
+): SetupPresentationHarnessSelection {
   if (plan.selection.outcome !== "selected") {
-    return { selected: [], requiredHarnessIds: [], source: "unresolved" };
+    return { requiredHarnessIds: [], source: "unresolved" };
   }
   return {
-    selected: plan.selection.requiredHarnessIds.flatMap((harnessId) => {
-      const harness = facts.harnesses.find(
-        (candidate) => candidate.id === harnessId && candidate.status === "ok",
-      );
-      return harness === undefined ? [] : [harness];
-    }),
     requiredHarnessIds: plan.selection.requiredHarnessIds,
     source: plan.selection.source,
     defaultHarness: plan.selection.defaultHarness,
   };
 }
 
-export function projectSetupHarnessChecks(
-  plan: CoreSetupPlan,
-  facts: SetupFacts,
-  selection: SetupHarnessSelection,
-): readonly SetupViewCheck[] {
+export function projectSetupHarnessChecks(input: {
+  readonly plan: CoreSetupPlan;
+  readonly facts: SetupFacts;
+  readonly selection: SetupPresentationHarnessSelection;
+}): readonly SetupViewCheck[] {
+  const { plan, facts, selection } = input;
   const available = facts.harnesses.filter((harness) => harness.status === "ok");
   const unavailable = selection.requiredHarnessIds.filter(
     (id) => !available.some((harness) => harness.id === id),
@@ -53,28 +54,34 @@ export function projectSetupHarnessChecks(
     });
   }
 
-  const harness = projectHarnessCheck(
+  const harness = projectHarnessCheck({
     plan,
     facts,
     selection,
     available,
     unavailable,
-    harnessDetails,
-  );
-  const tracking = relevantHarnessTrackingIds(facts, selection).map((harnessId) =>
-    projectHarnessTrackingCheck(plan, facts, selection, harnessId),
+    details: harnessDetails,
+  });
+  const tracking = plan.evidence.harnessTracking.map((trackingFact) =>
+    projectHarnessTrackingCheck({
+      plan,
+      facts,
+      selection,
+      harnessId: trackingFact.harnessId,
+    }),
   );
   return [harness, ...tracking];
 }
 
-function projectHarnessCheck(
-  plan: CoreSetupPlan,
-  facts: SetupFacts,
-  selection: SetupHarnessSelection,
-  available: readonly SetupFacts["harnesses"][number][],
-  unavailable: readonly SupportedHarnessId[],
-  details: SetupViewCheck["details"],
-): SetupViewCheck {
+function projectHarnessCheck(input: {
+  readonly plan: CoreSetupPlan;
+  readonly facts: SetupFacts;
+  readonly selection: SetupPresentationHarnessSelection;
+  readonly available: readonly SetupFacts["harnesses"][number][];
+  readonly unavailable: readonly SupportedHarnessId[];
+  readonly details: SetupViewCheck["details"];
+}): SetupViewCheck {
+  const { plan, facts, selection, available, unavailable, details } = input;
   if (plan.selection.outcome !== "selected") {
     const explanation =
       available.length > 1
@@ -129,12 +136,13 @@ function projectHarnessCheck(
   };
 }
 
-function projectHarnessTrackingCheck(
-  plan: CoreSetupPlan,
-  facts: SetupFacts,
-  selection: SetupHarnessSelection,
-  harnessId: SupportedHarnessId,
-): SetupViewCheck {
+function projectHarnessTrackingCheck(input: {
+  readonly plan: CoreSetupPlan;
+  readonly facts: SetupFacts;
+  readonly selection: SetupPresentationHarnessSelection;
+  readonly harnessId: SupportedHarnessId;
+}): SetupViewCheck {
+  const { plan, facts, selection, harnessId } = input;
   const assessment = plan.evidence.harnessTracking.find(
     (tracking) => tracking.harnessId === harnessId,
   )?.assessment;
@@ -145,14 +153,14 @@ function projectHarnessTrackingCheck(
   const fact = facts.harnessTracking.find((candidate) => candidate.harnessId === harnessId);
   const label = facts.harnesses.find((candidate) => candidate.id === harnessId)?.label ?? harnessId;
   const unavailableStatus = required ? "missing" : "warning";
-  const presentation = trackingPresentation(
+  const presentation = trackingPresentation({
     assessment,
-    fact?.detail,
+    detail: fact?.detail,
     harnessId,
     label,
     unavailableStatus,
     required,
-  );
+  });
   return {
     id: `harness-tracking:${harnessId}`,
     tier: required ? "required" : "recommended",
@@ -184,14 +192,15 @@ function trackingOwnershipDetails(
   return details;
 }
 
-function trackingPresentation(
-  assessment: HarnessTrackingAssessment,
-  detail: string | undefined,
-  harnessId: SupportedHarnessId,
-  label: string,
-  unavailableStatus: "missing" | "warning",
-  required: boolean,
-): Pick<SetupViewCheck, "status" | "explanation"> {
+function trackingPresentation(input: {
+  readonly assessment: HarnessTrackingAssessment;
+  readonly detail: string | undefined;
+  readonly harnessId: SupportedHarnessId;
+  readonly label: string;
+  readonly unavailableStatus: "missing" | "warning";
+  readonly required: boolean;
+}): Pick<SetupViewCheck, "status" | "explanation"> {
+  const { assessment, detail, harnessId, label, unavailableStatus, required } = input;
   switch (assessment.state) {
     case "not-applicable":
       return {

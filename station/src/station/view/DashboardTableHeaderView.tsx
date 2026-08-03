@@ -7,7 +7,7 @@ import type {
 import { DashboardFilterView } from "./DashboardFilterView.js";
 import { Segments } from "./segments.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
-import { STATION_COLORS } from "./theme.js";
+import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 
 export function DashboardTableHeaderView({ model }: { model: DashboardTableHeaderModel }) {
   switch (model.kind) {
@@ -35,13 +35,14 @@ export function DashboardScrollIndicatorView({
   direction: "above" | "below";
   overflow: DashboardSessionOverflow;
 }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const hiddenSessions = direction === "above" ? overflow.above : overflow.below;
   return (
     <box height={1}>
       {hiddenSessions > 0 ? (
         <text
-          fg={STATION_COLORS.gray}
+          fg={toOpenTuiColor(theme.text.muted)}
           {...stationMouseProps(dispatch, {
             kind: "scrollIndicator",
             direction: direction === "above" ? "up" : "down",
@@ -55,9 +56,10 @@ export function DashboardScrollIndicatorView({
 }
 
 function ColumnHeaderRow({ layout }: { layout: RowGridLayout }) {
+  const theme = useStationTheme();
   return (
     <box height={1} width="100%" overflow="hidden">
-      <text fg={STATION_COLORS.gray}>
+      <text fg={toOpenTuiColor(theme.text.muted)}>
         <Segments segments={layout.segments} />
       </text>
     </box>

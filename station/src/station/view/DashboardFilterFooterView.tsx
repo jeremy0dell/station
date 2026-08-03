@@ -1,30 +1,50 @@
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type ColorInput } from "@opentui/core";
 import type { DashboardFilterFooterSegment } from "@station/dashboard-core";
-import { STATION_COLORS } from "./theme.js";
+import {
+  toOpenTuiColor,
+  toOpenTuiOpaqueColor,
+  useStationTheme,
+  type StationTheme,
+} from "../../theme/index.js";
 
 export function DashboardFilterFooterView({
   segments,
 }: {
   segments: readonly DashboardFilterFooterSegment[];
 }) {
+  const theme = useStationTheme();
   return (
-    <box height={1} width="100%" backgroundColor={STATION_COLORS.filterEditorSurface}>
+    <box
+      height={1}
+      width="100%"
+      backgroundColor={toOpenTuiOpaqueColor(theme.filter.editorSurface)}
+    >
       <text width="100%">
         {segments.map((segment, index) => (
-          <DashboardFilterFooterSegmentView key={`${segment.role}:${index}`} segment={segment} />
+          <DashboardFilterFooterSegmentView
+            key={`${segment.role}:${index}`}
+            segment={segment}
+            theme={theme}
+          />
         ))}
       </text>
     </box>
   );
 }
 
-function DashboardFilterFooterSegmentView({ segment }: { segment: DashboardFilterFooterSegment }) {
+function DashboardFilterFooterSegmentView({
+  segment,
+  theme,
+}: {
+  segment: DashboardFilterFooterSegment;
+  theme: StationTheme;
+}) {
   const badge = segment.role === "badge";
   const key = segment.role === "key";
   return (
     <span
-      fg={footerSegmentForeground(segment)}
-      {...(badge ? { bg: STATION_COLORS.filterEditorRail } : {})}
+      fg={footerSegmentForeground(theme, segment)}
+      {...(badge ? { bg: toOpenTuiColor(theme.filter.editorRail) } : {})}
       attributes={badge || key ? TextAttributes.BOLD : TextAttributes.NONE}
     >
       {segment.text}
@@ -32,8 +52,11 @@ function DashboardFilterFooterSegmentView({ segment }: { segment: DashboardFilte
   );
 }
 
-function footerSegmentForeground(segment: DashboardFilterFooterSegment): string {
-  if (segment.role === "badge") return STATION_COLORS.background;
-  if (segment.role === "key") return STATION_COLORS.foreground;
-  return STATION_COLORS.gray;
+function footerSegmentForeground(
+  theme: StationTheme,
+  segment: DashboardFilterFooterSegment,
+): ColorInput {
+  if (segment.role === "badge") return toOpenTuiColor(theme.text.inverse);
+  if (segment.role === "key") return toOpenTuiColor(theme.text.primary);
+  return toOpenTuiColor(theme.text.muted);
 }

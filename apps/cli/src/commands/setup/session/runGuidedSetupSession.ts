@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { SafeError } from "@station/contracts";
+import { CliSetupHarnessIdSchema, type SafeError } from "@station/contracts";
 import {
   assessSetupPlan,
   type SetupEditableIntent,
@@ -11,12 +11,11 @@ import {
   type SupportedHarnessId,
 } from "@station/setup-core";
 import { type SetupMessageRef, setupMessageRef } from "@station/setup-messages";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type { SetupComposition, SetupSessionProjection } from "../composition.js";
-import { isSupportedHarnessId } from "../harnessSelection.js";
-import type { SetupFacts } from "../model.js";
 import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
-import { formatCommand } from "../render.js";
+import { formatSetupCommand } from "../presenters/text.js";
 import type {
   SetupCommandOptions,
   SetupCommandResult,
@@ -215,7 +214,7 @@ async function driveGuidedSession(
         prompt.logWarn(presenter.text(setupMessageRef("guided.invalid-selection")));
         continue;
       }
-      installHarnesses = selected.flatMap((value) => (isSupportedHarnessId(value) ? [value] : []));
+      installHarnesses = parseHarnessIds(selected);
     }
     if (installHarnesses.length === 0) {
       prompt.logWarn(
@@ -422,10 +421,10 @@ async function driveGuidedSession(
   state = await composition.session.application.apply();
   projection = await requireProjection(composition, state);
   if (projection === undefined) return finishIncomplete(composition);
-  const finalView = overlaySetupOperationOutcomes(
-    projection.view,
-    projection.session.operationOutcomes,
-  );
+  const finalView = overlaySetupOperationOutcomes({
+    view: projection.view,
+    outcomes: projection.session.operationOutcomes,
+  });
   if (
     projection.session.operationOutcomes.some(
       (outcome) =>
@@ -501,9 +500,7 @@ async function selectHarnesses(
       composition.guided.logWarn(presenter.text(setupMessageRef("guided.harness-select-required")));
     }
   }
-  const selectedHarnesses = selected.flatMap((value) =>
-    isSupportedHarnessId(value) ? [value] : [],
-  );
+  const selectedHarnesses = parseHarnessIds(selected);
   if (facts.config.status !== "missing" || selectedHarnesses.length < 2) {
     return { kind: "selected", harnessIds: selectedHarnesses };
   }
@@ -532,9 +529,10 @@ async function selectHarnesses(
 function configuredDefaultBlocksSelection(facts: SetupFacts): boolean {
   if (facts.config.status !== "valid") return facts.config.status === "invalid";
   const configuredDefault = facts.config.defaults.harness;
+  const parsedDefault = CliSetupHarnessIdSchema.safeParse(configuredDefault);
   return (
-    !isSupportedHarnessId(configuredDefault) ||
-    !facts.harnesses.some((harness) => harness.id === configuredDefault && harness.status === "ok")
+    !parsedDefault.success ||
+    !facts.harnesses.some((harness) => harness.id === parsedDefault.data && harness.status === "ok")
   );
 }
 
@@ -562,6 +560,13 @@ function installerPromptChoices(
     (...choicePair) =>
       displayOrder.indexOf(choicePair[0].value) - displayOrder.indexOf(choicePair[1].value),
   );
+}
+
+function parseHarnessIds(values: readonly string[]): SupportedHarnessId[] {
+  return values.flatMap((value) => {
+    const parsed = CliSetupHarnessIdSchema.safeParse(value);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 function validateSelectedValues(
@@ -795,7 +800,7 @@ function renderTmuxFeedback(composition: SetupComposition, requested: boolean): 
   const facts = composition.session.snapshot()?.facts;
   if (facts === undefined || (!requested && facts.tmuxBinding.status !== "ok")) return;
   const presenter = composition.text;
-  const popupCommand = formatCommand([facts.launchers.station.command, "popup"]);
+  const popupCommand = formatSetupCommand([facts.launchers.station.command, "popup"]);
   if (facts.tmuxBinding.status === "ok") {
     composition.guided.logInfo(
       presenter.text(
@@ -820,7 +825,7 @@ function worktrunkShellPrompt(facts: SetupFacts, presenter: TextSetupPresenter):
     integration.shell === undefined ? baseCommand : [...baseCommand, integration.shell];
   return presenter.prompt(
     setupMessageRef("guided.worktrunk-shell-prompt", {
-      command: formatCommand(command),
+      command: formatSetupCommand(command),
       path:
         integration.rcPath === undefined
           ? "the active shell startup file"

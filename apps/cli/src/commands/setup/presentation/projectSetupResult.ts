@@ -1,12 +1,16 @@
-import type { SetupPlan as CoreSetupPlan, SetupSessionOperationOutcome } from "@station/setup-core";
+import type {
+  SetupPlan as CoreSetupPlan,
+  SetupSessionOperationOutcome,
+  SupportedHarnessId,
+} from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
+import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
-import type { SetupHarnessSelection } from "../harnessSelection.js";
-import type { SetupAction, SetupFacts, SupportedHarnessId } from "../model.js";
 import { launcherPathDirectory } from "./projectSetupChecks.js";
 import type {
   ProjectSetupView,
   SetupApplyPresentation,
+  SetupPresentationHarnessSelection,
   SetupViewAction,
   SetupViewCheck,
   SetupViewResult,
@@ -15,7 +19,7 @@ import type {
 export function projectSetupResult(input: {
   readonly plan: CoreSetupPlan;
   readonly facts: SetupFacts;
-  readonly selection: SetupHarnessSelection;
+  readonly selection: SetupPresentationHarnessSelection;
   readonly checks: readonly SetupViewCheck[];
   readonly actions: readonly SetupViewAction[];
 }): SetupViewResult {
@@ -25,37 +29,25 @@ export function projectSetupResult(input: {
   };
 }
 
-export function overlaySetupOperationOutcomes(
-  view: ProjectSetupView,
-  outcomes: readonly SetupSessionOperationOutcome[],
-): ProjectSetupView {
+export function overlaySetupOperationOutcomes(input: {
+  readonly view: ProjectSetupView;
+  readonly outcomes: readonly SetupSessionOperationOutcome[];
+}): ProjectSetupView {
   const statuses = new Map(
-    outcomes.map((outcome) => [outcome.operationId, outcome.status] as const),
+    input.outcomes.map((outcome) => [outcome.operationId, outcome.status] as const),
   );
-  const updatedActions = view.actions.map((action) => {
+  const updatedActions = input.view.actions.map((action) => {
     const status = action.operationId === undefined ? undefined : statuses.get(action.operationId);
     return status === undefined ? action : { ...action, status };
   });
-  return withUpdatedActions(view, updatedActions);
+  return withUpdatedActions({ view: input.view, actions: updatedActions });
 }
 
-export function overlaySetupActionStatuses(
-  view: ProjectSetupView,
-  actions: readonly SetupAction[],
-): ProjectSetupView {
-  // Apply records statuses on its copied compatibility plan; overlay them without projecting human copy through that schema.
-  const statuses = new Map(actions.map((action) => [action.id, action.status] as const));
-  const updatedActions = view.actions.map((action) => {
-    const status = statuses.get(action.id);
-    return status === undefined ? action : { ...action, status };
-  });
-  return withUpdatedActions(view, updatedActions);
-}
-
-function withUpdatedActions(
-  view: ProjectSetupView,
-  actions: readonly SetupViewAction[],
-): ProjectSetupView {
+function withUpdatedActions(input: {
+  readonly view: ProjectSetupView;
+  readonly actions: readonly SetupViewAction[];
+}): ProjectSetupView {
+  const { view, actions } = input;
   const failedConfigWrite = actions.some(
     (action) => action.kind === "write-config" && action.status === "failed",
   );
@@ -74,7 +66,7 @@ function withUpdatedActions(
 function projectApplyPresentation(input: {
   readonly plan: CoreSetupPlan;
   readonly facts: SetupFacts;
-  readonly selection: SetupHarnessSelection;
+  readonly selection: SetupPresentationHarnessSelection;
   readonly checks: readonly SetupViewCheck[];
   readonly actions: readonly SetupViewAction[];
 }): SetupApplyPresentation {
@@ -107,7 +99,7 @@ function projectApplyPresentation(input: {
     const stationCommand = launcher?.stationExecutable ?? facts.launchers.station.command;
     return {
       kind: "complete",
-      preparedHarnesses: preparedHarnesses(plan, facts),
+      preparedHarnesses: preparedHarnesses({ plan, facts }),
       showCodexReview: plan.evidence.harnessTracking.some(
         (tracking) => tracking.harnessId === "codex" && tracking.assessment.state === "prepared",
       ),
@@ -118,13 +110,16 @@ function projectApplyPresentation(input: {
   if (selection.source === "unresolved") {
     return {
       kind: "blocked",
-      title: findCheck(input.checks, "harness").explanation,
+      title: findCheck({ checks: input.checks, id: "harness" }).explanation,
       detail: setupMessageRef("recovery.selection-command"),
       commands: [["stn", "--config", facts.configPath, "setup"]],
     };
   }
   if (facts.git.status === "missing") {
-    return { kind: "message", message: findCheck(input.checks, "git-project").explanation };
+    return {
+      kind: "message",
+      message: findCheck({ checks: input.checks, id: "git-project" }).explanation,
+    };
   }
   const missingTracking = plan.evidence.harnessTracking.find(
     (tracking) =>
@@ -133,12 +128,15 @@ function projectApplyPresentation(input: {
       tracking.assessment.state !== "not-applicable",
   );
   if (missingTracking !== undefined) {
-    const check = findCheck(input.checks, `harness-tracking:${missingTracking.harnessId}`);
+    const check = findCheck({
+      checks: input.checks,
+      id: `harness-tracking:${missingTracking.harnessId}`,
+    });
     return {
       kind: "blocked",
       title: check.explanation,
       detail: setupMessageRef("recovery.tracking"),
-      commands: [harnessTrackingCommand(facts, missingTracking.harnessId)],
+      commands: [harnessTrackingCommand({ facts, harnessId: missingTracking.harnessId })],
     };
   }
   const missing = input.checks.find(
@@ -154,16 +152,17 @@ function projectApplyPresentation(input: {
   }
   return {
     kind: "blocked",
-    title: missingRecoveryTitle(missing.id, missing.explanation),
+    title: missingRecoveryTitle({ id: missing.id, fallback: missing.explanation }),
     detail: setupMessageRef("recovery.then-run"),
     commands: recoveryCommands(facts),
   };
 }
 
-function preparedHarnesses(
-  plan: CoreSetupPlan,
-  facts: SetupFacts,
-): readonly { readonly id: SupportedHarnessId; readonly label: string }[] {
+function preparedHarnesses(input: {
+  readonly plan: CoreSetupPlan;
+  readonly facts: SetupFacts;
+}): readonly { readonly id: SupportedHarnessId; readonly label: string }[] {
+  const { plan, facts } = input;
   return plan.evidence.harnessTracking.flatMap((tracking) => {
     if (tracking.assessment.state !== "prepared") return [];
     const harness = facts.harnesses.find((candidate) => candidate.id === tracking.harnessId);
@@ -171,10 +170,11 @@ function preparedHarnesses(
   });
 }
 
-function harnessTrackingCommand(
-  facts: SetupFacts,
-  harnessId: "claude" | "codex" | "cursor" | "opencode" | "pi",
-): readonly string[] {
+function harnessTrackingCommand(input: {
+  readonly facts: SetupFacts;
+  readonly harnessId: "claude" | "codex" | "cursor" | "opencode" | "pi";
+}): readonly string[] {
+  const { facts, harnessId } = input;
   const command = [
     setupLauncherExecutable(facts.launchers.station),
     "--config",
@@ -190,31 +190,27 @@ function harnessTrackingCommand(
   return command;
 }
 
-function findCheck(checks: readonly SetupViewCheck[], id: string): SetupViewCheck {
+function findCheck(input: {
+  readonly checks: readonly SetupViewCheck[];
+  readonly id: string;
+}): SetupViewCheck {
+  const { checks, id } = input;
   const check = checks.find((candidate) => candidate.id === id);
   if (check === undefined) throw new Error(`Setup view is missing ${id}.`);
   return check;
 }
 
-function missingRecoveryTitle(id: string, fallback: SetupViewCheck["explanation"]) {
-  switch (id) {
-    case "command-line-tools":
-      return setupMessageRef("recovery.command-line-tools");
-    case "worktrunk":
-      return setupMessageRef("recovery.worktrunk");
-    case "tmux":
-      return setupMessageRef("recovery.tmux");
-    case "bun":
-      return setupMessageRef("recovery.bun");
-    case "harness":
-      return fallback;
-    case "diffnav":
-      return setupMessageRef("recovery.diffnav");
-    case "git-delta":
-      return setupMessageRef("recovery.git-delta");
-    default:
-      return fallback;
-  }
+function missingRecoveryTitle(input: {
+  readonly id: string;
+  readonly fallback: SetupViewCheck["explanation"];
+}) {
+  if (input.id === "command-line-tools") return setupMessageRef("recovery.command-line-tools");
+  if (input.id === "worktrunk") return setupMessageRef("recovery.worktrunk");
+  if (input.id === "tmux") return setupMessageRef("recovery.tmux");
+  if (input.id === "bun") return setupMessageRef("recovery.bun");
+  if (input.id === "diffnav") return setupMessageRef("recovery.diffnav");
+  if (input.id === "git-delta") return setupMessageRef("recovery.git-delta");
+  return input.fallback;
 }
 
 function recoveryCommands(facts: SetupFacts): readonly (readonly string[])[] {

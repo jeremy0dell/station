@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import { selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID } from "../state/types.js";
@@ -13,10 +14,7 @@ import {
   type ScriptedTerminal,
 } from "../terminal/testing/scriptedTerminal.js";
 import { waitFor } from "../terminal/testing/waitFor.js";
-import type {
-  StationTerminalProcess,
-  StationTerminalSpawnOptions,
-} from "../terminal/types.js";
+import type { StationTerminalProcess, StationTerminalSpawnOptions } from "../terminal/types.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
 // End-to-end input tests: keystrokes enter through OpenTUI's real input
@@ -64,9 +62,11 @@ describe("station input end to end", () => {
       registry,
     });
     const setup = await testRender(
-      <PaneRegistryProvider registry={registry}>
-        <TerminalPane paneId={MAIN_PANE_ID} />
-      </PaneRegistryProvider>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <PaneRegistryProvider registry={registry}>
+          <TerminalPane paneId={MAIN_PANE_ID} />
+        </PaneRegistryProvider>
+      </StationThemeProvider>,
       {
         ...SURFACE,
         prependInputHandlers: [runtime.handleSequence],
@@ -88,9 +88,11 @@ describe("station input end to end", () => {
     return { registry, setup, store, shutdowns };
   }
 
-  async function renderScripted(kittyKeyboard: boolean): Promise<Station & {
-    scripted: ScriptedTerminal;
-  }> {
+  async function renderScripted(kittyKeyboard: boolean): Promise<
+    Station & {
+      scripted: ScriptedTerminal;
+    }
+  > {
     const scripted = createScriptedTerminal();
     const station = await renderStation({
       createTerminal: () => scripted.terminal,
@@ -142,7 +144,12 @@ describe("station input end to end", () => {
     station.setup.mockInput.pressCtrlC();
     await waitFor(() => {
       const bytes = station.scripted.helpers.writes.join("");
-      return bytes.includes("ab") && bytes.includes("\r") && bytes.includes("\x1b") && bytes.includes("\x03");
+      return (
+        bytes.includes("ab") &&
+        bytes.includes("\r") &&
+        bytes.includes("\x1b") &&
+        bytes.includes("\x03")
+      );
     });
     // No CSI-u garbage leaked into the pty.
     expect(/\x1b\[\d+;\d+u/.test(station.scripted.helpers.writes.join(""))).toBe(false);
@@ -206,16 +213,18 @@ describe("station input end to end", () => {
   it("paste flows to the pty and respects the child's bracketed-paste mode", async () => {
     const station = await renderScripted(false);
     await station.setup.mockInput.pasteBracketedText("echo pasted");
-    await waitFor(() =>
-      station.scripted.helpers.writes[station.scripted.helpers.writes.length - 1] ===
+    await waitFor(
+      () =>
+        station.scripted.helpers.writes[station.scripted.helpers.writes.length - 1] ===
         "echo pasted",
     );
 
     station.scripted.helpers.emitData("\x1b[?2004h");
     await new Promise((resolve) => setTimeout(resolve, 60));
     await station.setup.mockInput.pasteBracketedText("wrapped paste");
-    await waitFor(() =>
-      station.scripted.helpers.writes[station.scripted.helpers.writes.length - 1] ===
+    await waitFor(
+      () =>
+        station.scripted.helpers.writes[station.scripted.helpers.writes.length - 1] ===
         "\x1b[200~wrapped paste\x1b[201~",
     );
   });

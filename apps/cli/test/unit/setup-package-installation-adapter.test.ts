@@ -1,13 +1,16 @@
 import { chmod, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+  SetupHarnessInstallOperation,
+  SetupPackageInstallOperation,
+  SupportedHarnessId,
+} from "@station/setup-core";
 import { afterEach, describe, expect, it } from "vitest";
-import { applySetupPlan } from "../../src/commands/setup/apply.js";
-import { homebrewInstallAction } from "../../src/commands/setup/flows/guided.js";
-import { missingHarnessInstallActions } from "../../src/commands/setup/harnessInstall.js";
-import type { SetupAction, SetupHarnessFact, SetupPlan } from "../../src/commands/setup/model.js";
+import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
+import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
 
-describe("guided agent installers", () => {
+describe("setup package installation adapter", () => {
   const tempRoots: string[] = [];
 
   afterEach(async () => {
@@ -16,21 +19,39 @@ describe("guided agent installers", () => {
     );
   });
 
-  it("uses official Homebrew packages for every supported macOS agent except Cursor", () => {
-    const actions = missingHarnessInstallActions(missingHarnesses(), {
-      brewAvailable: true,
-      homeDir: "/tmp/home",
-      macos: true,
+  it("uses official Homebrew packages for every supported macOS agent except Cursor", async () => {
+    const commands = new Map<SupportedHarnessId, readonly string[]>();
+    let activeHarness: SupportedHarnessId | undefined;
+    const execute = createSetupOperationAdapter({
+      facts: packageFacts({ brewAvailable: true, macos: true }),
+      deps: {
+        runner: async (input) => {
+          if (activeHarness !== undefined) {
+            commands.set(activeHarness, [input.command, ...(input.args ?? [])]);
+          }
+          return {
+            command: input.command,
+            args: input.args ?? [],
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+          };
+        },
+      },
     });
 
-    const commands = commandsByHarness(actions);
-    expect(commands).toMatchObject({
+    for (const harnessId of harnessInstallOrder) {
+      activeHarness = harnessId;
+      await execute(harnessInstallOperation(harnessId));
+    }
+
+    expect(Object.fromEntries(commands)).toMatchObject({
       codex: ["brew", "install", "--cask", "homebrew/cask/codex"],
       opencode: ["brew", "install", "homebrew/core/opencode"],
       pi: ["brew", "install", "homebrew/core/pi-coding-agent"],
       claude: ["brew", "install", "--cask", "homebrew/cask/claude-code"],
     });
-    expect(commands.cursor?.join(" ")).toContain("https://cursor.com/install");
+    expect(commands.get("cursor")?.join(" ")).toContain("https://cursor.com/install");
   });
 
   it("executes every fallback unattended without touching the user's shell files", async () => {
@@ -48,27 +69,33 @@ describe("guided agent installers", () => {
     ]);
     const zshrc = join(homeDir, ".zshrc");
     await writeFile(zshrc, "# user sentinel\n", "utf8");
-    await installFakeExecutables(binDir, fixtureDir);
+    await installFakeExecutables({ binDir, fixtureDir });
 
-    const actions = [
-      homebrewInstallAction(),
-      ...missingHarnessInstallActions(missingHarnesses(), {
-        brewAvailable: false,
-        homeDir,
-        macos: false,
-      }).map((action) => ({ ...action, selected: true })),
-    ];
-    const result = await applySetupPlan(testPlan(actions), {
-      env: {
-        HOME: homeDir,
-        CODEX_HOME: join(homeDir, ".codex"),
-        PATH: `${binDir}:/usr/bin:/bin`,
-        FAKE_INSTALLER_DIR: fixtureDir,
-        FAKE_RESULTS: resultDir,
+    const execute = createSetupOperationAdapter({
+      facts: packageFacts({ brewAvailable: false, homeDir, macos: false }),
+      deps: {
+        env: {
+          HOME: homeDir,
+          CODEX_HOME: join(homeDir, ".codex"),
+          PATH: `${binDir}:/usr/bin:/bin`,
+          FAKE_INSTALLER_DIR: fixtureDir,
+          FAKE_RESULTS: resultDir,
+        },
       },
     });
+    const operations: SetupPackageInstallOperation[] = [
+      {
+        id: "install:homebrew",
+        kind: "install-homebrew",
+        tier: "required",
+        selected: true,
+      },
+      ...harnessInstallOrder.map(harnessInstallOperation),
+    ];
+    const outcomes = [];
+    for (const operation of operations) outcomes.push(await execute(operation));
 
-    expect(result.failedAction).toBeUndefined();
+    expect(outcomes.every((outcome) => outcome.status === "completed")).toBe(true);
     await expect(readFile(join(resultDir, "homebrew"), "utf8")).resolves.toBe("ran\n");
     await expect(readFile(join(resultDir, "codex"), "utf8")).resolves.toContain(
       `CODEX_HOME=${homeDir}/.codex`,
@@ -97,43 +124,35 @@ describe("guided agent installers", () => {
   });
 });
 
-function missingHarnesses(): SetupHarnessFact[] {
-  return [
-    { id: "codex", label: "Codex", status: "missing", command: "codex" },
-    { id: "cursor", label: "Cursor Agent", status: "missing", command: "agent" },
-    { id: "opencode", label: "OpenCode", status: "missing", command: "opencode" },
-    { id: "pi", label: "Pi", status: "missing", command: "pi" },
-    { id: "claude", label: "Claude Code", status: "missing", command: "claude" },
-  ];
-}
+const harnessInstallOrder = ["codex", "cursor", "opencode", "pi", "claude"] as const;
 
-function commandsByHarness(
-  actions: readonly SetupAction[],
-): Record<string, readonly string[] | undefined> {
-  return Object.fromEntries(actions.map((action) => [action.data?.harness, action.command]));
-}
-
-function testPlan(actions: readonly SetupAction[]): SetupPlan {
+function harnessInstallOperation(harnessId: SupportedHarnessId): SetupHarnessInstallOperation {
   return {
-    generatedAt: "2026-07-26T12:00:00.000Z",
-    mode: "apply",
-    checks: [],
-    actions: [...actions],
-    summary: {
-      launchReady: false,
-      workflowReady: false,
-      requiredOk: false,
-      requiredMissing: 1,
-      warnings: 0,
-      selectedActions: actions.length,
-      selectionSource: "unresolved",
-      configPath: "/tmp/config.toml",
-    },
-    nextSteps: [],
+    id: `install-harness:${harnessId}`,
+    kind: "install-harness",
+    tier: "required",
+    selected: true,
+    harnessId,
   };
 }
 
-async function installFakeExecutables(binDir: string, fixtureDir: string): Promise<void> {
+function packageFacts(input: {
+  readonly brewAvailable: boolean;
+  readonly homeDir?: string;
+  readonly macos: boolean;
+}): SetupFacts {
+  return {
+    homeDir: input.homeDir ?? "/tmp/home",
+    brew: { status: input.brewAvailable ? "ok" : "missing", command: "brew" },
+    xcode: { status: "ok", applicable: input.macos },
+  } as SetupFacts;
+}
+
+async function installFakeExecutables(input: {
+  readonly binDir: string;
+  readonly fixtureDir: string;
+}): Promise<void> {
+  const { binDir, fixtureDir } = input;
   const curl = join(binDir, "curl");
   const npm = join(binDir, "npm");
   await writeFile(

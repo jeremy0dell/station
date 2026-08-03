@@ -1,4 +1,4 @@
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type ColorInput } from "@opentui/core";
 import type { ProjectView } from "@station/contracts";
 import {
   projectHeaderLabelParts,
@@ -7,13 +7,13 @@ import {
   type DashboardPersistentFilterProjectMatch,
   type ProjectHeaderControl,
 } from "@station/dashboard-core";
+import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import {
   stationMouseProps,
   useStationHoverState,
   useStationMouse,
 } from "./stationMouseContext.js";
-import { STATION_COLORS } from "./theme.js";
 
 const SHELL_AFFORDANCE_LABEL = "[shell]";
 const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
@@ -46,6 +46,7 @@ export function ProjectHeaderView({
     quickSessionLabel.length +
     DEFAULT_AGENT_AFFORDANCE_LABEL.length +
     PROJECT_HEADER_SEPARATOR_COUNT;
+  const dimmed = persistentFilterMatch?.matched === false;
   return (
     <box flexDirection="row" width="100%" height={1} overflow="hidden">
       <ProjectHeaderPrimary
@@ -53,26 +54,30 @@ export function ProjectHeaderView({
         collapsed={collapsed}
         width={Math.max(1, columns - controlsWidth)}
         focused={focus === "primary"}
+        dimmed={dimmed}
         persistentFilterMatch={persistentFilterMatch}
       />
       <box flexGrow={1} height={1} />
-      <ProjectHeaderSeparator />
+      <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
         label={shellLabel}
         target={{ kind: "openShellForProject", projectId: project.id }}
         focused={focus === "shell"}
+        dimmed={dimmed}
       />
-      <ProjectHeaderSeparator />
+      <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
         label={quickSessionLabel}
         target={{ kind: "quickSessionForProject", projectId: project.id }}
         focused={focus === "quickSession"}
+        dimmed={dimmed}
       />
-      <ProjectHeaderSeparator />
+      <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
         label={DEFAULT_AGENT_AFFORDANCE_LABEL}
         target={{ kind: "showDefaultAgentPickerForProject", projectId: project.id }}
         focused={focus === "defaultAgent"}
+        dimmed={dimmed}
       />
     </box>
   );
@@ -83,21 +88,25 @@ function ProjectHeaderPrimary({
   collapsed,
   width,
   focused,
+  dimmed,
   persistentFilterMatch,
 }: {
   project: ProjectView;
   collapsed: boolean;
   width: number;
   focused: boolean;
+  dimmed: boolean;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   return (
     <text
       flexShrink={0}
-      fg={STATION_COLORS.foreground}
-      {...projectHeaderBackground(hover, focused)}
+      fg={toOpenTuiColor(theme.text.primary)}
+      attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
+      {...projectHeaderBackground(theme, hover, focused)}
       {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -106,6 +115,7 @@ function ProjectHeaderPrimary({
         project={project}
         collapsed={collapsed}
         width={width}
+        dimmed={dimmed}
         persistentFilterMatch={persistentFilterMatch}
       />
     </text>
@@ -117,18 +127,22 @@ function ProjectHeaderAction({
   label,
   target,
   focused,
+  dimmed,
 }: {
   label: string;
   target: StationMouseTarget;
   focused: boolean;
+  dimmed: boolean;
 }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   return (
     <text
       flexShrink={0}
-      fg={hover ? STATION_COLORS.green : STATION_COLORS.gray}
-      {...projectHeaderBackground(hover, focused)}
+      fg={toOpenTuiColor(hover ? theme.status.success : theme.text.muted)}
+      attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
+      {...projectHeaderBackground(theme, hover, focused)}
       {...stationMouseProps(dispatch, target)}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -138,9 +152,14 @@ function ProjectHeaderAction({
   );
 }
 
-function ProjectHeaderSeparator() {
+function ProjectHeaderSeparator({ dimmed }: { dimmed: boolean }) {
+  const theme = useStationTheme();
   return (
-    <text flexShrink={0} fg={STATION_COLORS.gray}>
+    <text
+      flexShrink={0}
+      fg={toOpenTuiColor(theme.text.muted)}
+      attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
+    >
       {" "}
     </text>
   );
@@ -150,13 +169,16 @@ function ProjectHeaderLabel({
   project,
   collapsed,
   width,
+  dimmed,
   persistentFilterMatch,
 }: {
   project: ProjectView;
   collapsed: boolean;
   width: number;
+  dimmed: boolean;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
+  const theme = useStationTheme();
   const parts = projectHeaderLabelParts(project, collapsed);
   const combined = truncateCells(`${parts.title}${parts.counts}`, width);
   const title = combined.slice(0, parts.title.length);
@@ -169,8 +191,9 @@ function ProjectHeaderLabel({
         prefix={prefix}
         label={label}
         ranges={persistentFilterMatch?.labelRanges ?? []}
+        dimmed={dimmed}
       />
-      <span fg={STATION_COLORS.gray}>{combined.slice(parts.title.length)}</span>
+      <span fg={toOpenTuiColor(theme.text.muted)}>{combined.slice(parts.title.length)}</span>
     </>
   );
 }
@@ -179,13 +202,15 @@ function ProjectHeaderLabelText({
   prefix,
   label,
   ranges,
+  dimmed,
 }: {
   prefix: string;
   label: string;
   ranges: readonly { start: number; end: number }[];
+  dimmed: boolean;
 }) {
   return (
-    <span attributes={TextAttributes.BOLD}>
+    <span attributes={TextAttributes.BOLD | (dimmed ? TextAttributes.DIM : TextAttributes.NONE)}>
       {prefix}
       {textMatchSegments(label, ranges).map((segment, index) => (
         <ProjectHeaderMatchSegment key={`${index}:${segment.text}`} segment={segment} />
@@ -199,22 +224,30 @@ function ProjectHeaderMatchSegment({
 }: {
   segment: ReturnType<typeof textMatchSegments>[number];
 }) {
+  const theme = useStationTheme();
   if (!segment.matched) {
     return <span>{segment.text}</span>;
   }
   return (
-    <span fg={STATION_COLORS.filterMatchForeground} bg={STATION_COLORS.filterMatchBackground}>
+    <span
+      fg={toOpenTuiColor(theme.filter.matchForeground)}
+      bg={toOpenTuiColor(theme.filter.matchBackground)}
+    >
       {segment.text}
     </span>
   );
 }
 
-function projectHeaderBackground(hover: boolean, focused: boolean): { bg?: string } {
+function projectHeaderBackground(
+  theme: StationTheme,
+  hover: boolean,
+  focused: boolean,
+): { bg?: ColorInput } {
   if (hover) {
-    return { bg: STATION_COLORS.hoverBackground };
+    return { bg: toOpenTuiColor(theme.interaction.hover) };
   }
   if (focused) {
-    return { bg: STATION_COLORS.compactFocusBackground };
+    return { bg: toOpenTuiColor(theme.interaction.compactFocus) };
   }
   return {};
 }
