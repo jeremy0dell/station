@@ -3,7 +3,7 @@ import { LegacyKeySequence } from "./keySequences.js";
 
 describe("legacy key-sequence vocabulary", () => {
   it("pins supported non-arrow key bytes", () => {
-    expect(LegacyKeySequence.Escape).toBe("\x1b");
+    expect(LegacyKeySequence.Backspace).toBe("\x7f");
     expect(LegacyKeySequence.ShiftTab).toBe("\x1b[Z");
     expect(LegacyKeySequence.PageUp).toBe("\x1b[5~");
     expect(LegacyKeySequence.PageDown).toBe("\x1b[6~");

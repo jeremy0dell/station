@@ -6,6 +6,7 @@ import {
   setGraphicsRendition,
 } from "./csi.js";
 import { DecMode } from "./decset.js";
+import { CsiCommand } from "./identifiers.js";
 import { VtPrefix } from "./syntax.js";
 
 describe("CSI protocol vocabulary", () => {
@@ -20,11 +21,15 @@ describe("CSI protocol vocabulary", () => {
   });
 
   it("composes dynamic parameters from typed values", () => {
-    expect(`${VtPrefix.Csi}?${DecMode.BracketedPaste}h`).toBe("\x1b[?2004h");
-    expect(`${VtPrefix.Csi}3;4H`).toBe("\x1b[3;4H");
-    expect(`${VtPrefix.Csi}2;5r`).toBe("\x1b[2;5r");
-    expect(`${VtPrefix.Csi}12X`).toBe("\x1b[12X");
-    expect(`${VtPrefix.Csi}${CursorPresentationStyle.SteadyBar} q`).toBe("\x1b[6 q");
+    expect(
+      `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.BracketedPaste}${CsiCommand.SetDecPrivateMode.final}`,
+    ).toBe("\x1b[?2004h");
+    expect(`${VtPrefix.Csi}3;4${CsiCommand.CursorPosition.final}`).toBe("\x1b[3;4H");
+    expect(`${VtPrefix.Csi}2;5${CsiCommand.SetScrollingRegion.final}`).toBe("\x1b[2;5r");
+    expect(`${VtPrefix.Csi}12${CsiCommand.EraseCharacters.final}`).toBe("\x1b[12X");
+    expect(
+      `${VtPrefix.Csi}${CursorPresentationStyle.SteadyBar}${CsiCommand.SelectCursorStyle.intermediates}${CsiCommand.SelectCursorStyle.final}`,
+    ).toBe("\x1b[6 q");
     expect(setGraphicsRendition([38, 2, 1, 2, 3])).toBe("\x1b[38;2;1;2;3m");
   });
 

@@ -1,10 +1,7 @@
-import { C0, VtPrefix } from "./syntax.js";
+import { VtPrefix } from "./syntax.js";
 
 /** Named legacy key sequences emitted or recognized directly by Station. */
 export const LegacyKeySequence = {
-  Escape: C0.Escape,
-  Enter: C0.CarriageReturn,
-  Tab: C0.HorizontalTab,
   Backspace: "\x7f",
   ShiftTab: `${VtPrefix.Csi}Z`,
   PageUp: `${VtPrefix.Csi}5~`,

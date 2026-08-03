@@ -1,3 +1,4 @@
+import { CsiCommand } from "./identifiers.js";
 import { VtPrefix } from "./syntax.js";
 
 /** Kitty keyboard modifier bits, distinct from the mouse modifier domain. */
@@ -106,16 +107,23 @@ export function reduceKittyKeyboardState(
 
 /** Complete Kitty keyboard sequences with no runtime parameters. */
 export const KittySequence = {
-  QueryFlags: `${VtPrefix.Csi}?u`,
+  QueryFlags: `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${CsiCommand.KittyQueryFlags.final}`,
 } as const;
 
 /** Recreate one buffer's stack from the default zero-flags state. */
 export function serializeKittyKeyboardState(state: KittyKeyboardState): string {
   const entries = [...state.stack, state.flags];
   const initialFlags = entries[0] ?? 0;
-  const parts = initialFlags === 0 ? [] : [`${VtPrefix.Csi}=${initialFlags}u`];
+  const parts: string[] = [];
+  if (initialFlags !== 0) {
+    parts.push(
+      `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}${initialFlags}${CsiCommand.KittyUpdateFlags.final}`,
+    );
+  }
   for (const flags of entries.slice(1)) {
-    parts.push(`${VtPrefix.Csi}>${flags}u`);
+    parts.push(
+      `${VtPrefix.Csi}${CsiCommand.KittyPushFlags.prefix}${flags}${CsiCommand.KittyPushFlags.final}`,
+    );
   }
   return parts.join("");
 }

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "bun:test";
+import { DecMode } from "./decset.js";
 import {
   encodeMouseButtonByte,
   legacyMouseReport,
+  MouseButton,
   MouseEncoding,
   MouseModifierBit,
   MouseMotionBit,
   MouseTracking,
+  MouseTrackingDecMode,
   sgrMouseReport,
 } from "./mouse.js";
 
@@ -19,6 +22,13 @@ describe("mouse protocol vocabulary", () => {
     expect(MouseEncoding.Sgr).toBe("sgr");
     // Distinct catalogs, even though X10 and Legacy share the underlying string.
     expect(MouseTracking.X10).toBe(MouseEncoding.Legacy);
+    expect(MouseTrackingDecMode).toEqual({
+      x10: DecMode.MouseX10,
+      vt200: DecMode.MouseVt200,
+      drag: DecMode.MouseButtonEvent,
+      any: DecMode.MouseAnyEvent,
+    });
+    expect(MouseButton).toEqual({ left: 0, middle: 1, right: 2, none: 3 });
   });
 
   it("folds motion and modifier bits onto the base button code", () => {

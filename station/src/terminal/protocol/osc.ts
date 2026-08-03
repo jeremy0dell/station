@@ -5,5 +5,3 @@ export const OscCommand = {
   DefaultBackground: 11,
   Clipboard: 52,
 } as const;
-/** OSC command values composed by Station. */
-export type OscCommandValue = (typeof OscCommand)[keyof typeof OscCommand];

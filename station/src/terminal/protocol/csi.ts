@@ -1,16 +1,12 @@
 import { AnsiMode } from "./decset.js";
+import { CsiCommand } from "./identifiers.js";
 import { VtPrefix } from "./syntax.js";
 
 /** ED parameters supported by Station. */
 export const EraseDisplayMode = {
-  CursorToEnd: 0,
-  CursorToBeginning: 1,
   EntireDisplay: 2,
   Scrollback: 3,
 } as const;
-export type EraseDisplayModeValue =
-  (typeof EraseDisplayMode)[keyof typeof EraseDisplayMode];
-
 /** DECSCUSR presentation values emitted during Host restoration. */
 export const CursorPresentationStyle = {
   BlinkingBlock: 1,
@@ -25,13 +21,13 @@ export type CursorPresentationStyleValue =
 
 /** Complete CSI sequences with no runtime parameters. */
 export const CsiSequence = {
-  CursorHome: `${VtPrefix.Csi}H`,
-  ResetScrollRegion: `${VtPrefix.Csi}r`,
-  ResetGraphicsRendition: `${VtPrefix.Csi}0m`,
-  SetLineFeedNewLine: `${VtPrefix.Csi}${AnsiMode.LineFeedNewLine}h`,
-  ResetLineFeedNewLine: `${VtPrefix.Csi}${AnsiMode.LineFeedNewLine}l`,
-  EraseEntireDisplay: `${VtPrefix.Csi}${EraseDisplayMode.EntireDisplay}J`,
-  EraseScrollback: `${VtPrefix.Csi}${EraseDisplayMode.Scrollback}J`,
+  CursorHome: `${VtPrefix.Csi}${CsiCommand.CursorPosition.final}`,
+  ResetScrollRegion: `${VtPrefix.Csi}${CsiCommand.SetScrollingRegion.final}`,
+  ResetGraphicsRendition: `${VtPrefix.Csi}0${CsiCommand.SelectGraphicRendition.final}`,
+  SetLineFeedNewLine: `${VtPrefix.Csi}${AnsiMode.LineFeedNewLine}${CsiCommand.SetAnsiMode.final}`,
+  ResetLineFeedNewLine: `${VtPrefix.Csi}${AnsiMode.LineFeedNewLine}${CsiCommand.ResetAnsiMode.final}`,
+  EraseEntireDisplay: `${VtPrefix.Csi}${EraseDisplayMode.EntireDisplay}${CsiCommand.EraseInDisplay.final}`,
+  EraseScrollback: `${VtPrefix.Csi}${EraseDisplayMode.Scrollback}${CsiCommand.EraseInDisplay.final}`,
 } as const;
 
 /** Paired markers for a bracketed-paste payload. */
@@ -42,5 +38,5 @@ export const BracketedPasteMarker = {
 
 /** Encode an SGR parameter list without interpreting its dynamic color values. */
 export function setGraphicsRendition(params: readonly number[]): string {
-  return `${VtPrefix.Csi}${params.join(";")}m`;
+  return `${VtPrefix.Csi}${params.join(";")}${CsiCommand.SelectGraphicRendition.final}`;
 }

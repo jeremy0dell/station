@@ -6,6 +6,7 @@ import {
   reduceKittyKeyboardState,
   serializeKittyKeyboardState,
 } from "./kitty.js";
+import { CsiCommand } from "./identifiers.js";
 import { VtPrefix } from "./syntax.js";
 
 describe("Kitty keyboard protocol", () => {
@@ -51,13 +52,15 @@ describe("Kitty keyboard protocol", () => {
   });
 
   it("pins transition, query, reply, and state serialization bytes", () => {
-    expect(`${VtPrefix.Csi}=5u`).toBe("\x1b[=5u");
-    expect(`${VtPrefix.Csi}=2;${KittyFlagUpdateMode.SetBits}u`).toBe("\x1b[=2;2u");
-    expect(`${VtPrefix.Csi}>7u`).toBe("\x1b[>7u");
-    expect(`${VtPrefix.Csi}<u`).toBe("\x1b[<u");
-    expect(`${VtPrefix.Csi}<3u`).toBe("\x1b[<3u");
+    expect(`${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}5${CsiCommand.KittyUpdateFlags.final}`).toBe("\x1b[=5u");
+    expect(
+      `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}2;${KittyFlagUpdateMode.SetBits}${CsiCommand.KittyUpdateFlags.final}`,
+    ).toBe("\x1b[=2;2u");
+    expect(`${VtPrefix.Csi}${CsiCommand.KittyPushFlags.prefix}7${CsiCommand.KittyPushFlags.final}`).toBe("\x1b[>7u");
+    expect(`${VtPrefix.Csi}${CsiCommand.KittyPopFlags.prefix}${CsiCommand.KittyPopFlags.final}`).toBe("\x1b[<u");
+    expect(`${VtPrefix.Csi}${CsiCommand.KittyPopFlags.prefix}3${CsiCommand.KittyPopFlags.final}`).toBe("\x1b[<3u");
     expect(KittySequence.QueryFlags).toBe("\x1b[?u");
-    expect(`${VtPrefix.Csi}?5u`).toBe("\x1b[?5u");
+    expect(`${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}5${CsiCommand.KittyQueryFlags.final}`).toBe("\x1b[?5u");
     expect(serializeKittyKeyboardState({ flags: 5, stack: [1, 3] })).toBe(
       "\x1b[=1u\x1b[>3u\x1b[>5u",
     );

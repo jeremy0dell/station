@@ -11,6 +11,11 @@ export type EscFunctionIdentifier = Readonly<{
   final: string;
 }>;
 
+/** Narrow an xterm CSI parameter to its primary numeric value. */
+export const isPrimaryCsiParameter = (
+  parameter: number | number[],
+): parameter is number => !Array.isArray(parameter);
+
 /** CSI commands Station registers or emits directly. */
 export const CsiCommand = {
   SetAnsiMode: { final: "h" },

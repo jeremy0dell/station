@@ -138,12 +138,11 @@ function parseCandidate(data: string, start: number): Candidate {
   }
   cursor += 1;
 
-  const reset = CsiSequence.ResetScrollRegion;
-  const resetStatus = requireLiteral(data, cursor, reset);
+  const resetStatus = requireLiteral(data, cursor, CsiSequence.ResetScrollRegion);
   if (resetStatus !== "complete") {
     return { kind: resetStatus };
   }
-  cursor += reset.length;
+  cursor += CsiSequence.ResetScrollRegion.length;
 
   const repaintStart = cursor;
   const positionCsi = requireLiteral(data, cursor, VtPrefix.Csi);
@@ -224,5 +223,5 @@ function partialStartLength(data: string, start: number): number {
 }
 
 function replacement(count: number): string {
-  return `${CsiSequence.ResetScrollRegion}${VtPrefix.Csi}999;1H${"\n".repeat(count)}${CsiSequence.CursorHome}`;
+  return `${CsiSequence.ResetScrollRegion}${VtPrefix.Csi}999;1${CsiCommand.CursorPosition.final}${"\n".repeat(count)}${CsiSequence.CursorHome}`;
 }

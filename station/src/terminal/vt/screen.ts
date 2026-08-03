@@ -13,7 +13,11 @@ import {
 } from "../diagnostics.js";
 import { EraseDisplayMode } from "../protocol/csi.js";
 import { DecMode } from "../protocol/decset.js";
-import { CsiCommand, EscCommand } from "../protocol/identifiers.js";
+import {
+  CsiCommand,
+  EscCommand,
+  isPrimaryCsiParameter,
+} from "../protocol/identifiers.js";
 import {
   initialKittyKeyboardState,
   type KittyKeyboardOperation,
@@ -24,7 +28,6 @@ import {
 import { OscCommand } from "../protocol/osc.js";
 import {
   MouseEncoding,
-  MouseTracking,
   type MouseEncodingValue,
   type MouseTrackingValue,
 } from "../protocol/mouse.js";
@@ -91,21 +94,6 @@ export type MouseProtocol = {
   /** SGR (DECSET 1006) vs the legacy X10 byte encoding. */
   encoding: MouseEncodingValue;
 };
-
-// xterm hands us tracking as one of a closed set of raw strings; translate it
-// into the catalog at this seam (and null for "none") so no downstream file is
-// coupled to xterm's vocabulary. Typed against xterm's union via `satisfies` so
-// dropping or renaming a mode is a compile error and the lookup stays total (no
-// undefined slipping past the null guard). Values match the engine's, so
-// behavior is unchanged.
-type XtermTrackingMode = "none" | "x10" | "vt200" | "drag" | "any";
-const XTERM_TRACKING = {
-  none: null,
-  x10: MouseTracking.X10,
-  vt200: MouseTracking.Vt200,
-  drag: MouseTracking.Drag,
-  any: MouseTracking.Any,
-} as const satisfies Record<XtermTrackingMode, MouseTrackingValue | null>;
 
 export type VtBufferStats = {
   cols: number;
@@ -501,11 +489,11 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     return false;
   });
   terminal.parser.registerCsiHandler(CsiCommand.KittyPushFlags, (params) => {
-    applyKittyKeyboard({ type: "push", flags: primaryParams(params)[0] ?? 0 });
+    applyKittyKeyboard({ type: "push", flags: params.filter(isPrimaryCsiParameter)[0] ?? 0 });
     return true;
   });
   terminal.parser.registerCsiHandler(CsiCommand.KittyUpdateFlags, (params) => {
-    const [flags = 0, mode] = primaryParams(params);
+    const [flags = 0, mode] = params.filter(isPrimaryCsiParameter);
     applyKittyKeyboard({
       type: "update",
       flags,
@@ -514,11 +502,13 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     return true;
   });
   terminal.parser.registerCsiHandler(CsiCommand.KittyPopFlags, (params) => {
-    applyKittyKeyboard({ type: "pop", count: primaryParams(params)[0] ?? 1 });
+    applyKittyKeyboard({ type: "pop", count: params.filter(isPrimaryCsiParameter)[0] ?? 1 });
     return true;
   });
   terminal.parser.registerCsiHandler(CsiCommand.KittyQueryFlags, () => {
-    emitResponse(`${VtPrefix.Csi}?${activeKittyKeyboard().flags}u`);
+    emitResponse(
+      `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${activeKittyKeyboard().flags}${CsiCommand.KittyQueryFlags.final}`,
+    );
     return true;
   });
 
@@ -752,8 +742,8 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     isBracketedPasteEnabled: () => terminal.modes.bracketedPasteMode,
     isMouseReportingEnabled: () => terminal.modes.mouseTrackingMode !== "none",
     mouseProtocol: () => {
-      const tracking = XTERM_TRACKING[terminal.modes.mouseTrackingMode];
-      if (tracking === null) {
+      const tracking = terminal.modes.mouseTrackingMode;
+      if (tracking === "none") {
         return null;
       }
       return { tracking, encoding: sgrMouse ? MouseEncoding.Sgr : MouseEncoding.Legacy };
@@ -816,11 +806,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
 }
 
 function paramListIncludes(params: (number | number[])[], target: number): boolean {
-  return primaryParams(params).includes(target);
-}
-
-function primaryParams(params: (number | number[])[]): number[] {
-  return params.filter((param): param is number => !Array.isArray(param));
+  return params.filter(isPrimaryCsiParameter).includes(target);
 }
 
 /** "#d4d4d8" -> "rgb:d4d4/d4d4/d8d8" (xterm's 16-bit-per-channel reply form). */

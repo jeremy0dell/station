@@ -16,13 +16,9 @@ export const ARROW_KEYS = {
 } as const satisfies Record<ArrowDirection, { normal: string; application: string }>;
 
 /** Either wire form mapped to the shared normal/application pair. */
-export const CURSOR_KEY_BYTES = new Map<string, { normal: string; application: string }>([
-  [ARROW_KEYS.up.normal, ARROW_KEYS.up],
-  [ARROW_KEYS.up.application, ARROW_KEYS.up],
-  [ARROW_KEYS.down.normal, ARROW_KEYS.down],
-  [ARROW_KEYS.down.application, ARROW_KEYS.down],
-  [ARROW_KEYS.right.normal, ARROW_KEYS.right],
-  [ARROW_KEYS.right.application, ARROW_KEYS.right],
-  [ARROW_KEYS.left.normal, ARROW_KEYS.left],
-  [ARROW_KEYS.left.application, ARROW_KEYS.left],
-]);
+export const CURSOR_KEY_BYTES = new Map<string, { normal: string; application: string }>(
+  Object.values(ARROW_KEYS).flatMap((pair) => [
+    [pair.normal, pair] as const,
+    [pair.application, pair] as const,
+  ]),
+);

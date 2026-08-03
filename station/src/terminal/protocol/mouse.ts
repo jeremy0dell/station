@@ -5,6 +5,7 @@
 // NOTE: a separate, unrelated `input/mouse.ts` models Station's own UI mouse
 // events — import the protocol vocabulary from here (`protocol/mouse.js`), not
 // from there.
+import { DecMode, type DecModeValue } from "./decset.js";
 import { VtPrefix } from "./syntax.js";
 
 /**
@@ -25,6 +26,14 @@ export const MouseTracking = {
 } as const;
 export type MouseTrackingValue = (typeof MouseTracking)[keyof typeof MouseTracking];
 
+/** DEC private mode corresponding to each active mouse-tracking flavor. */
+export const MouseTrackingDecMode = {
+  [MouseTracking.X10]: DecMode.MouseX10,
+  [MouseTracking.Vt200]: DecMode.MouseVt200,
+  [MouseTracking.Drag]: DecMode.MouseButtonEvent,
+  [MouseTracking.Any]: DecMode.MouseAnyEvent,
+} as const satisfies Record<MouseTrackingValue, DecModeValue>;
+
 /**
  * How a report is serialized on the wire. Named off the "x10" symbol to break
  * the collision with {@link MouseTracking.X10}; the runtime VALUE of `Legacy`
@@ -41,20 +50,13 @@ export type MouseEncodingValue = (typeof MouseEncoding)[keyof typeof MouseEncodi
 /** The pointer-button names a report can carry (single source of truth). */
 export type MouseButtonName = "left" | "middle" | "right" | "none";
 
-/** Base SGR/legacy button codes. */
+/** Base SGR/legacy button codes keyed by the report's button names. */
 export const MouseButton = {
-  Left: 0,
-  Middle: 1,
-  Right: 2,
-  None: 3,
-} as const;
-
-export const MOUSE_BUTTON_BY_NAME: Record<MouseButtonName, number> = {
-  left: MouseButton.Left,
-  middle: MouseButton.Middle,
-  right: MouseButton.Right,
-  none: MouseButton.None,
-};
+  left: 0,
+  middle: 1,
+  right: 2,
+  none: 3,
+} as const satisfies Record<MouseButtonName, number>;
 
 /** Wheel scroll button codes (SGR). */
 export const MouseWheelButton = {

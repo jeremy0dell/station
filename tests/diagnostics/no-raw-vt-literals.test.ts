@@ -20,7 +20,7 @@ describe("no raw VT literals policy", () => {
     const source = [
       "const mode = 2004;",
       // biome-ignore lint/suspicious/noTemplateCurlyInString: The fixture must contain a template expression.
-      "const cursorMode = `${VtPrefix.Csi}?${25}h`;",
+      "const cursorMode = `${VtPrefix.Csi}?${25}h`; const ansiMode = `${VtPrefix.Csi}${20}h`;",
       'terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, handler);',
       'terminal.parser.registerEscHandler({ final: "c" }, handler);',
       "terminal.parser.registerOscHandler(10, handler);",
@@ -29,6 +29,7 @@ describe("no raw VT literals policy", () => {
     expect(inspectVtSource(productionPath, source).map((item) => item.message)).toEqual([
       "raw terminal mode 2004; use AnsiMode or DecMode",
       "raw terminal mode 25; use AnsiMode or DecMode",
+      "raw terminal mode 20; use AnsiMode or DecMode",
       "inline parser identifier; use CsiCommand or EscCommand",
       "inline parser identifier; use CsiCommand or EscCommand",
       "inline OSC command; use OscCommand",

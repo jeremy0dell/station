@@ -5,6 +5,7 @@
 // sequences to the bytes a legacy terminal would have sent.
 
 import { ARROW_KEYS } from "../protocol/cursorKeys.js";
+import { CsiCommand } from "../protocol/identifiers.js";
 import { LegacyKeySequence } from "../protocol/keySequences.js";
 import { KittyEvent, KittyKey, KittyModifierBit } from "../protocol/kitty.js";
 import { C0, VtPrefix } from "../protocol/syntax.js";
@@ -100,7 +101,7 @@ function parseModifiedKeySequence(sequence: string): ModifiedKeySequence | undef
 
 function modifiedEnterSequence(sequence: string, parsed: ModifiedKeySequence): string {
   return XTERM_MODIFY_OTHER_KEYS_PATTERN.test(sequence)
-    ? `${VtPrefix.Csi}${parsed.codePoint};${parsed.modifierValue}u`
+    ? `${VtPrefix.Csi}${parsed.codePoint};${parsed.modifierValue}${CsiCommand.KittyKeyEvent.final}`
     : sequence;
 }
 
@@ -250,7 +251,7 @@ function controlByteFor(codePoint: number): string | undefined {
     case 0x3f: // Ctrl+?
       return "\x7f";
     case 0x32: // Ctrl+2
-      return "\x00";
+      return C0.Null;
     case 0x33: // Ctrl+3
       return C0.Escape;
     case 0x34: // Ctrl+4

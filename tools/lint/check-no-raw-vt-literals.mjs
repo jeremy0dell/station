@@ -14,8 +14,8 @@ const ignoredDirs = new Set(["node_modules", "dist", ".turbo", "coverage"]);
 const syntaxDefinition = "station/src/terminal/protocol/syntax.ts";
 const modeDefinition = "station/src/terminal/protocol/decset.ts";
 const protocolRoot = "station/src/terminal/protocol/";
-const distinctiveModeValues = new Set([1002, 1003, 1004, 1006, 1016, 1047, 1048, 1049, 2004, 2026]);
-const allModeValues = new Set([1, 6, 7, 9, 12, 25, 45, 47, 66, 1000, ...distinctiveModeValues]);
+const allModeValues = modeValues(readFileSync(join(root, modeDefinition), "utf8"));
+const distinctiveModeValues = new Set([...allModeValues].filter((value) => value >= 1002));
 const rawControlEscape = /\\(?:x(?:07|1b)|u(?:0007|001b)|u\{(?:7|1b)\})/iu;
 
 export function inspectVtSource(rel, source) {
@@ -91,6 +91,36 @@ export function inspectVtSource(rel, source) {
   };
   visit(sourceFile);
   return violations;
+}
+
+function modeValues(source) {
+  const sourceFile = ts.createSourceFile(
+    modeDefinition,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const values = new Set();
+  const visit = (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      (node.name.text === "AnsiMode" || node.name.text === "DecMode") &&
+      node.initializer !== undefined &&
+      ts.isAsExpression(node.initializer) &&
+      ts.isObjectLiteralExpression(node.initializer.expression)
+    ) {
+      for (const property of node.initializer.expression.properties) {
+        if (ts.isPropertyAssignment(property) && ts.isNumericLiteral(property.initializer)) {
+          values.add(Number(property.initializer.text));
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return values;
 }
 
 function shouldCheck(rel) {

@@ -14,7 +14,7 @@ import { C0 } from "../../terminal/protocol/syntax.js";
 const NAMED_SEQUENCES: Record<string, TuiKey> = {
   [C0.CarriageReturn]: { input: C0.CarriageReturn, return: true },
   [C0.LineFeed]: { input: C0.LineFeed, return: true },
-  [LegacyKeySequence.Escape]: { input: "", escape: true },
+  [C0.Escape]: { input: "", escape: true },
   [LegacyKeySequence.Backspace]: { input: "", backspace: true },
   [C0.Backspace]: { input: "", backspace: true },
   [LegacyKeySequence.Delete]: { input: "", delete: true },

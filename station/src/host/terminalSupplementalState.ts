@@ -4,9 +4,13 @@ import {
   CursorPresentationStyle,
   type CursorPresentationStyleValue,
 } from "../terminal/protocol/csi.js";
-import { DecMode, type DecModeValue } from "../terminal/protocol/decset.js";
+import { DecMode } from "../terminal/protocol/decset.js";
 import { EscSequence } from "../terminal/protocol/esc.js";
-import { CsiCommand, EscCommand } from "../terminal/protocol/identifiers.js";
+import {
+  CsiCommand,
+  EscCommand,
+  isPrimaryCsiParameter,
+} from "../terminal/protocol/identifiers.js";
 import {
   initialKittyKeyboardState,
   type KittyKeyboardOperation,
@@ -15,6 +19,7 @@ import {
   reduceKittyKeyboardState,
   serializeKittyKeyboardState,
 } from "../terminal/protocol/kitty.js";
+import { MouseTrackingDecMode } from "../terminal/protocol/mouse.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
 import {
   isUnsupportedBlankXtermAttribute,
@@ -28,7 +33,7 @@ import {
 } from "./xtermSnapshotAttributes.js";
 
 const ALT_BUFFER_PREFIX =
-  `${VtPrefix.Csi}?${DecMode.SaveCursorAndAlternate}h` + CsiSequence.CursorHome;
+  `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SaveCursorAndAlternate}${CsiCommand.SetDecPrivateMode.final}` + CsiSequence.CursorHome;
 
 type BufferType = "normal" | "alternate";
 type AlternateMode =
@@ -109,14 +114,14 @@ export class TerminalSupplementalState {
 
   constructor(private readonly terminal: Terminal) {
     const kittyHandlers = [
-      { identifier: CsiCommand.KittyPopFlags, operator: "<" },
-      { identifier: CsiCommand.KittyPushFlags, operator: ">" },
-      { identifier: CsiCommand.KittyUpdateFlags, operator: "=" },
+      CsiCommand.KittyPopFlags,
+      CsiCommand.KittyPushFlags,
+      CsiCommand.KittyUpdateFlags,
     ] as const;
     this.#subscriptions = [
-      ...kittyHandlers.map(({ identifier, operator }) =>
+      ...kittyHandlers.map((identifier) =>
         terminal.parser.registerCsiHandler(identifier, (params) => {
-          this.#applyKittyKeyboard(operator, params);
+          this.#applyKittyKeyboard(identifier.prefix, params);
           return false;
         }),
       ),
@@ -193,15 +198,15 @@ export class TerminalSupplementalState {
     if (this.#bufferType === "alternate") {
       parts.push(
         normalKitty,
-        `${VtPrefix.Csi}?${this.#alternateMode}h`,
+        `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${this.#alternateMode}${CsiCommand.SetDecPrivateMode.final}`,
         alternateKitty,
       );
     } else {
       if (alternateKitty.length > 0) {
         parts.push(
-          `${VtPrefix.Csi}?${DecMode.Alternate}h`,
+          `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.Alternate}${CsiCommand.SetDecPrivateMode.final}`,
           alternateKitty,
-          `${VtPrefix.Csi}?${DecMode.Alternate}l`,
+          `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.Alternate}${CsiCommand.ResetDecPrivateMode.final}`,
         );
       }
       parts.push(normalKitty);
@@ -209,34 +214,36 @@ export class TerminalSupplementalState {
 
     const modes = this.terminal.modes;
     if (modes.applicationCursorKeysMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.ApplicationCursorKeys}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.ApplicationCursorKeys}${CsiCommand.SetDecPrivateMode.final}`);
     }
     if (modes.applicationKeypadMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.ApplicationKeypad}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.ApplicationKeypad}${CsiCommand.SetDecPrivateMode.final}`);
     }
     if (modes.bracketedPasteMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.BracketedPaste}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.BracketedPaste}${CsiCommand.SetDecPrivateMode.final}`);
     }
-    const mouseTrackingMode = mouseTrackingDecMode(modes.mouseTrackingMode);
-    if (mouseTrackingMode !== undefined) {
-      parts.push(`${VtPrefix.Csi}?${mouseTrackingMode}h`);
+    const mouseTracking = modes.mouseTrackingMode;
+    if (mouseTracking !== "none") {
+      parts.push(
+        `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${MouseTrackingDecMode[mouseTracking]}${CsiCommand.SetDecPrivateMode.final}`,
+      );
     }
     const mouseEncoding = (this.terminal as unknown as PinnedXtermTerminal)._core
       .coreMouseService.activeEncoding;
     if (mouseEncoding === "SGR" || mouseEncoding === "SGR_PIXELS") {
-      parts.push(`${VtPrefix.Csi}?${DecMode.SgrMouse}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SgrMouse}${CsiCommand.SetDecPrivateMode.final}`);
     }
     if (mouseEncoding === "SGR_PIXELS") {
-      parts.push(`${VtPrefix.Csi}?${DecMode.SgrPixels}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SgrPixels}${CsiCommand.SetDecPrivateMode.final}`);
     }
     if (modes.sendFocusMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.FocusReporting}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.FocusReporting}${CsiCommand.SetDecPrivateMode.final}`);
     }
     if (!modes.wraparoundMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.Wraparound}l`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.Wraparound}${CsiCommand.ResetDecPrivateMode.final}`);
     }
     if (modes.reverseWraparoundMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.ReverseWraparound}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.ReverseWraparound}${CsiCommand.SetDecPrivateMode.final}`);
     }
     return parts.join("");
   }
@@ -260,28 +267,28 @@ export class TerminalSupplementalState {
     ];
     const mouseEncoding = pinned._core.coreMouseService.activeEncoding;
     if (mouseEncoding === "SGR" || mouseEncoding === "SGR_PIXELS") {
-      parts.push(`${VtPrefix.Csi}?${DecMode.SgrMouse}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SgrMouse}${CsiCommand.SetDecPrivateMode.final}`);
     }
     if (mouseEncoding === "SGR_PIXELS") {
-      parts.push(`${VtPrefix.Csi}?${DecMode.SgrPixels}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SgrPixels}${CsiCommand.SetDecPrivateMode.final}`);
     }
     parts.push(
       this.terminal.options.cursorBlink
-        ? `${VtPrefix.Csi}?${DecMode.CursorBlink}h`
-        : `${VtPrefix.Csi}?${DecMode.CursorBlink}l`,
+        ? `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.CursorBlink}${CsiCommand.SetDecPrivateMode.final}`
+        : `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.CursorBlink}${CsiCommand.ResetDecPrivateMode.final}`,
       this.terminal.options.convertEol
         ? CsiSequence.SetLineFeedNewLine
         : CsiSequence.ResetLineFeedNewLine,
       cursorPresentationSequence(pinned),
       this.#cursorVisible
-        ? `${VtPrefix.Csi}?${DecMode.CursorVisible}h`
-        : `${VtPrefix.Csi}?${DecMode.CursorVisible}l`,
+        ? `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.CursorVisible}${CsiCommand.SetDecPrivateMode.final}`
+        : `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.CursorVisible}${CsiCommand.ResetDecPrivateMode.final}`,
       this.#kittyKeyboardSequence(this.#bufferType),
       beforeSynchronizedOutput,
     );
     if (this.terminal.modes.synchronizedOutputMode) {
       // Sync mode comes last so restoration bytes themselves are never held.
-      parts.push(`${VtPrefix.Csi}?${DecMode.SynchronizedOutput}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SynchronizedOutput}${CsiCommand.SetDecPrivateMode.final}`);
     }
     return parts.join("");
   }
@@ -301,11 +308,11 @@ export class TerminalSupplementalState {
 
     const parts: string[] = [];
     if (restoreOriginMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.Origin}l`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.Origin}${CsiCommand.ResetDecPrivateMode.final}`);
     }
     if (customRegion) {
       parts.push(
-        `${VtPrefix.Csi}${pinned.scrollTop + 1};${pinned.scrollBottom + 1}r`,
+        `${VtPrefix.Csi}${pinned.scrollTop + 1};${pinned.scrollBottom + 1}${CsiCommand.SetScrollingRegion.final}`,
       );
     }
     parts.push(blankBackgrounds, CsiSequence.ResetGraphicsRendition, currentSgr);
@@ -319,12 +326,12 @@ export class TerminalSupplementalState {
         );
       }
       parts.push(
-        `${VtPrefix.Csi}?${DecMode.Origin}h`,
-        `${VtPrefix.Csi}${row};${buffer.cursorX + 1}H`,
+        `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.Origin}${CsiCommand.SetDecPrivateMode.final}`,
+        `${VtPrefix.Csi}${row};${buffer.cursorX + 1}${CsiCommand.CursorPosition.final}`,
       );
     } else if (movesCursor) {
       parts.push(
-        `${VtPrefix.Csi}${buffer.cursorY + 1};${buffer.cursorX + 1}H`,
+        `${VtPrefix.Csi}${buffer.cursorY + 1};${buffer.cursorX + 1}${CsiCommand.CursorPosition.final}`,
       );
     }
     if (restoreSavedCursor) {
@@ -356,22 +363,22 @@ export class TerminalSupplementalState {
       Math.max(0, pinned.savedY - buffer.baseY),
     );
     const savedColumn = Math.min(this.terminal.cols - 1, Math.max(0, pinned.savedX));
-    const parts = restoreOriginMode ? [`${VtPrefix.Csi}?${DecMode.Origin}l`] : [];
+    const parts = restoreOriginMode ? [`${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.Origin}${CsiCommand.ResetDecPrivateMode.final}`] : [];
     parts.push(
       CsiSequence.ResetGraphicsRendition,
       xtermAttributeSgr(pinned.savedCurAttrData),
-      `${VtPrefix.Csi}${savedRow + 1};${savedColumn + 1}H`,
+      `${VtPrefix.Csi}${savedRow + 1};${savedColumn + 1}${CsiCommand.CursorPosition.final}`,
       EscSequence.SaveCursor,
       CsiSequence.ResetGraphicsRendition,
       currentSgr,
     );
     if (restoreOriginMode) {
-      parts.push(`${VtPrefix.Csi}?${DecMode.Origin}h`);
+      parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.Origin}${CsiCommand.SetDecPrivateMode.final}`);
       const row = buffer.cursorY - pinned.scrollTop + 1;
-      parts.push(`${VtPrefix.Csi}${row};${buffer.cursorX + 1}H`);
+      parts.push(`${VtPrefix.Csi}${row};${buffer.cursorX + 1}${CsiCommand.CursorPosition.final}`);
     } else {
       parts.push(
-        `${VtPrefix.Csi}${buffer.cursorY + 1};${buffer.cursorX + 1}H`,
+        `${VtPrefix.Csi}${buffer.cursorY + 1};${buffer.cursorX + 1}${CsiCommand.CursorPosition.final}`,
       );
     }
     return parts.join("");
@@ -407,7 +414,7 @@ export class TerminalSupplementalState {
       ? buffer.cursorY - pinned.scrollTop + 1
       : buffer.cursorY + 1;
     return [
-      `${VtPrefix.Csi}${row};${column + 1}H`,
+      `${VtPrefix.Csi}${row};${column + 1}${CsiCommand.CursorPosition.final}`,
       CsiSequence.ResetGraphicsRendition,
       xtermAttributeSgr(cell),
       cell.getChars(),
@@ -444,10 +451,10 @@ export class TerminalSupplementalState {
           end += 1;
         }
         parts.push(
-          `${VtPrefix.Csi}${row + 1};${column + 1}H`,
+          `${VtPrefix.Csi}${row + 1};${column + 1}${CsiCommand.CursorPosition.final}`,
           CsiSequence.ResetGraphicsRendition,
           xtermBackgroundSgr(cell),
-          `${VtPrefix.Csi}${end - column}X`,
+          `${VtPrefix.Csi}${end - column}${CsiCommand.EraseCharacters.final}`,
         );
         column = end;
       }
@@ -581,7 +588,7 @@ export class TerminalSupplementalState {
   }
 
   #applyPrivateModes(params: (number | number[])[], set: boolean): void {
-    for (const mode of primaryParams(params)) {
+    for (const mode of params.filter(isPrimaryCsiParameter)) {
       if (mode === DecMode.CursorVisible) {
         this.#cursorVisible = set;
       }
@@ -609,7 +616,7 @@ export class TerminalSupplementalState {
     if (state === undefined) {
       return;
     }
-    const [first, second] = primaryParams(params);
+    const [first, second] = params.filter(isPrimaryCsiParameter);
     let operation: KittyKeyboardOperation;
     switch (operator) {
       case "<":
@@ -654,11 +661,11 @@ export class TerminalSupplementalState {
         ? this.#wrapPendingSequence("alternate", currentSgr, false)
         : "";
     return [
-      `${VtPrefix.Csi}?${DecMode.Alternate}h`,
+      `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.Alternate}${CsiCommand.SetDecPrivateMode.final}`,
       kitty,
       savedCursor,
       wrapPending,
-      `${VtPrefix.Csi}?${DecMode.Alternate}l`,
+      `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.Alternate}${CsiCommand.ResetDecPrivateMode.final}`,
     ].join("");
   }
 
@@ -684,33 +691,12 @@ export class TerminalSupplementalState {
   }
 }
 
-function primaryParams(params: (number | number[])[]): number[] {
-  return params.filter((param): param is number => !Array.isArray(param));
-}
-
-function mouseTrackingDecMode(
-  mode: Terminal["modes"]["mouseTrackingMode"],
-): DecModeValue | undefined {
-  switch (mode) {
-    case "none":
-      return undefined;
-    case "x10":
-      return DecMode.MouseX10;
-    case "vt200":
-      return DecMode.MouseVt200;
-    case "drag":
-      return DecMode.MouseButtonEvent;
-    case "any":
-      return DecMode.MouseAnyEvent;
-  }
-}
-
 function cursorPresentationSequence(terminal: PinnedXtermTerminal): string {
   const { cursorBlink, cursorStyle } = terminal._core.coreService.decPrivateModes;
   if (cursorBlink === undefined && cursorStyle === undefined) {
     return "";
   }
-  return `${VtPrefix.Csi}${cursorPresentationStyle(cursorStyle, cursorBlink === false)} q`;
+  return `${VtPrefix.Csi}${cursorPresentationStyle(cursorStyle, cursorBlink === false)}${CsiCommand.SelectCursorStyle.intermediates}${CsiCommand.SelectCursorStyle.final}`;
 }
 
 function cursorPresentationStyle(

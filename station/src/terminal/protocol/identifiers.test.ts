@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { CsiCommand, EscCommand } from "./identifiers.js";
+import {
+  CsiCommand,
+  EscCommand,
+  isPrimaryCsiParameter,
+} from "./identifiers.js";
 
 describe("VT command identifiers", () => {
   it("pins complete DEC and reset identities", () => {
@@ -17,5 +21,9 @@ describe("VT command identifiers", () => {
     expect(CsiCommand.KittyUpdateFlags).toEqual({ prefix: "=", final: "u" });
     expect(CsiCommand.KittyPopFlags).toEqual({ prefix: "<", final: "u" });
     expect(CsiCommand.KittyQueryFlags).toEqual({ prefix: "?", final: "u" });
+  });
+
+  it("shares xterm primary-parameter narrowing across parser consumers", () => {
+    expect([1, [2, 3], 4].filter(isPrimaryCsiParameter)).toEqual([1, 4]);
   });
 });

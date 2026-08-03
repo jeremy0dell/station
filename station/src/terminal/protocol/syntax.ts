@@ -37,6 +37,3 @@ export const VtTerminator = {
   /** String Terminator (ESC backslash). */
   String: `${C0.Escape}\\`,
 } as const;
-
-/** Supported VT string-terminator values. */
-export type VtTerminatorValue = (typeof VtTerminator)[keyof typeof VtTerminator];

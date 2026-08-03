@@ -16,6 +16,7 @@ import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
 import { DecMode } from "../terminal/protocol/decset.js";
+import { CsiCommand } from "../terminal/protocol/identifiers.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
@@ -194,8 +195,8 @@ export async function runDashboardMain(): Promise<void> {
     if (popupRenderer) {
       // OpenTUI keeps 1002 drag tracking on when 1003 movement is off; popups need click-only 1000 + 1006.
       process.stdout.write(
-        `${VtPrefix.Csi}?${DecMode.MouseButtonEvent}l` +
-          `${VtPrefix.Csi}?${DecMode.MouseVt200}h`,
+        `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.MouseButtonEvent}${CsiCommand.ResetDecPrivateMode.final}` +
+          `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.MouseVt200}${CsiCommand.SetDecPrivateMode.final}`,
       );
     }
     hotSlots.__stationDashboardHotRenderer = nextRenderer;
