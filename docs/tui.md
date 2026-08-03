@@ -16,7 +16,11 @@ Both entry points load `[tui].widgets` from the runtime config and render the sa
 configured-widget title chrome; widget settings update that shared config when a
 config path is available.
 
-Launch is driven by `apps/cli/src/commands/tui.ts`. A source checkout uses the Node CLI to launch the Bun renderer:
+Launch is driven by `apps/cli/src/commands/tui.ts`. The launcher mints one
+`uiRunId` per renderer child, records exact spawn/exit code/signal evidence in
+`logs/cli.jsonl`, and passes that identity to the renderer.
+A null child exit code is never interpreted as success. A source checkout uses
+the Node CLI to launch the Bun renderer:
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).
 - Inside tmux, `stn` opens the interactive observer-backed dashboard in a
@@ -145,6 +149,26 @@ cd station
 bun run station                       # native workspace, live observer
 STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
 bun run dashboard                     # interactive dashboard renderer without native panes
+```
+
+## Native UI Lifecycle Evidence
+
+The native renderer is an independent semantic witness in `logs/tui.jsonl`. It
+records startup/ready, typed workspace, Station-overlay, and context-menu
+transitions, shutdown intent (`ctrl_q` or cooperative TTY takeover), fatal
+errors, and normal shutdown completion. Normal shutdown flushes this evidence
+before process exit; abrupt loss and exact process signals remain covered by the
+launcher. Ctrl-O is a surface transition inside one `uiRunId`, not a renderer
+restart. Direct development mints a valid run ID and preserves it across Bun HMR.
+
+This telemetry is local and content-free: it must not collect terminal output,
+prompts, key contents, foreground application names, environment variables,
+process lists, arbitrary cwd, or repository paths. Inspect it with bounded raw-event
+queries or the JSONL files:
+
+```bash
+stn debug logs "renderer." --component cli
+stn debug logs "ui." --component tui
 ```
 
 ## Native TTY Ownership

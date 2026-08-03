@@ -11,6 +11,10 @@ import {
   RetentionPolicySchema,
   STATION_SCHEMA_VERSION,
   TraceContextSchema,
+  UiLifecycleEventSchema,
+  UiRunContextSchema,
+  UiShutdownReasonSchema,
+  UiSurfaceChangeReasonSchema,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
@@ -63,6 +67,40 @@ describe("diagnostics schemas", () => {
       ((await loadJson("doctor-report.json")) as { retention: unknown }).retention,
       "retention policy",
     );
+  });
+
+  it("parses strict cross-process UI lifecycle records", () => {
+    const rendererExit = {
+      timestamp: "2026-05-20T12:00:00.000Z",
+      component: "cli",
+      eventId: "launcher:2",
+      kind: "renderer.exited",
+      uiRunId: "ui_11111111-1111-4111-8111-111111111111",
+      source: { id: "launcher", sequence: 2, pid: 100 },
+      rendererPid: 101,
+      exitCode: null,
+      signal: "SIGTERM",
+    };
+    expect(UiLifecycleEventSchema.parse(rendererExit)).toEqual(rendererExit);
+    expect(UiLifecycleEventSchema.safeParse({ ...rendererExit, signal: "TERM" }).success).toBe(
+      false,
+    );
+    expect(
+      UiLifecycleEventSchema.safeParse({ ...rendererExit, causalEventId: "event_unused" }).success,
+    ).toBe(false);
+    expect(UiShutdownReasonSchema.safeParse("signal").success).toBe(false);
+    expect(UiSurfaceChangeReasonSchema.safeParse("startup").success).toBe(false);
+    expect(
+      UiRunContextSchema.parse({
+        uiRunId: rendererExit.uiRunId,
+        rendererPid: rendererExit.rendererPid,
+        clientKind: "native_renderer",
+      }),
+    ).toEqual({
+      uiRunId: rendererExit.uiRunId,
+      rendererPid: rendererExit.rendererPid,
+      clientKind: "native_renderer",
+    });
   });
 
   it("parses a minimal diagnostic snapshot with trace-aware command and event records", () => {

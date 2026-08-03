@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:os";
 import type { StationConfig, TmuxConfig } from "@station/config";
-import { TUI_STARTUP_RECONCILE_REASON } from "@station/contracts";
+import {
+  TUI_STARTUP_RECONCILE_REASON,
+  type UiRendererEntry,
+  type UiRunId,
+} from "@station/contracts";
+import { componentLogPath, createJsonlLogger } from "@station/observability";
 import { createObserverClient } from "@station/protocol";
 import {
   isCompiledBinary,
@@ -26,22 +33,26 @@ import {
   stationUiInstallHint,
 } from "../stationWorkspace.js";
 import { attachTuiRendererControl, type TuiRendererControlAdapters } from "./tuiRendererControl.js";
+import { createTuiRendererLifecycleWitness } from "./tuiRendererLifecycle.js";
 
 export type { TuiRendererControlAdapters } from "./tuiRendererControl.js";
 
 /** The renderer subprocess exited with this code (the CLI's `tui` result). */
 export type TuiRunResult = {
   status: "exited";
+  /** CLI process status; signal exits are never projected as success. */
   code: number;
+  /** Exact renderer outcome retained when the production launcher owns the child. */
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | null;
 };
-
-/** Which Bun entry the renderer child runs: the native workspace or the read-only dashboard. */
-export type RendererEntry = "station" | "dashboard";
 
 /** Inputs for the Bun renderer child: env merged over the CLI's own, plus which entry to run. */
 export type RendererSpawnOptions = {
   env: Record<string, string>;
-  entry: RendererEntry;
+  entry: UiRendererEntry;
+  /** Launcher-minted identity passed to the production renderer environment. */
+  uiRunId: UiRunId;
 };
 
 export type TuiCommandDeps = {
@@ -81,7 +92,8 @@ const nestedTuiDisabledError = {
 /**
  * COMPOSITION ROOT
  *
- * Owns Observer startup, resolved-config propagation, renderer process selection,
+ * Owns one launcher-minted UI run identity per renderer child, Observer startup,
+ * resolved-config propagation, exact child outcome evidence, renderer selection,
  * and persistent popup control wiring.
  */
 export async function runTuiCommand(
@@ -105,6 +117,7 @@ export async function runTuiCommand(
   ) {
     throw nestedTuiDisabledError;
   }
+  const paths = resolveObserverPaths(options.config);
   if (parsed.devFakeDashboard) {
     // The Bun renderer carries its own mock source; the --fake-* counts are
     // accepted for back-compat but the mock uses its baseline scenario.
@@ -115,10 +128,10 @@ export async function runTuiCommand(
       "dashboard",
       parsed.persistentPopup,
       options.config?.terminal?.tmux,
+      paths.stateDir,
     );
   }
 
-  const paths = resolveObserverPaths(options.config);
   const clientBuildVersion =
     deps.buildVersion?.() ?? deps.observer?.buildVersion ?? stationObserverBuildVersion();
   const observerDeps: ObserverProcessDeps = {
@@ -182,6 +195,7 @@ export async function runTuiCommand(
     parsed.popupMode ? "dashboard" : "station",
     parsed.persistentPopup,
     options.config?.terminal?.tmux,
+    paths.stateDir,
   );
 }
 
@@ -209,23 +223,45 @@ function buildRendererEnv(
 function runRenderer(
   deps: TuiCommandDeps,
   env: Record<string, string>,
-  entry: RendererEntry,
+  entry: UiRendererEntry,
   persistentPopup: boolean,
   popupConfig: TmuxConfig | undefined,
+  stateDir: string,
 ): Promise<TuiRunResult> {
+  const uiRunId = `ui_${randomUUID()}`;
+  const spawnOptions: RendererSpawnOptions = { env, entry, uiRunId };
   return (
-    deps.spawnRenderer?.({ env, entry }) ??
-    spawnRenderer({ env, entry }, deps, persistentPopup, popupConfig)
+    deps.spawnRenderer?.(spawnOptions) ??
+    spawnRenderer(spawnOptions, deps, persistentPopup, popupConfig, stateDir)
   );
 }
 
 async function spawnRenderer(
-  { env, entry }: RendererSpawnOptions,
+  { env, entry, uiRunId }: RendererSpawnOptions,
   deps: TuiCommandDeps,
   persistentPopup: boolean,
   popupConfig: TmuxConfig | undefined,
+  stateDir: string,
 ): Promise<TuiRunResult> {
-  const childEnv = { ...process.env, ...env, STATION_QUIET_PRELAUNCH: "1" };
+  const childEnv = {
+    ...process.env,
+    ...env,
+    STATION_QUIET_PRELAUNCH: "1",
+    STATION_UI_RUN_ID: uiRunId,
+  };
+  const lifecycleLogger = createJsonlLogger({
+    component: "cli",
+    path: componentLogPath(stateDir, "cli"),
+  });
+  const lifecycle = createTuiRendererLifecycleWitness({
+    logger: lifecycleLogger,
+    uiRunId,
+    entry,
+  });
+  const recordSpawnFailure = async (error: RuntimeSafeError): Promise<void> => {
+    await lifecycle.spawnFailed(error);
+    await lifecycle.flush();
+  };
   const override = process.env.STATION_DASHBOARD_COMMAND;
   const compiled = deps.selfExecRuntime?.compiled ?? isCompiledBinary();
   // The installation preflight applies to the source Bun workspace, not a compiled self-exec.
@@ -235,6 +271,11 @@ async function spawnRenderer(
     !(await (deps.stationUiInstalled ?? isStationUiInstalled)())
   ) {
     process.stderr.write(`${stationUiInstallHint} Or run stn doctor.\n`);
+    await recordSpawnFailure({
+      tag: "TuiCommandError",
+      code: "TUI_RENDERER_NOT_INSTALLED",
+      message: "The Station renderer dependencies are unavailable.",
+    });
     return { status: "exited", code: 1 };
   }
   if (override === undefined) {
@@ -247,7 +288,14 @@ async function spawnRenderer(
     override === undefined && !compiled && persistentPopup && entry === "dashboard";
   if (sourcePersistentDashboard) {
     const linkResult = await runStationLink(spawnProcess, workspaceDir, childEnv);
-    if (linkResult.code !== 0) return linkResult;
+    if (linkResult.code !== 0) {
+      await recordSpawnFailure({
+        tag: "TuiCommandError",
+        code: "TUI_RENDERER_PRELAUNCH_FAILED",
+        message: "The Station renderer prelaunch step failed.",
+      });
+      return linkResult;
+    }
   }
   const developmentArgv = ["bun", "run", "--silent", "--cwd", workspaceDir, entry] as const;
   const rendererArgv = sourcePersistentDashboard
@@ -258,18 +306,30 @@ async function spawnRenderer(
         deps.selfExecRuntime,
       );
   const [command, ...args] = rendererArgv;
-  const child =
-    override !== undefined
-      ? spawnProcess(override, {
-          shell: true,
-          stdio: popupRenderer ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
-          env: childEnv,
-        })
-      : spawnProcess(command, args, {
-          stdio: popupRenderer ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
-          env: childEnv,
-          ...(sourcePersistentDashboard ? { cwd: workspaceDir } : {}),
-        });
+  let child: ReturnType<typeof spawnProcess>;
+  try {
+    child =
+      override !== undefined
+        ? spawnProcess(override, {
+            shell: true,
+            stdio: popupRenderer ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
+            env: childEnv,
+          })
+        : spawnProcess(command, args, {
+            stdio: popupRenderer ? ["inherit", "inherit", "inherit", "ipc"] : "inherit",
+            env: childEnv,
+            ...(sourcePersistentDashboard ? { cwd: workspaceDir } : {}),
+          });
+  } catch (error) {
+    await recordSpawnFailure(
+      safeErrorFromUnknown(error, {
+        tag: "TuiCommandError",
+        code: "TUI_RENDERER_SPAWN_FAILED",
+        message: "The Station renderer could not be spawned.",
+      }),
+    );
+    return { status: "exited", code: 1 };
+  }
   const control = popupRenderer
     ? attachTuiRendererControl(
         child,
@@ -277,15 +337,62 @@ async function spawnRenderer(
       )
     : undefined;
   return new Promise<TuiRunResult>((resolve) => {
-    child.once("error", () => {
+    let settled = false;
+    const spawned = child.pid === undefined ? Promise.resolve() : lifecycle.spawned(child.pid);
+    const finish = async (result: TuiRunResult): Promise<void> => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       control?.dispose();
-      resolve({ status: "exited", code: 1 });
+      await lifecycle.flush();
+      resolve(result);
+    };
+    child.once("error", (error) => {
+      void (async () => {
+        await recordSpawnFailure(
+          safeErrorFromUnknown(error, {
+            tag: "TuiCommandError",
+            code: "TUI_RENDERER_SPAWN_FAILED",
+            message: "The Station renderer could not be spawned.",
+          }),
+        );
+        await finish({ status: "exited", code: 1 });
+      })();
     });
-    child.once("exit", (code) => {
-      control?.dispose();
-      resolve({ status: "exited", code: code ?? 0 });
+    child.once("exit", (exitCode, signal) => {
+      void (async () => {
+        await spawned;
+        await lifecycle.exited({
+          ...(child.pid === undefined ? {} : { rendererPid: child.pid }),
+          exitCode,
+          signal,
+        });
+        const result: TuiRunResult = {
+          status: "exited",
+          code: rendererProcessCode(exitCode, signal),
+        };
+        if (exitCode === null) {
+          result.exitCode = null;
+        }
+        if (signal !== null) {
+          result.signal = signal;
+        }
+        await finish(result);
+      })();
     });
   });
+}
+
+function rendererProcessCode(exitCode: number | null, signal: NodeJS.Signals | null): number {
+  if (exitCode !== null) {
+    return exitCode;
+  }
+  if (signal === null) {
+    return 1;
+  }
+  const signalNumber = constants.signals[signal];
+  return signalNumber === undefined ? 1 : 128 + signalNumber;
 }
 
 async function runStationLink(

@@ -11,6 +11,7 @@ import {
 } from "@station/cli/internal";
 import { loadConfig, setTuiWidgetsInConfig, type TuiConfig } from "@station/config";
 import { TUI_RENDERER_CONTROL_PROTOCOL_VERSION } from "@station/contracts";
+import { readJsonlLog } from "@station/observability";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
@@ -851,6 +852,11 @@ describe("CLI tui command", () => {
     }
 
     expect(spawnProcess).not.toHaveBeenCalled();
+    const records = await readJsonlLog(join(fixture.stateDir, "logs", "cli.jsonl"));
+    expect(records[0]?.lifecycle).toMatchObject({
+      kind: "renderer.spawn_failed",
+      error: { code: "TUI_RENDERER_NOT_INSTALLED" },
+    });
   });
 
   it("preserves the explicit dashboard command shell override", async () => {
@@ -1505,6 +1511,48 @@ describe("CLI tui command", () => {
         STATION_OBSERVER_SOCKET_PATH: fixture.socketPath,
       },
     ]);
+  });
+
+  it("retains exact renderer signals and never maps a null exit code to success", async () => {
+    const fixture = await createTempState();
+    const child = Object.assign(new EventEmitter(), { pid: 4321 });
+    let childEnv: NodeJS.ProcessEnv | undefined;
+    const spawnProcess = vi.fn((_command, _args, options) => {
+      childEnv = options?.env;
+      return child as never;
+    });
+
+    const resultPromise = runTuiCommand(
+      [],
+      { config: fixture.config },
+      {
+        observer: runningObserverDeps(),
+        selfExecRuntime: { compiled: true, execPath: "/opt/station/stn" },
+        spawnProcess: spawnProcess as never,
+      },
+    );
+    await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce());
+    child.emit("exit", null, "SIGTERM");
+
+    await expect(resultPromise).resolves.toEqual({
+      status: "exited",
+      code: 143,
+      exitCode: null,
+      signal: "SIGTERM",
+    });
+    expect(childEnv?.STATION_UI_RUN_ID).toMatch(/^ui_/);
+    expect(childEnv?.STATION_UI_CLIENT_KIND).toBeUndefined();
+    const records = await readJsonlLog(join(fixture.stateDir, "logs", "cli.jsonl"));
+    expect(records.map((record) => record.lifecycle?.kind)).toEqual([
+      "renderer.spawned",
+      "renderer.exited",
+    ]);
+    expect(records.at(-1)?.lifecycle).toMatchObject({
+      uiRunId: childEnv?.STATION_UI_RUN_ID,
+      exitCode: null,
+      signal: "SIGTERM",
+      rendererPid: 4321,
+    });
   });
 
   it("rejects invalid fake dashboard count flags before observer startup", async () => {

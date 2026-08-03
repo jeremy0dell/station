@@ -167,6 +167,7 @@ logs/observer.jsonl
 logs/hooks.jsonl
 logs/cli.jsonl
 logs/tui.jsonl
+logs/station-host.jsonl
 diagnostics/*/diagnostic-index.json
 diagnostics/*/commands.jsonl
 diagnostics/*/errors.jsonl
@@ -345,7 +346,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.
 - `logs/observer.jsonl` and `logs/hooks.jsonl` explain runtime events around reconcile, command execution, hook delivery, projection, spool fallback, and provider health.
-- `logs/tui.jsonl` carries pane corruption telemetry from the native workspace: `Terminal corruption signal.` lines with `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
+- `logs/tui.jsonl` carries the strict native UI lifecycle (`ui.started`, ready/surface changes, shutdown intent/completion, and fatal errors) plus pane corruption telemetry. Lifecycle records contain IDs, typed surfaces/reasons, process outcomes, and source ordering only; they never contain terminal output, prompts, keys, foreground applications, process lists, environment variables, cwd, or repository paths. `Terminal corruption signal.` lines retain `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
 - `diagnostics/panes/` holds pane evidence dumps written when a detector trips: the visible grid plus the raw byte tail that produced it. Feed `rawTail` back through `createStationVtScreen` to replay the corruption offline.
 - SQLite is observer-owned runtime history; inspect through existing debug/diagnostic surfaces unless a task explicitly needs database-level investigation.
 - Logs and bundles are diagnostic evidence only. Reconcile from config/providers/current observer state before treating old evidence as current truth.
@@ -355,7 +356,8 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 
 Station (the OpenTUI terminal workspace under `station/`) adds a second runtime process beside the observer: the `station-station-host` daemon, which owns PTYs that outlive the UI so panes can warm-reattach across a UI restart.
 
-When Station "does nothing" or panes read "exited", check the process topology before the code:
+When Station "does nothing" or panes read "exited", inspect the `cli` and `tui`
+lifecycle logs plus existing Host operational logs, then check the process topology before the code:
 
 - Native Station coordinates one UI per input TTY with an active SQLite write
   transaction and a cooperative Unix-socket endpoint under
