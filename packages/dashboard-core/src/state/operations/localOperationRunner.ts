@@ -1,4 +1,4 @@
-import type { SafeError, StationCommand } from "@station/contracts";
+import type { CommandId, SafeError, StationCommand, StationEvent } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
 import type { TuiFolderService } from "../../services/folderService.js";
@@ -32,9 +32,54 @@ import type { CommandRuntimeOptions } from "./runtimeCommands.js";
 import { type FocusStartedAgentRow, runStartAgentOperation } from "./startAgent.js";
 import type { TuiOperation } from "./types.js";
 
+export type CommandFailedEventHandling = {
+  suppressReducerToast: boolean;
+  applyLocalEffect(): void;
+};
+
 export type TuiLocalOperationRunner = {
   run(operations: readonly TuiOperation[] | undefined): void;
+  prepareCommandFailedEvent(event: CommandFailedEvent): CommandFailedEventHandling;
 };
+
+type CommandFailedEvent = Extract<StationEvent, { type: "command.failed" }>;
+
+type LocalCommandFailure =
+  | { type: "createSession"; localId: string }
+  | { type: "removeWorktree"; localId: string }
+  | { type: "startAgent" | "resumeAgent"; localId: string }
+  | { type: "renameSession"; sessionId: string };
+
+function localCommandFailureForState(
+  state: TuiState,
+  commandId: CommandId,
+): LocalCommandFailure | undefined {
+  const createRow = state.localRows.pendingCreate.find(
+    (candidate) => candidate.commandId === commandId,
+  );
+  if (createRow !== undefined) {
+    return { type: "createSession", localId: createRow.localId };
+  }
+  const removeRow = state.localRows.pendingRemove.find(
+    (candidate) => candidate.commandId === commandId,
+  );
+  if (removeRow !== undefined) {
+    return { type: "removeWorktree", localId: removeRow.localId };
+  }
+  const startRow = state.localRows.pendingStart.find(
+    (candidate) => candidate.commandId === commandId,
+  );
+  if (startRow !== undefined) {
+    return { type: startRow.operation ?? "startAgent", localId: startRow.localId };
+  }
+  const renameRow = Object.values(state.localRows.pendingRenameTitles ?? {}).find(
+    (candidate) => candidate.commandId === commandId,
+  );
+  if (renameRow !== undefined) {
+    return { type: "renameSession", sessionId: renameRow.sessionId };
+  }
+  return undefined;
+}
 
 function markCreateSessionRowFailed(
   store: StoreApi<DashboardState>,
@@ -87,6 +132,7 @@ export function createTuiLocalOperationRunner(input: {
   clientLabel: string;
   focusStartedAgentRow: FocusStartedAgentRow;
 }): TuiLocalOperationRunner {
+  const handledCommandFailureIds = new Set<CommandId>();
   const store = () => input.getStore();
 
   return {
@@ -99,6 +145,8 @@ export function createTuiLocalOperationRunner(input: {
             input.runtime,
             operation,
             (localId, error) => markCreateSessionRowFailed(store(), localId, error),
+            (commandId) => handledCommandFailureIds.add(commandId),
+            (commandId) => handledCommandFailureIds.has(commandId),
             (error) => addSafeErrorToast(store(), error),
           );
         }
@@ -117,6 +165,8 @@ export function createTuiLocalOperationRunner(input: {
             operation,
             input.clientLabel,
             (localId) => markRemoveWorktreeRowFailed(store(), localId),
+            (commandId) => handledCommandFailureIds.add(commandId),
+            (commandId) => handledCommandFailureIds.has(commandId),
             (error) => addSafeErrorToast(store(), error),
           );
         }
@@ -127,6 +177,8 @@ export function createTuiLocalOperationRunner(input: {
             input.runtime,
             operation,
             (localId) => markStartAgentRowFailed(store(), localId),
+            (commandId) => handledCommandFailureIds.add(commandId),
+            (commandId) => handledCommandFailureIds.has(commandId),
             (error) => addSafeErrorToast(store(), error),
             input.focusStartedAgentRow,
           );
@@ -138,6 +190,8 @@ export function createTuiLocalOperationRunner(input: {
             operation,
             input.clientLabel,
             (sessionId) => markRenameSessionFailed(store(), sessionId),
+            (commandId) => handledCommandFailureIds.add(commandId),
+            (commandId) => handledCommandFailureIds.has(commandId),
             (error) => addSafeErrorToast(store(), error),
             () => addRenameSuccessToast(store()),
           );
@@ -175,6 +229,7 @@ export function createTuiLocalOperationRunner(input: {
             input.service,
             operation.command,
             input.clientLabel,
+            (commandId) => handledCommandFailureIds.add(commandId),
           );
         }
         if (operation.type === "removeProject") {
@@ -183,9 +238,34 @@ export function createTuiLocalOperationRunner(input: {
             input.service,
             operation.command,
             input.clientLabel,
+            (commandId) => handledCommandFailureIds.add(commandId),
           );
         }
       }
+    },
+    prepareCommandFailedEvent: (event) => {
+      const localFailure = localCommandFailureForState(store().getState(), event.commandId);
+      const suppressReducerToast =
+        localFailure !== undefined || handledCommandFailureIds.has(event.commandId);
+      return {
+        suppressReducerToast,
+        applyLocalEffect: () => {
+          if (localFailure === undefined) {
+            return;
+          }
+          handledCommandFailureIds.add(event.commandId);
+          if (localFailure.type === "createSession") {
+            markCreateSessionRowFailed(store(), localFailure.localId, event.error);
+          } else if (localFailure.type === "removeWorktree") {
+            markRemoveWorktreeRowFailed(store(), localFailure.localId);
+          } else if (localFailure.type === "startAgent" || localFailure.type === "resumeAgent") {
+            markStartAgentRowFailed(store(), localFailure.localId);
+          } else if (localFailure.type === "renameSession") {
+            markRenameSessionFailed(store(), localFailure.sessionId);
+          }
+          addSafeErrorToast(store(), event.error);
+        },
+      };
     },
   };
 }
@@ -195,6 +275,7 @@ async function runSetProjectDefaultHarnessOperation(
   service: ObserverService,
   command: Extract<StationCommand, { type: "project.setDefaultHarness" }>,
   clientLabel: string,
+  markCommandFailureHandled: (commandId: CommandId) => void,
 ): Promise<void> {
   // Roll the optimistic marker back to the snapshot's default; success leaves it
   // for the next snapshot to prune once the change has landed.
@@ -214,6 +295,10 @@ async function runSetProjectDefaultHarnessOperation(
       );
       return;
     }
+    // This op shows its own failure toast below, so claim the command's failure
+    // before awaiting: the observer's command.failed notice is then suppressed
+    // regardless of which path resolves first (otherwise both fire).
+    markCommandFailureHandled(receipt.commandId);
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
       revertOptimistic();
@@ -238,6 +323,7 @@ async function runRemoveProjectOperation(
   service: ObserverService,
   command: Extract<StationCommand, { type: "project.remove" }>,
   clientLabel: string,
+  markCommandFailureHandled: (commandId: CommandId) => void,
 ): Promise<void> {
   // Read the label before dispatch; the post-reload snapshot no longer has it.
   const label = store
@@ -256,6 +342,10 @@ async function runRemoveProjectOperation(
       );
       return;
     }
+    // This op shows its own failure toast below, so claim the command's failure
+    // before awaiting: the observer's command.failed notice is then suppressed
+    // regardless of which path resolves first (otherwise both fire).
+    markCommandFailureHandled(receipt.commandId);
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
       addSafeCommandToast(store, completion.error);

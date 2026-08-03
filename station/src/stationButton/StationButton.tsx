@@ -1,5 +1,4 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
-import type { StationClientStateSource } from "@station/client";
 import type { TuiIslandConfig } from "@station/config";
 import type { DashboardStateSource } from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
@@ -18,10 +17,8 @@ import { useMergeCelebration } from "./useMergeCelebration.js";
 export type StationButtonProps = {
   /** Coordination store: pane focus + STATION overlay visibility. */
   store: StationStore;
-  /** Dashboard-local state used only to decorate canonical rows with optimistic titles. */
+  /** Read-only dashboard state carrying session counts and attention. */
   dashboardState: DashboardStateSource;
-  /** Canonical snapshot authority for counts, attention, and project rollups. */
-  clientState: StationClientStateSource;
   /** Station input runtime entry point, reused for the header toggle/context menu. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   /** Opt-in island display modes from `[tui.island]`. */
@@ -31,27 +28,14 @@ export type StationButtonProps = {
 // Reuses the existing `{ kind: "header" }` mouse path so the route to STATION mode
 // survives the header's removal (some terminals never deliver Ctrl-O). Attention
 // clicks focus the flagged session instead of toggling.
-export function StationButton({
-  store,
-  dashboardState,
-  clientState,
-  dispatchMouse,
-  island,
-}: StationButtonProps) {
-  const getStatus = useStableStatus(clientState, dashboardState, island?.projectRollup === true);
+export function StationButton({ store, dashboardState, dispatchMouse, island }: StationButtonProps) {
+  const getStatus = useStableStatus(dashboardState, island?.projectRollup === true);
   const subscribe = useCallback(
-    (onChange: () => void) => {
-      const unsubscribeClient = clientState.subscribe(onChange);
-      const unsubscribeDashboard = dashboardState.subscribe(onChange);
-      return () => {
-        unsubscribeDashboard();
-        unsubscribeClient();
-      };
-    },
-    [clientState, dashboardState],
+    (onChange: () => void) => dashboardState.subscribe(onChange),
+    [dashboardState],
   );
   const status = useSyncExternalStore(subscribe, getStatus, getStatus);
-  const celebration = useMergeCelebration(clientState);
+  const celebration = useMergeCelebration(dashboardState);
 
   const onHeader = useCallback(
     (event: StationMouseEvent) => {
@@ -103,22 +87,17 @@ export function StationButton({
 // Returns the same reference until a field changes, so useSyncExternalStore
 // (Object.is-compared) doesn't loop on the fresh object built each call.
 function useStableStatus(
-  clientState: StationClientStateSource,
   dashboardState: DashboardStateSource,
   projectRollup: boolean,
 ): () => StationButtonStatus {
   const cache = useRef<StationButtonStatus | undefined>(undefined);
   return useCallback(() => {
-    const next = selectStationButtonStatus(
-      clientState.getState().snapshot,
-      dashboardState.getState().localRows,
-      { projectRollup },
-    );
+    const next = selectStationButtonStatus(dashboardState.getState(), { projectRollup });
     const prev = cache.current;
     if (prev !== undefined && stationButtonStatusEqual(prev, next)) {
       return prev;
     }
     cache.current = next;
     return next;
-  }, [clientState, dashboardState, projectRollup]);
+  }, [dashboardState, projectRollup]);
 }

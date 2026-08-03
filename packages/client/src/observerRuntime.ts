@@ -37,12 +37,12 @@ type RefreshFlightOutcome =
 /**
  * ADAPTER
  *
- * Owns one canonical client projection and convergence-safe service over an injected or pinned Observer transport.
+ * Translates an injected service or pinned Observer socket transport into one live client projection.
  */
 export function createStationClientRuntime(
   options: StationClientRuntimeOptions,
 ): StationClientRuntime {
-  const upstreamService = resolveService(options);
+  const service = resolveService(options);
   const hooks: StationClientRuntimeHooks = options.hooks ?? {};
   const initialDelayMs = options.reconnect?.initialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS;
   const maxDelayMs = options.reconnect?.maxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS;
@@ -188,7 +188,7 @@ export function createStationClientRuntime(
 
   async function loadFlightOutcome(): Promise<RefreshFlightOutcome> {
     try {
-      const snapshot = await upstreamService.loadSnapshot();
+      const snapshot = await service.loadSnapshot();
       return { status: "loaded", snapshot };
     } catch (raw: unknown) {
       const error = toSafeError(raw, safeErrorOptions);
@@ -203,7 +203,7 @@ export function createStationClientRuntime(
   // connected, connect failures flip to displayOnly/reconnecting, and other
   // failures leave the connection untouched (apps surface them via the hook).
   // Caller-sourced flights apply the snapshot but fire no hooks and never
-  // touch failure state; service callers keep their own error handling.
+  // touch failure state; refresh() callers keep their own error handling.
   function applyFlightOutcome(
     outcome: RefreshFlightOutcome,
     source: RefreshSource,
@@ -286,7 +286,7 @@ export function createStationClientRuntime(
   }
 
   function openIterator(): AsyncIterator<StationEvent> {
-    const iterator = upstreamService.subscribeEvents()[Symbol.asyncIterator]();
+    const iterator = service.subscribeEvents()[Symbol.asyncIterator]();
     currentIterator = iterator;
     return iterator;
   }
@@ -391,52 +391,7 @@ export function createStationClientRuntime(
     }
   }
 
-  function currentSnapshotAfterLoad(): StationSnapshot {
-    const snapshot = state.snapshot;
-    if (snapshot === undefined) {
-      throw new Error("Observer load resolved without updating client state.");
-    }
-    return snapshot;
-  }
-
-  const runtimeService: ObserverService = {
-    loadSnapshot: async (): Promise<StationSnapshot> => {
-      // Caller loads join the runtime's single-flight chain. State commits
-      // before the promise resolves, so later events always reduce from the
-      // same snapshot object returned to the caller.
-      const outcome = await requestRefresh("caller");
-      if (outcome.status !== "loaded") {
-        throw outcome.raw;
-      }
-      if (stopRequested) {
-        throw new Error("Observer snapshot load resolved after the client runtime stopped.");
-      }
-      return currentSnapshotAfterLoad();
-    },
-    subscribeEvents: () => upstreamService.subscribeEvents(),
-    dispatch: (command) => upstreamService.dispatch(command),
-    waitForCommandCompletion: (commandId) => upstreamService.waitForCommandCompletion(commandId),
-    reconcile: async (reason?: string): Promise<StationSnapshot> => {
-      // Reconcile is its own Observer call rather than a chain flight, but it
-      // participates in the same invariants: the returned snapshot counts as
-      // a resync under epoch gating, and the mutation bump makes an airborne
-      // flight schedule a follow-up instead of clobbering reconciled state.
-      const epochAtStart = activeEpoch;
-      const loaded = await upstreamService.reconcile(reason);
-      if (stopRequested) {
-        throw new Error("Observer reconcile resolved after the client runtime stopped.");
-      }
-      mutationCounter += 1;
-      applyLoadedOutcome(loaded, epochAtStart);
-      hooks.onRefreshSettled?.({ status: "loaded", snapshot: loaded });
-      return currentSnapshotAfterLoad();
-    },
-    prepareExternalLaunch: (params) => upstreamService.prepareExternalLaunch(params),
-    reportExternalExit: (params) => upstreamService.reportExternalExit(params),
-  };
-
   return {
-    service: runtimeService,
     start,
     stop: (): Promise<void> => {
       stopPromise ??= performStop();
@@ -449,6 +404,31 @@ export function createStationClientRuntime(
         listeners.delete(listener);
       };
     },
+    refresh: async (_reason?: string): Promise<void> => {
+      // Caller-owned refresh joins the single-flight chain: the loaded
+      // snapshot applies to runtime state, but no hooks fire and failures
+      // rethrow untouched, so operation call sites keep their error handling.
+      const outcome = await requestRefresh("caller");
+      if (outcome.status !== "loaded") {
+        throw outcome.raw;
+      }
+    },
+    reconcile: async (reason?: string): Promise<void> => {
+      // Reconcile is its own observer call rather than a chain flight, but it
+      // participates in the same invariants: the returned snapshot counts as
+      // a resync under epoch gating, and the mutation bump makes an airborne
+      // flight schedule a follow-up instead of clobbering reconciled state.
+      const epochAtStart = activeEpoch;
+      const loaded = await service.reconcile(reason);
+      if (stopRequested) {
+        return;
+      }
+      mutationCounter += 1;
+      applyLoadedOutcome(loaded, epochAtStart);
+      hooks.onRefreshSettled?.({ status: "loaded", snapshot: loaded });
+    },
+    dispatch: (command) => service.dispatch(command),
+    waitForCommand: (commandId) => service.waitForCommandCompletion(commandId),
   };
 }
 

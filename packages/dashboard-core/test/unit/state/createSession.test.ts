@@ -116,6 +116,8 @@ function createFixture() {
         },
         operation,
         (_localId, error) => failures.push(error),
+        () => {},
+        () => false,
         (error) => toasts.push(error),
       ),
   };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  createDashboardRuntime,
   createEmptyTuiLocalRows,
   type DashboardRuntimeOptions,
 } from "@station/dashboard-core";
@@ -7,7 +8,6 @@ import { resolveInitialState } from "../../state/initialState.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
-import { createStationTestDashboardRuntime } from "../test/support/makeStationTestRuntime.js";
 import { resolveKeyFocusedRowAgentTarget, resolveQuickSessionSubmit } from "./stationActions.js";
 import { createStationOverlayLayer } from "./stationOverlayLayer.js";
 
@@ -19,7 +19,7 @@ function newStore(
   snapshot = manyProjectsSnapshot(),
   initialState?: DashboardRuntimeOptions["initialState"],
 ) {
-  return createStationTestDashboardRuntime({
+  return createDashboardRuntime({
     source: new FakeStationSource(snapshot),
     service: new FakeTuiObserverService(snapshot),
     initialSnapshot: snapshot,

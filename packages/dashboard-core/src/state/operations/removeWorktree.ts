@@ -1,4 +1,4 @@
-import type { SafeError } from "@station/contracts";
+import type { CommandId, SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
 import type { ObserverService } from "../../services/types.js";
@@ -12,6 +12,8 @@ export async function runRemoveWorktreeOperation(
   operation: RemoveWorktreeOperation,
   clientLabel: string,
   markRemoveWorktreeRowFailed: (localId: string) => void,
+  markCommandFailureHandled: (commandId: CommandId) => void,
+  hasCommandFailureBeenHandled: (commandId: CommandId) => boolean,
   addSafeErrorToast: (error: SafeError) => void,
 ): Promise<void> {
   try {
@@ -32,8 +34,12 @@ export async function runRemoveWorktreeOperation(
     );
     const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
+      const alreadyHandled = hasCommandFailureBeenHandled(completion.commandId);
+      markCommandFailureHandled(completion.commandId);
       markRemoveWorktreeRowFailed(operation.localId);
-      addSafeErrorToast(completion.error);
+      if (!alreadyHandled) {
+        addSafeErrorToast(completion.error);
+      }
     }
   } catch (error: unknown) {
     markRemoveWorktreeRowFailed(operation.localId);

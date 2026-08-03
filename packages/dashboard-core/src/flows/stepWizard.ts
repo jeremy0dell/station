@@ -3,10 +3,10 @@ export type StepWizardState<TStep extends string> = {
   stepHistory: TStep[];
 };
 
-type WizardStateWithMode<TState extends StepWizardState<string>, TMode extends string> = Omit<
-  TState,
-  "mode" | "stepHistory"
-> & {
+type WizardStateWithMode<
+  TState extends StepWizardState<string>,
+  TMode extends TState["mode"],
+> = Omit<TState, "mode" | "stepHistory"> & {
   mode: TMode;
   stepHistory: TState["stepHistory"];
 };
@@ -18,10 +18,10 @@ export function createStepWizardState<TStep extends string>(mode: TStep): StepWi
   };
 }
 
-export function enterWizardStep<TState extends StepWizardState<string>, TMode extends string>(
-  state: TState,
-  mode: TMode & NoInfer<TState["stepHistory"][number]>,
-): WizardStateWithMode<TState, TMode> {
+export function enterWizardStep<
+  TState extends StepWizardState<string>,
+  TMode extends TState["mode"],
+>(state: TState, mode: TMode): WizardStateWithMode<TState, TMode> {
   return {
     ...state,
     mode,
@@ -29,10 +29,10 @@ export function enterWizardStep<TState extends StepWizardState<string>, TMode ex
   } as WizardStateWithMode<TState, TMode>;
 }
 
-export function resetWizardStep<TState extends StepWizardState<string>, TMode extends string>(
-  state: TState,
-  mode: TMode & NoInfer<TState["stepHistory"][number]>,
-): WizardStateWithMode<TState, TMode> {
+export function resetWizardStep<
+  TState extends StepWizardState<string>,
+  TMode extends TState["mode"],
+>(state: TState, mode: TMode): WizardStateWithMode<TState, TMode> {
   return {
     ...state,
     mode,

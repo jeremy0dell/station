@@ -67,12 +67,13 @@ existing observer operation instead.
 ## Command dispatch (client plan PR 4)
 
 Live mode dispatches through the single shared `@station/client` service: one
-client runtime owns canonical snapshot/connection state and the `ObserverService`
-used by commands (`sources/observerStationClient.ts`). Reconcile and operation
-snapshot loads commit through that runtime before resolving, so the next event
-reduces from the same snapshot object dashboard projection receives through its
-read-only client-state subscription. Dispatch and command-completion waits pass
-through unchanged; row-activate focus,
+`ObserverService` feeds both runtime state and commands
+(`sources/observerStationClient.ts`). Its service facet routes reconcile and
+operation snapshot loads through the client runtime (dashboard-core's
+`bridgeOperationService`) so the runtime's reducer base stays converged with
+dashboard state and the connected transition plus recovery toast arrive via the
+read-only state subscription — the seam from PR #78 review finding #3. Dispatch and
+command-completion waits pass through unchanged; row-activate focus,
 jump-to-session on click, and `Z` refresh are live
 (`store/stationCommandDispatch.test.ts`).
 
@@ -81,10 +82,9 @@ Mock mode keeps the rejecting service by design
 paths (pending rows, TTL revert, toasts) and resolve as rejected receipts
 naming mock mode.
 
-Known gap: canonical client state carries snapshot and connection truth, not a
-notice queue, so `command.failed` event notices do not independently surface as
-toasts; failures still toast once through command-completion waits on focus and
-operation paths.
+Known gap: Station's runtime runs without `createObserverBridgeHooks`, so
+`command.failed` event notices do not surface as toasts; failures still toast
+through the command-completion waits on the focus and operation paths.
 
 ## Known not-yet
 

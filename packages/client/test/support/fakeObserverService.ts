@@ -72,14 +72,6 @@ export class FakeObserverService implements ObserverService {
     return this.snapshot;
   }
 
-  async prepareExternalLaunch(): Promise<never> {
-    throw new Error("External launch preparation is not configured in this client test fake.");
-  }
-
-  async reportExternalExit(): Promise<never> {
-    throw new Error("External exit reporting is not configured in this client test fake.");
-  }
-
   // Subclasses that replace subscribeEvents call this so reconnect-timing
   // tests can read subscribeTimes regardless of the subscription's fate.
   protected recordSubscribe(): void {

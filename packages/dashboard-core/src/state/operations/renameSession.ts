@@ -1,4 +1,4 @@
-import type { SafeError } from "@station/contracts";
+import type { CommandId, SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
 import type { ObserverService } from "../../services/types.js";
@@ -12,9 +12,12 @@ export async function runRenameSessionOperation(
   operation: RenameSessionOperation,
   clientLabel: string,
   markRenameSessionFailed: (sessionId: string) => void,
+  markCommandFailureHandled: (commandId: CommandId) => void,
+  hasCommandFailureBeenHandled: (commandId: CommandId) => boolean,
   addSafeErrorToast: (error: SafeError) => void,
   addRenameSuccessToast: () => void,
 ): Promise<void> {
+  let commandId: CommandId | undefined;
   try {
     const receipt = await service.dispatch(operation.command);
     if (!receipt.accepted) {
@@ -28,6 +31,7 @@ export async function runRenameSessionOperation(
       return;
     }
 
+    commandId = receipt.commandId;
     store.setState(
       bindPendingRenameSessionTitle(store.getState(), operation.sessionId, receipt.commandId),
     );
@@ -37,9 +41,16 @@ export async function runRenameSessionOperation(
       return;
     }
 
+    const alreadyHandled = hasCommandFailureBeenHandled(completion.commandId);
+    markCommandFailureHandled(completion.commandId);
     markRenameSessionFailed(operation.sessionId);
-    addSafeErrorToast(completion.error);
+    if (!alreadyHandled) {
+      addSafeErrorToast(completion.error);
+    }
   } catch (error: unknown) {
+    if (commandId !== undefined) {
+      markCommandFailureHandled(commandId);
+    }
     markRenameSessionFailed(operation.sessionId);
     addSafeErrorToast(toSafeError(error, { clientLabel }));
   }

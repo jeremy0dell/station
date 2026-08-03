@@ -13765,7 +13765,7 @@
       "declaration": "createStationClientRuntime",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Owns one canonical client projection and convergence-safe service over an injected or pinned Observer transport.",
+      "purpose": "Translates an injected service or pinned Observer socket transport into one live client projection.",
       "dependencies": [
         {
           "path": "packages/client/src/observerService.ts",

@@ -1,4 +1,4 @@
-import type { ClientNotice } from "@station/client";
+import type { ClientNotice } from "@station/dashboard-core";
 import {
   activeTuiToast,
   addTuiToast,

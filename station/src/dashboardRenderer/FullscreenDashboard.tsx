@@ -1,5 +1,4 @@
 import type { MouseEvent } from "@opentui/core";
-import type { StationClientStateSource } from "@station/client";
 import { useTerminalDimensions } from "@opentui/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { useCallback } from "react";
@@ -19,7 +18,6 @@ import { routeDashboardMouse } from "./dashboardMouse.js";
 
 type FullscreenDashboardInput = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<
     DashboardActions,
     | "createQuickSession"

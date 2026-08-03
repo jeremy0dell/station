@@ -1,8 +1,6 @@
-import type { ObserverService, StationClientStateSource } from "@station/client";
 import type { ProjectId } from "@station/contracts";
 import { expect, it } from "vitest";
 import type { ReadonlyDeep } from "../../../src/state/readonly.js";
-import type { DashboardRuntimeOptions } from "../../../src/state/runtime.js";
 import type { DashboardSnapshotView, DashboardStateView } from "../../../src/state/types.js";
 
 function verifyReadonlyStateSource(
@@ -50,25 +48,6 @@ function verifyReadonlyStateSource(
   void preservedSnapshotProjectId;
 }
 
-function verifyDashboardRuntimeOptions(
-  service: ObserverService,
-  source: StationClientStateSource,
-): void {
-  const valid: DashboardRuntimeOptions = { service, source };
-  // @ts-expect-error Dashboard composition must supply canonical client state.
-  const missingSource: DashboardRuntimeOptions = { service };
-  const independentSnapshot: DashboardRuntimeOptions = {
-    service,
-    source,
-    // @ts-expect-error Runtime snapshots come only from the canonical source.
-    initialSnapshot: source.getState().snapshot,
-  };
-  void valid;
-  void missingSource;
-  void independentSnapshot;
-}
-
 it("compiles the deep-readonly dashboard state boundary", () => {
   expect(verifyReadonlyStateSource).toBeTypeOf("function");
-  expect(verifyDashboardRuntimeOptions).toBeTypeOf("function");
 });

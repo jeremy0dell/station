@@ -13,11 +13,6 @@ import {
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import type { StationClient } from "../../sources/types.js";
 
-export type StationDashboardRuntime = DashboardRuntime & {
-  /** Canonical snapshot/connection authority paired with this dashboard projection. */
-  clientState: StationClient["state"];
-};
-
 /** Options for Station's native dashboard-runtime composition. */
 export type CreateStationDashboardRuntimeOptions = {
   folderService?: TuiFolderService;
@@ -29,11 +24,11 @@ export type CreateStationDashboardRuntimeOptions = {
   widgetsPersisted?: boolean;
 };
 
-/** Create Station's dashboard projection paired with its canonical client source. */
+/** Create Station's dashboard runtime over the native renderer's client source. */
 export function createStationDashboardRuntime(
   client: StationClient,
   options: CreateStationDashboardRuntimeOptions = {},
-): StationDashboardRuntime {
+): DashboardRuntime {
   const runtimeOptions: Parameters<typeof createDashboardRuntime>[0] = {
     source: client.state,
     service: client.service,
@@ -58,6 +53,5 @@ export function createStationDashboardRuntime(
     initialState.widgetsPersisted = options.widgetsPersisted;
   }
   runtimeOptions.initialState = initialState;
-  const runtime = createDashboardRuntime(runtimeOptions);
-  return { ...runtime, clientState: client.state };
+  return createDashboardRuntime(runtimeOptions);
 }

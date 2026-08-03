@@ -3,6 +3,7 @@ import {
   createStationClientRuntime,
   type ObserverService,
 } from "@station/client";
+import { bridgeOperationService } from "@station/dashboard-core";
 import { isNeedsAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
 import type { StationClient } from "./types.js";
 
@@ -18,8 +19,9 @@ export type CreateObserverStationClientOptions = {
 /**
  * COMPOSITION ROOT
  *
- * One runtime owns canonical snapshot/connection state and the service used by
- * command operations, so loaded snapshots become the next event's reducer base.
+ * One shared ObserverService feeds runtime state and command dispatch. Snapshot
+ * and reconcile operations must go through the runtime-backed bridge, or the
+ * next incremental event can overwrite the side-loaded state.
  */
 export function createObserverStationClient(
   options: CreateObserverStationClientOptions,
@@ -51,8 +53,11 @@ export function createObserverStationClient(
   });
 
   return {
-    state: runtime,
-    service: runtime.service,
+    state: {
+      getState: () => runtime.getState(),
+      subscribe: (listener) => runtime.subscribe(listener),
+    },
+    service: bridgeOperationService(service, runtime),
     start: () => {
       runtime.start();
     },

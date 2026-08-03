@@ -1,4 +1,4 @@
-import type { StationClientConnectionState, StationClientStateSource } from "@station/client";
+import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import {
   createDashboardRuntime,
@@ -24,28 +24,8 @@ export type MakeStationTestRuntimeOptions = {
   dashboardSearchExperience?: DashboardSearchExperience | undefined;
 };
 
-export type StationTestDashboardRuntime = DashboardRuntime & {
-  clientState: StationClientStateSource;
-};
-
-export type CreateStationTestDashboardRuntimeOptions = Omit<DashboardRuntimeOptions, "source"> & {
-  source?: StationClientStateSource;
-  initialSnapshot?: StationSnapshot;
-};
-
-/** Dashboard test runtime with an explicit canonical source attached to the test facade. */
-export function createStationTestDashboardRuntime(
-  options: CreateStationTestDashboardRuntimeOptions,
-): StationTestDashboardRuntime {
-  const { initialSnapshot, ...runtimeOptions } = options;
-  const clientState = options.source ?? new FakeStationSource(initialSnapshot);
-  const runtime = createDashboardRuntime({ ...runtimeOptions, source: clientState });
-  return { ...runtime, clientState };
-}
-
 export type StationTestRuntime = {
-  runtime: StationTestDashboardRuntime;
-  input: Pick<StationTestDashboardRuntime, "state" | "actions" | "clientState">;
+  runtime: DashboardRuntime;
   source: FakeStationSource;
   service: FakeTuiObserverService;
 };
@@ -58,14 +38,16 @@ export function makeStationTestRuntime(
 ): StationTestRuntime {
   const snapshot =
     options.snapshot === null ? undefined : (options.snapshot ?? manyProjectsSnapshot());
-  const initialSourceSnapshot = options.seedInitialSnapshot === false ? undefined : snapshot;
-  const source = new FakeStationSource(initialSourceSnapshot, options.connection);
+  const source = new FakeStationSource(snapshot, options.connection);
   const service = new FakeTuiObserverService(snapshot ?? manyProjectsSnapshot());
-  const runtime = createStationTestDashboardRuntime({
+  const runtime = createDashboardRuntime({
     source,
     service,
     dashboardSearchExperience:
       options.dashboardSearchExperience ?? legacySearchExperience,
+    ...(snapshot === undefined || options.seedInitialSnapshot === false
+      ? {}
+      : { initialSnapshot: snapshot }),
     persistentPopup: true,
     onDismiss: async () => {},
     initialState: {
@@ -74,15 +56,5 @@ export function makeStationTestRuntime(
     },
     ...(options.folderService === undefined ? {} : { folderService: options.folderService }),
   });
-  if (snapshot !== undefined && options.seedInitialSnapshot === false) {
-    // Preserve loading-state fixtures: the source gains truth before start,
-    // while the dashboard projection first observes it during start().
-    source.setSnapshot(snapshot);
-  }
-  return {
-    runtime,
-    input: { state: runtime.state, actions: runtime.actions, clientState: source },
-    source,
-    service,
-  };
+  return { runtime, source, service };
 }

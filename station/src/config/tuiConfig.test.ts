@@ -3,18 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
 import {
+  createDashboardRuntime,
   legacySearchExperience,
   persistentFilterExperience,
-  type DashboardRuntime,
 } from "@station/dashboard-core";
 import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
-import {
-  createStationTestDashboardRuntime,
-  makeStationTestRuntime,
-} from "../station/test/support/makeStationTestRuntime.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { createStation } from "../app/createStation.js";
 import { NO_OP_CLIPBOARD_EFFECTS } from "../copy/testing.js";
 import { createStationStore } from "../state/store.js";
@@ -178,7 +175,7 @@ root = "${projectRoot}"
     let writes: ReturnType<typeof startWidgetConfigWrites> | undefined;
     let durableExit: Promise<void> | undefined;
     let exitCode: number | undefined;
-    const store = createStationTestDashboardRuntime({
+    const store = createDashboardRuntime({
       source,
       service,
       initialState: { widgets: [{ type: "time" }], widgetsPersisted: true },
@@ -258,7 +255,7 @@ root = "${projectRoot}"
       { widgets: initialWidgets, widgetsPersisted: true },
     );
     const popupSource = new FakeStationSource(manyProjectsSnapshot());
-    const popupStore = createStationTestDashboardRuntime({
+    const popupStore = createDashboardRuntime({
       source: popupSource,
       service: new FakeTuiObserverService(manyProjectsSnapshot()),
       initialState: { widgets: initialWidgets, widgetsPersisted: true },
@@ -301,7 +298,7 @@ root = "${projectRoot}"
     const source = new FakeStationSource(manyProjectsSnapshot());
     let dismisses = 0;
     let exits = 0;
-    const store = createStationTestDashboardRuntime({
+    const store = createDashboardRuntime({
       source,
       service: new FakeTuiObserverService(manyProjectsSnapshot()),
       persistentPopup: true,
@@ -322,14 +319,14 @@ root = "${projectRoot}"
 });
 
 function startTestWidgetConfigWrites(
-  runtime: DashboardRuntime,
+  runtime: ReturnType<typeof createDashboardRuntime>,
   configPath: string,
 ): ReturnType<typeof startWidgetConfigWrites> {
   return startWidgetConfigWrites(runtime.state, runtime.actions.pushToast, configPath);
 }
 
 function addWidgetThroughSettings(
-  store: DashboardRuntime,
+  store: ReturnType<typeof createDashboardRuntime>,
   pickerIndex: number,
 ): void {
   store.actions.handleKey({ input: "W" });

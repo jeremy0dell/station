@@ -48,18 +48,17 @@ describe("PaneGrid", () => {
       },
     });
     const store = createStationStore();
-    const stationFixture =
+    const dashboardState =
       options?.withStationSnapshot === true
-        ? makeStationTestRuntime({ snapshot: manyProjectsSnapshot() })
+        ? makeStationTestRuntime({ snapshot: manyProjectsSnapshot() }).runtime.state
         : undefined;
-    const clientState = stationFixture?.source;
     const dispatchMouse = (_target: MouseTargetRef, _event: StationMouseEvent): boolean => true;
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
         <PaneRegistryProvider registry={registry}>
           <PaneGrid
             store={store}
-            {...(clientState === undefined ? {} : { clientState })}
+            {...(dashboardState === undefined ? {} : { dashboardState })}
             dispatchMouse={dispatchMouse}
           />
         </PaneRegistryProvider>
@@ -72,7 +71,7 @@ describe("PaneGrid", () => {
     });
     await setup.flush();
     await waitFor(() => spawnSizes.length > 0);
-    return { setup, registry, store, spawnSizes, terminals, clientState, stationFixture };
+    return { setup, registry, store, spawnSizes, terminals, dashboardState };
   }
 
   // A store change re-renders PaneGrid; the new layout pass (which fires the
@@ -198,43 +197,22 @@ describe("PaneGrid", () => {
     expect([...hexes].some((hex) => hex !== PRIMARY_BORDER_INACTIVE)).toBe(true);
   });
 
-  it("titles a primary-agent pane from client truth when dashboard projection is stale", async () => {
-    const { setup, store, spawnSizes, stationFixture } = await renderGrid({
-      withStationSnapshot: true,
-    });
-    if (stationFixture === undefined) {
-      throw new Error("expected Station fixture");
-    }
+  it("titles a primary-agent pane from the STATION session and harness", async () => {
+    const { setup, store, spawnSizes } = await renderGrid({ withStationSnapshot: true });
     const paneId = agentWorktreePaneId("wt_station_idle");
     store.actions.createPane(paneId, { role: "primary-agent" });
     store.actions.setPrimaryAgent(paneId, {
       sessionId: "ses_wt_station_idle",
       terminalTargetId: "native:wt_station_idle",
     });
-    const canonical = manyProjectsSnapshot();
-    stationFixture.source.setSnapshot({
-      ...canonical,
-      sessions: canonical.sessions.map((session) =>
-        session.id === "ses_wt_station_idle"
-          ? { ...session, title: "canonical-pane-title" }
-          : session,
-      ),
-    });
 
-    expect(
-      stationFixture.runtime.state.getState().snapshot?.sessions.find(
-        (session) => session.id === "ses_wt_station_idle",
-      )?.title,
-    ).not.toBe("canonical-pane-title");
     await pumpUntil(
       setup,
-      () =>
-        spawnSizes.length >= 2 &&
-        setup.captureCharFrame().includes("canonical-pane-title - codex agent"),
+      () => spawnSizes.length >= 2 && setup.captureCharFrame().includes("pty-buffer - codex agent"),
     );
 
     const frame = setup.captureCharFrame();
-    expect(frame).toContain("canonical-pane-title - codex agent");
+    expect(frame).toContain("pty-buffer - codex agent");
     expect(frame).not.toContain("terminal pid");
   });
 

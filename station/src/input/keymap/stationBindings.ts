@@ -1,4 +1,3 @@
-import type { StationClientStateSource } from "@station/client";
 import { agentWorktreePaneId, STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
 import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
@@ -30,7 +29,6 @@ import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
 
 type StationDashboardInput = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
 };
 
@@ -155,10 +153,10 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
  * Everywhere else Enter falls through to terminal passthrough untouched.
  */
 function createStationButtonLayer(
-  clientState: StationClientStateSource,
+  dashboardState: DashboardStateSource,
 ): KeymapLayer<RouteOutcome> {
   const attentionRow = () => {
-    const snapshot = clientState.getState().snapshot;
+    const snapshot = dashboardState.getState().snapshot;
     return snapshot === undefined
       ? undefined
       : selectDashboardSessionRows(snapshot).find((row) => rowNeedsUser(row.presentation));
@@ -247,7 +245,7 @@ export function createStationKeymap(
     welcomeLayer,
   ];
   if (dashboardRuntime !== undefined) {
-    layers.push(createStationButtonLayer(dashboardRuntime.clientState));
+    layers.push(createStationButtonLayer(dashboardRuntime.state));
   }
   return createKeymapStack(layers);
 }

@@ -261,12 +261,7 @@ No single layer owns all truth.
 
 Clients must treat a subscription gap as possible event loss. The Station client
 runtime subscribes first, loads a full snapshot while that subscription is live,
-and reloads after later gaps or events that cannot be reduced safely. The runtime
-also owns the `ObserverService` used by UI operations: caller snapshot loads and
-reconcile results commit to the same canonical client state before their promises
-resolve, so a later incremental event cannot reduce from an older side-loaded base.
-Dashboard projection subscribes to that state and never constructs a second client
-runtime.
+and reloads after later gaps or events that cannot be reduced safely.
 
 ## Runtime Lifecycle
 

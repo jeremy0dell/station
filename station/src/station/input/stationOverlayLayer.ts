@@ -8,7 +8,6 @@
 // overlay-close outcome so the coordination store owns visibility and focus
 // restore. One exception — a Station-session slot key — resolves to a managed
 // launch (see catchAll) so the keyboard opens an agent exactly as a click does.
-import type { StationClientStateSource } from "@station/client";
 import type { KeymapLayer } from "../../input/keymap/keymaps.js";
 import {
   paneLaunchForkSessionOutcome,
@@ -29,7 +28,6 @@ import {
 
 type StationOverlayDashboard = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "dispatch" | "handleKey" | "pushToast">;
 };
 
