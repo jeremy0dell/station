@@ -380,7 +380,14 @@ function applyTransition(
   operations: TuiLocalOperationRunner,
   transition: TuiTransition,
 ): TuiHandleKeyResult {
-  store.setState(transition.state);
+  const merged = { ...store.getState(), ...transition.state };
+  if (transition.state.persistentFilter === undefined) {
+    // Zustand's default merge retains absent optionals, so replace the merged store when clearing.
+    const { persistentFilter: _removed, ...withoutPersistentFilter } = merged;
+    store.setState(withoutPersistentFilter, true);
+  } else {
+    store.setState(merged, true);
+  }
   void applyTransitionEffects(store, service, clientRuntime, runtime, operations, transition);
   const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
   if (transition.exitCode !== undefined) {

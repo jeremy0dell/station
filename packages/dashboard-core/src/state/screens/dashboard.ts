@@ -99,10 +99,15 @@ function handleDashboardAction(
       };
     case "tui.exit":
       return exitOrDismissPopup(state);
-    case "tui.popup.dismiss":
+    case "tui.popup.dismiss": {
+      if (state.persistentFilter !== undefined) {
+        const { persistentFilter: _removed, ...withoutPersistentFilter } = state;
+        return { state: withoutPersistentFilter };
+      }
       return state.runtime.persistentPopup && state.runtime.canDismissPopup
         ? { state, dismissPopup: true }
         : { state };
+    }
     case "tui.search.open":
       return dashboardSearchExperience.open(state);
     case "tui.rename.open":

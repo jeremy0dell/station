@@ -71,6 +71,7 @@ function renderActiveScreenOverlay({
   switch (screen.name) {
     case "dashboard":
     case "search":
+    case "persistentFilter":
       return null;
     case "help":
       return <HelpOverlayView columns={columns} rows={rows} />;

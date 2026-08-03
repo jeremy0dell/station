@@ -2,13 +2,12 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type { ProjectView, StationSnapshot } from "@station/contracts";
+import type { StationSnapshot } from "@station/contracts";
 import {
   dashboardTableHeaderModel,
   fleetCountsLabel,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
-  projectHeaderLabelParts,
   rowGridInputForViewportItem,
 } from "@station/dashboard-core";
 import {
@@ -24,42 +23,27 @@ import {
   type DashboardViewportItem,
   type FleetSummary,
 } from "@station/dashboard-core";
-import type { DashboardFocus, ProjectHeaderControl, TuiViewState } from "@station/dashboard-core";
-import type { StationMouseTarget } from "../input/stationMouse.js";
+import type { DashboardFocus, TuiScreen, TuiViewState } from "@station/dashboard-core";
 import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
 } from "./DashboardTableHeaderView.js";
+import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
-// The project-header "open a shell here" click target stays in its own trailing
-// cell so stopPropagation can never also toggle the header.
-const SHELL_AFFORDANCE_LABEL = "[shell]";
-const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
-const DEFAULT_AGENT_AFFORDANCE_LABEL = "[▾]";
-
-// The per-project-header quick-session affordance sits after [shell] on project
-// rows: "[quick session]" creates a session (default harness), "[▾]" opens the
-// project default-agent picker. Compact mode uses "[qs]" when columns are limited.
-const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
-const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
-const PROJECT_HEADER_SEPARATOR_COUNT = 3;
-
-// Below this terminal width the header affordances switch to compact labels.
-const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
-
 export type DashboardViewProps = {
   snapshot: StationSnapshot;
   viewState: TuiViewState;
+  screen: TuiScreen;
   columns?: number;
 };
 
-export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardViewProps) {
+export function DashboardView({ snapshot, viewState, screen, columns = 80 }: DashboardViewProps) {
   const dispatch = useStationMouse();
-  const viewport = selectDashboardViewport(snapshot, viewState);
+  const viewport = selectDashboardViewport(snapshot, viewState, screen);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
   const fleet = selectFleetSummary(snapshot);
@@ -77,6 +61,10 @@ export function DashboardView({ snapshot, viewState, columns = 80 }: DashboardVi
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
     overflow: viewport.sessionOverflow,
+    columns: contentColumns,
+    ...(viewport.persistentFilter === undefined
+      ? {}
+      : { persistentFilter: viewport.persistentFilter }),
   });
   return (
     <box
@@ -272,10 +260,11 @@ function DashboardViewportRow({
       return <box height={1} />;
     case "projectHeader":
       return (
-        <ProjectHeaderLine
+        <ProjectHeaderView
           columns={columns}
           project={item.project}
           collapsed={item.collapsed}
+          persistentFilterMatch={item.persistentFilterMatch}
           focus={
             dashboardFocus?.kind === "projectHeader" && dashboardFocus.projectId === item.project.id
               ? dashboardFocus.control
@@ -396,152 +385,5 @@ function EmptySessionButton({ projectId, focused }: { projectId: string; focused
     >
       {EMPTY_SESSION_BUTTON_LABEL}
     </text>
-  );
-}
-
-function ProjectHeaderLine({
-  columns,
-  project,
-  collapsed,
-  focus,
-}: {
-  columns: number;
-  project: ProjectView;
-  collapsed: boolean;
-  focus?: ProjectHeaderControl | undefined;
-}) {
-  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
-  const shellLabel = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
-  const quickSessionLabel = compact
-    ? QUICK_SESSION_AFFORDANCE_LABEL_COMPACT
-    : QUICK_SESSION_AFFORDANCE_LABEL;
-  const controlsWidth =
-    shellLabel.length +
-    quickSessionLabel.length +
-    DEFAULT_AGENT_AFFORDANCE_LABEL.length +
-    PROJECT_HEADER_SEPARATOR_COUNT;
-  return (
-    <box flexDirection="row" width="100%" height={1} overflow="hidden">
-      <ProjectHeaderPrimary
-        project={project}
-        collapsed={collapsed}
-        width={Math.max(1, columns - controlsWidth)}
-        focused={focus === "primary"}
-      />
-      <box flexGrow={1} height={1} />
-      <ProjectHeaderSeparator />
-      <ProjectHeaderActionSegment
-        label={shellLabel}
-        target={{ kind: "openShellForProject", projectId: project.id }}
-        focused={focus === "shell"}
-      />
-      <ProjectHeaderSeparator />
-      <ProjectHeaderActionSegment
-        label={quickSessionLabel}
-        target={{ kind: "quickSessionForProject", projectId: project.id }}
-        focused={focus === "quickSession"}
-      />
-      <ProjectHeaderSeparator />
-      <ProjectHeaderActionSegment
-        label={DEFAULT_AGENT_AFFORDANCE_LABEL}
-        target={{ kind: "showDefaultAgentPickerForProject", projectId: project.id }}
-        focused={focus === "defaultAgent"}
-      />
-    </box>
-  );
-}
-
-function ProjectHeaderPrimary({
-  project,
-  collapsed,
-  width,
-  focused,
-}: {
-  project: ProjectView;
-  collapsed: boolean;
-  width: number;
-  focused: boolean;
-}) {
-  const theme = useStationTheme();
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const background = hover
-    ? { bg: toOpenTuiColor(theme.interaction.hover) }
-    : focused
-      ? { bg: toOpenTuiColor(theme.interaction.compactFocus) }
-      : {};
-  return (
-    <text
-      flexShrink={0}
-      fg={toOpenTuiColor(theme.text.primary)}
-      {...background}
-      {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      <ProjectHeaderLabel project={project} collapsed={collapsed} width={width} />
-    </text>
-  );
-}
-
-function ProjectHeaderActionSegment({
-  label,
-  target,
-  focused,
-}: {
-  label: string;
-  target: StationMouseTarget;
-  focused: boolean;
-}) {
-  const theme = useStationTheme();
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const background = hover
-    ? { bg: toOpenTuiColor(theme.interaction.hover) }
-    : focused
-      ? { bg: toOpenTuiColor(theme.interaction.compactFocus) }
-      : {};
-  return (
-    <text
-      flexShrink={0}
-      fg={toOpenTuiColor(hover ? theme.status.success : theme.text.muted)}
-      {...background}
-      {...stationMouseProps(dispatch, target)}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      {label}
-    </text>
-  );
-}
-
-function ProjectHeaderSeparator() {
-  const theme = useStationTheme();
-  return (
-    <text flexShrink={0} fg={toOpenTuiColor(theme.text.muted)}>
-      {" "}
-    </text>
-  );
-}
-
-function ProjectHeaderLabel({
-  project,
-  collapsed,
-  width,
-}: {
-  project: ProjectView;
-  collapsed: boolean;
-  width: number;
-}) {
-  const theme = useStationTheme();
-  const parts = projectHeaderLabelParts(project, collapsed);
-  const combined = truncateCells(`${parts.title}${parts.counts}`, width);
-  const title = combined.slice(0, parts.title.length);
-  const counts = combined.slice(parts.title.length);
-  return (
-    <>
-      <span attributes={TextAttributes.BOLD}>{title}</span>
-      <span fg={toOpenTuiColor(theme.text.muted)}>{counts}</span>
-    </>
   );
 }

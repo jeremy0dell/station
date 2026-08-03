@@ -23,6 +23,9 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
   if (options.initialSnapshot !== undefined) {
     state.snapshot = options.initialSnapshot;
   }
+  if (options.persistentFilter !== undefined) {
+    state.persistentFilter = options.persistentFilter;
+  }
   if (options.dashboardFocus !== undefined) {
     state.dashboardFocus = options.dashboardFocus;
   }

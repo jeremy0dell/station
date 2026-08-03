@@ -1,4 +1,8 @@
 import type { TuiKey } from "../keys.js";
+import {
+  handleDashboardPersistentFilterKey,
+  openDashboardPersistentFilter,
+} from "../screens/persistentFilter.js";
 import { handleLegacyDashboardSearchKey, openLegacyDashboardSearch } from "../screens/search.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
@@ -16,8 +20,7 @@ export const legacySearchExperience: DashboardSearchExperience = {
   handleKey: handleLegacyDashboardSearchKey,
 };
 
-// Keep a separate identity so #395 can change this selected arm without changing #394 behavior.
 export const persistentFilterExperience: DashboardSearchExperience = {
-  open: openLegacyDashboardSearch,
-  handleKey: handleLegacyDashboardSearchKey,
+  open: openDashboardPersistentFilter,
+  handleKey: handleDashboardPersistentFilterKey,
 };
