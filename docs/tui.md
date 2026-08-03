@@ -65,9 +65,9 @@ When the private tmux devbox runs the dashboard under Bun `--hot`, the CLI
 parent and its IPC channel remain authoritative for the lifetime of
 `_station-ui`. A source reload synchronously releases the prior OpenTUI stdin
 owner, then unmounts the old React root, removes popup listeners, detaches the
-old source/store, stops the old Station client, and recreates those renderer
-resources inside the same Bun process. The renderer disposer deliberately does
-not disconnect the CLI-owned IPC channel. Source build identity is verified
+old source/dashboard runtime, stops the old Station client, and recreates those
+renderer resources inside the same Bun process. The renderer disposer
+deliberately does not disconnect the CLI-owned IPC channel. Source build identity is verified
 once per OS process so a harmless reload reuses the accepted identity; a new
 process still verifies the current checkout and outputs.
 
@@ -241,10 +241,12 @@ reattach; pane borders and neighboring panes must remain unlinked.
   typed product intents, results, and normalized focus origins, never provider commands, arguments,
   raw claims, or lease representations.
 - Render normalized contracts from `@station/contracts` and use `@station/protocol` through the Station service/source layer.
-- OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the Station state store, not presentation components.
+- OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the dashboard runtime, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
-- Each renderer composition resolves one `StationTuiComposition` through `station/src/config/tuiConfig.ts` and passes that opaque composition into the dashboard store. This is the only feature-decision boundary: reducers and render/input leaves must not select search behavior or inspect feature flags; legacy session and optimistic-row matching remains centralized in the pure dashboard search projection.
-- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers to replace store state. Hosted workspace creation temporarily crosses into dashboard state through the named `addPendingCreateSession`, `failPendingCreateSession`, and `removePendingCreateSession` actions; Station still owns failure-retention timers and expiry scheduling until that lifecycle moves behind the runtime facade.
+- Each renderer composition resolves one `StationTuiComposition` through `station/src/config/tuiConfig.ts` and passes that opaque composition into its `DashboardRuntime`. This is the only feature-decision boundary: reducers and render/input leaves must not select search behavior or inspect feature flags; legacy session and optimistic-row matching remains centralized in the pure dashboard search projection.
+- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is repeat-safe. The internal Zustand store contains only `DashboardState`, and its `setState` never crosses the dashboard-core boundary.
+- Presentation receives the read-only `DashboardStateSource` unless a rendered effect requires specific `DashboardActions`. Input and effect adapters receive state plus actions, while native and standalone composition roots alone own full runtime lifecycle. Config persistence receives only the state subscription and `pushToast` capability it needs.
+- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers or replacing runtime state. Hosted workspace creation temporarily crosses into dashboard state through the named `addPendingCreateSession`, `failPendingCreateSession`, and `removePendingCreateSession` actions; Station still owns failure-retention timers and expiry scheduling until that lifecycle moves behind the runtime facade.
 - New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
@@ -320,7 +322,7 @@ interception, and equivalence with keyboard transitions. They do not prove termi
 negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
 The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
-Workflow controls dispatch renderer-neutral actions through `TuiStore.dispatch(...)`; direct hotkeys
+Workflow controls dispatch renderer-neutral actions through `DashboardActions.dispatch(...)`; direct hotkeys
 and focused Enter decode to the same pure intents before transitions or effects run. Dashboard-core
 owns action availability and resolution, while native Station and standalone/tmux
 retain their terminal-specific effects after shared resolution. Session rows are resolved by their
@@ -455,7 +457,7 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 - `station/src/input/` holds the router and sequence plumbing; runtime keyboard
   dispatch goes through the shared transition machine, while only the dashboard
   keeps a binding table because its screen handler executes those actions directly.
-- `station/src/station/` holds the STATION overlay (the dashboard surface): `view/` is the OpenTUI render layer over `@station/dashboard-core`, `input/` is the overlay keymap and mouse routing, and `store/` is the overlay store.
+- `station/src/station/` holds the STATION overlay (the dashboard surface): `view/` is the OpenTUI render layer over `@station/dashboard-core`, `input/` is the overlay keymap and mouse routing, and `store/dashboardRuntime.ts` is the native dashboard-runtime composition.
 - `station/src/terminal/` is the app-local PTY boundary (VT parser/screen model under `terminal/vt/`); `station/src/host/` is the PTY-host client for warm/cold reattach.
 - For managed Codex launches, the Station terminal provider selects a generic output-compatibility policy that both UI-owned fallback PTYs and Host-owned PTYs apply before replay storage and live delivery. It rewrites only the exact row-1 region scroll followed by its correlated cursor-and-erase repaint; both PTY boundaries remain provider-neutral, and manually starting Codex in an auxiliary shell remains outside this compatibility scope.
 - Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
@@ -477,7 +479,7 @@ Station uses `bun test` (colocated `*.test.ts` / `*.test.tsx`), not vitest. `@st
 - Live command dispatch through the shared client (focus, jump-to-session, convergence, recovery) lives in `station/src/station/store/stationCommandDispatch.test.ts`.
 - Rendering correctness uses golden frames: `station/src/station/view/dashboard.golden.test.tsx` (scenario × size matrix) and `view/modals.golden.test.tsx`. Use golden frames when exact terminal text, spacing, layout, footer placement, or clipping matters.
 - Production popup acceptance lives in `integrations/terminal/tmux/test/integration/popup-real.test.ts`. Popup input and resize assertions must enter through an attached outer PTY, then prove the visible captured frame and converged nested-client/pane/renderer geometry; an internal store transition or command receipt is not sufficient evidence.
-- Isolation is enforced by `station/src/station/importBoundaries.test.ts`. It scans all production `station/src` modules for forbidden UI/provider imports and prohibits direct dashboard store mutation outright, while keeping exact, shrink-only inventories of temporary raw store imports, mutable store references, and runtime/operation internals. Dashboard-surface checks additionally enforce its linked `@station` package set, no local ported fork, and no `focusable`.
+- Isolation is enforced by `station/src/station/importBoundaries.test.ts`. It scans all production `station/src` modules for forbidden UI/provider imports, raw Zustand dashboard stores, mutable `StoreApi` references, and direct dashboard mutation. The remaining runtime/operation-internal import inventory is shrink-only. Dashboard-surface checks additionally enforce its linked `@station` package set, no local ported fork, and no `focusable`.
 - PTY/terminal behavior is tested under `station/src/terminal/` (VT conformance/stress) and via the smoke probes in the `test:pty` / `test:agents` scripts.
 
 Useful focused commands:

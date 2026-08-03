@@ -1,9 +1,8 @@
 import type { MouseEvent } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import { useCallback } from "react";
 import { useStore } from "zustand/react";
-import type { StoreApi } from "zustand/vanilla";
 import { normalizeStationMouseEvent } from "../input/mouse.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import { DashboardFrameTitle } from "../station/view/DashboardFrameTitle.js";
@@ -17,6 +16,8 @@ import {
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { routeDashboardMouse } from "./dashboardMouse.js";
 
+type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+
 /**
  * The standalone dashboard, rendered to fill the terminal. This is the
  * fullscreen counterpart to Station's in-app `StationOverlay`: it drops the
@@ -28,27 +29,27 @@ import { routeDashboardMouse } from "./dashboardMouse.js";
  * shared dashboard actions and delegates terminal effects to its environment.
  */
 export type FullscreenDashboardProps = {
-  store: StoreApi<TuiStore>;
+  runtime: DashboardInput;
   effects: DashboardRendererEffects;
   onCopyNotice: (text: string) => void;
   hoverEnabled?: boolean;
 };
 
 export function FullscreenDashboard({
-  store,
+  runtime,
   effects,
   onCopyNotice,
   hoverEnabled = true,
 }: FullscreenDashboardProps) {
   const theme = useStationTheme();
   const { width, height } = useTerminalDimensions();
-  const widgets = useStore(store, (state) => state.widgets);
+  const widgets = useStore(runtime.state, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets);
   const dispatch = useCallback<StationMouseDispatch>(
     (target, event: MouseEvent) => {
-      routeDashboardMouse(target, normalizeStationMouseEvent(event), store, effects);
+      routeDashboardMouse(target, normalizeStationMouseEvent(event), runtime, effects);
     },
-    [effects, store],
+    [effects, runtime],
   );
   return (
     <StationHoverProvider value={hoverEnabled}>
@@ -60,13 +61,14 @@ export function FullscreenDashboard({
           backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
         >
           <DashboardRoot
-            store={store}
+            state={runtime.state}
+            actions={runtime.actions}
             columns={width}
             rows={height}
             onCopyNotice={onCopyNotice}
           />
           <DashboardFrameTitle
-            store={store}
+            state={runtime.state}
             frame={{ left: 0, top: 0, width }}
             topRowWidgets={topRowWidgets}
             zIndex={1}

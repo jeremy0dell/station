@@ -11,15 +11,16 @@ import type {
   TuiFolderReadResult,
   TuiFolderService,
   TuiSnapshotSource,
+  TuiSnapshotSourceState,
 } from "@station/dashboard-core";
 import {
   ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS,
-  createTuiStore,
-  openProjectDefaultAgentPicker,
+  persistentFilterExperience,
   selectedAddProjectFolderRow,
-  type TuiStore,
 } from "@station/dashboard-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createDashboardRuntime } from "../../../src/state/runtime.js";
+import type { DashboardState } from "../../../src/state/types.js";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
@@ -29,73 +30,129 @@ import {
 } from "../../fixtures/snapshots.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
-describe("TUI store", () => {
+describe("dashboard runtime boundary", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("publishes data-only state through a read-only source", () => {
+    const snapshot = createDashboardSnapshot();
+    const runtime = createDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+    });
+
+    expect(Object.keys(runtime.state).sort()).toEqual(["getInitialState", "getState", "subscribe"]);
+    expect(runtime.state).not.toHaveProperty("setState");
+    expect(runtime.actions).not.toHaveProperty("setState");
+    expect(runtime.state.getState()).not.toHaveProperty("handleKey");
+    expect(runtime.state.getState()).not.toHaveProperty("start");
+    expect(runtime.state.getInitialState()).not.toHaveProperty("dispatch");
+    expect(runtime.state.getInitialState()).not.toHaveProperty("dispose");
+  });
+
+  it("starts once and disposes subscriptions repeat-safely", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const service = new FakeTuiObserverService(snapshot);
+    const runtime = createDashboardRuntime({ service });
+
+    runtime.start();
+    runtime.start();
+    await waitFor(() => service.subscribeCount === 1);
+
+    runtime.dispose();
+    runtime.dispose();
+    await waitFor(() => service.cleanupCount === 1);
+
+    runtime.start();
+    await Promise.resolve();
+    expect(service.subscribeCount).toBe(1);
+  });
+
+  it("deletes an absent persistent filter during full replacement", () => {
+    const snapshot = createDashboardSnapshot();
+    const runtime = createDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      initialState: { persistentFilter: { query: "working" } },
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+
+    runtime.actions.handleKey({ input: "/" });
+    runtime.actions.handleKey({ input: "u", ctrl: true });
+    runtime.actions.handleKey({ input: "\r", return: true });
+
+    expect("persistentFilter" in runtime.state.getState()).toBe(false);
+  });
+});
+
+describe("dashboard runtime", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it("applies semantic actions through the same transition executor as keys", () => {
     const snapshot = createNoProjectsSnapshot();
-    const keyStore = createTuiStore({
+    const keyStore = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
-    const actionStore = createTuiStore({
+    const actionStore = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
 
-    const keyResult = keyStore.getState().handleKey({ input: "A" });
-    const actionResult = actionStore.getState().dispatch({ type: "dashboard.addProject" });
+    const keyResult = keyStore.actions.handleKey({ input: "A" });
+    const actionResult = actionStore.actions.dispatch({ type: "dashboard.addProject" });
 
     expect(actionResult).toEqual(keyResult);
-    expect(actionStore.getState().screen).toEqual(keyStore.getState().screen);
+    expect(actionStore.state.getState().screen).toEqual(keyStore.state.getState().screen);
   });
 
   it("applies focus before returning each project-header control intent exactly once", () => {
     const snapshot = createDashboardSnapshot();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
 
-    const result = store.getState().dispatch({
+    const result = store.actions.dispatch({
       type: "dashboard.projectHeader.activate",
       projectId: "web",
       actionId: "shell",
     });
 
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "web",
       control: "shell",
     });
     expect(result.controlIntent).toEqual({ type: "projectShell.open", projectId: "web" });
-    expect(store.getState().handleKey({ input: "" }).controlIntent).toBeUndefined();
+    expect(store.actions.handleKey({ input: "" }).controlIntent).toBeUndefined();
   });
 
   it("returns an empty-project Quick Session intent before standalone resolution transfers focus", () => {
     const snapshot = createZeroWorktreeSnapshot();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
 
-    const result = store.getState().dispatch({
+    const result = store.actions.dispatch({
       type: "dashboard.emptyProject.activate",
       projectId: "web",
     });
 
     expect(result.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "emptyProjectAction",
       projectId: "web",
     });
-    expect(store.getState().handleKey({ input: "" }).controlIntent).toBeUndefined();
+    expect(store.actions.handleKey({ input: "" }).controlIntent).toBeUndefined();
 
-    store.getState().createQuickSession("web");
-    expect(store.getState().localRows.pendingCreate).toHaveLength(1);
-    expect(store.getState().dashboardFocus).toEqual({
+    store.actions.createQuickSession("web");
+    expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "web",
       control: "quickSession",
@@ -104,36 +161,35 @@ describe("TUI store", () => {
 
   it("routes state-only actions through the transition executor", () => {
     const snapshot = createDashboardSnapshot();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
 
-    const result = store.getState().dispatch({
+    const result = store.actions.dispatch({
       type: "dashboard.projectHeader.focus",
       projectId: "web",
       control: "defaultAgent",
     });
 
     expect(result).toEqual({ dismissPopup: false });
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "web",
       control: "defaultAgent",
     });
   });
 
-  it("owns the optimistic hosted-create row lifecycle without replacing store actions", () => {
+  it("owns the optimistic hosted-create row lifecycle without storing actions", () => {
     const snapshot = createDashboardSnapshot();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { terminalRows: 42 },
     });
     const actions = {
-      dispatch: store.getState().dispatch,
-      handleKey: store.getState().handleKey,
-      start: store.getState().start,
+      dispatch: store.actions.dispatch,
+      handleKey: store.actions.handleKey,
     };
     const error: SafeError = {
       tag: "StationLaunchError",
@@ -141,7 +197,7 @@ describe("TUI store", () => {
       message: "The hosted create failed.",
     };
 
-    store.getState().addPendingCreateSession({
+    store.actions.addPendingCreateSession({
       localId: "local-create-1",
       projectId: "web",
       title: "new session",
@@ -149,13 +205,13 @@ describe("TUI store", () => {
       harnessProvider: "codex",
       createdAt: fixtureNow,
     });
-    expect(store.getState().localRows.pendingCreate).toEqual([
+    expect(store.state.getState().localRows.pendingCreate).toEqual([
       expect.objectContaining({ localId: "local-create-1", projectId: "web" }),
     ]);
 
-    store.getState().failPendingCreateSession("local-create-1", error, 123_456);
-    expect(store.getState().localRows.pendingCreate).toEqual([]);
-    expect(store.getState().localRows.failedCreate).toEqual([
+    store.actions.failPendingCreateSession("local-create-1", error, 123_456);
+    expect(store.state.getState().localRows.pendingCreate).toEqual([]);
+    expect(store.state.getState().localRows.failedCreate).toEqual([
       expect.objectContaining({
         localId: "local-create-1",
         error,
@@ -163,32 +219,33 @@ describe("TUI store", () => {
       }),
     ]);
 
-    store.getState().removePendingCreateSession("local-create-1");
-    expect(store.getState().localRows.failedCreate).toEqual([]);
-    expect(store.getState().terminalRows).toBe(42);
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.getState().dispatch).toBe(actions.dispatch);
-    expect(store.getState().handleKey).toBe(actions.handleKey);
-    expect(store.getState().start).toBe(actions.start);
+    store.actions.removePendingCreateSession("local-create-1");
+    expect(store.state.getState().localRows.failedCreate).toEqual([]);
+    expect(store.state.getState().terminalRows).toBe(42);
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.actions.dispatch).toBe(actions.dispatch);
+    expect(store.actions.handleKey).toBe(actions.handleKey);
+    expect(store.state.getState()).not.toHaveProperty("dispatch");
+    expect(store.state.getState()).not.toHaveProperty("start");
   });
 
   it("loads initial snapshots and cleans up event subscriptions", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({ service });
-    const stop = store.getState().start();
+    const store = createDashboardRuntime({ service });
+    store.start();
 
-    await waitFor(() => store.getState().snapshot?.rows.length === 1);
+    await waitFor(() => store.state.getState().snapshot?.rows.length === 1);
     await waitFor(() => service.subscribeCount === 1);
-    stop();
+    store.dispose();
     await waitFor(() => service.cleanupCount === 1);
   });
 
   it("applies live events to rendered state", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({ service });
-    const stop = store.getState().start();
+    const store = createDashboardRuntime({ service });
+    store.start();
     const event: StationEvent = {
       type: "worktree.updated",
       worktreeId: "wt_web_idle",
@@ -205,15 +262,17 @@ describe("TUI store", () => {
     await waitFor(() => service.subscribeCount === 1);
     service.emit(event);
 
-    await waitFor(() => store.getState().snapshot?.rows[0]?.display.statusLabel === "working");
-    stop();
+    await waitFor(
+      () => store.state.getState().snapshot?.rows[0]?.display.statusLabel === "working",
+    );
+    store.dispose();
   });
 
   it("removes worktree rows and surfaces command failure toasts from observer events", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
-    const stop = store.getState().start();
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    store.start();
 
     await waitFor(() => service.subscribeCount === 1);
     service.emit({ type: "worktree.removed", worktreeId: "wt_web_idle" });
@@ -230,92 +289,99 @@ describe("TUI store", () => {
 
     await waitFor(
       () =>
-        store.getState().snapshot?.rows.length === 0 &&
-        store
+        store.state.getState().snapshot?.rows.length === 0 &&
+        store.state
           .getState()
           .toasts.some((entry) => entry.toast.diagnosticId === "diag_terminal_missing"),
     );
-    stop();
+    store.dispose();
   });
 
   it("marks an existing snapshot as display-only on observer connect failures without a toast", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new SnapshotConnectFailingService(snapshot);
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
-    const stop = store.getState().start();
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    store.start();
 
     await waitFor(() => service.subscribeCount === 1);
     service.failSubscriptions(wrappedConnectError());
 
-    await waitFor(() => store.getState().observerConnectionStatus.state === "displayOnly");
-    expect(store.getState().snapshot?.rows).toHaveLength(1);
-    expect(store.getState().toasts).toEqual([]);
-    stop();
+    await waitFor(() => store.state.getState().observerConnectionStatus.state === "displayOnly");
+    expect(store.state.getState().snapshot?.rows).toHaveLength(1);
+    expect(store.state.getState().toasts).toEqual([]);
+    store.dispose();
   });
 
   it("marks cold starts as reconnecting on observer connect failures without a toast", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new ColdStartConnectFailingService(snapshot);
-    const store = createTuiStore({ service });
-    const stop = store.getState().start();
+    const store = createDashboardRuntime({ service });
+    store.start();
 
-    await waitFor(() => store.getState().observerConnectionStatus.state === "reconnecting");
-    expect(store.getState().snapshot).toBeUndefined();
-    expect(store.getState().toasts).toEqual([]);
-    stop();
+    await waitFor(() => store.state.getState().observerConnectionStatus.state === "reconnecting");
+    expect(store.state.getState().snapshot).toBeUndefined();
+    expect(store.state.getState().toasts).toEqual([]);
+    store.dispose();
   });
 
-  it("clears reconnect status after a successful snapshot and shows delayed recovery feedback", async () => {
+  it("clears reconnect status after a successful snapshot and shows delayed recovery feedback", () => {
     const snapshot = createCommandSnapshot("idle");
-    const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
-    const stop = store.getState().start();
-
-    await waitFor(() => service.subscribeCount === 1);
-    store.setState({
-      observerConnectionStatus: {
+    const source = mutableSnapshotSource({
+      snapshot,
+      connection: {
         state: "displayOnly",
         since: Date.now() - 1_501,
         lastError: connectSafeError(),
       },
     });
-    service.endSubscriptions();
+    const store = createDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      source,
+      initialSnapshot: snapshot,
+    });
+    store.start();
 
-    await waitFor(
-      () =>
-        store.getState().observerConnectionStatus.state === "connected" &&
-        store.getState().toasts.some((entry) => entry.toast.message === "Observer reconnected."),
-    );
-    stop();
+    source.setConnection({ state: "connected", since: Date.now() });
+
+    expect(store.state.getState().observerConnectionStatus.state).toBe("connected");
+    expect(
+      store.state
+        .getState()
+        .toasts.some((entry) => entry.toast.message === "Observer reconnected."),
+    ).toBe(true);
+    store.dispose();
   });
 
-  it("does not show recovery feedback for brief reconnect states", async () => {
+  it("does not show recovery feedback for brief reconnect states", () => {
     const snapshot = createCommandSnapshot("idle");
-    const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
-    const stop = store.getState().start();
-
-    await waitFor(() => service.subscribeCount === 1);
-    store.setState({
-      observerConnectionStatus: {
+    const source = mutableSnapshotSource({
+      snapshot,
+      connection: {
         state: "displayOnly",
         since: Date.now() - 100,
         lastError: connectSafeError(),
       },
     });
-    service.endSubscriptions();
+    const store = createDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      source,
+      initialSnapshot: snapshot,
+    });
+    store.start();
 
-    await waitFor(() => store.getState().observerConnectionStatus.state === "connected");
-    expect(store.getState().toasts).toEqual([]);
-    stop();
+    source.setConnection({ state: "connected", since: Date.now() });
+
+    expect(store.state.getState().observerConnectionStatus.state).toBe("connected");
+    expect(store.state.getState().toasts).toEqual([]);
+    store.dispose();
   });
 
   it("acknowledges a ready turn after successful focus", async () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
 
-    store.getState().handleKey({ input: "1" });
+    store.actions.handleKey({ input: "1" });
 
     await waitFor(() => service.dispatched.length === 2);
     expect(service.dispatched).toEqual([
@@ -336,7 +402,7 @@ describe("TUI store", () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const service = new ReadinessFailureService(snapshot, failure);
     let focusSuccessCount = 0;
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -348,11 +414,13 @@ describe("TUI store", () => {
       }),
     });
 
-    store.getState().handleKey({ input: "1" });
+    store.actions.handleKey({ input: "1" });
 
-    await waitFor(() => store.getState().toasts.some((entry) => entry.toast.message === message));
+    await waitFor(() =>
+      store.state.getState().toasts.some((entry) => entry.toast.message === message),
+    );
     expect(focusSuccessCount).toBe(0);
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
     expect(service.dispatched.map((command) => command.type)).toEqual([
       "terminal.focus",
       "session.acknowledgeTurn",
@@ -363,7 +431,7 @@ describe("TUI store", () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const order: string[] = [];
     const service = new OrderedFocusService(snapshot, order);
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -378,7 +446,7 @@ describe("TUI store", () => {
       },
     });
 
-    store.getState().handleKey({ input: "1" });
+    store.actions.handleKey({ input: "1" });
 
     await waitFor(() => order.includes("dismiss"));
     expect(order).toEqual([
@@ -411,7 +479,7 @@ describe("TUI store", () => {
       },
     };
     let focusSuccessCount = 0;
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -420,7 +488,7 @@ describe("TUI store", () => {
       },
     });
 
-    store.getState().handleKey({ input: "1" });
+    store.actions.handleKey({ input: "1" });
 
     await waitFor(() => service.waitedForCommandIds.length === 1);
     expect(service.dispatched).toEqual([
@@ -433,7 +501,7 @@ describe("TUI store", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
     let focusSuccessCount = 0;
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -449,10 +517,10 @@ describe("TUI store", () => {
       },
     });
 
-    store.getState().handleKey({ input: "1" });
+    store.actions.handleKey({ input: "1" });
 
     await waitFor(() =>
-      store
+      store.state
         .getState()
         .toasts.some(
           (entry) => entry.toast.message === "The current popup origin could not be resolved.",
@@ -460,14 +528,14 @@ describe("TUI store", () => {
     );
     expect(service.dispatched).toEqual([]);
     expect(focusSuccessCount).toBe(0);
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("does not exit after a target-scoped focus-success callback fails", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
     const exitCodes: number[] = [];
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       exitOnFocusSuccess: true,
@@ -484,10 +552,10 @@ describe("TUI store", () => {
       onExit: (code) => exitCodes.push(code),
     });
 
-    store.getState().handleKey({ input: "1" });
+    store.actions.handleKey({ input: "1" });
 
     await waitFor(() =>
-      store
+      store.state
         .getState()
         .toasts.some(
           (entry) => entry.toast.message === "The popup focus target changed before dismissal.",
@@ -500,7 +568,7 @@ describe("TUI store", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
     const exitCodes: number[] = [];
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -514,35 +582,35 @@ describe("TUI store", () => {
       onExit: (code) => exitCodes.push(code),
     });
 
-    const result = store.getState().handleKey({ input: "Q" });
+    const result = store.actions.handleKey({ input: "Q" });
 
     expect(result).toEqual({ dismissPopup: true });
     await waitFor(() =>
-      store
+      store.state
         .getState()
         .toasts.some((entry) => entry.toast.message === "The popup could not be dismissed."),
     );
     expect(exitCodes).toEqual([]);
-    expect(store.getState().snapshot).toBe(snapshot);
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().snapshot).toBe(snapshot);
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("does not treat a retained no-agent session as completed start truth", async () => {
     const snapshot = createCommandSnapshot("none");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
 
-    store.getState().handleKey({ input: "1" });
+    store.actions.handleKey({ input: "1" });
 
     await waitFor(() => service.loadCount === 1);
-    expect(store.getState().localRows.pendingStart).toHaveLength(1);
+    expect(store.state.getState().localRows.pendingStart).toHaveLength(1);
     expect(service.dispatched).toEqual([expect.objectContaining({ type: "session.startAgent" })]);
   });
 
   it("syncs terminal rows into view state and clamps dashboard scroll", () => {
     const snapshot = createDashboardSnapshot();
     const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       initialState: {
@@ -551,40 +619,40 @@ describe("TUI store", () => {
       },
     });
 
-    store.getState().setTerminalRows(24);
+    store.actions.setTerminalRows(24);
 
-    expect(store.getState().terminalRows).toBe(24);
-    expect(store.getState().scrollOffset).toBe(0);
+    expect(store.state.getState().terminalRows).toBe(24);
+    expect(store.state.getState().scrollOffset).toBe(0);
   });
 
   it("uses the local folder service and dispatches project.add after confirmation", async () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
     });
 
-    store.getState().handleKey({ input: "A" });
-    expect(store.getState().screen).toMatchObject({ name: "addProject" });
+    store.actions.handleKey({ input: "A" });
+    expect(store.state.getState().screen).toMatchObject({ name: "addProject" });
 
-    store.getState().handleKey({ input: "", rightArrow: true });
-    await waitFor(() => screenMode(store.getState()) === "choose");
+    store.actions.handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
     expect(folderService.reads).toEqual(["/Users/example/Developer/station"]);
 
-    store.getState().handleKey({ input: "", downArrow: true });
-    store.getState().handleKey({ input: "\r", return: true });
-    await waitFor(() => screenMode(store.getState()) === "review");
+    store.actions.handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "\r", return: true });
+    await waitFor(() => screenMode(store.state.getState()) === "review");
 
-    store.getState().handleKey({ input: "N" });
-    store.getState().handleKey({ input: "-custom" });
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "-custom" });
+    store.actions.handleKey({ input: "\r", return: true });
 
     service.setSnapshot(createZeroWorktreeSnapshot());
-    store.getState().handleKey({ input: "\r", return: true });
-    await waitFor(() => screenMode(store.getState()) === "success");
+    store.actions.handleKey({ input: "\r", return: true });
+    await waitFor(() => screenMode(store.state.getState()) === "success");
 
     expect(service.dispatched).toEqual([
       {
@@ -616,30 +684,30 @@ describe("TUI store", () => {
       },
       "/Users/example/Developer",
     );
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       source: staticSnapshotSource(snapshot),
       initialSnapshot: snapshot,
       folderService,
     });
 
-    store.getState().handleKey({ input: "A" });
-    store.getState().handleKey({ input: "", rightArrow: true });
-    await waitFor(() => screenMode(store.getState()) === "choose");
-    store.getState().handleKey({ input: "", downArrow: true });
-    store.getState().handleKey({ input: "", downArrow: true });
-    expect(selectedAddProjectPath(store.getState())).toBe("/Users/example/Developer/station");
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
+    store.actions.handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
+    expect(selectedAddProjectPath(store.state.getState())).toBe("/Users/example/Developer/station");
 
     vi.useFakeTimers();
-    const stop = store.getState().start();
+    store.start();
     entries = folderEntries("aardvark", "alpha", "station");
     await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
 
-    expect(addProjectEntryNames(store.getState())).toEqual(["aardvark", "alpha", "station"]);
-    expect(selectedAddProjectPath(store.getState())).toBe("/Users/example/Developer/station");
+    expect(addProjectEntryNames(store.state.getState())).toEqual(["aardvark", "alpha", "station"]);
+    expect(selectedAddProjectPath(store.state.getState())).toBe("/Users/example/Developer/station");
 
     let notifications = 0;
-    const unsubscribe = store.subscribe(() => {
+    const unsubscribe = store.state.subscribe(() => {
       notifications += 1;
     });
     await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
@@ -648,20 +716,20 @@ describe("TUI store", () => {
     entries = folderEntries("aardvark", "renamed");
     failNextRead = true;
     await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
-    expect(addProjectEntryNames(store.getState())).toEqual(["aardvark", "alpha", "station"]);
+    expect(addProjectEntryNames(store.state.getState())).toEqual(["aardvark", "alpha", "station"]);
     expect(notifications).toBe(0);
 
     await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
-    expect(addProjectEntryNames(store.getState())).toEqual(["aardvark", "renamed"]);
-    expect(selectedAddProjectPath(store.getState())).toBe("/Users/example/Developer/renamed");
+    expect(addProjectEntryNames(store.state.getState())).toEqual(["aardvark", "renamed"]);
+    expect(selectedAddProjectPath(store.state.getState())).toBe("/Users/example/Developer/renamed");
 
-    store.getState().handleKey({ input: "", escape: true });
+    store.actions.handleKey({ input: "", escape: true });
     const readsAfterClose = reads.length;
     await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS * 2);
     expect(reads).toHaveLength(readsAfterClose);
 
     unsubscribe();
-    stop();
+    store.dispose();
   });
 
   it("does not overlap polls or apply a late result after directory navigation", async () => {
@@ -680,48 +748,48 @@ describe("TUI store", () => {
         entries: path === rootPath ? [folderEntry("child", childPath)] : [],
       };
     });
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       source: staticSnapshotSource(snapshot),
       initialSnapshot: snapshot,
       folderService,
     });
 
-    store.getState().handleKey({ input: "A" });
-    store.getState().handleKey({ input: "", rightArrow: true });
-    await waitFor(() => screenMode(store.getState()) === "choose");
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
 
     vi.useFakeTimers();
-    const stop = store.getState().start();
+    store.start();
     await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
     await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS * 4);
     expect(reads.filter((path) => path === rootPath)).toHaveLength(2);
 
-    store.getState().handleKey({ input: "", downArrow: true });
-    store.getState().handleKey({ input: "", rightArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", rightArrow: true });
     await vi.advanceTimersByTimeAsync(0);
-    expect(activeAddProjectPath(store.getState())).toBe(childPath);
+    expect(activeAddProjectPath(store.state.getState())).toBe(childPath);
 
     latePoll.resolve({ path: rootPath, entries: folderEntries("stale") });
     await vi.advanceTimersByTimeAsync(0);
-    expect(activeAddProjectPath(store.getState())).toBe(childPath);
-    expect(addProjectEntryNames(store.getState())).toEqual([]);
+    expect(activeAddProjectPath(store.state.getState())).toBe(childPath);
+    expect(addProjectEntryNames(store.state.getState())).toEqual([]);
 
-    stop();
+    store.dispose();
   });
 
   it("opens the explicit first-project flow with Enter on an empty dashboard", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService: fakeFolderService(),
     });
 
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "\r", return: true });
 
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "addProject",
       flow: { mode: "start", firstProject: true },
     });
@@ -731,10 +799,10 @@ describe("TUI store", () => {
     const snapshot = createDashboardSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     service.setSnapshot(snapshotWithProjectHarness(snapshot, "web", "opencode"));
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
 
-    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
-    store.getState().handleKey({ input: "2" });
+    store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
+    store.actions.handleKey({ input: "2" });
 
     await waitFor(() => service.loadCount === 1);
     expect(service.dispatched).toEqual([
@@ -744,8 +812,8 @@ describe("TUI store", () => {
       },
     ]);
     expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
-    expect(store.getState().snapshot?.projects[0]?.defaults.harness).toBe("opencode");
-    expect(store.getState().toasts.map((entry) => entry.toast)).toContainEqual(
+    expect(store.state.getState().snapshot?.projects[0]?.defaults.harness).toBe("opencode");
+    expect(store.state.getState().toasts.map((entry) => entry.toast)).toContainEqual(
       expect.objectContaining({
         kind: "success",
         message: "Default agent set to opencode.",
@@ -766,13 +834,13 @@ describe("TUI store", () => {
         message: "Default harness was rejected.",
       },
     };
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
 
-    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
-    store.getState().handleKey({ input: "2" });
+    store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
+    store.actions.handleKey({ input: "2" });
 
     await waitFor(() =>
-      store
+      store.state
         .getState()
         .toasts.some((entry) => entry.toast.message === "Default harness was rejected."),
     );
@@ -792,13 +860,13 @@ describe("TUI store", () => {
         message: "Project-local config keeps claude effective.",
       },
     };
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
 
-    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
-    store.getState().handleKey({ input: "2" });
+    store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
+    store.actions.handleKey({ input: "2" });
 
     await waitFor(() =>
-      store
+      store.state
         .getState()
         .toasts.some(
           (entry) => entry.toast.message === "Project-local config keeps claude effective.",
@@ -816,13 +884,15 @@ describe("TUI store", () => {
       code: "PROTOCOL_SOCKET_CLOSED",
       message: "Observer socket closed.",
     };
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
 
-    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
-    store.getState().handleKey({ input: "2" });
+    store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
+    store.actions.handleKey({ input: "2" });
 
     await waitFor(() =>
-      store.getState().toasts.some((entry) => entry.toast.message === "Observer socket closed."),
+      store.state
+        .getState()
+        .toasts.some((entry) => entry.toast.message === "Observer socket closed."),
     );
     expect(service.waitedForCommandIds).toEqual([]);
     expect(service.loadCount).toBe(0);
@@ -837,12 +907,12 @@ describe("TUI store", () => {
       message: "Project-local config keeps claude effective.",
     };
     service.nextCompletion = { status: "failed", commandId: "cmd_tui_1", error: failure };
-    const store = createTuiStore({ service, initialSnapshot: snapshot });
-    const stop = store.getState().start();
+    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    store.start();
     await waitFor(() => service.subscribeCount === 1);
 
-    store.setState(openProjectDefaultAgentPicker(store.getState(), "web"));
-    store.getState().handleKey({ input: "2" });
+    store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
+    store.actions.handleKey({ input: "2" });
 
     // The op registers the command before awaiting, so the observer's separate
     // command.failed broadcast must be suppressed (one toast, not two). A second
@@ -862,36 +932,36 @@ describe("TUI store", () => {
 
     await waitFor(
       () =>
-        store.getState().toasts.some((entry) => entry.toast.message === failure.message) &&
-        store.getState().toasts.some((entry) => entry.toast.message === "Unrelated failure."),
+        store.state.getState().toasts.some((entry) => entry.toast.message === failure.message) &&
+        store.state.getState().toasts.some((entry) => entry.toast.message === "Unrelated failure."),
     );
     expect(
-      store.getState().toasts.filter((entry) => entry.toast.message === failure.message),
+      store.state.getState().toasts.filter((entry) => entry.toast.message === failure.message),
     ).toHaveLength(1);
-    stop();
+    store.dispose();
   });
 
   it("reviews a pasted full path when folder filtering has no matches", async () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
     });
 
-    store.getState().handleKey({ input: "A" });
-    store.getState().handleKey({ input: "", rightArrow: true });
-    await waitFor(() => screenMode(store.getState()) === "choose");
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
 
-    store.getState().handleKey({ input: "/" });
-    store.getState().handleKey({ input: "/Users/example/Developer/synth" });
-    store.getState().handleKey({ input: "\r", return: true });
-    await waitFor(() => screenMode(store.getState()) === "review");
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "/Users/example/Developer/synth" });
+    store.actions.handleKey({ input: "\r", return: true });
+    await waitFor(() => screenMode(store.state.getState()) === "review");
 
     expect(folderService.reviews).toEqual(["/Users/example/Developer/synth"]);
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "addProject",
       flow: {
         mode: "review",
@@ -906,19 +976,19 @@ describe("TUI store", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
     });
 
-    store.getState().handleKey({ input: "A" });
-    store.getState().handleKey({ input: "", downArrow: true });
-    store.getState().handleKey({ input: "\r", return: true });
-    await waitFor(() => screenMode(store.getState()) === "choose");
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "\r", return: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
 
     expect(folderService.reads).toEqual(["/Users/example"]);
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "addProject",
       flow: {
         mode: "choose",
@@ -931,22 +1001,22 @@ describe("TUI store", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
     });
 
-    store.getState().handleKey({ input: "A" });
-    store.getState().handleKey({ input: "\r", return: true });
-    await waitFor(() => screenMode(store.getState()) === "choose");
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "\r", return: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
 
-    store.getState().handleKey({ input: "/" });
-    store.getState().handleKey({ input: "Germ" });
-    await waitFor(() => addProjectSearchResultCount(store.getState()) === 1);
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "Germ" });
+    await waitFor(() => addProjectSearchResultCount(store.state.getState()) === 1);
 
-    store.getState().handleKey({ input: "\r", return: true });
-    await waitFor(() => screenMode(store.getState()) === "review");
+    store.actions.handleKey({ input: "\r", return: true });
+    await waitFor(() => screenMode(store.state.getState()) === "review");
 
     expect(folderService.reviews).toContain("/Users/example/Desktop/projects/GermStack");
   });
@@ -981,6 +1051,26 @@ function staticSnapshotSource(snapshot: StationSnapshot): TuiSnapshotSource {
   };
 }
 
+function mutableSnapshotSource(initial: TuiSnapshotSourceState): TuiSnapshotSource & {
+  setConnection(connection: TuiSnapshotSourceState["connection"]): void;
+} {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    getState: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    setConnection: (connection) => {
+      current = { ...current, connection };
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+  };
+}
+
 function mutableFolderService(
   reads: string[],
   readDirectory: (path: string) => TuiFolderReadResult | Promise<TuiFolderReadResult>,
@@ -1007,17 +1097,17 @@ function folderEntry(name: string, path: string): TuiFolderEntry {
   return { name, path, kind: "directory" };
 }
 
-function selectedAddProjectPath(state: TuiStore): string | undefined {
+function selectedAddProjectPath(state: DashboardState): string | undefined {
   return selectedAddProjectFolderRow(state)?.path;
 }
 
-function activeAddProjectPath(state: TuiStore): string | undefined {
+function activeAddProjectPath(state: DashboardState): string | undefined {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.currentPath
     : undefined;
 }
 
-function addProjectEntryNames(state: TuiStore): string[] {
+function addProjectEntryNames(state: DashboardState): string[] {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.entries.map((entry) => entry.name)
     : [];
@@ -1108,11 +1198,11 @@ function entriesForPath(path: string) {
   ];
 }
 
-function screenMode(state: TuiStore) {
+function screenMode(state: DashboardState) {
   return state.screen.name === "addProject" ? state.screen.flow.mode : undefined;
 }
 
-function addProjectSearchResultCount(state: TuiStore) {
+function addProjectSearchResultCount(state: DashboardState) {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.searchEntries.length
     : 0;

@@ -6,8 +6,8 @@ import { toOpenTuiColor, useStationTheme } from "./theme/index.js";
 
 // App-level toast pinned to the bottom-right of the whole Station window — above
 // the shell pane AND the STATION overlay (high zIndex, absolute so nothing reflows
-// for it). Deliberately distinct from the STATION overlay toast (stationViewStore
-// pushToast / ToastOverlayView), which is scoped to the overlay and hidden while
+// for it). Deliberately distinct from the dashboard-runtime toast
+// (`DashboardActions.pushToast` / ToastOverlayView), which is scoped to the overlay and hidden while
 // the shell is showing — copy confirmations must be visible over the shell too.
 // Colors come from the shared palette so the two toasts stay visually in sync.
 const TOAST_DISMISS_MS = 2500;

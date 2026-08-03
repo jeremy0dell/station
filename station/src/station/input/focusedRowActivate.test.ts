@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { createTuiStore } from "@station/dashboard-core";
+import {
+  createDashboardRuntime,
+  createEmptyTuiLocalRows,
+  type DashboardRuntimeOptions,
+} from "@station/dashboard-core";
 import { resolveInitialState } from "../../state/initialState.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
@@ -11,20 +15,24 @@ import { createStationOverlayLayer } from "./stationOverlayLayer.js";
 // terminal.focus, which Station-hosted panes can't honor). Enter on the
 // focused cursor row must resolve to the same RowAgentTarget a slot key or
 // click does; anything unresolved falls through to the shared machine.
-function newStore(snapshot = manyProjectsSnapshot()) {
-  return createTuiStore({
+function newStore(
+  snapshot = manyProjectsSnapshot(),
+  initialState?: DashboardRuntimeOptions["initialState"],
+) {
+  return createDashboardRuntime({
     source: new FakeStationSource(snapshot),
     service: new FakeTuiObserverService(snapshot),
     initialSnapshot: snapshot,
+    ...(initialState === undefined ? {} : { initialState }),
     persistentPopup: true,
     onDismiss: async () => {},
   });
 }
 
 function focusFirstSession(store: ReturnType<typeof newStore>): string {
-  store.getState().handleKey({ input: "", downArrow: true });
-  store.getState().handleKey({ input: "", downArrow: true });
-  const focus = store.getState().dashboardFocus;
+  store.actions.handleKey({ input: "", downArrow: true });
+  store.actions.handleKey({ input: "", downArrow: true });
+  const focus = store.state.getState().dashboardFocus;
   if (focus?.kind !== "session") {
     throw new Error("Expected a focused session row.");
   }
@@ -51,8 +59,8 @@ describe("resolveKeyFocusedRowAgentTarget", () => {
 
   it("maps focused project shell and Quick Session Enter to native router outcomes", () => {
     const shellStore = newStore();
-    shellStore.getState().handleKey({ input: "", downArrow: true });
-    shellStore.getState().handleKey({ input: "", rightArrow: true });
+    shellStore.actions.handleKey({ input: "", downArrow: true });
+    shellStore.actions.handleKey({ input: "", rightArrow: true });
     expect(
       createStationOverlayLayer(shellStore).catchAll?.("\r", resolveInitialState()),
     ).toEqual({
@@ -63,9 +71,9 @@ describe("resolveKeyFocusedRowAgentTarget", () => {
     });
 
     const quickStore = newStore();
-    quickStore.getState().handleKey({ input: "", downArrow: true });
-    quickStore.getState().handleKey({ input: "", rightArrow: true });
-    quickStore.getState().handleKey({ input: "", rightArrow: true });
+    quickStore.actions.handleKey({ input: "", downArrow: true });
+    quickStore.actions.handleKey({ input: "", rightArrow: true });
+    quickStore.actions.handleKey({ input: "", rightArrow: true });
     const quick = createStationOverlayLayer(quickStore).catchAll?.(
       "\r",
       resolveInitialState(),
@@ -78,8 +86,7 @@ describe("resolveKeyFocusedRowAgentTarget", () => {
   });
 
   it("maps focused empty-project Enter to the native Quick Session executor", () => {
-    const store = newStore();
-    store.setState({
+    const store = newStore(manyProjectsSnapshot(), {
       dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
     });
 
@@ -88,7 +95,7 @@ describe("resolveKeyFocusedRowAgentTarget", () => {
       projectId: "empty-project",
       harness: "codex",
     });
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "empty-project",
       control: "quickSession",
@@ -96,8 +103,7 @@ describe("resolveKeyFocusedRowAgentTarget", () => {
   });
 
   it("resolves empty-project Quick Session availability at the native consumer", () => {
-    const available = newStore();
-    available.setState({
+    const available = newStore(manyProjectsSnapshot(), {
       dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
     });
 
@@ -105,51 +111,49 @@ describe("resolveKeyFocusedRowAgentTarget", () => {
       kind: "submit",
       projectId: "empty-project",
     });
-    expect(available.getState().dashboardFocus).toEqual({
+    expect(available.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "empty-project",
       control: "quickSession",
     });
 
     const snapshot = manyProjectsSnapshot();
-    const blocked = newStore({
-      ...snapshot,
-      projects: snapshot.projects.map((project) =>
-        project.id === "empty-project"
-          ? { ...project, health: { ...project.health, status: "unavailable" as const } }
-          : project,
-      ),
-    });
-    blocked.setState({
-      dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
-    });
+    const blocked = newStore(
+      {
+        ...snapshot,
+        projects: snapshot.projects.map((project) =>
+          project.id === "empty-project"
+            ? { ...project, health: { ...project.health, status: "unavailable" as const } }
+            : project,
+        ),
+      },
+      { dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" } },
+    );
 
     expect(resolveQuickSessionSubmit(blocked, "empty-project")).toEqual({ kind: "none" });
-    expect(blocked.getState().dashboardFocus).toEqual({
+    expect(blocked.state.getState().dashboardFocus).toEqual({
       kind: "emptyProjectAction",
       projectId: "empty-project",
     });
-    expect(blocked.getState().toasts.at(-1)?.toast.kind).toBe("error");
+    expect(blocked.state.getState().toasts.at(-1)?.toast.kind).toBe("error");
   });
 
   it("is inert while an operation is pending on the focused row", () => {
-    const store = newStore();
-    const focusedSessionId = focusFirstSession(store);
-    const worktreeId = store
-      .getState()
-      .snapshot?.sessions.find((session) => session.id === focusedSessionId)?.worktreeId;
-    if (worktreeId === undefined) {
-      throw new Error("Expected the focused session's worktree.");
+    const snapshot = manyProjectsSnapshot();
+    const session = snapshot.sessions[0];
+    if (session === undefined) {
+      throw new Error("Expected a session fixture.");
     }
-    store.setState({
+    const store = newStore(snapshot, {
+      dashboardFocus: { kind: "session", sessionId: session.id },
       localRows: {
-        ...store.getState().localRows,
+        ...createEmptyTuiLocalRows(),
         pendingStart: [
           {
-            localId: `start:${worktreeId}`,
+            localId: `start:${session.worktreeId}`,
             operation: "startAgent",
-            projectId: "station",
-            worktreeId,
+            projectId: session.projectId,
+            worktreeId: session.worktreeId,
             branch: "station-overlay",
             createdAt: "2026-07-02T12:00:00.000Z",
           },

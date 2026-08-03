@@ -50,7 +50,13 @@ export type TuiViewState = {
   selection: TuiSelectionState;
 };
 
-export type TuiState = TuiViewState & {
+/**
+ * Data-only state owned by the dashboard runtime.
+ *
+ * External mutation is available only through {@link DashboardActions}; action
+ * and lifecycle methods are never stored in dashboard snapshots.
+ */
+export type DashboardState = TuiViewState & {
   snapshot?: StationSnapshot;
   loading: boolean;
   screen: TuiScreen;
@@ -66,6 +72,9 @@ export type TuiState = TuiViewState & {
   /** False when no config.toml path exists to write widget edits back to. */
   widgetsPersisted: boolean;
 };
+
+/** Temporary data-only alias retained while pure reducer naming is migrated. */
+export type TuiState = DashboardState;
 
 export type TuiToastEntry = {
   id: string;

@@ -30,9 +30,15 @@ the dashboard is open so the hidden native layout cannot change.
 ## Input
 
 Runtime keyboard dispatch goes through the shared dashboard-core transition
-machine. Workflow mouse targets call `TuiStore.dispatch(...)` with renderer-neutral
-Dashboard actions; direct commands and focused Enter decode to the same core intents,
-and the store applies every resulting transition and effect through one executor.
+machine. Workflow mouse targets call `DashboardActions.dispatch(...)` with
+renderer-neutral Dashboard actions; direct commands and focused Enter decode to the
+same core intents, and the runtime applies every resulting transition and effect
+through one executor.
+`DashboardRuntime.state` is read-only (`getState`, `getInitialState`, and
+`subscribe`), while `DashboardRuntime.actions` is the only external mutation
+authority. Presentation receives the state source; input receives state plus actions;
+`createStation` alone owns `start` and repeat-safe `dispose`.
+
 Station keeps only sequence translation and managed-pane overrides needed for row
 activation, new sessions, and forks. Native pointer Create, direct `C`, and focused
 Create Enter converge after semantic resolution and shared validation in one native
@@ -65,8 +71,8 @@ Live mode dispatches through the single shared `@station/client` service: one
 (`sources/observerStationClient.ts`). Its service facet routes reconcile and
 operation snapshot loads through the client runtime (dashboard-core's
 `bridgeOperationService`) so the runtime's reducer base stays converged with
-the store and the connected transition plus recovery toast arrive via the
-state subscription — the seam from PR #78 review finding #3. Dispatch and
+dashboard state and the connected transition plus recovery toast arrive via the
+read-only state subscription — the seam from PR #78 review finding #3. Dispatch and
 command-completion waits pass through unchanged; row-activate focus,
 jump-to-session on click, and `Z` refresh are live
 (`store/stationCommandDispatch.test.ts`).

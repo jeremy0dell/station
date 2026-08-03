@@ -35,7 +35,7 @@ const LINKED_STATION_VIEW_PACKAGES = new Set([
 const TEST_ONLY_DIRECTORIES = new Set(["fixtures", "test", "testing", "__fixtures__", "__tests__"]);
 const DASHBOARD_CORE_ROOT_IMPORT = "@station/dashboard-core";
 const DASHBOARD_CORE_INTERNAL_PATHS = [
-  "@station/dashboard-core/state/store",
+  "@station/dashboard-core/state/runtime",
   "@station/dashboard-core/state/observerBridge",
   "@station/dashboard-core/state/operations",
 ] as const;
@@ -306,8 +306,6 @@ function dashboardRuntimeInternalExports(): ReadonlySet<string> {
   );
   // TuiFocusTarget is a normalized renderer-control contract, not an operation implementation.
   names.delete("TuiFocusTarget");
-  names.add("createTuiStore");
-  names.add("TuiStoreOptions");
   return names;
 }
 
@@ -437,67 +435,11 @@ const PRODUCTION_MODULES = sourceModules(STATION_SOURCE_ROOT, isProductionSource
 const DASHBOARD_RUNTIME_INTERNAL_EXPORTS = dashboardRuntimeInternalExports();
 
 // #168 descendants may delete entries from these inventories; additions require architecture review.
-const RAW_DASHBOARD_STORE_MODULES = [
-  "app/createStation.ts",
-  "app/types.ts",
-  "contextMenu/ContextMenuRoot.tsx",
-  "dashboardRenderer/FullscreenDashboard.tsx",
-  "dashboardRenderer/dashboardEffects.ts",
-  "dashboardRenderer/dashboardMouse.ts",
-  "dashboardRenderer/inputBridge.ts",
-  "input/keymap/stationBindings.ts",
-  "input/runtime/managedLaunch.ts",
-  "input/runtime/managedLaunchAttempt.ts",
-  "input/runtime/paneEffects.ts",
-  "input/runtime/stationRows.ts",
-  "input/stationInput.ts",
-  "state/reconcilers/overlayRowFocus.ts",
-  "station/StationOverlay.tsx",
-  "station/input/stationActions.ts",
-  "station/input/stationMouse.ts",
-  "station/input/stationOverlayLayer.ts",
-  "station/store/stationViewStore.ts",
-  "station/view/DashboardFooterView.tsx",
-  "station/view/DashboardFrameTitle.tsx",
-  "station/view/DashboardRoot.tsx",
-  "stationButton/StationButton.tsx",
-  "stationButton/useMergeCelebration.ts",
-  "terminal/PaneGrid.tsx",
-] as const;
-const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {
-  "app/createStation.ts": 3,
-  "app/types.ts": 2,
-  "contextMenu/ContextMenuRoot.tsx": 1,
-  "dashboardRenderer/FullscreenDashboard.tsx": 1,
-  "dashboardRenderer/dashboardEffects.ts": 4,
-  "dashboardRenderer/dashboardMouse.ts": 11,
-  "dashboardRenderer/inputBridge.ts": 1,
-  "input/keymap/stationBindings.ts": 3,
-  "input/runtime/managedLaunch.ts": 1,
-  "input/runtime/managedLaunchAttempt.ts": 1,
-  "input/runtime/paneEffects.ts": 1,
-  "input/runtime/stationRows.ts": 8,
-  "input/stationInput.ts": 2,
-  "state/reconcilers/overlayRowFocus.ts": 1,
-  "station/StationOverlay.tsx": 1,
-  "station/input/stationActions.ts": 17,
-  "station/input/stationMouse.ts": 5,
-  "station/input/stationOverlayLayer.ts": 1,
-  "station/store/stationViewStore.ts": 1,
-  "station/view/DashboardFooterView.tsx": 1,
-  "station/view/DashboardFrameTitle.tsx": 1,
-  "station/view/DashboardRoot.tsx": 1,
-  "stationButton/StationButton.tsx": 2,
-  "stationButton/useMergeCelebration.ts": 1,
-  "terminal/PaneGrid.tsx": 2,
-};
+const RAW_DASHBOARD_STORE_MODULES = [] as const;
+const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {};
 const DIRECT_DASHBOARD_MUTATION_INVENTORY: DirectDashboardMutationInventory = {};
 const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [
-  "config/tuiConfig.ts: import createTuiStore from @station/dashboard-core",
-  "dashboardRenderer/main.tsx: import createTuiStore from @station/dashboard-core",
-  "dashboardRenderer/popupRuntime.ts: import TuiStoreOptions from @station/dashboard-core",
   "sources/observerStationClient.ts: import bridgeOperationService from @station/dashboard-core",
-  "station/store/stationViewStore.ts: import createTuiStore from @station/dashboard-core",
 ] as const;
 
 describe("station production boundaries", () => {
@@ -513,7 +455,7 @@ describe("station production boundaries", () => {
     ];
     const expectedExcluded = [
       "station/importBoundaries.test.ts",
-      "station/test/support/makeStationTestStore.ts",
+      "station/test/support/makeStationTestRuntime.ts",
       "sources/fixtures/mockObserverSnapshot.ts",
       "terminal/testing/frameProbe.ts",
     ];
@@ -541,7 +483,7 @@ describe("station production boundaries", () => {
     expect(failures).toEqual([]);
   });
 
-  it("keeps Zustand React access read-only and freezes raw store imports", () => {
+  it("keeps Zustand React access read-only and rejects raw store imports", () => {
     const rawImports: string[] = [];
     const invalidReactImports: string[] = [];
     for (const module of PRODUCTION_MODULES) {
@@ -567,7 +509,7 @@ describe("station production boundaries", () => {
     expect(rawImports.sort()).toEqual(expectedRawImports);
   });
 
-  it("freezes TuiStore imports and mutable StoreApi references", () => {
+  it("rejects TuiStore imports and mutable StoreApi references", () => {
     const tuiStoreImports: string[] = [];
     const actualReferences: Record<string, number> = {};
     const unexpectedReferences: string[] = [];

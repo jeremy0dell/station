@@ -1,6 +1,6 @@
 import {
+  createDashboardRuntime,
   createInitialTuiState,
-  createTuiStore,
   type DashboardSearchExperience,
   handleTuiKey,
   legacySearchExperience,
@@ -101,15 +101,15 @@ describe("dashboard search experience selection", () => {
         };
       },
     };
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       dashboardSearchExperience: selectedExperience,
     });
 
-    store.getState().handleKey({ input: "/" });
-    store.getState().handleKey({ input: "owned" });
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "owned" });
 
-    expect(store.getState().screen).toEqual({ name: "search", value: "selected:owned" });
+    expect(store.state.getState().screen).toEqual({ name: "search", value: "selected:owned" });
   });
 });

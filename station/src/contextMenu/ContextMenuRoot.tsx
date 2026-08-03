@@ -1,7 +1,6 @@
 import { useTerminalDimensions } from "@opentui/react";
 import { useSyncExternalStore } from "react";
-import type { StoreApi } from "zustand/vanilla";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardState, DashboardStateSource } from "@station/dashboard-core";
 import { buildContextMenuItems } from "./items.js";
 import { measureContextMenu, placeContextMenu } from "./placement.js";
 import { ContextMenuLayer } from "./ContextMenuLayer.js";
@@ -13,27 +12,26 @@ import type { Automation } from "../config/stationConfig.js";
 
 export type ContextMenuRootProps = {
   store: StationStore;
-  stationViewStore: StoreApi<TuiStore>;
+  dashboardState: DashboardStateSource;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   automations: readonly Automation[];
 };
 
 export function ContextMenuRoot({
   store,
-  stationViewStore,
+  dashboardState,
   dispatchMouse,
   automations,
 }: ContextMenuRootProps) {
-  void stationViewStore;
   const state = useSyncExternalStore<StationState>(
     store.subscribe,
     store.getState,
     store.getState,
   );
-  const stationState = useSyncExternalStore<TuiStore>(
-    stationViewStore.subscribe,
-    stationViewStore.getState,
-    stationViewStore.getState,
+  const stationState = useSyncExternalStore<DashboardState>(
+    dashboardState.subscribe,
+    dashboardState.getState,
+    dashboardState.getState,
   );
   const menu = state.input.contextMenu;
   const { width, height } = useTerminalDimensions();

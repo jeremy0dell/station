@@ -1,43 +1,46 @@
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import type { StoreApi } from "zustand/vanilla";
 import {
-  createTuiStore,
+  createDashboardRuntime,
   legacySearchExperience,
+  type DashboardRuntime,
+  type DashboardRuntimeOptions,
   type DashboardSearchExperience,
   type TuiFolderService,
-  type TuiStore,
 } from "@station/dashboard-core";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import { FakeStationSource } from "./fakeStationSource.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";
 
-export type MakeStationTestStoreOptions = {
+export type MakeStationTestRuntimeOptions = {
   /** Source snapshot; `null` exercises the no-snapshot states. Default: manyProjectsSnapshot(). */
   snapshot?: StationSnapshot | null | undefined;
   connection?: StationClientConnectionState | undefined;
   /** Seed the store synchronously instead of waiting for the source mirror. Default: true. */
   seedInitialSnapshot?: boolean | undefined;
   terminalRows?: number | undefined;
+  initialState?: DashboardRuntimeOptions["initialState"];
   folderService?: TuiFolderService | undefined;
   dashboardSearchExperience?: DashboardSearchExperience | undefined;
 };
 
-export type StationTestStore = {
-  store: StoreApi<TuiStore>;
+export type StationTestRuntime = {
+  runtime: DashboardRuntime;
   source: FakeStationSource;
   service: FakeTuiObserverService;
 };
 
 /**
- * STATION view store builder: production wiring (source + service + persistent popup).
+ * Dashboard runtime builder using production source, service, and popup wiring.
  */
-export function makeStationTestStore(options: MakeStationTestStoreOptions = {}): StationTestStore {
+export function makeStationTestRuntime(
+  options: MakeStationTestRuntimeOptions = {},
+): StationTestRuntime {
   const snapshot =
     options.snapshot === null ? undefined : (options.snapshot ?? manyProjectsSnapshot());
   const source = new FakeStationSource(snapshot, options.connection);
   const service = new FakeTuiObserverService(snapshot ?? manyProjectsSnapshot());
-  const store = createTuiStore({
+  const runtime = createDashboardRuntime({
     source,
     service,
     dashboardSearchExperience:
@@ -47,10 +50,11 @@ export function makeStationTestStore(options: MakeStationTestStoreOptions = {}):
       : { initialSnapshot: snapshot }),
     persistentPopup: true,
     onDismiss: async () => {},
-    ...(options.terminalRows === undefined
-      ? {}
-      : { initialState: { terminalRows: options.terminalRows } }),
+    initialState: {
+      ...(options.initialState ?? {}),
+      ...(options.terminalRows === undefined ? {} : { terminalRows: options.terminalRows }),
+    },
     ...(options.folderService === undefined ? {} : { folderService: options.folderService }),
   });
-  return { store, source, service };
+  return { runtime, source, service };
 }

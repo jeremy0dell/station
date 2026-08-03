@@ -29,7 +29,8 @@ function useStoreValue<T>(store: StationStore, selector: (state: StationState) =
 export function StationApp({
   store,
   registry,
-  stationViewStore,
+  dashboardState,
+  dashboardActions,
   dispatchMouse,
   onCopySelection,
   automations,
@@ -44,7 +45,7 @@ export function StationApp({
   const welcomeVisible = useStoreValue(store, selectWelcomeVisible);
   const welcomeCanContinue = useStoreValue(store, selectWelcomeCanContinue);
   // The live session widget set: seeded from config, edited by the panel.
-  const widgets = useStore(stationViewStore, (state) => state.widgets);
+  const widgets = useStore(dashboardState, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets, topRowWidgetDeps);
 
   return (
@@ -63,7 +64,7 @@ export function StationApp({
           <PaneRegistryProvider registry={registry}>
             <PaneGrid
               store={store}
-              stationViewStore={stationViewStore}
+              dashboardState={dashboardState}
               dispatchMouse={dispatchMouse}
               onCopySelection={onCopySelection}
             />
@@ -74,7 +75,8 @@ export function StationApp({
           centered popup; pane clicks are guarded while any overlay is active. */}
       {overlayVisible ? (
         <StationOverlay
-          store={stationViewStore}
+          state={dashboardState}
+          actions={dashboardActions}
           topRowWidgets={topRowWidgets}
           dispatchMouse={dispatchMouse}
           onCopyNotice={onCopySelection}
@@ -84,7 +86,7 @@ export function StationApp({
       ) : null}
       <ContextMenuRoot
         store={store}
-        stationViewStore={stationViewStore}
+        dashboardState={dashboardState}
         dispatchMouse={dispatchMouse}
         automations={automations}
       />
@@ -93,7 +95,7 @@ export function StationApp({
           mouse events, so clicks elsewhere reach the panes underneath. */}
       <StationButton
         store={store}
-        stationViewStore={stationViewStore}
+        dashboardState={dashboardState}
         dispatchMouse={dispatchMouse}
         island={island}
       />

@@ -20,7 +20,7 @@ import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
-import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 import {
@@ -62,7 +62,7 @@ const SNAPSHOT_SCENARIOS: ReadonlyArray<{ name: string; snapshot: () => StationS
 ];
 
 type RenderedDashboard = Awaited<ReturnType<typeof testRender>> & {
-  store: ReturnType<typeof makeStationTestStore>["store"];
+  store: ReturnType<typeof makeStationTestRuntime>["runtime"];
 };
 
 const WORKTREE_ERROR_MESSAGE =
@@ -96,7 +96,7 @@ describe("dashboard golden frames", () => {
     theme?: StationTheme;
     dashboardSearchExperience?: DashboardSearchExperience;
   }): Promise<RenderedDashboard> {
-    const { store } = makeStationTestStore({
+    const { runtime: store } = makeStationTestRuntime({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
@@ -104,10 +104,11 @@ describe("dashboard golden frames", () => {
         ? {}
         : { dashboardSearchExperience: input.dashboardSearchExperience }),
     });
-    store.getState().start();
+    store.start();
     const dashboard = (
       <DashboardRoot
-        store={store}
+        state={store.state}
+        actions={store.actions}
         columns={input.width}
         rows={input.height}
         onCopyNotice={() => {}}
@@ -136,7 +137,7 @@ describe("dashboard golden frames", () => {
     const toast = input.toast;
     if (toast !== undefined) {
       await act(async () => {
-        store.getState().pushToast(toast);
+        store.actions.pushToast(toast);
         await Promise.resolve();
       });
       await setup.flush();
@@ -161,8 +162,8 @@ describe("dashboard golden frames", () => {
       dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
-      setup.store.getState().handleKey({ input: "/" });
-      setup.store.getState().handleKey({ input: "cli" });
+      setup.store.actions.handleKey({ input: "/" });
+      setup.store.actions.handleKey({ input: "cli" });
       await Promise.resolve();
     });
     await setup.flush();
@@ -207,8 +208,8 @@ describe("dashboard golden frames", () => {
       dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
-      setup.store.getState().handleKey({ input: "/" });
-      setup.store.getState().handleKey({ input: "no-such-session" });
+      setup.store.actions.handleKey({ input: "/" });
+      setup.store.actions.handleKey({ input: "no-such-session" });
       await Promise.resolve();
     });
     await setup.flush();
@@ -225,9 +226,9 @@ describe("dashboard golden frames", () => {
       dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
-      setup.store.getState().handleKey({ input: "/" });
-      setup.store.getState().handleKey({ input: "working" });
-      setup.store.getState().handleKey({ input: "\r", return: true });
+      setup.store.actions.handleKey({ input: "/" });
+      setup.store.actions.handleKey({ input: "working" });
+      setup.store.actions.handleKey({ input: "\r", return: true });
       await Promise.resolve();
     });
     await setup.flush();
@@ -247,8 +248,8 @@ describe("dashboard golden frames", () => {
       dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
-      setup.store.getState().handleKey({ input: "/" });
-      setup.store.getState().handleKey({ input: "a-very-long-persistent-filter-draft" });
+      setup.store.actions.handleKey({ input: "/" });
+      setup.store.actions.handleKey({ input: "a-very-long-persistent-filter-draft" });
       await Promise.resolve();
     });
     await setup.flush();
@@ -272,15 +273,15 @@ describe("dashboard golden frames", () => {
     const width = 99;
     const height = 25;
     const divider = "─".repeat(width - 1);
-    const { store, source } = makeStationTestStore({
+    const { runtime: store, source } = makeStationTestRuntime({
       snapshot: null,
       connection: { state: "loading", since: Date.now() },
       seedInitialSnapshot: false,
     });
-    store.getState().start();
+    store.start();
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <DashboardRoot store={store} columns={width} rows={height} onCopyNotice={() => {}} />
+        <DashboardRoot state={store.state} actions={store.actions} columns={width} rows={height} onCopyNotice={() => {}} />
       </StationThemeProvider>,
       { width, height },
     );
@@ -591,8 +592,9 @@ describe("dashboard golden frames", () => {
         dispatchMouse: (target) => targets.push(target),
       });
       await act(async () => {
-        setup.store.setState({
-          dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+        setup.store.actions.dispatch({
+          type: "dashboard.emptyProject.activate",
+          projectId: "empty-project",
         });
       });
       await setup.flush();
@@ -648,14 +650,14 @@ describe("dashboard golden frames", () => {
   });
 
   it("renders the focus cursor and jumps it to the next session needing you", async () => {
-    const { store } = makeStationTestStore({
+    const { runtime: store } = makeStationTestRuntime({
       snapshot: attentionAndFailuresSnapshot(),
       seedInitialSnapshot: false,
     });
-    store.getState().start();
+    store.start();
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
-        <DashboardRoot store={store} columns={80} rows={24} onCopyNotice={() => {}} />
+        <DashboardRoot state={store.state} actions={store.actions} columns={80} rows={24} onCopyNotice={() => {}} />
       </StationThemeProvider>,
       { width: 80, height: 24 },
     );
@@ -665,11 +667,11 @@ describe("dashboard golden frames", () => {
     await setup.renderOnce();
     expect(setup.captureCharFrame()).not.toContain("▏");
 
-    store.getState().handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
     await setup.flush();
     expect(setup.captureCharFrame()).not.toContain("▏");
 
-    store.getState().handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
     await setup.flush();
     let lines = setup.captureCharFrame().split("\n");
     const cursorRow = lines.findIndex((line) => line.startsWith("▏"));
@@ -683,7 +685,7 @@ describe("dashboard golden frames", () => {
     );
 
     // Tab (Ctrl-I) jumps past the working/unknown rows to the stuck one.
-    store.getState().handleKey({ input: "i", ctrl: true });
+    store.actions.handleKey({ input: "i", ctrl: true });
     await setup.flush();
     lines = setup.captureCharFrame().split("\n");
     expect(lines.find((line) => line.startsWith("▏"))).toContain("popup-latency");
@@ -700,10 +702,10 @@ describe("dashboard golden frames", () => {
       const quickLabel = width < 90 ? "[qs]" : "[quick session]";
       const controls = ["primary", "shell", "quickSession", "defaultAgent"] as const;
 
-      setup.store.getState().handleKey({ input: "", downArrow: true });
+      setup.store.actions.handleKey({ input: "", downArrow: true });
       for (let index = 0; index < controls.length; index += 1) {
         if (index > 0) {
-          setup.store.getState().handleKey({ input: "", rightArrow: true });
+          setup.store.actions.handleKey({ input: "", rightArrow: true });
         }
         await setup.flush();
         const lines = setup.captureCharFrame().split("\n");
@@ -791,8 +793,8 @@ describe("dashboard golden frames", () => {
       height: 24,
       snapshot: manyProjectsSnapshot(),
     });
-    setup.store.getState().handleKey({ input: "", downArrow: true });
-    setup.store.getState().handleKey({ input: "", rightArrow: true });
+    setup.store.actions.handleKey({ input: "", downArrow: true });
+    setup.store.actions.handleKey({ input: "", rightArrow: true });
     await setup.flush();
     const lines = setup.captureCharFrame().split("\n");
     const row = lines.findIndex((line) => line.includes("▼ station"));

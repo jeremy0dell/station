@@ -19,9 +19,9 @@ describe("createPopupRuntime", () => {
       transientChannel,
     );
 
-    expect(fullscreen.storeOptions).toEqual({});
+    expect(fullscreen.runtimeOptions).toEqual({});
     expect(fullscreenChannel.subscribeCount).toBe(0);
-    expect(transient.storeOptions).toEqual({
+    expect(transient.runtimeOptions).toEqual({
       exitOnFocusSuccess: true,
       focusOrigin: { provider: "fixture-terminal", clientId: "client-startup" },
     });
@@ -35,7 +35,7 @@ describe("createPopupRuntime", () => {
       missingControlLossCount += 1;
     });
     expect(missingControlLossCount).toBe(1);
-    expect(missing.storeOptions).toMatchObject({
+    expect(missing.runtimeOptions).toMatchObject({
       exitOnFocusSuccess: false,
       persistentPopup: true,
     });
@@ -79,18 +79,18 @@ describe("createPopupRuntime", () => {
       controlLossCount += 1;
     });
 
-    expect(runtime.storeOptions).toMatchObject({
+    expect(runtime.runtimeOptions).toMatchObject({
       exitOnFocusSuccess: false,
       persistentPopup: true,
     });
 
-    const dismiss = runtime.storeOptions.onDismiss?.();
+    const dismiss = runtime.runtimeOptions.onDismiss?.();
     const dismissRequest = requiredRequest(channel.requests.at(-1));
     expect(dismissRequest.type).toBe("dismiss");
     channel.respond(dismissedResponse(dismissRequest.requestId));
     await dismiss;
 
-    const targetPromise = runtime.storeOptions.resolveFocusTarget?.();
+    const targetPromise = runtime.runtimeOptions.resolveFocusTarget?.();
     const focusRequest = requiredRequest(channel.requests.at(-1));
     expect(focusRequest.type).toBe("resolve-focus-target");
     channel.respond({
@@ -119,7 +119,7 @@ describe("createPopupRuntime", () => {
   it("resolves a separately leased focus target for every request", async () => {
     const channel = new FakeRendererControlChannel();
     const runtime = createPopupRuntime(persistentPopupEnv(), channel);
-    const resolveFocusTarget = runtime.storeOptions.resolveFocusTarget;
+    const resolveFocusTarget = runtime.runtimeOptions.resolveFocusTarget;
 
     const first = resolveFocusTarget?.();
     const firstRequest = requiredRequest(channel.requests.at(-1));
@@ -151,8 +151,8 @@ describe("createPopupRuntime", () => {
     const channel = new FakeRendererControlChannel();
     const runtime = createPopupRuntime(persistentPopupEnv(), channel);
 
-    const first = runtime.storeOptions.onDismiss?.();
-    const second = runtime.storeOptions.onDismiss?.();
+    const first = runtime.runtimeOptions.onDismiss?.();
+    const second = runtime.runtimeOptions.onDismiss?.();
 
     expect(channel.requests).toHaveLength(1);
     channel.respond(dismissedResponse(requiredRequest(channel.requests[0]).requestId));
@@ -166,7 +166,7 @@ describe("createPopupRuntime", () => {
       controlLossCount += 1;
     });
 
-    const dismiss = runtime.storeOptions.onDismiss?.();
+    const dismiss = runtime.runtimeOptions.onDismiss?.();
     const request = requiredRequest(channel.requests.at(-1));
     channel.respond({
       protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
@@ -209,7 +209,7 @@ describe("createPopupRuntime", () => {
       const runtime = createPopupRuntime(persistentPopupEnv(), channel, () => {
         controlLossCount += 1;
       });
-      const dismiss = runtime.storeOptions.onDismiss?.();
+      const dismiss = runtime.runtimeOptions.onDismiss?.();
       const request = requiredRequest(channel.requests.at(-1));
 
       channel.respond(responseFor(request));
@@ -231,7 +231,7 @@ describe("createPopupRuntime", () => {
       },
     );
     disconnectedChannel.disconnect();
-    const afterDisconnect = disconnected.storeOptions.resolveFocusTarget?.();
+    const afterDisconnect = disconnected.runtimeOptions.resolveFocusTarget?.();
 
     await expect(afterDisconnect).rejects.toMatchObject({
       code: "TUI_RENDERER_CONTROL_DISCONNECTED",
@@ -244,7 +244,7 @@ describe("createPopupRuntime", () => {
     const disposed = createPopupRuntime(persistentPopupEnv(), disposedChannel, () => {
       disposedControlLossCount += 1;
     });
-    const pendingDispose = disposed.storeOptions.onDismiss?.();
+    const pendingDispose = disposed.runtimeOptions.onDismiss?.();
 
     disposed.dispose();
 

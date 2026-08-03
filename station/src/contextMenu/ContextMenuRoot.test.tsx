@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
-import type { StoreApi } from "zustand/vanilla";
-import { createInitialTuiState, type TuiStore } from "@station/dashboard-core";
+import {
+  createInitialTuiState,
+  type DashboardStateSource,
+} from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { createStationStore } from "../state/store.js";
@@ -66,7 +68,7 @@ async function renderRoot(
     <StationThemeProvider theme={nativeStationTheme}>
       <ContextMenuRoot
         store={store}
-        stationViewStore={emptyStationStore()}
+        dashboardState={emptyDashboardState()}
         dispatchMouse={dispatchMouse}
         automations={[]}
       />
@@ -77,29 +79,11 @@ async function renderRoot(
   return setup;
 }
 
-function emptyStationStore(): StoreApi<TuiStore> {
-  const state = {
-    ...createInitialTuiState(),
-    start: () => () => {},
-    handleKey: () => ({ dismissPopup: false }),
-    dispatch: () => ({ dismissPopup: false }),
-    createQuickSession: () => {},
-    setTerminalRows: () => {},
-    focusDashboardSession: () => {},
-    clearDashboardFocus: () => {},
-    pushToast: () => {},
-    dismissToasts: () => {},
-    expireToasts: () => {},
-    refreshActiveToastExpiry: () => {},
-    addPendingCreateSession: () => {},
-    failPendingCreateSession: () => {},
-    removePendingCreateSession: () => {},
-  } satisfies TuiStore;
+function emptyDashboardState(): DashboardStateSource {
+  const state = createInitialTuiState();
   return {
     getState: () => state,
     getInitialState: () => state,
     subscribe: () => () => {},
-    setState: () => {},
-    destroy: () => {},
-  } as StoreApi<TuiStore>;
+  };
 }

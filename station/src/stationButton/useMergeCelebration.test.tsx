@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
-import { createTuiStore, type TuiStore } from "@station/dashboard-core";
+import { createDashboardRuntime, type DashboardRuntime } from "@station/dashboard-core";
 import type { StationSnapshot } from "@station/contracts";
-import type { StoreApi } from "zustand/vanilla";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
@@ -16,10 +15,10 @@ function CelebrationProbe({
   store,
   ttlMs,
 }: {
-  store: StoreApi<TuiStore>;
+  store: DashboardRuntime;
   ttlMs: number;
 }) {
-  const celebration = useMergeCelebration(store, ttlMs);
+  const celebration = useMergeCelebration(store.state, ttlMs);
   return (
     <text>
       {celebration === undefined
@@ -46,7 +45,7 @@ describe("useMergeCelebration", () => {
   it("celebrates a PR flipping to merged, then quiets after the TTL", async () => {
     const snapshot = manyProjectsSnapshot();
     const source = new FakeStationSource(snapshot);
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       source,
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -54,7 +53,7 @@ describe("useMergeCelebration", () => {
       onDismiss: async () => {},
     });
     // Snapshots flow from the source only once the store is started.
-    const detach = store.getState().start();
+    store.start();
     const setup = await testRender(<CelebrationProbe store={store} ttlMs={60} />, SURFACE);
     try {
       await setup.flush();
@@ -75,7 +74,7 @@ describe("useMergeCelebration", () => {
       await setup.flush();
       expect(setup.captureCharFrame()).toContain("quiet");
     } finally {
-      detach();
+      store.dispose();
       setup.renderer.destroy();
     }
   });

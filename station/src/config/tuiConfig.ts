@@ -11,13 +11,12 @@ import {
 import {
   legacySearchExperience,
   persistentFilterExperience,
+  type DashboardActions,
   type DashboardSearchExperience,
-  type createTuiStore,
+  type DashboardStateSource,
 } from "@station/dashboard-core";
 import { FeatureFlagDefinitions } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
-
-type TuiStoreApi = ReturnType<typeof createTuiStore>;
 
 export type StationTuiComposition = {
   /** Resolved once at renderer composition; downstream dashboard code never reads feature flags. */
@@ -99,11 +98,14 @@ const WIDGET_LOCK_OWNER_PREFIX = "owner-";
 /**
  * Persist each local widget transition against config.toml as the authority.
  * A cross-process lock serializes reload/rebase/write, so stale native and popup
- * stores preserve independent edits instead of replacing one another's arrays.
- * `flush()` preserves observation; `dispose()` detaches and awaits durability.
+ * dashboard sessions preserve independent edits instead of replacing one
+ * another's arrays. The adapter receives only read-only state and the notice
+ * capability required for failures. `flush()` preserves observation;
+ * `dispose()` detaches and awaits durability.
  */
 export function startWidgetConfigWrites(
-  stationViewStore: TuiStoreApi,
+  state: DashboardStateSource,
+  pushToast: DashboardActions["pushToast"],
   configPath: string,
 ): WidgetConfigWrites {
   let writes = Promise.resolve();
@@ -115,18 +117,18 @@ export function startWidgetConfigWrites(
       code: "STATION_WIDGET_CONFIG_SAVE_FAILED",
       message: "Could not save widgets to config.toml.",
     });
-    stationViewStore.getState().pushToast({
+    pushToast({
       kind: "error",
       message: "Could not save widgets to config.toml.",
       hint: error.message,
     });
   };
 
-  const detach = stationViewStore.subscribe((state, previous) => {
-    if (state.widgets === previous.widgets) {
+  const detach = state.subscribe((current, previous) => {
+    if (current.widgets === previous.widgets) {
       return;
     }
-    const change = { before: previous.widgets, after: state.widgets };
+    const change = { before: previous.widgets, after: current.widgets };
     writes = writes
       .then(() => persistWidgetChange(configPath, change))
       .catch(reportWriteFailure);

@@ -117,7 +117,7 @@ function moveContextMenuSelection(delta: -1 | 1, effects: StationInputEffects): 
   const items = buildContextMenuItems(
     menu.target,
     state,
-    effects.stationViewStore?.getState(),
+    effects.dashboardRuntime?.state.getState(),
     effects.automations,
   );
   if (items.length === 0) {
@@ -134,11 +134,11 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
   if (menu === null) {
     return;
   }
-  const stationViewStore = effects.stationViewStore;
+  const dashboardRuntime = effects.dashboardRuntime;
   const items = buildContextMenuItems(
     menu.target,
     state,
-    stationViewStore?.getState(),
+    dashboardRuntime?.state.getState(),
     effects.automations,
   );
   const item = items[itemIndex ?? menu.activeIndex];
@@ -160,8 +160,8 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
       effects.closePane(action.paneId);
       return;
     case "renameSession":
-      if (stationViewStore !== undefined) {
-        stationViewStore.getState().dispatch({
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({
           type: "renameSession.openEdit",
           rowId: action.rowId,
           returnTo: "dashboard",
@@ -170,29 +170,23 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
       }
       return;
     case "removeWorktree":
-      if (stationViewStore !== undefined) {
-        stationViewStore
-          .getState()
-          .dispatch({ type: "removeWorktree.openConfirm", rowId: action.rowId });
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({ type: "removeWorktree.openConfirm", rowId: action.rowId });
       }
       return;
     case "setProjectDefaultAgent":
-      if (stationViewStore !== undefined) {
-        stationViewStore
-          .getState()
-          .dispatch({ type: "projectDefaultAgent.open", projectId: action.projectId });
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({ type: "projectDefaultAgent.open", projectId: action.projectId });
       }
       return;
     case "openProjectSettings":
-      if (stationViewStore !== undefined) {
-        stationViewStore
-          .getState()
-          .dispatch({ type: "projectSettings.open", projectId: action.projectId });
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({ type: "projectSettings.open", projectId: action.projectId });
       }
       return;
     case "forkSession":
-      if (stationViewStore !== undefined) {
-        stationViewStore.getState().dispatch({
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({
           type: "forkSession.openDetails",
           rowId: action.rowId,
           returnTo: "dashboard",

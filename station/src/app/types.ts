@@ -1,10 +1,14 @@
-import type { DashboardSearchExperience, TuiStore } from "@station/dashboard-core";
+import type {
+  DashboardActions,
+  DashboardRuntime,
+  DashboardSearchExperience,
+  DashboardStateSource,
+} from "@station/dashboard-core";
 import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,
   TuiIslandConfig,
 } from "@station/dashboard-core/widgets/types";
-import type { StoreApi } from "zustand/vanilla";
 import type { Automation, ScrollOnOutputMode } from "../config/stationConfig.js";
 import type { ClipboardEffects } from "../copy/clipboard.js";
 import type { StationInputRuntime } from "../input/stationInput.js";
@@ -18,11 +22,12 @@ import type {
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
 
-/** Props for the pure `<StationApp />` view; `createStation` builds these. */
+/** Props for the pure `<StationApp />` view; `createStation` supplies read-only dashboard state and named effects. */
 export type StationAppProps = {
   store: StationStore;
   registry: PtyRegistry;
-  stationViewStore: StoreApi<TuiStore>;
+  dashboardState: DashboardStateSource;
+  dashboardActions: DashboardActions;
   dispatchMouse: StationInputRuntime["dispatchMouse"];
   onCopySelection: (text: string) => void;
   /** Configured automations surfaced in the pane context menu. */
@@ -88,7 +93,8 @@ export type Station = {
   viewProps: StationAppProps;
   store: StationStore;
   registry: PtyRegistry;
-  stationViewStore: StoreApi<TuiStore>;
+  /** Dashboard state, mutation authority, and lifecycle owned by this Station composition. */
+  dashboard: DashboardRuntime;
   stationInput: StationInputRuntime;
   start(): void;
   dispose(): void;

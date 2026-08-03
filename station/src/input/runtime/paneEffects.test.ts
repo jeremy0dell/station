@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { StoreApi } from "zustand/vanilla";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import { createStationStore } from "../../state/store.js";
 import { agentWorktreePaneId, type PaneId } from "../../state/types.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
@@ -49,9 +48,11 @@ describe("split cwd resolution along the anchor chain", () => {
       split: { anchorPaneId: "pane-split-1" as PaneId, direction: "right" },
     });
 
-    const stationViewStore = {
-      getState: () => ({ snapshot: { rows: [{ id: worktreeId, path: worktreeRoot }] } }),
-    } as unknown as StoreApi<TuiStore>;
+    const dashboardRuntime = {
+      state: {
+        getState: () => ({ snapshot: { rows: [{ id: worktreeId, path: worktreeRoot }] } }),
+      },
+    } as unknown as DashboardRuntime;
 
     const ensured: Array<{ id: PaneId; options: { cwd?: string } | undefined }> = [];
     const registry = {
@@ -63,7 +64,7 @@ describe("split cwd resolution along the anchor chain", () => {
 
     const effects = createPaneEffects({
       store,
-      stationViewStore,
+      dashboardRuntime,
       registry,
       resolveAuxShellPlacement: undefined,
       autoCloseOverlay: false,

@@ -6,13 +6,12 @@
 // coordination store, and terminal passthrough is untouched when the
 // overlay is down.
 import { describe, expect, it } from "bun:test";
-import type { StoreApi } from "zustand/vanilla";
 import {
   persistentFilterExperience,
   type DashboardSearchExperience,
-  type TuiStore,
+  type DashboardRuntime,
 } from "@station/dashboard-core";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import type { StationMouseEvent } from "./mouse.js";
@@ -30,10 +29,10 @@ import { createStationInputRuntime } from "./stationInput.js";
 
 function makeViewStore(
   dashboardSearchExperience?: DashboardSearchExperience,
-): StoreApi<TuiStore> {
-  return makeStationTestStore({
+): DashboardRuntime {
+  return makeStationTestRuntime({
     ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
-  }).store;
+  }).runtime;
 }
 
 const LEFT_DOWN: StationMouseEvent = {
@@ -79,11 +78,11 @@ describe("station overlay layer in the keymap stack", () => {
     const keymap = createStationKeymap(view);
 
     expect(routeKey("H", station.getState(), keymap)).toEqual({ kind: "swallowed" });
-    expect(view.getState().screen).toEqual({ name: "help" });
+    expect(view.state.getState().screen).toEqual({ name: "help" });
 
     // Esc in help mode closes the MODE, not the overlay.
     expect(routeKey("\x1b", station.getState(), keymap)).toEqual({ kind: "swallowed" });
-    expect(view.getState().screen).toEqual({ name: "dashboard" });
+    expect(view.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("maps dashboard dismiss intents to overlay-close", () => {
@@ -107,7 +106,7 @@ describe("station overlay layer in the keymap stack", () => {
     const keymap = createStationKeymap(view);
 
     routeKey("/", station.getState(), keymap);
-    expect(view.getState().screen).toMatchObject({ name: "search" });
+    expect(view.state.getState().screen).toMatchObject({ name: "search" });
 
     expect(routeKey(OVERLAY_TOGGLE_LEGACY, station.getState(), keymap)).toEqual({
       kind: "overlay-close",
@@ -118,7 +117,7 @@ describe("station overlay layer in the keymap stack", () => {
       commandId: "station.exit",
     });
     // The search mode never saw the chords as text.
-    expect(view.getState().screen).toMatchObject({ name: "search", value: "" });
+    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "" });
   });
 
   it("intercepts direct C as the native managed New Session launch", () => {
@@ -158,7 +157,7 @@ describe("station overlay layer in the keymap stack", () => {
     routeKey("/", station.getState(), keymap);
     routeKey("a", station.getState(), keymap);
     expect(routeKey("\x1b[15~", station.getState(), keymap)).toEqual({ kind: "swallowed" });
-    expect(view.getState().screen).toMatchObject({ name: "search", value: "a" });
+    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "a" });
   });
 
   it("leaves terminal passthrough untouched while the overlay is down", () => {
@@ -170,7 +169,7 @@ describe("station overlay layer in the keymap stack", () => {
       kind: "terminal-write",
       bytes: "H",
     });
-    expect(view.getState().screen).toEqual({ name: "dashboard" });
+    expect(view.state.getState().screen).toEqual({ name: "dashboard" });
   });
 });
 
@@ -189,7 +188,7 @@ describe("station input through the station runtime", () => {
     const runtime = createStationInputRuntime({
       store: station,
       shutdown: () => {},
-      stationViewStore: view,
+      dashboardRuntime: view,
       writeToTerminal: (_paneId, bytes) => {
         written.push(bytes);
         return true;
@@ -207,7 +206,7 @@ describe("station input through the station runtime", () => {
 
     expect(runtime.handleSequence("/")).toBe(true);
     expect(runtime.handleSequence("p")).toBe(true);
-    expect(view.getState().screen).toMatchObject({ name: "search", value: "p" });
+    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "p" });
 
     expect(runtime.handleSequence("\x1b")).toBe(true); // cancel search
     expect(runtime.handleSequence("\x1b")).toBe(true); // dismiss overlay
@@ -222,22 +221,22 @@ describe("station input through the station runtime", () => {
 
     expect(runtime.handleSequence("/")).toBe(true);
     expect(runtime.handleSequence("working")).toBe(true);
-    expect(view.getState().screen).toMatchObject({
+    expect(view.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       draft: { value: "working", cursor: 7 },
     });
     expect(runtime.handleSequence("\x1b")).toBe(true);
-    expect(view.getState().screen).toEqual({ name: "dashboard" });
-    expect(view.getState().persistentFilter).toBeUndefined();
+    expect(view.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(view.state.getState().persistentFilter).toBeUndefined();
 
     runtime.handleSequence("/");
     runtime.handleSequence("working");
     runtime.handleSequence("\r");
-    expect(view.getState().persistentFilter).toEqual({ query: "working" });
+    expect(view.state.getState().persistentFilter).toEqual({ query: "working" });
 
     expect(runtime.handleSequence("Q")).toBe(true);
     expect(station.getState().input.activeOverlay).toBeNull();
-    expect(view.getState().persistentFilter).toEqual({ query: "working" });
+    expect(view.state.getState().persistentFilter).toEqual({ query: "working" });
 
     const clearing = makeRuntime(true, {
       dashboardSearchExperience: persistentFilterExperience,
@@ -253,7 +252,7 @@ describe("station input through the station runtime", () => {
       ),
     ).toEqual({ kind: "swallowed" });
     expect(clearing.station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
-    expect(clearing.view.getState().persistentFilter).toBeUndefined();
+    expect(clearing.view.state.getState().persistentFilter).toBeUndefined();
     expect(clearing.runtime.handleSequence("\x1b")).toBe(true);
     expect(clearing.station.getState().input.activeOverlay).toBeNull();
   });
@@ -268,14 +267,14 @@ describe("station input through the station runtime", () => {
       bytes: new TextEncoder().encode("sta\x1b[31mtion\x00\nover\rlay\x07"),
       preventDefault: () => {},
     });
-    expect(view.getState().screen).toMatchObject({
+    expect(view.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       draft: { value: "sta[31mtion over lay" },
     });
 
     expect(runtime.handleSequence(OVERLAY_TOGGLE_LEGACY)).toBe(true);
     expect(station.getState().input.activeOverlay).toBeNull();
-    expect(view.getState().screen).toMatchObject({
+    expect(view.state.getState().screen).toMatchObject({
       name: "persistentFilter",
       draft: { value: "sta[31mtion over lay" },
     });
@@ -292,7 +291,7 @@ describe("station input through the station runtime", () => {
     expect(runtime.handleSequence("\x1b[D")).toBe(true);
     expect(runtime.handleSequence("\x15")).toBe(true);
 
-    const screen = view.getState().screen;
+    const screen = view.state.getState().screen;
     if (screen.name !== "newSession" || screen.flow.mode !== "editName") {
       throw new Error("expected new-session edit-name mode");
     }
@@ -313,7 +312,7 @@ describe("station input through the station runtime", () => {
 
     expect(prevented).toBe(true);
     expect(pasted).toEqual([]);
-    expect(view.getState().screen).toMatchObject({ name: "search", value: "station-overlay" });
+    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "station-overlay" });
   });
 
   it("strips control bytes from pastes so they cannot leak into text inputs", () => {
@@ -325,7 +324,7 @@ describe("station input through the station runtime", () => {
       preventDefault: () => {},
     });
 
-    expect(view.getState().screen).toMatchObject({
+    expect(view.state.getState().screen).toMatchObject({
       name: "search",
       value: "sta[31mtion over lay",
     });
@@ -340,7 +339,7 @@ describe("station input through the station runtime", () => {
         LEFT_DOWN,
       ),
     ).toBe(true);
-    expect([...view.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect([...view.state.getState().collapsedProjectIds]).toEqual(["station"]);
     expect(station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
   });
 
@@ -354,7 +353,7 @@ describe("station input through the station runtime", () => {
         LEFT_DOWN,
       ),
     ).toBe(true);
-    expect(view.getState().screen).toMatchObject({
+    expect(view.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "editName" },
     });
@@ -364,12 +363,12 @@ describe("station input through the station runtime", () => {
 
   it("gives bounded-screen barriers first refusal without opening a context menu", () => {
     const { view, station, runtime } = makeRuntime(true);
-    view.getState().handleKey({ input: "H" });
+    view.actions.handleKey({ input: "H" });
 
     for (const target of [{ kind: "screenBackdrop" }, { kind: "sheetBackdrop" }] as const) {
       expect(runtime.dispatchMouse({ kind: "station", target }, RIGHT_DOWN)).toBe(true);
       expect(runtime.dispatchMouse({ kind: "station", target }, WHEEL_UP)).toBe(true);
-      expect(view.getState().screen).toEqual({ name: "help" });
+      expect(view.state.getState().screen).toEqual({ name: "help" });
       expect(station.getState().input.contextMenu).toBeNull();
     }
 
@@ -379,7 +378,7 @@ describe("station input through the station runtime", () => {
         LEFT_DOWN,
       ),
     ).toBe(true);
-    expect(view.getState().screen).toEqual({ name: "dashboard" });
+    expect(view.state.getState().screen).toEqual({ name: "dashboard" });
     expect(station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
   });
 
@@ -419,7 +418,7 @@ describe("station input through the station runtime", () => {
       { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
       LEFT_DOWN,
     );
-    expect([...view.getState().collapsedProjectIds]).toEqual([]);
+    expect([...view.state.getState().collapsedProjectIds]).toEqual([]);
   });
 
   it("keeps the header click toggle working while the overlay is open", () => {
@@ -439,7 +438,7 @@ describe("station input through the station runtime", () => {
       ),
     ).toBe(true);
 
-    expect([...view.getState().collapsedProjectIds]).toEqual([]);
+    expect([...view.state.getState().collapsedProjectIds]).toEqual([]);
     expect(station.getState().input.contextMenu).toMatchObject({
       target: { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
       anchor: { x: 8, y: 4 },

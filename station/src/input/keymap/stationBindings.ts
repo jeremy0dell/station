@@ -1,10 +1,9 @@
-import type { StoreApi } from "zustand/vanilla";
 import { agentWorktreePaneId, STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
 import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
 import { rowNeedsUser } from "../../stationButton/status.js";
-import { selectDashboardSessionRows, type TuiStore } from "@station/dashboard-core";
+import { selectDashboardSessionRows, type DashboardRuntime } from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import {
   paneLaunchForkSessionOutcome,
@@ -23,6 +22,8 @@ import {
 } from "../mouse.js";
 import { ControlByte } from "../../terminal/protocol/controlBytes.js";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
+
+type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
 
 export const STATION_EXIT_LEGACY = "\x11"; // Ctrl-Q
 export const OVERLAY_TOGGLE_LEGACY = "\x0f"; // Ctrl-O
@@ -149,10 +150,10 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
  * Everywhere else Enter falls through to terminal passthrough untouched.
  */
 function createStationButtonLayer(
-  stationViewStore: StoreApi<TuiStore>,
+  dashboardRuntime: DashboardInput,
 ): KeymapLayer<RouteOutcome> {
   const attentionRow = () => {
-    const snapshot = stationViewStore.getState().snapshot;
+    const snapshot = dashboardRuntime.state.getState().snapshot;
     return snapshot === undefined
       ? undefined
       : selectDashboardSessionRows(snapshot).find((row) => rowNeedsUser(row.presentation));
@@ -229,10 +230,10 @@ const workspaceLayer: KeymapLayer<RouteOutcome> = {
 
 /** The registration site: adding a Station chord is one binding here. */
 export function createStationKeymap(
-  stationViewStore?: StoreApi<TuiStore>,
+  dashboardRuntime?: DashboardInput,
 ): KeymapStack<RouteOutcome> {
   const overlayLayer =
-    stationViewStore === undefined ? placeholderOverlayLayer : createStationOverlayLayer(stationViewStore);
+    dashboardRuntime === undefined ? placeholderOverlayLayer : createStationOverlayLayer(dashboardRuntime);
   const layers: KeymapLayer<RouteOutcome>[] = [
     contextMenuLayer,
     overlayLayer,
@@ -240,8 +241,8 @@ export function createStationKeymap(
     workspaceLayer,
     welcomeLayer,
   ];
-  if (stationViewStore !== undefined) {
-    layers.push(createStationButtonLayer(stationViewStore));
+  if (dashboardRuntime !== undefined) {
+    layers.push(createStationButtonLayer(dashboardRuntime));
   }
   return createKeymapStack(layers);
 }
@@ -252,7 +253,7 @@ export function createStationKeymap(
  * is not guarded by the overlay itself. Pane clicks do not focus through an
  * active overlay.
  */
-export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>): MouseBindings {
+export function createStationMouseBindings(dashboardRuntime?: DashboardInput): MouseBindings {
   const anchorFrom = (event: StationMouseEvent) => ({ x: event.x, y: event.y });
   return {
     header: (_target, state, event) => {
@@ -313,7 +314,7 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
     // outcomes so the coordination store keeps owning overlay visibility. Hit-testing and wheel
     // direction are the renderable's job (carried in the target ref) — the router never reads event payloads.
     station: (target, state, event) => {
-      if (state.input.activeOverlay !== STATION_OVERLAY_ID || stationViewStore === undefined) {
+      if (state.input.activeOverlay !== STATION_OVERLAY_ID || dashboardRuntime === undefined) {
         return { kind: "swallowed" };
       }
       if (
@@ -327,7 +328,7 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
           anchor: anchorFrom(event),
         };
       }
-      const outcome = routeStationMouse(target.target, event, stationViewStore);
+      const outcome = routeStationMouse(target.target, event, dashboardRuntime);
       if (outcome.kind === "close-overlay") {
         return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
       }

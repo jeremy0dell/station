@@ -3,7 +3,6 @@ import { buildWheelForwardSequence } from "../../terminal/input/wheelForward.js"
 import { MouseEncoding } from "../../terminal/protocol/mouse.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
 import type { StationTerminalSpawnOptions } from "../../terminal/types.js";
-import type { StoreApi } from "zustand/vanilla";
 import { selectPaneRecord } from "../../state/selectors.js";
 import type { CreatePaneOptions, StationStore } from "../../state/store.js";
 import {
@@ -14,10 +13,12 @@ import {
   type PaneSplitDirection,
 } from "../../state/types.js";
 import type { Automation } from "../../config/stationConfig.js";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import type { WorktreeRow } from "@station/contracts";
 import { paneInputBytes } from "./sequenceNormalize.js";
 import type { OpenPaneSpawn } from "../stationInput.js";
+
+type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
 
 /** Lines of scrollback per wheel tick, and arrow repeats per tick when a
  * fullscreen pager owns the screen. Not yet configurable. */
@@ -68,7 +69,7 @@ export type PaneEffects = {
 
 type PaneEffectsDeps = {
   store: StationStore;
-  stationViewStore: StoreApi<TuiStore> | undefined;
+  dashboardRuntime: DashboardInput | undefined;
   registry: PtyRegistry | undefined;
   resolveAuxShellPlacement: AuxShellPlacement | undefined;
   autoCloseOverlay: boolean;
@@ -78,7 +79,7 @@ type PaneEffectsDeps = {
 };
 
 export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
-  const { store, stationViewStore, registry, resolveAuxShellPlacement, autoCloseOverlay, automations } =
+  const { store, dashboardRuntime, registry, resolveAuxShellPlacement, autoCloseOverlay, automations } =
     deps;
   // Monotonic split-id source, seeded above any existing split id so restored / HMR-surviving
   // splits keep theirs and a fresh split can't collide with one already in the store.
@@ -153,7 +154,7 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
   }
 
   function splitCwdForAnchor(anchorPaneId: PaneId): string | undefined {
-    const rows = stationViewStore?.getState().snapshot?.rows;
+    const rows = dashboardRuntime?.state.getState().snapshot?.rows;
     if (rows === undefined) {
       return undefined;
     }

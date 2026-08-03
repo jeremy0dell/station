@@ -7,7 +7,7 @@ import {
   type TuiRendererControlRequest,
   type TuiRendererControlResponse,
 } from "@station/contracts";
-import type { TuiFocusTarget, TuiStoreOptions } from "@station/dashboard-core";
+import type { TuiFocusTarget, DashboardRuntimeOptions } from "@station/dashboard-core";
 
 export type RendererControlChannel = {
   isConnected(): boolean;
@@ -19,8 +19,8 @@ export type RendererControlChannel = {
   close(): void;
 };
 
-type PopupStoreOptions = Pick<
-  TuiStoreOptions,
+type PopupDashboardRuntimeOptions = Pick<
+  DashboardRuntimeOptions,
   | "exitOnFocusSuccess"
   | "focusOrigin"
   | "onDismiss"
@@ -30,7 +30,7 @@ type PopupStoreOptions = Pick<
 >;
 
 export type PopupRuntime = {
-  storeOptions: PopupStoreOptions;
+  runtimeOptions: PopupDashboardRuntimeOptions;
   openShell?: (cwd: string) => Promise<void>;
   dispose(): void;
 };
@@ -41,21 +41,21 @@ export function createPopupRuntime(
   onControlLoss: () => void = () => {},
 ): PopupRuntime {
   if (env.STATION_TUI_POPUP !== "1") {
-    return { storeOptions: {}, dispose: () => {} };
+    return { runtimeOptions: {}, dispose: () => {} };
   }
 
   if (env.STATION_TUI_PERSISTENT !== "1") {
     const focusOrigin = focusOriginFromEnv(env);
-    const storeOptions: PopupStoreOptions = {
+    const runtimeOptions: PopupDashboardRuntimeOptions = {
       exitOnFocusSuccess: true,
       ...(focusOrigin === undefined ? {} : { focusOrigin }),
     };
     if (env.STATION_TUI_POPUP !== "1" || channel === undefined) {
-      return { storeOptions, dispose: () => {} };
+      return { runtimeOptions, dispose: () => {} };
     }
     const control = createRendererControlClient(channel, onControlLoss);
     return {
-      storeOptions,
+      runtimeOptions,
       openShell: control.openShell,
       dispose: control.dispose,
     };
@@ -64,7 +64,7 @@ export function createPopupRuntime(
   if (channel === undefined) {
     onControlLoss();
     return {
-      storeOptions: {
+      runtimeOptions: {
         exitOnFocusSuccess: false,
         persistentPopup: true,
       },
@@ -74,7 +74,7 @@ export function createPopupRuntime(
 
   const control = createRendererControlClient(channel, onControlLoss);
   return {
-    storeOptions: {
+    runtimeOptions: {
       exitOnFocusSuccess: false,
       persistentPopup: true,
       onDismiss: () => control.dismiss(),

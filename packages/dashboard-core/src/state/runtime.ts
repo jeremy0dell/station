@@ -1,8 +1,6 @@
 import { createStationClientRuntime, type StationClientRuntime } from "@station/client";
 import type {
   CommandReceipt,
-  SafeError,
-  SessionId,
   StationCommand,
   StationSnapshot,
   TerminalFocusOrigin,
@@ -13,7 +11,7 @@ import { sessionForWorktreeRow } from "../selectors/selectors.js";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
 import type { TuiObserverService, TuiToast } from "../services/types.js";
-import { type DashboardAction, handleTuiAction } from "./actions.js";
+import { type DashboardActionResult, type DashboardActions, handleTuiAction } from "./actions.js";
 import { buildFocusCommand } from "./commandBuilders.js";
 import {
   clearDashboardFocus as clearDashboardFocusState,
@@ -24,11 +22,9 @@ import {
   type DashboardSearchExperience,
   legacySearchExperience,
 } from "./experiences/dashboardSearch.js";
-import type { TuiKey } from "./keys.js";
 import {
   addPendingCreateSessionRow,
   failPendingCreateSessionRow,
-  type PendingCreateSessionRow,
   removeCreateSessionLocalRow,
 } from "./localRows.js";
 import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
@@ -44,51 +40,21 @@ import {
 import { createInitialTuiState, replaceSnapshot } from "./screen.js";
 import { applyAddProjectFolderRefreshed } from "./screens/addProjectScreen.js";
 import { submitQuickSession } from "./screens/quickSession.js";
-import { attachTuiSnapshotSource, type TuiSnapshotSource } from "./sourceBridge.js";
+import { applySnapshotSourceState, type TuiSnapshotSource } from "./sourceBridge.js";
 import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
-import { handleTuiKey, type TuiControlIntent, type TuiTransition } from "./transition.js";
-import type { CreateInitialTuiStateOptions, TuiState } from "./types.js";
+import { handleTuiKey, type TuiTransition } from "./transition.js";
+import type { CreateInitialTuiStateOptions, DashboardState, TuiState } from "./types.js";
 
-export type TuiHandleKeyResult = {
-  dismissPopup: boolean;
-  exitCode?: number;
-  controlIntent?: TuiControlIntent;
+/** Read-only dashboard state source compatible with Zustand's React selector contract. */
+export type DashboardStateSource = {
+  getState(): DashboardState;
+  getInitialState(): DashboardState;
+  subscribe(listener: (state: DashboardState, previous: DashboardState) => void): () => void;
 };
 
-/** The sole public dashboard mutation authority. */
-export type DashboardActions = {
-  /** Applies a key transition and returns any one-shot renderer-owned control intent. */
-  handleKey(key: TuiKey): TuiHandleKeyResult;
-  /** Resolves typed actions through the shared transition and effect path. */
-  dispatch(action: DashboardAction): TuiHandleKeyResult;
-  /** Create a project session immediately with its configured default harness. */
-  createQuickSession(projectId: string): void;
-  setTerminalRows(rows: number): void;
-  /** Synchronize row focus from a canonical observer session identity. */
-  focusDashboardSession(sessionId: SessionId): void;
-  /** Remove transient row focus without changing other dashboard state. */
-  clearDashboardFocus(): void;
-  /** Surface a client-side toast (e.g. an unresolved-harness notice). */
-  pushToast(toast: TuiToast): void;
-  dismissToasts(): void;
-  expireToasts(nowMs?: number): void;
-  refreshActiveToastExpiry(nowMs?: number): void;
-  /** Adds a pending hosted-create row until its workspace lifecycle resolves. */
-  addPendingCreateSession(row: PendingCreateSessionRow): void;
-  /** Moves a pending row to retained failure; the caller owns expiry and scheduled removal. */
-  failPendingCreateSession(localId: string, error: SafeError, expiresAt: number): void;
-  /** Removes a pending or retained-failure hosted-create row by local identity. */
-  removePendingCreateSession(localId: string): void;
-};
-
-/** Temporary composition of dashboard data, actions, and lifecycle pending the runtime facade. */
-export type TuiStore = TuiState &
-  DashboardActions & {
-    start(): () => void;
-  };
-
-export type TuiStoreOptions = {
+/** Construction options for a dashboard runtime and its private state store. */
+export type DashboardRuntimeOptions = {
   service: TuiObserverService;
   source?: TuiSnapshotSource;
   initialSnapshot?: StationSnapshot;
@@ -105,12 +71,28 @@ export type TuiStoreOptions = {
   dashboardSearchExperience?: DashboardSearchExperience;
 };
 
-export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
+/** Read-only state, closed actions, and lifecycle owned by one dashboard composition. */
+export type DashboardRuntime = {
+  state: DashboardStateSource;
+  actions: DashboardActions;
+  /** Activate source and directory-polling subscriptions at most once. */
+  start(): void;
+  /** Repeat-safely detach source and directory-polling resources. */
+  dispose(): void;
+};
+
+/**
+ * Create a dashboard runtime around a private data-only Zustand store.
+ *
+ * The returned state wrapper deliberately omits `setState`; callers mutate only
+ * through {@link DashboardActions}.
+ */
+export function createDashboardRuntime(options: DashboardRuntimeOptions): DashboardRuntime {
   const runtime = createRuntimeOptions(options);
   const folderService = options.folderService ?? createNodeFolderService();
   const dashboardSearchExperience = options.dashboardSearchExperience ?? legacySearchExperience;
   const source = options.source;
-  let store: StoreApi<TuiStore>;
+  let store: StoreApi<DashboardState>;
   let operations: TuiLocalOperationRunner;
   const clientRuntime =
     source === undefined
@@ -145,8 +127,8 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
     },
   });
 
-  store = createStore<TuiStore>()((set, get) => ({
-    ...createInitialTuiState({
+  store = createStore<DashboardState>()(() =>
+    createInitialTuiState({
       ...(options.initialState ?? {}),
       ...(options.initialSnapshot === undefined
         ? {}
@@ -160,25 +142,10 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
         ...(runtime.focusOrigin === undefined ? {} : { focusOrigin: runtime.focusOrigin }),
       },
     }),
-    start: (): (() => void) => {
-      let stopSnapshotUpdates: () => void;
-      if (source !== undefined) {
-        stopSnapshotUpdates = attachTuiSnapshotSource(store, source);
-      } else if (clientRuntime === undefined) {
-        throw new Error("createTuiStore requires a runtime when no source is provided.");
-      } else {
-        clientRuntime.start();
-        stopSnapshotUpdates = () => {
-          void clientRuntime.stop();
-        };
-      }
-      const stopDirectoryPolling = attachAddProjectDirectoryPolling(store, folderService);
-      return () => {
-        stopDirectoryPolling();
-        stopSnapshotUpdates();
-      };
-    },
-    handleKey: (key): TuiHandleKeyResult =>
+  );
+
+  const actions: DashboardActions = {
+    handleKey: (key): DashboardActionResult =>
       applyTransition(
         store,
         options.service,
@@ -186,7 +153,7 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
         runtime,
         operations,
         handleTuiKey(
-          get(),
+          store.getState(),
           key,
           {
             cwd: folderService.cwd(),
@@ -195,14 +162,14 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
           dashboardSearchExperience,
         ),
       ),
-    dispatch: (action): TuiHandleKeyResult =>
+    dispatch: (action): DashboardActionResult =>
       applyTransition(
         store,
         options.service,
         clientRuntime,
         runtime,
         operations,
-        handleTuiAction(get(), action, {
+        handleTuiAction(store.getState(), action, {
           cwd: folderService.cwd(),
           homeDir: folderService.homeDir(),
         }),
@@ -214,51 +181,107 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
         clientRuntime,
         runtime,
         operations,
-        submitQuickSession(get(), projectId),
+        submitQuickSession(store.getState(), projectId),
       );
     },
     setTerminalRows: (rows): void => {
-      const current = get();
-      set(reconcileDashboardFocus(current, { ...current, terminalRows: rows }));
+      const current = store.getState();
+      store.setState(reconcileDashboardFocus(current, { ...current, terminalRows: rows }), true);
     },
     focusDashboardSession: (sessionId): void => {
-      set(
-        (current) =>
-          applyDashboardFocusState(current, focusDashboardSessionState(current, sessionId)),
+      store.setState(
+        (current) => replaceDashboardFocusState(focusDashboardSessionState(current, sessionId)),
         true,
       );
     },
     clearDashboardFocus: (): void => {
-      set((current) => applyDashboardFocusState(current, clearDashboardFocusState(current)), true);
+      store.setState(
+        (current) => replaceDashboardFocusState(clearDashboardFocusState(current)),
+        true,
+      );
     },
     pushToast: (toast): void => {
-      set(addTuiToast(get(), toast));
+      store.setState(addTuiToast(store.getState(), toast), true);
     },
     dismissToasts: (): void => {
-      set({ toasts: [] });
+      store.setState({ toasts: [] });
     },
     expireToasts: (nowMs = Date.now()): void => {
-      set(expireTuiToasts(get(), nowMs));
+      store.setState(expireTuiToasts(store.getState(), nowMs), true);
     },
     refreshActiveToastExpiry: (nowMs = Date.now()): void => {
-      set(refreshActiveTuiToastExpiry(get(), nowMs));
+      store.setState(refreshActiveTuiToastExpiry(store.getState(), nowMs), true);
     },
     addPendingCreateSession: (row): void => {
-      set((state) => addPendingCreateSessionRow(state, row));
+      store.setState((state) => addPendingCreateSessionRow(state, row), true);
     },
     failPendingCreateSession: (localId, error, expiresAt): void => {
-      set((state) => failPendingCreateSessionRow(state, localId, error, expiresAt));
+      store.setState(
+        (state) => failPendingCreateSessionRow(state, localId, error, expiresAt),
+        true,
+      );
     },
     removePendingCreateSession: (localId): void => {
-      set((state) => removeCreateSessionLocalRow(state, localId));
+      store.setState((state) => removeCreateSessionLocalRow(state, localId), true);
     },
-  }));
+  };
 
-  return store;
+  const state: DashboardStateSource = {
+    getState: () => store.getState(),
+    getInitialState: () => store.getInitialState(),
+    subscribe: (listener) => store.subscribe(listener),
+  };
+  let started = false;
+  let disposed = false;
+  let stopSnapshotUpdates: (() => void) | undefined;
+  let stopDirectoryPolling: (() => void) | undefined;
+
+  return {
+    state,
+    actions,
+    start: (): void => {
+      if (started || disposed) {
+        return;
+      }
+      started = true;
+      if (source !== undefined) {
+        stopSnapshotUpdates = attachSnapshotSource(store, source);
+      } else if (clientRuntime === undefined) {
+        throw new Error("createDashboardRuntime requires a runtime when no source is provided.");
+      } else {
+        clientRuntime.start();
+        stopSnapshotUpdates = () => {
+          void clientRuntime.stop();
+        };
+      }
+      stopDirectoryPolling = attachAddProjectDirectoryPolling(store, folderService);
+    },
+    dispose: (): void => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      stopDirectoryPolling?.();
+      stopDirectoryPolling = undefined;
+      stopSnapshotUpdates?.();
+      stopSnapshotUpdates = undefined;
+    },
+  };
+}
+
+function attachSnapshotSource(
+  store: StoreApi<DashboardState>,
+  source: TuiSnapshotSource,
+): () => void {
+  const apply = (): void => {
+    store.setState(applySnapshotSourceState(store.getState(), source.getState(), Date.now()), true);
+  };
+  apply();
+  return source.subscribe(apply);
 }
 
 function attachAddProjectDirectoryPolling(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   folderService: TuiFolderService,
 ): () => void {
   let activePath: string | undefined;
@@ -329,12 +352,12 @@ function activeAddProjectDirectory(state: TuiState): string | undefined {
     : undefined;
 }
 
-function applyDashboardFocusState(current: TuiStore, next: TuiState): TuiStore {
-  // Full replacement propagates an absent optional cursor; seeding from the
-  // concrete store retains its action methods.
-  const replacement = { ...current };
-  delete replacement.dashboardFocus;
-  return { ...replacement, ...next };
+function replaceDashboardFocusState(next: TuiState): DashboardState {
+  const replacement: DashboardState = { ...next };
+  if (next.dashboardFocus === undefined) {
+    delete replacement.dashboardFocus;
+  }
+  return replacement;
 }
 
 type RuntimeOptions = {
@@ -348,7 +371,7 @@ type RuntimeOptions = {
   onExit?: (code: number) => void;
 };
 
-function createRuntimeOptions(options: TuiStoreOptions): RuntimeOptions {
+function createRuntimeOptions(options: DashboardRuntimeOptions): RuntimeOptions {
   const runtime: RuntimeOptions = {
     clientLabel: options.clientLabel ?? "TUI",
     exitOnFocusSuccess: options.exitOnFocusSuccess === true,
@@ -373,23 +396,22 @@ function createRuntimeOptions(options: TuiStoreOptions): RuntimeOptions {
 }
 
 function applyTransition(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   clientRuntime: StationClientRuntime | undefined,
   runtime: RuntimeOptions,
   operations: TuiLocalOperationRunner,
   transition: TuiTransition,
-): TuiHandleKeyResult {
-  const merged = { ...store.getState(), ...transition.state };
+): DashboardActionResult {
+  const replacement: DashboardState = { ...transition.state };
   if (transition.state.persistentFilter === undefined) {
-    // Zustand's default merge retains absent optionals, so replace the merged store when clearing.
-    const { persistentFilter: _removed, ...withoutPersistentFilter } = merged;
-    store.setState(withoutPersistentFilter, true);
-  } else {
-    store.setState(merged, true);
+    // Full replacement must delete an absent exact-optional filter instead of materializing undefined.
+    delete replacement.persistentFilter;
   }
+  // State lands before effects so one-shot control intents observe the transition they represent.
+  store.setState(replacement, true);
   void applyTransitionEffects(store, service, clientRuntime, runtime, operations, transition);
-  const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
+  const result: DashboardActionResult = { dismissPopup: transition.dismissPopup === true };
   if (transition.exitCode !== undefined) {
     result.exitCode = transition.exitCode;
   }
@@ -400,7 +422,7 @@ function applyTransition(
 }
 
 async function applyTransitionEffects(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   clientRuntime: StationClientRuntime | undefined,
   runtime: RuntimeOptions,
@@ -436,7 +458,7 @@ async function applyTransitionEffects(
 }
 
 async function reconcileSnapshot(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   clientRuntime: StationClientRuntime | undefined,
   reason: string,
@@ -465,7 +487,7 @@ async function reconcileSnapshot(
 }
 
 async function dispatchCommand(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   command: StationCommand,
   runtime: Pick<RuntimeOptions, "clientLabel">,
@@ -484,7 +506,7 @@ async function dispatchCommand(
 }
 
 async function dispatchCommandAndWaitForCompletion(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   command: StationCommand,
   runtime: Pick<RuntimeOptions, "clientLabel">,
@@ -544,7 +566,7 @@ function buildStartedAgentFocusCommand(
 }
 
 async function dispatchFocusWithLifecycle(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "terminal.focus" }>,
   runtime: RuntimeOptions,
@@ -638,7 +660,7 @@ function turnReadinessForFocusCommand(
 }
 
 async function dismissPersistentPopup(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   onDismiss: () => Promise<void>,
   runtime: Pick<RuntimeOptions, "clientLabel">,
 ): Promise<void> {
@@ -675,6 +697,6 @@ function queuedCommandToast(command: StationCommand, receipt: CommandReceipt): T
   };
 }
 
-function addToast(store: StoreApi<TuiStore>, toast: TuiToast): void {
+function addToast(store: StoreApi<DashboardState>, toast: TuiToast): void {
   store.setState(addTuiToast(store.getState(), toast));
 }

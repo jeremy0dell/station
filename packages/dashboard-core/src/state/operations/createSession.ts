@@ -3,7 +3,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
 import type { TuiObserverService } from "../../services/types.js";
 import { bindPendingCreateSessionRow, removeCreateSessionLocalRow } from "../localRows.js";
-import type { TuiStore } from "../store.js";
+import type { DashboardState } from "../types.js";
 import {
   type CommandRuntimeOptions,
   prepareCreateSessionCommandForRuntime,
@@ -11,7 +11,7 @@ import {
 import type { CreateSessionOperation } from "./types.js";
 
 export async function runCreateSessionOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   runtime: CommandRuntimeOptions,
   operation: CreateSessionOperation,

@@ -1,30 +1,31 @@
-import type { TuiStore } from "@station/dashboard-core";
-import type { StoreApi } from "zustand/vanilla";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import { paneTreeIds } from "../paneTree.js";
 import type { StationStore } from "../store.js";
 import { STATION_OVERLAY_ID } from "../types.js";
 
+type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+
 /** Synchronizes native-pane identity to the dashboard cursor once per overlay open. */
 export function createOverlayRowFocusReconciler(
   store: StationStore,
-  stationViewStore: StoreApi<TuiStore>,
+  dashboardRuntime: DashboardInput,
 ): () => void {
   let previousOverlay = store.getState().input.activeOverlay;
   let pendingSessionId: string | undefined;
   let disposed = false;
 
   const clearFocus = (): void => {
-    stationViewStore.getState().clearDashboardFocus();
+    dashboardRuntime.actions.clearDashboardFocus();
   };
   const synchronize = (sessionId: string): void => {
-    const state = stationViewStore.getState();
+    const state = dashboardRuntime.state.getState();
     if (state.snapshot === undefined) {
       clearFocus();
       pendingSessionId = sessionId;
       return;
     }
     pendingSessionId = undefined;
-    state.focusDashboardSession(sessionId);
+    dashboardRuntime.actions.focusDashboardSession(sessionId);
   };
 
   const detachStationStore = store.subscribe(() => {
@@ -49,7 +50,7 @@ export function createOverlayRowFocusReconciler(
     }
   });
 
-  const detachDashboardStore = stationViewStore.subscribe((state) => {
+  const detachDashboardStore = dashboardRuntime.state.subscribe((state) => {
     if (pendingSessionId === undefined || state.snapshot === undefined) {
       return;
     }
@@ -57,7 +58,7 @@ export function createOverlayRowFocusReconciler(
     // cursor or scroll changes cannot resynchronize.
     const sessionId = pendingSessionId;
     pendingSessionId = undefined;
-    state.focusDashboardSession(sessionId);
+    dashboardRuntime.actions.focusDashboardSession(sessionId);
   });
 
   return () => {

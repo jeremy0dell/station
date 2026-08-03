@@ -2,8 +2,8 @@ import type { StationSnapshot } from "@station/contracts";
 import type { DashboardFocus, ProjectHeaderControl, TuiState } from "@station/dashboard-core";
 import {
   clearDashboardFocus,
+  createDashboardRuntime,
   createInitialTuiState,
-  createTuiStore,
   focusDashboardEmptyProjectAction,
   focusDashboardSession,
   handleTuiKey,
@@ -95,17 +95,17 @@ describe("dashboard focus", () => {
     expect(cleared.scrollOffset).toBe(2);
 
     const snapshot = createDashboardSnapshot();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { terminalRows: 12 },
     });
-    store.getState().focusDashboardSession("ses_wt_web_attention");
-    store.getState().handleKey(DOWN);
-    expect(store.getState().dashboardFocus).toEqual(session("ses_wt_web_exited"));
-    store.getState().clearDashboardFocus();
-    expect("dashboardFocus" in store.getState()).toBe(false);
-    expect(typeof store.getState().handleKey).toBe("function");
+    store.actions.focusDashboardSession("ses_wt_web_attention");
+    store.actions.handleKey(DOWN);
+    expect(store.state.getState().dashboardFocus).toEqual(session("ses_wt_web_exited"));
+    store.actions.clearDashboardFocus();
+    expect("dashboardFocus" in store.state.getState()).toBe(false);
+    expect(typeof store.actions.handleKey).toBe("function");
   });
 
   it("walks headers and sessions in rendered vertical order", () => {
@@ -274,7 +274,7 @@ describe("dashboard focus", () => {
     expect(current.dashboardFocus).toEqual(emptyAction("api"));
 
     const snapshot = createZeroWorktreeSnapshot();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: {
@@ -282,9 +282,9 @@ describe("dashboard focus", () => {
         dashboardFocus: emptyAction("api"),
       },
     });
-    store.getState().setTerminalRows(10);
-    expect(store.getState().dashboardFocus).toEqual(emptyAction("api"));
-    expect(store.getState().scrollOffset).toBe(2);
+    store.actions.setTerminalRows(10);
+    expect(store.state.getState().dashboardFocus).toEqual(emptyAction("api"));
+    expect(store.state.getState().scrollOffset).toBe(2);
   });
 
   it("reconciles removed empty actions by their old rendered position", () => {
@@ -451,7 +451,7 @@ describe("dashboard focus", () => {
     expect(refreshed.dashboardFocus).toEqual(header("api", "defaultAgent"));
 
     const snapshot = createDashboardSnapshot();
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: {
@@ -459,9 +459,9 @@ describe("dashboard focus", () => {
         dashboardFocus: header("api", "defaultAgent"),
       },
     });
-    store.getState().setTerminalRows(12);
-    expect(store.getState().dashboardFocus).toEqual(header("api", "defaultAgent"));
-    expect(store.getState().scrollOffset).toBe(4);
+    store.actions.setTerminalRows(12);
+    expect(store.state.getState().dashboardFocus).toEqual(header("api", "defaultAgent"));
+    expect(store.state.getState().scrollOffset).toBe(4);
   });
 
   it("falls forward then backward when snapshot replacement removes focused identity", () => {

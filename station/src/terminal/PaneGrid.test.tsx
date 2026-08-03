@@ -18,7 +18,7 @@ import { createScriptedTerminal, type ScriptedTerminal } from "./testing/scripte
 import { waitFor } from "./testing/waitFor.js";
 import type { StationTerminalSize } from "./types.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 
 const SURFACE = { width: 40, height: 12 };
 const PRIMARY_BORDER_ACTIVE = stationColorSnapshotValue(nativeStationTheme.pane.primary.active);
@@ -48,9 +48,9 @@ describe("PaneGrid", () => {
       },
     });
     const store = createStationStore();
-    const stationViewStore =
+    const dashboardState =
       options?.withStationSnapshot === true
-        ? makeStationTestStore({ snapshot: manyProjectsSnapshot() }).store
+        ? makeStationTestRuntime({ snapshot: manyProjectsSnapshot() }).runtime.state
         : undefined;
     const dispatchMouse = (_target: MouseTargetRef, _event: StationMouseEvent): boolean => true;
     const setup = await testRender(
@@ -58,7 +58,7 @@ describe("PaneGrid", () => {
         <PaneRegistryProvider registry={registry}>
           <PaneGrid
             store={store}
-            {...(stationViewStore === undefined ? {} : { stationViewStore })}
+            {...(dashboardState === undefined ? {} : { dashboardState })}
             dispatchMouse={dispatchMouse}
           />
         </PaneRegistryProvider>
@@ -71,7 +71,7 @@ describe("PaneGrid", () => {
     });
     await setup.flush();
     await waitFor(() => spawnSizes.length > 0);
-    return { setup, registry, store, spawnSizes, terminals, stationViewStore };
+    return { setup, registry, store, spawnSizes, terminals, dashboardState };
   }
 
   // A store change re-renders PaneGrid; the new layout pass (which fires the

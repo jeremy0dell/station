@@ -1,6 +1,5 @@
 import type { ColorInput } from "@opentui/core";
 import { useStore } from "zustand/react";
-import type { StoreApi } from "zustand/vanilla";
 import {
   activeTuiToast,
   dashboardFooterModel,
@@ -9,23 +8,23 @@ import {
   QUIT_HINT_DISMISS_ERROR,
   truncateCells,
   type DashboardFooterModel,
+  type DashboardStateSource,
   type TuiState,
-  type TuiStore,
 } from "@station/dashboard-core";
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
 
 export type DashboardFooterViewProps = {
-  store: StoreApi<TuiStore>;
+  state: DashboardStateSource;
   columns: number;
 };
 
-export function DashboardFooterView({ store, columns }: DashboardFooterViewProps) {
+export function DashboardFooterView({ state, columns }: DashboardFooterViewProps) {
   const theme = useStationTheme();
-  const snapshot = useStore(store, (state) => state.snapshot);
-  const screen = useStore(store, (state) => state.screen);
-  const persistentFilter = useStore(store, (state) => state.persistentFilter);
-  const quitHint = useStore(store, selectFooterQuitHint);
+  const snapshot = useStore(state, (current) => current.snapshot);
+  const screen = useStore(state, (current) => current.screen);
+  const persistentFilter = useStore(state, (current) => current.persistentFilter);
+  const quitHint = useStore(state, selectFooterQuitHint);
   const contentColumns = Math.max(1, Math.floor(columns));
   const model = dashboardFooterModel({
     columns: contentColumns,

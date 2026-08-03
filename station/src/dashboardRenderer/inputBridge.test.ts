@@ -1,8 +1,7 @@
-import type { TuiControlIntent, TuiKey, TuiStore } from "@station/dashboard-core";
+import type { TuiControlIntent, TuiKey, DashboardRuntime } from "@station/dashboard-core";
 import { describe, expect, it } from "bun:test";
-import type { StoreApi } from "zustand/vanilla";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { executeDashboardControlIntent } from "./dashboardEffects.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
 
@@ -14,7 +13,7 @@ function harness(resultIntent?: TuiControlIntent): {
   const keys: TuiKey[] = [];
   const intents: TuiControlIntent[] = [];
   const store = {
-    getState: () => ({
+    actions: {
       handleKey: (key: TuiKey) => {
         keys.push(key);
         return {
@@ -22,8 +21,8 @@ function harness(resultIntent?: TuiControlIntent): {
           ...(resultIntent === undefined ? {} : { controlIntent: resultIntent }),
         };
       },
-    }),
-  } as unknown as StoreApi<TuiStore>;
+    },
+  } as unknown as DashboardRuntime;
   return {
     handle: createDashboardSequenceHandler(store, (intent) => intents.push(intent)),
     keys,
@@ -62,23 +61,23 @@ describe("createDashboardSequenceHandler", () => {
   });
 
   it("executes standalone project shell and Quick Session effects from keyboard focus", async () => {
-    const shellFixture = makeStationTestStore({ snapshot: manyProjectsSnapshot() });
+    const shellFixture = makeStationTestRuntime({ snapshot: manyProjectsSnapshot() });
     const openedShells: string[] = [];
     const effects = {
       openShell: ({ cwd }: { cwd: string }) => openedShells.push(cwd),
       openUrl: () => {},
     };
-    const shell = createDashboardSequenceHandler(shellFixture.store, (intent) => {
-      executeDashboardControlIntent(intent, shellFixture.store, effects);
+    const shell = createDashboardSequenceHandler(shellFixture.runtime, (intent) => {
+      executeDashboardControlIntent(intent, shellFixture.runtime, effects);
     });
     shell("\x1b[B");
     shell("\x1b[C");
     shell("\r");
     expect(openedShells).toEqual(["/Users/example/Developer/station"]);
 
-    const quickFixture = makeStationTestStore({ snapshot: manyProjectsSnapshot() });
-    const quick = createDashboardSequenceHandler(quickFixture.store, (intent) => {
-      executeDashboardControlIntent(intent, quickFixture.store, effects);
+    const quickFixture = makeStationTestRuntime({ snapshot: manyProjectsSnapshot() });
+    const quick = createDashboardSequenceHandler(quickFixture.runtime, (intent) => {
+      executeDashboardControlIntent(intent, quickFixture.runtime, effects);
     });
     quick("\x1b[B");
     quick("\x1b[C");
@@ -93,13 +92,15 @@ describe("createDashboardSequenceHandler", () => {
   });
 
   it("consumes focused empty-project Enter as one Quick Session intent", async () => {
-    const fixture = makeStationTestStore({ snapshot: manyProjectsSnapshot() });
-    fixture.store.setState({
-      dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+    const fixture = makeStationTestRuntime({
+      snapshot: manyProjectsSnapshot(),
+      initialState: {
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+      },
     });
     const effects = { openShell: () => {}, openUrl: () => {} };
-    const handle = createDashboardSequenceHandler(fixture.store, (intent) => {
-      executeDashboardControlIntent(intent, fixture.store, effects);
+    const handle = createDashboardSequenceHandler(fixture.runtime, (intent) => {
+      executeDashboardControlIntent(intent, fixture.runtime, effects);
     });
 
     handle("\r");
@@ -110,7 +111,7 @@ describe("createDashboardSequenceHandler", () => {
     expect(
       fixture.service.dispatched.filter((command) => command.type === "session.create"),
     ).toHaveLength(1);
-    expect(fixture.store.getState().dashboardFocus).toEqual({
+    expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "empty-project",
       control: "quickSession",

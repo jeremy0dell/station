@@ -8,7 +8,7 @@ import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
-import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
@@ -48,7 +48,7 @@ describe("ToastOverlayView actions", () => {
     );
     expect(fixture.setup.renderer.getSelection()?.getSelectedText()).toBe("Worktrunk");
     expect(fixture.targets).toEqual([]);
-    expect(fixture.store.getState().toasts).toHaveLength(1);
+    expect(fixture.runtime.state.getState().toasts).toHaveLength(1);
 
     const spans = fixture.setup.captureSpans();
     expect(spanHex(spanAtFrameCell(spans, copy.row, copy.col))).not.toBe(
@@ -62,11 +62,11 @@ describe("ToastOverlayView actions", () => {
 
     expect(fixture.copied).toEqual([COPY_TEXT]);
     expect(fixture.targets).toEqual([]);
-    expect(fixture.store.getState().toasts).toHaveLength(1);
+    expect(fixture.runtime.state.getState().toasts).toHaveLength(1);
     expect(fixture.frame()).toContain("[ copied ]");
 
     await act(async () => {
-      fixture.store.getState().pushToast({
+      fixture.runtime.actions.pushToast({
         ...NOTICE,
         message: "A different operation failed.",
       });
@@ -94,18 +94,18 @@ describe("ToastOverlayView actions", () => {
     await fixture.setup.mockMouse.click(dismiss.col, dismiss.row, MouseButtons.LEFT);
     await fixture.setup.flush();
     expect(fixture.targets).toEqual([{ kind: "toast" }]);
-    expect(fixture.store.getState().toasts).toEqual([]);
+    expect(fixture.runtime.state.getState().toasts).toEqual([]);
   });
 });
 
 async function renderNotice() {
-  const { store } = makeStationTestStore({
+  const { runtime: store } = makeStationTestRuntime({
     snapshot: manyProjectsSnapshot(),
     seedInitialSnapshot: false,
   });
   const targets: StationMouseTarget[] = [];
   const copied: string[] = [];
-  store.getState().start();
+  store.start();
   const setup = await testRender(
     <StationThemeProvider theme={nativeStationTheme}>
       <StationHoverProvider value>
@@ -113,12 +113,13 @@ async function renderNotice() {
           value={(target) => {
             targets.push(target);
             if (target.kind === "toast") {
-              store.getState().dismissToasts();
+              store.actions.dismissToasts();
             }
           }}
         >
           <DashboardRoot
-            store={store}
+            state={store.state}
+            actions={store.actions}
             columns={99}
             rows={25}
             onCopyNotice={(text) => copied.push(text)}
@@ -131,11 +132,11 @@ async function renderNotice() {
   teardowns.push(() => setup.renderer.destroy());
   await setup.renderOnce();
   await act(async () => {
-    store.getState().pushToast(NOTICE);
+    store.actions.pushToast(NOTICE);
     await Promise.resolve();
   });
   await setup.flush();
-  return { setup, store, targets, copied, frame: () => setup.captureCharFrame() };
+  return { setup, runtime: store, targets, copied, frame: () => setup.captureCharFrame() };
 }
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
