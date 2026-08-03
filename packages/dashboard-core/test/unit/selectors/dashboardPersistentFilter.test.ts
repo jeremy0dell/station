@@ -96,6 +96,21 @@ describe("dashboard persistent filter selector", () => {
     expect(byProject?.projects.get("web")?.labelRanges).toEqual([{ start: 4, end: 11 }]);
   });
 
+  it("matches only the visible row and project fields supplied by the viewport", () => {
+    const projection = selectDashboardPersistentFilter({
+      candidates,
+      projects,
+      screen: { name: "dashboard" },
+      applied: { query: "feature" },
+    });
+
+    expect(projection).toMatchObject({ matchCount: 0, totalCount: 2, zeroMatches: true });
+    expect(projection?.rows.get("session:alpha")).toMatchObject({
+      matched: false,
+      dimmed: true,
+    });
+  });
+
   it("maps expanded and non-ASCII folds back to source-string offsets", () => {
     const sourceCandidates: DashboardPersistentFilterCandidate[] = [
       {

@@ -6,50 +6,78 @@ import {
   useStationTheme,
   type StationTheme,
 } from "../../theme/index.js";
+import {
+  stationMouseProps,
+  useStationMouse,
+  type StationMouseDispatch,
+} from "./stationMouseContext.js";
 
 export function DashboardFilterFooterView({
   segments,
+  variant,
 }: {
   segments: readonly DashboardFilterFooterSegment[];
+  variant: "editing" | "applied";
 }) {
   const theme = useStationTheme();
   return (
     <box
       height={1}
       width="100%"
-      backgroundColor={toOpenTuiOpaqueColor(theme.filter.editorSurface)}
+      flexDirection="row"
+      {...footerBackground(theme, variant)}
     >
-      <text width="100%">
-        {segments.map((segment, index) => (
-          <DashboardFilterFooterSegmentView
-            key={`${segment.role}:${index}`}
-            segment={segment}
-            theme={theme}
-          />
-        ))}
-      </text>
+      {segments.map((segment, index) => (
+        <FilterFooterSegment key={`${segment.role}:${index}`} segment={segment} />
+      ))}
     </box>
   );
 }
 
-function DashboardFilterFooterSegmentView({
-  segment,
-  theme,
-}: {
-  segment: DashboardFilterFooterSegment;
-  theme: StationTheme;
-}) {
-  const badge = segment.role === "badge";
-  const key = segment.role === "key";
+function FilterFooterSegment({ segment }: { segment: DashboardFilterFooterSegment }) {
+  const theme = useStationTheme();
+  const dispatch = useStationMouse();
+  const emphasized = segment.role === "badge" || segment.role === "key";
   return (
-    <span
+    <text
+      flexShrink={0}
       fg={footerSegmentForeground(theme, segment)}
-      {...(badge ? { bg: toOpenTuiColor(theme.filter.editorRail) } : {})}
-      attributes={badge || key ? TextAttributes.BOLD : TextAttributes.NONE}
+      attributes={emphasized ? TextAttributes.BOLD : TextAttributes.NONE}
+      {...footerSegmentBackground(theme, segment)}
+      {...footerSegmentInteraction(dispatch, segment)}
     >
       {segment.text}
-    </span>
+    </text>
   );
+}
+
+function footerBackground(
+  theme: StationTheme,
+  variant: "editing" | "applied",
+): { backgroundColor?: ColorInput } {
+  return variant === "editing"
+    ? { backgroundColor: toOpenTuiOpaqueColor(theme.filter.editorSurface) }
+    : {};
+}
+
+function footerSegmentBackground(
+  theme: StationTheme,
+  segment: DashboardFilterFooterSegment,
+): { bg?: ColorInput } {
+  return segment.role === "badge" ? { bg: toOpenTuiColor(theme.filter.editorRail) } : {};
+}
+
+function footerSegmentInteraction(
+  dispatch: StationMouseDispatch,
+  segment: DashboardFilterFooterSegment,
+): Partial<ReturnType<typeof stationMouseProps>> {
+  if (segment.action === undefined) {
+    return {};
+  }
+  return stationMouseProps(dispatch, {
+    kind: "persistentFilterAction",
+    actionId: segment.action,
+  });
 }
 
 function footerSegmentForeground(

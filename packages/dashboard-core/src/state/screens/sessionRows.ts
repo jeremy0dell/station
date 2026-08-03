@@ -4,7 +4,7 @@ import {
   selectDashboardSessionRow,
   sessionForWorktreeRow,
   sessionRowDisplayTitle,
-} from "../../selectors/selectors.js";
+} from "../../selectors/dashboardSessionRows.js";
 import type { TuiState } from "../types.js";
 
 export type OpenRenameEditForRowOptions = {

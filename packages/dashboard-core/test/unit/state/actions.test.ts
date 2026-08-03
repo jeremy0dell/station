@@ -183,6 +183,23 @@ describe("semantic TUI actions", () => {
     expect(handleTuiAction(state, { type: "dashboard.addProject" }, context).state).toBe(state);
   });
 
+  it("routes persistent-filter edit and clear through semantic dashboard actions", () => {
+    const applied = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      persistentFilter: { query: "working" },
+    });
+
+    const edited = handleTuiAction(applied, { type: "persistentFilter.edit" }, context).state;
+    expect(edited.screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "working", cursor: 7 },
+    });
+
+    const cleared = handleTuiAction(applied, { type: "persistentFilter.clear" }, context).state;
+    expect(cleared.screen).toEqual({ name: "dashboard" });
+    expect(cleared.persistentFilter).toBeUndefined();
+  });
+
   it("activates Add Project review controls identically through hotkey, focused Enter, and action", () => {
     const state = addProjectReviewState();
 

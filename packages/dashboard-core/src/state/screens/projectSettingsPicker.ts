@@ -2,7 +2,10 @@ import type { TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export const projectSettingsPickerScreenBehavior = { clickAway: closeProjectSettingsPicker };
+export const projectSettingsPickerScreenBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: closeProjectSettingsPicker,
+};
 
 // Slot/↑↓/↵/mouse are handled by the shared selectionMiddleware
 // (projectSettingsPickerListSpec); only esc-to-dashboard stays bespoke.

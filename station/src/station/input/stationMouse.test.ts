@@ -10,6 +10,7 @@ import {
   applyAddProjectFolderReviewed,
   applyAddProjectFolderReviewFailed,
   applyAddProjectSubmitted,
+  persistentFilterExperience,
   selectDashboardViewport,
 } from "@station/dashboard-core";
 import { addTuiToast } from "@station/dashboard-core";
@@ -390,6 +391,46 @@ describe("routeStationMouse", () => {
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.getState().screen).toEqual(before.screen);
     expect(store.getState().searchQuery).toBe(before.searchQuery);
+  });
+
+  it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
+    const fixture = makeStationTestStore({
+      terminalRows: 14,
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    const store = fixture.store;
+    store.setState({ persistentFilter: { query: "working" } });
+
+    expect(
+      routeStationMouse(
+        { kind: "persistentFilterAction", actionId: "persistentFilter.edit" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "working", cursor: 7 },
+    });
+
+    store.getState().handleKey({ input: "", escape: true });
+    store.getState().handleKey({ input: "H" });
+    routeStationMouse(
+      { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toEqual({ name: "help" });
+    expect(store.getState().persistentFilter).toEqual({ query: "working" });
+
+    store.getState().handleKey({ input: "", escape: true });
+    routeStationMouse(
+      { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.getState().persistentFilter).toBeUndefined();
   });
 
   it("toggles project collapse on header click, dashboard mode only", () => {

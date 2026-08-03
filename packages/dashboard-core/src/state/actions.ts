@@ -16,6 +16,10 @@ import {
   openForkDetailsForRow,
 } from "./screens/fork.js";
 import { handleNewSessionAction } from "./screens/newSession.js";
+import {
+  clearDashboardPersistentFilter,
+  openDashboardPersistentFilter,
+} from "./screens/persistentFilter.js";
 import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
 import { focusProjectSettingsItem, openProjectSettings } from "./screens/projectSettings.js";
 import {
@@ -35,9 +39,12 @@ import {
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type { ProjectHeaderControl, ProjectSettingsItemId, TuiState } from "./types.js";
 
+export type PersistentFilterActionId = "persistentFilter.edit" | "persistentFilter.clear";
+
 /** User-interaction subset of {@link DashboardAction}, shared by pointer and keyboard activation. */
 export type TuiSemanticAction =
   | { type: "dashboard.addProject" }
+  | { type: PersistentFilterActionId }
   | {
       type: "dashboard.projectHeader.activate";
       projectId: ProjectId;
@@ -84,6 +91,10 @@ export function handleTuiAction(
   switch (action.type) {
     case "dashboard.addProject":
       return handleFirstProjectAddAction(state, context);
+    case "persistentFilter.edit":
+      return openDashboardPersistentFilter(state);
+    case "persistentFilter.clear":
+      return clearDashboardPersistentFilter(state);
     case "dashboard.projectHeader.activate":
       return activateProjectHeaderControl(state, action.projectId, action.actionId);
     case "dashboard.emptyProject.activate":

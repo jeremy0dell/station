@@ -45,7 +45,10 @@ export type AddProjectInputIntent =
   | { type: "retry"; path: string }
   | { type: "transition"; action: AddProjectFlowAction };
 
-export const addProjectScreenBehavior = { clickAway: cancelAddProject };
+export const addProjectScreenBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: cancelAddProject,
+};
 
 export function openAddProject(state: TuiState, input: CreateAddProjectFlowInput): TuiState {
   return reconcileAddProjectSelection(

@@ -4,7 +4,7 @@ import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export const searchScreenBehavior = {};
+export const searchScreenBehavior = { dashboardHoverEnabled: false };
 
 export function openLegacyDashboardSearch(state: TuiState): TuiTransition {
   return {

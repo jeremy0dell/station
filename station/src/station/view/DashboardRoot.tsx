@@ -54,7 +54,8 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
   const hoverEnabled = useStationHoverEnabled();
 
   const toastHiddenByScreen = isTuiToastHiddenByScreen(screen);
-  const backgroundHoverEnabled = hoverEnabled && tuiScreenBehavior(screen).clickAway === undefined;
+  const backgroundHoverEnabled =
+    hoverEnabled && tuiScreenBehavior(screen).dashboardHoverEnabled;
   const wasToastHiddenByScreen = useRef(toastHiddenByScreen);
 
   // The store's terminalRows feeds the keyboard scroll-clamping machinery;

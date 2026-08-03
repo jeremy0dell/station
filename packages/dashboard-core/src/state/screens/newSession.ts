@@ -17,7 +17,10 @@ import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export const newSessionScreenBehavior = { clickAway: cancelNewSession };
+export const newSessionScreenBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: cancelNewSession,
+};
 
 export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "newSession") {

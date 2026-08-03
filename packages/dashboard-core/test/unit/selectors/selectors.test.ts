@@ -297,6 +297,25 @@ describe("TUI selectors", () => {
     ).toEqual(["api"]);
   });
 
+  it("can expose complete canonical children without changing stored collapse state", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      searchQuery: "missing",
+      collapsedProjectIds: ["web"],
+    });
+    const groups = selectProjectGroups(snapshot, state, {
+      includeCollapsedRows: true,
+      applySearch: false,
+    });
+
+    expect(groups.find((group) => group.project.id === "web")).toMatchObject({
+      collapsed: true,
+      rows: expect.arrayContaining([expect.objectContaining({ id: "ses_wt_web_idle" })]),
+    });
+    expect(state.collapsedProjectIds).toEqual(new Set(["web"]));
+  });
+
   it.each([
     ["branch", "FIX-NAV-MOBILE", ["ses_wt_web_idle"]],
     ["status value", "needs_attention", ["ses_wt_web_attention"]],

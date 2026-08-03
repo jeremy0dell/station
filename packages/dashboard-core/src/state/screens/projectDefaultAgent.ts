@@ -2,7 +2,10 @@ import type { TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export const projectDefaultAgentScreenBehavior = { clickAway: closeProjectDefaultAgent };
+export const projectDefaultAgentScreenBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: closeProjectDefaultAgent,
+};
 
 export function openProjectDefaultAgentPicker(state: TuiState, projectId: string): TuiState {
   if (state.snapshot === undefined) {

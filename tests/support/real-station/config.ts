@@ -27,6 +27,7 @@ export type WriteRealStationConfigOptions = {
   installCodexHooks?: boolean;
   installOpenCodeHooks?: boolean;
   useLifecycleHooks?: boolean;
+  dashboardPersistentFilter?: boolean;
   tmuxSession?: string;
   eventHook?: {
     command: string;
@@ -73,6 +74,7 @@ export async function writeRealStationConfig(
     "",
     ...harnessConfigLines(options, harnessProvider),
     ...eventHookConfigLines(options),
+    ...featureFlagConfigLines(options),
     "[[projects]]",
     `id = ${tomlString(projectId)}`,
     'label = "station real E2E"',
@@ -102,6 +104,12 @@ export async function writeRealStationConfig(
     tmuxSession,
     projectId,
   };
+}
+
+function featureFlagConfigLines(options: WriteRealStationConfigOptions): string[] {
+  return options.dashboardPersistentFilter === true
+    ? ["[feature_flags]", "dashboard_persistent_filter = true", ""]
+    : [];
 }
 
 function eventHookConfigLines(options: WriteRealStationConfigOptions): string[] {

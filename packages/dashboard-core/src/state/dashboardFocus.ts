@@ -1,10 +1,10 @@
 import type { ProjectId, SessionId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
+import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import {
   type DashboardViewportItem,
   selectDashboardItems,
 } from "../selectors/dashboardViewport.js";
-import type { DashboardSessionRow } from "../selectors/selectors.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import type { TuiTransition } from "./transition.js";
@@ -174,8 +174,8 @@ export function focusedSelectableRow(state: TuiState): DashboardSessionRow | und
 }
 
 /**
- * Preserves stable focus across dashboard list-shape changes, then falls forward
- * from the old item position before falling back to the preceding focusable item.
+ * Preserves stable focus across dashboard list-shape changes, preferring a hidden child's
+ * collapsed parent before falling forward or backward by rendered position.
  */
 export function reconcileDashboardFocus(previous: TuiState, next: TuiState): TuiState {
   if (next.snapshot === undefined) {
@@ -202,8 +202,34 @@ export function reconcileDashboardFocus(previous: TuiState, next: TuiState): Tui
   if (previousIndex === undefined) {
     return clearDashboardFocus(withClampedScroll(next, nextItems.length));
   }
+  const parentHeaderIndex = collapsedParentHeaderIndex(next, nextItems, focus);
+  if (parentHeaderIndex !== undefined) {
+    return focusItem(next, nextItems, parentHeaderIndex);
+  }
   const following = nextFocusable.find((index) => index >= previousIndex);
   return focusItem(next, nextItems, following ?? lastFocusableIndex(nextFocusable));
+}
+
+function collapsedParentHeaderIndex(
+  state: TuiState,
+  items: readonly DashboardViewportItem[],
+  focus: DashboardFocus,
+): number | undefined {
+  let projectId: ProjectId | undefined;
+  if (focus.kind === "session") {
+    projectId = state.snapshot?.sessions.find(
+      (session) => session.id === focus.sessionId,
+    )?.projectId;
+  } else if (focus.kind === "emptyProjectAction") {
+    projectId = focus.projectId;
+  }
+  if (projectId === undefined || !state.collapsedProjectIds.has(projectId)) {
+    return undefined;
+  }
+  const index = items.findIndex(
+    (item) => item.type === "projectHeader" && item.project.id === projectId,
+  );
+  return index === -1 ? undefined : index;
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {

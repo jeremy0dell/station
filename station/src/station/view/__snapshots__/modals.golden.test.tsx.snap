@@ -16,10 +16,10 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  [6] x b│  Esc/↑↓     context menu close/move                          │   #8 ✓ 
  [7] ⠋ p│  Enter/Sp   context menu select                              │8 #16 … 
  [8] ○ t│                     station project view                     │-1 #4 ✓ 
-        │  ↑/↓        move cursor                                      │        
+        │  ↑/↓        move cursor · wheel scroll                       │        
 ▼ script│  ↵          open focused session                             │qs] [▾] 
  [9] ○ a│  tab        next session needing you                         │6 #5 x1 
- [a] ? m│  wheel      scroll project list                              │ -1 #10 
+ [a] ? m│  / ↵ Esc Q  edit/apply/cancel-clear/retain-close filter      │ -1 #10 
         │  1-9/a-z    open visible session                             │        
 ▼ empty-│  N/A/R/C/F/P  new/add/rename/fold/fork/settings              │qs] [▾] 
         ╰──────────────────────────────────────────────────────────────╯        

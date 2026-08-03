@@ -1,6 +1,6 @@
 import type { TerminalFocusOrigin, WorktreeRow } from "@station/contracts";
 import { worktreeHasLiveAgent } from "@station/contracts";
-import type { DashboardSessionRow } from "../selectors/selectors.js";
+import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import { safeErrorToToast } from "../services/errors/errors.js";
 import {
   buildResumeAgentCommand,

@@ -1174,6 +1174,53 @@ describe("TUI screen transitions", () => {
     ]);
   });
 
+  it.each([
+    ["Help", [{ input: "H" }], { input: "", escape: true }],
+    ["New Session", [{ input: "N" }], { input: "", escape: true }],
+    ["Add Project", [{ input: "A" }], { input: "", escape: true }],
+    ["rename", [{ input: "R" }], { input: "", escape: true }],
+    ["fork", [{ input: "F" }], { input: "", escape: true }],
+    ["remove", [{ input: "X" }], { input: "", escape: true }],
+    ["settings", [{ input: "P" }, { input: "1" }], { input: "", escape: true }],
+  ] as const)("returns from %s with the same applied filter", (_label, openKeys, closeKey) => {
+    let state = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      persistentFilter: { query: "working" },
+    });
+    for (const key of openKeys) {
+      state = handleTuiKey(state, key).state;
+    }
+
+    const returned = handleTuiKey(state, closeKey).state;
+
+    expect(returned.screen).toEqual({ name: "dashboard" });
+    expect(returned.persistentFilter).toEqual({ query: "working" });
+  });
+
+  it("limits chooser slots and focused Enter to sessions retained by the applied filter", () => {
+    const base = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      persistentFilter: { query: "queue-worker" },
+      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
+    });
+    const choosing = handleTuiKey(base, { input: "X" }).state;
+
+    expect(handleTuiKey(choosing, { input: "2" }).state.screen).toEqual({
+      name: "removeWorktree",
+      step: "chooseSlot",
+    });
+    expect(handleTuiKey(choosing, { input: "1" }).state.screen).toMatchObject({
+      name: "removeWorktree",
+      step: "confirm",
+      rowId: "ses_wt_api_working",
+    });
+    expect(handleTuiKey(choosing, { input: "\r", return: true }).state.screen).toMatchObject({
+      name: "removeWorktree",
+      step: "confirm",
+      rowId: "ses_wt_api_working",
+    });
+  });
+
   it("resets dashboard scroll when a search query is applied", () => {
     const opened = handleTuiKey(
       createInitialTuiState({

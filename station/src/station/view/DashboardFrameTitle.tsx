@@ -51,7 +51,7 @@ export function DashboardFrameTitle({
   const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
   const screen = useStore(store, (state) => state.screen);
   const behavior = tuiScreenBehavior(screen);
-  const hover = hovered && behavior.clickAway === undefined;
+  const hover = hovered && behavior.dashboardHoverEnabled;
 
   const needsYou = snapshot === undefined ? 0 : selectFleetSummary(snapshot).needsYou;
   const subtitle =

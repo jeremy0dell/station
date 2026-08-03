@@ -239,6 +239,35 @@ describe("dashboard golden frames", () => {
     expect(frame).toContain("Esc clear");
   });
 
+  it("ignores branch metadata that is not visible in the dashboard row", async () => {
+    const base = manyProjectsSnapshot();
+    const snapshot = {
+      ...base,
+      rows: base.rows.map((row) =>
+        row.id === "wt_station_idle2" ? { ...row, title: "Readable CLI task" } : row,
+      ),
+    };
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot,
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    await act(async () => {
+      setup.store.getState().handleKey({ input: "/" });
+      setup.store.getState().handleKey({ input: "cli-help-man" });
+      setup.store.getState().handleKey({ input: "\r", return: true });
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("FILTER cli-help-man");
+    expect(frame).toContain("0/10 matches");
+    expect(frame).not.toContain("Readable CLI task");
+    expect(frame).not.toContain("↳");
+  });
+
   it("clips a long persistent draft at minimum dashboard size", async () => {
     const setup = await renderDashboard({
       width: 40,
@@ -831,6 +860,39 @@ describe("dashboard golden frames", () => {
 
     const spans = setup.captureSpans();
     expect(spanBgHex(spanAtFrameCell(spans, row, 78))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+  });
+
+  it("suppresses dashboard row hovers while the persistent filter editor owns input", async () => {
+    const setup = await renderDashboard({
+      width: 120,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    await act(async () => {
+      setup.store.getState().handleKey({ input: "/" });
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const lines = setup.captureCharFrame().split("\n");
+    const projectRow = lines.findIndex((line) => line.includes("▼ station"));
+    const shellColumn = lines[projectRow]?.indexOf("[shell]") ?? -1;
+    await setup.mockMouse.moveTo(shellColumn, projectRow);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), projectRow, shellColumn))).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+
+    const sessionRow = lines.findIndex((line) => line.includes("docs-cleanup"));
+    const sessionColumn = lines[sessionRow]?.indexOf("docs-cleanup") ?? -1;
+    await setup.mockMouse.moveTo(sessionColumn, sessionRow);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), sessionRow, 118))).not.toBe(
       stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
   });

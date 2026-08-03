@@ -282,35 +282,45 @@ selected experience or typed state; they do not read the flag.
 
 With the flag on, `/` opens a single-line editor in the complete table-header row. Its draft starts
 from the dashboard-local applied query. Editing performs a deterministic, locale-neutral
-case-insensitive soft preview over visible row fields and project labels. Folded match offsets map
-back to the displayed source text before highlighting. Every row keeps its current order, slot,
-collapse visibility, and viewport position; visible matches receive bounded highlight spans, while
-nonmatching rows and project headers are dimmed. Collapsed and empty projects still receive header
-match state. The header includes the live row count and any above-viewport context. A valid
-zero-result draft stays editable and uses an amber `0/N matches` cue rather than an error state.
-Long drafts follow the
-caret horizontally and never wrap into the body.
+case-insensitive soft preview over the complete session and optimistic-row universe plus project
+labels. Folded match offsets map back to source text before highlighting. Every rendered row keeps
+its current order, slot, collapse visibility, and viewport position; visible matches receive bounded
+highlight spans, while nonmatching rows and project headers are dimmed. Matches inside collapsed
+projects contribute to the global count and header state without revealing the children during
+editing. The header includes the live row count and any above-viewport context. A valid zero-result
+draft stays editable and uses an amber `0/N matches` cue rather than an error state. Long drafts
+follow the caret horizontally and never wrap into the body.
 
 `Enter` applies a nonblank draft to optional dashboard-local persistent-filter state; applying a
-blank draft removes that optional state. Editing `Esc` discards the draft and restores the applied
-query exactly. On the dashboard, `Esc` clears an applied filter before the existing popup-dismiss
-path; `Q` closes or dismisses while retaining dashboard-local state. An applied query remains a soft
-projection in #395: its bounded summary/count replaces the column row and `/ edit` plus `Esc clear`
-appear in the neutral dashboard footer, but rows are not hidden or reordered. Narrow applied-filter
-footers shed secondary shortcuts before the edit, clear, and close controls. While editing, the
-footer is a visually explicit bounded `FILTER` helper. Persistent filtering never uses the absolute
-`CommandPromptView` overlay.
+blank draft removes that optional state. An applied filter is a hard projection: nonmatching
+sessions, optimistic rows, projects, and orphaned project gaps are omitted without changing
+canonical order. A project-label match retains all of that project's children, while a child-only
+match retains only its project context and matching children. Matching children of a stored-collapsed
+project are temporarily visible while the disclosure marker and `collapsedProjectIds` stay
+unchanged; clearing restores the collapsed view.
 
-Hard applied row/group omission, collapse override, hidden-field match explanations, pointer
-edit/clear parity, sheet-return parity, and real native/tmux terminal acceptance remain owned by
-[#396](https://github.com/jeremy0dell/station/issues/396).
+Matching is intentionally limited to text visible in project headers and session rows: project
+label, displayed title, agent, and activity. Hidden branch values, provider identifiers, raw status
+values, and generated diagnostic reasons are not searched because they cannot provide a stable,
+user-verifiable result.
+
+Editing `Esc` discards the draft and reconciles back to the prior applied projection. On the
+dashboard, `Esc` clears an applied filter before the existing popup-dismiss path; `Q` closes or
+dismisses while retaining dashboard-local state. The bounded summary/count replaces the column row,
+and `/ edit` plus `Esc clear` are keyboard and pointer controls in the neutral dashboard footer.
+Narrow applied-filter footers shed secondary shortcuts before edit, clear, and close. While editing,
+the footer is a visually explicit bounded `FILTER` helper. Persistent filtering never uses the
+absolute `CommandPromptView` overlay. Sheets, Help, snapshot replacement, and warm popup reopen
+preserve the applied filter; covered footer targets remain inert outside dashboard mode.
 
 | Verification | Flag off | Flag on |
 | --- | --- | --- |
-| `/` at wide and minimum width | Legacy absolute prompt; no live preview | Header editor; live highlights/dimming/count; no wrapping |
-| Editing `Esc` | Cancels legacy draft | Restores the prior applied query |
-| `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Applies persistent state, then clears it without closing |
-| Zero matches | Legacy projection behavior | Amber, recoverable soft preview with all rows still present |
+| `/` at wide and minimum width | Legacy absolute prompt; no live preview | Header editor; live highlights/dimming/global count; no wrapping |
+| Editing `Esc` | Cancels legacy draft | Restores the prior hard applied projection |
+| `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
+| Zero matches | Legacy projection behavior | Amber, recoverable soft preview; applying yields an empty dashboard projection |
+| Hidden metadata only | Legacy search may retain the row | Ignores metadata that is not rendered in the dashboard |
+| Applied footer pointer | No persistent controls | `/ edit` and `Esc clear` share the keyboard transitions |
 | `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining the applied query |
 
 ## Mouse Coverage Boundaries

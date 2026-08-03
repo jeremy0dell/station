@@ -33,6 +33,7 @@ export type TuiRuntimeState = {
 };
 
 export type DashboardPersistentFilter = {
+  /** Nonblank dashboard-local query whose applied projection omits nonmatching groups and rows. */
   query: string;
 };
 

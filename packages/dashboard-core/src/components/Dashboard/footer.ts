@@ -1,3 +1,4 @@
+import type { PersistentFilterActionId } from "../../state/actions.js";
 import {
   dashboardBindingHelp,
   QUIT_HINT_CLOSE,
@@ -18,12 +19,16 @@ export type DashboardFilterFooterSegmentRole = "badge" | "key" | "description" |
 export type DashboardFilterFooterSegment = {
   text: string;
   role: DashboardFilterFooterSegmentRole;
+  action?: PersistentFilterActionId;
 };
 
 export type DashboardFooterModel =
   | { kind: "loading"; text: string }
   | { kind: "dashboard"; text: string }
-  | { kind: "persistentFilterApplied"; text: string }
+  | {
+      kind: "persistentFilterApplied";
+      segments: readonly DashboardFilterFooterSegment[];
+    }
   | {
       kind: "persistentFilterEditing";
       segments: readonly DashboardFilterFooterSegment[];
@@ -54,7 +59,7 @@ export function dashboardFooterModel({
     const appliedQuitHint = quitHint === QUIT_HINT_CLOSE ? QUIT_HINT_FILTER_CLOSE : quitHint;
     return {
       kind: "persistentFilterApplied",
-      text: appliedFilterFooter(columns, appliedQuitHint),
+      segments: appliedFilterFooter(columns, appliedQuitHint),
     };
   }
   return {
@@ -107,35 +112,103 @@ function dashboardFooter(columns: number, quitHint: string, firstRun: boolean): 
   return compact;
 }
 
-function appliedFilterFooter(columns: number, quitHint: string): string {
-  const full = footerLine(
+function appliedFilterFooter(
+  columns: number,
+  quitHint: string,
+): readonly DashboardFilterFooterSegment[] {
+  const full = appliedFooterSegments(
     [
       ["tui.dashboard.focusActivate", "activate"],
       ["tui.dashboard.newSession", "new"],
       ["tui.dashboard.addProject", "add"],
       ["tui.dashboard.nextNeedsMe", "next-needs-me"],
-      ["tui.dashboard.search", "edit"],
-      ["tui.dashboard.dismissEsc", "clear"],
+      ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+      ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
       ["tui.dashboard.remove", "delete"],
       ["tui.dashboard.helpAlias", "help"],
     ],
     quitHint,
   );
-  const essential = footerLine(
+  const prioritized = appliedFooterSegments(
     [
-      ["tui.dashboard.search", "edit"],
-      ["tui.dashboard.dismissEsc", "clear"],
+      ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+      ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
+      ["tui.dashboard.focusActivate", "activate"],
+      ["tui.dashboard.newSession", "new"],
     ],
     quitHint,
   );
-  return fitFooterCandidates(columns, [
+  const essential = appliedFooterSegments(
+    [
+      ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+      ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
+    ],
+    quitHint,
+  );
+  return fitFooterSegmentCandidates(columns, [
     full,
-    `${shortcut("tui.dashboard.search", "edit")}  ${shortcut("tui.dashboard.dismissEsc", "clear")}  ${shortcut("tui.dashboard.focusActivate", "activate")}  ${shortcut("tui.dashboard.newSession", "new")}  ${quitHint}`,
+    prioritized,
     essential,
-    `${shortcut("tui.dashboard.search", "edit")} ${shortcut("tui.dashboard.dismissEsc", "clear")} Q`,
-    "/ Esc Q",
-    "Q",
+    [
+      {
+        text: shortcut("tui.dashboard.search", "edit"),
+        role: "key",
+        action: "persistentFilter.edit",
+      },
+      { text: " ", role: "spacer" },
+      {
+        text: shortcut("tui.dashboard.dismissEsc", "clear"),
+        role: "key",
+        action: "persistentFilter.clear",
+      },
+      { text: " Q", role: "description" },
+    ],
+    [
+      { text: "/", role: "key", action: "persistentFilter.edit" },
+      { text: " ", role: "spacer" },
+      { text: "Esc", role: "key", action: "persistentFilter.clear" },
+      { text: " Q", role: "description" },
+    ],
+    [{ text: "Q", role: "description" }],
   ]);
+}
+
+type AppliedFooterShortcut = readonly [
+  id: TuiDashboardBindingId,
+  label: string,
+  action?: PersistentFilterActionId,
+];
+
+function appliedFooterSegments(
+  shortcuts: readonly AppliedFooterShortcut[],
+  quitHint: string,
+): DashboardFilterFooterSegment[] {
+  const segments: DashboardFilterFooterSegment[] = [];
+  shortcuts.forEach(([id, label, action], index) => {
+    if (index > 0) {
+      segments.push({ text: "  ", role: "spacer" });
+    }
+    const segment: DashboardFilterFooterSegment = {
+      text: shortcut(id, label),
+      role: action === undefined ? "description" : "key",
+    };
+    if (action !== undefined) {
+      segment.action = action;
+    }
+    segments.push(segment);
+  });
+  segments.push({ text: "  ", role: "spacer" });
+  segments.push({ text: quitHint, role: "description" });
+  return segments;
+}
+
+function fitFooterSegmentCandidates(
+  columns: number,
+  candidates: readonly (readonly DashboardFilterFooterSegment[])[],
+): readonly DashboardFilterFooterSegment[] {
+  const width = normalizeTextLineWidth(columns);
+  const selected = candidates.find((candidate) => textLineSegmentsWidth(candidate) <= width);
+  return selected ?? clipTextLineSegments(candidates.at(-1) ?? [], width);
 }
 
 function footerLine(

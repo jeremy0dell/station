@@ -460,15 +460,15 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown
 ─────────────────────────────────────────────────────────── 
 FILTER working                                 2/10 matches 
 ▼ station  5 sessions · 4 agents              [sh] [qs] [▾] 
- [1] ○ cli-help-man            codex     idle         #70 ✓ 
- [2] - docs-cleanup            codex     no agent           
- [3] ○ pty-buffer              codex     idle         #73 ✓ 
- [4] + session-resume          codex     starting           
- [5] ⠋ station-overlay         codex     working      #76 … 
+ [1] ⠋ station-overlay         codex     working      #76 … 
                                                             
 ▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
- [6] x batch-export            opencode  exited        #8 ✓ 
-▼ 4 below · showing 6 of 10                                 
+ [2] ⠋ provider-hooks          opencode  working      #16 … 
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
 ─────────────────────────────────────────────────────────── 
 / edit  Esc clear  ↵ activate  N new  Q:close               
 "
