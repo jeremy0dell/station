@@ -1,9 +1,4 @@
-import {
-  rgbColor,
-  terminalDefaultColor,
-  type StationRgbColor,
-  type StationTheme,
-} from "./types.js";
+import { rgbColor, type StationTheme } from "./types.js";
 
 // This file is Station's sole production raw-color authority; renderers consume semantic roles.
 const palette = {
@@ -170,30 +165,5 @@ export const nativeStationTheme = {
     sheet: palette.background,
     settings: palette.background,
     toast: palette.background,
-  },
-} as const satisfies StationTheme;
-
-const terminalBackground = (fallback: StationRgbColor) =>
-  terminalDefaultColor("background", fallback);
-
-export const embeddedStationTheme = {
-  ...sharedRoles,
-  surfaces: {
-    // Terminal-default intent still paints opaque cells; the snapshot keeps non-default consumers deterministic.
-    canvas: terminalBackground(palette.background),
-    panel: terminalBackground(palette.background),
-    prompt: terminalBackground(palette.background),
-    help: terminalBackground(palette.background),
-    sheet: terminalBackground(palette.background),
-    settings: terminalBackground(palette.background),
-    toast: terminalBackground(palette.background),
-  },
-  contextMenu: {
-    ...sharedRoles.contextMenu,
-    surface: terminalBackground(palette.menuSurface),
-  },
-  island: {
-    ...sharedRoles.island,
-    background: terminalBackground(palette.background),
   },
 } as const satisfies StationTheme;

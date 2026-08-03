@@ -71,6 +71,51 @@ not disconnect the CLI-owned IPC channel. Source build identity is verified
 once per OS process so a harmless reload reuses the accepted identity; a new
 process still verifies the current checkout and outputs.
 
+## Adaptive Embedded Appearance
+
+Appearance `auto` has two renderer-owned meanings and no user setting in this
+slice:
+
+- The native workspace always resolves the complete built-in Station theme.
+  Station does not request or consume the outer terminal palette for native
+  appearance selection. OpenTUI may independently synchronize palette state
+  during renderer setup when required by detected capabilities.
+- The embedded standalone/tmux dashboard asks OpenTUI for the outer terminal's
+  default foreground, default background, and ANSI indices 0-15. OpenTUI owns
+  terminal and tmux OSC transport; Station never branches on terminal identity
+  or tmux.
+
+Station strictly parses the raw OpenTUI response. Both defaults and all 16 ANSI
+entries must be non-null six-digit RGB values, every other known response field
+must be RGB or null, and missing, extra, partial, or malformed data is rejected.
+Station does not use OpenTUI's fallback-normalized palette because normalization
+would make incomplete host evidence look complete. Missing evidence, a palette
+failure, or a default foreground/background pair below ordinary-text contrast
+selects the complete built-in theme atomically; host surfaces are never mixed
+with unrelated Station foreground roles.
+
+A valid embedded palette resolves one complete provider-neutral semantic theme.
+Terminal-default and indexed intent retain their observed snapshots. Weak ANSI
+roles are deterministically corrected toward the observed foreground so they
+remain readable on both the canvas and adaptive interaction fills;
+muted/border/interaction roles derive from foreground/background blends. The
+observed luminance and contrast determine dark/light behavior; OpenTUI's theme
+mode label does not.
+
+OpenTUI emits palette responses before `getPalette()` resolves and treats theme
+mode changes as cache invalidation followed by a palette refresh. Station treats
+`PALETTE` as color authority and `THEME_MODE` only as invalidation. Its controller
+serializes and coalesces refreshes, rejects superseded generations, and clears
+the OpenTUI cache again after an invalidated in-flight query settles because that
+query can repopulate a cache already cleared by the event.
+
+The standalone renderer owns the controller beside its OpenTUI renderer. The
+controller starts from the complete built-in fallback, and palette I/O does not
+delay root rendering; normal exit, errors, and Bun HMR unmount the React root and
+dispose palette listeners before destroying OpenTUI. Live propagation of native
+pane VT palette state remains tracked by #417 and is not part of embedded
+appearance selection.
+
 You can also run the renderer directly during development:
 
 ```bash

@@ -27,7 +27,11 @@ import {
   nativeStationTheme,
   stationColorSnapshotValue,
   StationThemeProvider,
+  type StationTheme,
 } from "../../theme/index.js";
+import { parseStationTerminalPaletteObservation } from "../../theme/terminalPalette/observation.js";
+import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
+import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
@@ -37,6 +41,12 @@ function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
 function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.bg === undefined ? undefined : rgbToHex(span.bg);
 }
+
+const lightObservation = parseStationTerminalPaletteObservation(lightTerminalColors);
+if (lightObservation === null) {
+  throw new Error("Expected a complete light terminal palette fixture.");
+}
+const LIGHT_TERMINAL_THEME = createTerminalPaletteTheme(lightObservation);
 
 const SIZES = [
   { width: 80, height: 24 },
@@ -83,6 +93,7 @@ describe("dashboard golden frames", () => {
     dispatchMouse?: (target: StationMouseTarget) => void;
     hoverEnabled?: boolean;
     toast?: TuiToast;
+    theme?: StationTheme;
     dashboardSearchExperience?: DashboardSearchExperience;
   }): Promise<RenderedDashboard> {
     const { store } = makeStationTestStore({
@@ -111,7 +122,7 @@ describe("dashboard golden frames", () => {
         </StationMouseProvider>
       );
     const setup = await testRender(
-      <StationThemeProvider theme={nativeStationTheme}>
+      <StationThemeProvider theme={input.theme ?? nativeStationTheme}>
         <StationHoverProvider value={input.hoverEnabled ?? true}>
           {mouseDashboard}
         </StationHoverProvider>
@@ -458,6 +469,36 @@ describe("dashboard golden frames", () => {
     expect(spanHex(spanAtFrameCell(frame, unknownRow, unknownNameCol))).toBe(
       stationColorSnapshotValue(nativeStationTheme.text.primary),
     );
+  });
+
+  it("keeps layout stable while applying representative light-terminal roles", async () => {
+    const input = {
+      width: 80,
+      height: 24,
+      snapshot: attentionAndFailuresSnapshot(),
+    };
+    const native = await renderDashboard(input);
+    const light = await renderDashboard({ ...input, theme: LIGHT_TERMINAL_THEME });
+    expect(light.captureCharFrame()).toBe(native.captureCharFrame());
+
+    const lines = light.captureCharFrame().split("\n");
+    const spans = light.captureSpans();
+    const attentionRow = lines.findIndex((line) => line.includes("hook-scope"));
+    const attentionName = lines[attentionRow]?.indexOf("hook-scope") ?? -1;
+    const dangerMark = lines[attentionRow]?.indexOf("!") ?? -1;
+    const exitedRow = lines.findIndex((line) => line.includes("done-run"));
+    const mutedStatus = lines[exitedRow]?.indexOf("exited") ?? -1;
+
+    expect(spanHex(spanAtFrameCell(spans, attentionRow, attentionName))).toBe(
+      stationColorSnapshotValue(LIGHT_TERMINAL_THEME.text.primary),
+    );
+    expect(spanHex(spanAtFrameCell(spans, attentionRow, dangerMark))).toBe(
+      stationColorSnapshotValue(LIGHT_TERMINAL_THEME.status.danger),
+    );
+    expect(spanHex(spanAtFrameCell(spans, exitedRow, mutedStatus))).toBe(
+      stationColorSnapshotValue(LIGHT_TERMINAL_THEME.status.neutral),
+    );
+    expect(LIGHT_TERMINAL_THEME.surfaces.canvas.kind).toBe("terminal-default");
   });
 
   it("routes PR number clicks through the link mouse target", async () => {
