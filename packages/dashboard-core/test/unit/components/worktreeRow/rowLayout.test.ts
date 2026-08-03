@@ -1,16 +1,12 @@
-import {
-  layoutWorktreeRowGrid,
-  type RowGridLayout,
-  segmentsWidth,
-  worktreeStyleRowGridInput,
-} from "@station/dashboard-core";
+import { layoutWorktreeRowGrid, type RowGridLayout, segmentsWidth } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { worktreeStyleRowGridInput } from "../../../../src/components/WorktreeRow/rowInput.js";
 
 function rowText(layout: RowGridLayout): string {
   return layout.segments.map((segment) => (segment.kind === "text" ? segment.text : "·")).join("");
 }
 
-describe("worktree row layout permissiveness", () => {
+describe("worktree row layout and filter semantics", () => {
   it("stretches the status to the row end instead of truncating while space remains", () => {
     const status = "Cursor turn ended after running the full test suite";
     const [layout] = layoutWorktreeRowGrid({
@@ -72,5 +68,74 @@ describe("worktree row layout permissiveness", () => {
     });
     expect(layout).toBeDefined();
     expect(segmentsWidth(layout.segments)).toBeLessThanOrEqual(40);
+  });
+
+  it("segments every visible matched field with semantic match backgrounds", () => {
+    const [layout] = layoutWorktreeRowGrid({
+      columns: 80,
+      rows: [
+        worktreeStyleRowGridInput({
+          id: "matched",
+          slot: "1",
+          marker: { kind: "text", text: "●" },
+          title: "alpha task",
+          agent: "codex",
+          activity: "working",
+          textHighlights: {
+            title: [{ start: 0, end: 5 }],
+            agent: [{ start: 2, end: 5 }],
+            activity: [{ start: 0, end: 4 }],
+          },
+        }),
+      ],
+    });
+
+    expect(
+      layout.segments
+        .filter((segment) => segment.kind === "text" && segment.highlighted === true)
+        .map((segment) => (segment.kind === "text" ? segment.text : "")),
+    ).toEqual(["alpha", "dex", "work"]);
+  });
+
+  it("dims nonmatching preview rows semantically", () => {
+    const input = worktreeStyleRowGridInput({
+      id: "dimmed",
+      slot: "2",
+      marker: { kind: "text", text: "-" },
+      title: "beta task",
+      agent: "pi",
+      activity: "idle",
+      dimmed: true,
+    });
+
+    expect(
+      Object.values(input.cells)
+        .flatMap((cell) => cell?.segments ?? [])
+        .filter((segment) => segment.kind === "text" && segment.text.trim().length > 0)
+        .every((segment) => segment.dimmed === true),
+    ).toBe(true);
+  });
+
+  it("preserves a Unicode title highlight while clipping by terminal cells", () => {
+    const [layout] = layoutWorktreeRowGrid({
+      columns: 12,
+      rows: [
+        worktreeStyleRowGridInput({
+          id: "unicode",
+          slot: "1",
+          marker: { kind: "text", text: "-" },
+          title: "修正-alpha",
+          textHighlights: { title: [{ start: 0, end: 2 }] },
+        }),
+      ],
+    });
+
+    expect(segmentsWidth(layout.segments)).toBeLessThanOrEqual(12);
+    expect(
+      layout.segments.some(
+        (segment) =>
+          segment.kind === "text" && segment.text === "修正" && segment.highlighted === true,
+      ),
+    ).toBe(true);
   });
 });

@@ -118,8 +118,7 @@ export type OpenForkDetailsOptions = {
   branchToken?: string;
 };
 
-// Builds the fork details step from a dashboard row. Exported so the context menu can
-// open it directly for a clicked row (skipping chooseSlot), like renameSession.
+// The dashboard action resolver uses this pure transition to skip chooseSlot for context-menu entry.
 export function openForkDetailsForRow(
   state: TuiState,
   rowId: SessionId,

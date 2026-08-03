@@ -1,6 +1,7 @@
 import { createStationClientRuntime, type StationClientRuntime } from "@station/client";
 import type {
   CommandReceipt,
+  SafeError,
   SessionId,
   StationCommand,
   StationSnapshot,
@@ -12,7 +13,7 @@ import { sessionForWorktreeRow } from "../selectors/selectors.js";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
 import type { TuiObserverService, TuiToast } from "../services/types.js";
-import { handleTuiAction, type TuiSemanticAction } from "./actions.js";
+import { type DashboardAction, handleTuiAction } from "./actions.js";
 import { buildFocusCommand } from "./commandBuilders.js";
 import {
   clearDashboardFocus as clearDashboardFocusState,
@@ -24,6 +25,12 @@ import {
   legacySearchExperience,
 } from "./experiences/dashboardSearch.js";
 import type { TuiKey } from "./keys.js";
+import {
+  addPendingCreateSessionRow,
+  failPendingCreateSessionRow,
+  type PendingCreateSessionRow,
+  removeCreateSessionLocalRow,
+} from "./localRows.js";
 import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
 import {
   createTuiLocalOperationRunner,
@@ -49,12 +56,12 @@ export type TuiHandleKeyResult = {
   controlIntent?: TuiControlIntent;
 };
 
-export type TuiStore = TuiState & {
-  start(): () => void;
+/** The sole public dashboard mutation authority. */
+export type DashboardActions = {
   /** Applies a key transition and returns any one-shot renderer-owned control intent. */
   handleKey(key: TuiKey): TuiHandleKeyResult;
-  /** Applies a semantic transition and returns any one-shot renderer-owned control intent. */
-  handleAction(action: TuiSemanticAction): TuiHandleKeyResult;
+  /** Resolves typed actions through the shared transition and effect path. */
+  dispatch(action: DashboardAction): TuiHandleKeyResult;
   /** Create a project session immediately with its configured default harness. */
   createQuickSession(projectId: string): void;
   setTerminalRows(rows: number): void;
@@ -67,7 +74,19 @@ export type TuiStore = TuiState & {
   dismissToasts(): void;
   expireToasts(nowMs?: number): void;
   refreshActiveToastExpiry(nowMs?: number): void;
+  /** Adds a pending hosted-create row until its workspace lifecycle resolves. */
+  addPendingCreateSession(row: PendingCreateSessionRow): void;
+  /** Moves a pending row to retained failure; the caller owns expiry and scheduled removal. */
+  failPendingCreateSession(localId: string, error: SafeError, expiresAt: number): void;
+  /** Removes a pending or retained-failure hosted-create row by local identity. */
+  removePendingCreateSession(localId: string): void;
 };
+
+/** Temporary composition of dashboard data, actions, and lifecycle pending the runtime facade. */
+export type TuiStore = TuiState &
+  DashboardActions & {
+    start(): () => void;
+  };
 
 export type TuiStoreOptions = {
   service: TuiObserverService;
@@ -176,7 +195,7 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
           dashboardSearchExperience,
         ),
       ),
-    handleAction: (action): TuiHandleKeyResult =>
+    dispatch: (action): TuiHandleKeyResult =>
       applyTransition(
         store,
         options.service,
@@ -223,6 +242,15 @@ export function createTuiStore(options: TuiStoreOptions): StoreApi<TuiStore> {
     },
     refreshActiveToastExpiry: (nowMs = Date.now()): void => {
       set(refreshActiveTuiToastExpiry(get(), nowMs));
+    },
+    addPendingCreateSession: (row): void => {
+      set((state) => addPendingCreateSessionRow(state, row));
+    },
+    failPendingCreateSession: (localId, error, expiresAt): void => {
+      set((state) => failPendingCreateSessionRow(state, localId, error, expiresAt));
+    },
+    removePendingCreateSession: (localId): void => {
+      set((state) => removeCreateSessionLocalRow(state, localId));
     },
   }));
 
@@ -352,7 +380,14 @@ function applyTransition(
   operations: TuiLocalOperationRunner,
   transition: TuiTransition,
 ): TuiHandleKeyResult {
-  store.setState(transition.state);
+  const merged = { ...store.getState(), ...transition.state };
+  if (transition.state.persistentFilter === undefined) {
+    // Zustand's default merge retains absent optionals, so replace the merged store when clearing.
+    const { persistentFilter: _removed, ...withoutPersistentFilter } = merged;
+    store.setState(withoutPersistentFilter, true);
+  } else {
+    store.setState(merged, true);
+  }
   void applyTransitionEffects(store, service, clientRuntime, runtime, operations, transition);
   const result: TuiHandleKeyResult = { dismissPopup: transition.dismissPopup === true };
   if (transition.exitCode !== undefined) {

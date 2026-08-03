@@ -2,9 +2,18 @@
 // the parity checklist, reached by driving the real machine with real keys,
 // rendered over the dashboard at 80x24. Snapshots live in __snapshots__.
 import { afterEach, describe, expect, it } from "bun:test";
-import { TextRenderable, type BaseRenderable } from "@opentui/core";
+import { rgbToHex, TextRenderable, type BaseRenderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
-import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+  type StationColor,
+} from "../../theme/index.js";
+import { parseStationTerminalPaletteObservation } from "../../theme/terminalPalette/observation.js";
+import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
+import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
+import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import type { StoreApi } from "zustand/vanilla";
 import {
   attentionAndFailuresSnapshot,
@@ -12,9 +21,10 @@ import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
-import type { TuiKey } from "@station/dashboard-core";
+import type { DashboardSearchExperience, TuiKey } from "@station/dashboard-core";
 import type { TuiStore } from "@station/dashboard-core";
 import {
+  persistentFilterExperience,
   addPendingProjectDefaultHarness,
   applyAddProjectFolderLoaded,
   applyAddProjectFolderReviewFailed,
@@ -30,6 +40,11 @@ import { StationMouseProvider } from "./stationMouseContext.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
 
 const SIZE = { width: 80, height: 24 };
+const lightObservation = parseStationTerminalPaletteObservation(lightTerminalColors);
+if (lightObservation === null) {
+  throw new Error("Expected a complete light terminal palette fixture.");
+}
+const LIGHT_TERMINAL_THEME = createTerminalPaletteTheme(lightObservation);
 
 type ModalCase = {
   name: string;
@@ -38,6 +53,7 @@ type ModalCase = {
   prepare?: (store: StoreApi<TuiStore>) => void;
   size?: { width: number; height: number };
   trimSnapshotTrailingWhitespace?: true;
+  dashboardSearchExperience?: DashboardSearchExperience;
   expect: string[];
   reject?: string[];
 };
@@ -90,6 +106,13 @@ const CASES: ModalCase[] = [
     name: "search prompt",
     keys: [{ input: "/" }, { input: "api" }],
     expect: ["search: api"],
+  },
+  {
+    name: "persistent filter header editor without prompt overlay",
+    keys: [{ input: "/" }, { input: "api" }],
+    dashboardSearchExperience: persistentFilterExperience,
+    expect: ["FILTER /api▏", "FILTER", "Enter apply", "api-cache"],
+    reject: ["search: api"],
   },
   {
     name: "collapse project sheet",
@@ -511,9 +534,13 @@ describe("modal flow golden frames", () => {
     }
   });
 
-  function makeStore(snapshot = manyProjectsSnapshot()): StoreApi<TuiStore> {
+  function makeStore(
+    snapshot = manyProjectsSnapshot(),
+    dashboardSearchExperience?: DashboardSearchExperience,
+  ): StoreApi<TuiStore> {
     return makeStationTestStore({
       snapshot,
+      ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
       folderService: {
         cwd: () => "/Users/example/Developer/station",
         homeDir: () => "/Users/example",
@@ -527,7 +554,7 @@ describe("modal flow golden frames", () => {
 
   for (const modal of CASES) {
     it(`renders the ${modal.name}`, async () => {
-      const store = makeStore(modal.snapshot?.());
+      const store = makeStore(modal.snapshot?.(), modal.dashboardSearchExperience);
       for (const key of modal.keys) {
         store.getState().handleKey(key);
       }
@@ -566,6 +593,89 @@ describe("modal flow golden frames", () => {
       expect(frame).toMatchSnapshot();
     });
   }
+
+  it("renders Help, sheets, settings, and prompts with opaque adaptive light roles", async () => {
+    const representatives: ReadonlyArray<{
+      name: string;
+      needle: string;
+      foreground: StationColor;
+      border: boolean;
+    }> = [
+      {
+        name: "help overlay",
+        needle: "station help",
+        foreground: LIGHT_TERMINAL_THEME.text.primary,
+        border: false,
+      },
+      {
+        name: "collapse project sheet",
+        needle: "Collapse Project",
+        foreground: LIGHT_TERMINAL_THEME.text.primary,
+        border: true,
+      },
+      {
+        name: "widget settings panel",
+        needle: "widgets",
+        foreground: LIGHT_TERMINAL_THEME.text.primary,
+        border: true,
+      },
+      {
+        name: "search prompt",
+        needle: "search: api",
+        foreground: LIGHT_TERMINAL_THEME.status.warning,
+        border: false,
+      },
+    ];
+
+    for (const representative of representatives) {
+      const modal = CASES.find((candidate) => candidate.name === representative.name);
+      if (modal === undefined) {
+        throw new Error(`Missing modal fixture ${representative.name}.`);
+      }
+      const store = makeStore(modal.snapshot?.());
+      for (const key of modal.keys) {
+        store.getState().handleKey(key);
+      }
+      modal.prepare?.(store);
+      const size = modal.size ?? SIZE;
+      const setup = await testRender(
+        <StationThemeProvider theme={LIGHT_TERMINAL_THEME}>
+          <DashboardRoot
+            store={store}
+            columns={size.width}
+            rows={size.height}
+            onCopyNotice={() => {}}
+          />
+        </StationThemeProvider>,
+        size,
+      );
+      teardowns.push(() => setup.renderer.destroy());
+      await setup.renderOnce();
+
+      const lines = setup.captureCharFrame().split("\n");
+      const row = lines.findIndex((line) => line.includes(representative.needle));
+      const col = lines[row]?.indexOf(representative.needle) ?? -1;
+      const span = spanAtFrameCell(setup.captureSpans(), row, col);
+      expect(span?.bg.intent).toBe("default");
+      expect(span?.bg.toInts()[3]).toBe(255);
+      expect(span?.fg === undefined ? undefined : rgbToHex(span.fg)).toBe(
+        stationColorSnapshotValue(representative.foreground),
+      );
+
+      if (representative.border) {
+        const borderChars = ["╭", "┌", "┏"] as const;
+        const borderRow = lines.findIndex((line) => borderChars.some((char) => line.includes(char)));
+        const borderLine = lines[borderRow] ?? "";
+        const borderCol = borderChars
+          .map((char) => borderLine.indexOf(char))
+          .find((column) => column >= 0) ?? -1;
+        const borderSpan = spanAtFrameCell(setup.captureSpans(), borderRow, borderCol);
+        expect(borderSpan?.fg === undefined ? undefined : rgbToHex(borderSpan.fg)).toBe(
+          stationColorSnapshotValue(LIGHT_TERMINAL_THEME.interaction.hairline),
+        );
+      }
+    }
+  });
 
   it("keeps widget settings text out of OpenTUI selection", async () => {
     const setup = await testRender(

@@ -1,9 +1,4 @@
-import {
-  rgbColor,
-  terminalDefaultColor,
-  type StationRgbColor,
-  type StationTheme,
-} from "./types.js";
+import { rgbColor, type StationTheme } from "./types.js";
 
 // This file is Station's sole production raw-color authority; renderers consume semantic roles.
 const palette = {
@@ -21,6 +16,10 @@ const palette = {
   hairline: rgbColor("#20252c"),
   focus: rgbColor("#15222e"),
   compactFocus: rgbColor("#1b3448"),
+  filterEditorSurface: rgbColor("#11232c"),
+  filterAppliedSurface: rgbColor("#171b20"),
+  filterMatchBackground: rgbColor("#3f4a1b"),
+  filterMatchForeground: rgbColor("#f1f5c4"),
   menuSurface: rgbColor("#15191e"),
   menuSelected: rgbColor("#2f3842"),
   menuText: rgbColor("#f4f4f5"),
@@ -112,6 +111,14 @@ const sharedRoles = {
     border: palette.gray,
     hairline: palette.hairline,
   },
+  filter: {
+    editorRail: palette.cyan,
+    editorSurface: palette.filterEditorSurface,
+    appliedSurface: palette.filterAppliedSurface,
+    matchForeground: palette.filterMatchForeground,
+    matchBackground: palette.filterMatchBackground,
+    zeroMatch: palette.yellow,
+  },
   welcome: {
     button: palette.welcomeButton,
     buttonMuted: palette.background,
@@ -158,30 +165,5 @@ export const nativeStationTheme = {
     sheet: palette.background,
     settings: palette.background,
     toast: palette.background,
-  },
-} as const satisfies StationTheme;
-
-const terminalBackground = (fallback: StationRgbColor) =>
-  terminalDefaultColor("background", fallback);
-
-export const embeddedStationTheme = {
-  ...sharedRoles,
-  surfaces: {
-    // Terminal-default intent still paints opaque cells; the snapshot keeps non-default consumers deterministic.
-    canvas: terminalBackground(palette.background),
-    panel: terminalBackground(palette.background),
-    prompt: terminalBackground(palette.background),
-    help: terminalBackground(palette.background),
-    sheet: terminalBackground(palette.background),
-    settings: terminalBackground(palette.background),
-    toast: terminalBackground(palette.background),
-  },
-  contextMenu: {
-    ...sharedRoles.contextMenu,
-    surface: terminalBackground(palette.menuSurface),
-  },
-  island: {
-    ...sharedRoles.island,
-    background: terminalBackground(palette.background),
   },
 } as const satisfies StationTheme;

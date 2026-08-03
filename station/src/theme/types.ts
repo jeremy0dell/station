@@ -127,6 +127,14 @@ export type StationTheme = Readonly<{
     border: StationSemanticColor;
     hairline: StationSemanticColor;
   }>;
+  filter: Readonly<{
+    editorRail: StationSemanticColor;
+    editorSurface: StationOpaqueBackgroundColor;
+    appliedSurface: StationOpaqueBackgroundColor;
+    matchForeground: StationForegroundColor;
+    matchBackground: StationOpaqueBackgroundColor;
+    zeroMatch: StationSemanticColor;
+  }>;
   welcome: Readonly<{
     button: StationOpaqueBackgroundColor;
     buttonMuted: StationOpaqueBackgroundColor;

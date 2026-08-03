@@ -4,7 +4,6 @@ import {
   type DashboardSearchExperience,
   handleTuiKey,
   legacySearchExperience,
-  persistentFilterExperience,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
@@ -13,10 +12,8 @@ import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 const RETURN = { input: "\r", return: true } as const;
 
-describe.each([
-  { name: "legacy", experience: legacySearchExperience },
-  { name: "persistent", experience: persistentFilterExperience },
-])("$name dashboard search experience", ({ experience }) => {
+describe("legacy dashboard search experience", () => {
+  const experience = legacySearchExperience;
   it("opens an empty search screen from the dashboard", () => {
     const state = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),

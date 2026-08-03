@@ -1,14 +1,14 @@
 import { TextAttributes } from "@opentui/core";
 import type { RowSegment } from "@station/dashboard-core";
 import stringWidth from "string-width";
-import { useHoverPointer } from "../../useHoverPointer.js";
-import { type StationMouseTarget } from "../input/stationMouse.js";
 import { rowColor, toOpenTuiColor, useStationTheme } from "../../theme/index.js";
+import { useHoverPointer } from "../../useHoverPointer.js";
+import type { StationMouseTarget } from "../input/stationMouse.js";
 import { Throbber } from "./Throbber.js";
 import {
+  stationMouseProps,
   useStationHoverEnabled,
   useStationMouse,
-  stationMouseProps,
 } from "./stationMouseContext.js";
 
 type TextRowSegment = Extract<RowSegment, { kind: "text" }>;
@@ -53,7 +53,13 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
   const { left, segment, url, width } = link;
   const attributes = textSegmentAttributes(segment);
   const color = rowColor(theme, segment.color);
-  const fg = color === undefined ? undefined : toOpenTuiColor(color);
+  const fg = segment.highlighted === true
+    ? toOpenTuiColor(theme.filter.matchForeground)
+    : color === undefined
+      ? undefined
+      : toOpenTuiColor(color);
+  const bg =
+    segment.highlighted === true ? toOpenTuiColor(theme.filter.matchBackground) : undefined;
   const target: StationMouseTarget = { kind: "link", url };
   return (
     <text
@@ -63,6 +69,7 @@ function SegmentLinkTarget({ link }: { link: SegmentLink }) {
       width={width}
       height={1}
       {...(fg === undefined ? {} : { fg })}
+      {...(bg === undefined ? {} : { bg })}
       attributes={attributes}
       {...pointerProps}
       {...stationMouseProps(dispatch, target)}
@@ -77,13 +84,28 @@ function Segment({ segment }: { segment: RowSegment }) {
   if (segment.kind === "throbber") {
     const color = rowColor(theme, segment.color);
     const fg = color === undefined ? undefined : toOpenTuiColor(color);
-    return <Throbber variant={segment.variant} {...(fg === undefined ? {} : { fg })} />;
+    const throbber = <Throbber variant={segment.variant} {...(fg === undefined ? {} : { fg })} />;
+    return segment.dimmed === true ? (
+      <span attributes={TextAttributes.DIM}>{throbber}</span>
+    ) : (
+      throbber
+    );
   }
   const attributes = textSegmentAttributes(segment);
   const color = rowColor(theme, segment.color);
-  const fg = color === undefined ? undefined : toOpenTuiColor(color);
+  const fg = segment.highlighted === true
+    ? toOpenTuiColor(theme.filter.matchForeground)
+    : color === undefined
+      ? undefined
+      : toOpenTuiColor(color);
+  const bg =
+    segment.highlighted === true ? toOpenTuiColor(theme.filter.matchBackground) : undefined;
   return (
-    <span {...(fg === undefined ? {} : { fg })} attributes={attributes}>
+    <span
+      {...(fg === undefined ? {} : { fg })}
+      {...(bg === undefined ? {} : { bg })}
+      attributes={attributes}
+    >
       {segment.text}
     </span>
   );
@@ -91,7 +113,7 @@ function Segment({ segment }: { segment: RowSegment }) {
 
 function textSegmentAttributes(segment: TextRowSegment): number {
   let attributes = TextAttributes.NONE;
-  if (segment.dimColor === true) {
+  if (segment.dimColor === true || segment.dimmed === true) {
     attributes |= TextAttributes.DIM;
   }
   if (segment.underline === true) {

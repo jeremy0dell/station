@@ -386,6 +386,7 @@ describe("dashboard viewport selector", () => {
       snapshot,
       createInitialTuiState({
         initialSnapshot: snapshot,
+        persistentFilter: { query: "removing session..." },
         localRows: {
           pendingCreate: [],
           failedCreate: [],
@@ -408,10 +409,23 @@ describe("dashboard viewport selector", () => {
     );
     expect(item).toMatchObject({
       type: "session",
+      presentation: { activity: "removing session..." },
       pendingRemove: {
         localId: "remove:wt_web_idle",
       },
+      persistentFilterMatch: {
+        matched: true,
+        ranges: { activity: [{ start: 0, end: 19 }] },
+      },
     });
+    if (item === undefined) throw new Error("expected pending remove item");
+    const rowInput = rowGridInputForViewportItem(item, new Map());
+    expect(
+      rowInput?.cells.activity?.segments
+        .filter((segment) => segment.kind === "text")
+        .map((segment) => (segment.kind === "text" ? segment.text : ""))
+        .join(""),
+    ).toBe("removing session...");
     expect(viewport.rowChoices.map((choice) => choice.value.id)).not.toContain("ses_wt_web_idle");
   });
 
@@ -472,6 +486,104 @@ describe("dashboard viewport selector", () => {
     expect(item).toMatchObject({
       type: "session",
       displayTitle: "Readable feature task",
+    });
+  });
+
+  it("carries soft-preview metadata without changing order, visibility, slots, or overflow", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 10 });
+    const resting = selectDashboardViewport(snapshot, state);
+    const editing = selectDashboardViewport(snapshot, state, {
+      name: "persistentFilter",
+      draft: { value: "QUEUE", cursor: 5 },
+    });
+
+    expect(editing.items.map((item) => item.id)).toEqual(resting.items.map((item) => item.id));
+    expect(editing.visibleItems.map((item) => item.id)).toEqual(
+      resting.visibleItems.map((item) => item.id),
+    );
+    expect(editing.displayRowChoices).toEqual(resting.displayRowChoices);
+    expect(editing.sessionOverflow).toEqual(resting.sessionOverflow);
+    expect(editing.persistentFilter).toMatchObject({
+      source: "draft",
+      matchCount: 1,
+      totalCount: 7,
+    });
+    expect(editing.items.find((item) => item.id === "session:ses_wt_api_working")).toMatchObject({
+      persistentFilterMatch: { matched: true, dimmed: false },
+    });
+    expect(editing.items.find((item) => item.id === "session:ses_wt_web_idle")).toMatchObject({
+      persistentFilterMatch: { matched: false, dimmed: true },
+    });
+  });
+
+  it("attaches filter state to expanded, collapsed, and empty project headers", () => {
+    const base = createDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      sessions: base.sessions.filter((session) => session.projectId !== "web"),
+    };
+    const unmatched = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        collapsedProjectIds: ["api"],
+        persistentFilter: { query: "missing" },
+      }),
+    );
+
+    expect(unmatched.items).toContainEqual(
+      expect.objectContaining({ type: "emptyProject", id: "empty:web" }),
+    );
+    expect(unmatched.items.find((item) => item.id === "project:web")).toMatchObject({
+      type: "projectHeader",
+      collapsed: false,
+      persistentFilterMatch: { matched: false, labelRanges: [] },
+    });
+    expect(unmatched.items.find((item) => item.id === "project:api")).toMatchObject({
+      type: "projectHeader",
+      collapsed: true,
+      persistentFilterMatch: { matched: false, labelRanges: [] },
+    });
+
+    const matchedCollapsed = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        collapsedProjectIds: ["api"],
+        persistentFilter: { query: "api" },
+      }),
+    );
+    expect(matchedCollapsed.items.find((item) => item.id === "project:api")).toMatchObject({
+      persistentFilterMatch: { matched: true, labelRanges: [{ start: 0, end: 3 }] },
+    });
+  });
+
+  it("includes optimistic rows in persistent-preview counts and metadata", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      persistentFilter: { query: "pending launch" },
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "local_filter_pending",
+            projectId: "web",
+            title: "Pending launch",
+            branch: "station-pending-filter",
+            harnessProvider: "codex",
+            createdAt: "2026-05-31T12:00:00.000Z",
+          },
+        ],
+        failedCreate: [],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+
+    const viewport = selectDashboardViewport(snapshot, state, { name: "dashboard" });
+
+    expect(viewport.persistentFilter).toMatchObject({ matchCount: 1, totalCount: 8 });
+    expect(viewport.items.find((item) => item.id === "create:local_filter_pending")).toMatchObject({
+      persistentFilterMatch: { matched: true, dimmed: false },
     });
   });
 });
