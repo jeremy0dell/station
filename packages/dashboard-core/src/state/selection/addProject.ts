@@ -1,6 +1,6 @@
 import { addProjectRows } from "../../flows/addProject/rows.js";
-import type { AddProjectFlowState } from "../../flows/addProject/types.js";
-import type { TuiState } from "../types.js";
+import type { AddProjectFlowState, AddProjectFlowStateView } from "../../flows/addProject/types.js";
+import type { DashboardStateView, TuiState } from "../types.js";
 import type { TuiSelectionState } from "./types.js";
 
 export const ADD_PROJECT_START_LIST_ID = "addProjectStart";
@@ -10,14 +10,14 @@ function startChoiceId(index: number): string {
   return String(index);
 }
 
-export function addProjectSelectedIndex(state: TuiState): number | undefined {
+export function addProjectSelectedIndex(state: DashboardStateView): number | undefined {
   return state.screen.name === "addProject"
     ? addProjectSelectedIndexForFlow(state.screen.flow, state.selection)
     : undefined;
 }
 
 export function addProjectSelectedIndexForFlow(
-  flow: AddProjectFlowState,
+  flow: AddProjectFlowStateView,
   selection: TuiSelectionState,
 ): number | undefined {
   if (flow.mode === "start") {
@@ -39,7 +39,7 @@ export function addProjectSelectedIndexForFlow(
   return undefined;
 }
 
-export function selectedAddProjectFolderRow(state: TuiState) {
+export function selectedAddProjectFolderRow(state: DashboardStateView) {
   if (state.screen.name !== "addProject" || state.screen.flow.mode !== "choose") {
     return undefined;
   }

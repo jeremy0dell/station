@@ -8,7 +8,7 @@ import {
   scenarioState,
 } from "../fixtures/scenarios.js";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
-import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardFrameTitle } from "./DashboardFrameTitle.js";
 import {
   nativeStationTheme,
@@ -38,16 +38,16 @@ describe("DashboardFrameTitle", () => {
     connection?: ReturnType<typeof scenarioState>["connection"];
     widgets?: readonly TopRowWidgetView[];
   }) {
-    const { store } = makeStationTestStore({
+    const { runtime: store } = makeStationTestRuntime({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
     });
-    store.getState().start();
+    store.start();
     const setup = await testRender(
       <StationThemeProvider theme={nativeStationTheme}>
         <DashboardFrameTitle
-          store={store}
+          state={store.state}
           frame={FRAME}
           topRowWidgets={input.widgets ?? []}
           zIndex={1}

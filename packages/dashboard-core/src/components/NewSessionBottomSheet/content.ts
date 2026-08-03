@@ -1,16 +1,17 @@
-import type { ProviderHealth, StationSnapshot } from "@station/contracts";
+import type { ProviderHealth } from "@station/contracts";
 import {
   type NewSessionActionId,
   type NewSessionEditNameFocus,
-  type NewSessionEditNameState,
+  type NewSessionEditNameStateView,
   type NewSessionReviewFocus,
-  type NewSessionReviewState,
+  type NewSessionReviewStateView,
   newSessionActionEnabled,
 } from "../../flows/newSession.js";
 import {
   selectNewSessionHarnessOptions,
   selectNewSessionProject,
 } from "../../selectors/selectors.js";
+import type { DashboardSnapshotView } from "../../state/types.js";
 
 export type NewSessionReviewFieldId = "project" | "name" | "agent";
 
@@ -113,8 +114,8 @@ const EDIT_NAME_CONTROLS: {
 
 /** Builds the renderer-neutral Create Session review model from typed snapshot state. */
 export function newSessionReviewContent(
-  snapshot: StationSnapshot,
-  state: NewSessionReviewState,
+  snapshot: DashboardSnapshotView,
+  state: NewSessionReviewStateView,
 ): NewSessionReviewContent {
   const project = selectNewSessionProject(snapshot, state.selectedProjectId);
   const harness =
@@ -146,7 +147,7 @@ export function newSessionReviewContent(
 }
 
 export function newSessionEditNameContent(
-  state: NewSessionEditNameState,
+  state: NewSessionEditNameStateView,
 ): NewSessionEditNameContent {
   return {
     controls: EDIT_NAME_CONTROLS,

@@ -1,23 +1,27 @@
-import type { StoreApi } from "zustand/vanilla";
-import type { TuiStore } from "@station/dashboard-core";
+import type {
+  DashboardSnapshotView,
+  DashboardStateSource,
+} from "@station/dashboard-core";
 import { STATION_HOST_PROVIDER_ID } from "@station/host";
-import type { ProviderId, WorktreeRow } from "@station/contracts";
+import type { ProviderId } from "@station/contracts";
+
+type DashboardWorktreeRowView = DashboardSnapshotView["rows"][number];
 
 /** How long to wait for a freshly created worktree's row to reach the snapshot. */
 const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
 
 export function findWorktreeRowById(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   worktreeId: string,
-): WorktreeRow | undefined {
+): DashboardWorktreeRowView | undefined {
   return store.getState().snapshot?.rows.find((row) => row.id === worktreeId);
 }
 
 export function findWorktreeRowByBranch(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   projectId: string,
   branch: string,
-): WorktreeRow | undefined {
+): DashboardWorktreeRowView | undefined {
   return store
     .getState()
     .snapshot?.rows.find((row) => row.projectId === projectId && row.branch === branch);
@@ -26,7 +30,7 @@ export function findWorktreeRowByBranch(
 // The harness a fork inherits: the source's live/recovery harness, else the
 // project default — shared by the optimistic row and the launch.
 export function inheritedForkHarness(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   projectId: string,
   sourceWorktreeId: string,
 ): ProviderId | undefined {
@@ -42,7 +46,7 @@ export function inheritedForkHarness(
  * agent can't be shown in Station rather than focus it to no visible effect.
  */
 export function externalTerminalProviderForWorktree(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   worktreeId: string,
 ): string | undefined {
   const provider = findWorktreeRowById(store, worktreeId)?.terminal?.provider;
@@ -50,7 +54,7 @@ export function externalTerminalProviderForWorktree(
 }
 
 export function nonFocusableStationTerminalForWorktree(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   worktreeId: string,
 ): { label: string } | undefined {
   const row = findWorktreeRowById(store, worktreeId);
@@ -67,7 +71,7 @@ export function nonFocusableStationTerminalForWorktree(
  * terminal or a row with no terminal both fall through to the normal launch path.
  */
 export function unreachableTerminalRow(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   worktreeId: string,
 ): { label: string; provider: string; state: string } | undefined {
   const row = findWorktreeRowById(store, worktreeId);
@@ -82,7 +86,7 @@ export function unreachableTerminalRow(
 }
 
 export function readinessForWorktree(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   worktreeId: string,
 ): { sessionId: string; token: string } | undefined {
   const agent = findWorktreeRowById(store, worktreeId)?.agent;
@@ -102,16 +106,16 @@ export function readinessForWorktree(
  * carrying the row.
  */
 export function waitForWorktreeByBranch(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateSource,
   projectId: string,
   branch: string,
-): Promise<WorktreeRow | undefined> {
+): Promise<DashboardWorktreeRowView | undefined> {
   const existing = findWorktreeRowByBranch(store, projectId, branch);
   if (existing !== undefined) {
     return Promise.resolve(existing);
   }
   return new Promise((resolve) => {
-    const settle = (row: WorktreeRow | undefined): void => {
+    const settle = (row: DashboardWorktreeRowView | undefined): void => {
       clearTimeout(timer);
       unsubscribe();
       resolve(row);

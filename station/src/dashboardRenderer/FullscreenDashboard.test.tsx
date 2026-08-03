@@ -4,7 +4,7 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import {
   stationColorSnapshotValue,
   type StationColor,
@@ -76,8 +76,8 @@ afterEach(async () => {
 
 describe("FullscreenDashboard surface ownership", () => {
   it("uses terminal-default background intent for its canvas and title chrome", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
 
     expectTerminalDefaultBackground(setup, "station · overview");
     const bottomRight = spanAtFrameCell(
@@ -89,12 +89,12 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("renders a coherent light terminal canvas", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     const lightSource: StationThemeSource = {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
     };
-    const setup = await render(fixture.store, SURFACE, TEST_EFFECTS, lightSource);
+    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, lightSource);
 
     expectTerminalDefaultBackground(setup, "station · overview", LIGHT_THEME);
     expect(
@@ -108,7 +108,7 @@ describe("FullscreenDashboard surface ownership", () => {
     ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
 
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
     const help = cellFor(setup.captureCharFrame(), "station help");
@@ -119,15 +119,17 @@ describe("FullscreenDashboard surface ownership", () => {
 
   it("keeps the focused light Add Session control readable", async () => {
     const size = { width: 120, height: 40 };
-    const fixture = makeStationTestStore({ terminalRows: size.height });
-    fixture.store.setState({
-      dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+    const fixture = makeStationTestRuntime({
+      terminalRows: size.height,
+      initialState: {
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+      },
     });
     const lightSource: StationThemeSource = {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
     };
-    const setup = await render(fixture.store, size, TEST_EFFECTS, lightSource);
+    const setup = await render(fixture.runtime, size, TEST_EFFECTS, lightSource);
     const addSession = cellFor(setup.captureCharFrame(), "[ + add session ]");
     const span = spanAtFrameCell(setup.captureSpans(), addSession.row, addSession.col);
 
@@ -141,19 +143,19 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("keeps focused light sheet-button roles readable", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     const lightSource: StationThemeSource = {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
     };
-    const setup = await render(fixture.store, SURFACE, TEST_EFFECTS, lightSource);
+    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, lightSource);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "X" });
+      fixture.runtime.actions.handleKey({ input: "X" });
       await setup.flush();
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
-      fixture.store.getState().handleKey({ input: "", leftArrow: true });
+      fixture.runtime.actions.handleKey({ input: "", leftArrow: true });
       await setup.flush();
     });
 
@@ -183,9 +185,9 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("repaints in place when the external theme source changes", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     const source = new MutableThemeSource(DARK_THEME);
-    const setup = await render(fixture.store, SURFACE, TEST_EFFECTS, source);
+    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, source);
     const title = cellFor(setup.captureCharFrame(), "station · overview");
     const darkBackground = spanBgHex(
       spanAtFrameCell(setup.captureSpans(), title.row, title.col),
@@ -213,12 +215,12 @@ describe("FullscreenDashboard surface ownership", () => {
     { name: "project settings", keys: ["P", "1"], needle: "Project settings" },
   ] as const) {
     it(`uses terminal-default background intent for the ${testCase.name}`, async () => {
-      const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-      const setup = await render(fixture.store);
+      const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+      const setup = await render(fixture.runtime);
 
       await actOn(async () => {
         for (const input of testCase.keys) {
-          fixture.store.getState().handleKey({ input });
+          fixture.runtime.actions.handleKey({ input });
         }
         await setup.flush();
       });
@@ -228,11 +230,11 @@ describe("FullscreenDashboard surface ownership", () => {
   }
 
   it("uses terminal-default background intent for dashboard toasts", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
 
     await actOn(async () => {
-      fixture.store.getState().pushToast({
+      fixture.runtime.actions.pushToast({
         kind: "error",
         message: "Surface ownership notice",
       });
@@ -243,12 +245,12 @@ describe("FullscreenDashboard surface ownership", () => {
   });
 
   it("obscures dashboard cells with an opaque default background and restores them", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const before = setup.captureCharFrame();
 
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
 
@@ -259,7 +261,7 @@ describe("FullscreenDashboard surface ownership", () => {
     expect(span?.bg.intent).toBe("default");
 
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "Q" });
+      fixture.runtime.actions.handleKey({ input: "Q" });
       await setup.flush();
     });
 
@@ -269,8 +271,8 @@ describe("FullscreenDashboard surface ownership", () => {
 
 describe("FullscreenDashboard mouse composition", () => {
   it("routes a row click into the observer-backed dashboard command flow", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(async () => {
@@ -288,23 +290,23 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("collapses a project once for a complete primary down/up click", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const header = cellFor(setup.captureCharFrame(), "▼ station");
 
     await actOn(() => setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT));
 
-    expect([...fixture.store.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect([...fixture.runtime.state.getState().collapsedProjectIds]).toEqual(["station"]);
   });
 
   it("does not activate a dashboard row when the same click dismisses a bounded screen", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const frame = setup.captureCharFrame();
     const row = cellFor(frame, "docs-cleanup");
     const titleAction = cellFor(frame, "[+]");
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
     await actOn(async () => {
@@ -331,46 +333,46 @@ describe("FullscreenDashboard mouse composition", () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
     });
 
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
-    expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().localRows.pendingStart).toEqual([]);
   });
 
   it("dismisses a bounded screen from the obscured title row", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const titleAction = cellFor(setup.captureCharFrame(), "[+]");
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
 
     await actOn(() => setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT));
 
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
-    expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().localRows.pendingStart).toEqual([]);
   });
 
   it("dismisses outside a bounded screen while its inner surface still consumes clicks", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
     const help = cellFor(setup.captureCharFrame(), "station help");
 
     await actOn(() => setup.mockMouse.click(help.col, help.row, MouseButtons.LEFT));
-    expect(fixture.store.getState().screen).toEqual({ name: "help" });
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "help" });
 
     await actOn(() => setup.mockMouse.click(0, 0, MouseButtons.LEFT));
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("keeps controls inside a bounded screen interactive", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "W" });
+      fixture.runtime.actions.handleKey({ input: "W" });
       await setup.flush();
     });
     const addWidget = cellFor(setup.captureCharFrame(), "[ + add widget ]");
@@ -387,17 +389,17 @@ describe("FullscreenDashboard mouse composition", () => {
 
     await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
 
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "widgetSettings",
       focus: "picker",
     });
   });
 
   it("omits click-away interception while choose-row screens select dashboard rows", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "X" });
+      fixture.runtime.actions.handleKey({ input: "X" });
       await setup.flush();
     });
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
@@ -414,7 +416,7 @@ describe("FullscreenDashboard mouse composition", () => {
 
     await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
 
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "removeWorktree",
       step: "confirm",
       rowId: "ses_wt_station_none",
@@ -422,11 +424,11 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("routes rendered Remove actions without leaking to the dashboard", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "X" });
+      fixture.runtime.actions.handleKey({ input: "X" });
       await setup.flush();
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
       await setup.flush();
@@ -435,16 +437,16 @@ describe("FullscreenDashboard mouse composition", () => {
 
     await actOn(() => setup.mockMouse.click(keep.col, keep.row, MouseButtons.LEFT));
 
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
-    expect(fixture.store.getState().localRows.pendingRemove).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().localRows.pendingRemove).toEqual([]);
   });
 
   it("routes rendered Fork field clicks without submitting", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "F" });
+      fixture.runtime.actions.handleKey({ input: "F" });
       await setup.flush();
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
       await setup.flush();
@@ -452,7 +454,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const copy = cellFor(setup.captureCharFrame(), "Copy");
 
     await actOn(() => setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT));
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "fork",
       step: "details",
       focus: "copyDirty",
@@ -461,7 +463,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const name = cellFor(setup.captureCharFrame(), "Name");
 
     await actOn(() => setup.mockMouse.click(name.col, name.row, MouseButtons.LEFT));
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "fork",
       step: "details",
       focus: "name",
@@ -470,20 +472,20 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("scrolls when the wheel is used over a child row", async () => {
-    const fixture = makeStationTestStore({ terminalRows: 12 });
-    const setup = await render(fixture.store, { width: 80, height: 12 });
+    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const setup = await render(fixture.runtime, { width: 80, height: 12 });
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(() => setup.mockMouse.scroll(row.col, row.row, "down"));
 
-    expect(fixture.store.getState().scrollOffset).toBe(1);
+    expect(fixture.runtime.state.getState().scrollOffset).toBe(1);
   });
 
   it("renders and routes the same project actions as native Station", async () => {
     const size = { width: 120, height: 40 };
-    const fixture = makeStationTestStore({ terminalRows: size.height });
+    const fixture = makeStationTestRuntime({ terminalRows: size.height });
     const openedShells: string[] = [];
-    const setup = await render(fixture.store, size, {
+    const setup = await render(fixture.runtime, size, {
       openShell: ({ cwd }) => openedShells.push(cwd),
       openUrl: () => {},
     });
@@ -509,7 +511,7 @@ describe("FullscreenDashboard mouse composition", () => {
     });
 
     expect(openedShells).toEqual(["/Users/example/Developer/station"]);
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "projectDefaultAgent",
       projectId: "station",
     });
@@ -517,9 +519,9 @@ describe("FullscreenDashboard mouse composition", () => {
 
   it("routes the empty-project add-session button and pull-request links", async () => {
     const size = { width: 120, height: 40 };
-    const fixture = makeStationTestStore({ terminalRows: size.height });
+    const fixture = makeStationTestRuntime({ terminalRows: size.height });
     const openedUrls: string[] = [];
-    const setup = await render(fixture.store, size, {
+    const setup = await render(fixture.runtime, size, {
       openShell: () => {},
       openUrl: (url) => openedUrls.push(url),
     });
@@ -539,7 +541,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("keeps the dashboard open with its existing toast when a clicked command is rejected", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     fixture.service.nextReceipt = {
       commandId: "cmd_tui_rejected",
       accepted: false,
@@ -550,13 +552,13 @@ describe("FullscreenDashboard mouse composition", () => {
         message: "The test observer rejected this command.",
       },
     };
-    const setup = await render(fixture.store);
+    const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(async () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
       await waitFor(() =>
-        fixture.store
+        fixture.runtime.state
           .getState()
           .toasts.some(
             (entry) => entry.toast.message === "The test observer rejected this command.",
@@ -565,17 +567,19 @@ describe("FullscreenDashboard mouse composition", () => {
     });
     await setup.flush();
 
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
     expect(setup.captureCharFrame()).toContain("The test observer rejected this command.");
   });
 });
 
 describe("FullscreenDashboard configured widgets", () => {
   async function renderWidgets(widgets: readonly TuiWidgetConfig[]) {
-    const fixture = makeStationTestStore({ terminalRows: WIDGET_SURFACE.height });
-    fixture.store.setState({ widgets });
-    const setup = await render(fixture.store, WIDGET_SURFACE);
-    return { setup, store: fixture.store };
+    const fixture = makeStationTestRuntime({
+      terminalRows: WIDGET_SURFACE.height,
+      initialState: { widgets },
+    });
+    const setup = await render(fixture.runtime, WIDGET_SURFACE);
+    return { setup, store: fixture.runtime };
   }
 
   it("renders resolved configured widgets in the standalone title row at 99x25", async () => {
@@ -591,7 +595,7 @@ describe("FullscreenDashboard configured widgets", () => {
     const { setup, store } = await renderWidgets([{ type: "fleet" }, { type: "prs" }]);
 
     await actOn(async () => {
-      store.getState().handleKey({ input: "W" });
+      store.actions.handleKey({ input: "W" });
       await setup.flush();
     });
 
@@ -611,7 +615,7 @@ describe("FullscreenDashboard configured widgets", () => {
     expect(titleRow).not.toContain("open PR");
 
     await actOn(async () => {
-      store.getState().handleKey({ input: "W" });
+      store.actions.handleKey({ input: "W" });
       await setup.flush();
     });
     expect(setup.captureCharFrame()).toContain("no widgets yet");
@@ -619,14 +623,14 @@ describe("FullscreenDashboard configured widgets", () => {
 });
 
 async function render(
-  store: ReturnType<typeof makeStationTestStore>["store"],
+  store: ReturnType<typeof makeStationTestRuntime>["runtime"],
   size: { width: number; height: number } = SURFACE,
   effects: DashboardRendererEffects = TEST_EFFECTS,
   themeSource: StationThemeSource = DARK_THEME_SOURCE,
 ) {
   const setup = await testRender(
     <StandaloneDashboardApp
-      store={store}
+      runtime={store}
       effects={effects}
       onCopyNotice={() => {}}
       themeSource={themeSource}

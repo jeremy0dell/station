@@ -14,15 +14,19 @@ import { parseStationTerminalPaletteObservation } from "../../theme/terminalPale
 import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
 import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
-import type { StoreApi } from "zustand/vanilla";
 import {
   attentionAndFailuresSnapshot,
   externalAgentSnapshot,
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
-import type { DashboardSearchExperience, TuiKey } from "@station/dashboard-core";
-import type { TuiStore } from "@station/dashboard-core";
+import type {
+  DashboardRuntime,
+  DashboardSearchExperience,
+  DashboardState,
+  DashboardStateSource,
+  TuiKey,
+} from "@station/dashboard-core";
 import {
   persistentFilterExperience,
   addPendingProjectDefaultHarness,
@@ -30,11 +34,13 @@ import {
   applyAddProjectFolderReviewFailed,
   applyAddProjectFolderReviewed,
   applyAddProjectSubmitted,
+  createInitialTuiState,
+  handleTuiKey,
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openProjectSettings,
 } from "@station/dashboard-core";
-import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
 import { WidgetSettingsPanelView } from "./settings/WidgetSettingsPanelView.js";
@@ -50,7 +56,7 @@ type ModalCase = {
   name: string;
   keys: TuiKey[];
   snapshot?: () => ReturnType<typeof manyProjectsSnapshot>;
-  prepare?: (store: StoreApi<TuiStore>) => void;
+  prepare?: (state: DashboardState) => DashboardState;
   size?: { width: number; height: number };
   trimSnapshotTrailingWhitespace?: true;
   dashboardSearchExperience?: DashboardSearchExperience;
@@ -76,16 +82,14 @@ function snapshotWithCodexHealth(
   };
 }
 
-function openAddProjectReview(store: StoreApi<TuiStore>, gitRoot: boolean): void {
-  store.getState().handleKey({ input: "A" });
-  store.setState(
-    applyAddProjectFolderReviewed(store.getState(), {
-      selectedPath: "/Users/example/Developer/station",
-      ...(gitRoot ? { gitRoot: "/Users/example/Developer/station" } : {}),
-      id: "station",
-      label: "Station",
-    }),
-  );
+function openAddProjectReview(state: DashboardState, gitRoot: boolean): DashboardState {
+  const opened = handleTuiKey(state, { input: "A" }).state;
+  return applyAddProjectFolderReviewed(opened, {
+    selectedPath: "/Users/example/Developer/station",
+    ...(gitRoot ? { gitRoot: "/Users/example/Developer/station" } : {}),
+    id: "station",
+    label: "Station",
+  });
 }
 
 const CASES: ModalCase[] = [
@@ -164,18 +168,14 @@ const CASES: ModalCase[] = [
   {
     name: "project settings optimistic default",
     keys: [],
-    prepare: (store) => {
-      store.setState(openProjectSettings(store.getState(), "station"));
+    prepare: (state) =>
       // Optimistic state the picker sets the moment a new agent is chosen,
       // before the observer round-trip lands (station's real default is codex).
-      store.setState(
-        addPendingProjectDefaultHarness(store.getState(), {
-          projectId: "station",
-          harness: "opencode",
-          createdAt: "2026-06-28T00:00:00.000Z",
-        }),
-      );
-    },
+      addPendingProjectDefaultHarness(openProjectSettings(state, "station"), {
+        projectId: "station",
+        harness: "opencode",
+        createdAt: "2026-06-28T00:00:00.000Z",
+      }),
     expect: ["Default agent", "updating…"],
   },
   {
@@ -211,9 +211,7 @@ const CASES: ModalCase[] = [
     keys: [],
     snapshot: externalAgentSnapshot,
     trimSnapshotTrailingWhitespace: true,
-    prepare: (store) => {
-      store.setState(openRemoveWorktreeConfirmForRow(store.getState(), "run_wt_station_idle"));
-    },
+    prepare: (state) => openRemoveWorktreeConfirmForRow(state, "run_wt_station_idle"),
     expect: [
       "Cannot delete worktree",
       "This agent was started outside Station.",
@@ -382,9 +380,7 @@ const CASES: ModalCase[] = [
   {
     name: "project default agent picker",
     keys: [],
-    prepare: (store) => {
-      store.setState(openProjectDefaultAgentPicker(store.getState(), "station"));
-    },
+    prepare: (state) => openProjectDefaultAgentPicker(state, "station"),
     trimSnapshotTrailingWhitespace: true,
     expect: [
       "Select default agent for station",
@@ -406,32 +402,29 @@ const CASES: ModalCase[] = [
   {
     name: "add project folder actions",
     keys: [{ input: "A" }],
-    prepare: (store) => {
-      store.setState(
-        applyAddProjectFolderLoaded(store.getState(), {
-          path: "/Users/example/Developer",
-          entries: [
-            {
-              name: "station",
-              path: "/Users/example/Developer/station",
-              kind: "directory",
-            },
-          ],
-        }),
-      );
-    },
+    prepare: (state) =>
+      applyAddProjectFolderLoaded(state, {
+        path: "/Users/example/Developer",
+        entries: [
+          {
+            name: "station",
+            path: "/Users/example/Developer/station",
+            kind: "directory",
+          },
+        ],
+      }),
     expect: ["Choose Project Folder", "Choose (↵)", "Open (→)", "Parent (←)", "Search (/)"],
   },
   {
     name: "add project review actions",
     keys: [],
-    prepare: (store) => openAddProjectReview(store, true),
+    prepare: (state) => openAddProjectReview(state, true),
     expect: ["Add Project: Review", "▸ Add project (A)", "Edit id (N)", "Choose folder (B)"],
   },
   {
     name: "add project Git recovery",
     keys: [],
-    prepare: (store) => openAddProjectReview(store, false),
+    prepare: (state) => openAddProjectReview(state, false),
     expect: [
       "Git root",
       "not detected",
@@ -442,39 +435,28 @@ const CASES: ModalCase[] = [
   {
     name: "add project id editor actions",
     keys: [],
-    prepare: (store) => {
-      openAddProjectReview(store, true);
-      store.getState().handleKey({ input: "N" });
-    },
+    prepare: (state) => handleTuiKey(openAddProjectReview(state, true), { input: "N" }).state,
     expect: ["Project id", "▸ Save id (Ctrl-S)", "Back (Esc)"],
   },
   {
     name: "add project success action",
     keys: [],
-    prepare: (store) => {
-      openAddProjectReview(store, true);
-      store.setState(
-        applyAddProjectSubmitted(store.getState(), {
-          label: "Station",
-          root: "/Users/example/Developer/station",
-        }),
-      );
-    },
+    prepare: (state) =>
+      applyAddProjectSubmitted(openAddProjectReview(state, true), {
+        label: "Station",
+        root: "/Users/example/Developer/station",
+      }),
     expect: ["Project Added", "Reconciled successfully", "▸ Dashboard (D)"],
   },
   {
     name: "add project failure actions",
     keys: [],
-    prepare: (store) => {
-      openAddProjectReview(store, true);
-      store.setState(
-        applyAddProjectFolderReviewFailed(
-          store.getState(),
-          "/Users/example/Developer/station",
-          new Error("Git review failed"),
-        ),
-      );
-    },
+    prepare: (state) =>
+      applyAddProjectFolderReviewFailed(
+        openAddProjectReview(state, true),
+        "/Users/example/Developer/station",
+        new Error("Git review failed"),
+      ),
     expect: [
       "Add Project Failed",
       "Could not add this project",
@@ -492,15 +474,14 @@ const CASES: ModalCase[] = [
     name: "widget settings panel",
     keys: [{ input: "W" }],
     trimSnapshotTrailingWhitespace: true,
-    prepare: (store) => {
-      store.setState({
-        widgets: [
-          { type: "time" },
-          { type: "weather", city: "New York, NY", label: "NYC", enabled: false },
-          { type: "moon" },
-        ],
-      });
-    },
+    prepare: (state) => ({
+      ...state,
+      widgets: [
+        { type: "time" },
+        { type: "weather", city: "New York, NY", label: "NYC", enabled: false },
+        { type: "moon" },
+      ],
+    }),
     expect: [
       "widgets",
       "saved to config.toml",
@@ -538,8 +519,8 @@ describe("modal flow golden frames", () => {
   function makeStore(
     snapshot = manyProjectsSnapshot(),
     dashboardSearchExperience?: DashboardSearchExperience,
-  ): StoreApi<TuiStore> {
-    return makeStationTestStore({
+  ): DashboardRuntime {
+    return makeStationTestRuntime({
       snapshot,
       ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
       folderService: {
@@ -550,21 +531,42 @@ describe("modal flow golden frames", () => {
         searchDirectories: async (query) => ({ query, truncated: false, entries: [] }),
         reviewFolder: async (path) => ({ selectedPath: path, id: "p", label: "p" }),
       },
-    }).store;
+    }).runtime;
+  }
+
+  function prepareModalState(
+    modal: ModalCase,
+    snapshot: ReturnType<typeof manyProjectsSnapshot>,
+  ): DashboardState | undefined {
+    if (modal.prepare === undefined) {
+      return undefined;
+    }
+    let state = createInitialTuiState({ initialSnapshot: snapshot });
+    for (const key of modal.keys) {
+      const context = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
+      state =
+        modal.dashboardSearchExperience === undefined
+          ? handleTuiKey(state, key, context).state
+          : handleTuiKey(state, key, context, modal.dashboardSearchExperience).state;
+    }
+    return modal.prepare(state);
   }
 
   for (const modal of CASES) {
     it(`renders the ${modal.name}`, async () => {
-      const store = makeStore(modal.snapshot?.(), modal.dashboardSearchExperience);
+      const snapshot = modal.snapshot?.() ?? manyProjectsSnapshot();
+      const store = makeStore(snapshot, modal.dashboardSearchExperience);
       for (const key of modal.keys) {
-        store.getState().handleKey(key);
+        store.actions.handleKey(key);
       }
-      modal.prepare?.(store);
+      const prepared = prepareModalState(modal, snapshot);
+      const state = prepared === undefined ? store.state : staticDashboardState(prepared);
       const size = modal.size ?? SIZE;
       const setup = await testRender(
         <StationThemeProvider theme={nativeStationTheme}>
           <DashboardRoot
-            store={store}
+            state={state}
+            actions={store.actions}
             columns={size.width}
             rows={size.height}
             onCopyNotice={() => {}}
@@ -633,16 +635,19 @@ describe("modal flow golden frames", () => {
       if (modal === undefined) {
         throw new Error(`Missing modal fixture ${representative.name}.`);
       }
-      const store = makeStore(modal.snapshot?.());
+      const snapshot = modal.snapshot?.() ?? manyProjectsSnapshot();
+      const store = makeStore(snapshot);
       for (const key of modal.keys) {
-        store.getState().handleKey(key);
+        store.actions.handleKey(key);
       }
-      modal.prepare?.(store);
+      const prepared = prepareModalState(modal, snapshot);
+      const state = prepared === undefined ? store.state : staticDashboardState(prepared);
       const size = modal.size ?? SIZE;
       const setup = await testRender(
         <StationThemeProvider theme={LIGHT_TERMINAL_THEME}>
           <DashboardRoot
-            store={store}
+            state={state}
+            actions={store.actions}
             columns={size.width}
             rows={size.height}
             onCopyNotice={() => {}}
@@ -677,6 +682,14 @@ describe("modal flow golden frames", () => {
       }
     }
   });
+
+  function staticDashboardState(state: DashboardState): DashboardStateSource {
+    return {
+      getState: () => state,
+      getInitialState: () => state,
+      subscribe: () => () => {},
+    };
+  }
 
   it("keeps widget settings text out of OpenTUI selection", async () => {
     const setup = await testRender(

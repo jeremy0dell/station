@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentPrepareExternalLaunchParams, AgentPrepareExternalLaunchResult } from "@station/client";
 import type { StationCommand, StationSnapshot, WorktreeRow } from "@station/contracts";
-import { createTuiStore } from "@station/dashboard-core";
+import { createDashboardRuntime } from "@station/dashboard-core";
 import { selectStationOverlayVisible } from "../../state/selectors.js";
 import { createStationStore } from "../../state/store.js";
 import { STATION_OVERLAY_ID, type PaneId } from "../../state/types.js";
@@ -167,7 +167,7 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
     prepareCalls.push(params);
     return prepare === undefined ? observerService.nextPreparedLaunch : await prepare(params);
   };
-  const stationViewStore = createTuiStore({
+  const dashboardRuntime = createDashboardRuntime({
     source: new FakeStationSource(snapshot),
     service: observerService,
     initialSnapshot: snapshot,
@@ -211,21 +211,21 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
   };
   const runManagedLaunchAttempt = createManagedLaunchAttempt({
     store,
-    stationViewStore,
+    dashboardRuntime,
     observerService: options.observer === false ? undefined : observerService,
     registry: options.registry === false ? undefined : registry,
     managedTerminalAttacher: options.attacher,
   });
   return {
     store,
-    stationViewStore,
+    dashboardRuntime,
     observerService,
     prepareCalls,
     calls,
     ensured,
     terminalFactories,
     runManagedLaunchAttempt,
-    lastToast: () => stationViewStore.getState().toasts.at(-1)?.toast,
+    lastToast: () => dashboardRuntime.state.getState().toasts.at(-1)?.toast,
   };
 }
 
@@ -567,7 +567,7 @@ describe("createManagedLaunchAttempt", () => {
         .getState()
         .workspace.panes.some((pane) => pane.id === PANE_ID && pane.role === "primary-agent"),
     ).toBe(true);
-    expect(harness.stationViewStore.getState().toasts).toEqual([]);
+    expect(harness.dashboardRuntime.state.getState().toasts).toEqual([]);
   });
 
   it("releases the in-flight guard after informational and focus-failure completions", async () => {

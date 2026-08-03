@@ -1,11 +1,10 @@
 import { useTerminalDimensions } from "@opentui/react";
 import type { MouseEvent } from "@opentui/core";
 import { useCallback } from "react";
-import type { StoreApi } from "zustand/vanilla";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import type { StationMouseTarget } from "./input/stationMouse.js";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { DashboardFrameTitle } from "./view/DashboardFrameTitle.js";
 import { DashboardRoot } from "./view/DashboardRoot.js";
@@ -13,8 +12,13 @@ import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../theme/
 import { StationMouseProvider, type StationMouseDispatch } from "./view/stationMouseContext.js";
 
 export type StationOverlayProps = {
-  /** Owned by main.tsx (HMR recreates store + renderer + handlers together). */
-  store: StoreApi<TuiStore>;
+  /** Read-only dashboard state owned by the renderer composition. */
+  state: DashboardStateSource;
+  /** Named dashboard effects required by the rendered surface. */
+  actions: Pick<
+    DashboardActions,
+    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
+  >;
   topRowWidgets?: readonly TopRowWidgetView[];
   /** The Station input runtime's mouse entry point. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
@@ -74,7 +78,8 @@ export function stationPopupLayout(
  * The backdrop owns outside mouse events (clicks/wheel never fall through to shell).
  */
 export function StationOverlay({
-  store,
+  state,
+  actions,
   topRowWidgets = [],
   dispatchMouse,
   onCopyNotice,
@@ -133,14 +138,15 @@ export function StationOverlay({
         onMouseScroll={stopPopupMouse}
       >
         <DashboardRoot
-          store={store}
+          state={state}
+          actions={actions}
           columns={innerColumns}
           rows={innerRows}
           onCopyNotice={onCopyNotice}
         />
       </box>
       <DashboardFrameTitle
-        store={store}
+        state={state}
         frame={{ left: layout.left, top: layout.top, width: layout.width }}
         topRowWidgets={topRowWidgets}
         zIndex={31}

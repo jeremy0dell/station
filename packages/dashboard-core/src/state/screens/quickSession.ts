@@ -10,7 +10,7 @@ import { focusDashboardProjectHeader } from "../dashboardFocus.js";
 import { addPendingCreateSessionRow } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardStateView, TuiState } from "../types.js";
 
 export type QuickSessionIntent = {
   projectId: string;
@@ -27,7 +27,7 @@ export type QuickSessionResolution =
 
 /** Resolves a quick session as submit, blocked with its exact provider error, or missing. */
 export function resolveQuickSessionIntent(
-  state: TuiState,
+  state: DashboardStateView,
   projectId: string,
 ): QuickSessionResolution {
   if (state.snapshot === undefined) return { kind: "missing" };

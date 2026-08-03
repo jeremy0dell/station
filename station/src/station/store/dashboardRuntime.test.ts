@@ -1,27 +1,26 @@
 import { describe, expect, it } from "bun:test";
-import type { StoreApi } from "zustand/vanilla";
 import {
   selectDashboardViewport,
   type DashboardSearchExperience,
 } from "@station/dashboard-core";
 import type { TuiFolderService } from "@station/dashboard-core";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import { waitFor } from "../../terminal/testing/waitFor.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
 import { createStationStubObserverService } from "./stubObserverService.js";
-import { createStationViewStore } from "./stationViewStore.js";
+import { createStationDashboardRuntime } from "./dashboardRuntime.js";
 
-describe("createStationViewStore", () => {
+describe("createStationDashboardRuntime", () => {
   it("composes the legacy dashboard search experience", () => {
     const store = makeStore();
 
-    store.getState().handleKey({ input: "/" });
-    store.getState().handleKey({ input: "pty" });
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "pty" });
+    store.actions.handleKey({ input: "\r", return: true });
 
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.getState().searchQuery).toBe("pty");
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().searchQuery).toBe("pty");
   });
 
   it("forwards a supplied resolved search experience without selecting one", () => {
@@ -43,19 +42,19 @@ describe("createStationViewStore", () => {
     };
     const store = makeStore(undefined, dashboardSearchExperience);
 
-    store.getState().handleKey({ input: "/" });
-    store.getState().handleKey({ input: "native" });
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "native" });
 
-    expect(store.getState().screen).toEqual({ name: "search", value: "resolved:native" });
+    expect(store.state.getState().screen).toEqual({ name: "search", value: "resolved:native" });
   });
 
   it("routes row activation through the stubbed command service with real pending state", async () => {
     const store = makeStore();
     const slot = slotForRow(store, "ses_wt_station_none");
 
-    store.getState().handleKey({ input: slot });
+    store.actions.handleKey({ input: slot });
 
-    expect(store.getState().localRows.pendingStart).toMatchObject([
+    expect(store.state.getState().localRows.pendingStart).toMatchObject([
       {
         localId: "start:wt_station_none",
         worktreeId: "wt_station_none",
@@ -68,11 +67,11 @@ describe("createStationViewStore", () => {
   it("routes N through create-session pending state and stub rejection feedback", async () => {
     const store = makeStore();
 
-    store.getState().handleKey({ input: "N" });
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "\r", return: true });
 
-    expect(store.getState().localRows.pendingCreate).toHaveLength(1);
-    expect(store.getState().localRows.pendingCreate[0]).toMatchObject({
+    expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
+    expect(store.state.getState().localRows.pendingCreate[0]).toMatchObject({
       projectId: "station",
       harnessProvider: "codex",
     });
@@ -82,12 +81,12 @@ describe("createStationViewStore", () => {
   it("routes A through add-project dispatch and stub rejection feedback", async () => {
     const store = makeStore(fakeFolderService());
 
-    store.getState().handleKey({ input: "A" });
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "\r", return: true });
     await waitFor(() => addProjectScreenMode(store) === "choose");
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "\r", return: true });
     await waitFor(() => addProjectScreenMode(store) === "review");
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "\r", return: true });
 
     await waitFor(() => addProjectFailureMessage(store).includes("unavailable in mock mode"));
   });
@@ -96,11 +95,11 @@ describe("createStationViewStore", () => {
     const store = makeStore();
     const slot = slotForRow(store, "ses_wt_station_idle");
 
-    store.getState().handleKey({ input: "X" });
-    store.getState().handleKey({ input: slot });
-    store.getState().handleKey({ input: "y" });
+    store.actions.handleKey({ input: "X" });
+    store.actions.handleKey({ input: slot });
+    store.actions.handleKey({ input: "y" });
 
-    expect(store.getState().localRows.pendingRemove).toMatchObject([
+    expect(store.state.getState().localRows.pendingRemove).toMatchObject([
       {
         localId: "remove:wt_station_idle",
         worktreeId: "wt_station_idle",
@@ -114,12 +113,12 @@ describe("createStationViewStore", () => {
     const store = makeStore();
     const slot = slotForRow(store, "ses_wt_station_idle");
 
-    store.getState().handleKey({ input: "R" });
-    store.getState().handleKey({ input: slot });
-    store.getState().handleKey({ input: "x" });
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "R" });
+    store.actions.handleKey({ input: slot });
+    store.actions.handleKey({ input: "x" });
+    store.actions.handleKey({ input: "\r", return: true });
 
-    expect(store.getState().localRows.pendingRenameTitles?.ses_wt_station_idle).toMatchObject({
+    expect(store.state.getState().localRows.pendingRenameTitles?.ses_wt_station_idle).toMatchObject({
       title: "x",
     });
     await waitForMockRejectionToast(store);
@@ -128,7 +127,7 @@ describe("createStationViewStore", () => {
   it("routes Z through reconcile and stub rejection feedback", async () => {
     const store = makeStore();
 
-    store.getState().handleKey({ input: "Z" });
+    store.actions.handleKey({ input: "Z" });
 
     await waitForMockRejectionToast(store);
   });
@@ -137,10 +136,10 @@ describe("createStationViewStore", () => {
 function makeStore(
   folderService?: TuiFolderService,
   dashboardSearchExperience?: DashboardSearchExperience,
-): StoreApi<TuiStore> {
+): DashboardRuntime {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
-  const options: Parameters<typeof createStationViewStore>[1] = {
+  const options: Parameters<typeof createStationDashboardRuntime>[1] = {
   };
   if (folderService !== undefined) {
     options.folderService = folderService;
@@ -148,7 +147,7 @@ function makeStore(
   if (dashboardSearchExperience !== undefined) {
     options.dashboardSearchExperience = dashboardSearchExperience;
   }
-  const store = createStationViewStore(
+  const store = createStationDashboardRuntime(
     {
       state: source,
       service: createStationStubObserverService(source, { dispatchDelayMs: 1 }),
@@ -159,12 +158,12 @@ function makeStore(
     },
     options,
   );
-  store.getState().start();
+  store.start();
   return store;
 }
 
-function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
-  const state = store.getState();
+function slotForRow(store: DashboardRuntime, rowId: string): string {
+  const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
@@ -177,21 +176,21 @@ function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
   return choice.key;
 }
 
-async function waitForMockRejectionToast(store: StoreApi<TuiStore>): Promise<void> {
+async function waitForMockRejectionToast(store: DashboardRuntime): Promise<void> {
   await waitFor(() =>
     store
-      .getState()
+      .state.getState()
       .toasts.some((entry) => entry.toast.message.includes("unavailable in mock mode")),
   );
 }
 
-function addProjectScreenMode(store: StoreApi<TuiStore>): string | undefined {
-  const screen = store.getState().screen;
+function addProjectScreenMode(store: DashboardRuntime): string | undefined {
+  const screen = store.state.getState().screen;
   return screen.name === "addProject" ? screen.flow.mode : undefined;
 }
 
-function addProjectFailureMessage(store: StoreApi<TuiStore>): string {
-  const screen = store.getState().screen;
+function addProjectFailureMessage(store: DashboardRuntime): string {
+  const screen = store.state.getState().screen;
   return screen.name === "addProject" && screen.flow.mode === "failed"
     ? screen.flow.error.message
     : "";

@@ -1,9 +1,13 @@
 import type { TuiTimezoneWidgetConfig, TuiTimezoneZone } from "@station/config";
+import type { ReadonlyDeep } from "../state/readonly.js";
+
+type TuiTimezoneZoneView = ReadonlyDeep<TuiTimezoneZone>;
+type TuiTimezoneWidgetConfigView = ReadonlyDeep<TuiTimezoneWidgetConfig>;
 
 const INVALID_ZONE_TIME = "--:--";
 
 /** Wall-clock time in an IANA zone, formatted like the time widget; "--:--" on an unknown zone. */
-export function zoneTime(date: Date, zone: TuiTimezoneZone, timeFormat: "12h" | "24h"): string {
+export function zoneTime(date: Date, zone: TuiTimezoneZoneView, timeFormat: "12h" | "24h"): string {
   let parts: Intl.DateTimeFormatPart[];
   try {
     parts = new Intl.DateTimeFormat("en-US", {
@@ -30,7 +34,7 @@ export function zoneTime(date: Date, zone: TuiTimezoneZone, timeFormat: "12h" | 
 
 export function formatTimezoneWidget(
   date: Date,
-  config: TuiTimezoneWidgetConfig,
+  config: TuiTimezoneWidgetConfigView,
 ): { text: string; compact: string } {
   const timeFormat = config.timeFormat ?? "12h";
   const rendered = config.zones.map((zone) => `${zone.label} ${zoneTime(date, zone, timeFormat)}`);

@@ -1,8 +1,9 @@
-import type { ProjectId, StationSnapshot } from "@station/contracts";
+import type { ProjectId } from "@station/contracts";
 import {
   bottomSheetContentWidth,
   selectProjectChooserChoices,
-  type TuiSelectionState,
+  type DashboardSnapshotView,
+  type DashboardStateView,
 } from "@station/dashboard-core";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
@@ -16,9 +17,9 @@ const TITLE: Record<ProjectChooserMode, string> = {
 };
 
 export type ProjectChoiceSheetViewProps = {
-  snapshot: StationSnapshot;
+  snapshot: DashboardSnapshotView;
   mode: ProjectChooserMode;
-  selection: TuiSelectionState;
+  selection: DashboardStateView["selection"];
   columns: number;
   rows: number;
 };

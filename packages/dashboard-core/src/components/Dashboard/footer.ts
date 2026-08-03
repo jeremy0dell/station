@@ -6,13 +6,15 @@ import {
   QUIT_HINT_FILTER_CLOSE,
   type TuiDashboardBindingId,
 } from "../../state/keymap.js";
-import type { DashboardPersistentFilter, TuiScreen } from "../../state/types.js";
+import type { DashboardScreenView, DashboardViewState } from "../../state/types.js";
 import { cellWidth, truncateCells } from "../WorktreeRow/layout.js";
 import {
   clipTextLineSegments,
   normalizeTextLineWidth,
   textLineSegmentsWidth,
 } from "./segmentLayout.js";
+
+type DashboardPersistentFilterView = NonNullable<DashboardViewState["persistentFilter"]>;
 
 export type DashboardFilterFooterSegmentRole = "badge" | "key" | "description" | "spacer";
 
@@ -46,8 +48,8 @@ export function dashboardFooterModel({
   quitHint: string;
   hasSnapshot: boolean;
   firstRun: boolean;
-  screen?: TuiScreen;
-  persistentFilter?: DashboardPersistentFilter;
+  screen?: DashboardScreenView;
+  persistentFilter?: DashboardPersistentFilterView;
 }): DashboardFooterModel {
   if (!hasSnapshot) {
     return { kind: "loading", text: fitFooterCandidates(columns, [quitHint]) };

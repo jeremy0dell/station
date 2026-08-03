@@ -2,14 +2,13 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import { act } from "react";
-import type { StoreApi } from "zustand/vanilla";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import { routeStationMouse } from "./input/stationMouse.js";
-import { makeStationTestStore } from "./test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "./test/support/makeStationTestRuntime.js";
 import { StationOverlay, stationPopupLayout } from "./StationOverlay.js";
 import {
   nativeStationTheme,
@@ -28,7 +27,7 @@ describe("StationOverlay", () => {
   });
 
   it("keeps native dashboard surfaces on the current Station RGB colors", async () => {
-    const { store } = makeStationTestStore();
+    const { runtime: store } = makeStationTestRuntime();
     const setup = await renderOverlay(() => true, store);
     const title = cellFor(setup.captureCharFrame(), "station · overview");
     let span = spanAtFrameCell(setup.captureSpans(), title.row, title.col);
@@ -36,7 +35,7 @@ describe("StationOverlay", () => {
     expect(spanBgHex(span)).toBe(stationColorSnapshotValue(nativeStationTheme.surfaces.panel));
 
     await act(async () => {
-      store.getState().handleKey({ input: "H" });
+      store.actions.handleKey({ input: "H" });
       await setup.flush();
     });
     const help = cellFor(setup.captureCharFrame(), "station help");
@@ -139,7 +138,7 @@ describe("StationOverlay", () => {
   });
 
   it("lets an inner screen consume popup click-away before the outer overlay", async () => {
-    const { store } = makeStationTestStore();
+    const { runtime: store } = makeStationTestRuntime();
     const calls: MouseTargetRef[] = [];
     const setup = await renderOverlay((target, event) => {
       calls.push(target);
@@ -152,7 +151,7 @@ describe("StationOverlay", () => {
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await act(async () => {
-      store.getState().handleKey({ input: "H" });
+      store.actions.handleKey({ input: "H" });
       await setup.flush();
     });
     await act(async () => {
@@ -167,12 +166,12 @@ describe("StationOverlay", () => {
 
     await setup.mockMouse.click(layout.left + 1, layout.top + 1, MouseButtons.LEFT);
 
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
     expect(calls).toEqual([{ kind: "station", target: { kind: "screenBackdrop" } }]);
   });
 
   it("routes obscured title-row clicks through the inner screen backdrop", async () => {
-    const { store } = makeStationTestStore();
+    const { runtime: store } = makeStationTestRuntime();
     const calls: Array<{ target: MouseTargetRef; event: StationMouseEvent }> = [];
     const setup = await renderOverlay((target, event) => {
       calls.push({ target, event });
@@ -183,13 +182,13 @@ describe("StationOverlay", () => {
     }, store);
     const titleAction = cellFor(setup.captureCharFrame(), "[+]");
     await act(async () => {
-      store.getState().handleKey({ input: "H" });
+      store.actions.handleKey({ input: "H" });
       await setup.flush();
     });
 
     await setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.RIGHT);
 
-    expect(store.getState().screen).toEqual({ name: "help" });
+    expect(store.state.getState().screen).toEqual({ name: "help" });
     expect(calls.at(-1)).toMatchObject({
       target: { kind: "station", target: { kind: "screenBackdrop" } },
       event: { type: "down", button: "right", rawButton: 2 },
@@ -197,7 +196,7 @@ describe("StationOverlay", () => {
 
     await setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT);
 
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
     expect(calls.at(-1)).toMatchObject({
       target: { kind: "station", target: { kind: "screenBackdrop" } },
       event: { type: "down", button: "left", rawButton: 0 },
@@ -207,11 +206,11 @@ describe("StationOverlay", () => {
 
 async function renderOverlay(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
-  store: StoreApi<TuiStore> = makeStationTestStore().store,
+  store: DashboardRuntime = makeStationTestRuntime().runtime,
 ) {
   const setup = await testRender(
     <StationThemeProvider theme={nativeStationTheme}>
-      <StationOverlay store={store} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />
+      <StationOverlay state={store.state} actions={store.actions} dispatchMouse={dispatchMouse} onCopyNotice={() => {}} />
     </StationThemeProvider>,
     SURFACE,
   );

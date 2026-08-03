@@ -1,12 +1,5 @@
-import type { ProjectView, StationSnapshot } from "@station/contracts";
 import { worktreeRowVisibleFields } from "../components/WorktreeRow/rowInput.js";
-import type {
-  FailedCreateSessionRow,
-  PendingCreateSessionRow,
-  PendingRemoveWorktreeRow,
-  PendingStartAgentRow,
-} from "../state/localRows.js";
-import type { TuiViewState } from "../state/types.js";
+import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
 import type {
   DashboardPersistentFilterCandidate,
   DashboardPersistentFilterProjection,
@@ -20,9 +13,17 @@ import {
   sessionRowDisplayTitle,
 } from "./dashboardSessionRows.js";
 
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
+type DashboardPendingCreateSessionRowView =
+  DashboardViewState["localRows"]["pendingCreate"][number];
+type DashboardFailedCreateSessionRowView = DashboardViewState["localRows"]["failedCreate"][number];
+type DashboardPendingRemoveWorktreeRowView =
+  DashboardViewState["localRows"]["pendingRemove"][number];
+type DashboardPendingStartAgentRowView = DashboardViewState["localRows"]["pendingStart"][number];
+
 type DashboardCreateSessionLocalRow =
-  | ({ status: "pending" } & PendingCreateSessionRow)
-  | ({ status: "failed" } & FailedCreateSessionRow);
+  | ({ readonly status: "pending" } & DashboardPendingCreateSessionRowView)
+  | ({ readonly status: "failed" } & DashboardFailedCreateSessionRowView);
 
 type DashboardRowPresentation = DashboardPersistentFilterVisibleFields;
 
@@ -32,8 +33,8 @@ export type DashboardSessionItem = {
   row: DashboardSessionRow;
   displayTitle: string;
   presentation: DashboardRowPresentation;
-  pendingRemove?: PendingRemoveWorktreeRow;
-  pendingStart?: PendingStartAgentRow;
+  pendingRemove?: DashboardPendingRemoveWorktreeRowView;
+  pendingStart?: DashboardPendingStartAgentRowView;
   persistentFilterMatch?: DashboardPersistentFilterRowMatch;
 };
 
@@ -48,7 +49,7 @@ export type DashboardCreateLocalItem = {
 export type DashboardRowItem = DashboardSessionItem | DashboardCreateLocalItem;
 
 export type DashboardProjectRowGroup = {
-  project: ProjectView;
+  project: DashboardProjectView;
   collapsed: boolean;
   rows: DashboardRowItem[];
 };
@@ -68,8 +69,8 @@ type GroupDashboardRow =
     };
 
 export function selectDashboardProjectRowGroups(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewState,
   options: DashboardProjectRowsOptions,
 ): DashboardProjectRowGroup[] {
   const localRows = visibleCreateSessionLocalRows(snapshot, state);
@@ -104,9 +105,9 @@ export function withDashboardRowFilterMatch(
 
 function projectRows(
   sessionRows: readonly DashboardSessionRow[],
-  project: ProjectView,
+  project: DashboardProjectView,
   localRows: readonly DashboardCreateSessionLocalRow[],
-  state: TuiViewState,
+  state: DashboardViewState,
   options: DashboardProjectRowsOptions,
 ): DashboardRowItem[] {
   const projectLocalRows = localRows.filter(
@@ -121,8 +122,8 @@ function projectRows(
 
 function localRowMatchesSearch(
   row: DashboardCreateSessionLocalRow,
-  project: ProjectView,
-  state: TuiViewState,
+  project: DashboardProjectView,
+  state: DashboardViewState,
 ): boolean {
   return matchesDashboardOptimisticSearch(
     {
@@ -135,7 +136,7 @@ function localRowMatchesSearch(
   );
 }
 
-function sessionItem(row: DashboardSessionRow, state: TuiViewState): DashboardSessionItem {
+function sessionItem(row: DashboardSessionRow, state: DashboardViewState): DashboardSessionItem {
   const displayTitle = sessionRowDisplayTitle(row, state.localRows);
   const pendingRemove = state.localRows.pendingRemove.find(
     (localRow) => localRow.worktreeId === row.worktree.id,
@@ -171,8 +172,8 @@ function createLocalItem(row: DashboardCreateSessionLocalRow): DashboardCreateLo
 function sessionRowPresentation(
   row: DashboardSessionRow,
   displayTitle: string,
-  pendingRemove: PendingRemoveWorktreeRow | undefined,
-  pendingStart: PendingStartAgentRow | undefined,
+  pendingRemove: DashboardPendingRemoveWorktreeRowView | undefined,
+  pendingStart: DashboardPendingStartAgentRowView | undefined,
 ): DashboardRowPresentation {
   if (pendingRemove !== undefined) {
     return { title: displayTitle, activity: "removing session..." };
@@ -205,8 +206,8 @@ function createSessionRowPresentation(
 }
 
 function visibleCreateSessionLocalRows(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewState,
 ): DashboardCreateSessionLocalRow[] {
   const rowsById = new Map(snapshot.rows.map((row) => [row.id, row]));
   const realRows = new Set(
@@ -231,7 +232,7 @@ function visibleCreateSessionLocalRows(
 function mergeDashboardRows(
   rows: readonly DashboardSessionRow[],
   localRows: readonly DashboardCreateSessionLocalRow[],
-  state: TuiViewState,
+  state: DashboardViewState,
 ): GroupDashboardRow[] {
   return [
     ...rows.map((row) => ({ type: "session" as const, row })),
@@ -242,7 +243,7 @@ function mergeDashboardRows(
 function compareDashboardRows(
   left: GroupDashboardRow,
   right: GroupDashboardRow,
-  state: TuiViewState,
+  state: DashboardViewState,
 ): number {
   const titleOrder = rowTitle(left, state).localeCompare(rowTitle(right, state));
   if (titleOrder !== 0) return titleOrder;
@@ -254,7 +255,7 @@ function compareDashboardRows(
   return rowId(left).localeCompare(rowId(right));
 }
 
-function rowTitle(row: GroupDashboardRow, state: TuiViewState): string {
+function rowTitle(row: GroupDashboardRow, state: DashboardViewState): string {
   if (row.type === "createLocalRow") {
     return row.row.title;
   }

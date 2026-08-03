@@ -1,14 +1,19 @@
-import type { SessionId, SessionView, StationSnapshot, WorktreeRow } from "@station/contracts";
-import { pendingRenameTitles, type TuiLocalRows } from "../state/localRows.js";
-import type { TuiViewState } from "../state/types.js";
+import type { SessionId } from "@station/contracts";
+import { pendingRenameTitles } from "../state/localRows.js";
+import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
 import { matchesDashboardSessionSearch } from "./dashboardSearchProjection.js";
+
+type DashboardWorktreeRowView = DashboardSnapshotView["rows"][number];
+type DashboardSessionView = DashboardSnapshotView["sessions"][number];
+type DashboardLocalRowsView = DashboardViewState["localRows"];
+type Mutable<T> = { -readonly [TKey in keyof T]: T[TKey] };
 
 export type DashboardSessionRow = {
   /** Dashboard identity is the canonical session id, never the checkout id. */
   id: SessionId;
-  session: SessionView;
-  worktree: WorktreeRow;
-  presentation: WorktreeRow;
+  session: DashboardSessionView;
+  worktree: DashboardWorktreeRowView;
+  presentation: DashboardWorktreeRowView;
 };
 
 export type SelectProjectGroupsOptions = {
@@ -19,8 +24,8 @@ export type SelectProjectGroupsOptions = {
 };
 
 export function selectProjectGroups(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewState,
   options: SelectProjectGroupsOptions = {},
 ) {
   const sessionRows = selectDashboardSessionRows(snapshot);
@@ -53,7 +58,7 @@ export function selectProjectGroups(
   });
 }
 
-export function selectDashboardSessionRows(snapshot: StationSnapshot): DashboardSessionRow[] {
+export function selectDashboardSessionRows(snapshot: DashboardSnapshotView): DashboardSessionRow[] {
   const worktreesById = new Map(snapshot.rows.map((row) => [row.id, row]));
   return snapshot.sessions.flatMap((session) => {
     const source = worktreesById.get(session.worktreeId);
@@ -65,16 +70,16 @@ export function selectDashboardSessionRows(snapshot: StationSnapshot): Dashboard
 }
 
 export function selectDashboardSessionRow(
-  snapshot: StationSnapshot,
+  snapshot: DashboardSnapshotView,
   sessionId: SessionId,
 ): DashboardSessionRow | undefined {
   return selectDashboardSessionRows(snapshot).find((row) => row.id === sessionId);
 }
 
 export function sessionForWorktreeRow(
-  row: WorktreeRow,
-  sessions: readonly SessionView[],
-): SessionView | undefined {
+  row: DashboardWorktreeRowView,
+  sessions: readonly DashboardSessionView[],
+): DashboardSessionView | undefined {
   const sessionId = row.agent?.sessionId;
   if (sessionId !== undefined) {
     const direct = sessions.find(
@@ -96,7 +101,7 @@ export function sessionForWorktreeRow(
 
 export function sessionRowDisplayTitle(
   row: Pick<DashboardSessionRow, "session" | "worktree">,
-  localRows: TuiLocalRows,
+  localRows: DashboardLocalRowsView,
 ): string {
   return pendingRenameTitles(localRows)[row.session.id]?.title ?? row.worktree.title;
 }
@@ -104,7 +109,7 @@ export function sessionRowDisplayTitle(
 function compareRows(
   left: DashboardSessionRow,
   right: DashboardSessionRow,
-  localRows: TuiLocalRows,
+  localRows: DashboardLocalRowsView,
 ): number {
   return (
     sessionRowDisplayTitle(left, localRows).localeCompare(
@@ -116,7 +121,10 @@ function compareRows(
   );
 }
 
-function dashboardSessionRow(session: SessionView, source: WorktreeRow): DashboardSessionRow {
+function dashboardSessionRow(
+  session: DashboardSessionView,
+  source: DashboardWorktreeRowView,
+): DashboardSessionRow {
   return {
     id: session.id,
     session,
@@ -125,31 +133,31 @@ function dashboardSessionRow(session: SessionView, source: WorktreeRow): Dashboa
   };
 }
 
-function sessionPresentation(session: SessionView, source: WorktreeRow): WorktreeRow {
-  const {
-    terminal: _sourceTerminal,
-    recovery: sourceRecovery,
-    ...sourceWithoutRuntimeState
-  } = source;
-  const row: WorktreeRow = {
-    ...sourceWithoutRuntimeState,
+function sessionPresentation(
+  session: DashboardSessionView,
+  source: DashboardWorktreeRowView,
+): DashboardWorktreeRowView {
+  const row: Mutable<DashboardWorktreeRowView> = {
+    ...source,
     display: sessionDisplay(session),
-    agent: sessionAgent(session, source),
   };
-  if (session.terminal !== undefined) {
+  row.agent = sessionAgent(session, source);
+  if (session.terminal === undefined) {
+    delete row.terminal;
+  } else {
     row.terminal = session.terminal;
   }
-  if (session.origin !== "external" && sourceRecovery !== undefined) {
-    row.recovery = sourceRecovery;
+  if (session.origin === "external") {
+    delete row.recovery;
   }
   return row;
 }
 
 function sessionAgent(
-  session: SessionView,
-  source: WorktreeRow,
-): NonNullable<WorktreeRow["agent"]> {
-  const agent: NonNullable<WorktreeRow["agent"]> = {
+  session: DashboardSessionView,
+  source: DashboardWorktreeRowView,
+): NonNullable<DashboardWorktreeRowView["agent"]> {
+  const agent: Mutable<NonNullable<DashboardWorktreeRowView["agent"]>> = {
     harness: session.harness.provider,
     state: session.status.value,
     confidence: session.status.confidence,
@@ -166,16 +174,19 @@ function sessionAgent(
   return agent;
 }
 
-function sourceAgentMatchesSession(source: WorktreeRow, session: SessionView): boolean {
+function sourceAgentMatchesSession(
+  source: DashboardWorktreeRowView,
+  session: DashboardSessionView,
+): boolean {
   if (session.origin === "station") {
     return source.agent?.sessionId === session.id;
   }
   return session.harness.runId !== undefined && source.agent?.runId === session.harness.runId;
 }
 
-function sessionDisplay(session: SessionView): WorktreeRow["display"] {
+function sessionDisplay(session: DashboardSessionView): DashboardWorktreeRowView["display"] {
   const value = session.status.value;
-  const display: WorktreeRow["display"] = {
+  const display: Mutable<DashboardWorktreeRowView["display"]> = {
     statusLabel: sessionStatusLabel(value),
     sortPriority: sessionStatusPriority(value),
     alert: value === "needs_attention" || value === "stuck",
@@ -186,14 +197,14 @@ function sessionDisplay(session: SessionView): WorktreeRow["display"] {
 }
 
 function sessionStatusLabel(
-  value: SessionView["status"]["value"],
-): WorktreeRow["display"]["statusLabel"] {
+  value: DashboardSessionView["status"]["value"],
+): DashboardWorktreeRowView["display"]["statusLabel"] {
   if (value === "needs_attention") return "needs attention";
   if (value === "none") return "no agent";
   return value;
 }
 
-function sessionStatusPriority(value: SessionView["status"]["value"]): number {
+function sessionStatusPriority(value: DashboardSessionView["status"]["value"]): number {
   switch (value) {
     case "needs_attention":
       return 10;

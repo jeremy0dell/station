@@ -1,6 +1,7 @@
 import type { SafeError } from "@station/contracts";
-import { createTuiStore } from "@station/dashboard-core";
+import { createInitialTuiState, type DashboardState } from "@station/dashboard-core";
 import { describe, expect, it, vi } from "vitest";
+import { createStore } from "zustand/vanilla";
 import { runCreateSessionOperation } from "../../../src/state/operations/createSession.js";
 import { createCommandSnapshot } from "../../fixtures/snapshots.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
@@ -91,7 +92,9 @@ const operation = {
 function createFixture() {
   const snapshot = createCommandSnapshot("idle");
   const service = new FakeTuiObserverService(snapshot);
-  const store = createTuiStore({ service, initialSnapshot: snapshot });
+  const store = createStore<DashboardState>()(() =>
+    createInitialTuiState({ initialSnapshot: snapshot }),
+  );
   const failures: SafeError[] = [];
   const toasts: SafeError[] = [];
 

@@ -4,7 +4,6 @@
 // mirroring apps/tui's App.tsx branch for the popup posture, including the
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
 import { useEffect, useRef } from "react";
-import type { StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand/react";
 import {
   activeTuiToast,
@@ -13,7 +12,8 @@ import {
   nextTuiToastExpiry,
   snapshotLoadingLines,
   tuiScreenBehavior,
-  type TuiStore,
+  type DashboardActions,
+  type DashboardStateSource,
 } from "@station/dashboard-core";
 import { ActiveScreenOverlayView } from "./ActiveScreenOverlayView.js";
 import { CommandPromptView } from "./CommandPromptView.js";
@@ -27,30 +27,34 @@ import { ToastOverlayView } from "./ToastOverlayView.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 
 export type DashboardRootProps = {
-  store: StoreApi<TuiStore>;
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
+  >;
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;
   onCopyNotice: (text: string) => void;
 };
 
-export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardRootProps) {
+export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: DashboardRootProps) {
   const theme = useStationTheme();
-  const snapshot = useStore(store, (state) => state.snapshot);
-  const loading = useStore(store, (state) => state.loading);
-  const screen = useStore(store, (state) => state.screen);
-  const searchQuery = useStore(store, (state) => state.searchQuery);
-  const persistentFilter = useStore(store, (state) => state.persistentFilter);
-  const collapsedProjectIds = useStore(store, (state) => state.collapsedProjectIds);
-  const scrollOffset = useStore(store, (state) => state.scrollOffset);
-  const dashboardFocus = useStore(store, (state) => state.dashboardFocus);
-  const selection = useStore(store, (state) => state.selection);
-  const localRows = useStore(store, (state) => state.localRows);
-  const liveWidgets = useStore(store, (state) => state.widgets);
-  const widgetsPersisted = useStore(store, (state) => state.widgetsPersisted);
-  const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
-  const activeToast = useStore(store, activeTuiToast);
-  const nextExpiry = useStore(store, nextTuiToastExpiry);
+  const snapshot = useStore(state, (state) => state.snapshot);
+  const loading = useStore(state, (state) => state.loading);
+  const screen = useStore(state, (state) => state.screen);
+  const searchQuery = useStore(state, (state) => state.searchQuery);
+  const persistentFilter = useStore(state, (state) => state.persistentFilter);
+  const collapsedProjectIds = useStore(state, (state) => state.collapsedProjectIds);
+  const scrollOffset = useStore(state, (state) => state.scrollOffset);
+  const dashboardFocus = useStore(state, (state) => state.dashboardFocus);
+  const selection = useStore(state, (state) => state.selection);
+  const localRows = useStore(state, (state) => state.localRows);
+  const liveWidgets = useStore(state, (state) => state.widgets);
+  const widgetsPersisted = useStore(state, (state) => state.widgetsPersisted);
+  const observerConnectionStatus = useStore(state, (state) => state.observerConnectionStatus);
+  const activeToast = useStore(state, activeTuiToast);
+  const nextExpiry = useStore(state, nextTuiToastExpiry);
   const hoverEnabled = useStationHoverEnabled();
 
   const toastHiddenByScreen = isTuiToastHiddenByScreen(screen);
@@ -63,25 +67,25 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
   // opens never lays out against the store's stale value while this passive
   // effect catches up.
   useEffect(() => {
-    store.getState().setTerminalRows(rows);
-  }, [rows, store]);
+    actions.setTerminalRows(rows);
+  }, [actions, rows]);
   useEffect(() => {
     const wasHidden = wasToastHiddenByScreen.current;
     wasToastHiddenByScreen.current = toastHiddenByScreen;
     if (wasHidden && !toastHiddenByScreen && activeToast !== undefined) {
-      store.getState().refreshActiveToastExpiry(Date.now());
+      actions.refreshActiveToastExpiry(Date.now());
     }
-  }, [activeToast, store, toastHiddenByScreen]);
+  }, [actions, activeToast, toastHiddenByScreen]);
   useEffect(() => {
     if (nextExpiry === undefined || toastHiddenByScreen) {
       return;
     }
     const delay = Math.max(0, nextExpiry - Date.now());
     const timer = setTimeout(() => {
-      store.getState().expireToasts(Date.now());
+      actions.expireToasts(Date.now());
     }, delay);
     return () => clearTimeout(timer);
-  }, [nextExpiry, store, toastHiddenByScreen]);
+  }, [actions, nextExpiry, toastHiddenByScreen]);
 
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const toastOverlay = (
@@ -112,7 +116,7 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
           ))}
         </box>
         <Divider columns={contentColumns} />
-        <DashboardFooterView store={store} columns={contentColumns} />
+        <DashboardFooterView state={state} columns={contentColumns} />
         {toastOverlay}
       </box>
     );
@@ -136,7 +140,7 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
           screen={screen}
           columns={columns}
         />
-        <DashboardFooterView store={store} columns={contentColumns} />
+        <DashboardFooterView state={state} columns={contentColumns} />
         <CommandPromptView screen={screen} />
         {toastOverlay}
       </StationHoverProvider>

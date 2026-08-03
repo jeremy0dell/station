@@ -1,12 +1,6 @@
-import type {
-  ProjectId,
-  ProjectView,
-  ProviderHealth,
-  ProviderId,
-  SnapshotHarness,
-  StationSnapshot,
-} from "@station/contracts";
-import { pendingProjectDefaultHarnesses, type TuiLocalRows } from "../state/localRows.js";
+import type { ProjectId, ProviderHealth, ProviderId } from "@station/contracts";
+import { pendingProjectDefaultHarnesses } from "../state/localRows.js";
+import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
 
 export const SELECTION_KEYS = [
   "1",
@@ -53,12 +47,17 @@ export type KeyedChoice<T> = {
   value: T;
 };
 
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
+type DashboardProviderHealthView = DashboardSnapshotView["providerHealth"][ProviderId];
+type DashboardSnapshotHarnessView = NonNullable<DashboardSnapshotView["harnesses"]>[number];
+type DashboardLocalRowsView = DashboardViewState["localRows"];
+
 export type NewSessionHarnessOption = {
   id: ProviderId;
   label: string;
   status: ProviderHealth["status"];
   createBlocked: boolean;
-  health?: ProviderHealth;
+  health?: DashboardProviderHealthView;
   /** Set only when the snapshot knows both versions and they differ (M10 badge). */
   update?: { installed: string; latest: string };
 };
@@ -90,29 +89,29 @@ export function isSelectionKey(input: string): input is SelectionKey {
  * view can key off the snapshot alone and stay in exact agreement.
  */
 export function selectProjectChooserChoices(
-  snapshot: StationSnapshot,
-): Array<KeyedChoice<ProjectView>> {
+  snapshot: DashboardSnapshotView,
+): Array<KeyedChoice<DashboardProjectView>> {
   return keyChoices(snapshot.projects);
 }
 
 export function selectNewSessionProject(
-  snapshot: StationSnapshot,
+  snapshot: DashboardSnapshotView,
   selectedProjectId: ProjectId,
-): ProjectView | undefined {
+): DashboardProjectView | undefined {
   return (
     snapshot.projects.find((project) => project.id === selectedProjectId) ?? snapshot.projects[0]
   );
 }
 
 export function selectNewSessionProjectChoices(
-  snapshot: StationSnapshot,
-): Array<KeyedChoice<ProjectView>> {
+  snapshot: DashboardSnapshotView,
+): Array<KeyedChoice<DashboardProjectView>> {
   return keyChoices(snapshot.projects);
 }
 
 export function selectNewSessionHarnessOptions(
-  snapshot: StationSnapshot,
-  _project: ProjectView,
+  snapshot: DashboardSnapshotView,
+  _project: DashboardProjectView,
 ): NewSessionHarnessOption[] {
   const configured = configuredHarnesses(snapshot);
   const labels = new Map(configured.map((harness) => [harness.id, harness.label]));
@@ -151,8 +150,8 @@ export function selectNewSessionHarnessOptions(
 }
 
 export function selectNewSessionHarnessChoices(
-  snapshot: StationSnapshot,
-  project: ProjectView,
+  snapshot: DashboardSnapshotView,
+  project: DashboardProjectView,
 ): Array<KeyedChoice<NewSessionHarnessOption>> {
   return keyChoices(selectNewSessionHarnessOptions(snapshot, project));
 }
@@ -164,8 +163,8 @@ export function selectNewSessionHarnessChoices(
  * cue while the change is in flight.
  */
 export function selectProjectDefaultHarness(
-  localRows: TuiLocalRows,
-  project: ProjectView,
+  localRows: DashboardLocalRowsView,
+  project: DashboardProjectView,
 ): { harness: ProviderId; pending: boolean } {
   const pending = pendingProjectDefaultHarnesses(localRows)[project.id];
   if (pending === undefined) {
@@ -174,7 +173,9 @@ export function selectProjectDefaultHarness(
   return { harness: pending.harness, pending: true };
 }
 
-function configuredHarnesses(snapshot: StationSnapshot): readonly SnapshotHarness[] {
+function configuredHarnesses(
+  snapshot: DashboardSnapshotView,
+): readonly DashboardSnapshotHarnessView[] {
   if (snapshot.harnesses !== undefined) {
     return snapshot.harnesses;
   }

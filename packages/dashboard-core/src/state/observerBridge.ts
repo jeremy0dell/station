@@ -6,13 +6,12 @@ import type { TuiObserverService } from "../services/types.js";
 import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import type { TuiLocalOperationRunner } from "./operations/localOperationRunner.js";
 import { replaceSnapshot } from "./screen.js";
-import type { TuiStore } from "./store.js";
 import { OBSERVER_RECOVERY_TOAST_THRESHOLD_MS } from "./timing.js";
 import { addTuiToast, addTuiToasts } from "./toasts.js";
-import type { TuiState } from "./types.js";
+import type { DashboardState, TuiState } from "./types.js";
 
 export function createObserverBridgeHooks(deps: {
-  getStore(): StoreApi<TuiStore>;
+  getStore(): StoreApi<DashboardState>;
   getOperations(): TuiLocalOperationRunner;
 }): StationClientRuntimeHooks {
   return {

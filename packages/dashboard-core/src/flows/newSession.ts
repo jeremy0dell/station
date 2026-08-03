@@ -9,6 +9,7 @@ import {
   transitionEditableTextInput,
 } from "../components/EditableTextInput/editing.js";
 import { selectNewSessionHarnessOptions, selectNewSessionProject } from "../selectors/selectors.js";
+import type { ReadonlyDeep } from "../state/readonly.js";
 import {
   backWizardStep,
   createStepWizardState,
@@ -65,6 +66,12 @@ export type NewSessionFlowState =
   | NewSessionEditNameState
   | NewSessionPickProjectState
   | NewSessionPickAgentState;
+
+/** Deep-readonly New Session flow consumed by presentation and intent readers. */
+export type NewSessionFlowStateView = ReadonlyDeep<NewSessionFlowState>;
+export type NewSessionReviewStateView = ReadonlyDeep<NewSessionReviewState>;
+export type NewSessionEditNameStateView = ReadonlyDeep<NewSessionEditNameState>;
+type NewSessionSnapshotView = ReadonlyDeep<StationSnapshot>;
 
 export type NewSessionFlowAction =
   | { type: "editName" }
@@ -128,8 +135,8 @@ export type NewSessionActionId = keyof typeof NEW_SESSION_ACTIONS;
 
 /** Returns whether a New Session control is visible and currently actionable. */
 export function newSessionActionEnabled(
-  snapshot: StationSnapshot | undefined,
-  state: NewSessionFlowState,
+  snapshot: NewSessionSnapshotView | undefined,
+  state: NewSessionFlowStateView,
   actionId: NewSessionActionId,
 ): boolean {
   if (NEW_SESSION_ACTIONS[actionId].mode !== state.mode) return false;
@@ -168,7 +175,7 @@ export type NewSessionProjectResolution =
     };
 
 export function createNewSessionFlow(
-  snapshot: StationSnapshot,
+  snapshot: NewSessionSnapshotView,
   token: string,
   projectId?: ProjectId,
 ): NewSessionReviewState | undefined {
@@ -235,7 +242,7 @@ export function transitionNewSessionFlow(
 }
 
 export function newSessionIntentForInput(
-  state: NewSessionFlowState,
+  state: NewSessionFlowStateView,
   input: NewSessionInput,
 ): NewSessionInputIntent {
   const actionId = newSessionActionForInput(state, input);
@@ -260,7 +267,7 @@ export function newSessionIntentForInput(
 
 /** Resolves a visible New Session control into a renderer-neutral flow intent. */
 export function newSessionIntentForAction(
-  state: NewSessionFlowState,
+  state: NewSessionFlowStateView,
   actionId: NewSessionActionId,
 ): NewSessionInputIntent {
   const definition = NEW_SESSION_ACTIONS[actionId];
@@ -270,7 +277,7 @@ export function newSessionIntentForAction(
 
 /** Decodes only semantic control activation; text editing and focus movement stay as input intents. */
 export function newSessionActionForInput(
-  state: NewSessionFlowState,
+  state: NewSessionFlowStateView,
   input: Pick<NewSessionInput, "input" | "key">,
 ): NewSessionActionId | undefined {
   if (state.mode === "review") {
@@ -287,13 +294,13 @@ export function newSessionActionForInput(
   return state.editNameFocus === "back" ? "editName.back" : "editName.save";
 }
 
-export function selectedProject(snapshot: StationSnapshot, state: NewSessionFlowState) {
+export function selectedProject(snapshot: NewSessionSnapshotView, state: NewSessionFlowStateView) {
   return selectNewSessionProject(snapshot, state.selectedProjectId);
 }
 
 export function validateNewSessionCreate(
-  snapshot: StationSnapshot,
-  state: NewSessionFlowState,
+  snapshot: NewSessionSnapshotView,
+  state: NewSessionFlowStateView,
 ): NewSessionCreateValidation {
   const resolution = resolveNewSessionProjectAvailability(selectedProject(snapshot, state));
   if (resolution.kind === "missing") {
@@ -399,7 +406,7 @@ function reviewInputIntent(input: NewSessionInput): NewSessionInputIntent {
 }
 
 function editNameInputIntent(
-  state: NewSessionEditNameState,
+  state: NewSessionEditNameStateView,
   input: NewSessionInput,
 ): NewSessionInputIntent {
   if (state.editNameFocus === "name") {
@@ -455,7 +462,7 @@ function commitEditedName(state: NewSessionEditNameState): NewSessionReviewState
 /** Commit a project chosen by id (the shared selection engine's cursor/slot value). */
 export function chooseNewSessionProjectById(
   state: NewSessionPickProjectState,
-  snapshot: StationSnapshot,
+  snapshot: NewSessionSnapshotView,
   projectId: ProjectId,
   token: string,
 ): NewSessionPickProjectState | NewSessionReviewState {
@@ -465,7 +472,7 @@ export function chooseNewSessionProjectById(
 
 function applyChosenProject(
   state: NewSessionPickProjectState,
-  snapshot: StationSnapshot,
+  snapshot: NewSessionSnapshotView,
   project: NonNullable<ReturnType<typeof selectNewSessionProject>>,
   token: string,
 ): NewSessionPickProjectState | NewSessionReviewState {
@@ -487,7 +494,7 @@ function applyChosenProject(
 }
 
 function firstHarnessOption(
-  snapshot: StationSnapshot,
+  snapshot: NewSessionSnapshotView,
   project: NonNullable<ReturnType<typeof selectNewSessionProject>>,
 ) {
   return selectNewSessionHarnessOptions(snapshot, project)[0];
@@ -496,7 +503,7 @@ function firstHarnessOption(
 /** Commit an agent chosen by id (the shared selection engine's cursor/slot value). */
 export function chooseNewSessionAgentById(
   state: NewSessionPickAgentState,
-  snapshot: StationSnapshot,
+  snapshot: NewSessionSnapshotView,
   agentId: ProviderId,
 ): NewSessionPickAgentState | NewSessionReviewState {
   const project = selectedProject(snapshot, state);

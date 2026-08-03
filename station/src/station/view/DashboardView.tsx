@@ -2,7 +2,6 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type { StationSnapshot } from "@station/contracts";
 import {
   dashboardTableHeaderModel,
   fleetCountsLabel,
@@ -23,7 +22,13 @@ import {
   type DashboardViewportItem,
   type FleetSummary,
 } from "@station/dashboard-core";
-import type { DashboardFocus, TuiScreen, TuiViewState } from "@station/dashboard-core";
+import type {
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardViewState,
+} from "@station/dashboard-core";
+
+type DashboardFocusView = DashboardViewState["dashboardFocus"];
 import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
@@ -35,9 +40,9 @@ import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
 export type DashboardViewProps = {
-  snapshot: StationSnapshot;
-  viewState: TuiViewState;
-  screen: TuiScreen;
+  snapshot: DashboardSnapshotView;
+  viewState: DashboardViewState;
+  screen: DashboardScreenView;
   columns?: number;
 };
 
@@ -198,7 +203,7 @@ function dashboardRowLayouts(
   items: readonly DashboardViewportItem[],
   keyByRow: ReadonlyMap<string, string>,
   columns: number,
-  dashboardFocus?: DashboardFocus,
+  dashboardFocus?: DashboardFocusView,
 ): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
   const rowInputs = items.flatMap((item) => {
     const input = rowGridInputForViewportItem(item, keyByRow, dashboardFocus);
@@ -226,7 +231,7 @@ function DashboardBody({
   columns: number;
   items: readonly DashboardViewportItem[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  dashboardFocus?: DashboardFocus | undefined;
+  dashboardFocus?: DashboardFocusView;
 }) {
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -252,7 +257,7 @@ function DashboardViewportRow({
   columns: number;
   item: DashboardViewportItem;
   layout: RowGridLayout | undefined;
-  dashboardFocus?: DashboardFocus | undefined;
+  dashboardFocus?: DashboardFocusView;
 }) {
   const theme = useStationTheme();
   switch (item.type) {

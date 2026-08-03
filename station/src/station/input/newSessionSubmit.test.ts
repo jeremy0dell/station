@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
-import { createTuiStore } from "@station/dashboard-core";
+import { createDashboardRuntime } from "@station/dashboard-core";
 import { resolveInitialState } from "../../state/initialState.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
@@ -15,7 +15,7 @@ const CREATE_ACTION = { type: "newSession.activate", actionId: "review.create" }
 // resolvers are the interception point: focused Enter or direct C on review
 // becomes a hosted launch; field/editor keys fall through to the machine.
 function newStore(snapshot = manyProjectsSnapshot()) {
-  return createTuiStore({
+  return createDashboardRuntime({
     source: new FakeStationSource(snapshot),
     service: new FakeTuiObserverService(snapshot),
     initialSnapshot: snapshot,
@@ -27,7 +27,7 @@ function newStore(snapshot = manyProjectsSnapshot()) {
 function storeOnNewSessionReview(snapshot?: StationSnapshot) {
   const store = newStore(snapshot);
   // "N" opens the New Session wizard, which lands on the review step.
-  store.getState().handleKey({ input: "N" });
+  store.actions.handleKey({ input: "N" });
   return store;
 }
 
@@ -50,7 +50,7 @@ function snapshotWithUnavailableCodex(): StationSnapshot {
 describe("resolveNewSessionSubmit", () => {
   it("resolves the review screen to a hosted-launch submit with the picked project/harness", () => {
     const store = storeOnNewSessionReview();
-    expect(store.getState().screen.name).toBe("newSession");
+    expect(store.state.getState().screen.name).toBe("newSession");
 
     const submit = resolveNewSessionSubmit(store, CREATE_ACTION);
     expect(submit.kind).toBe("submit");
@@ -65,12 +65,12 @@ describe("resolveNewSessionSubmit", () => {
 
   it("carries a custom name independently from the generated branch", () => {
     const store = storeOnNewSessionReview();
-    const opened = store.getState().screen;
+    const opened = store.state.getState().screen;
     if (opened.name !== "newSession") throw new Error("expected new-session wizard");
     const branch = opened.flow.branch;
-    store.getState().handleKey({ input: "N" });
-    store.getState().handleKey({ input: "Hexagonal PT 12" });
-    store.getState().handleKey({ input: "\r", return: true });
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "Hexagonal PT 12" });
+    store.actions.handleKey({ input: "\r", return: true });
 
     expect(resolveNewSessionSubmit(store, CREATE_ACTION)).toMatchObject({
       kind: "submit",
@@ -100,8 +100,8 @@ describe("resolveNewSessionSubmit", () => {
       expect(
         createStationOverlayLayer(store).catchAll?.(sequence, resolveInitialState()),
       ).toEqual({ kind: "swallowed" });
-      expect(store.getState().screen.name).toBe("newSession");
-      expect(store.getState().toasts).toEqual([]);
+      expect(store.state.getState().screen.name).toBe("newSession");
+      expect(store.state.getState().toasts).toEqual([]);
     }
   });
 });
@@ -111,7 +111,7 @@ describe("resolveKeyNewSessionSubmit", () => {
     const store = storeOnNewSessionReview();
     expect(resolveKeyNewSessionSubmit(store, "\r").kind).toBe("submit");
 
-    store.getState().handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
     expect(resolveKeyNewSessionSubmit(store, "\r").kind).toBe("none");
     expect(resolveKeyNewSessionSubmit(store, "C").kind).toBe("submit");
 

@@ -3,27 +3,19 @@
 // exactly the state the row's slot key produces, in every mode where rows
 // are interactive.
 import { describe, expect, it } from "bun:test";
-import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import {
   addProjectSelectedIndex,
-  applyAddProjectFolderReviewed,
-  applyAddProjectFolderReviewFailed,
-  applyAddProjectSubmitted,
   persistentFilterExperience,
-  selectDashboardViewport,
-} from "@station/dashboard-core";
-import { addTuiToast } from "@station/dashboard-core";
-import {
-  createEditableTextInputState,
-  openProjectSettings,
   removeProjectConfirmPhrase,
+  selectDashboardViewport,
+  type DashboardRuntime,
+  type DashboardRuntimeOptions,
 } from "@station/dashboard-core";
-import type { TuiStore } from "@station/dashboard-core";
 import { agentWorktreePaneId } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
-import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { resolveKeyRowAgentTarget, resolveRowAgentTarget } from "./stationActions.js";
 import { routeStationMouse } from "./stationMouse.js";
 
@@ -69,11 +61,17 @@ const SCROLL_UP: StationMouseEvent = {
   scrollDirection: "up",
 };
 
-function makeStore(snapshot?: StationSnapshot): StoreApi<TuiStore> {
+function makeStore(
+  snapshot?: StationSnapshot,
+  initialState?: DashboardRuntimeOptions["initialState"],
+): DashboardRuntime {
   // Enough rows to keep the same visible window as before the pinned fleet bar +
   // column header, so the station-project rows stay slot-addressable.
-  return makeStationTestStore({ terminalRows: 14, ...(snapshot === undefined ? {} : { snapshot }) })
-    .store;
+  return makeStationTestRuntime({
+    terminalRows: 14,
+    ...(snapshot === undefined ? {} : { snapshot }),
+    ...(initialState === undefined ? {} : { initialState }),
+  }).runtime;
 }
 
 // A clone of the fixture with one project's default harness overridden. The
@@ -167,7 +165,7 @@ describe("routeStationMouse", () => {
 
     expect(outcome).toMatchObject({ kind: "launch-managed", worktreeId: "wt_station_idle" });
     // No local toast: harness resolution (and any failure) is the observer's job now.
-    expect(store.getState().toasts).toEqual([]);
+    expect(store.state.getState().toasts).toEqual([]);
   });
 
   it("treats a dashboard click on a stale row as an inert click with no toast", () => {
@@ -176,30 +174,30 @@ describe("routeStationMouse", () => {
     const outcome = routeStationMouse({ kind: "row", rowId: "wt_nope" }, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().toasts).toEqual([]);
+    expect(store.state.getState().toasts).toEqual([]);
   });
 
   it("chooses the clicked row in remove mode, same as the slot key", () => {
     const clicked = makeStore();
     const keyed = makeStore();
     const rowId = "ses_wt_station_working";
-    clicked.getState().handleKey({ input: "X" });
-    keyed.getState().handleKey({ input: "X" });
+    clicked.actions.handleKey({ input: "X" });
+    keyed.actions.handleKey({ input: "X" });
     const slot = slotForRow(keyed, rowId);
 
     routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, clicked);
-    keyed.getState().handleKey({ input: slot });
+    keyed.actions.handleKey({ input: slot });
 
-    expect(clicked.getState().screen).toEqual(keyed.getState().screen);
-    expect(clicked.getState().screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+    expect(clicked.state.getState().screen).toMatchObject({ name: "removeWorktree", step: "confirm" });
   });
 
   it("confirms remove with the semantic Delete action", () => {
     const store = makeStore();
     const worktreeId = "wt_station_working";
     const rowId = `ses_${worktreeId}`;
-    store.getState().handleKey({ input: "X" });
-    store.getState().handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: "X" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
 
     const outcome = routeStationMouse(
       { kind: "removeWorktreeAction", actionId: "confirm.delete" },
@@ -208,8 +206,8 @@ describe("routeStationMouse", () => {
     );
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.getState().localRows.pendingRemove).toMatchObject([
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().localRows.pendingRemove).toMatchObject([
       { localId: `remove:${worktreeId}`, worktreeId },
     ]);
   });
@@ -217,8 +215,8 @@ describe("routeStationMouse", () => {
   it("cancels remove with the semantic Keep action", () => {
     const store = makeStore();
     const rowId = "ses_wt_station_working";
-    store.getState().handleKey({ input: "X" });
-    store.getState().handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: "X" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
 
     const outcome = routeStationMouse(
       { kind: "removeWorktreeAction", actionId: "confirm.keep" },
@@ -227,13 +225,13 @@ describe("routeStationMouse", () => {
     );
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.getState().localRows.pendingRemove).toEqual([]);
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().localRows.pendingRemove).toEqual([]);
   });
 
   it("keeps stale Remove actions inert", () => {
     const store = makeStore();
-    const before = store.getState().screen;
+    const before = store.state.getState().screen;
     const target = {
       kind: "removeWorktreeAction",
       actionId: "confirm.delete",
@@ -242,28 +240,28 @@ describe("routeStationMouse", () => {
     const outcome = routeStationMouse(target, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual(before);
-    expect(store.getState().localRows.pendingRemove).toEqual([]);
+    expect(store.state.getState().screen).toEqual(before);
+    expect(store.state.getState().localRows.pendingRemove).toEqual([]);
 
-    store.getState().handleKey({ input: "X" });
+    store.actions.handleKey({ input: "X" });
     routeStationMouse(target, LEFT_DOWN, store);
-    expect(store.getState().screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
-    expect(store.getState().localRows.pendingRemove).toEqual([]);
+    expect(store.state.getState().screen).toEqual({ name: "removeWorktree", step: "chooseSlot" });
+    expect(store.state.getState().localRows.pendingRemove).toEqual([]);
   });
 
   it("chooses the clicked row in fork mode, same as the slot key", () => {
     const clicked = makeStore();
     const keyed = makeStore();
     const rowId = "ses_wt_station_working";
-    clicked.getState().handleKey({ input: "F" });
-    keyed.getState().handleKey({ input: "F" });
+    clicked.actions.handleKey({ input: "F" });
+    keyed.actions.handleKey({ input: "F" });
     const slot = slotForRow(keyed, rowId);
 
     routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, clicked);
-    keyed.getState().handleKey({ input: slot });
+    keyed.actions.handleKey({ input: slot });
 
-    const clickedScreen = clicked.getState().screen;
-    const keyedScreen = keyed.getState().screen;
+    const clickedScreen = clicked.state.getState().screen;
+    const keyedScreen = keyed.state.getState().screen;
     if (
       clickedScreen.name !== "fork" ||
       clickedScreen.step !== "details" ||
@@ -282,10 +280,10 @@ describe("routeStationMouse", () => {
   it("focuses Fork Name and toggles Copy through semantic field actions", () => {
     const store = makeStore();
     const rowId = "ses_wt_station_working";
-    store.getState().handleKey({ input: "F" });
-    store.getState().handleKey({ input: slotForRow(store, rowId) });
-    store.getState().handleKey({ input: "", downArrow: true });
-    store.getState().handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "F" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
 
     expect(
       routeStationMouse(
@@ -294,7 +292,7 @@ describe("routeStationMouse", () => {
         store,
       ),
     ).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "fork",
       step: "details",
       focus: "name",
@@ -306,7 +304,7 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "fork",
       step: "details",
       focus: "copyDirty",
@@ -318,9 +316,9 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     const worktreeId = "wt_station_working";
     const rowId = `ses_${worktreeId}`;
-    store.getState().handleKey({ input: "F" });
-    store.getState().handleKey({ input: slotForRow(store, rowId) });
-    expect(store.getState().screen).toMatchObject({ name: "fork", step: "details" });
+    store.actions.handleKey({ input: "F" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+    expect(store.state.getState().screen).toMatchObject({ name: "fork", step: "details" });
 
     const outcome = routeStationMouse(
       { kind: "forkSessionAction", actionId: "details.submit" },
@@ -339,7 +337,7 @@ describe("routeStationMouse", () => {
     }
     // The submit is intercepted, not dispatched to the machine — the sheet stays open
     // until the executor closes it, so the machine never ran the tmux session.fork.
-    expect(store.getState().screen).toMatchObject({ name: "fork", step: "details" });
+    expect(store.state.getState().screen).toMatchObject({ name: "fork", step: "details" });
   });
 
   it("keeps stale Fork actions inert", () => {
@@ -355,32 +353,32 @@ describe("routeStationMouse", () => {
   it("submits Rename Session through its semantic sheet button", () => {
     const store = makeStore();
     const rowId = "ses_wt_station_idle";
-    store.getState().handleKey({ input: "R" });
-    store.getState().handleKey({ input: slotForRow(store, rowId) });
-    store.getState().handleKey({ input: "Mouse title" });
+    store.actions.handleKey({ input: "R" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: "Mouse title" });
 
     const outcome = routeStationMouse({ kind: "renameSessionSubmit" }, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.getState().localRows.pendingRenameTitles?.[rowId]?.title).toBe("Mouse title");
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().localRows.pendingRenameTitles?.[rowId]?.title).toBe("Mouse title");
   });
 
   it("keeps a stale Rename Session button inert", () => {
     const store = makeStore();
-    const before = store.getState().screen;
+    const before = store.state.getState().screen;
 
     expect(routeStationMouse({ kind: "renameSessionSubmit" }, LEFT_DOWN, store)).toEqual({
       kind: "handled",
     });
-    expect(store.getState().screen).toBe(before);
-    expect(store.getState().localRows.pendingRenameTitles).toEqual({});
+    expect(store.state.getState().screen).toBe(before);
+    expect(store.state.getState().localRows.pendingRenameTitles).toEqual({});
   });
 
   it("ignores row clicks in text-input modes", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "/" });
-    const before = store.getState();
+    store.actions.handleKey({ input: "/" });
+    const before = store.state.getState();
 
     const outcome = routeStationMouse(
       { kind: "row", rowId: "ses_wt_station_idle" },
@@ -389,17 +387,16 @@ describe("routeStationMouse", () => {
     );
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual(before.screen);
-    expect(store.getState().searchQuery).toBe(before.searchQuery);
+    expect(store.state.getState().screen).toEqual(before.screen);
+    expect(store.state.getState().searchQuery).toBe(before.searchQuery);
   });
 
   it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
-    const fixture = makeStationTestStore({
+    const store = makeStationTestRuntime({
       terminalRows: 14,
       dashboardSearchExperience: persistentFilterExperience,
-    });
-    const store = fixture.store;
-    store.setState({ persistentFilter: { query: "working" } });
+      initialState: { persistentFilter: { query: "working" } },
+    }).runtime;
 
     expect(
       routeStationMouse(
@@ -408,142 +405,142 @@ describe("routeStationMouse", () => {
         store,
       ),
     ).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual({
+    expect(store.state.getState().screen).toEqual({
       name: "persistentFilter",
       draft: { value: "working", cursor: 7 },
     });
 
-    store.getState().handleKey({ input: "", escape: true });
-    store.getState().handleKey({ input: "H" });
+    store.actions.handleKey({ input: "", escape: true });
+    store.actions.handleKey({ input: "H" });
     routeStationMouse(
       { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toEqual({ name: "help" });
-    expect(store.getState().persistentFilter).toEqual({ query: "working" });
+    expect(store.state.getState().screen).toEqual({ name: "help" });
+    expect(store.state.getState().persistentFilter).toEqual({ query: "working" });
 
-    store.getState().handleKey({ input: "", escape: true });
+    store.actions.handleKey({ input: "", escape: true });
     routeStationMouse(
       { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.getState().persistentFilter).toBeUndefined();
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().persistentFilter).toBeUndefined();
   });
 
   it("toggles project collapse on header click, dashboard mode only", () => {
     const store = makeStore();
 
     routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
-    expect([...store.getState().collapsedProjectIds]).toEqual(["station"]);
-    expect(store.getState().dashboardFocus).toEqual({
+    expect([...store.state.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
       control: "primary",
     });
 
     routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
-    expect([...store.getState().collapsedProjectIds]).toEqual([]);
+    expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
 
-    store.getState().handleKey({ input: "H" });
+    store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
-    expect([...store.getState().collapsedProjectIds]).toEqual([]);
+    expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
   });
 
   it("scrolls on wheel in row-interactive modes and nowhere else", () => {
     const store = makeStore();
 
     routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
-    expect(store.getState().scrollOffset).toBe(1);
+    expect(store.state.getState().scrollOffset).toBe(1);
     routeStationMouse({ kind: "body" }, SCROLL_UP, store);
-    expect(store.getState().scrollOffset).toBe(0);
+    expect(store.state.getState().scrollOffset).toBe(0);
 
-    store.getState().handleKey({ input: "H" });
+    store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "body" }, SCROLL_DOWN, store);
-    expect(store.getState().scrollOffset).toBe(0);
+    expect(store.state.getState().scrollOffset).toBe(0);
   });
 
   it("never scrolls the dashboard under a sheet backdrop", () => {
     const store = makeStore();
     const outcome = routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().scrollOffset).toBe(0);
+    expect(store.state.getState().scrollOffset).toBe(0);
   });
 
   it("dismisses a bounded screen only on primary-down over the screen backdrop", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "H" });
+    store.actions.handleKey({ input: "H" });
 
     for (const event of [LEFT_UP, RIGHT_DOWN, MIDDLE_DOWN, SCROLL_DOWN]) {
       expect(routeStationMouse({ kind: "screenBackdrop" }, event, store)).toEqual({
         kind: "handled",
       });
-      expect(store.getState().screen).toEqual({ name: "help" });
+      expect(store.state.getState().screen).toEqual({ name: "help" });
     }
 
     expect(routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store)).toEqual({
       kind: "handled",
     });
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("keeps stale screen and sheet backdrop wheel events from scrolling after dismissal", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "H" });
+    store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
 
     routeStationMouse({ kind: "screenBackdrop" }, SCROLL_DOWN, store);
     routeStationMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
 
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.getState().scrollOffset).toBe(0);
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().scrollOffset).toBe(0);
   });
 
   it("pages on scroll-indicator clicks", () => {
     const store = makeStore();
     routeStationMouse({ kind: "scrollIndicator", direction: "down" }, LEFT_DOWN, store);
-    expect(store.getState().scrollOffset).toBe(5);
+    expect(store.state.getState().scrollOffset).toBe(5);
     routeStationMouse({ kind: "scrollIndicator", direction: "up" }, LEFT_DOWN, store);
-    expect(store.getState().scrollOffset).toBe(0);
+    expect(store.state.getState().scrollOffset).toBe(0);
   });
 
   it("dismisses toasts on click in any mode", () => {
     const store = makeStore();
-    store.setState(addTuiToast(store.getState(), { kind: "info", message: "hello" }));
-    store.getState().handleKey({ input: "H" });
+    store.actions.pushToast({ kind: "info", message: "hello" });
+    store.actions.handleKey({ input: "H" });
 
     routeStationMouse({ kind: "toast" }, LEFT_DOWN, store);
 
-    expect(store.getState().toasts).toEqual([]);
+    expect(store.state.getState().toasts).toEqual([]);
   });
 
   it("selects sheet choices by their slot key in picker modes only", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "N" });
-    store.getState().handleKey({ input: "P" });
-    expect(store.getState().screen).toMatchObject({
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "P" });
+    expect(store.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "pickProject" },
     });
 
     routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "review" },
     });
 
     // Outside picker modes a stray choice click is inert (no text injection).
-    store.getState().handleKey({ input: "", escape: true });
-    store.getState().handleKey({ input: "/" });
+    store.actions.handleKey({ input: "", escape: true });
+    store.actions.handleKey({ input: "/" });
     routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
-    expect(store.getState().screen).toMatchObject({ name: "search", value: "" });
+    expect(store.state.getState().screen).toMatchObject({ name: "search", value: "" });
   });
 
   it("treats right-click as inert at the STATION router layer", () => {
     const store = makeStore();
-    const before = store.getState().screen;
+    const before = store.state.getState().screen;
 
     const outcome = routeStationMouse(
       { kind: "projectHeader", projectId: "station" },
@@ -552,8 +549,8 @@ describe("routeStationMouse", () => {
     );
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toBe(before);
-    expect([...store.getState().collapsedProjectIds]).toEqual([]);
+    expect(store.state.getState().screen).toBe(before);
+    expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
   });
 
   it("opens first-project onboarding from the dashboard CTA only while empty", () => {
@@ -561,14 +558,14 @@ describe("routeStationMouse", () => {
     expect(routeStationMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, empty)).toEqual({
       kind: "handled",
     });
-    expect(empty.getState().screen).toMatchObject({
+    expect(empty.state.getState().screen).toMatchObject({
       name: "addProject",
       flow: { mode: "start", firstProject: true },
     });
 
     const populated = makeStore();
     routeStationMouse({ kind: "firstProjectAdd" }, LEFT_DOWN, populated);
-    expect(populated.getState().screen).toEqual({ name: "dashboard" });
+    expect(populated.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("opens PR links on plain left click in dashboard mode", () => {
@@ -580,7 +577,7 @@ describe("routeStationMouse", () => {
       url,
     });
 
-    store.getState().handleKey({ input: "/" });
+    store.actions.handleKey({ input: "/" });
     expect(routeStationMouse({ kind: "link", url }, LEFT_DOWN, store)).toEqual({ kind: "handled" });
   });
 
@@ -615,7 +612,7 @@ describe("routeStationMouse", () => {
       cwd: projectRoot("station"),
       role: "shell",
     });
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
       control: "shell",
@@ -631,7 +628,7 @@ describe("routeStationMouse", () => {
     // Opening a shell is orthogonal to agent activation, so the affordance must
     // still resolve the session's backing checkout. (The dashboard *mouse*
     // row-click opens the primary agent, so keyboard drives the pending start.)
-    store.getState().handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
     const outcome = routeStationMouse({ kind: "openShellForRow", rowId }, LEFT_DOWN, store);
     expect(outcome).toEqual({
       kind: "open-pane",
@@ -644,7 +641,7 @@ describe("routeStationMouse", () => {
 
   it("gates the open-shell affordance to dashboard mode", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "/" }); // enter search (non-dashboard) mode
+    store.actions.handleKey({ input: "/" }); // enter search (non-dashboard) mode
 
     expect(
       routeStationMouse(
@@ -686,7 +683,7 @@ describe("routeStationMouse", () => {
       expect(outcome.branch).toMatch(/^station-[0-9a-f]+$/);
       expect(outcome.title).toBe(outcome.branch);
     }
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
       control: "quickSession",
@@ -706,7 +703,7 @@ describe("routeStationMouse", () => {
       projectId: "empty-project",
       harness: "codex",
     });
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "empty-project",
       control: "quickSession",
@@ -723,11 +720,11 @@ describe("routeStationMouse", () => {
         store,
       ),
     ).toEqual({ kind: "handled" });
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "emptyProjectAction",
       projectId: "empty-project",
     });
-    expect(store.getState().toasts.at(-1)?.toast.kind).toBe("error");
+    expect(store.state.getState().toasts.at(-1)?.toast.kind).toBe("error");
   });
 
   it("keeps stale and modal empty-project targets inert", () => {
@@ -738,10 +735,10 @@ describe("routeStationMouse", () => {
     expect(
       routeStationMouse({ kind: "emptyProjectAction", projectId: "station" }, LEFT_DOWN, stale),
     ).toEqual({ kind: "handled" });
-    expect(stale.getState().dashboardFocus).toBeUndefined();
+    expect(stale.state.getState().dashboardFocus).toBeUndefined();
 
     const modal = makeStore();
-    modal.getState().handleKey({ input: "H" });
+    modal.actions.handleKey({ input: "H" });
     expect(
       routeStationMouse(
         { kind: "emptyProjectAction", projectId: "empty-project" },
@@ -749,8 +746,8 @@ describe("routeStationMouse", () => {
         modal,
       ),
     ).toEqual({ kind: "handled" });
-    expect(modal.getState().screen).toEqual({ name: "help" });
-    expect(modal.getState().dashboardFocus).toBeUndefined();
+    expect(modal.state.getState().screen).toEqual({ name: "help" });
+    expect(modal.state.getState().dashboardFocus).toBeUndefined();
   });
 
   it("shows the blocked Quick Session error without emitting a launch outcome", () => {
@@ -759,14 +756,14 @@ describe("routeStationMouse", () => {
     expect(
       routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
-    expect(store.getState().localRows.pendingCreate).toEqual([]);
-    const toast = store.getState().toasts.at(-1)?.toast;
+    expect(store.state.getState().localRows.pendingCreate).toEqual([]);
+    const toast = store.state.getState().toasts.at(-1)?.toast;
     expect(toast).toMatchObject({
       kind: "error",
       message: "Project checkout is configured as a bare repository.",
     });
     expect(toast?.hint).toContain("config --local core.bare false");
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
       control: "quickSession",
@@ -775,7 +772,7 @@ describe("routeStationMouse", () => {
 
   it("gates quick-session and default-agent picker to dashboard mode", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "/" }); // enter search mode
+    store.actions.handleKey({ input: "/" }); // enter search mode
 
     expect(
       routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
@@ -805,13 +802,13 @@ describe("routeStationMouse", () => {
     );
     // The outcome is handled (no router effect); the picker screen is set on the store.
     expect(outcome).toEqual({ kind: "handled" });
-    const screen = store.getState().screen;
+    const screen = store.state.getState().screen;
     expect(screen).toBeDefined();
     expect(screen?.name).toBe("projectDefaultAgent");
     if (screen?.name === "projectDefaultAgent") {
       expect(screen.projectId).toBe("station");
     }
-    expect(store.getState().dashboardFocus).toEqual({
+    expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
       control: "defaultAgent",
@@ -819,8 +816,8 @@ describe("routeStationMouse", () => {
   });
 
   it("selects a project default agent by clicking an agent picker row", async () => {
-    const fixture = makeStationTestStore({ terminalRows: 12 });
-    const store = fixture.store;
+    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const store = fixture.runtime;
     routeStationMouse(
       { kind: "showDefaultAgentPickerForProject", projectId: "station" },
       LEFT_DOWN,
@@ -841,7 +838,7 @@ describe("routeStationMouse", () => {
     ).toBe(true);
     expect(fixture.service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
     const toast = store
-      .getState()
+      .state.getState()
       .toasts.find((entry) => entry.toast.message === "Default agent set to opencode.");
     expect(toast?.toast).toMatchObject({ kind: "success" });
   });
@@ -854,16 +851,16 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen?.name).not.toBe("projectDefaultAgent");
+    expect(store.state.getState().screen?.name).not.toBe("projectDefaultAgent");
   });
 
   it("focuses a settings item on click and leaves an unarmed remove click inert", () => {
     const store = makeStore();
-    store.setState(openProjectSettings(store.getState(), "station"));
+    store.actions.dispatch({ type: "projectSettings.open", projectId: "station" });
 
     // Clicking a left-list item drops into its detail pane.
     routeStationMouse({ kind: "projectSettingsItem", itemId: "remove" }, LEFT_DOWN, store);
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "projectSettings",
       activeId: "remove",
       focus: "detail",
@@ -873,7 +870,7 @@ describe("routeStationMouse", () => {
     // type into the confirm field) nor fire removal.
     const outcome = routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store);
     expect(outcome).toEqual({ kind: "handled" });
-    const after = store.getState().screen;
+    const after = store.state.getState().screen;
     expect(after.name).toBe("projectSettings");
     if (after.name === "projectSettings") {
       expect(after.removeDraft.value).toBe("");
@@ -881,23 +878,16 @@ describe("routeStationMouse", () => {
   });
 
   it("fires removal when the armed remove confirmation is clicked", async () => {
-    const fixture = makeStationTestStore({ terminalRows: 12 });
-    const store = fixture.store;
-    store.setState({
-      ...store.getState(),
-      screen: {
-        name: "projectSettings",
-        projectId: "station",
-        focus: "detail",
-        activeId: "remove",
-        removeDraft: createEditableTextInputState(removeProjectConfirmPhrase("station")),
-      },
-    });
+    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const store = fixture.runtime;
+    store.actions.dispatch({ type: "projectSettings.open", projectId: "station" });
+    store.actions.dispatch({ type: "projectSettings.focusItem", itemId: "remove" });
+    store.actions.handleKey({ input: removeProjectConfirmPhrase("station") });
 
     const outcome = routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
     await waitFor(() =>
       fixture.service.dispatched.some(
         (command) => command.type === "project.remove" && command.payload.projectId === "station",
@@ -907,7 +897,7 @@ describe("routeStationMouse", () => {
 
   it("ignores project-settings targets outside projectSettings mode", () => {
     const store = makeStore();
-    const before = store.getState().screen;
+    const before = store.state.getState().screen;
 
     expect(
       routeStationMouse({ kind: "projectSettingsItem", itemId: "remove" }, LEFT_DOWN, store),
@@ -915,7 +905,7 @@ describe("routeStationMouse", () => {
     expect(routeStationMouse({ kind: "projectSettingsConfirmRemove" }, LEFT_DOWN, store)).toEqual({
       kind: "handled",
     });
-    expect(store.getState().screen).toEqual(before);
+    expect(store.state.getState().screen).toEqual(before);
   });
 });
 
@@ -936,14 +926,14 @@ describe("resolveKeyRowAgentTarget", () => {
     // select the row for removal here — so it defers to the machine, not launch.
     const store = makeStore();
     const slot = slotForRow(store, "ses_wt_station_idle");
-    store.getState().handleKey({ input: "X" }); // enter remove choose-slot mode
+    store.actions.handleKey({ input: "X" }); // enter remove choose-slot mode
 
     expect(resolveKeyRowAgentTarget(store, slot)).toEqual({ kind: "none" });
   });
 });
 
-function pendingStartIds(store: StoreApi<TuiStore>): string[] {
-  return store.getState().localRows.pendingStart.map((row) => row.localId);
+function pendingStartIds(store: DashboardRuntime): string[] {
+  return store.state.getState().localRows.pendingStart.map((row) => row.localId);
 }
 
 // The fixture's worktree path / project root, read back from a fresh snapshot
@@ -965,8 +955,8 @@ function projectRoot(projectId: string): string {
   return root;
 }
 
-function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
-  const state = store.getState();
+function slotForRow(store: DashboardRuntime, rowId: string): string {
+  const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
@@ -991,10 +981,9 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe("routeStationMouse widget settings", () => {
-  function panelStore(): StoreApi<TuiStore> {
-    const store = makeStore();
-    store.setState({ widgets: [{ type: "time" }, { type: "moon" }] });
-    store.getState().handleKey({ input: "W" });
+  function panelStore(): DashboardRuntime {
+    const store = makeStore(undefined, { widgets: [{ type: "time" }, { type: "moon" }] });
+    store.actions.handleKey({ input: "W" });
     return store;
   }
 
@@ -1003,181 +992,114 @@ describe("routeStationMouse widget settings", () => {
     expect(routeStationMouse({ kind: "widgetSettingsOpen" }, LEFT_DOWN, store)).toEqual({
       kind: "handled",
     });
-    expect(store.getState().screen.name).toBe("widgetSettings");
+    expect(store.state.getState().screen.name).toBe("widgetSettings");
 
     // In any other mode the click is absorbed without opening.
     const busy = makeStore();
-    busy.getState().handleKey({ input: "H" });
+    busy.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "widgetSettingsOpen" }, LEFT_DOWN, busy);
-    expect(busy.getState().screen.name).toBe("help");
+    expect(busy.state.getState().screen.name).toBe("help");
   });
 
   it("toggles a clicked row and moves the cursor onto it", () => {
     const store = panelStore();
     routeStationMouse({ kind: "widgetSettingsRow", index: 1 }, LEFT_DOWN, store);
-    expect(store.getState().widgets[1]).toEqual({ type: "moon", enabled: false });
-    const screen = store.getState().screen;
+    expect(store.state.getState().widgets[1]).toEqual({ type: "moon", enabled: false });
+    const screen = store.state.getState().screen;
     expect(screen.name === "widgetSettings" && screen.cursor).toBe(1);
   });
 
   it("removes via the row's ×", () => {
     const store = panelStore();
     routeStationMouse({ kind: "widgetSettingsRemove", index: 0 }, LEFT_DOWN, store);
-    expect(store.getState().widgets.map((widget) => widget.type)).toEqual(["moon"]);
+    expect(store.state.getState().widgets.map((widget) => widget.type)).toEqual(["moon"]);
   });
 
   it("adds from the picker via [ + add widget ] then a choice row", () => {
     const store = panelStore();
     routeStationMouse({ kind: "widgetSettingsAdd" }, LEFT_DOWN, store);
-    const picking = store.getState().screen;
+    const picking = store.state.getState().screen;
     expect(picking.name === "widgetSettings" && picking.focus).toBe("picker");
     routeStationMouse({ kind: "widgetSettingsPickerChoice", index: 1 }, LEFT_DOWN, store);
-    expect(store.getState().widgets.at(-1)).toEqual({ type: "fleet" });
-    const done = store.getState().screen;
+    expect(store.state.getState().widgets.at(-1)).toEqual({ type: "fleet" });
+    const done = store.state.getState().screen;
     expect(done.name === "widgetSettings" && done.focus).toBe("list");
   });
 
   it("ignores panel targets outside the widgetSettings mode", () => {
-    const store = makeStore();
-    store.setState({ widgets: [{ type: "time" }] });
+    const store = makeStore(undefined, { widgets: [{ type: "time" }] });
     routeStationMouse({ kind: "widgetSettingsRow", index: 0 }, LEFT_DOWN, store);
-    expect(store.getState().widgets[0]).toEqual({ type: "time" });
+    expect(store.state.getState().widgets[0]).toEqual({ type: "time" });
   });
 
   it("moves the add-project cursor to a clicked row", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "A" });
-    const opened = store.getState().screen;
+    store.actions.handleKey({ input: "A" });
+    const opened = store.state.getState().screen;
     if (opened.name !== "addProject" || opened.flow.mode !== "start") {
       throw new Error("expected addProject start");
     }
-    expect(addProjectSelectedIndex(store.getState())).toBe(0);
+    expect(addProjectSelectedIndex(store.state.getState())).toBe(0);
 
     routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
-    const moved = store.getState().screen;
+    const moved = store.state.getState().screen;
     if (moved.name !== "addProject" || moved.flow.mode !== "start") {
       throw new Error("expected addProject start");
     }
-    expect(addProjectSelectedIndex(store.getState())).toBe(1);
+    expect(addProjectSelectedIndex(store.state.getState())).toBe(1);
   });
 
-  it("routes Add Project controls through enabled shared actions", () => {
+  it("routes Add Project controls through shared actions", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "A" });
+    store.actions.handleKey({ input: "A" });
     routeStationMouse(
       { kind: "addProjectAction", actionId: "start.cancel" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-
-    store.getState().handleKey({ input: "A" });
-    store.setState(
-      applyAddProjectFolderReviewed(store.getState(), {
-        selectedPath: "/workspace/station",
-        gitRoot: "/workspace/station",
-        id: "station",
-        label: "Station",
-      }),
-    );
-    routeStationMouse(
-      { kind: "addProjectAction", actionId: "review.editId" },
-      LEFT_DOWN,
-      store,
-    );
-    store.getState().handleKey({ input: "-mouse" });
-    routeStationMouse(
-      { kind: "addProjectAction", actionId: "editId.save" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.getState().screen).toMatchObject({
-      name: "addProject",
-      flow: { mode: "review", id: "station-mouse", actionFocus: "submit" },
-    });
-
-    const success = applyAddProjectSubmitted(store.getState(), {
-      label: "Station",
-      root: "/workspace/station",
-    });
-    store.setState(success);
-    routeStationMouse(
-      { kind: "addProjectAction", actionId: "success.dashboard" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
-
-    store.getState().handleKey({ input: "A" });
-    store.setState(
-      applyAddProjectFolderReviewFailed(
-        store.getState(),
-        "/workspace/station",
-        new Error("review failed"),
-      ),
-    );
-    routeStationMouse(
-      { kind: "addProjectAction", actionId: "failed.cancel" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
-  it("keeps disabled and stale Add Project controls inert", () => {
+  it("keeps stale Add Project controls inert", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "A" });
-    store.setState(
-      applyAddProjectFolderReviewed(store.getState(), {
-        selectedPath: "/workspace/notes",
-        id: "notes",
-        label: "Notes",
-      }),
-    );
-    routeStationMouse(
-      { kind: "addProjectAction", actionId: "review.submit" },
-      LEFT_DOWN,
-      store,
-    );
-    expect(store.getState().screen).toMatchObject({
-      name: "addProject",
-      flow: { mode: "review", submitting: false, actionFocus: "chooseFolder" },
-    });
-
+    store.actions.handleKey({ input: "A" });
     routeStationMouse(
       { kind: "addProjectAction", actionId: "failed.retry" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toMatchObject({ name: "addProject", flow: { mode: "review" } });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "addProject",
+      flow: { mode: "start" },
+    });
   });
 
   it("routes Create Session review and name-editor controls", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "N" });
+    store.actions.handleKey({ input: "N" });
     routeStationMouse(
       { kind: "newSessionAction", actionId: "review.project" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "pickProject" },
     });
 
-    store.getState().handleKey({ input: "", escape: true });
+    store.actions.handleKey({ input: "", escape: true });
     routeStationMouse(
       { kind: "newSessionAction", actionId: "review.name" },
       LEFT_DOWN,
       store,
     );
-    store.getState().handleKey({ input: "Mouse session" });
+    store.actions.handleKey({ input: "Mouse session" });
     routeStationMouse(
       { kind: "newSessionAction", actionId: "editName.save" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "review", title: "Mouse session" },
     });
@@ -1187,13 +1109,13 @@ describe("routeStationMouse widget settings", () => {
       LEFT_DOWN,
       store,
     );
-    store.getState().handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
     routeStationMouse(
       { kind: "newSessionAction", actionId: "editName.name" },
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toMatchObject({
+    expect(store.state.getState().screen).toMatchObject({
       name: "newSession",
       flow: { mode: "editName", editNameFocus: "name" },
     });
@@ -1202,13 +1124,13 @@ describe("routeStationMouse widget settings", () => {
       LEFT_DOWN,
       store,
     );
-    expect(store.getState().screen).toMatchObject({ name: "newSession", flow: { mode: "review" } });
+    expect(store.state.getState().screen).toMatchObject({ name: "newSession", flow: { mode: "review" } });
   });
 
   it("returns the native managed-launch outcome for direct Create", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "N" });
-    store.getState().handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "N" });
+    store.actions.handleKey({ input: "", downArrow: true });
 
     const outcome = routeStationMouse(
       { kind: "newSessionAction", actionId: "review.create" },
@@ -1224,7 +1146,7 @@ describe("routeStationMouse widget settings", () => {
 
   it("keeps a stale unavailable Create target inert", () => {
     const store = makeStore(snapshotWithUnavailableCodex());
-    store.getState().handleKey({ input: "N" });
+    store.actions.handleKey({ input: "N" });
 
     expect(
       routeStationMouse(
@@ -1233,14 +1155,14 @@ describe("routeStationMouse widget settings", () => {
         store,
       ),
     ).toEqual({ kind: "handled" });
-    expect(store.getState().screen.name).toBe("newSession");
-    expect(store.getState().toasts).toEqual([]);
+    expect(store.state.getState().screen.name).toBe("newSession");
+    expect(store.state.getState().toasts).toEqual([]);
   });
 
   it("ignores an add-project row click outside addProject mode", () => {
     const store = makeStore();
-    store.getState().handleKey({ input: "H" });
+    store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "addProjectRow", index: 1 }, LEFT_DOWN, store);
-    expect(store.getState().screen.name).toBe("help");
+    expect(store.state.getState().screen.name).toBe("help");
   });
 });

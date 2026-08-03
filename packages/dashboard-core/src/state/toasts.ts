@@ -1,6 +1,6 @@
 import type { TuiToast } from "../services/types.js";
 import { toastExpiryMs } from "./timing.js";
-import type { TuiScreen, TuiState, TuiToastEntry } from "./types.js";
+import type { DashboardScreenView, DashboardStateView, TuiState, TuiToastEntry } from "./types.js";
 
 export function addTuiToast(state: TuiState, toast: TuiToast, nowMs = Date.now()): TuiState {
   const current = expireTuiToasts(state, nowMs);
@@ -66,18 +66,20 @@ export function refreshActiveTuiToastExpiry(state: TuiState, nowMs = Date.now())
   };
 }
 
-export function activeTuiToast(state: Pick<TuiState, "toasts">): TuiToastEntry | undefined {
+export function activeTuiToast(
+  state: Pick<DashboardStateView, "toasts">,
+): DashboardStateView["toasts"][number] | undefined {
   return state.toasts.at(-1);
 }
 
-export function isTuiToastHiddenByScreen(screen: TuiScreen): boolean {
+export function isTuiToastHiddenByScreen(screen: DashboardScreenView): boolean {
   if (screen.name === "dashboard" || screen.name === "search") {
     return false;
   }
   return screen.name !== "renameSession" || screen.step === "editName";
 }
 
-export function nextTuiToastExpiry(state: Pick<TuiState, "toasts">): number | undefined {
+export function nextTuiToastExpiry(state: Pick<DashboardStateView, "toasts">): number | undefined {
   return state.toasts.reduce<number | undefined>((next, entry) => {
     if (entry.expiresAt === undefined) {
       return next;

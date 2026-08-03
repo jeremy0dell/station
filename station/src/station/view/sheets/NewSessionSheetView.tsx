@@ -1,4 +1,4 @@
-import type { ProjectView, ProviderId, StationSnapshot } from "@station/contracts";
+import type { ProviderId } from "@station/contracts";
 import {
   bottomSheetContentWidth,
   newSessionContentRowCount,
@@ -7,11 +7,12 @@ import {
   selectedProject,
   selectNewSessionHarnessChoices,
   selectNewSessionProjectChoices,
-  type NewSessionFlowState,
-  type TuiSelectionState,
+  type DashboardSnapshotView,
+  type DashboardStateView,
+  type NewSessionFlowStateView,
 } from "@station/dashboard-core";
-import { EditableTextInputView } from "../EditableTextInputView.js";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
+import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
@@ -23,10 +24,12 @@ import {
   SheetLine,
 } from "./parts.js";
 
+type NewSessionProjectView = DashboardSnapshotView["projects"][number];
+
 export type NewSessionSheetViewProps = {
-  snapshot: StationSnapshot;
-  state: NewSessionFlowState;
-  selection: TuiSelectionState;
+  snapshot: DashboardSnapshotView;
+  state: NewSessionFlowStateView;
+  selection: DashboardStateView["selection"];
   columns: number;
   rows: number;
 };
@@ -55,10 +58,10 @@ export function NewSessionSheetView({
 }
 
 function renderMode(
-  snapshot: StationSnapshot,
-  state: NewSessionFlowState,
-  project: ProjectView | undefined,
-  selection: TuiSelectionState,
+  snapshot: DashboardSnapshotView,
+  state: NewSessionFlowStateView,
+  project: NewSessionProjectView | undefined,
+  selection: DashboardStateView["selection"],
   contentWidth: number,
 ) {
   if (state.mode === "pickProject") {
@@ -66,7 +69,7 @@ function renderMode(
       <ProjectPicker
         snapshot={snapshot}
         width={contentWidth}
-        selectedId={selection.get("newSessionPickProject") as ProjectView["id"] | undefined}
+        selectedId={selection.get("newSessionPickProject") as NewSessionProjectView["id"] | undefined}
       />
     );
   }
@@ -89,7 +92,7 @@ function renderMode(
   return <Review snapshot={snapshot} state={state} width={contentWidth} />;
 }
 
-function titleForState(state: NewSessionFlowState): string {
+function titleForState(state: NewSessionFlowStateView): string {
   switch (state.mode) {
     case "review":
       return "Create Session";
@@ -107,8 +110,8 @@ function Review({
   state,
   width,
 }: {
-  snapshot: StationSnapshot;
-  state: Extract<NewSessionFlowState, { mode: "review" }>;
+  snapshot: DashboardSnapshotView;
+  state: Extract<NewSessionFlowStateView, { mode: "review" }>;
   width: number;
 }) {
   const theme = useStationTheme();
@@ -164,8 +167,8 @@ function EditName({
   project,
   width,
 }: {
-  state: Extract<NewSessionFlowState, { mode: "editName" }>;
-  project: ProjectView | undefined;
+  state: Extract<NewSessionFlowStateView, { mode: "editName" }>;
+  project: NewSessionProjectView | undefined;
   width: number;
 }) {
   const nameValue = state.draftName.value.length === 0 ? state.title : state.draftName.value;
@@ -233,9 +236,9 @@ function ProjectPicker({
   width,
   selectedId,
 }: {
-  snapshot: StationSnapshot;
+  snapshot: DashboardSnapshotView;
   width: number;
-  selectedId?: ProjectView["id"];
+  selectedId?: NewSessionProjectView["id"];
 }) {
   const theme = useStationTheme();
   const projects = selectNewSessionProjectChoices(snapshot);
@@ -265,8 +268,8 @@ function AgentPicker({
   width,
   selectedId,
 }: {
-  snapshot: StationSnapshot;
-  project: ProjectView;
+  snapshot: DashboardSnapshotView;
+  project: NewSessionProjectView;
   width: number;
   selectedId?: ProviderId;
 }) {
@@ -282,9 +285,9 @@ function AgentPicker({
 }
 
 function optionCountForState(
-  snapshot: StationSnapshot,
-  state: NewSessionFlowState,
-  project: ProjectView | undefined,
+  snapshot: DashboardSnapshotView,
+  state: NewSessionFlowStateView,
+  project: NewSessionProjectView | undefined,
 ): number {
   if (state.mode === "pickProject") {
     return selectNewSessionProjectChoices(snapshot).length;

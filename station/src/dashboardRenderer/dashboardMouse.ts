@@ -1,4 +1,4 @@
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
   deriveTuiInputMode,
   isRemoveProjectArmed,
@@ -7,7 +7,6 @@ import {
   type ProjectHeaderControl,
   type TuiInputMode,
 } from "@station/dashboard-core";
-import type { StoreApi } from "zustand/vanilla";
 import { isPrimaryMouseEvent, wheelDirection, type StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 import {
@@ -16,6 +15,14 @@ import {
   showStaleDashboardTargetNotice,
   type DashboardRendererEffects,
 } from "./dashboardEffects.js";
+
+type DashboardMouseInput = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    "createQuickSession" | "dismissToasts" | "dispatch" | "handleKey" | "pushToast"
+  >;
+};
 
 const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "dashboard",
@@ -35,10 +42,10 @@ const SCROLL_PAGE_ROWS = 5;
 export function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   effects: DashboardRendererEffects,
 ): void {
-  const mode = deriveTuiInputMode(store.getState());
+  const mode = deriveTuiInputMode(store.state.getState());
   const scrollDirection = wheelDirection(event);
   if (scrollDirection !== null) {
     if (
@@ -46,7 +53,7 @@ export function routeDashboardMouse(
       target.kind !== "sheetBackdrop" &&
       ROW_INTERACTIVE_MODES.has(mode)
     ) {
-      store.getState().dispatch({
+      store.actions.dispatch({
         type: "dashboard.scroll",
         delta: scrollDirection === "up" ? -1 : 1,
       });
@@ -68,7 +75,7 @@ export function routeDashboardMouse(
 
 function routeSurfaceClick(
   target: StationMouseTarget,
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
   effects: DashboardRendererEffects,
 ): boolean {
@@ -99,14 +106,14 @@ function routeSurfaceClick(
       return true;
     case "firstProjectAdd":
       if (mode === "dashboard") {
-        store.getState().dispatch({ type: "dashboard.addProject" });
+        store.actions.dispatch({ type: "dashboard.addProject" });
       }
       return true;
     case "scrollIndicator":
       pageInMode(store, target.direction, mode);
       return true;
     case "toast":
-      store.getState().dismissToasts();
+      store.actions.dismissToasts();
       return true;
     case "body":
       return true;
@@ -115,14 +122,18 @@ function routeSurfaceClick(
   }
 }
 
-function activateRowInMode(store: StoreApi<TuiStore>, rowId: string, mode: TuiInputMode): void {
+function activateRowInMode(
+  store: DashboardMouseInput,
+  rowId: string,
+  mode: TuiInputMode,
+): void {
   if (ROW_INTERACTIVE_MODES.has(mode)) {
     activateCurrentRow(store, rowId);
   }
 }
 
 function activateProjectHeaderInMode(
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   projectId: string,
   actionId: ProjectHeaderControl,
   mode: TuiInputMode,
@@ -131,7 +142,7 @@ function activateProjectHeaderInMode(
   if (mode !== "dashboard") {
     return;
   }
-  const result = store.getState().dispatch({
+  const result = store.actions.dispatch({
     type: "dashboard.projectHeader.activate",
     projectId,
     actionId,
@@ -142,7 +153,7 @@ function activateProjectHeaderInMode(
 }
 
 function activateEmptyProjectInMode(
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   projectId: string,
   mode: TuiInputMode,
   effects: DashboardRendererEffects,
@@ -150,7 +161,7 @@ function activateEmptyProjectInMode(
   if (mode !== "dashboard") {
     return;
   }
-  const result = store.getState().dispatch({
+  const result = store.actions.dispatch({
     type: "dashboard.emptyProject.activate",
     projectId,
   });
@@ -166,7 +177,7 @@ function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardRende
 }
 
 function openRowShellInMode(
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   rowId: string,
   mode: TuiInputMode,
   effects: DashboardRendererEffects,
@@ -176,11 +187,15 @@ function openRowShellInMode(
   }
 }
 
-function pageInMode(store: StoreApi<TuiStore>, direction: "up" | "down", mode: TuiInputMode): void {
+function pageInMode(
+  store: DashboardMouseInput,
+  direction: "up" | "down",
+  mode: TuiInputMode,
+): void {
   if (!ROW_INTERACTIVE_MODES.has(mode)) {
     return;
   }
-  store.getState().dispatch({
+  store.actions.dispatch({
     type: "dashboard.scroll",
     delta: direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
   });
@@ -188,31 +203,31 @@ function pageInMode(store: StoreApi<TuiStore>, direction: "up" | "down", mode: T
 
 function routeModalClick(
   target: StationMouseTarget,
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
 ): boolean {
   if (target.kind === "sheetBackdrop") {
     return true;
   }
   if (target.kind === "screenBackdrop") {
-    store.getState().dispatch({ type: "screen.clickAway" });
+    store.actions.dispatch({ type: "screen.clickAway" });
     return true;
   }
   switch (target.kind) {
     case "sheetChoice":
       if (SHEET_CHOICE_MODES.has(mode)) {
-        store.getState().handleKey({ input: target.choiceKey });
+        store.actions.handleKey({ input: target.choiceKey });
       }
       return true;
     case "removeWorktreeAction":
-      store.getState().dispatch({
+      store.actions.dispatch({
         type: "removeWorktree.activate",
         actionId: target.actionId,
       });
       return true;
     case "projectSettingsItem":
       if (mode === "projectSettings") {
-        store.getState().dispatch({
+        store.actions.dispatch({
           type: "projectSettings.focusItem",
           itemId: target.itemId,
         });
@@ -223,23 +238,23 @@ function routeModalClick(
       return true;
     case "addProjectRow":
       if (ADD_PROJECT_ROW_MODES.has(mode)) {
-        store.getState().dispatch({ type: "addProject.selectRow", index: target.index });
+        store.actions.dispatch({ type: "addProject.selectRow", index: target.index });
       }
       return true;
     case "addProjectAction":
-      store.getState().dispatch({
+      store.actions.dispatch({
         type: "addProject.activate",
         actionId: target.actionId,
       });
       return true;
     case "newSessionAction":
-      store.getState().dispatch({
+      store.actions.dispatch({
         type: "newSession.activate",
         actionId: target.actionId,
       });
       return true;
     case "forkSessionAction":
-      store.getState().dispatch({
+      store.actions.dispatch({
         type: "forkSession.activate",
         actionId: target.actionId,
       });
@@ -249,48 +264,46 @@ function routeModalClick(
   }
 }
 
-function confirmProjectRemoval(store: StoreApi<TuiStore>, mode: TuiInputMode): void {
-  const screen = store.getState().screen;
+function confirmProjectRemoval(store: DashboardMouseInput, mode: TuiInputMode): void {
+  const screen = store.state.getState().screen;
   if (
     mode === "projectSettings" &&
     screen.name === "projectSettings" &&
     isRemoveProjectArmed(screen)
   ) {
-    store.getState().handleKey({ input: "r" });
+    store.actions.handleKey({ input: "r" });
   }
 }
 
 function routeWidgetClick(
   target: StationMouseTarget,
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
 ): boolean {
   switch (target.kind) {
     case "widgetSettingsOpen":
       if (mode === "dashboard") {
-        store.getState().dispatch({ type: "widgetSettings.open" });
+        store.actions.dispatch({ type: "widgetSettings.open" });
       }
       return true;
     case "widgetSettingsRow":
       if (mode === "widgetSettings") {
-        store.getState().dispatch({ type: "widgetSettings.toggle", index: target.index });
+        store.actions.dispatch({ type: "widgetSettings.toggle", index: target.index });
       }
       return true;
     case "widgetSettingsRemove":
       if (mode === "widgetSettings") {
-        store.getState().dispatch({ type: "widgetSettings.remove", index: target.index });
+        store.actions.dispatch({ type: "widgetSettings.remove", index: target.index });
       }
       return true;
     case "widgetSettingsAdd":
       if (mode === "widgetSettings") {
-        store.getState().dispatch({ type: "widgetSettings.openPicker" });
+        store.actions.dispatch({ type: "widgetSettings.openPicker" });
       }
       return true;
     case "widgetSettingsPickerChoice":
       if (mode === "widgetSettings") {
-        store
-          .getState()
-          .dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
+        store.actions.dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
       }
       return true;
     default:
@@ -298,8 +311,8 @@ function routeWidgetClick(
   }
 }
 
-function activateCurrentRow(store: StoreApi<TuiStore>, rowId: string): void {
-  const state = store.getState();
+function activateCurrentRow(store: DashboardMouseInput, rowId: string): void {
+  const state = store.state.getState();
   if (state.snapshot === undefined) {
     showStaleDashboardTargetNotice(store);
     return;
@@ -319,5 +332,5 @@ function activateCurrentRow(store: StoreApi<TuiStore>, rowId: string): void {
     showStaleDashboardTargetNotice(store);
     return;
   }
-  store.getState().handleKey({ input: choice.key });
+  store.actions.handleKey({ input: choice.key });
 }

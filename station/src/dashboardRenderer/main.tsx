@@ -5,7 +5,7 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { createTuiStore } from "@station/dashboard-core";
+import { createDashboardRuntime } from "@station/dashboard-core";
 import {
   loadStationTuiConfig,
   startWidgetConfigWrites,
@@ -91,7 +91,7 @@ export async function runDashboardMain(): Promise<void> {
   );
 
   const client = createStationClient(env);
-  const store = createTuiStore({
+  const dashboardRuntime = createDashboardRuntime({
     source: client.state,
     service: client.service,
     clientLabel: "station",
@@ -101,7 +101,7 @@ export async function runDashboardMain(): Promise<void> {
       widgets: tuiConfig.config?.widgets ?? [],
       widgetsPersisted: tuiConfig.configPath !== undefined,
     },
-    ...popupRuntime.storeOptions,
+    ...popupRuntime.runtimeOptions,
   });
   const copyNoticeText = (text: string): void => {
     copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
@@ -110,14 +110,14 @@ export async function runDashboardMain(): Promise<void> {
     openShell: ({ cwd }) => {
       const openShell = popupRuntime.openShell;
       if (openShell === undefined) {
-        store.getState().pushToast({
+        dashboardRuntime.actions.pushToast({
           kind: "error",
           message: "Opening a shell is unavailable outside native Station or a tmux popup.",
         });
         return;
       }
       void openShell(cwd).catch(() => {
-        store.getState().pushToast({
+        dashboardRuntime.actions.pushToast({
           kind: "error",
           message: "The tmux popup could not open the requested shell.",
         });
@@ -126,13 +126,17 @@ export async function runDashboardMain(): Promise<void> {
     openUrl: openExternalUrl,
   };
   if (tuiConfig.configPath !== undefined) {
-    widgetConfigWrites = startWidgetConfigWrites(store, tuiConfig.configPath);
+    widgetConfigWrites = startWidgetConfigWrites(
+      dashboardRuntime.state,
+      dashboardRuntime.actions.pushToast,
+      tuiConfig.configPath,
+    );
   }
 
   // Attach the snapshot source first, then start the client runtime feeding it
   // (the order Station's lifecycle uses), so the first frame already sees the
   // connection state instead of a stale "disconnected".
-  const detachSource = store.getState().start();
+  dashboardRuntime.start();
   client.start();
 
   let disposed = false;
@@ -149,7 +153,7 @@ export async function runDashboardMain(): Promise<void> {
     themeController?.dispose();
     popupRuntime.dispose();
     void widgetConfigWrites?.dispose();
-    detachSource();
+    dashboardRuntime.dispose();
     void client.stop();
     renderer?.destroy();
     process.off("exit", onProcessExit);
@@ -174,8 +178,8 @@ export async function runDashboardMain(): Promise<void> {
       exitOnCtrlC: false,
       prependInputHandlers: [
         copySelectedText,
-        createDashboardSequenceHandler(store, (intent) => {
-          executeDashboardControlIntent(intent, store, rendererEffects);
+        createDashboardSequenceHandler(dashboardRuntime, (intent) => {
+          executeDashboardControlIntent(intent, dashboardRuntime, rendererEffects);
         }),
       ],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
@@ -196,14 +200,14 @@ export async function runDashboardMain(): Promise<void> {
     nextRenderer.keyInput.on("paste", (event) => {
       const text = sanitizePastedText(new TextDecoder().decode(event.bytes));
       if (text.length > 0) {
-        store.getState().handleKey({ input: text });
+        dashboardRuntime.actions.handleKey({ input: text });
       }
     });
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
     nextRoot.render(
       <StandaloneDashboardApp
-        store={store}
+        runtime={dashboardRuntime}
         effects={rendererEffects}
         onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}

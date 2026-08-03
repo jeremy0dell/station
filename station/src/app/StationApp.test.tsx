@@ -63,13 +63,13 @@ describe("Station app composition", () => {
 
     await station.setup.mockInput.typeText("C1");
     await waitFor(() =>
-      station.composition.stationViewStore.getState().collapsedProjectIds.has("station"),
+      station.composition.dashboard.state.getState().collapsedProjectIds.has("station"),
     );
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => !overlayVisible(station));
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    expect(station.composition.stationViewStore.getState().collapsedProjectIds.has("station")).toBe(
+    expect(station.composition.dashboard.state.getState().collapsedProjectIds.has("station")).toBe(
       true,
     );
 
@@ -126,17 +126,17 @@ describe("Station app composition", () => {
     station.store.actions.focusPane(firstPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => {
-      const focus = station.composition.stationViewStore.getState().dashboardFocus;
+      const focus = station.composition.dashboard.state.getState().dashboardFocus;
       return focus?.kind === "session" && focus.sessionId === "ses_wt_station_working";
     });
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
-    await waitFor(() => !("dashboardFocus" in station.composition.stationViewStore.getState()));
+    await waitFor(() => !("dashboardFocus" in station.composition.dashboard.state.getState()));
 
     station.store.actions.focusPane(secondPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => {
-      const focus = station.composition.stationViewStore.getState().dashboardFocus;
+      const focus = station.composition.dashboard.state.getState().dashboardFocus;
       return focus?.kind === "session" && focus.sessionId === "ses_wt_station_idle";
     });
   });
@@ -595,7 +595,10 @@ root = "${projectRoot}"
     teardowns.push(() => composition.dispose());
 
     composition.start();
-    composition.stationViewStore.setState({ widgets: [{ type: "moon" }] });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.open" });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.remove", index: 0 });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.openPicker" });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.addFromPicker", index: 3 });
 
     await waitFor(() => readFileSync(configPath, "utf8").includes('type = "moon"'));
     const sourceText = readFileSync(configPath, "utf8");

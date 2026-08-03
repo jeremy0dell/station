@@ -1,6 +1,10 @@
-import type { ProjectId, ProjectView, StationSnapshot } from "@station/contracts";
+import type { ProjectId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
-import type { TuiScreen, TuiViewState } from "../state/types.js";
+import type {
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardViewState,
+} from "../state/types.js";
 import {
   type DashboardPersistentFilterProjection,
   type DashboardPersistentFilterProjectMatch,
@@ -18,6 +22,8 @@ import {
 import type { DashboardSessionRow } from "./dashboardSessionRows.js";
 import { type KeyedChoice, keyChoices } from "./selectors.js";
 
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
+
 export type DashboardViewportItem =
   | {
       type: "projectGap";
@@ -27,7 +33,7 @@ export type DashboardViewportItem =
   | {
       type: "projectHeader";
       id: string;
-      project: ProjectView;
+      project: DashboardProjectView;
       /** Stored disclosure state; applied matches may render children without changing it. */
       collapsed: boolean;
       persistentFilterMatch?: DashboardPersistentFilterProjectMatch;
@@ -35,7 +41,7 @@ export type DashboardViewportItem =
   | {
       type: "emptyProject";
       id: string;
-      project: ProjectView;
+      project: DashboardProjectView;
     }
   | DashboardSessionItem
   | DashboardCreateLocalItem;
@@ -61,12 +67,12 @@ export type DashboardSessionOverflow = {
   total: number;
 };
 
-type DashboardViewportState = TuiViewState & { screen?: TuiScreen };
+type DashboardViewportState = DashboardViewState & { readonly screen?: DashboardScreenView };
 
 export function selectDashboardViewport(
-  snapshot: StationSnapshot,
+  snapshot: DashboardSnapshotView,
   state: DashboardViewportState,
-  activeScreen?: TuiScreen,
+  activeScreen?: DashboardScreenView,
 ): DashboardViewport {
   const selectedScreen = activeScreen ?? state.screen ?? { name: "dashboard" };
   const { items, persistentFilter } = selectDashboardItemsProjection(
@@ -112,9 +118,9 @@ export function selectDashboardViewport(
 }
 
 export function selectDashboardItems(
-  snapshot: StationSnapshot,
+  snapshot: DashboardSnapshotView,
   state: DashboardViewportState,
-  activeScreen?: TuiScreen,
+  activeScreen?: DashboardScreenView,
 ): DashboardViewportItem[] {
   return selectDashboardItemsProjection(
     snapshot,
@@ -124,9 +130,9 @@ export function selectDashboardItems(
 }
 
 function selectDashboardItemsProjection(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
-  activeScreen: TuiScreen,
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewState,
+  activeScreen: DashboardScreenView,
 ): {
   items: DashboardViewportItem[];
   persistentFilter: DashboardPersistentFilterProjection | undefined;
@@ -223,7 +229,7 @@ function projectHeaderItem(
 }
 
 function emptyProjectItem(
-  project: ProjectView,
+  project: DashboardProjectView,
 ): Extract<DashboardViewportItem, { type: "emptyProject" }> {
   return {
     type: "emptyProject",

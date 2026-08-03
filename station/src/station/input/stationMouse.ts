@@ -4,7 +4,6 @@
 // dispatching the same semantic entry points keyboard uses. Hover is
 // deliberately absent: it is component-local presentation state and must
 // never touch the store.
-import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
 import {
   deriveTuiInputMode,
@@ -17,8 +16,9 @@ import {
   type ProjectHeaderControl,
   type ProjectSettingsItemId,
   type RemoveWorktreeActionId,
+  type DashboardActions,
+  type DashboardStateSource,
   type TuiInputMode,
-  type TuiStore,
 } from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
@@ -35,6 +35,11 @@ import {
   type RowAgentTarget,
   type StationKeyOutcome,
 } from "./stationActions.js";
+
+type StationMouseDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
+};
 
 export type StationMouseTarget =
   | { kind: "row"; rowId: string }
@@ -170,13 +175,13 @@ const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
 export function routeStationMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: StoreApi<TuiStore>,
+  store: StationMouseDashboard,
 ): StationMouseOutcome {
   const eventKind = stationMouseEventKind(event);
   if (eventKind === undefined) {
     return { kind: "handled" };
   }
-  const mode = deriveTuiInputMode(store.getState());
+  const mode = deriveTuiInputMode(store.state.getState());
 
   if (eventKind !== "down") {
     return routeStationWheel(target, eventKind, store, mode);
@@ -234,7 +239,7 @@ export function routeStationMouse(
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
       }
-      store.getState().dispatch({
+      store.actions.dispatch({
         type: "dashboard.scroll",
         delta: target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
       });
@@ -258,7 +263,7 @@ export function routeStationMouse(
       if (mode !== "projectSettings") {
         return { kind: "handled" };
       }
-      store.getState().dispatch({
+      store.actions.dispatch({
         type: "projectSettings.focusItem",
         itemId: target.itemId,
       });
@@ -267,39 +272,37 @@ export function routeStationMouse(
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
-      store.getState().dispatch({ type: "widgetSettings.open" });
+      store.actions.dispatch({ type: "widgetSettings.open" });
       return { kind: "handled" };
     case "widgetSettingsRow":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      store.getState().dispatch({ type: "widgetSettings.toggle", index: target.index });
+      store.actions.dispatch({ type: "widgetSettings.toggle", index: target.index });
       return { kind: "handled" };
     case "widgetSettingsRemove":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      store.getState().dispatch({ type: "widgetSettings.remove", index: target.index });
+      store.actions.dispatch({ type: "widgetSettings.remove", index: target.index });
       return { kind: "handled" };
     case "widgetSettingsAdd":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      store.getState().dispatch({ type: "widgetSettings.openPicker" });
+      store.actions.dispatch({ type: "widgetSettings.openPicker" });
       return { kind: "handled" };
     case "widgetSettingsPickerChoice":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      store
-        .getState()
-        .dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
+      store.actions.dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
       return { kind: "handled" };
     case "addProjectRow":
       if (!ADD_PROJECT_ROW_MODES.has(mode)) {
         return { kind: "handled" };
       }
-      store.getState().dispatch({ type: "addProject.selectRow", index: target.index });
+      store.actions.dispatch({ type: "addProject.selectRow", index: target.index });
       return { kind: "handled" };
     case "addProjectAction":
       return fromKeyOutcome(
@@ -331,7 +334,7 @@ export function routeStationMouse(
       // Only an armed button fires. Dispatching "r" while unarmed would be typed
       // into the confirm field (the machine treats "r" as editable text until the
       // phrase matches), so guard the click here rather than emit a stray key.
-      const { screen } = store.getState();
+      const { screen } = store.state.getState();
       if (screen.name === "projectSettings" && isRemoveProjectArmed(screen)) {
         return fromKeyOutcome(dispatchStationKey(store, { input: "r" }));
       }
@@ -340,7 +343,7 @@ export function routeStationMouse(
     case "forkSessionAction":
       return routeForkSessionAction(store, target.actionId);
     case "screenBackdrop":
-      store.getState().dispatch({ type: "screen.clickAway" });
+      store.actions.dispatch({ type: "screen.clickAway" });
       return { kind: "handled" };
     case "body":
     case "sheetBackdrop":
@@ -349,7 +352,7 @@ export function routeStationMouse(
 }
 
 function routeForkSessionAction(
-  store: StoreApi<TuiStore>,
+  store: StationMouseDashboard,
   actionId: ForkSessionActionId,
 ): StationMouseOutcome {
   const action = { type: "forkSession.activate", actionId } as const;
@@ -370,7 +373,7 @@ function routeForkSessionAction(
 }
 
 function routeProjectHeaderActivation(
-  store: StoreApi<TuiStore>,
+  store: StationMouseDashboard,
   mode: TuiInputMode,
   projectId: string,
   actionId: ProjectHeaderControl,
@@ -387,7 +390,10 @@ function routeProjectHeaderActivation(
   );
 }
 
-function routeDashboardRow(store: StoreApi<TuiStore>, rowId: string): StationMouseOutcome {
+function routeDashboardRow(
+  store: StationMouseDashboard,
+  rowId: string,
+): StationMouseOutcome {
   const target = resolveRowAgentTarget(store, rowId);
   return target.kind === "launch-managed"
     ? fromRowAgentTarget(target)
@@ -419,7 +425,7 @@ const SHEET_CHOICE_MODES: ReadonlySet<TuiInputMode> = new Set(
 function routeStationWheel(
   target: StationMouseTarget,
   eventKind: "scroll-up" | "scroll-down",
-  store: StoreApi<TuiStore>,
+  store: StationMouseDashboard,
   mode: TuiInputMode,
 ): StationMouseOutcome {
   // Sheets and prompts must not scroll the dashboard beneath them.
@@ -430,7 +436,7 @@ function routeStationWheel(
   ) {
     return { kind: "handled" };
   }
-  store.getState().dispatch({
+  store.actions.dispatch({
     type: "dashboard.scroll",
     delta: eventKind === "scroll-up" ? -1 : 1,
   });

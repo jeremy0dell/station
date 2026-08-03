@@ -1,8 +1,11 @@
-import type { ProjectId, SessionId } from "@station/contracts";
+import type { ProjectId, SafeError, SessionId } from "@station/contracts";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
+import type { TuiToast } from "../services/types.js";
 import { focusDashboardProjectHeader } from "./dashboardFocus.js";
 import { scrollDashboard } from "./dashboardScroll.js";
+import type { TuiKey } from "./keys.js";
+import type { PendingCreateSessionRow } from "./localRows.js";
 import {
   activateEmptyProjectAction,
   activateProjectHeaderControl,
@@ -36,8 +39,46 @@ import {
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
 } from "./screens/widgetSettings.js";
-import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
+import type { TuiControlIntent, TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type { ProjectHeaderControl, ProjectSettingsItemId, TuiState } from "./types.js";
+
+/** Result of a dashboard action, including any one-shot renderer-owned control intent. */
+export type DashboardActionResult = {
+  dismissPopup: boolean;
+  exitCode?: number;
+  controlIntent?: TuiControlIntent;
+};
+
+/**
+ * The sole external mutation authority for dashboard state.
+ *
+ * Actions apply dashboard transitions and effects without exposing the private
+ * Zustand store or a generic state setter.
+ */
+export type DashboardActions = {
+  /** Applies a key transition and returns any one-shot renderer-owned control intent. */
+  handleKey(key: TuiKey): DashboardActionResult;
+  /** Resolves typed actions through the shared transition and effect path. */
+  dispatch(action: DashboardAction): DashboardActionResult;
+  /** Create a project session immediately with its configured default harness. */
+  createQuickSession(projectId: string): void;
+  setTerminalRows(rows: number): void;
+  /** Synchronize row focus from a canonical observer session identity. */
+  focusDashboardSession(sessionId: SessionId): void;
+  /** Remove transient row focus without changing other dashboard state. */
+  clearDashboardFocus(): void;
+  /** Surface a client-side toast (e.g. an unresolved-harness notice). */
+  pushToast(toast: TuiToast): void;
+  dismissToasts(): void;
+  expireToasts(nowMs?: number): void;
+  refreshActiveToastExpiry(nowMs?: number): void;
+  /** Adds a pending hosted-create row until its workspace lifecycle resolves. */
+  addPendingCreateSession(row: PendingCreateSessionRow): void;
+  /** Moves a pending row to retained failure; the caller owns expiry and scheduled removal. */
+  failPendingCreateSession(localId: string, error: SafeError, expiresAt: number): void;
+  /** Removes a pending or retained-failure hosted-create row by local identity. */
+  removePendingCreateSession(localId: string): void;
+};
 
 export type PersistentFilterActionId = "persistentFilter.edit" | "persistentFilter.clear";
 

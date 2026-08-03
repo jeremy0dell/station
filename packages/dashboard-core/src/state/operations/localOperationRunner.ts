@@ -22,10 +22,9 @@ import {
   applyAddProjectSubmitFailed,
   applyAddProjectSubmitted,
 } from "../screens/addProjectScreen.js";
-import type { TuiStore } from "../store.js";
 import { FAILED_CREATE_ROW_TTL_MS } from "../timing.js";
 import { addTuiToast } from "../toasts.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState, TuiState } from "../types.js";
 import { runCreateSessionOperation } from "./createSession.js";
 import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
@@ -83,7 +82,7 @@ function localCommandFailureForState(
 }
 
 function markCreateSessionRowFailed(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   localId: string,
   error: SafeError,
 ): void {
@@ -100,23 +99,23 @@ function markCreateSessionRowFailed(
   }, FAILED_CREATE_ROW_TTL_MS);
 }
 
-function markRemoveWorktreeRowFailed(store: StoreApi<TuiStore>, localId: string): void {
+function markRemoveWorktreeRowFailed(store: StoreApi<DashboardState>, localId: string): void {
   store.setState(removePendingRemoveWorktreeRow(store.getState(), localId));
 }
 
-function markStartAgentRowFailed(store: StoreApi<TuiStore>, localId: string): void {
+function markStartAgentRowFailed(store: StoreApi<DashboardState>, localId: string): void {
   store.setState(removePendingStartAgentRow(store.getState(), localId));
 }
 
-function markRenameSessionFailed(store: StoreApi<TuiStore>, sessionId: string): void {
+function markRenameSessionFailed(store: StoreApi<DashboardState>, sessionId: string): void {
   store.setState(removePendingRenameSessionTitle(store.getState(), sessionId));
 }
 
-function addSafeErrorToast(store: StoreApi<TuiStore>, error: SafeError): void {
+function addSafeErrorToast(store: StoreApi<DashboardState>, error: SafeError): void {
   store.setState(addTuiToast(store.getState(), safeErrorToToast(error)));
 }
 
-function addRenameSuccessToast(store: StoreApi<TuiStore>): void {
+function addRenameSuccessToast(store: StoreApi<DashboardState>): void {
   store.setState(
     addTuiToast(store.getState(), {
       kind: "success",
@@ -126,7 +125,7 @@ function addRenameSuccessToast(store: StoreApi<TuiStore>): void {
 }
 
 export function createTuiLocalOperationRunner(input: {
-  getStore: () => StoreApi<TuiStore>;
+  getStore: () => StoreApi<DashboardState>;
   service: TuiObserverService;
   folderService: TuiFolderService;
   runtime: CommandRuntimeOptions;
@@ -272,7 +271,7 @@ export function createTuiLocalOperationRunner(input: {
 }
 
 async function runSetProjectDefaultHarnessOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "project.setDefaultHarness" }>,
   clientLabel: string,
@@ -320,7 +319,7 @@ async function runSetProjectDefaultHarnessOperation(
 }
 
 async function runRemoveProjectOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "project.remove" }>,
   clientLabel: string,
@@ -364,12 +363,12 @@ async function runRemoveProjectOperation(
   }
 }
 
-function addSafeCommandToast(store: StoreApi<TuiStore>, error: SafeError): void {
+function addSafeCommandToast(store: StoreApi<DashboardState>, error: SafeError): void {
   store.setState(addTuiToast(store.getState(), safeErrorToToast(error)));
 }
 
 async function runLoadProjectDirectoryOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   folderService: TuiFolderService,
   path: string,
   clientLabel: string,
@@ -383,7 +382,7 @@ async function runLoadProjectDirectoryOperation(
 }
 
 async function runReviewProjectFolderOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   folderService: TuiFolderService,
   path: string,
   clientLabel: string,
@@ -397,7 +396,7 @@ async function runReviewProjectFolderOperation(
 }
 
 async function runSearchProjectDirectoriesOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   folderService: TuiFolderService,
   query: string,
   clientLabel: string,
@@ -411,7 +410,7 @@ async function runSearchProjectDirectoriesOperation(
 }
 
 async function runForkSessionOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "session.fork" }>,
   clientLabel: string,
@@ -443,7 +442,7 @@ async function runForkSessionOperation(
 }
 
 async function runAddProjectOperation(
-  store: StoreApi<TuiStore>,
+  store: StoreApi<DashboardState>,
   service: TuiObserverService,
   command: Extract<StationCommand, { type: "project.add" }>,
   clientLabel: string,

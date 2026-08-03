@@ -3,15 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
 import {
-  createTuiStore,
+  createDashboardRuntime,
   legacySearchExperience,
   persistentFilterExperience,
 } from "@station/dashboard-core";
-import { createStationViewStore } from "../station/store/stationViewStore.js";
+import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { createStation } from "../app/createStation.js";
 import { NO_OP_CLIPBOARD_EFFECTS } from "../copy/testing.js";
 import { createStationStore } from "../state/store.js";
@@ -143,18 +143,17 @@ root = "${projectRoot}"
     dirs.push(dir);
     const configPath = await writeWidgetTestConfig(dir);
 
-    const { store } = makeStationTestStore();
-    store.setState({ widgets: [{ type: "time" }] });
-    const writes = startWidgetConfigWrites(store, configPath);
-    store.setState({ widgets: [{ type: "time" }, { type: "moon" }] });
-    store.setState({ widgets: [{ type: "time" }, { type: "moon" }, { type: "fleet" }] });
-    store.setState({
-      widgets: [{ type: "time" }, { type: "moon" }, { type: "fleet" }, { type: "prs" }],
+    const { runtime: store } = makeStationTestRuntime({
+      initialState: { widgets: [{ type: "time" }] },
     });
+    const writes = startTestWidgetConfigWrites(store, configPath);
+    addWidgetThroughSettings(store, 3);
+    addWidgetThroughSettings(store, 1);
+    addWidgetThroughSettings(store, 2);
 
     await writes.flush();
     await writes.dispose();
-    store.setState({ widgets: [{ type: "moon" }] });
+    store.actions.dispatch({ type: "widgetSettings.toggle", index: 0 });
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const loadedAfterDispose = await loadStationTuiConfig({ path: configPath });
@@ -176,7 +175,7 @@ root = "${projectRoot}"
     let writes: ReturnType<typeof startWidgetConfigWrites> | undefined;
     let durableExit: Promise<void> | undefined;
     let exitCode: number | undefined;
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       source,
       service,
       initialState: { widgets: [{ type: "time" }], widgetsPersisted: true },
@@ -188,12 +187,12 @@ root = "${projectRoot}"
         durableExit = writes.dispose();
       },
     });
-    writes = startWidgetConfigWrites(store, configPath);
+    writes = startTestWidgetConfigWrites(store, configPath);
 
-    store.getState().handleKey({ input: "W" });
-    store.getState().handleKey({ input: " " });
-    store.getState().handleKey({ input: "", escape: true });
-    store.getState().handleKey({ input: "Q" });
+    store.actions.handleKey({ input: "W" });
+    store.actions.handleKey({ input: " " });
+    store.actions.handleKey({ input: "", escape: true });
+    store.actions.handleKey({ input: "Q" });
 
     expect(exitCode).toBe(0);
     if (durableExit === undefined) {
@@ -229,8 +228,8 @@ root = "${projectRoot}"
     });
     composition.start();
 
-    composition.stationViewStore.getState().handleKey({ input: "W" });
-    composition.stationViewStore.getState().handleKey({ input: " " });
+    composition.dashboard.actions.handleKey({ input: "W" });
+    composition.dashboard.actions.handleKey({ input: " " });
     composition.stationInput.handleSequence("\x11");
 
     await shutdown;
@@ -246,7 +245,7 @@ root = "${projectRoot}"
 
     const initialWidgets = [{ type: "time" }] as const;
     const nativeSource = new FakeStationSource(manyProjectsSnapshot());
-    const nativeStore = createStationViewStore(
+    const nativeStore = createStationDashboardRuntime(
       {
         state: nativeSource,
         service: new FakeTuiObserverService(manyProjectsSnapshot()),
@@ -256,15 +255,15 @@ root = "${projectRoot}"
       { widgets: initialWidgets, widgetsPersisted: true },
     );
     const popupSource = new FakeStationSource(manyProjectsSnapshot());
-    const popupStore = createTuiStore({
+    const popupStore = createDashboardRuntime({
       source: popupSource,
       service: new FakeTuiObserverService(manyProjectsSnapshot()),
       initialState: { widgets: initialWidgets, widgetsPersisted: true },
       persistentPopup: true,
       onDismiss: async () => {},
     });
-    const nativeWrites = startWidgetConfigWrites(nativeStore, configPath);
-    const popupWrites = startWidgetConfigWrites(popupStore, configPath);
+    const nativeWrites = startTestWidgetConfigWrites(nativeStore, configPath);
+    const popupWrites = startTestWidgetConfigWrites(popupStore, configPath);
 
     addWidgetThroughSettings(nativeStore, 3);
     await nativeWrites.flush();
@@ -277,9 +276,9 @@ root = "${projectRoot}"
       { type: "fleet" },
     ]);
 
-    nativeStore.getState().handleKey({ input: "", escape: true });
-    nativeStore.getState().handleKey({ input: "W" });
-    nativeStore.getState().handleKey({ input: " " });
+    nativeStore.actions.handleKey({ input: "", escape: true });
+    nativeStore.actions.handleKey({ input: "W" });
+    nativeStore.actions.handleKey({ input: " " });
     await nativeWrites.flush();
     addWidgetThroughSettings(popupStore, 2);
     await popupWrites.flush();
@@ -289,7 +288,7 @@ root = "${projectRoot}"
       { type: "moon" },
       { type: "fleet" },
     ]);
-    expect(popupStore.getState().toasts.at(-1)?.toast.message).toBe(
+    expect(popupStore.state.getState().toasts.at(-1)?.toast.message).toBe(
       "Could not save widgets to config.toml.",
     );
     await Promise.all([nativeWrites.dispose(), popupWrites.dispose()]);
@@ -299,7 +298,7 @@ root = "${projectRoot}"
     const source = new FakeStationSource(manyProjectsSnapshot());
     let dismisses = 0;
     let exits = 0;
-    const store = createTuiStore({
+    const store = createDashboardRuntime({
       source,
       service: new FakeTuiObserverService(manyProjectsSnapshot()),
       persistentPopup: true,
@@ -311,7 +310,7 @@ root = "${projectRoot}"
       },
     });
 
-    store.getState().handleKey({ input: "Q" });
+    store.actions.handleKey({ input: "Q" });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(dismisses).toBe(1);
@@ -319,16 +318,23 @@ root = "${projectRoot}"
   });
 });
 
+function startTestWidgetConfigWrites(
+  runtime: ReturnType<typeof createDashboardRuntime>,
+  configPath: string,
+): ReturnType<typeof startWidgetConfigWrites> {
+  return startWidgetConfigWrites(runtime.state, runtime.actions.pushToast, configPath);
+}
+
 function addWidgetThroughSettings(
-  store: ReturnType<typeof createTuiStore>,
+  store: ReturnType<typeof createDashboardRuntime>,
   pickerIndex: number,
 ): void {
-  store.getState().handleKey({ input: "W" });
-  store.getState().handleKey({ input: "a" });
+  store.actions.handleKey({ input: "W" });
+  store.actions.handleKey({ input: "a" });
   for (let index = 0; index < pickerIndex; index += 1) {
-    store.getState().handleKey({ input: "", downArrow: true });
+    store.actions.handleKey({ input: "", downArrow: true });
   }
-  store.getState().handleKey({ input: "\r", return: true });
+  store.actions.handleKey({ input: "\r", return: true });
 }
 
 async function writeWidgetTestConfig(

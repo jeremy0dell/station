@@ -1,14 +1,16 @@
 // OpenTUI port of apps/tui's RenameSessionBottomSheet.
-import { bottomSheetContentWidth } from "@station/dashboard-core";
-import { truncateCells } from "@station/dashboard-core";
-import type { TuiScreen } from "@station/dashboard-core";
+import {
+  bottomSheetContentWidth,
+  truncateCells,
+  type DashboardScreenView,
+} from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetButtonRow, SheetFooter, SheetLabelValue, SheetLine, SheetText } from "./parts.js";
 
 export type RenameSessionSheetViewProps = {
-  state: Extract<TuiScreen, { name: "renameSession"; step: "editName" }>;
+  state: Extract<DashboardScreenView, { name: "renameSession"; step: "editName" }>;
   columns: number;
   rows: number;
 };

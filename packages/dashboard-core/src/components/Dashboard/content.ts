@@ -1,18 +1,24 @@
-import type { ProjectView } from "@station/contracts";
 import stringWidth from "string-width";
 import type { DashboardPersistentFilterRowMatch } from "../../selectors/dashboardPersistentFilter.js";
 import type {
   DashboardSessionOverflow,
   DashboardViewportItem,
 } from "../../selectors/dashboardViewport.js";
-
-import type { DashboardFocus, TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
+import type {
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardStateView,
+} from "../../state/types.js";
 import type { RowGridRowInput } from "../WorktreeRow/layout.js";
 import {
   type WorktreeRowTextHighlights,
   worktreeRowGridInput,
   worktreeStyleRowGridInput,
 } from "../WorktreeRow/rowInput.js";
+
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
+type DashboardFocusView = DashboardStateView["dashboardFocus"];
+type DashboardObserverConnectionStatusView = DashboardStateView["observerConnectionStatus"];
 
 export type DashboardHeaderStatus = {
   full: string;
@@ -96,7 +102,7 @@ export function fleetCountsLabel(
 }
 
 export function projectHeaderLabelParts(
-  project: ProjectView,
+  project: DashboardProjectView,
   collapsed: boolean,
 ): { title: string; counts: string } {
   const caret = collapsed ? "▶" : "▼";
@@ -131,7 +137,7 @@ export function scrollIndicatorLabel(
 export function rowGridInputForViewportItem(
   item: DashboardViewportItem,
   keyByRow: ReadonlyMap<string, string>,
-  dashboardFocus?: DashboardFocus,
+  dashboardFocus?: DashboardFocusView,
 ): RowGridRowInput | undefined {
   if (item.type !== "session" && item.type !== "createLocalRow") {
     return undefined;
@@ -213,7 +219,7 @@ type DashboardRowDecorations = {
 
 function rowDecorationsForViewportItem(
   item: DashboardRowViewportItem,
-  dashboardFocus: DashboardFocus | undefined,
+  dashboardFocus: DashboardFocusView,
 ): DashboardRowDecorations {
   const decorations: DashboardRowDecorations = {};
   if (
@@ -251,7 +257,7 @@ export type SnapshotLoadingLine = {
 
 export function snapshotLoadingLines(
   loading: boolean,
-  observerConnectionStatus: TuiObserverConnectionStatus,
+  observerConnectionStatus: DashboardObserverConnectionStatusView,
 ): SnapshotLoadingLine[] {
   if (observerConnectionStatus.state === "reconnecting") {
     return [
@@ -283,7 +289,7 @@ export function snapshotLoadingLines(
 }
 
 export function observerHeaderStatusForConnection(
-  status: TuiObserverConnectionStatus,
+  status: DashboardObserverConnectionStatusView,
   hasSnapshot: boolean,
 ): DashboardHeaderStatus | undefined {
   if (hasSnapshot && status.state === "displayOnly") {
@@ -303,7 +309,9 @@ export type CommandPromptLine = { text: string; color: "yellow" | "red" };
  * text+color so render adapters only render. Lives beside
  * commandPromptRows, which guards the same screens.
  */
-export function commandPromptLineForScreen(screen: TuiScreen): CommandPromptLine | undefined {
+export function commandPromptLineForScreen(
+  screen: DashboardScreenView,
+): CommandPromptLine | undefined {
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
     return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", color: "yellow" };
   }
@@ -314,14 +322,16 @@ export function commandPromptLineForScreen(screen: TuiScreen): CommandPromptLine
   return { text: `${prompt.label}: ${prompt.value}`, color: "yellow" };
 }
 
-function textPromptForScreen(screen: TuiScreen): { label: string; value: string } | undefined {
+function textPromptForScreen(
+  screen: DashboardScreenView,
+): { label: string; value: string } | undefined {
   if (screen.name === "search") {
     return { label: "search", value: screen.value };
   }
   return undefined;
 }
 
-export function commandPromptRows(screen: TuiScreen): number {
+export function commandPromptRows(screen: DashboardScreenView): number {
   if (screen.name === "search") {
     return 2;
   }

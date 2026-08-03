@@ -1,4 +1,7 @@
-import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core";
+import {
+  bottomSheetContentWidth,
+  type DashboardScreenView,
+} from "@station/dashboard-core";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
@@ -11,7 +14,7 @@ import {
   SheetMessageLine,
 } from "./parts.js";
 
-type RemoveScreen = Extract<TuiScreen, { name: "removeWorktree" }>;
+type RemoveScreen = Extract<DashboardScreenView, { name: "removeWorktree" }>;
 
 export type RemoveSessionSheetViewProps = {
   screen: RemoveScreen;

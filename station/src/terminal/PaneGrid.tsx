@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { StoreApi } from "zustand/vanilla";
-import type { TuiStore } from "@station/dashboard-core";
-import type { StationSnapshot } from "@station/contracts";
+import type {
+  DashboardSnapshotView,
+  DashboardStateSource,
+} from "@station/dashboard-core";
 import type { ColorInput } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
@@ -24,7 +25,7 @@ import { TerminalPane } from "./TerminalPane.js";
 
 export type PaneGridProps = {
   store: StationStore;
-  stationViewStore?: StoreApi<TuiStore>;
+  dashboardState?: DashboardStateSource;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   /** Forwarded to every pane so a completed drag/word/line selection is copied. */
   onCopySelection?: (text: string) => void;
@@ -35,7 +36,7 @@ type RenderCtx = {
   store: StationStore;
   activePaneId: PaneId | null;
   workspace: StationState["workspace"];
-  snapshot: StationSnapshot | undefined;
+  snapshot: DashboardSnapshotView | undefined;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   onCopySelection: ((text: string) => void) | undefined;
 };
@@ -47,7 +48,7 @@ type RenderCtx = {
  */
 export function PaneGrid({
   store,
-  stationViewStore,
+  dashboardState,
   dispatchMouse,
   onCopySelection,
 }: PaneGridProps) {
@@ -59,7 +60,7 @@ export function PaneGrid({
   const workspace = useSyncExternalStore(store.subscribe, getWorkspace, getWorkspace);
   const panes = workspace.panes;
   const activePaneId = useSyncExternalStore(store.subscribe, getActivePaneId, getActivePaneId);
-  const snapshot = useStationSnapshot(stationViewStore);
+  const snapshot = useStationSnapshot(dashboardState);
   const tree = useMemo(() => selectActivePaneTree(panes, activePaneId), [panes, activePaneId]);
   if (tree === null) {
     return null;
@@ -134,12 +135,14 @@ type PaneAccent = {
   inactive: ColorInput;
 };
 
-function useStationSnapshot(store: StoreApi<TuiStore> | undefined): StationSnapshot | undefined {
+function useStationSnapshot(
+  state: DashboardStateSource | undefined,
+): DashboardSnapshotView | undefined {
   const subscribe = useCallback(
-    (listener: () => void) => (store === undefined ? () => {} : store.subscribe(listener)),
-    [store],
+    (listener: () => void) => (state === undefined ? () => {} : state.subscribe(listener)),
+    [state],
   );
-  const getSnapshot = useCallback(() => store?.getState().snapshot, [store]);
+  const getSnapshot = useCallback(() => state?.getState().snapshot, [state]);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
@@ -185,7 +188,7 @@ function stableIndex(value: string, size: number): number {
 function paneSemanticTitle(
   paneId: PaneId,
   workspace: StationState["workspace"],
-  snapshot: StationSnapshot | undefined,
+  snapshot: DashboardSnapshotView | undefined,
 ): string | undefined {
   const primaryAgent = primaryAgentForPane(workspace, paneId);
   if (primaryAgent !== undefined) {

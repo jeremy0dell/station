@@ -1,13 +1,12 @@
 import { TextAttributes } from "@opentui/core";
 import { useStore } from "zustand/react";
-import type { StoreApi } from "zustand/vanilla";
 import stringWidth from "string-width";
 import {
   headerStrip,
   observerHeaderStatusForConnection,
   selectFleetSummary,
   tuiScreenBehavior,
-  type TuiStore,
+  type DashboardStateSource,
 } from "@station/dashboard-core";
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
@@ -25,7 +24,7 @@ const WIDGET_SETTINGS_AFFORDANCE = "[+]";
 const EDGE = 2;
 
 export type DashboardFrameTitleProps = {
-  store: StoreApi<TuiStore>;
+  state: DashboardStateSource;
   /** The popup box the title row overlays; texts paint over its top border. */
   frame: { left: number; top: number; width: number };
   topRowWidgets?: readonly TopRowWidgetView[];
@@ -38,7 +37,7 @@ export type DashboardFrameTitleProps = {
  * need the user, the subtitle swaps to a red `! N need you` flag.
  */
 export function DashboardFrameTitle({
-  store,
+  state,
   frame,
   topRowWidgets = [],
   zIndex,
@@ -47,9 +46,12 @@ export function DashboardFrameTitle({
   const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.panel);
   const dispatch = useStationMouse();
   const [hovered, setHover] = useStationHoverState();
-  const snapshot = useStore(store, (state) => state.snapshot);
-  const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
-  const screen = useStore(store, (state) => state.screen);
+  const snapshot = useStore(state, (current) => current.snapshot);
+  const observerConnectionStatus = useStore(
+    state,
+    (current) => current.observerConnectionStatus,
+  );
+  const screen = useStore(state, (current) => current.screen);
   const behavior = tuiScreenBehavior(screen);
   const hover = hovered && behavior.dashboardHoverEnabled;
 

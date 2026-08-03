@@ -3,7 +3,7 @@ import { addProjectRows } from "./rows.js";
 import type {
   AddProjectEditIdActionFocus,
   AddProjectFailedActionFocus,
-  AddProjectFlowState,
+  AddProjectFlowStateView,
   AddProjectReviewActionFocus,
   AddProjectSuccessActionFocus,
 } from "./types.js";
@@ -152,7 +152,7 @@ const ACTIONS_BY_MODE = {
  * Choose-mode availability follows the canonical selected row when its index is supplied.
  */
 export function addProjectActions(
-  state: AddProjectFlowState,
+  state: AddProjectFlowStateView,
   selectedIndex?: number,
 ): readonly AddProjectActionDescriptor[] {
   const ids =
@@ -171,7 +171,7 @@ export function addProjectActions(
 }
 
 export function addProjectAction(
-  state: AddProjectFlowState,
+  state: AddProjectFlowStateView,
   actionId: AddProjectActionId,
   selectedIndex?: number,
 ): AddProjectActionDescriptor | undefined {
@@ -179,7 +179,7 @@ export function addProjectAction(
 }
 
 function isActionEnabled(
-  state: AddProjectFlowState,
+  state: AddProjectFlowStateView,
   actionId: AddProjectActionId,
   selectedIndex: number | undefined,
 ): boolean {

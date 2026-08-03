@@ -2,7 +2,6 @@ import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type { Automation } from "../config/stationConfig.js";
-import type { StoreApi } from "zustand/vanilla";
 import type { StationStore } from "../state/store.js";
 import {
   MAIN_PANE_ID,
@@ -15,7 +14,7 @@ import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { dispatchStationKey } from "../station/input/stationActions.js";
 import type { ObserverService } from "@station/client";
 import type { ProviderId } from "@station/contracts";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
   routeKey,
   routeMouse,
@@ -37,6 +36,20 @@ import { executeOutcome } from "./runtime/executeOutcome.js";
 import { createPaneEffects } from "./runtime/paneEffects.js";
 import { createManagedLaunch, type ManagedLaunchTarget } from "./runtime/managedLaunch.js";
 
+type StationInputDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    | "addPendingCreateSession"
+    | "dismissToasts"
+    | "dispatch"
+    | "failPendingCreateSession"
+    | "handleKey"
+    | "pushToast"
+    | "removePendingCreateSession"
+  >;
+};
+
 /**
  * What an open-pane effect spawns: the cwd plus, for a primary agent, the
  * harness `command`/`args`, the pane `role`, and the `worktreeId` it belongs
@@ -53,7 +66,7 @@ export type OpenPaneSpawn = {
 
 export type StationInputEffects = {
   store: StationStore;
-  stationViewStore?: StoreApi<TuiStore>;
+  dashboardRuntime?: StationInputDashboard;
   /** Configured automations, surfaced in the pane context menu. */
   automations: readonly Automation[];
   runCommand(commandId: StationCommandId): void;
@@ -157,7 +170,7 @@ export type StationInputRuntimeOptions = {
   store: StationStore;
   shutdown(): void;
   /** Registers the STATION dashboard layer + mouse targets when provided. */
-  stationViewStore?: StoreApi<TuiStore>;
+  dashboardRuntime?: StationInputDashboard;
   keymap?: KeymapStack<RouteOutcome>;
   mouseBindings?: MouseBindings;
   /** Runtime PTY resources; terminal writes/pastes resolve through it. */
@@ -192,13 +205,13 @@ export type StationInputRuntimeOptions = {
  * them to the store, the terminal registry, and app commands.
  */
 export function createStationInputRuntime(options: StationInputRuntimeOptions): StationInputRuntime {
-  const keymap = options.keymap ?? createStationKeymap(options.stationViewStore);
-  const mouseBindings = options.mouseBindings ?? createStationMouseBindings(options.stationViewStore);
+  const keymap = options.keymap ?? createStationKeymap(options.dashboardRuntime);
+  const mouseBindings = options.mouseBindings ?? createStationMouseBindings(options.dashboardRuntime);
   const registry = options.registry;
 
   const paneEffects = createPaneEffects({
     store: options.store,
-    stationViewStore: options.stationViewStore,
+    dashboardState: options.dashboardRuntime?.state,
     registry,
     resolveAuxShellPlacement: options.resolveAuxShellPlacement,
     autoCloseOverlay: options.autoCloseOverlayOnPaneOpen ?? false,
@@ -208,7 +221,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
   });
   const managed = createManagedLaunch({
     store: options.store,
-    stationViewStore: options.stationViewStore,
+    dashboardRuntime: options.dashboardRuntime,
     observerService: options.observerService,
     registry,
     managedTerminalAttacher: options.managedTerminalAttacher,
@@ -255,8 +268,8 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
     launchHostedForkSession: managed.launchHostedForkSession,
     openExternalUrl: options.openExternalUrl ?? (() => {}),
   };
-  if (options.stationViewStore !== undefined) {
-    effects.stationViewStore = options.stationViewStore;
+  if (options.dashboardRuntime !== undefined) {
+    effects.dashboardRuntime = options.dashboardRuntime;
   }
 
   return {
@@ -265,7 +278,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       const normalized = normalizeSequence(sequence, {
         preserveModifiedEnter: focusedPaneAcceptsModifiedEnter(state, registry, (providerId) =>
           providerSupportsModifiedEnterSoftNewline(
-            options.stationViewStore?.getState().snapshot,
+            options.dashboardRuntime?.state.getState().snapshot,
             providerId,
           ),
         ),
@@ -288,7 +301,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       // applies to this channel too), and a dismiss outcome — a one-char
       // paste can match a bound key — closes the overlay like a keypress.
       if (
-        options.stationViewStore !== undefined &&
+        options.dashboardRuntime !== undefined &&
         options.store.getState().input.activeOverlay === STATION_OVERLAY_ID
       ) {
         event.preventDefault();
@@ -296,7 +309,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
         if (sanitized.length === 0) {
           return;
         }
-        const outcome = dispatchStationKey(options.stationViewStore, { input: sanitized });
+        const outcome = dispatchStationKey(options.dashboardRuntime, { input: sanitized });
         if (outcome.kind === "close-overlay") {
           executeOutcome({ kind: "overlay-close", overlayId: STATION_OVERLAY_ID }, effects);
         }
