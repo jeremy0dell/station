@@ -103,7 +103,7 @@ See [Observer Architecture](observer-architecture.md).
 
 ## Station Subsystem
 
-The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime:
+The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime. Its Station-owned VT vocabulary lives under `station/src/terminal/protocol/`: typed command identities, domain values, complete sequence constants, and state reducers support explicit byte templates without widening `packages/protocol` or `packages/contracts`.
 
 - The `station-station-host` daemon (`packages/station-host`) owns PTYs that outlive the UI. Its socket defaults beside the observer socket at `<state_dir>/run/station-host.sock` (override `STATION_HOST_SOCKET_PATH`).
 - Host output compatibility is an optional generic spawn policy selected by integrations and applied before both scrollback retention and attached-client broadcast, so live and warm-reattached views consume one byte stream.

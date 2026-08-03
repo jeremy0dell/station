@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { nativeStationTheme, rgbColor } from "../../theme/index.js";
+import { DecMode } from "../protocol/decset.js";
+import { CsiCommand } from "../protocol/identifiers.js";
+import { KittyFlagUpdateMode, KittySequence } from "../protocol/kitty.js";
+import { VtPrefix } from "../protocol/syntax.js";
 import { waitFor } from "../testing/waitFor.js";
 import { createStationVtScreen, type StationVtScreen } from "./screen.js";
 
@@ -476,6 +480,31 @@ describe("createStationVtScreen", () => {
     await screen.whenIdle();
     expect(screen.isKittyKeyboardEnabled()).toBe(false);
     expect(responses).toEqual(["\x1b[?0u", "\x1b[?0u"]);
+  });
+
+  it("applies generated Kitty commands independently in each buffer", async () => {
+    const responses: string[] = [];
+    const screen = track(
+      createStationVtScreen({
+        size: { cols: 20, rows: 5 },
+        onResponse: (data) => responses.push(data),
+      }),
+    );
+
+    screen.feed(
+      `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}1${CsiCommand.KittyUpdateFlags.final}` +
+        `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}2;${KittyFlagUpdateMode.SetBits}${CsiCommand.KittyUpdateFlags.final}` +
+        `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}1;${KittyFlagUpdateMode.ClearBits}${CsiCommand.KittyUpdateFlags.final}` +
+        KittySequence.QueryFlags +
+        `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.SaveCursorAndAlternate}${CsiCommand.SetDecPrivateMode.final}` +
+        `${VtPrefix.Csi}${CsiCommand.KittyUpdateFlags.prefix}4${CsiCommand.KittyUpdateFlags.final}` +
+        KittySequence.QueryFlags +
+        `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.SaveCursorAndAlternate}${CsiCommand.ResetDecPrivateMode.final}` +
+        KittySequence.QueryFlags,
+    );
+    await screen.whenIdle();
+
+    expect(responses).toEqual(["\x1b[?2u", "\x1b[?4u", "\x1b[?2u"]);
   });
 
   it("applies kitty modes, pop counts, bounded eviction, and per-buffer state", async () => {

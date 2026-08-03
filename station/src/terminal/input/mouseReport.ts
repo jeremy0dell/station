@@ -5,7 +5,6 @@
 import {
   encodeMouseButtonByte,
   legacyMouseReport,
-  MOUSE_BUTTON_BY_NAME,
   MouseButton,
   MouseEncoding,
   sgrMouseReport,
@@ -30,8 +29,8 @@ export function buildMouseReportSequence(event: MouseReportEvent): string {
   // legacy can't, so it collapses every release to the "no button" code.
   const base =
     event.encoding === MouseEncoding.Legacy && event.action === "release"
-      ? MouseButton.None
-      : MOUSE_BUTTON_BY_NAME[event.button];
+      ? MouseButton.none
+      : MouseButton[event.button];
   const cb = encodeMouseButtonByte({
     base,
     motion: event.action === "motion",

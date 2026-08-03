@@ -1,6 +1,7 @@
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
 import { reportTerminalCorruption, writePaneEvidenceDump } from "../diagnostics.js";
+import { BracketedPasteMarker } from "../protocol/csi.js";
 import { createLocalPtyTerminal } from "../pty/localPtyTerminal.js";
 import {
   createPtyOutputCompatibility,
@@ -476,7 +477,11 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         return false;
       }
       const bracketed = entry.screen?.isBracketedPasteEnabled() ?? false;
-      entry.terminal.write(bracketed ? `\x1b[200~${text}\x1b[201~` : text);
+      entry.terminal.write(
+        bracketed
+          ? `${BracketedPasteMarker.Start}${text}${BracketedPasteMarker.End}`
+          : text,
+      );
       return true;
     },
 

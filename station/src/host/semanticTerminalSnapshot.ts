@@ -2,20 +2,17 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
 import { MAX_SCROLLBACK_LINES } from "../config/stationConfig.js";
-import {
-  ControlByte,
-  CsiFinal,
-  EraseInDisplayMode,
-} from "../terminal/protocol/controlBytes.js";
+import { EraseDisplayMode } from "../terminal/protocol/csi.js";
+import { EscSequence } from "../terminal/protocol/esc.js";
+import { CsiCommand, EscCommand } from "../terminal/protocol/identifiers.js";
+import { OscCommand } from "../terminal/protocol/osc.js";
+import { VtPrefix, VtTerminator } from "../terminal/protocol/syntax.js";
 import {
   TerminalSnapshotUnsupportedStateError,
   TerminalSupplementalState,
   type TerminalSnapshotUnsupportedStateDetail,
 } from "./terminalSupplementalState.js";
 
-const RIS = `${ControlByte.Esc}c`;
-const OSC_TITLE = `${ControlByte.Esc}]2;`;
-const STRING_TERMINATOR = ControlByte.Bel;
 const XTERM_GROUND_STATE = 0;
 
 type PinnedXtermParserState = {
@@ -110,9 +107,9 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
       this.#terminal.onTitleChange((title) => {
         this.#title = title;
       }),
-      this.#terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) => {
+      this.#terminal.parser.registerCsiHandler(CsiCommand.EraseInDisplay, (params) => {
         const isNormalBufferFullErase =
-          params[0] === EraseInDisplayMode.EntireDisplay &&
+          params[0] === EraseDisplayMode.EntireDisplay &&
           this.#terminal.buffer.active.type === "normal";
         const isSynchronizedFullErase =
           isNormalBufferFullErase && this.#terminal.modes.synchronizedOutputMode;
@@ -124,12 +121,12 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
         }
         return false;
       }),
-      this.#terminal.parser.registerEscHandler({ final: "c" }, () => {
+      this.#terminal.parser.registerEscHandler(EscCommand.ResetToInitialState, () => {
         this.#title = "";
         normalBufferIsSynchronizedFrame = false;
         return false;
       }),
-      this.#terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+      this.#terminal.parser.registerCsiHandler(CsiCommand.SoftReset, () => {
         normalBufferIsSynchronizedFrame = false;
         return false;
       }),
@@ -163,7 +160,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
       }
       assertXtermParserBoundary(this.#terminal);
       const resetData = this.#supplementalState.liveResetSequence();
-      const title = OSC_TITLE + this.#title + STRING_TERMINATOR;
+      const title = `${VtPrefix.Osc}${OscCommand.WindowTitle};${this.#title}${VtTerminator.Bell}`;
       let serialized: string;
       try {
         serialized = this.#serializer.serialize();
@@ -176,7 +173,10 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
         );
       }
       try {
-        return [RIS + this.#supplementalState.restoreSerialization(serialized, title)];
+        return [
+          EscSequence.ResetToInitialState +
+            this.#supplementalState.restoreSerialization(serialized, title),
+        ];
       } catch (error) {
         if (error instanceof TerminalSnapshotUnsupportedStateError) {
           throw new TerminalSnapshotUnavailableError(

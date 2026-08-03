@@ -49,3 +49,6 @@ export const DecMode = {
   /** Synchronized output (?2026h/?2026l). */
   SynchronizedOutput: 2026,
 } as const;
+
+/** DEC private-mode values Station emits or interprets directly. */
+export type DecModeValue = (typeof DecMode)[keyof typeof DecMode];
