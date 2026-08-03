@@ -11,15 +11,24 @@ import {
   type TerminalCorruptionKind,
   writePaneEvidenceDump,
 } from "../diagnostics.js";
-import { CsiFinal, EraseInDisplayMode } from "../protocol/controlBytes.js";
+import { EraseDisplayMode } from "../protocol/csi.js";
 import { DecMode } from "../protocol/decset.js";
-import { KittyKeyboard } from "../protocol/kitty.js";
+import { CsiCommand, EscCommand } from "../protocol/identifiers.js";
+import {
+  initialKittyKeyboardState,
+  type KittyKeyboardOperation,
+  type KittyKeyboardState,
+  normalizeKittyFlagUpdateMode,
+  reduceKittyKeyboardState,
+} from "../protocol/kitty.js";
+import { OscCommand } from "../protocol/osc.js";
 import {
   MouseEncoding,
   MouseTracking,
   type MouseEncodingValue,
   type MouseTrackingValue,
 } from "../protocol/mouse.js";
+import { VtPrefix, VtTerminator } from "../protocol/syntax.js";
 import type { StationTerminalSize } from "../types.js";
 import { nativeStationTheme, type StationTerminalTheme } from "../../theme/index.js";
 import { buildVtPalette256 } from "./palette.js";
@@ -298,17 +307,25 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // Lines scrolled up from the live bottom (0 = at the bottom).
   let scrollOffset = 0;
   let normalBufferIsSynchronizedFrame = false;
-  type KittyKeyboardState = { flags: number; stack: number[] };
-  const kittyKeyboard = new Map<"alternate" | "normal", KittyKeyboardState>([
-    ["normal", { flags: 0, stack: [] }],
-    ["alternate", { flags: 0, stack: [] }],
+  type KittyBufferType = "alternate" | "normal";
+  const kittyKeyboard = new Map<KittyBufferType, KittyKeyboardState>([
+    ["normal", initialKittyKeyboardState()],
+    ["alternate", initialKittyKeyboardState()],
   ]);
+  const activeKittyBufferType = (): KittyBufferType =>
+    terminal.buffer.active.type === "alternate" ? "alternate" : "normal";
   const activeKittyKeyboard = (): KittyKeyboardState => {
-    const bufferType = terminal.buffer.active.type === "alternate" ? "alternate" : "normal";
+    const bufferType = activeKittyBufferType();
     const state = kittyKeyboard.get(bufferType);
     if (state === undefined) {
       throw new Error(`Missing kitty keyboard state for ${bufferType} buffer.`);
     }
+    return state;
+  };
+  const applyKittyKeyboard = (operation: KittyKeyboardOperation): KittyKeyboardState => {
+    const bufferType = activeKittyBufferType();
+    const state = reduceKittyKeyboardState(activeKittyKeyboard(), operation);
+    kittyKeyboard.set(bufferType, state);
     return state;
   };
   // The most recent OSC 0/2 title; mirrors xterm's onTitleChange so the pane
@@ -407,24 +424,28 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // ThemeService is browser-only), but termenv/lipgloss-based TUIs wait on
   // them for background detection. Answer with Station's theme; non-query
   // payloads fall through to xterm's own color tracking.
-  terminal.parser.registerOscHandler(10, (data) => {
+  terminal.parser.registerOscHandler(OscCommand.DefaultForeground, (data) => {
     if (data !== "?") {
       return false;
     }
-    emitResponse(`\x1b]10;${toOscRgb(defaultForeground)}\x07`);
+    emitResponse(
+      `${VtPrefix.Osc}${OscCommand.DefaultForeground};${toOscRgb(defaultForeground)}${VtTerminator.Bell}`,
+    );
     return true;
   });
-  terminal.parser.registerOscHandler(11, (data) => {
+  terminal.parser.registerOscHandler(OscCommand.DefaultBackground, (data) => {
     if (data !== "?") {
       return false;
     }
-    emitResponse(`\x1b]11;${toOscRgb(defaultBackground)}\x07`);
+    emitResponse(
+      `${VtPrefix.Osc}${OscCommand.DefaultBackground};${toOscRgb(defaultBackground)}${VtTerminator.Bell}`,
+    );
     return true;
   });
 
   // The headless buffer API does not expose DECTCEM cursor visibility, so
   // track ?25h/?25l ourselves; returning false keeps default processing.
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+  terminal.parser.registerCsiHandler(CsiCommand.SetDecPrivateMode, (params) => {
     if (paramListIncludes(params, DecMode.CursorVisible)) {
       cursorVisible = true;
     }
@@ -433,7 +454,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+  terminal.parser.registerCsiHandler(CsiCommand.ResetDecPrivateMode, (params) => {
     if (paramListIncludes(params, DecMode.CursorVisible)) {
       cursorVisible = false;
     }
@@ -442,9 +463,9 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
-  terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) => {
+  terminal.parser.registerCsiHandler(CsiCommand.EraseInDisplay, (params) => {
     const isNormalBufferFullScreenErase =
-      params[0] === EraseInDisplayMode.EntireDisplay && terminal.buffer.active.type === "normal";
+      params[0] === EraseDisplayMode.EntireDisplay && terminal.buffer.active.type === "normal";
     const isSynchronizedFullScreenErase =
       isNormalBufferFullScreenErase && terminal.modes.synchronizedOutputMode;
     // Archive the transition into an app-owned screen, not its subsequent repaint frames.
@@ -459,13 +480,12 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // RIS and DECSTR both restore a visible cursor; without these a `reset`
   // after a cursor-hiding app leaves the pane cursorless forever. RIS also
   // clears mouse modes (xterm resets the flavor; clear our SGR bit to match).
-  terminal.parser.registerEscHandler({ final: "c" }, () => {
+  terminal.parser.registerEscHandler(EscCommand.ResetToInitialState, () => {
     cursorVisible = true;
     sgrMouse = false;
     normalBufferIsSynchronizedFrame = false;
-    for (const state of kittyKeyboard.values()) {
-      state.flags = 0;
-      state.stack.length = 0;
+    for (const bufferType of kittyKeyboard.keys()) {
+      kittyKeyboard.set(bufferType, initialKittyKeyboardState());
     }
     if (oscTitle !== undefined) {
       oscTitle = undefined;
@@ -475,46 +495,30 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
-  terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+  terminal.parser.registerCsiHandler(CsiCommand.SoftReset, () => {
     cursorVisible = true;
     normalBufferIsSynchronizedFrame = false;
     return false;
   });
-  terminal.parser.registerCsiHandler({ prefix: ">", final: "u" }, (params) => {
-    const state = activeKittyKeyboard();
-    if (state.stack.length === KittyKeyboard.StackLimit) {
-      state.stack.shift();
-    }
-    state.stack.push(state.flags);
-    state.flags = primaryParams(params)[0] ?? 0;
+  terminal.parser.registerCsiHandler(CsiCommand.KittyPushFlags, (params) => {
+    applyKittyKeyboard({ type: "push", flags: primaryParams(params)[0] ?? 0 });
     return true;
   });
-  terminal.parser.registerCsiHandler({ prefix: "=", final: "u" }, (params) => {
-    const state = activeKittyKeyboard();
-    const [flags = 0, mode = 1] = primaryParams(params);
-    if (mode === 2) {
-      state.flags |= flags;
-    } else if (mode === 3) {
-      state.flags &= ~flags;
-    } else {
-      state.flags = flags;
-    }
+  terminal.parser.registerCsiHandler(CsiCommand.KittyUpdateFlags, (params) => {
+    const [flags = 0, mode] = primaryParams(params);
+    applyKittyKeyboard({
+      type: "update",
+      flags,
+      mode: normalizeKittyFlagUpdateMode(mode),
+    });
     return true;
   });
-  terminal.parser.registerCsiHandler({ prefix: "<", final: "u" }, (params) => {
-    const state = activeKittyKeyboard();
-    const count = Math.max(1, primaryParams(params)[0] ?? 1);
-    if (count > state.stack.length) {
-      state.flags = 0;
-      state.stack.length = 0;
-    } else {
-      state.flags = state.stack[state.stack.length - count] ?? 0;
-      state.stack.length -= count;
-    }
+  terminal.parser.registerCsiHandler(CsiCommand.KittyPopFlags, (params) => {
+    applyKittyKeyboard({ type: "pop", count: primaryParams(params)[0] ?? 1 });
     return true;
   });
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "u" }, () => {
-    emitResponse(`\x1b[?${activeKittyKeyboard().flags}u`);
+  terminal.parser.registerCsiHandler(CsiCommand.KittyQueryFlags, () => {
+    emitResponse(`${VtPrefix.Csi}?${activeKittyKeyboard().flags}u`);
     return true;
   });
 

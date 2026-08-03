@@ -1,7 +1,9 @@
 import type { TerminalOutputCompatibility } from "@station/contracts";
-import { ControlByte } from "./protocol/controlBytes.js";
+import { CsiSequence } from "./protocol/csi.js";
+import { CsiCommand } from "./protocol/identifiers.js";
+import { VtPrefix } from "./protocol/syntax.js";
 
-const START = `${ControlByte.Csi}1;`;
+const START = `${VtPrefix.Csi}1;`;
 const MAX_PARAMETER_DIGITS = 6;
 
 export type PtyOutputCompatibilityResult = {
@@ -112,16 +114,16 @@ function parseCandidate(data: string, start: number): Candidate {
   if (data[cursor] === undefined) {
     return { kind: "incomplete" };
   }
-  if (data[cursor] !== "r") {
+  if (data[cursor] !== CsiCommand.SetScrollingRegion.final) {
     return { kind: "invalid" };
   }
   cursor += 1;
 
-  const scrollCsi = requireLiteral(data, cursor, ControlByte.Csi);
+  const scrollCsi = requireLiteral(data, cursor, VtPrefix.Csi);
   if (scrollCsi !== "complete") {
     return { kind: scrollCsi };
   }
-  cursor += ControlByte.Csi.length;
+  cursor += VtPrefix.Csi.length;
 
   const count = readDigits(data, cursor, false);
   if (count.kind !== "complete") {
@@ -131,12 +133,12 @@ function parseCandidate(data: string, start: number): Candidate {
   if (data[cursor] === undefined) {
     return { kind: "incomplete" };
   }
-  if (data[cursor] !== "S") {
+  if (data[cursor] !== CsiCommand.ScrollUp.final) {
     return { kind: "invalid" };
   }
   cursor += 1;
 
-  const reset = `${ControlByte.Csi}r`;
+  const reset = CsiSequence.ResetScrollRegion;
   const resetStatus = requireLiteral(data, cursor, reset);
   if (resetStatus !== "complete") {
     return { kind: resetStatus };
@@ -144,18 +146,18 @@ function parseCandidate(data: string, start: number): Candidate {
   cursor += reset.length;
 
   const repaintStart = cursor;
-  const positionCsi = requireLiteral(data, cursor, ControlByte.Csi);
+  const positionCsi = requireLiteral(data, cursor, VtPrefix.Csi);
   if (positionCsi !== "complete") {
     return { kind: positionCsi };
   }
-  cursor += ControlByte.Csi.length;
+  cursor += VtPrefix.Csi.length;
 
   const row = readDigits(data, cursor, true);
   if (row.kind !== "complete") {
     return row;
   }
   cursor = row.end;
-  const repaintTail = `;1H${ControlByte.Csi}J`;
+  const repaintTail = `;1${CsiCommand.CursorPosition.final}${VtPrefix.Csi}${CsiCommand.EraseInDisplay.final}`;
   const repaintStatus = requireLiteral(data, cursor, repaintTail);
   if (repaintStatus !== "complete") {
     return { kind: repaintStatus };
@@ -222,5 +224,5 @@ function partialStartLength(data: string, start: number): number {
 }
 
 function replacement(count: number): string {
-  return `${ControlByte.Csi}r${ControlByte.Csi}999;1H${"\n".repeat(count)}${ControlByte.Csi}H`;
+  return `${CsiSequence.ResetScrollRegion}${VtPrefix.Csi}999;1H${"\n".repeat(count)}${CsiSequence.CursorHome}`;
 }

@@ -15,6 +15,8 @@ import { copyToClipboard, DEFAULT_COPY_SINKS } from "../copy/clipboard.js";
 import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
+import { DecMode } from "../terminal/protocol/decset.js";
+import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
@@ -191,7 +193,10 @@ export async function runDashboardMain(): Promise<void> {
     void nextThemeController.start();
     if (popupRenderer) {
       // OpenTUI keeps 1002 drag tracking on when 1003 movement is off; popups need click-only 1000 + 1006.
-      process.stdout.write("\u001b[?1002l\u001b[?1000h");
+      process.stdout.write(
+        `${VtPrefix.Csi}?${DecMode.MouseButtonEvent}l` +
+          `${VtPrefix.Csi}?${DecMode.MouseVt200}h`,
+      );
     }
     hotSlots.__stationDashboardHotRenderer = nextRenderer;
     hotSlots.__stationDashboardHotDispose = disposeResources;

@@ -24,7 +24,7 @@ import {
   wheelDirection,
   type StationMouseEvent,
 } from "../mouse.js";
-import { ControlByte } from "../../terminal/protocol/controlBytes.js";
+import { C0 } from "../../terminal/protocol/syntax.js";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
 
 type StationDashboardInput = {
@@ -44,7 +44,7 @@ export const SPLIT_RIGHT_LEGACY = "\x1c"; // Ctrl-\
 export const SPLIT_BELOW_LEGACY = "\x1e"; // Ctrl-^
 export const FOCUS_NEXT_LEGACY = "\x1d"; // Ctrl-]
 export const CLOSE_PANE_LEGACY = "\x1f"; // Ctrl-_
-export const ESC_LEGACY = ControlByte.Esc;
+export const ESC_LEGACY = C0.Escape;
 export const ENTER_LEGACY = "\r";
 export const SPACE_LEGACY = " ";
 export const ARROW_UP_LEGACY = ARROW_KEYS.up.normal;

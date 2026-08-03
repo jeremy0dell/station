@@ -1,6 +1,6 @@
 import { kittySequenceToLegacy } from "../../terminal/index.js";
 import { stripTerminalReplies } from "../../terminal/input/terminalReplies.js";
-import { cursorKeyBytes } from "../../terminal/protocol/cursorKeys.js";
+import { CURSOR_KEY_BYTES } from "../../terminal/protocol/cursorKeys.js";
 import type { PtyRegistryView } from "../../terminal/registry/ptyRegistry.js";
 import type { PaneId } from "../../state/types.js";
 import type { DashboardSnapshotView } from "@station/dashboard-core";
@@ -27,8 +27,6 @@ export function normalizeSequence(
   }
   return { consumed: false, legacy };
 }
-
-const CURSOR_KEY_BYTES = cursorKeyBytes();
 
 /** Rewrite arrow-key bytes to the pane's application/normal cursor-key mode. */
 export function paneInputBytes(

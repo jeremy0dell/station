@@ -8,14 +8,16 @@
 // leak into text-input modes as garbage characters.
 import type { TuiKey } from "@station/dashboard-core";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
+import { LegacyKeySequence } from "../../terminal/protocol/keySequences.js";
+import { C0 } from "../../terminal/protocol/syntax.js";
 
 const NAMED_SEQUENCES: Record<string, TuiKey> = {
-  "\r": { input: "\r", return: true },
-  "\n": { input: "\n", return: true },
-  "\x1b": { input: "", escape: true },
-  "\x7f": { input: "", backspace: true },
-  "\b": { input: "", backspace: true },
-  "\x1b[3~": { input: "", delete: true },
+  [C0.CarriageReturn]: { input: C0.CarriageReturn, return: true },
+  [C0.LineFeed]: { input: C0.LineFeed, return: true },
+  [LegacyKeySequence.Escape]: { input: "", escape: true },
+  [LegacyKeySequence.Backspace]: { input: "", backspace: true },
+  [C0.Backspace]: { input: "", backspace: true },
+  [LegacyKeySequence.Delete]: { input: "", delete: true },
   [ARROW_KEYS.up.normal]: { input: "", upArrow: true },
   [ARROW_KEYS.down.normal]: { input: "", downArrow: true },
   [ARROW_KEYS.right.normal]: { input: "", rightArrow: true },

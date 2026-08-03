@@ -5,7 +5,7 @@
 // NOTE: a separate, unrelated `input/mouse.ts` models Station's own UI mouse
 // events — import the protocol vocabulary from here (`protocol/mouse.js`), not
 // from there.
-import { ControlByte } from "./controlBytes.js";
+import { VtPrefix } from "./syntax.js";
 
 /**
  * Which pointer events the child app asked for. Values come VERBATIM from
@@ -85,8 +85,8 @@ export const MouseLegacy = {
   MaxCell: 223,
 } as const;
 
-const SGR_MOUSE_PREFIX = `${ControlByte.Csi}<`;
-const LEGACY_MOUSE_PREFIX = `${ControlByte.Csi}M`;
+const SGR_MOUSE_PREFIX = `${VtPrefix.Csi}<`;
+const LEGACY_MOUSE_PREFIX = `${VtPrefix.Csi}M`;
 
 /**
  * Fold the action/motion marker and modifiers onto a base button code. Shared

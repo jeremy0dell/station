@@ -6,6 +6,9 @@ export const AnsiMode = {
   LineFeedNewLine: 20,
 } as const;
 
+/** ANSI mode values Station emits directly. */
+export type AnsiModeValue = (typeof AnsiMode)[keyof typeof AnsiMode];
+
 /** DECSET/DECRST private-mode numbers emitted or parsed directly by Station. */
 export const DecMode = {
   /** DECCKM — application cursor keys (?1h/?1l). */
@@ -49,3 +52,6 @@ export const DecMode = {
   /** Synchronized output (?2026h/?2026l). */
   SynchronizedOutput: 2026,
 } as const;
+
+/** DEC private-mode values Station emits or interprets directly. */
+export type DecModeValue = (typeof DecMode)[keyof typeof DecMode];

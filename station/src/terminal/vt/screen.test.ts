@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { nativeStationTheme, rgbColor } from "../../theme/index.js";
+import { DecMode } from "../protocol/decset.js";
+import { KittyFlagUpdateMode, KittySequence } from "../protocol/kitty.js";
+import { VtPrefix } from "../protocol/syntax.js";
 import { waitFor } from "../testing/waitFor.js";
 import { createStationVtScreen, type StationVtScreen } from "./screen.js";
 
@@ -476,6 +479,31 @@ describe("createStationVtScreen", () => {
     await screen.whenIdle();
     expect(screen.isKittyKeyboardEnabled()).toBe(false);
     expect(responses).toEqual(["\x1b[?0u", "\x1b[?0u"]);
+  });
+
+  it("applies generated Kitty commands independently in each buffer", async () => {
+    const responses: string[] = [];
+    const screen = track(
+      createStationVtScreen({
+        size: { cols: 20, rows: 5 },
+        onResponse: (data) => responses.push(data),
+      }),
+    );
+
+    screen.feed(
+      `${VtPrefix.Csi}=1u` +
+        `${VtPrefix.Csi}=2;${KittyFlagUpdateMode.SetBits}u` +
+        `${VtPrefix.Csi}=1;${KittyFlagUpdateMode.ClearBits}u` +
+        KittySequence.QueryFlags +
+        `${VtPrefix.Csi}?${DecMode.SaveCursorAndAlternate}h` +
+        `${VtPrefix.Csi}=4u` +
+        KittySequence.QueryFlags +
+        `${VtPrefix.Csi}?${DecMode.SaveCursorAndAlternate}l` +
+        KittySequence.QueryFlags,
+    );
+    await screen.whenIdle();
+
+    expect(responses).toEqual(["\x1b[?2u", "\x1b[?4u", "\x1b[?2u"]);
   });
 
   it("applies kitty modes, pop counts, bounded eviction, and per-buffer state", async () => {

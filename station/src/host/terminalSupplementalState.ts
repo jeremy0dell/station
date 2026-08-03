@@ -1,7 +1,21 @@
 import type { IBuffer, IBufferLine, Terminal } from "@xterm/headless";
-import { ControlByte, CsiFinal } from "../terminal/protocol/controlBytes.js";
-import { AnsiMode, DecMode } from "../terminal/protocol/decset.js";
-import { KittyKeyboard } from "../terminal/protocol/kitty.js";
+import {
+  CsiSequence,
+  CursorPresentationStyle,
+  type CursorPresentationStyleValue,
+} from "../terminal/protocol/csi.js";
+import { DecMode, type DecModeValue } from "../terminal/protocol/decset.js";
+import { EscSequence } from "../terminal/protocol/esc.js";
+import { CsiCommand, EscCommand } from "../terminal/protocol/identifiers.js";
+import {
+  initialKittyKeyboardState,
+  type KittyKeyboardOperation,
+  type KittyKeyboardState,
+  normalizeKittyFlagUpdateMode,
+  reduceKittyKeyboardState,
+  serializeKittyKeyboardState,
+} from "../terminal/protocol/kitty.js";
+import { VtPrefix } from "../terminal/protocol/syntax.js";
 import {
   isUnsupportedBlankXtermAttribute,
   isUnsupportedXtermCellAttribute,
@@ -14,15 +28,13 @@ import {
 } from "./xtermSnapshotAttributes.js";
 
 const ALT_BUFFER_PREFIX =
-  `${ControlByte.Csi}?${DecMode.SaveCursorAndAlternate}h${ControlByte.Csi}H`;
-const RIS = `${ControlByte.Esc}c`;
+  `${VtPrefix.Csi}?${DecMode.SaveCursorAndAlternate}h` + CsiSequence.CursorHome;
 
 type BufferType = "normal" | "alternate";
 type AlternateMode =
   | typeof DecMode.Alternate
   | typeof DecMode.AlternateClear
   | typeof DecMode.SaveCursorAndAlternate;
-type KittyKeyboardState = { flags: number; stack: number[] };
 type PinnedXtermBuffer = {
   savedCharset: object | undefined;
   savedCurAttrData: PinnedXtermAttributes;
@@ -86,8 +98,8 @@ export class TerminalSnapshotUnsupportedStateError extends Error {
  */
 export class TerminalSupplementalState {
   readonly #kittyKeyboard = new Map<BufferType, KittyKeyboardState>([
-    ["normal", { flags: 0, stack: [] }],
-    ["alternate", { flags: 0, stack: [] }],
+    ["normal", initialKittyKeyboardState()],
+    ["alternate", initialKittyKeyboardState()],
   ]);
   readonly #savedBuffers = new Set<BufferType>();
   readonly #subscriptions: Array<{ dispose(): void }>;
@@ -96,35 +108,40 @@ export class TerminalSupplementalState {
   #cursorVisible = true;
 
   constructor(private readonly terminal: Terminal) {
+    const kittyHandlers = [
+      { identifier: CsiCommand.KittyPopFlags, operator: "<" },
+      { identifier: CsiCommand.KittyPushFlags, operator: ">" },
+      { identifier: CsiCommand.KittyUpdateFlags, operator: "=" },
+    ] as const;
     this.#subscriptions = [
-      ...(["<", ">", "="] as const).map((prefix) =>
-        terminal.parser.registerCsiHandler({ prefix, final: "u" }, (params) => {
-          this.#applyKittyKeyboard(prefix, params);
+      ...kittyHandlers.map(({ identifier, operator }) =>
+        terminal.parser.registerCsiHandler(identifier, (params) => {
+          this.#applyKittyKeyboard(operator, params);
           return false;
         }),
       ),
-      terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+      terminal.parser.registerCsiHandler(CsiCommand.SetDecPrivateMode, (params) => {
         this.#applyPrivateModes(params, true);
         return false;
       }),
-      terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+      terminal.parser.registerCsiHandler(CsiCommand.ResetDecPrivateMode, (params) => {
         this.#applyPrivateModes(params, false);
         return false;
       }),
-      terminal.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+      terminal.parser.registerCsiHandler(CsiCommand.SoftReset, () => {
         this.#cursorVisible = true;
         this.#savedBuffers.add(this.#bufferType);
         return false;
       }),
-      terminal.parser.registerCsiHandler({ final: "s" }, () => {
+      terminal.parser.registerCsiHandler(CsiCommand.SaveCursor, () => {
         this.#savedBuffers.add(this.#bufferType);
         return false;
       }),
-      terminal.parser.registerEscHandler({ final: "7" }, () => {
+      terminal.parser.registerEscHandler(EscCommand.SaveCursor, () => {
         this.#savedBuffers.add(this.#bufferType);
         return false;
       }),
-      terminal.parser.registerEscHandler({ final: "c" }, () => {
+      terminal.parser.registerEscHandler(EscCommand.ResetToInitialState, () => {
         this.#reset();
         return false;
       }),
@@ -170,21 +187,21 @@ export class TerminalSupplementalState {
    * history, or provider data.
    */
   liveResetSequence(): string {
-    const parts = [RIS];
+    const parts: string[] = [EscSequence.ResetToInitialState];
     const normalKitty = this.#kittyKeyboardSequence("normal");
     const alternateKitty = this.#kittyKeyboardSequence("alternate");
     if (this.#bufferType === "alternate") {
       parts.push(
         normalKitty,
-        privateModeSequence(this.#alternateMode, true),
+        `${VtPrefix.Csi}?${this.#alternateMode}h`,
         alternateKitty,
       );
     } else {
       if (alternateKitty.length > 0) {
         parts.push(
-          privateModeSequence(DecMode.Alternate, true),
+          `${VtPrefix.Csi}?${DecMode.Alternate}h`,
           alternateKitty,
-          privateModeSequence(DecMode.Alternate, false),
+          `${VtPrefix.Csi}?${DecMode.Alternate}l`,
         );
       }
       parts.push(normalKitty);
@@ -192,34 +209,34 @@ export class TerminalSupplementalState {
 
     const modes = this.terminal.modes;
     if (modes.applicationCursorKeysMode) {
-      parts.push(privateModeSequence(DecMode.ApplicationCursorKeys, true));
+      parts.push(`${VtPrefix.Csi}?${DecMode.ApplicationCursorKeys}h`);
     }
     if (modes.applicationKeypadMode) {
-      parts.push(privateModeSequence(DecMode.ApplicationKeypad, true));
+      parts.push(`${VtPrefix.Csi}?${DecMode.ApplicationKeypad}h`);
     }
     if (modes.bracketedPasteMode) {
-      parts.push(privateModeSequence(DecMode.BracketedPaste, true));
+      parts.push(`${VtPrefix.Csi}?${DecMode.BracketedPaste}h`);
     }
     const mouseTrackingMode = mouseTrackingDecMode(modes.mouseTrackingMode);
     if (mouseTrackingMode !== undefined) {
-      parts.push(privateModeSequence(mouseTrackingMode, true));
+      parts.push(`${VtPrefix.Csi}?${mouseTrackingMode}h`);
     }
     const mouseEncoding = (this.terminal as unknown as PinnedXtermTerminal)._core
       .coreMouseService.activeEncoding;
     if (mouseEncoding === "SGR" || mouseEncoding === "SGR_PIXELS") {
-      parts.push(privateModeSequence(DecMode.SgrMouse, true));
+      parts.push(`${VtPrefix.Csi}?${DecMode.SgrMouse}h`);
     }
     if (mouseEncoding === "SGR_PIXELS") {
-      parts.push(privateModeSequence(DecMode.SgrPixels, true));
+      parts.push(`${VtPrefix.Csi}?${DecMode.SgrPixels}h`);
     }
     if (modes.sendFocusMode) {
-      parts.push(privateModeSequence(DecMode.FocusReporting, true));
+      parts.push(`${VtPrefix.Csi}?${DecMode.FocusReporting}h`);
     }
     if (!modes.wraparoundMode) {
-      parts.push(privateModeSequence(DecMode.Wraparound, false));
+      parts.push(`${VtPrefix.Csi}?${DecMode.Wraparound}l`);
     }
     if (modes.reverseWraparoundMode) {
-      parts.push(privateModeSequence(DecMode.ReverseWraparound, true));
+      parts.push(`${VtPrefix.Csi}?${DecMode.ReverseWraparound}h`);
     }
     return parts.join("");
   }
@@ -243,24 +260,28 @@ export class TerminalSupplementalState {
     ];
     const mouseEncoding = pinned._core.coreMouseService.activeEncoding;
     if (mouseEncoding === "SGR" || mouseEncoding === "SGR_PIXELS") {
-      parts.push(`${ControlByte.Csi}?${DecMode.SgrMouse}h`);
+      parts.push(`${VtPrefix.Csi}?${DecMode.SgrMouse}h`);
     }
     if (mouseEncoding === "SGR_PIXELS") {
-      parts.push(`${ControlByte.Csi}?${DecMode.SgrPixels}h`);
+      parts.push(`${VtPrefix.Csi}?${DecMode.SgrPixels}h`);
     }
     parts.push(
-      `${ControlByte.Csi}?${DecMode.CursorBlink}${this.terminal.options.cursorBlink ? "h" : "l"}`,
-      `${ControlByte.Csi}${AnsiMode.LineFeedNewLine}${
-        this.terminal.options.convertEol ? "h" : "l"
-      }`,
+      this.terminal.options.cursorBlink
+        ? `${VtPrefix.Csi}?${DecMode.CursorBlink}h`
+        : `${VtPrefix.Csi}?${DecMode.CursorBlink}l`,
+      this.terminal.options.convertEol
+        ? CsiSequence.SetLineFeedNewLine
+        : CsiSequence.ResetLineFeedNewLine,
       cursorPresentationSequence(pinned),
-      `${ControlByte.Csi}?${DecMode.CursorVisible}${this.#cursorVisible ? "h" : "l"}`,
+      this.#cursorVisible
+        ? `${VtPrefix.Csi}?${DecMode.CursorVisible}h`
+        : `${VtPrefix.Csi}?${DecMode.CursorVisible}l`,
       this.#kittyKeyboardSequence(this.#bufferType),
       beforeSynchronizedOutput,
     );
     if (this.terminal.modes.synchronizedOutputMode) {
       // Sync mode comes last so restoration bytes themselves are never held.
-      parts.push(`${ControlByte.Csi}?${DecMode.SynchronizedOutput}h`);
+      parts.push(`${VtPrefix.Csi}?${DecMode.SynchronizedOutput}h`);
     }
     return parts.join("");
   }
@@ -280,12 +301,14 @@ export class TerminalSupplementalState {
 
     const parts: string[] = [];
     if (restoreOriginMode) {
-      parts.push(`${ControlByte.Csi}?${DecMode.Origin}l`);
+      parts.push(`${VtPrefix.Csi}?${DecMode.Origin}l`);
     }
     if (customRegion) {
-      parts.push(`${ControlByte.Csi}${pinned.scrollTop + 1};${pinned.scrollBottom + 1}r`);
+      parts.push(
+        `${VtPrefix.Csi}${pinned.scrollTop + 1};${pinned.scrollBottom + 1}r`,
+      );
     }
-    parts.push(blankBackgrounds, `${ControlByte.Csi}0m`, currentSgr);
+    parts.push(blankBackgrounds, CsiSequence.ResetGraphicsRendition, currentSgr);
 
     if (restoreOriginMode) {
       const row = buffer.cursorY - pinned.scrollTop + 1;
@@ -296,11 +319,13 @@ export class TerminalSupplementalState {
         );
       }
       parts.push(
-        `${ControlByte.Csi}?${DecMode.Origin}h`,
-        cursorPosition(row, buffer.cursorX),
+        `${VtPrefix.Csi}?${DecMode.Origin}h`,
+        `${VtPrefix.Csi}${row};${buffer.cursorX + 1}H`,
       );
     } else if (movesCursor) {
-      parts.push(cursorPosition(buffer.cursorY + 1, buffer.cursorX));
+      parts.push(
+        `${VtPrefix.Csi}${buffer.cursorY + 1};${buffer.cursorX + 1}H`,
+      );
     }
     if (restoreSavedCursor) {
       parts.push(this.#savedCursorSequence(bufferType, currentSgr, restoreOriginMode));
@@ -331,21 +356,23 @@ export class TerminalSupplementalState {
       Math.max(0, pinned.savedY - buffer.baseY),
     );
     const savedColumn = Math.min(this.terminal.cols - 1, Math.max(0, pinned.savedX));
-    const parts = restoreOriginMode ? [`${ControlByte.Csi}?${DecMode.Origin}l`] : [];
+    const parts = restoreOriginMode ? [`${VtPrefix.Csi}?${DecMode.Origin}l`] : [];
     parts.push(
-      `${ControlByte.Csi}0m`,
+      CsiSequence.ResetGraphicsRendition,
       xtermAttributeSgr(pinned.savedCurAttrData),
-      cursorPosition(savedRow + 1, savedColumn),
-      `${ControlByte.Esc}7`,
-      `${ControlByte.Csi}0m`,
+      `${VtPrefix.Csi}${savedRow + 1};${savedColumn + 1}H`,
+      EscSequence.SaveCursor,
+      CsiSequence.ResetGraphicsRendition,
       currentSgr,
     );
     if (restoreOriginMode) {
-      parts.push(`${ControlByte.Csi}?${DecMode.Origin}h`);
+      parts.push(`${VtPrefix.Csi}?${DecMode.Origin}h`);
       const row = buffer.cursorY - pinned.scrollTop + 1;
-      parts.push(cursorPosition(row, buffer.cursorX));
+      parts.push(`${VtPrefix.Csi}${row};${buffer.cursorX + 1}H`);
     } else {
-      parts.push(cursorPosition(buffer.cursorY + 1, buffer.cursorX));
+      parts.push(
+        `${VtPrefix.Csi}${buffer.cursorY + 1};${buffer.cursorX + 1}H`,
+      );
     }
     return parts.join("");
   }
@@ -380,11 +407,11 @@ export class TerminalSupplementalState {
       ? buffer.cursorY - pinned.scrollTop + 1
       : buffer.cursorY + 1;
     return [
-      cursorPosition(row, column),
-      `${ControlByte.Csi}0m`,
+      `${VtPrefix.Csi}${row};${column + 1}H`,
+      CsiSequence.ResetGraphicsRendition,
       xtermAttributeSgr(cell),
       cell.getChars(),
-      `${ControlByte.Csi}0m`,
+      CsiSequence.ResetGraphicsRendition,
       currentSgr,
     ].join("");
   }
@@ -417,10 +444,10 @@ export class TerminalSupplementalState {
           end += 1;
         }
         parts.push(
-          cursorPosition(row + 1, column),
-          `${ControlByte.Csi}0m`,
+          `${VtPrefix.Csi}${row + 1};${column + 1}H`,
+          CsiSequence.ResetGraphicsRendition,
           xtermBackgroundSgr(cell),
-          `${ControlByte.Csi}${end - column}${CsiFinal.EraseCharacter}`,
+          `${VtPrefix.Csi}${end - column}X`,
         );
         column = end;
       }
@@ -583,42 +610,31 @@ export class TerminalSupplementalState {
       return;
     }
     const [first, second] = primaryParams(params);
-    if (operator === "<") {
-      const count = Math.max(1, first ?? 1);
-      state.flags = state.stack[state.stack.length - count] ?? 0;
-      state.stack.length = Math.max(0, state.stack.length - count);
-      return;
+    let operation: KittyKeyboardOperation;
+    switch (operator) {
+      case "<":
+        operation = { type: "pop", count: first ?? 1 };
+        break;
+      case ">":
+        operation = { type: "push", flags: first ?? 0 };
+        break;
+      case "=":
+        operation = {
+          type: "update",
+          flags: first ?? 0,
+          mode: normalizeKittyFlagUpdateMode(second),
+        };
+        break;
     }
-    if (operator === ">") {
-      if (state.stack.length === KittyKeyboard.StackLimit) {
-        state.stack.shift();
-      }
-      state.stack.push(state.flags);
-      state.flags = first ?? 0;
-      return;
-    }
-    const flags = first ?? 0;
-    const mode = second ?? 1;
-    if (mode === 2) {
-      state.flags |= flags;
-    } else if (mode === 3) {
-      state.flags &= ~flags;
-    } else {
-      state.flags = flags;
-    }
+    this.#kittyKeyboard.set(
+      this.#bufferType,
+      reduceKittyKeyboardState(state, operation),
+    );
   }
 
   #kittyKeyboardSequence(bufferType: BufferType): string {
     const state = this.#kittyKeyboard.get(bufferType);
-    if (state === undefined) {
-      return "";
-    }
-    const entries = [...state.stack, state.flags];
-    const parts = entries[0] === 0 ? [] : [`${ControlByte.Csi}=${entries[0]}u`];
-    for (const flags of entries.slice(1)) {
-      parts.push(`${ControlByte.Csi}>${flags}u`);
-    }
-    return parts.join("");
+    return state === undefined ? "" : serializeKittyKeyboardState(state);
   }
 
   #hiddenAlternateStateSequence(currentSgr: string): string {
@@ -638,11 +654,11 @@ export class TerminalSupplementalState {
         ? this.#wrapPendingSequence("alternate", currentSgr, false)
         : "";
     return [
-      `${ControlByte.Csi}?${DecMode.Alternate}h`,
+      `${VtPrefix.Csi}?${DecMode.Alternate}h`,
       kitty,
       savedCursor,
       wrapPending,
-      `${ControlByte.Csi}?${DecMode.Alternate}l`,
+      `${VtPrefix.Csi}?${DecMode.Alternate}l`,
     ].join("");
   }
 
@@ -662,9 +678,8 @@ export class TerminalSupplementalState {
     this.#bufferType = "normal";
     this.#cursorVisible = true;
     this.#savedBuffers.clear();
-    for (const state of this.#kittyKeyboard.values()) {
-      state.flags = 0;
-      state.stack.length = 0;
+    for (const bufferType of this.#kittyKeyboard.keys()) {
+      this.#kittyKeyboard.set(bufferType, initialKittyKeyboardState());
     }
   }
 }
@@ -673,13 +688,9 @@ function primaryParams(params: (number | number[])[]): number[] {
   return params.filter((param): param is number => !Array.isArray(param));
 }
 
-function privateModeSequence(mode: number, set: boolean): string {
-  return `${ControlByte.Csi}?${mode}${set ? "h" : "l"}`;
-}
-
 function mouseTrackingDecMode(
   mode: Terminal["modes"]["mouseTrackingMode"],
-): number | undefined {
+): DecModeValue | undefined {
   switch (mode) {
     case "none":
       return undefined;
@@ -694,17 +705,33 @@ function mouseTrackingDecMode(
   }
 }
 
-function cursorPosition(row: number, column: number): string {
-  return `${ControlByte.Csi}${row};${column + 1}H`;
-}
-
 function cursorPresentationSequence(terminal: PinnedXtermTerminal): string {
   const { cursorBlink, cursorStyle } = terminal._core.coreService.decPrivateModes;
   if (cursorBlink === undefined && cursorStyle === undefined) {
     return "";
   }
-  const base = cursorStyle === "underline" ? 3 : cursorStyle === "bar" ? 5 : 1;
-  return `${ControlByte.Csi}${base + (cursorBlink === false ? 1 : 0)} q`;
+  return `${VtPrefix.Csi}${cursorPresentationStyle(cursorStyle, cursorBlink === false)} q`;
+}
+
+function cursorPresentationStyle(
+  cursorStyle: "bar" | "block" | "underline" | undefined,
+  steady: boolean,
+): CursorPresentationStyleValue {
+  switch (cursorStyle) {
+    case "underline":
+      return steady
+        ? CursorPresentationStyle.SteadyUnderline
+        : CursorPresentationStyle.BlinkingUnderline;
+    case "bar":
+      return steady
+        ? CursorPresentationStyle.SteadyBar
+        : CursorPresentationStyle.BlinkingBar;
+    case "block":
+    case undefined:
+      return steady
+        ? CursorPresentationStyle.SteadyBlock
+        : CursorPresentationStyle.BlinkingBlock;
+  }
 }
 
 function hasNaturallySerializableWrap(
