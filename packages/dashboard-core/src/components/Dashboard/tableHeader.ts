@@ -85,14 +85,15 @@ function editingPersistentFilterHeader(
   projection: DashboardPersistentFilterProjection,
   overflow: DashboardSessionOverflow,
 ): DashboardFilterHeaderModel {
-  const prefix = persistentFilterEditorPrefix(columns);
+  const contentColumns = persistentFilterContentColumns(columns);
+  const prefix = persistentFilterEditorPrefix(contentColumns);
   const count = persistentFilterCount(projection, overflow, columns < 32);
   const countWidth = cellWidth(count);
   const prefixWidth = textLineSegmentsWidth(prefix);
-  const countGap = columns >= prefixWidth + countWidth + 3 ? 2 : 0;
+  const countGap = contentColumns >= prefixWidth + countWidth + 3 ? 2 : 0;
   const queryWidth = Math.max(
     1,
-    columns - prefixWidth - (countGap > 0 ? countWidth + countGap : 0),
+    contentColumns - prefixWidth - (countGap > 0 ? countWidth + countGap : 0),
   );
   const draft = projection.draft ?? { value: projection.query, cursor: projection.query.length };
   const content = [
@@ -100,10 +101,10 @@ function editingPersistentFilterHeader(
     ...persistentFilterEditorWindow(draft.value, draft.cursor, queryWidth),
   ];
   const segments =
-    countGap > 0 ? appendPersistentFilterCount(content, count, columns, countGap) : content;
+    countGap > 0 ? appendPersistentFilterCount(content, count, contentColumns, countGap) : content;
   return {
     kind: "editing",
-    segments: clipTextLineSegments(segments, columns),
+    segments: padPersistentFilterHeader(segments, columns),
     zeroMatches: projection.zeroMatches,
   };
 }
@@ -113,24 +114,45 @@ function appliedPersistentFilterHeader(
   projection: DashboardPersistentFilterProjection,
   overflow: DashboardSessionOverflow,
 ): DashboardFilterHeaderModel {
+  const contentColumns = persistentFilterContentColumns(columns);
   const prefix: DashboardFilterHeaderSegment[] = [
-    { text: columns >= 16 ? "FILTER " : "F ", role: "label" },
+    { text: contentColumns >= 16 ? "FILTER " : "F ", role: "label" },
   ];
   const count = persistentFilterCount(projection, overflow, columns < 32);
   const countWidth = cellWidth(count);
   const prefixWidth = textLineSegmentsWidth(prefix);
-  const showCount = columns >= prefixWidth + countWidth + 3;
-  const summaryWidth = Math.max(0, columns - prefixWidth - (showCount ? countWidth + 2 : 0));
+  const showCount = contentColumns >= prefixWidth + countWidth + 3;
+  const summaryWidth = Math.max(0, contentColumns - prefixWidth - (showCount ? countWidth + 2 : 0));
   const content: DashboardFilterHeaderSegment[] = [
     ...prefix,
     { text: truncateCells(projection.query, summaryWidth), role: "query" },
   ];
-  const segments = showCount ? appendPersistentFilterCount(content, count, columns, 2) : content;
+  const segments = showCount
+    ? appendPersistentFilterCount(content, count, contentColumns, 2)
+    : content;
   return {
     kind: "applied",
-    segments: clipTextLineSegments(segments, columns),
+    segments: padPersistentFilterHeader(segments, columns),
     zeroMatches: projection.zeroMatches,
   };
+}
+
+function persistentFilterContentColumns(columns: number): number {
+  return columns >= 3 ? columns - 2 : columns;
+}
+
+function padPersistentFilterHeader(
+  segments: readonly DashboardFilterHeaderSegment[],
+  columns: number,
+): DashboardFilterHeaderSegment[] {
+  if (columns < 3) {
+    return clipTextLineSegments(segments, columns);
+  }
+  return [
+    { text: " ", role: "spacer" },
+    ...clipTextLineSegments(segments, columns - 2),
+    { text: " ", role: "spacer" },
+  ];
 }
 
 function persistentFilterEditorPrefix(columns: number): DashboardFilterHeaderSegment[] {

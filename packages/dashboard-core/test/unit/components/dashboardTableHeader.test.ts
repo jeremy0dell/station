@@ -83,6 +83,8 @@ describe("dashboard persistent filter header", () => {
       true,
     );
     expect(lineText(model)).toContain("FILTER /");
+    expect(lineText(model).startsWith(" ")).toBe(true);
+    expect(lineText(model).endsWith(" ")).toBe(true);
     expect(cellWidth(lineText(model))).toBeLessThanOrEqual(40);
     expect(lineText(model)).not.toContain("\n");
   });
@@ -115,6 +117,8 @@ describe("dashboard persistent filter header", () => {
     expect(lineText(model)).toContain("FILTER ");
     expect(lineText(model)).toContain("3/7 matches");
     expect(lineText(model)).toContain("…");
+    expect(lineText(model).startsWith(" ")).toBe(true);
+    expect(lineText(model).endsWith(" ")).toBe(true);
     expect(cellWidth(lineText(model))).toBeLessThanOrEqual(32);
   });
 });

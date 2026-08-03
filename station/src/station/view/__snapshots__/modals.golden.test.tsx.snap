@@ -1232,7 +1232,7 @@ exports[`modal flow golden frames renders the persistent filter header editor wi
 "                                                                                
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle 
 ─────────────────────────────────────────────────────────────────────────────── 
-▏ FILTER /api▏                                                       1/10 match 
+ ▏ FILTER /api▏                                                     1/10 match  
 ▼ station  5 sessions · 4 agents                                  [sh] [qs] [▾] 
  [1] ○ cli-help-man                       codex     idle           +14 -6 #70 ✓ 
  [2] - docs-cleanup                       codex     no agent                    
