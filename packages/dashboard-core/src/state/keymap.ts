@@ -353,47 +353,102 @@ export function dashboardFooterLabel({
   persistentFilter?: boolean;
 }): string {
   const full = dashboardFooterCandidate(
-    firstRun ? "firstRunFull" : persistentFilter ? "filteredFull" : "full",
+    dashboardFooterVariant("full", firstRun, persistentFilter),
     quitHint,
   );
   const compact = dashboardFooterCandidate(
-    firstRun ? "firstRunCompact" : persistentFilter ? "filteredCompact" : "compact",
+    dashboardFooterVariant("compact", firstRun, persistentFilter),
     quitHint,
   );
-  if (firstRun && full.length > columns) {
-    return quitHint === QUIT_HINT_DISMISS_ERROR && compact.length > columns ? quitHint : compact;
-  }
   if (full.length <= columns) {
     return full;
   }
-  if (quitHint !== QUIT_HINT_DISMISS_ERROR) {
-    return compact;
+  if (quitHint === QUIT_HINT_DISMISS_ERROR && compact.length > columns) {
+    return quitHint;
   }
-  return compact.length <= columns ? compact : quitHint;
+  return compact;
+}
+
+type DashboardFooterWidth = "full" | "compact";
+type DashboardFooterShortcut = { order: number; text: string };
+
+function dashboardFooterVariant(
+  width: DashboardFooterWidth,
+  firstRun: boolean,
+  persistentFilter: boolean,
+): DashboardFooterVariant {
+  if (firstRun) {
+    return width === "full" ? "firstRunFull" : "firstRunCompact";
+  }
+  if (persistentFilter) {
+    return width === "full" ? "filteredFull" : "filteredCompact";
+  }
+  return width;
 }
 
 function dashboardFooterCandidate(variant: DashboardFooterVariant, quitHint: string): string {
+  const shortcuts = dashboardFooterShortcuts(variant);
+  return shortcuts.length === 0 ? quitHint : `${shortcuts}  ${quitHint}`;
+}
+
+function dashboardFooterShortcuts(variant: DashboardFooterVariant): string {
   const bindings: readonly DashboardBindingSpec[] = TUI_DASHBOARD_BINDINGS;
   // Presentation order stays in footer metadata so key-match precedence can remain independent.
-  const shortcuts = bindings
-    .flatMap((binding) => {
-      const help = binding.help;
-      if (help?.footer === undefined) {
-        return [];
-      }
-      const fallbackVariant =
-        variant === "filteredFull" ? "full" : variant === "filteredCompact" ? "compact" : undefined;
-      const label =
-        help.footer.labels[variant] ??
-        (fallbackVariant === undefined ? undefined : help.footer.labels[fallbackVariant]);
-      return label === undefined
-        ? []
-        : [{ order: help.footer.order, text: `${help.keys} ${label}` }];
-    })
+  return bindings
+    .map((binding) => dashboardFooterShortcut(binding, variant))
+    .filter((shortcut): shortcut is DashboardFooterShortcut => shortcut !== undefined)
     .sort((left, right) => left.order - right.order)
     .map(({ text }) => text)
     .join("  ");
-  return shortcuts.length === 0 ? quitHint : `${shortcuts}  ${quitHint}`;
+}
+
+function dashboardFooterShortcut(
+  binding: DashboardBindingSpec,
+  variant: DashboardFooterVariant,
+): DashboardFooterShortcut | undefined {
+  const help = binding.help;
+  if (help === undefined || help.footer === undefined) {
+    return undefined;
+  }
+  const footer = help.footer;
+  const label = dashboardFooterLabelForVariant(footer.labels, variant);
+  if (label === undefined) {
+    return undefined;
+  }
+  return { order: footer.order, text: `${help.keys} ${label}` };
+}
+
+function dashboardFooterLabelForVariant(
+  labels: DashboardFooterMetadata["labels"],
+  variant: DashboardFooterVariant,
+): string | undefined {
+  const label = labels[variant];
+  if (label !== undefined) {
+    return label;
+  }
+  const fallbackVariant = dashboardFooterFallbackVariant(variant);
+  if (fallbackVariant === undefined) {
+    return undefined;
+  }
+  return labels[fallbackVariant];
+}
+
+function dashboardFooterFallbackVariant(
+  variant: DashboardFooterVariant,
+): DashboardFooterVariant | undefined {
+  switch (variant) {
+    case "filteredFull":
+      return "full";
+    case "filteredCompact":
+      return "compact";
+    case "full":
+    case "compact":
+    case "firstRunFull":
+    case "firstRunCompact":
+      return undefined;
+    default:
+      return undefined;
+  }
 }
 
 export function isSlotKey(key: TuiKey): boolean {

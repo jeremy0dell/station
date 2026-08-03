@@ -1,10 +1,6 @@
-import {
-  layoutWorktreeRowGrid,
-  type RowGridLayout,
-  segmentsWidth,
-  worktreeStyleRowGridInput,
-} from "@station/dashboard-core";
+import { layoutWorktreeRowGrid, type RowGridLayout, segmentsWidth } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { worktreeStyleRowGridInput } from "../../../../src/components/WorktreeRow/rowInput.js";
 
 function rowText(layout: RowGridLayout): string {
   return layout.segments.map((segment) => (segment.kind === "text" ? segment.text : "·")).join("");
@@ -85,15 +81,10 @@ describe("worktree row layout and filter semantics", () => {
           title: "alpha task",
           agent: "codex",
           activity: "working",
-          persistentFilterMatch: {
-            matched: true,
-            dimmed: false,
-            ranges: {
-              title: [{ start: 0, end: 5 }],
-              agent: [{ start: 2, end: 5 }],
-              status: [{ start: 0, end: 4 }],
-              projectLabel: [],
-            },
+          textHighlights: {
+            title: [{ start: 0, end: 5 }],
+            agent: [{ start: 2, end: 5 }],
+            activity: [{ start: 0, end: 4 }],
           },
         }),
       ],
@@ -114,11 +105,7 @@ describe("worktree row layout and filter semantics", () => {
       title: "beta task",
       agent: "pi",
       activity: "idle",
-      persistentFilterMatch: {
-        matched: false,
-        dimmed: true,
-        ranges: { title: [], agent: [], status: [], projectLabel: [] },
-      },
+      dimmedPreview: true,
     });
 
     expect(
@@ -138,16 +125,7 @@ describe("worktree row layout and filter semantics", () => {
           slot: "1",
           marker: { kind: "text", text: "-" },
           title: "修正-alpha",
-          persistentFilterMatch: {
-            matched: true,
-            dimmed: false,
-            ranges: {
-              title: [{ start: 0, end: 2 }],
-              agent: [],
-              status: [],
-              projectLabel: [],
-            },
-          },
+          textHighlights: { title: [{ start: 0, end: 2 }] },
         }),
       ],
     });

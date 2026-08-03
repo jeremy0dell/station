@@ -1,8 +1,5 @@
 import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
-import type {
-  DashboardPersistentFilterMatchRange,
-  DashboardPersistentFilterRowMatch,
-} from "../../selectors/dashboardPersistentFilter.js";
+import { type TextMatchRange, textMatchSegments } from "../TextMatch/segments.js";
 import {
   type RowColor,
   type RowGridCell,
@@ -15,20 +12,28 @@ import {
   type WorktreeRowMetadataGroups,
 } from "./layout.js";
 
+export type WorktreeRowTextHighlights = {
+  title?: readonly TextMatchRange[];
+  agent?: readonly TextMatchRange[];
+  activity?: readonly TextMatchRange[];
+};
+
 export function worktreeRowGridInput({
   id,
   row,
   slot,
   title,
   focused,
-  persistentFilterMatch,
+  textHighlights,
+  dimmedPreview,
 }: {
   id?: string;
   row: WorktreeRowModel;
   slot: string | undefined;
   title?: string | undefined;
   focused?: boolean | undefined;
-  persistentFilterMatch?: DashboardPersistentFilterRowMatch | undefined;
+  textHighlights?: WorktreeRowTextHighlights | undefined;
+  dimmedPreview?: true | undefined;
 }): RowGridRowInput {
   const marker = statusMarker(row);
   const visibleFields = worktreeRowVisibleFields(row, title);
@@ -47,8 +52,13 @@ export function worktreeRowGridInput({
     // instead of truncating while empty space remains, matching transient rows.
     activityOverflow: "rowSlack",
     metadataGroups: metadataGroups(row),
-    ...(persistentFilterMatch === undefined ? {} : { persistentFilterMatch }),
   };
+  if (textHighlights !== undefined) {
+    input.textHighlights = textHighlights;
+  }
+  if (dimmedPreview === true) {
+    input.dimmedPreview = true;
+  }
   // Tone colors the glyph + status label only — the session name must stay
   // foreground in every state (D12/D13).
   const tone = rowStatusTone(row, ready, state);
@@ -80,7 +90,8 @@ export function worktreeStyleRowGridInput(input: {
   agentColor?: RowColor;
   metadataGroups?: WorktreeRowMetadataGroups;
   focused?: true;
-  persistentFilterMatch?: DashboardPersistentFilterRowMatch;
+  textHighlights?: WorktreeRowTextHighlights;
+  dimmedPreview?: true;
 }): RowGridRowInput {
   const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
   cells.identity = {
@@ -96,20 +107,16 @@ export function worktreeStyleRowGridInput(input: {
   };
   cells.title = {
     key: "title",
-    segments: matchedTextSegments(
-      input.title,
-      input.color,
-      input.persistentFilterMatch?.ranges.title ?? [],
-    ),
+    segments: highlightedTextSegments(input.title, input.color, input.textHighlights?.title ?? []),
     importance: "required",
   };
   if (input.agent !== undefined) {
     cells.agent = {
       key: "agent",
-      segments: matchedTextSegments(
+      segments: highlightedTextSegments(
         input.agent,
         input.agentColor ?? input.color,
-        input.persistentFilterMatch?.ranges.agent ?? [],
+        input.textHighlights?.agent ?? [],
       ),
       importance: "optional",
     };
@@ -117,10 +124,10 @@ export function worktreeStyleRowGridInput(input: {
   if (input.activity !== undefined) {
     cells.activity = {
       key: "activity",
-      segments: matchedTextSegments(
+      segments: highlightedTextSegments(
         input.activity,
         input.activityColor ?? input.color,
-        input.persistentFilterMatch?.ranges.status ?? [],
+        input.textHighlights?.activity ?? [],
       ),
       importance: input.activityImportance ?? "optional",
     };
@@ -139,7 +146,7 @@ export function worktreeStyleRowGridInput(input: {
     }
   }
 
-  if (input.persistentFilterMatch?.dimmed === true) {
+  if (input.dimmedPreview === true) {
     for (const cell of Object.values(cells)) {
       if (cell !== undefined) {
         cell.segments = cell.segments.map(dimmedPreviewSegment);
@@ -153,7 +160,7 @@ export function worktreeStyleRowGridInput(input: {
   };
   if (input.metadataGroups !== undefined) {
     row.metadataGroups =
-      input.persistentFilterMatch?.dimmed === true
+      input.dimmedPreview === true
         ? {
             diff: input.metadataGroups.diff.map(dimmedPreviewSegment),
             pr: input.metadataGroups.pr.map(dimmedPreviewSegment),
@@ -166,31 +173,16 @@ export function worktreeStyleRowGridInput(input: {
   return row;
 }
 
-function matchedTextSegments(
+function highlightedTextSegments(
   text: string,
   color: RowColor | undefined,
-  ranges: readonly DashboardPersistentFilterMatchRange[],
+  ranges: readonly TextMatchRange[],
 ): RowSegment[] {
-  if (ranges.length === 0) {
-    return [textSegment(text, { color })];
-  }
-  const segments: RowSegment[] = [];
-  let cursor = 0;
-  for (const range of ranges) {
-    const start = Math.min(text.length, Math.max(cursor, range.start));
-    const end = Math.min(text.length, Math.max(start, range.end));
-    if (start > cursor) {
-      segments.push(textSegment(text.slice(cursor, start), { color }));
-    }
-    if (end > start) {
-      segments.push(textSegment(text.slice(start, end), { color, filterMatch: true }));
-    }
-    cursor = end;
-  }
-  if (cursor < text.length) {
-    segments.push(textSegment(text.slice(cursor), { color }));
-  }
-  return segments;
+  return textMatchSegments(text, ranges).map((segment) =>
+    segment.matched
+      ? textSegment(segment.text, { color, filterMatch: true })
+      : textSegment(segment.text, { color }),
+  );
 }
 
 function dimmedPreviewSegment(segment: RowSegment): RowSegment {

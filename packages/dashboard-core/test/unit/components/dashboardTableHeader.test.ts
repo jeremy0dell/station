@@ -1,10 +1,17 @@
-import {
-  cellWidth,
-  type DashboardPersistentFilterProjection,
-  dashboardPersistentFilterEditingFooterModel,
-  dashboardPersistentFilterHeaderModel,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import {
+  dashboardPersistentFilterHeaderModel,
+  dashboardTableHeaderModel,
+} from "../../../src/components/Dashboard/tableHeader.js";
+import { cellWidth, type RowGridLayout } from "../../../src/components/WorktreeRow/layout.js";
+import type { DashboardPersistentFilterProjection } from "../../../src/selectors/dashboardPersistentFilter.js";
+
+const HEADER_LAYOUT: RowGridLayout = {
+  id: "header",
+  segments: [],
+  hidden: { cells: [], metadata: [] },
+};
+const NO_OVERFLOW = { above: 0, below: 0, visible: 4, total: 4 };
 
 function projection(
   overrides: Partial<DashboardPersistentFilterProjection> = {},
@@ -26,7 +33,41 @@ function lineText(model: ReturnType<typeof dashboardPersistentFilterHeaderModel>
   return model.segments.map((segment) => segment.text).join("");
 }
 
-describe("dashboard persistent filter line", () => {
+describe("dashboard table header model", () => {
+  it("gives a persistent filter precedence in the shared header row", () => {
+    const model = dashboardTableHeaderModel({
+      layout: HEADER_LAYOUT,
+      overflow: { ...NO_OVERFLOW, above: 2 },
+      persistentFilter: projection(),
+    });
+
+    expect(model.kind).toBe("persistentFilter");
+  });
+
+  it("gives above overflow precedence over the available column layout", () => {
+    const overflow = { ...NO_OVERFLOW, above: 2, total: 6 };
+
+    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow })).toEqual({
+      kind: "aboveOverflow",
+      overflow,
+    });
+  });
+
+  it("uses column headers when the viewport is at the top", () => {
+    expect(dashboardTableHeaderModel({ layout: HEADER_LAYOUT, overflow: NO_OVERFLOW })).toEqual({
+      kind: "columns",
+      layout: HEADER_LAYOUT,
+    });
+  });
+
+  it("uses one empty header row when no layout exists", () => {
+    expect(dashboardTableHeaderModel({ layout: undefined, overflow: NO_OVERFLOW })).toEqual({
+      kind: "empty",
+    });
+  });
+});
+
+describe("dashboard persistent filter header", () => {
   it("keeps a long editor draft on one line with a visible caret window", () => {
     const model = dashboardPersistentFilterHeaderModel({
       columns: 40,
@@ -46,7 +87,7 @@ describe("dashboard persistent filter line", () => {
     expect(lineText(model)).not.toContain("\n");
   });
 
-  it("includes above-viewport context, counts, and an amber-ready zero-match cue", () => {
+  it("includes above-viewport context, counts, and a zero-match cue", () => {
     const model = dashboardPersistentFilterHeaderModel({
       columns: 60,
       projection: projection({ matchCount: 0, zeroMatches: true }),
@@ -75,18 +116,5 @@ describe("dashboard persistent filter line", () => {
     expect(lineText(model)).toContain("3/7 matches");
     expect(lineText(model)).toContain("…");
     expect(cellWidth(lineText(model))).toBeLessThanOrEqual(32);
-  });
-
-  it("selects bounded full and compact FILTER helper models", () => {
-    const full = dashboardPersistentFilterEditingFooterModel(80);
-    const compact = dashboardPersistentFilterEditingFooterModel(32);
-    const fullText = full.segments.map((segment) => segment.text).join("");
-    const compactText = compact.segments.map((segment) => segment.text).join("");
-
-    expect(fullText).toContain("FILTER");
-    expect(fullText).toContain("←→ cursor");
-    expect(fullText).toContain("Ctrl-U clear");
-    expect(compactText).toContain("↵ apply");
-    expect(cellWidth(compactText)).toBeLessThanOrEqual(32);
   });
 });

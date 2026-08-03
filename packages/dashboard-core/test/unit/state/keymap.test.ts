@@ -162,6 +162,13 @@ describe("dashboard footer", () => {
     ).toBe(
       "↵ activate  N new  A add  ⇥ next-needs-me  / edit  Esc clear  X delete  ? help  Q:close",
     );
+    expect(
+      dashboardFooterLabel({
+        columns: 80,
+        quitHint: "Q:close",
+        persistentFilter: true,
+      }),
+    ).toBe("↵ activate  N new  ⇥ next  / edit  Esc clear  X delete  ? help  Q:close");
   });
 
   it("keeps visible-error dismissal readable through compact and quit-only fallbacks", () => {

@@ -1,4 +1,3 @@
-import { TextAttributes } from "@opentui/core";
 import { useStore } from "zustand/react";
 import type { StoreApi } from "zustand/vanilla";
 import {
@@ -8,11 +7,11 @@ import {
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
   truncateCells,
-  type DashboardFilterFooterSegment,
   type DashboardFooterModel,
   type TuiState,
   type TuiStore,
 } from "@station/dashboard-core";
+import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
 import { STATION_COLORS } from "./theme.js";
 
 export type DashboardFooterViewProps = {
@@ -39,46 +38,11 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
 }
 
 function renderDashboardFooter(model: DashboardFooterModel, columns: number) {
-  switch (model.kind) {
-    case "loading":
-      return <text fg={STATION_COLORS.gray}>{truncateCells(model.text, columns)}</text>;
-    case "dashboard":
-    case "persistentFilterApplied":
-      return <text fg={STATION_COLORS.foreground}>{truncateCells(model.text, columns)}</text>;
-    case "persistentFilterEditing":
-      return (
-        <box height={1} width="100%" backgroundColor={STATION_COLORS.filterEditorSurface}>
-          <text width="100%">
-            {model.segments.map((segment, index) => (
-              <span
-                key={`${segment.role}:${index}`}
-                fg={footerSegmentForeground(segment)}
-                {...(segment.role === "badge" ? { bg: STATION_COLORS.filterEditorRail } : {})}
-                attributes={
-                  segment.role === "badge" || segment.role === "key"
-                    ? TextAttributes.BOLD
-                    : TextAttributes.NONE
-                }
-              >
-                {segment.text}
-              </span>
-            ))}
-          </text>
-        </box>
-      );
-    default:
-      return assertNeverDashboardFooterModel(model);
+  if (model.kind === "persistentFilterEditing") {
+    return <DashboardFilterFooterView segments={model.segments} />;
   }
-}
-
-function footerSegmentForeground(segment: DashboardFilterFooterSegment): string {
-  if (segment.role === "badge") return STATION_COLORS.background;
-  if (segment.role === "key") return STATION_COLORS.foreground;
-  return STATION_COLORS.gray;
-}
-
-function assertNeverDashboardFooterModel(_model: never): never {
-  throw new Error("Unhandled dashboard footer model.");
+  const foreground = model.kind === "loading" ? STATION_COLORS.gray : STATION_COLORS.foreground;
+  return <text fg={foreground}>{truncateCells(model.text, columns)}</text>;
 }
 
 function selectFooterQuitHint(state: Pick<TuiState, "screen" | "toasts">): string {

@@ -2,13 +2,12 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes } from "@opentui/core";
-import type { ProjectView, StationSnapshot } from "@station/contracts";
+import type { StationSnapshot } from "@station/contracts";
 import {
   dashboardTableHeaderModel,
   fleetCountsLabel,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
-  projectHeaderLabelParts,
   rowGridInputForViewportItem,
 } from "@station/dashboard-core";
 import {
@@ -26,16 +25,14 @@ import {
 } from "@station/dashboard-core";
 import type {
   DashboardFocus,
-  DashboardPersistentFilterProjectMatch,
-  ProjectHeaderControl,
   TuiScreen,
   TuiViewState,
 } from "@station/dashboard-core";
-import type { StationMouseTarget } from "../input/stationMouse.js";
 import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
 } from "./DashboardTableHeaderView.js";
+import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
 import { STATION_COLORS } from "./theme.js";
@@ -46,22 +43,6 @@ import {
 } from "./stationMouseContext.js";
 
 const HOVER_BG = STATION_COLORS.hoverBackground;
-
-// The project-header "open a shell here" click target stays in its own trailing
-// cell so stopPropagation can never also toggle the header.
-const SHELL_AFFORDANCE_LABEL = "[shell]";
-const SHELL_AFFORDANCE_LABEL_COMPACT = "[sh]";
-const DEFAULT_AGENT_AFFORDANCE_LABEL = "[▾]";
-
-// The per-project-header quick-session affordance sits after [shell] on project
-// rows: "[quick session]" creates a session (default harness), "[▾]" opens the
-// project default-agent picker. Compact mode uses "[qs]" when columns are limited.
-const QUICK_SESSION_AFFORDANCE_LABEL = "[quick session]";
-const QUICK_SESSION_AFFORDANCE_LABEL_COMPACT = "[qs]";
-const PROJECT_HEADER_SEPARATOR_COUNT = 3;
-
-// Below this terminal width the header affordances switch to compact labels.
-const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
 
 export type DashboardViewProps = {
   snapshot: StationSnapshot;
@@ -263,7 +244,7 @@ function DashboardViewportRow({
       return <box height={1} />;
     case "projectHeader":
       return (
-        <ProjectHeaderLine
+        <ProjectHeaderView
           columns={columns}
           project={item.project}
           collapsed={item.collapsed}
@@ -383,208 +364,5 @@ function EmptySessionButton({ projectId, focused }: { projectId: string; focused
     >
       {EMPTY_SESSION_BUTTON_LABEL}
     </text>
-  );
-}
-
-function ProjectHeaderLine({
-  columns,
-  project,
-  collapsed,
-  focus,
-  persistentFilterMatch,
-}: {
-  columns: number;
-  project: ProjectView;
-  collapsed: boolean;
-  focus?: ProjectHeaderControl | undefined;
-  persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
-}) {
-  const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
-  const shellLabel = compact ? SHELL_AFFORDANCE_LABEL_COMPACT : SHELL_AFFORDANCE_LABEL;
-  const quickSessionLabel = compact
-    ? QUICK_SESSION_AFFORDANCE_LABEL_COMPACT
-    : QUICK_SESSION_AFFORDANCE_LABEL;
-  const controlsWidth =
-    shellLabel.length +
-    quickSessionLabel.length +
-    DEFAULT_AGENT_AFFORDANCE_LABEL.length +
-    PROJECT_HEADER_SEPARATOR_COUNT;
-  return (
-    <box flexDirection="row" width="100%" height={1} overflow="hidden">
-      <ProjectHeaderPrimary
-        project={project}
-        collapsed={collapsed}
-        width={Math.max(1, columns - controlsWidth)}
-        focused={focus === "primary"}
-        persistentFilterMatch={persistentFilterMatch}
-      />
-      <box flexGrow={1} height={1} />
-      <ProjectHeaderSeparator />
-      <ProjectHeaderActionSegment
-        label={shellLabel}
-        target={{ kind: "openShellForProject", projectId: project.id }}
-        focused={focus === "shell"}
-      />
-      <ProjectHeaderSeparator />
-      <ProjectHeaderActionSegment
-        label={quickSessionLabel}
-        target={{ kind: "quickSessionForProject", projectId: project.id }}
-        focused={focus === "quickSession"}
-      />
-      <ProjectHeaderSeparator />
-      <ProjectHeaderActionSegment
-        label={DEFAULT_AGENT_AFFORDANCE_LABEL}
-        target={{ kind: "showDefaultAgentPickerForProject", projectId: project.id }}
-        focused={focus === "defaultAgent"}
-      />
-    </box>
-  );
-}
-
-function ProjectHeaderPrimary({
-  project,
-  collapsed,
-  width,
-  focused,
-  persistentFilterMatch,
-}: {
-  project: ProjectView;
-  collapsed: boolean;
-  width: number;
-  focused: boolean;
-  persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
-}) {
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const background = hover
-    ? { bg: HOVER_BG }
-    : focused
-      ? { bg: STATION_COLORS.compactFocusBackground }
-      : {};
-  return (
-    <text
-      flexShrink={0}
-      fg={STATION_COLORS.foreground}
-      {...background}
-      {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      <ProjectHeaderLabel
-        project={project}
-        collapsed={collapsed}
-        width={width}
-        persistentFilterMatch={persistentFilterMatch}
-      />
-    </text>
-  );
-}
-
-function ProjectHeaderActionSegment({
-  label,
-  target,
-  focused,
-}: {
-  label: string;
-  target: StationMouseTarget;
-  focused: boolean;
-}) {
-  const dispatch = useStationMouse();
-  const [hover, setHover] = useStationHoverState();
-  const background = hover
-    ? { bg: HOVER_BG }
-    : focused
-      ? { bg: STATION_COLORS.compactFocusBackground }
-      : {};
-  return (
-    <text
-      flexShrink={0}
-      fg={hover ? STATION_COLORS.green : STATION_COLORS.gray}
-      {...background}
-      {...stationMouseProps(dispatch, target)}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-    >
-      {label}
-    </text>
-  );
-}
-
-function ProjectHeaderSeparator() {
-  return (
-    <text flexShrink={0} fg={STATION_COLORS.gray}>
-      {" "}
-    </text>
-  );
-}
-
-function ProjectHeaderLabel({
-  project,
-  collapsed,
-  width,
-  persistentFilterMatch,
-}: {
-  project: ProjectView;
-  collapsed: boolean;
-  width: number;
-  persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
-}) {
-  const parts = projectHeaderLabelParts(project, collapsed);
-  const combined = truncateCells(`${parts.title}${parts.counts}`, width);
-  const title = combined.slice(0, parts.title.length);
-  const counts = combined.slice(parts.title.length);
-  return (
-    <>
-      <ProjectHeaderTitle
-        title={title}
-        labelOffset={Math.min(title.length, parts.title.length - project.label.length)}
-        match={persistentFilterMatch}
-      />
-      <span fg={STATION_COLORS.gray}>{counts}</span>
-    </>
-  );
-}
-
-function ProjectHeaderTitle({
-  title,
-  labelOffset,
-  match,
-}: {
-  title: string;
-  labelOffset: number;
-  match?: DashboardPersistentFilterProjectMatch | undefined;
-}) {
-  const label = title.slice(labelOffset);
-  const ranges = match?.labelRanges ?? [];
-  if (ranges.length === 0) {
-    return <span attributes={TextAttributes.BOLD}>{title}</span>;
-  }
-  const segments: Array<{ text: string; matched: boolean }> = [];
-  let cursor = 0;
-  for (const range of ranges) {
-    const start = Math.min(label.length, Math.max(cursor, range.start));
-    const end = Math.min(label.length, Math.max(start, range.end));
-    if (start > cursor) segments.push({ text: label.slice(cursor, start), matched: false });
-    if (end > start) segments.push({ text: label.slice(start, end), matched: true });
-    cursor = end;
-  }
-  if (cursor < label.length) segments.push({ text: label.slice(cursor), matched: false });
-  return (
-    <span attributes={TextAttributes.BOLD}>
-      {title.slice(0, labelOffset)}
-      {segments.map((segment, index) => (
-        <span
-          key={`${index}:${segment.text}`}
-          {...(segment.matched
-            ? {
-                fg: STATION_COLORS.filterMatchForeground,
-                bg: STATION_COLORS.filterMatchBackground,
-              }
-            : {})}
-        >
-          {segment.text}
-        </span>
-      ))}
-    </span>
   );
 }
