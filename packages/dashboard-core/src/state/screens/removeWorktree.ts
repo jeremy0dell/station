@@ -3,7 +3,7 @@ import {
   type DashboardSessionRow,
   selectDashboardSessionRow,
   sessionRowDisplayTitle,
-} from "../../selectors/selectors.js";
+} from "../../selectors/dashboardSessionRows.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";

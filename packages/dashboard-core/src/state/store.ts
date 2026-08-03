@@ -9,7 +9,7 @@ import type {
   WorktreeRow,
 } from "@station/contracts";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { sessionForWorktreeRow } from "../selectors/selectors.js";
+import { sessionForWorktreeRow } from "../selectors/dashboardSessionRows.js";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
 import type { TuiObserverService, TuiToast } from "../services/types.js";

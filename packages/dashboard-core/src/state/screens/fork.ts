@@ -7,7 +7,7 @@ import {
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
 import { createNewSessionNameToken } from "../../flows/newSession.js";
-import { selectDashboardSessionRow } from "../../selectors/selectors.js";
+import { selectDashboardSessionRow } from "../../selectors/dashboardSessionRows.js";
 import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";

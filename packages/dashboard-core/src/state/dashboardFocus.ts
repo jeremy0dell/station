@@ -1,10 +1,10 @@
 import type { ProjectId, SessionId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
+import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import {
   type DashboardViewportItem,
   selectDashboardItems,
 } from "../selectors/dashboardViewport.js";
-import type { DashboardSessionRow } from "../selectors/selectors.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import type { TuiTransition } from "./transition.js";
@@ -174,9 +174,8 @@ export function focusedSelectableRow(state: TuiState): DashboardSessionRow | und
 }
 
 /**
- * Reconciles against each state's active filter projection, preserving identity before falling
- * forward/backward. Clearing a filter returns a temporarily revealed collapsed child to its stored
- * project header.
+ * Preserves stable focus across dashboard list-shape changes, preferring a hidden child's
+ * collapsed parent before falling forward or backward by rendered position.
  */
 export function reconcileDashboardFocus(previous: TuiState, next: TuiState): TuiState {
   if (next.snapshot === undefined) {
@@ -203,25 +202,27 @@ export function reconcileDashboardFocus(previous: TuiState, next: TuiState): Tui
   if (previousIndex === undefined) {
     return clearDashboardFocus(withClampedScroll(next, nextItems.length));
   }
-  const collapsedHeaderIndex = collapsedChildHeaderIndex(next, nextItems, focus);
-  if (collapsedHeaderIndex !== undefined) {
-    return focusItem(next, nextItems, collapsedHeaderIndex);
+  const parentHeaderIndex = collapsedParentHeaderIndex(next, nextItems, focus);
+  if (parentHeaderIndex !== undefined) {
+    return focusItem(next, nextItems, parentHeaderIndex);
   }
   const following = nextFocusable.find((index) => index >= previousIndex);
   return focusItem(next, nextItems, following ?? lastFocusableIndex(nextFocusable));
 }
 
-function collapsedChildHeaderIndex(
+function collapsedParentHeaderIndex(
   state: TuiState,
   items: readonly DashboardViewportItem[],
   focus: DashboardFocus,
 ): number | undefined {
-  if (focus.kind !== "session") {
-    return undefined;
+  let projectId: ProjectId | undefined;
+  if (focus.kind === "session") {
+    projectId = state.snapshot?.sessions.find(
+      (session) => session.id === focus.sessionId,
+    )?.projectId;
+  } else if (focus.kind === "emptyProjectAction") {
+    projectId = focus.projectId;
   }
-  const projectId = state.snapshot?.sessions.find(
-    (session) => session.id === focus.sessionId,
-  )?.projectId;
   if (projectId === undefined || !state.collapsedProjectIds.has(projectId)) {
     return undefined;
   }
