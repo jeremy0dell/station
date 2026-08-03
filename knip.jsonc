@@ -22,6 +22,7 @@
     ".": {
       "entry": [
         // These helpers are launched by path strings, so static imports cannot prove reachability.
+        "scripts/enable-devbox-codex-hooks.mjs",
         "scripts/setup/setup-guided-sandbox.mjs",
         "scripts/station-tmux-devbox.mjs",
         "scripts/test-runners/sqlite-runtime-probe.mjs",

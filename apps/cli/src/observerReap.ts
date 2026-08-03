@@ -6,15 +6,13 @@ import {
   type ObserverDuplicateProcessEvidenceSource,
   type ObserverReap,
   type ObserverReapOutcome as ReapOutcome,
-  type ObserverReapPlan as ReapPlan,
   type ObserverReapTarget as ReapTarget,
   type ObserverProcessEntry as SharedObserverProcessEntry,
-  selectObserverReapPlan,
 } from "@station/observer/internal";
 import { createObserverClient } from "@station/protocol";
 
 export type ObserverProcessEntry = SharedObserverProcessEntry;
-export type { ReapOutcome, ReapPlan, ReapTarget };
+export type { ReapOutcome, ReapTarget };
 
 export type ObserverReapDeps = {
   listObserverProcesses?: () => ObserverProcessEntry[];
@@ -28,8 +26,6 @@ export type ObserverReapDeps = {
   signal?: (pid: number, sig: NodeJS.Signals | 0) => boolean;
   sleep?: (ms: number) => Promise<void>;
 };
-
-export const selectReapPlan = selectObserverReapPlan;
 
 /**
  * COMPOSITION ROOT

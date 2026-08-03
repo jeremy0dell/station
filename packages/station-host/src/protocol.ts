@@ -202,8 +202,6 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
     })
     .strict(),
 ]);
-export type HostReplay = z.infer<typeof HostReplaySchema>;
-
 /**
  * Attach acknowledgement captured atomically with the live listener. Raw replay
  * preserves production geometry; exact semantic and control-only reset recovery

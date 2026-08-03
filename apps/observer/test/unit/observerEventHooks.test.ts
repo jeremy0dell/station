@@ -11,7 +11,7 @@ import {
   createObserverEventHookRuntime,
   observerEventHookMatches,
 } from "../../src/hooks/observerEventHooks";
-import { agentStateChangedEventsFromReconcile } from "../../src/runtime/api";
+import { agentStateChangedEventsFromReconcile } from "../../src/runtime/agentEvents";
 import { createObserverEventBus } from "../../src/runtime/eventBus";
 
 describe("observer event hooks", () => {

@@ -291,10 +291,6 @@ export function selectedProject(snapshot: StationSnapshot, state: NewSessionFlow
   return selectNewSessionProject(snapshot, state.selectedProjectId);
 }
 
-export function harnessOptions(...args: Parameters<typeof selectNewSessionHarnessOptions>) {
-  return selectNewSessionHarnessOptions(...args);
-}
-
 export function validateNewSessionCreate(
   snapshot: StationSnapshot,
   state: NewSessionFlowState,
