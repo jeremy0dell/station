@@ -18,8 +18,11 @@ type RemoveWorktreeScreen = Extract<TuiState["screen"], { name: "removeWorktree"
 
 export type RemoveWorktreeActionId = "confirm.delete" | "confirm.keep";
 
-const removeWorktreeChooseSlotBehavior = {};
-const removeWorktreeDismissBehavior = { clickAway: cancelRemoveWorktree };
+const removeWorktreeChooseSlotBehavior = { dashboardHoverEnabled: true };
+const removeWorktreeDismissBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: cancelRemoveWorktree,
+};
 
 export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreen) {
   switch (screen.step) {

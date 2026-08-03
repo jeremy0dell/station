@@ -14,8 +14,11 @@ import { openRenameEditForRow } from "./sessionRows.js";
 
 type RenameSessionScreen = Extract<TuiState["screen"], { name: "renameSession" }>;
 
-const renameSessionChooseSlotBehavior = {};
-const renameSessionEditNameBehavior = { clickAway: backFromRenameEdit };
+const renameSessionChooseSlotBehavior = { dashboardHoverEnabled: true };
+const renameSessionEditNameBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: backFromRenameEdit,
+};
 
 export function renameSessionScreenBehavior(screen: RenameSessionScreen) {
   switch (screen.step) {

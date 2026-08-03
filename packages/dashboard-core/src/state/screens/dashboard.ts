@@ -27,7 +27,7 @@ import { clearDashboardPersistentFilter } from "./persistentFilter.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
 import { openWidgetSettings } from "./widgetSettings.js";
 
-export const dashboardScreenBehavior = {};
+export const dashboardScreenBehavior = { dashboardHoverEnabled: true };
 
 export function handleDashboardKey(
   state: TuiState,

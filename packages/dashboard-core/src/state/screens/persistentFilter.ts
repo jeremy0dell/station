@@ -9,7 +9,7 @@ import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export const persistentFilterScreenBehavior = {};
+export const persistentFilterScreenBehavior = { dashboardHoverEnabled: false };
 
 export function openDashboardPersistentFilter(state: TuiState): TuiTransition {
   if (state.screen.name !== "dashboard") {

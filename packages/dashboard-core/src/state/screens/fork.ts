@@ -20,8 +20,11 @@ type ForkScreen = Extract<TuiState["screen"], { name: "fork" }>;
 
 export type ForkSessionActionId = "details.name" | "details.copyDirty" | "details.submit";
 
-const forkChooseSlotBehavior = {};
-const forkDetailsBehavior = { clickAway: backFromForkDetails };
+const forkChooseSlotBehavior = { dashboardHoverEnabled: true };
+const forkDetailsBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: backFromForkDetails,
+};
 
 export function forkScreenBehavior(screen: ForkScreen) {
   switch (screen.step) {
