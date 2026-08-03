@@ -480,7 +480,7 @@ const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {
   "input/stationInput.ts": 2,
   "state/reconcilers/overlayRowFocus.ts": 1,
   "station/StationOverlay.tsx": 1,
-  "station/input/stationActions.ts": 25,
+  "station/input/stationActions.ts": 17,
   "station/input/stationMouse.ts": 5,
   "station/input/stationOverlayLayer.ts": 1,
   "station/store/stationViewStore.ts": 1,
@@ -491,59 +491,7 @@ const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {
   "stationButton/useMergeCelebration.ts": 1,
   "terminal/PaneGrid.tsx": 2,
 };
-const DIRECT_DASHBOARD_MUTATION_INVENTORY: DirectDashboardMutationInventory = {
-  "dashboardRenderer/dashboardMouse.ts": {
-    receiver: "store",
-    transitions: [
-      "clickAway",
-      "focusProjectSettingsItem",
-      "openWidgetSettings",
-      "scrollDashboard",
-      "selectAddProjectRow",
-      "widgetSettingsAddFromPicker",
-      "widgetSettingsOpenPicker",
-      "widgetSettingsRemoveAt",
-      "widgetSettingsToggleAt",
-    ],
-  },
-  "input/runtime/executeOutcome.ts": {
-    receiver: "stationViewStore",
-    transitions: [
-      "openForkDetailsForRow",
-      "openProjectDefaultAgentPicker",
-      "openProjectSettings",
-      "openRemoveWorktreeConfirmForRow",
-      "openRenameEditForRow",
-    ],
-  },
-  "input/runtime/managedLaunch.ts": {
-    receiver: "stationViewStore",
-    transitions: [
-      "addPendingCreateSessionRow",
-      "failPendingCreateSessionRow",
-      "removeCreateSessionLocalRow",
-    ],
-  },
-  "station/input/stationActions.ts": {
-    receiver: "store",
-    transitions: [
-      "addTuiToast",
-      "focusDashboardProjectHeader",
-      "focusProjectSettingsItemState",
-      "openWidgetSettingsState",
-      "scrollDashboard",
-      "selectAddProjectRowState",
-      "widgetSettingsAddFromPicker",
-      "widgetSettingsOpenPicker",
-      "widgetSettingsRemoveAt",
-      "widgetSettingsToggleAt",
-    ],
-  },
-  "station/input/stationMouse.ts": {
-    receiver: "store",
-    transitions: ["clickAway"],
-  },
-};
+const DIRECT_DASHBOARD_MUTATION_INVENTORY: DirectDashboardMutationInventory = {};
 const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [
   "config/tuiConfig.ts: import createTuiStore from @station/dashboard-core",
   "dashboardRenderer/main.tsx: import createTuiStore from @station/dashboard-core",
@@ -641,7 +589,7 @@ describe("station production boundaries", () => {
     expect(unexpectedReferences.sort()).toEqual([]);
   });
 
-  it("freezes direct dashboard store mutations", () => {
+  it("prohibits direct dashboard store mutations", () => {
     const expected = Object.entries(DIRECT_DASHBOARD_MUTATION_INVENTORY)
       .flatMap(([path, inventory]) =>
         inventory.transitions.map(

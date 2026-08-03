@@ -10,7 +10,6 @@ import {
   deriveTuiInputMode,
   isRemoveProjectArmed,
   LIST_REGISTRY,
-  tuiScreenBehavior,
   type AddProjectActionId,
   type ForkSessionActionId,
   type NewSessionActionId,
@@ -23,22 +22,14 @@ import {
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
-  addWidgetSettingsPickerChoice,
   dismissStationToasts,
   dispatchRowSlot,
   dispatchStationAction,
   dispatchStationKey,
-  focusProjectSettingsItem,
-  openWidgetSettingsPanel,
-  openWidgetSettingsPicker,
-  removeWidgetSettingsRow,
-  toggleWidgetSettingsRow,
   resolveForkSessionSubmit,
   resolveNewSessionSubmit,
   resolveRowAgentTarget,
   resolveRowPaneTarget,
-  scrollStationView,
-  selectAddProjectRow,
   type OpenPaneTarget,
   type RowAgentTarget,
   type StationKeyOutcome,
@@ -236,7 +227,10 @@ export function routeStationMouse(
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
       }
-      scrollStationView(store, target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS);
+      store.getState().dispatch({
+        type: "dashboard.scroll",
+        delta: target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
+      });
       return { kind: "handled" };
     case "toast":
       dismissStationToasts(store);
@@ -257,43 +251,48 @@ export function routeStationMouse(
       if (mode !== "projectSettings") {
         return { kind: "handled" };
       }
-      focusProjectSettingsItem(store, target.itemId);
+      store.getState().dispatch({
+        type: "projectSettings.focusItem",
+        itemId: target.itemId,
+      });
       return { kind: "handled" };
     case "widgetSettingsOpen":
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
-      openWidgetSettingsPanel(store);
+      store.getState().dispatch({ type: "widgetSettings.open" });
       return { kind: "handled" };
     case "widgetSettingsRow":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      toggleWidgetSettingsRow(store, target.index);
+      store.getState().dispatch({ type: "widgetSettings.toggle", index: target.index });
       return { kind: "handled" };
     case "widgetSettingsRemove":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      removeWidgetSettingsRow(store, target.index);
+      store.getState().dispatch({ type: "widgetSettings.remove", index: target.index });
       return { kind: "handled" };
     case "widgetSettingsAdd":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      openWidgetSettingsPicker(store);
+      store.getState().dispatch({ type: "widgetSettings.openPicker" });
       return { kind: "handled" };
     case "widgetSettingsPickerChoice":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      addWidgetSettingsPickerChoice(store, target.index);
+      store
+        .getState()
+        .dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
       return { kind: "handled" };
     case "addProjectRow":
       if (!ADD_PROJECT_ROW_MODES.has(mode)) {
         return { kind: "handled" };
       }
-      selectAddProjectRow(store, target.index);
+      store.getState().dispatch({ type: "addProject.selectRow", index: target.index });
       return { kind: "handled" };
     case "addProjectAction":
       return fromKeyOutcome(
@@ -333,14 +332,9 @@ export function routeStationMouse(
     }
     case "forkSessionAction":
       return routeForkSessionAction(store, target.actionId);
-    case "screenBackdrop": {
-      const state = store.getState();
-      const clickAway = tuiScreenBehavior(state.screen).clickAway;
-      if (clickAway !== undefined) {
-        store.setState(clickAway(state));
-      }
+    case "screenBackdrop":
+      store.getState().dispatch({ type: "screen.clickAway" });
       return { kind: "handled" };
-    }
     case "body":
     case "sheetBackdrop":
       return { kind: "handled" };
@@ -429,7 +423,10 @@ function routeStationWheel(
   ) {
     return { kind: "handled" };
   }
-  scrollStationView(store, eventKind === "scroll-up" ? -1 : 1);
+  store.getState().dispatch({
+    type: "dashboard.scroll",
+    delta: eventKind === "scroll-up" ? -1 : 1,
+  });
   return { kind: "handled" };
 }
 

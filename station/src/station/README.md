@@ -30,8 +30,8 @@ the dashboard is open so the hidden native layout cannot change.
 ## Input
 
 Runtime keyboard dispatch goes through the shared dashboard-core transition
-machine. Workflow mouse targets call `TuiStore.handleAction(...)` with renderer-neutral
-semantic actions; direct commands and focused Enter decode to the same core intents,
+machine. Workflow mouse targets call `TuiStore.dispatch(...)` with renderer-neutral
+Dashboard actions; direct commands and focused Enter decode to the same core intents,
 and the store applies every resulting transition and effect through one executor.
 Station keeps only sequence translation and managed-pane overrides needed for row
 activation, new sessions, and forks. Native pointer Create, direct `C`, and focused

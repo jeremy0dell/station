@@ -199,6 +199,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the Station state store, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
 - Each renderer composition resolves one `StationTuiComposition` through `station/src/config/tuiConfig.ts` and passes that opaque composition into the dashboard store. This is the only feature-decision boundary: reducers and render/input leaves must not select search behavior or inspect feature flags; legacy session and optimistic-row matching remains centralized in the pure dashboard search projection.
+- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers to replace store state. Hosted workspace creation temporarily crosses into dashboard state through the named `addPendingCreateSession`, `failPendingCreateSession`, and `removePendingCreateSession` actions; Station still owns failure-retention timers and expiry scheduling until that lifecycle moves behind the runtime facade.
 - New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
@@ -234,9 +235,9 @@ interception, and equivalence with keyboard transitions. They do not prove termi
 negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
 The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
-Workflow controls dispatch renderer-neutral semantic actions through `TuiStore.handleAction(...)`;
-direct hotkeys and focused Enter decode to the same pure intents before transitions or effects run.
-Dashboard-core owns action availability and resolution, while native Station and standalone/tmux
+Workflow controls dispatch renderer-neutral actions through `TuiStore.dispatch(...)`; direct hotkeys
+and focused Enter decode to the same pure intents before transitions or effects run. Dashboard-core
+owns action availability and resolution, while native Station and standalone/tmux
 retain their terminal-specific effects after shared resolution. Session rows are resolved by their
 exact current row ID before their visible slot key is dispatched, so
 observer-backed focus, start, resume, and picker behavior stays on the existing command path.
@@ -391,7 +392,7 @@ Station uses `bun test` (colocated `*.test.ts` / `*.test.tsx`), not vitest. `@st
 - Live command dispatch through the shared client (focus, jump-to-session, convergence, recovery) lives in `station/src/station/store/stationCommandDispatch.test.ts`.
 - Rendering correctness uses golden frames: `station/src/station/view/dashboard.golden.test.tsx` (scenario × size matrix) and `view/modals.golden.test.tsx`. Use golden frames when exact terminal text, spacing, layout, footer placement, or clipping matters.
 - Production popup acceptance lives in `integrations/terminal/tmux/test/integration/popup-real.test.ts`. Popup input and resize assertions must enter through an attached outer PTY, then prove the visible captured frame and converged nested-client/pane/renderer geometry; an internal store transition or command receipt is not sufficient evidence.
-- Isolation is enforced by `station/src/station/importBoundaries.test.ts`. It scans all production `station/src` modules for forbidden UI/provider imports and keeps exact, shrink-only inventories of temporary raw dashboard store imports, mutable store references, direct mutations, and runtime/operation internals. Dashboard-surface checks additionally enforce its linked `@station` package set, no local ported fork, and no `focusable`.
+- Isolation is enforced by `station/src/station/importBoundaries.test.ts`. It scans all production `station/src` modules for forbidden UI/provider imports and prohibits direct dashboard store mutation outright, while keeping exact, shrink-only inventories of temporary raw store imports, mutable store references, and runtime/operation internals. Dashboard-surface checks additionally enforce its linked `@station` package set, no local ported fork, and no `focusable`.
 - PTY/terminal behavior is tested under `station/src/terminal/` (VT conformance/stress) and via the smoke probes in the `test:pty` / `test:agents` scripts.
 
 Useful focused commands:
