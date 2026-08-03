@@ -1,4 +1,4 @@
-import type { HostSpawnParams } from "@station/host";
+import type { HostFrame, HostSpawnParams } from "@station/host";
 import { describe, expect, it } from "bun:test";
 import type {
   StationTerminalProcess,
@@ -158,6 +158,56 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData(input);
 
     expect(table.snapshot(ptyId).rawChunks).toEqual([input]);
+  });
+
+  it("removes OSC 9 message text before replay, semantic state, and live delivery", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const table = createPtyTable({
+      createTerminal: () => scripted.terminal,
+      maxScrollbackBytes: 1,
+      now: () => new Date("2026-07-29T12:34:56.000Z"),
+    });
+    const { ptyId } = table.spawn(baseParams);
+    const live = await table.attach(ptyId);
+    const frames = live.frames[Symbol.asyncIterator]();
+
+    scripted.helpers.emitData("before\x1b]");
+    scripted.helpers.emitData("9;approval for sensitive command\x07after");
+
+    const beforeNotification: HostFrame[] = [];
+    for (;;) {
+      const next = await frames.next();
+      if (next.done) throw new Error("Host notification stream ended early.");
+      if (next.value.type === "notification") {
+        expect(next.value).toMatchObject({
+          ptyId,
+          kind: "osc9",
+          observedAt: "2026-07-29T12:34:56.000Z",
+        });
+        break;
+      }
+      beforeNotification.push(next.value);
+    }
+    expect(
+      beforeNotification
+        .filter((frame): frame is Extract<HostFrame, { type: "data" }> => frame.type === "data")
+        .map((frame) => frame.data)
+        .join(""),
+    ).toBe("before\x1b]9;\x07");
+    expect(await frames.next()).toMatchObject({ value: { type: "data", data: "after" } });
+
+    const snapshot = table.snapshot(ptyId);
+    expect(snapshot.rawChunks.join("")).not.toContain("sensitive command");
+    const reattached = await table.attach(ptyId);
+    expect(JSON.stringify(reattached.ack)).not.toContain("sensitive command");
+    expect(reattached.ack.latestNotification).toMatchObject({
+      kind: "osc9",
+      observedAt: "2026-07-29T12:34:56.000Z",
+    });
+    expect((await table.attach(ptyId)).ack.latestNotification?.id).toBe(
+      reattached.ack.latestNotification?.id,
+    );
+    await frames.return?.();
   });
 
   it("flushes an incomplete compatibility prefix before the exit frame", async () => {

@@ -1,4 +1,11 @@
-import type { CommandReceipt, StationCommand, StationEvent, StationSnapshot } from "@station/contracts";
+import type {
+  CommandReceipt,
+  ProviderHookEvent,
+  ProviderHookReceipt,
+  StationCommand,
+  StationEvent,
+  StationSnapshot,
+} from "@station/contracts";
 import type {
   AgentPrepareExternalLaunchParams,
   AgentPrepareExternalLaunchResult,
@@ -11,6 +18,7 @@ export class FakeTuiObserverService implements TuiObserverService {
   readonly dispatched: StationCommand[] = [];
   readonly events: StationEvent[] = [];
   readonly reconcileReasons: Array<string | undefined> = [];
+  readonly ingestedProviderHooks: ProviderHookEvent[] = [];
   readonly waitedForCommandIds: string[] = [];
   cleanupCount = 0;
   loadCount = 0;
@@ -101,6 +109,20 @@ export class FakeTuiObserverService implements TuiObserverService {
     };
     this.dispatched.push(command);
     return this.snapshot;
+  }
+
+  async ingestProviderHookEvent(event: ProviderHookEvent): Promise<ProviderHookReceipt> {
+    this.ingestedProviderHooks.push(event);
+    return {
+      schemaVersion: event.schemaVersion,
+      hookId: event.hookId ?? `hook_${this.ingestedProviderHooks.length}`,
+      provider: event.provider,
+      event: event.event,
+      accepted: true,
+      status: "ingested",
+      receivedAt: event.receivedAt,
+      reconciled: false,
+    };
   }
 
   readonly preparedLaunches: AgentPrepareExternalLaunchParams[] = [];

@@ -66,7 +66,9 @@ describe("unhandled sequence detection", () => {
 
   it("does not count sequences the screen handles", async () => {
     const screen = track(createStationVtScreen({ size: { cols: 40, rows: 6 } }));
-    screen.feed("\x1b[31mred\x1b[0m\x1b[2J\x1b[H\x1b[?2004h\x1b]0;title\x07");
+    screen.feed(
+      "\x1b[31mred\x1b[0m\x1b[2J\x1b[H\x1b[?2004h\x1b]0;title\x07\x1b]9;approval\x07",
+    );
     await screen.whenIdle();
 
     expect(countersMatching("unhandled_sequence:")).toBe(0);

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type HostAttachAck,
   type HostAttachmentSource,
@@ -7,6 +8,7 @@ import {
   type HostPtyIdentity,
   type HostSpawnParams,
   type HostSpawnResult,
+  type HostTerminalNotification,
   StationHostProviderError,
 } from "@station/host";
 import { createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
@@ -27,6 +29,10 @@ import {
   createPtyOutputCompatibility,
   type PtyOutputCompatibility,
 } from "../terminal/ptyOutputCompatibility.js";
+import {
+  createOsc9NotificationSanitizer,
+  type Osc9NotificationSanitizer,
+} from "./osc9NotificationSanitizer.js";
 
 const MIN_COLS = 2;
 const MIN_ROWS = 1;
@@ -38,6 +44,8 @@ export type PtyTableOptions = {
   maxScrollbackBytes?: number;
   /** Test seam for deterministic capture barriers and serializer failures. */
   createSemanticTerminal?: (cols: number, rows: number) => SemanticTerminalModel;
+  /** Deterministic clock seam for the original Host notification timestamp. */
+  now?: () => Date;
   /** Lifecycle observability — safe identifiers, classifications, and counts; never PTY data/env. */
   onEvent?: (event: string, attributes: Record<string, unknown>) => void;
 };
@@ -61,6 +69,8 @@ export type PtyTable = {
   /**
    * Register the live sink before capturing raw history or semantic state, so
    * output after the capture boundary is queued exactly once as live frames.
+   * The latest content-free notification is captured immediately after that
+   * registration, so acknowledgement/live races are resolved by client ID dedupe.
    * Ordered resize barriers preserve geometry; classified exact-capture failure
    * retains the sink and returns mode-restoring control VT with no history.
    */
@@ -79,6 +89,8 @@ type PtyEntry = {
   terminal: StationTerminalProcess;
   ring: ScrollbackRing;
   semantic: SemanticTerminalModel;
+  notificationSanitizer: Osc9NotificationSanitizer;
+  latestNotification?: HostTerminalNotification;
   outputCompatibility: PtyOutputCompatibility;
   compatibilityRewriteReported: boolean;
   cols: number;
@@ -95,6 +107,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
   const createSemanticTerminal =
     options.createSemanticTerminal ?? createSemanticTerminalSnapshot;
   const emit = options.onEvent ?? (() => undefined);
+  const now = options.now ?? (() => new Date());
   const entries = new Map<string, PtyEntry>();
   let sequence = 0;
 
@@ -143,11 +156,43 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     }
   }
 
+  function publishNotification(entry: PtyEntry): void {
+    // Compatibility may retain a partial byte sequence; publish it before the
+    // metadata edge so every sink observes the notification at its source order.
+    publishOutput(entry, entry.outputCompatibility.flush());
+    const notification: HostTerminalNotification = {
+      id: randomUUID(),
+      kind: "osc9",
+      observedAt: now().toISOString(),
+    };
+    entry.latestNotification = notification;
+    broadcast(entry, {
+      type: "notification",
+      ptyId: entry.ptyId,
+      ...notification,
+    });
+  }
+
+  function sanitizeAndPublish(entry: PtyEntry, data: string): void {
+    for (const event of entry.notificationSanitizer.write(data)) {
+      if (event.type === "data") {
+        transformAndPublish(entry, event.data);
+      } else {
+        publishNotification(entry);
+      }
+    }
+  }
+
   // Broadcast a terminal exit, release the terminal's resources, and DROP the
   // entry. Used by natural exit, guarded close, and shutdown — so the host never
   // accumulates dead entries (each retaining its scrollback ring) and a re-spawn
   // for a worktree never finds a stale exited entry under the same target id.
   function reap(entry: PtyEntry, exitFrame: HostExitFrame, reason: string): void {
+    for (const event of entry.notificationSanitizer.flush()) {
+      if (event.type === "data") {
+        transformAndPublish(entry, event.data);
+      }
+    }
     publishOutput(entry, entry.outputCompatibility.flush());
     entry.exited = true;
     entry.lastExit = exitFrame;
@@ -229,6 +274,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         terminal,
         ring: new ScrollbackRing(maxScrollbackBytes, { cols, rows }),
         semantic,
+        notificationSanitizer: createOsc9NotificationSanitizer(),
         outputCompatibility: createPtyOutputCompatibility(params.outputCompatibility),
         compatibilityRewriteReported: false,
         cols,
@@ -250,7 +296,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
       entry.subscriptions.push(
         terminal.onData((data) => {
-          transformAndPublish(entry, data);
+          sanitizeAndPublish(entry, data);
         }),
       );
       entry.subscriptions.push(
@@ -350,6 +396,10 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       };
       entry.sinks.add(sink);
 
+      // Capturing immediately after sink registration makes a concurrent edge
+      // appear in the acknowledgement, the live stream, or both (ID dedupe is authoritative).
+      const latestNotification = entry.latestNotification;
+
       const raw = entry.ring.snapshot();
       const recorded = {
         cols: entry.cols,
@@ -424,6 +474,9 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         exited: false,
         replay,
       };
+      if (latestNotification !== undefined) {
+        ack.latestNotification = latestNotification;
+      }
       return { ack, frames: stream.frames, captureDurationMs };
     },
 

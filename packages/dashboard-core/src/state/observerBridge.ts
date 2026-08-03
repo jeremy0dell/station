@@ -77,6 +77,7 @@ export function bridgeOperationService(
   service: TuiObserverService,
   clientRuntime: StationClientRuntime,
 ): TuiObserverService {
+  const ingestProviderHookEvent = service.ingestProviderHookEvent?.bind(service);
   return {
     loadSnapshot: async () => {
       await clientRuntime.refresh("tui.operation");
@@ -89,6 +90,9 @@ export function bridgeOperationService(
       await clientRuntime.reconcile(reason);
       return requireSnapshot(clientRuntime);
     },
+    ...(ingestProviderHookEvent === undefined
+      ? {}
+      : { ingestProviderHookEvent: (event) => ingestProviderHookEvent(event) }),
     // Command-like RPCs: pass straight through (the observer reconciles itself).
     prepareExternalLaunch: (params) => service.prepareExternalLaunch(params),
     reportExternalExit: (params) => service.reportExternalExit(params),

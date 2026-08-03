@@ -14,6 +14,7 @@ import type {
   StationTerminalDisposable,
   StationTerminalExit,
   StationTerminalProcess,
+  StationTerminalNotification,
   StationTerminalReplay,
   StationTerminalSize,
   StationTerminalUnavailable,
@@ -111,8 +112,9 @@ export type HostAttachedTerminalOptions = {
 };
 
 /**
- * Host-attached `StationTerminalProcess`: attach, replay, then stream live
- * data and geometry frames. Degraded reconstruction replays the Host's
+ * Host-attached `StationTerminalProcess`: attach, replay, emit the latest
+ * content-free notification, then stream deduplicated live data/geometry/notification
+ * frames. Degraded reconstruction replays the Host's
  * mode-restoring reset data and keeps I/O live; proven PTY loss emits exit,
  * while compatibility failures emit unavailable. `dispose()` only detaches.
  */
@@ -143,6 +145,9 @@ export function createHostAttachedTerminal(
   const geometryListeners = new Set<
     (size: StationTerminalSize) => void | Promise<void>
   >();
+  const notificationListeners = new Set<
+    (notification: StationTerminalNotification) => void
+  >();
   const pendingData: string[] = [];
   const pendingWrites: string[] = [];
   let attachment: HostAttachment | undefined;
@@ -157,6 +162,8 @@ export function createHostAttachedTerminal(
   let disposed = false;
   let resolvedPtyId = options.ptyId;
   let closeRequested = false;
+  let pendingNotification: StationTerminalNotification | undefined;
+  const seenNotificationIds = new Set<string>();
 
   // Close an owned (aux) PTY on the host. Uses a SEPARATE short-lived client so
   // the request can't be cut off by dispose() tearing down the attach connection
@@ -267,6 +274,20 @@ export function createHostAttachedTerminal(
         }
       }),
     );
+  };
+
+  const emitNotification = (notification: StationTerminalNotification): void => {
+    if (disposed || seenNotificationIds.has(notification.id)) {
+      return;
+    }
+    seenNotificationIds.add(notification.id);
+    if (notificationListeners.size === 0) {
+      pendingNotification = notification;
+      return;
+    }
+    for (const listener of notificationListeners) {
+      listener(notification);
+    }
   };
 
   // Request a Host resize; the ordered stream barrier, not this RPC response,
@@ -435,6 +456,9 @@ export function createHostAttachedTerminal(
         case "focus":
           // Focus is best-effort host metadata with no terminal-output meaning.
           break;
+        case "notification":
+          emitNotification({ id: frame.id, kind: frame.kind, observedAt: frame.observedAt });
+          break;
         default:
           return unreachableAttachmentState(frame);
       }
@@ -477,6 +501,9 @@ export function createHostAttachedTerminal(
     await replayAttachmentSnapshot(opened, isReconnect);
     if (disposed) {
       return false;
+    }
+    if (opened.ack.latestNotification !== undefined) {
+      emitNotification(opened.ack.latestNotification);
     }
     // Failures after replay must clear before replaying the next ring snapshot.
     state.replayed = true;
@@ -708,6 +735,15 @@ export function createHostAttachedTerminal(
       geometryListeners.add(listener);
       return disposableFor(geometryListeners, listener);
     },
+    onNotification(listener) {
+      notificationListeners.add(listener);
+      if (pendingNotification !== undefined) {
+        const notification = pendingNotification;
+        pendingNotification = undefined;
+        listener(notification);
+      }
+      return disposableFor(notificationListeners, listener);
+    },
     write(data) {
       if (disposed || exited || unavailable) {
         return;
@@ -757,6 +793,8 @@ export function createHostAttachedTerminal(
       unavailableListeners.clear();
       replayListeners.clear();
       geometryListeners.clear();
+      notificationListeners.clear();
+      pendingNotification = undefined;
       // DETACH, never kill: closing this pane's connection makes the host release
       // the stream (its socket-close handler) while keeping the PTY alive for the
       // next reattach. (Each pane owns its own client/connection, so closing it

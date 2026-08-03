@@ -4,6 +4,14 @@ import { describe, expect, it } from "vitest";
 import { buildCodexLaunchPlan } from "../../src/launch";
 
 const now = "2026-05-21T12:00:00.000Z";
+const APPROVAL_NOTIFICATION_ARGS = [
+  "--config",
+  'tui.notifications=["approval-requested"]',
+  "--config",
+  'tui.notification_method="osc9"',
+  "--config",
+  'tui.notification_condition="always"',
+] as const;
 
 describe("buildCodexLaunchPlan", () => {
   it("builds a shell-safe interactive argv/env plan with config defaults", () => {
@@ -22,6 +30,7 @@ describe("buildCodexLaunchPlan", () => {
       args: [
         "--cd",
         "/tmp/station/web/task",
+        ...APPROVAL_NOTIFICATION_ARGS,
         "--profile",
         "team-default",
         "--sandbox",
@@ -53,6 +62,7 @@ describe("buildCodexLaunchPlan", () => {
     });
     expect(plan.args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(plan.args).not.toContain("--yolo");
+    expectApprovalNotificationOverridesExactlyOnce(plan.args);
     expect(JSON.stringify(plan)).not.toContain("undefined");
     expect(JSON.stringify(plan.providerData)).not.toContain("Review the task.");
   });
@@ -90,6 +100,7 @@ describe("buildCodexLaunchPlan", () => {
     expect(plan.args).toEqual([
       "--cd",
       "/tmp/station/web/task",
+      ...APPROVAL_NOTIFICATION_ARGS,
       "--profile",
       "request-profile",
       "--sandbox",
@@ -116,6 +127,7 @@ describe("buildCodexLaunchPlan", () => {
     expect(plan.args).toEqual([
       "--cd",
       "/tmp/station/web/task",
+      ...APPROVAL_NOTIFICATION_ARGS,
       "--profile",
       "team-default",
       "--dangerously-bypass-approvals-and-sandbox",
@@ -141,6 +153,7 @@ describe("buildCodexLaunchPlan", () => {
     expect(plan.args).toEqual([
       "--cd",
       "/tmp/station/web/task",
+      ...APPROVAL_NOTIFICATION_ARGS,
       "--dangerously-bypass-approvals-and-sandbox",
       "Review the task.",
     ]);
@@ -160,6 +173,7 @@ describe("buildCodexLaunchPlan", () => {
     expect(plan.args).toEqual([
       "--cd",
       "/tmp/station/web/task",
+      ...APPROVAL_NOTIFICATION_ARGS,
       "--profile",
       "station",
       "Review the task.",
@@ -219,6 +233,7 @@ describe("buildCodexLaunchPlan", () => {
     ]);
     expect(plan.args).not.toContain("--ask-for-approval");
     expect(plan.args).not.toContain("--no-alt-screen");
+    expect(plan.args).not.toContain("--config");
   });
 
   it("applies yolo permission mode to codex exec plans", () => {
@@ -245,6 +260,7 @@ describe("buildCodexLaunchPlan", () => {
     ]);
     expect(plan.args).not.toContain("--sandbox");
     expect(plan.args).not.toContain("--ask-for-approval");
+    expect(plan.args).not.toContain("--config");
     expect(plan.providerData).toMatchObject({
       permissionMode: "yolo",
     });
@@ -264,10 +280,12 @@ describe("buildCodexLaunchPlan", () => {
       "resume",
       "--cd",
       "/tmp/station/web/task",
+      ...APPROVAL_NOTIFICATION_ARGS,
       "codex_session_123",
       "Review the task.",
     ]);
     expect(plan.mode).toBe("interactive");
+    expectApprovalNotificationOverridesExactlyOnce(plan.args);
     expect(plan.providerData).toMatchObject({
       resume: true,
       resumeTargetKind: "native-session",
@@ -294,6 +312,7 @@ describe("buildCodexLaunchPlan", () => {
       "resume",
       "--cd",
       "/tmp/station/web/task",
+      ...APPROVAL_NOTIFICATION_ARGS,
       "--profile",
       "station",
       "codex_session_123",
@@ -367,4 +386,11 @@ function request(): BuildHarnessLaunchRequest {
     sessionId: "ses_web_task",
     initialPrompt: "Review the task.",
   };
+}
+
+function expectApprovalNotificationOverridesExactlyOnce(args: readonly string[]): void {
+  expect(args.filter((arg) => arg === "--config")).toHaveLength(3);
+  for (const value of APPROVAL_NOTIFICATION_ARGS.filter((_, index) => index % 2 === 1)) {
+    expect(args.filter((arg) => arg === value)).toHaveLength(1);
+  }
 }

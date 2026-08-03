@@ -52,11 +52,13 @@ Coverage: full. `PermissionRequest` and `Notification` drive **needs attention**
 
 ### Codex (Full)
 
-Events (`integrations/harness/codex/src/ingressRules.ts`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SubagentStart`, `Stop`.
+Events (`integrations/harness/codex/src/ingressRules.ts`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`, `PostCompact`, `SubagentStart`, `Stop`, plus Station's managed-pane `StationApprovalPromptOpened` edge.
 
 Hooks: a dedicated `station` profile (`station.config.toml`) under `~/.codex` calls `station-codex-hook.sh`. Setup can prove that Station's current profile and script artifacts are prepared, but Codex may still require review of the current definition through `/hooks`. Setup does not bypass trust, inspect private trust state, or force `[features] hooks = true`, so preparation is not proof that Codex executed the hook.
 
-Coverage: full. `PermissionRequest` drives **needs attention**, a completed `Stop` drives **idle**, and `stop_hook_active` keeps **working**. Codex has no session-end hook, so **exited** is inferred from process state.
+Managed interactive launches add command-line overrides for Codex's native `approval-requested` OSC 9 notification without changing the user's `config.toml`; `codex exec` does not receive those overrides. Station validates the emitting pane against current Observer identity before forwarding a message-free synthetic event.
+
+Coverage: full for Station-managed interactive sessions. `PermissionRequest` is statusless preflight telemetry; the native approval-UI notification drives **needs attention** with tool-approval intent. `PostToolUse` returns to **working**, a completed `Stop` drives **idle**, and `stop_hook_active` keeps **working**. Hook-only Codex sessions outside Station deliberately omit permission attention because they cannot prove the prompt opened. Codex has no session-end hook, so **exited** is inferred from process state.
 
 ### Cursor (Full)
 

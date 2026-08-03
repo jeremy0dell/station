@@ -359,6 +359,176 @@ describe("Station app composition", () => {
     expect(service.reportedExits).toEqual(["native:wt_station_idle"]);
   });
 
+  it("ingests a managed Codex pane's live OSC 9 approval notification", async () => {
+    const snapshot = managedCodexNotificationSnapshot();
+    const { composition, store, service, scripted } = composeStationForExit(snapshot);
+    const paneId = agentWorktreePaneId("wt_station_idle");
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: "ses_wt_station_idle",
+      terminalTargetId: "native:wt_station_idle",
+      harnessProvider: "codex",
+    });
+    composition.registry.ensure(paneId, { cwd: "/tmp/station/station/idle" });
+    composition.registry.resize(paneId, { cols: 80, rows: 24 });
+
+    scripted.helpers.emitData("\x1b]9;sensitive approval prompt\x07");
+    await composition.registry.get(paneId)?.screen?.whenIdle();
+    await waitFor(() => service.ingestedProviderHooks.length === 1);
+
+    expect(service.ingestedProviderHooks[0]).toMatchObject({
+      provider: "codex",
+      kind: "harness",
+      event: "StationApprovalPromptOpened",
+      projectId: "station",
+      worktreeId: "wt_station_idle",
+      sessionId: "ses_wt_station_idle",
+      payload: {
+        hook_event_name: "StationApprovalPromptOpened",
+        cwd: "/Users/example/.worktrees/station/pty-buffer",
+        station_terminal_provider: "station",
+        station_terminal_target_id: "native:wt_station_idle",
+      },
+    });
+    expect(JSON.stringify(service.ingestedProviderHooks)).not.toContain("sensitive approval prompt");
+  });
+
+  it("retries a Host notification after Observer state connects with its original identity", async () => {
+    const snapshot = managedCodexNotificationSnapshot();
+    const store = createStationStore();
+    const source = new FakeStationSource(snapshot, { state: "loading", since: Date.now() });
+    const service = new FakeTuiObserverService(snapshot);
+    const scripted = createScriptedTerminal();
+    let notificationListener:
+      | ((notification: {
+          id: string;
+          kind: "osc9";
+          observedAt: string;
+        }) => void)
+      | undefined;
+    scripted.terminal.onNotification = (listener) => {
+      notificationListener = listener;
+      return { dispose: () => {} };
+    };
+    const composition = createStation({
+      store,
+      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
+      stationClient: {
+        state: source,
+        service,
+        start: () => source.start(),
+        stop: () => source.stop(),
+      },
+      shutdown: () => {},
+      createTerminal: () => scripted.terminal,
+    });
+    teardowns.push(() => composition.dispose());
+    composition.start();
+
+    const paneId = agentWorktreePaneId("wt_station_idle");
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: "ses_wt_station_idle",
+      terminalTargetId: "native:wt_station_idle",
+      harnessProvider: "codex",
+    });
+    composition.registry.ensure(paneId, { cwd: "/tmp/station/station/idle" });
+    composition.registry.resize(paneId, { cols: 80, rows: 24 });
+
+    notificationListener?.({
+      id: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      kind: "osc9",
+      observedAt: "2026-07-29T12:34:56.000Z",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(service.ingestedProviderHooks).toEqual([]);
+
+    source.setConnection({ state: "connected", since: Date.now() });
+    await waitFor(() => service.ingestedProviderHooks.length === 1);
+    expect(service.ingestedProviderHooks[0]).toMatchObject({
+      hookId: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      receivedAt: "2026-07-29T12:34:56.000Z",
+    });
+  });
+
+  it("fails closed for notifications without exact managed Codex snapshot identity", async () => {
+    const complete = managedCodexNotificationSnapshot();
+    const incomplete = managedCodexNotificationSnapshot();
+    incomplete.sessions = incomplete.sessions.map((session) => {
+      if (session.id !== "ses_wt_station_idle") {
+        return session;
+      }
+      const copy = { ...session };
+      delete copy.terminal;
+      return copy;
+    });
+    const cases: Array<{
+      role: "primary-agent" | "shell";
+      snapshot: StationSnapshot;
+      identity?: {
+        sessionId: string;
+        terminalTargetId: string;
+        harnessProvider: "codex" | "claude";
+      };
+    }> = [
+      { role: "shell", snapshot: complete },
+      {
+        role: "primary-agent",
+        snapshot: complete,
+        identity: {
+          sessionId: "ses_wt_station_idle",
+          terminalTargetId: "native:wt_station_idle",
+          harnessProvider: "claude",
+        },
+      },
+      {
+        role: "primary-agent",
+        snapshot: complete,
+        identity: {
+          sessionId: "ses_stale",
+          terminalTargetId: "native:wt_station_idle",
+          harnessProvider: "codex",
+        },
+      },
+      {
+        role: "primary-agent",
+        snapshot: complete,
+        identity: {
+          sessionId: "ses_wt_station_idle",
+          terminalTargetId: "native:other",
+          harnessProvider: "codex",
+        },
+      },
+      {
+        role: "primary-agent",
+        snapshot: incomplete,
+        identity: {
+          sessionId: "ses_wt_station_idle",
+          terminalTargetId: "native:wt_station_idle",
+          harnessProvider: "codex",
+        },
+      },
+    ];
+
+    for (const [index, testCase] of cases.entries()) {
+      const { composition, store, service, scripted } = composeStationForExit(testCase.snapshot);
+      const paneId =
+        testCase.role === "shell" ? `pane-notification-shell-${index}` : agentWorktreePaneId("wt_station_idle");
+      store.actions.createPane(paneId, { role: testCase.role });
+      if (testCase.identity !== undefined) {
+        store.actions.setPrimaryAgent(paneId, testCase.identity);
+      }
+      composition.registry.ensure(paneId, { cwd: "/tmp/station/station/idle" });
+      composition.registry.resize(paneId, { cols: 80, rows: 24 });
+
+      scripted.helpers.emitData("\x1b]9;must be ignored\x07");
+      await composition.registry.get(paneId)?.screen?.whenIdle();
+
+      expect(service.ingestedProviderHooks).toEqual([]);
+      composition.dispose();
+    }
+  });
+
   it("preserves live screens while applying refreshed scrollback to future HMR spawns", async () => {
     const store = createStationStore();
     const firstSource = new FakeStationSource(manyProjectsSnapshot());
@@ -605,10 +775,10 @@ root = "${projectRoot}"
 });
 
 /** A composition wired to a recording observer service, for exit-report glue tests. */
-function composeStationForExit() {
+function composeStationForExit(snapshot: StationSnapshot = manyProjectsSnapshot()) {
   const store = createStationStore();
-  const source = new FakeStationSource(manyProjectsSnapshot());
-  const service = new FakeTuiObserverService(manyProjectsSnapshot());
+  const source = new FakeStationSource(snapshot);
+  const service = new FakeTuiObserverService(snapshot);
   const scripted = createScriptedTerminal();
   const composition = createStation({
     store,
@@ -624,6 +794,55 @@ function composeStationForExit() {
   });
   teardowns.push(() => composition.dispose());
   return { composition, store, service, scripted };
+}
+
+function managedCodexNotificationSnapshot(): StationSnapshot {
+  const snapshot = manyProjectsSnapshot();
+  const targetRow = snapshot.rows.find((row) => row.id === "wt_station_idle");
+  const targetSession = snapshot.sessions.find((session) => session.id === "ses_wt_station_idle");
+  if (
+    targetRow?.agent === undefined ||
+    targetRow.terminal === undefined ||
+    targetSession?.terminal === undefined
+  ) {
+    throw new Error("Codex notification fixture requires a live wt_station_idle session.");
+  }
+  const targetAgent = targetRow.agent;
+  const targetTerminal = targetRow.terminal;
+  const targetSessionTerminal = targetSession.terminal;
+  const runId = "codex:native:wt_station_idle";
+  return {
+    ...snapshot,
+    rows: snapshot.rows.map((row) =>
+      row.id === "wt_station_idle"
+        ? {
+            ...row,
+            terminal: { ...targetTerminal, provider: "station", state: "open" },
+            agent: {
+              ...targetAgent,
+              harness: "codex",
+              runId,
+              sessionId: "ses_wt_station_idle",
+            },
+          }
+        : row,
+    ),
+    sessions: snapshot.sessions.map((session) =>
+      session.id === "ses_wt_station_idle"
+        ? {
+            ...session,
+            origin: "station",
+            harness: {
+              ...session.harness,
+              provider: "codex",
+              mode: "interactive",
+              runId,
+            },
+            terminal: { ...targetSessionTerminal, provider: "station", state: "open" },
+          }
+        : session,
+    ),
+  };
 }
 
 async function waitForFrame(

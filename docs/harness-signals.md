@@ -118,6 +118,25 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
     The authoritative probe result updates health; startup traffic never assigns
     `healthy`, `idle`, or turn readiness directly.
 
+## Codex approval prompts
+
+Codex `PermissionRequest` is preflight telemetry: it may precede an automatic
+review decision, so it carries no status and cannot trigger attention UX.
+Station-managed interactive Codex launches enable only the native
+`approval-requested` OSC 9 notification. Host discards its message before replay,
+semantic state, diagnostics, and live output while retaining the latest
+content-free edge for warm reattach; the VT screen provides the same message-free
+boundary for a local fallback PTY. The app accepts the edge only when the live
+primary-agent pane still matches the Observer snapshot's Station session,
+worktree, Codex run, and terminal identity.
+
+The Codex adapter parses that accepted edge as the strict provider-local
+`StationApprovalPromptOpened` event and normalizes it to high-confidence
+`needs_attention` with `tool_approval`. Existing `PostToolUse` and `Stop` events
+remain the conservative progress and resolution edges. Hook-only Codex sessions
+outside Station cannot prove that the approval UI opened and therefore report no
+permission attention.
+
 ## Target Taxonomy (HarnessSignal)
 
 A closed `signal` field will supersede free-form `eventType` branching

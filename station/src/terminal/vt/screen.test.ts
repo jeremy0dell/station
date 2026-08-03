@@ -205,6 +205,27 @@ describe("createStationVtScreen", () => {
     expect(responses.join("")).not.toContain("]10;rgb:");
   });
 
+  it("handles fragmented OSC 9 notifications once per sequence without retaining messages", async () => {
+    let notifications = 0;
+    const screen = track(
+      createStationVtScreen({
+        size: { cols: 30, rows: 5 },
+        onNotification: () => {
+          notifications += 1;
+        },
+      }),
+    );
+
+    screen.feed("before\x1b]");
+    screen.feed("9;approval for sensitive command");
+    screen.feed("\x07after\x9d9;another sensitive command\x9c");
+    await screen.whenIdle();
+
+    expect(notifications).toBe(2);
+    expect(screen.rowText(0)).toContain("beforeafter");
+    expect(screen.corruptionEvidence().rawTail).toBe("beforeafter");
+  });
+
   // Feed text and wait until the coalesced flush that processes it has run, so
   // the scroll-on-output bookkeeping (which lives in flush) is deterministic.
   const feedAndFlush = async (screen: StationVtScreen, text: string): Promise<void> => {

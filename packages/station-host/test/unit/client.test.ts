@@ -4,6 +4,7 @@ import {
   HostAttachAckSchema,
   HostFrameSchema,
   HostRequestSchema,
+  HostTerminalNotificationSchema,
   hostFailure,
   hostSuccess,
   stationHostSafeError,
@@ -84,6 +85,33 @@ describe("createStationHostClient", () => {
     expect(HostFrameSchema.safeParse({ ...frame, rows: 0 }).success).toBe(false);
   });
 
+  it("accepts only strict content-free notification metadata", () => {
+    const notification = {
+      id: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+      kind: "osc9",
+      observedAt: "2026-07-29T12:34:56.000Z",
+    } as const;
+
+    expect(HostTerminalNotificationSchema.safeParse(notification).success).toBe(true);
+    expect(
+      HostTerminalNotificationSchema.safeParse({ ...notification, message: "secret" }).success,
+    ).toBe(false);
+    expect(
+      HostTerminalNotificationSchema.safeParse({ ...notification, id: "notification-1" }).success,
+    ).toBe(false);
+    expect(
+      HostTerminalNotificationSchema.safeParse({ ...notification, observedAt: "yesterday" })
+        .success,
+    ).toBe(false);
+    expect(
+      HostFrameSchema.safeParse({
+        type: "notification",
+        ptyId: "pty-1",
+        ...notification,
+      }).success,
+    ).toBe(true);
+  });
+
   it("accepts only strict ordered replay events", () => {
     const ack = {
       subscribed: true,
@@ -92,6 +120,11 @@ describe("createStationHostClient", () => {
       cols: 5,
       rows: 4,
       exited: false,
+      latestNotification: {
+        id: "d75008ab-f895-4d38-bf0f-6fba2d3e6185",
+        kind: "osc9",
+        observedAt: "2026-07-29T12:34:56.000Z",
+      },
       replay: {
         kind: "raw-complete",
         initialCols: 10,

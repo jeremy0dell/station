@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
 import { reportTerminalCorruption, writePaneEvidenceDump } from "../diagnostics.js";
@@ -9,6 +10,7 @@ import {
 import type {
   StationTerminalExit,
   StationTerminalProcess,
+  StationTerminalNotification,
   StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../types.js";
@@ -72,6 +74,20 @@ export type PtyRegistry = {
    */
   setPaneExitHandler(listener: ((paneId: PaneId) => void) | undefined): void;
   /**
+   * Replace the retry-aware pane-notification handler. HMR replacement retries
+   * retained edges through the current app composition rather than registry birth.
+   */
+  setPaneNotificationHandler(
+    listener:
+      | ((
+          paneId: PaneId,
+          notification: StationTerminalNotification,
+        ) => boolean | Promise<boolean>)
+      | undefined,
+  ): void;
+  /** Retry retained edges after Observer state or another dependency changes. */
+  retryPaneNotifications(): void;
+  /**
    * Refresh defaults used by future lazy spawns. Existing live panes keep their
    * current terminal/screen semantics; HMR should not mutate a running shell.
    */
@@ -110,6 +126,14 @@ export type PtyRegistryOptions = {
    * composition maps it to the agent's terminal target.
    */
   onPaneExit?: (paneId: PaneId) => void;
+  /**
+   * Receives content-free pane notifications. Return true after ingestion or
+   * permanent rejection; false or a rejection retains the latest edge for retry.
+   */
+  onPaneNotification?: (
+    paneId: PaneId,
+    notification: StationTerminalNotification,
+  ) => boolean | Promise<boolean>;
   /** Scroll-position-on-output policy for every pane's screen; default freeze. */
   scrollOnOutput?: ScrollOnOutputMode;
 };
@@ -137,6 +161,8 @@ type InternalEntry = {
   outputCompatibility: PtyOutputCompatibility;
   createTerminal: ((options: StationTerminalSpawnOptions) => StationTerminalProcess) | undefined;
   subscriptions: Array<{ dispose(): void }>;
+  pendingNotification: StationTerminalNotification | undefined;
+  notificationTask: Promise<void> | undefined;
 };
 
 /**
@@ -152,6 +178,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   const entries = new Map<PaneId, InternalEntry>();
   const listeners = new Set<() => void>();
   let onPaneExit = options.onPaneExit;
+  let onPaneNotification = options.onPaneNotification;
 
   const notify = (): void => {
     for (const listener of [...listeners]) {
@@ -188,9 +215,61 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       cwd: spawnOptions?.cwd,
       createTerminal: createTerminalOverride,
       subscriptions: [],
+      pendingNotification: undefined,
+      notificationTask: undefined,
     };
     entries.set(paneId, entry);
     return entry;
+  };
+
+  const retryPaneNotification = (entry: InternalEntry): void => {
+    const notification = entry.pendingNotification;
+    const handler = onPaneNotification;
+    if (
+      notification === undefined ||
+      handler === undefined ||
+      entry.notificationTask !== undefined ||
+      entries.get(entry.paneId) !== entry
+    ) {
+      return;
+    }
+    const task = Promise.resolve()
+      .then(() => handler(entry.paneId, notification))
+      .then((handled) => {
+        if (
+          handled &&
+          entries.get(entry.paneId) === entry &&
+          entry.pendingNotification?.id === notification.id
+        ) {
+          entry.pendingNotification = undefined;
+        }
+      })
+      .catch(() => {});
+    entry.notificationTask = task;
+    void task.finally(() => {
+      if (entry.notificationTask !== task) {
+        return;
+      }
+      entry.notificationTask = undefined;
+      if (
+        entries.get(entry.paneId) === entry &&
+        entry.pendingNotification !== undefined &&
+        entry.pendingNotification.id !== notification.id
+      ) {
+        retryPaneNotification(entry);
+      }
+    });
+  };
+
+  const queuePaneNotification = (
+    entry: InternalEntry,
+    notification: StationTerminalNotification,
+  ): void => {
+    if (entries.get(entry.paneId) !== entry || entry.exited || entry.unavailable) {
+      return;
+    }
+    entry.pendingNotification = notification;
+    retryPaneNotification(entry);
   };
 
   // First-resize lazy spawn: create the screen at the laid-out size, then start
@@ -202,6 +281,26 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
       ...(scrollbackLines === undefined ? {} : { scrollback: scrollbackLines }),
       diagnosticsLabel: entry.paneId,
+      onNotification: () => {
+        const current = entries.get(entry.paneId);
+        if (
+          entry.replayingSnapshot ||
+          current !== entry ||
+          current.terminal === null ||
+          current.exited ||
+          current.unavailable
+        ) {
+          return;
+        }
+        if (current.terminal.onNotification !== undefined) {
+          return;
+        }
+        queuePaneNotification(entry, {
+          id: randomUUID(),
+          kind: "osc9",
+          observedAt: new Date().toISOString(),
+        });
+      },
       onResponse: (data) => {
         // A replayed snapshot re-parses queries the child issued long ago
         // (startup probes recorded in the ring); answering those would inject
@@ -303,6 +402,13 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
             detail: { code: event.code, message: event.message },
           });
           notify();
+        }),
+      );
+    }
+    if (terminal.onNotification !== undefined) {
+      entry.subscriptions.push(
+        terminal.onNotification((notification) => {
+          queuePaneNotification(entry, notification);
         }),
       );
     }
@@ -522,6 +628,19 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
 
     setPaneExitHandler: (listener) => {
       onPaneExit = listener;
+    },
+
+    setPaneNotificationHandler: (listener) => {
+      onPaneNotification = listener;
+      for (const entry of entries.values()) {
+        retryPaneNotification(entry);
+      }
+    },
+
+    retryPaneNotifications: () => {
+      for (const entry of entries.values()) {
+        retryPaneNotification(entry);
+      }
     },
 
     setRuntimeOptions: (nextOptions) => {
