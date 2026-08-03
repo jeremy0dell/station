@@ -6,13 +6,13 @@ import { rgbToHex, TextRenderable, type BaseRenderable } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import {
   nativeStationTheme,
-  resolveStationTheme,
   stationColorSnapshotValue,
   StationThemeProvider,
   type StationColor,
 } from "../../theme/index.js";
 import { parseStationTerminalPaletteObservation } from "../../theme/terminalPalette/observation.js";
 import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
+import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import type { StoreApi } from "zustand/vanilla";
 import {
@@ -43,11 +43,7 @@ const lightObservation = parseStationTerminalPaletteObservation(lightTerminalCol
 if (lightObservation === null) {
   throw new Error("Expected a complete light terminal palette fixture.");
 }
-const LIGHT_TERMINAL_THEME = resolveStationTheme({
-  context: "embedded-dashboard",
-  preference: "auto",
-  observation: lightObservation,
-});
+const LIGHT_TERMINAL_THEME = createTerminalPaletteTheme(lightObservation);
 
 type ModalCase = {
   name: string;

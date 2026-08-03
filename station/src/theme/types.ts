@@ -1,9 +1,3 @@
-/** The renderer placement whose ownership determines automatic appearance selection. */
-export type StationAppearanceContext = "native-workspace" | "embedded-dashboard";
-
-/** The current appearance policy; explicit Station/terminal choices land in #421. */
-export type StationAppearancePreference = "auto";
-
 /** A normalized six-digit sRGB color used as a renderer-neutral theme value. */
 export type StationRgbColor = Readonly<{
   kind: "rgb";

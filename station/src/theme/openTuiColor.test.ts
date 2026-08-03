@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { alphaColor, indexedColor, rgbColor, terminalDefaultColor } from "./types.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
-import { resolveStationTheme } from "./resolveStationTheme.js";
 import { parseStationTerminalPaletteObservation } from "./terminalPalette/observation.js";
 import { darkTerminalColors } from "./terminalPalette/test/fixtures.js";
+import { createTerminalPaletteTheme } from "./terminalPalette/theme.js";
 
 function rgba(value: ReturnType<typeof toOpenTuiColor>) {
   if (typeof value === "string") {
@@ -38,16 +38,12 @@ describe("OpenTUI Station color adapter", () => {
     expect(rgbToHex(background)).toBe("#101316");
   });
 
-  it("retains resolver-produced indexed and default intent with observed snapshots", () => {
+  it("retains derived indexed and default intent with observed snapshots", () => {
     const observation = parseStationTerminalPaletteObservation(darkTerminalColors);
     if (observation === null) {
       throw new Error("Expected a complete terminal fixture.");
     }
-    const theme = resolveStationTheme({
-      context: "embedded-dashboard",
-      preference: "auto",
-      observation,
-    });
+    const theme = createTerminalPaletteTheme(observation);
     const action = rgba(toOpenTuiColor(theme.action.primary));
     const foreground = rgba(toOpenTuiColor(theme.text.primary));
     const background = rgba(toOpenTuiOpaqueColor(theme.surfaces.canvas));

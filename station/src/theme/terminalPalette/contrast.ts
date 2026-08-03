@@ -16,12 +16,24 @@ export function blendUntilContrast(
   background: StationRgbColor,
   target: number,
 ): StationRgbColor {
-  if (contrastRatio(start, background) >= target) {
+  return blendUntilContrasts(start, toward, [background], target);
+}
+
+/** Blends toward a known readable color until contrast is met on every supplied surface. */
+export function blendUntilContrasts(
+  start: StationRgbColor,
+  toward: StationRgbColor,
+  backgrounds: readonly StationRgbColor[],
+  target: number,
+): StationRgbColor {
+  const meetsTarget = (candidate: StationRgbColor): boolean =>
+    backgrounds.every((background) => contrastRatio(candidate, background) >= target);
+  if (meetsTarget(start)) {
     return start;
   }
   for (let step = 1; step <= SRGB_CHANNEL_MAX; step += 1) {
     const candidate = mixRgb(start, toward, step / SRGB_CHANNEL_MAX);
-    if (contrastRatio(candidate, background) >= target) {
+    if (meetsTarget(candidate)) {
       return candidate;
     }
   }

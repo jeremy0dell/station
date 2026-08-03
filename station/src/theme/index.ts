@@ -4,14 +4,8 @@ import type { StationSemanticColor, StationTheme } from "./types.js";
 
 export { nativeStationTheme } from "./builtInTheme.js";
 export { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
-export { resolveStationTheme } from "./resolveStationTheme.js";
 export { createStationThemeController } from "./terminalPalette/controller.js";
-export type {
-  StationThemeController,
-  StationThemeRenderer,
-} from "./terminalPalette/controller.js";
-export { parseStationTerminalPaletteObservation } from "./terminalPalette/observation.js";
-export type { StationTerminalPaletteObservation } from "./terminalPalette/observation.js";
+export type { StationThemeController } from "./terminalPalette/controller.js";
 export {
   StationThemeProvider,
   useStationTheme,
@@ -20,8 +14,6 @@ export {
 export type { StationThemeSource } from "./themeContext.js";
 export { rgbColor, stationColorSnapshotValue } from "./types.js";
 export type {
-  StationAppearanceContext,
-  StationAppearancePreference,
   StationColor,
   StationForegroundColor,
   StationSemanticColor,

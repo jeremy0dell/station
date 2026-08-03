@@ -74,8 +74,9 @@ When these disagree, reconcile from config, providers, and current observer stat
   renderer. Its strictly observed palette is appearance authority only for the
   embedded standalone/tmux dashboard; Station resolves that evidence into one
   complete provider-neutral theme, and terminal providers do not participate in
-  appearance selection. Native `auto` remains Station-owned and does not query
-  the outer palette. Every Station-owned child PTY receives Station's terminal
+  appearance selection. Native `auto` remains Station-owned; Station does not
+  request or consume outer-palette evidence for native appearance selection.
+  Every Station-owned child PTY receives Station's terminal
   identity and supported capabilities at the final native spawn boundary; local
   bridge, Bun, and Station Host paths must not expose outer-emulator identity as
   child capability evidence. A persistent Station Host process is never renderer

@@ -36,7 +36,7 @@ import { openExternalUrl } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
-import { resolveStationTheme, StationThemeProvider } from "./theme/index.js";
+import { nativeStationTheme, StationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
 
 export type RunStationMainOptions = {
@@ -306,12 +306,8 @@ async function startStationMain(
     ? createRenderProfiler(devRenderProfilePath())
     : undefined;
   station.start();
-  const nativeTheme = resolveStationTheme({
-    context: "native-workspace",
-    preference: "auto",
-  });
   const stationApp = (
-    <StationThemeProvider theme={nativeTheme}>
+    <StationThemeProvider theme={nativeStationTheme}>
       <StationApp {...station.viewProps} />
     </StationThemeProvider>
   );

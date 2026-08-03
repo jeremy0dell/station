@@ -4,9 +4,9 @@ import { act, type ReactNode } from "react";
 import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import { nativeStationTheme } from "./builtInTheme.js";
 import { toOpenTuiOpaqueColor } from "./openTuiColor.js";
-import { resolveStationTheme } from "./resolveStationTheme.js";
 import { parseStationTerminalPaletteObservation } from "./terminalPalette/observation.js";
 import { darkTerminalColors, lightTerminalColors } from "./terminalPalette/test/fixtures.js";
+import { createTerminalPaletteTheme } from "./terminalPalette/theme.js";
 import {
   StationThemeProvider,
   useStationTheme,
@@ -98,11 +98,7 @@ function terminalTheme(value: unknown): StationTheme {
   if (observation === null) {
     throw new Error("Expected complete terminal fixture.");
   }
-  return resolveStationTheme({
-    context: "embedded-dashboard",
-    preference: "auto",
-    observation,
-  });
+  return createTerminalPaletteTheme(observation);
 }
 
 function MissingProviderProbe(): ReactNode {

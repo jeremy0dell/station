@@ -1,12 +1,11 @@
 import { CliRenderEvents } from "@opentui/core";
 import { nativeStationTheme } from "../builtInTheme.js";
-import { resolveStationTheme } from "../resolveStationTheme.js";
-import type { StationTheme } from "../types.js";
+import type { StationTerminalTheme, StationTheme } from "../types.js";
 import {
   parseStationTerminalPaletteObservation,
   stationTerminalPaletteObservationSignature,
-  type StationTerminalPaletteObservation,
 } from "./observation.js";
+import { resolveEmbeddedStationTheme } from "./theme.js";
 
 const PALETTE_SIZE = 16 as const;
 type ThemeRendererEvent = CliRenderEvents.PALETTE | CliRenderEvents.THEME_MODE;
@@ -26,8 +25,6 @@ export type StationThemeController = Readonly<{
   subscribe(listener: () => void): () => void;
   /** Attaches renderer listeners and starts the initial non-blocking-safe observation. */
   start(): Promise<void>;
-  /** Invalidates cached palette evidence and resolves after the coalesced replacement query. */
-  refresh(): Promise<void>;
   /** Permanently detaches listeners and invalidates every pending asynchronous publication. */
   dispose(): void;
 }>;
@@ -49,7 +46,7 @@ export function createStationThemeController(
   let startPromise: Promise<void> | null = null;
   const listeners = new Set<() => void>();
 
-  const publish = (observation: StationTerminalPaletteObservation | null): void => {
+  const publish = (observation: StationTerminalTheme | null): void => {
     if (disposed) {
       return;
     }
@@ -59,11 +56,7 @@ export function createStationThemeController(
       return;
     }
     observationSignature = nextSignature;
-    snapshot = resolveStationTheme({
-      context: "embedded-dashboard",
-      preference: "auto",
-      observation,
-    });
+    snapshot = resolveEmbeddedStationTheme(observation);
     for (const listener of listeners) {
       listener();
     }
@@ -187,16 +180,6 @@ export function createStationThemeController(
     return startPromise;
   };
 
-  const refresh = async (): Promise<void> => {
-    if (!started) {
-      const starting = start();
-      const refreshing = requestObservation(true);
-      await Promise.all([starting, refreshing]);
-      return;
-    }
-    await requestObservation(true);
-  };
-
   const dispose = (): void => {
     if (disposed) {
       return;
@@ -224,7 +207,6 @@ export function createStationThemeController(
       return () => listeners.delete(listener);
     },
     start,
-    refresh,
     dispose,
   };
 }

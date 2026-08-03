@@ -1,15 +1,21 @@
 import { describe, expect, it } from "bun:test";
+import { nativeStationTheme } from "../builtInTheme.js";
 import { stationColorSnapshot, type StationColor, type StationTheme } from "../types.js";
 import { contrastRatio, STATION_TEXT_CONTRAST_RATIO } from "./contrast.js";
 import { parseStationTerminalPaletteObservation } from "./observation.js";
 import {
   darkTerminalColors,
   lightTerminalColors,
+  lowContrastTerminalColors,
   veryDarkTerminalColors,
   veryLightTerminalColors,
   weakAnsiTerminalColors,
 } from "./test/fixtures.js";
-import { createTerminalPaletteTheme, terminalPalettePolarity } from "./theme.js";
+import {
+  createTerminalPaletteTheme,
+  resolveEmbeddedStationTheme,
+  terminalPalettePolarity,
+} from "./theme.js";
 
 function observation(value: unknown) {
   const parsed = parseStationTerminalPaletteObservation(value);
@@ -51,6 +57,22 @@ describe("terminal palette theme construction", () => {
     }
   });
 
+  it("selects one whole fallback for absent or unreadable embedded evidence", () => {
+    expect(resolveEmbeddedStationTheme(undefined)).toBe(nativeStationTheme);
+    expect(resolveEmbeddedStationTheme(null)).toBe(nativeStationTheme);
+    expect(
+      resolveEmbeddedStationTheme(observation(lowContrastTerminalColors)),
+    ).toBe(nativeStationTheme);
+  });
+
+  it("derives a terminal theme only from complete readable embedded evidence", () => {
+    const observed = observation(darkTerminalColors);
+    const theme = resolveEmbeddedStationTheme(observed);
+
+    expect(theme).not.toBe(nativeStationTheme);
+    expect(theme.terminal).toBe(observed);
+  });
+
   it("derives stable themes for very dark and very light observations", () => {
     const dark = terminalTheme(veryDarkTerminalColors);
     const light = terminalTheme(veryLightTerminalColors);
@@ -64,6 +86,31 @@ describe("terminal palette theme construction", () => {
     expect(contrast(light.text.muted, light.surfaces.canvas)).toBeGreaterThanOrEqual(
       STATION_TEXT_CONTRAST_RATIO,
     );
+  });
+
+  it("keeps ordinary foreground roles readable on every interaction surface", () => {
+    for (const fixture of [darkTerminalColors, lightTerminalColors]) {
+      const theme = terminalTheme(fixture);
+      const foregrounds = [
+        theme.text.primary,
+        theme.text.muted,
+        ...Object.values(theme.status),
+        ...Object.values(theme.action),
+      ];
+      const surfaces = [
+        theme.interaction.hover,
+        theme.interaction.keyboardFocus,
+        theme.interaction.compactFocus,
+      ];
+
+      for (const surface of surfaces) {
+        for (const foreground of foregrounds) {
+          expect(contrast(foreground, surface)).toBeGreaterThanOrEqual(
+            STATION_TEXT_CONTRAST_RATIO,
+          );
+        }
+      }
+    }
   });
 
   it("corrects weak ANSI colors to explicit RGB", () => {
@@ -87,10 +134,10 @@ describe("terminal palette theme construction", () => {
     const observed = observation(darkTerminalColors);
     const theme = createTerminalPaletteTheme(observed);
 
-    expect(theme.status.danger).toEqual({
+    expect(theme.status.warning).toEqual({
       kind: "indexed",
-      index: 9,
-      snapshot: observed.ansi16[9],
+      index: 11,
+      snapshot: observed.ansi16[11],
     });
     expect(theme.action.primary).toEqual({
       kind: "indexed",

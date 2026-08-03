@@ -21,13 +21,13 @@ import type { StationMouseTarget } from "../input/stationMouse.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 import {
   nativeStationTheme,
-  resolveStationTheme,
   stationColorSnapshotValue,
   StationThemeProvider,
   type StationTheme,
 } from "../../theme/index.js";
 import { parseStationTerminalPaletteObservation } from "../../theme/terminalPalette/observation.js";
 import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
+import { createTerminalPaletteTheme } from "../../theme/terminalPalette/theme.js";
 import { StationHoverProvider, StationMouseProvider } from "./stationMouseContext.js";
 
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
@@ -42,11 +42,7 @@ const lightObservation = parseStationTerminalPaletteObservation(lightTerminalCol
 if (lightObservation === null) {
   throw new Error("Expected a complete light terminal palette fixture.");
 }
-const LIGHT_TERMINAL_THEME = resolveStationTheme({
-  context: "embedded-dashboard",
-  preference: "auto",
-  observation: lightObservation,
-});
+const LIGHT_TERMINAL_THEME = createTerminalPaletteTheme(lightObservation);
 
 const SIZES = [
   { width: 80, height: 24 },

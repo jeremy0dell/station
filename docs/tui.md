@@ -76,8 +76,10 @@ process still verifies the current checkout and outputs.
 Appearance `auto` has two renderer-owned meanings and no user setting in this
 slice:
 
-- The native workspace always resolves the complete built-in Station theme. It
-  does not query the outer terminal palette.
+- The native workspace always resolves the complete built-in Station theme.
+  Station does not request or consume the outer terminal palette for native
+  appearance selection. OpenTUI may independently synchronize palette state
+  during renderer setup when required by detected capabilities.
 - The embedded standalone/tmux dashboard asks OpenTUI for the outer terminal's
   default foreground, default background, and ANSI indices 0-15. OpenTUI owns
   terminal and tmux OSC transport; Station never branches on terminal identity
@@ -93,8 +95,9 @@ selects the complete built-in theme atomically; host surfaces are never mixed
 with unrelated Station foreground roles.
 
 A valid embedded palette resolves one complete provider-neutral semantic theme.
-Terminal-default and indexed intent retain their observed snapshots, weak ANSI
-roles are deterministically corrected toward the observed foreground, and
+Terminal-default and indexed intent retain their observed snapshots. Weak ANSI
+roles are deterministically corrected toward the observed foreground so they
+remain readable on both the canvas and adaptive interaction fills;
 muted/border/interaction roles derive from foreground/background blends. The
 observed luminance and contrast determine dark/light behavior; OpenTUI's theme
 mode label does not.
@@ -107,10 +110,11 @@ the OpenTUI cache again after an invalidated in-flight query settles because tha
 query can repopulate a cache already cleared by the event.
 
 The standalone renderer owns the controller beside its OpenTUI renderer. The
-first frame uses the complete built-in fallback without waiting for terminal I/O;
-normal exit, errors, and Bun HMR unmount the React root and dispose palette
-listeners before destroying OpenTUI. Live propagation of native pane VT palette
-state remains tracked by #417 and is not part of embedded appearance selection.
+controller starts from the complete built-in fallback, and palette I/O does not
+delay root rendering; normal exit, errors, and Bun HMR unmount the React root and
+dispose palette listeners before destroying OpenTUI. Live propagation of native
+pane VT palette state remains tracked by #417 and is not part of embedded
+appearance selection.
 
 You can also run the renderer directly during development:
 

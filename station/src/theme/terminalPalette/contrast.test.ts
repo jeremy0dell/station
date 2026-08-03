@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { rgbColor } from "../types.js";
 import {
   blendUntilContrast,
+  blendUntilContrasts,
   contrastRatio,
   mixRgb,
   STATION_TEXT_CONTRAST_RATIO,
@@ -42,5 +43,22 @@ describe("terminal palette contrast math", () => {
     expect(corrected).toEqual(
       blendUntilContrast(weak, foreground, background, STATION_TEXT_CONTRAST_RATIO),
     );
+  });
+
+  it("corrects one foreground against every supplied surface", () => {
+    const surfaces = [rgbColor("#111827"), rgbColor("#373d4a")];
+    const foreground = rgbColor("#e5e7eb");
+    const corrected = blendUntilContrasts(
+      rgbColor("#f87171"),
+      foreground,
+      surfaces,
+      STATION_TEXT_CONTRAST_RATIO,
+    );
+
+    for (const surface of surfaces) {
+      expect(contrastRatio(corrected, surface)).toBeGreaterThanOrEqual(
+        STATION_TEXT_CONTRAST_RATIO,
+      );
+    }
   });
 });

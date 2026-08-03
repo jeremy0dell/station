@@ -1,13 +1,16 @@
+import { nativeStationTheme } from "../builtInTheme.js";
 import {
   indexedColor,
   stationColorSnapshot,
   terminalDefaultColor,
   type StationRgbColor,
   type StationSemanticColor,
+  type StationTerminalTheme,
   type StationTheme,
 } from "../types.js";
 import {
   blendUntilContrast,
+  blendUntilContrasts,
   contrastRatio,
   mixRgb,
   relativeLuminance,
@@ -15,7 +18,6 @@ import {
   STATION_BOUNDARY_CONTRAST_RATIO,
   STATION_TEXT_CONTRAST_RATIO,
 } from "./contrast.js";
-import type { StationTerminalPaletteObservation } from "./observation.js";
 
 const ANSI_INDEX = {
   brightBlack: 8,
@@ -69,7 +71,7 @@ const TERMINAL_THEME_RECIPES = {
  * Classifies the observed defaults by luminance; OpenTUI's theme-mode label is not color authority.
  */
 export function terminalPalettePolarity(
-  observation: StationTerminalPaletteObservation,
+  observation: StationTerminalTheme,
 ): TerminalPalettePolarity {
   return relativeLuminance(observation.defaultBackground) <
     relativeLuminance(observation.defaultForeground)
@@ -77,9 +79,25 @@ export function terminalPalettePolarity(
     : "light";
 }
 
+/** Resolves complete embedded palette evidence or the whole built-in fallback theme. */
+export function resolveEmbeddedStationTheme(
+  observation: StationTerminalTheme | null | undefined,
+): StationTheme {
+  if (
+    observation === undefined ||
+    observation === null ||
+    contrastRatio(observation.defaultForeground, observation.defaultBackground) <
+      STATION_TEXT_CONTRAST_RATIO
+  ) {
+    // Whole-theme fallback prevents terminal surfaces from mixing with unrelated Station roles.
+    return nativeStationTheme;
+  }
+  return createTerminalPaletteTheme(observation);
+}
+
 /** Creates one complete embedded theme from a validated, readable terminal palette. */
 export function createTerminalPaletteTheme(
-  observation: StationTerminalPaletteObservation,
+  observation: StationTerminalTheme,
 ): StationTheme {
   const foreground = observation.defaultForeground;
   const background = observation.defaultBackground;
@@ -87,41 +105,42 @@ export function createTerminalPaletteTheme(
   const defaultBackground = terminalDefaultColor("background", background);
   const recipe = TERMINAL_THEME_RECIPES[terminalPalettePolarity(observation)];
 
+  const hover = readableSurfaceBlend(background, foreground, recipe.hover);
+  const keyboardFocus = readableSurfaceBlend(background, foreground, recipe.keyboardFocus);
+  const compactFocus = readableSurfaceBlend(background, foreground, recipe.compactFocus);
+  const selected = readableSurfaceBlend(background, foreground, recipe.selected);
+  const interactionSurfaces = [background, hover, keyboardFocus, compactFocus] as const;
+
   const textMuted = foregroundBlend(
-    background,
+    interactionSurfaces,
     foreground,
     recipe.textMuted,
     STATION_TEXT_CONTRAST_RATIO,
   );
   const textDisabled = foregroundBlend(
-    background,
+    interactionSurfaces,
     foreground,
     recipe.textDisabled,
     STATION_BOUNDARY_CONTRAST_RATIO,
   );
   const border = foregroundBlend(
-    background,
+    [background],
     foreground,
     recipe.border,
     STATION_BOUNDARY_CONTRAST_RATIO,
   );
   const hairline = foregroundBlend(
-    background,
+    [background],
     foreground,
     recipe.hairline,
     STATION_BOUNDARY_CONTRAST_RATIO,
   );
 
-  const hover = readableSurfaceBlend(background, foreground, recipe.hover);
-  const keyboardFocus = readableSurfaceBlend(background, foreground, recipe.keyboardFocus);
-  const compactFocus = readableSurfaceBlend(background, foreground, recipe.compactFocus);
-  const selected = readableSurfaceBlend(background, foreground, recipe.selected);
-
   const ansiText = (index: number): StationSemanticColor =>
     ansiColorWithContrast(
       observation,
       index,
-      background,
+      interactionSurfaces,
       foreground,
       STATION_TEXT_CONTRAST_RATIO,
     );
@@ -129,7 +148,7 @@ export function createTerminalPaletteTheme(
     ansiColorWithContrast(
       observation,
       index,
-      background,
+      [background],
       foreground,
       STATION_BOUNDARY_CONTRAST_RATIO,
     );
@@ -196,7 +215,7 @@ export function createTerminalPaletteTheme(
       buttonMuted: background,
       buttonHover: compactFocus,
       shimmer: foregroundBlend(
-        background,
+        [background],
         foreground,
         WELCOME_SHIMMER_BLEND,
         STATION_BOUNDARY_CONTRAST_RATIO,
@@ -237,9 +256,9 @@ export function createTerminalPaletteTheme(
 }
 
 function ansiColorWithContrast(
-  observation: StationTerminalPaletteObservation,
+  observation: StationTerminalTheme,
   index: number,
-  background: StationRgbColor,
+  backgrounds: readonly StationRgbColor[],
   foreground: StationRgbColor,
   target: number,
 ): StationSemanticColor {
@@ -247,10 +266,10 @@ function ansiColorWithContrast(
   if (snapshot === undefined) {
     throw new RangeError(`ANSI palette index ${index} is unavailable.`);
   }
-  if (contrastRatio(snapshot, background) >= target) {
+  if (backgrounds.every((background) => contrastRatio(snapshot, background) >= target)) {
     return indexedColor(index, snapshot);
   }
-  return blendUntilContrast(snapshot, foreground, background, target);
+  return blendUntilContrasts(snapshot, foreground, backgrounds, target);
 }
 
 function inactiveAccent(
@@ -267,15 +286,19 @@ function inactiveAccent(
 }
 
 function foregroundBlend(
-  background: StationRgbColor,
+  backgrounds: readonly StationRgbColor[],
   foreground: StationRgbColor,
   amount: number,
   target: number,
 ): StationRgbColor {
-  return blendUntilContrast(
+  const background = backgrounds[0];
+  if (background === undefined) {
+    throw new RangeError("Foreground blends require at least one background.");
+  }
+  return blendUntilContrasts(
     mixRgb(background, foreground, amount),
     foreground,
-    background,
+    backgrounds,
     target,
   );
 }

@@ -6,13 +6,14 @@ import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 import {
-  resolveStationTheme,
   stationColorSnapshotValue,
   type StationColor,
   type StationTheme,
   type StationThemeSource,
 } from "../theme/index.js";
+import { STATION_TEXT_CONTRAST_RATIO } from "../theme/terminalPalette/contrast.js";
 import { parseStationTerminalPaletteObservation } from "../theme/terminalPalette/observation.js";
+import { createTerminalPaletteTheme } from "../theme/terminalPalette/theme.js";
 import {
   darkTerminalColors,
   lightTerminalColors,
@@ -33,11 +34,7 @@ function fixtureTheme(value: unknown): StationTheme {
   if (observation === null) {
     throw new Error("Expected complete terminal palette fixture.");
   }
-  return resolveStationTheme({
-    context: "embedded-dashboard",
-    preference: "auto",
-    observation,
-  });
+  return createTerminalPaletteTheme(observation);
 }
 
 const DARK_THEME = fixtureTheme(darkTerminalColors);
@@ -100,15 +97,15 @@ describe("FullscreenDashboard surface ownership", () => {
     const setup = await render(fixture.store, SURFACE, TEST_EFFECTS, lightSource);
 
     expectTerminalDefaultBackground(setup, "station · overview", LIGHT_THEME);
-    expect(themeContrast(LIGHT_THEME.text.primary, LIGHT_THEME.surfaces.canvas)).toBeGreaterThanOrEqual(
-      4.5,
-    );
-    expect(themeContrast(LIGHT_THEME.text.muted, LIGHT_THEME.surfaces.canvas)).toBeGreaterThanOrEqual(
-      4.5,
-    );
-    expect(themeContrast(LIGHT_THEME.status.danger, LIGHT_THEME.surfaces.canvas)).toBeGreaterThanOrEqual(
-      4.5,
-    );
+    expect(
+      themeContrast(LIGHT_THEME.text.primary, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+    expect(
+      themeContrast(LIGHT_THEME.text.muted, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+    expect(
+      themeContrast(LIGHT_THEME.status.danger, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
 
     await actOn(async () => {
       fixture.store.getState().handleKey({ input: "H" });
@@ -118,6 +115,71 @@ describe("FullscreenDashboard surface ownership", () => {
     const helpSpan = spanAtFrameCell(setup.captureSpans(), help.row, help.col);
     expect(helpSpan?.bg.intent).toBe("default");
     expect(helpSpan?.bg.toInts()[3]).toBe(255);
+  });
+
+  it("keeps the focused light Add Session control readable", async () => {
+    const size = { width: 120, height: 40 };
+    const fixture = makeStationTestStore({ terminalRows: size.height });
+    fixture.store.setState({
+      dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+    });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.store, size, TEST_EFFECTS, lightSource);
+    const addSession = cellFor(setup.captureCharFrame(), "[ + add session ]");
+    const span = spanAtFrameCell(setup.captureSpans(), addSession.row, addSession.col);
+
+    expect(spanHex(span)).toBe(stationColorSnapshotValue(LIGHT_THEME.action.primary));
+    expect(spanBgHex(span)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.interaction.compactFocus),
+    );
+    expect(
+      themeContrast(LIGHT_THEME.action.primary, LIGHT_THEME.interaction.compactFocus),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+  });
+
+  it("keeps focused light sheet-button roles readable", async () => {
+    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.store, SURFACE, TEST_EFFECTS, lightSource);
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+
+    await actOn(async () => {
+      fixture.store.getState().handleKey({ input: "X" });
+      await setup.flush();
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      fixture.store.getState().handleKey({ input: "", leftArrow: true });
+      await setup.flush();
+    });
+
+    const frame = setup.captureCharFrame();
+    const deleteButton = cellFor(frame, "Delete (Y)");
+    const shortcut = cellFor(frame, "(Y)");
+    const deleteSpan = spanAtFrameCell(
+      setup.captureSpans(),
+      deleteButton.row,
+      deleteButton.col,
+    );
+    const shortcutSpan = spanAtFrameCell(setup.captureSpans(), shortcut.row, shortcut.col);
+
+    expect(spanHex(deleteSpan)).toBe(stationColorSnapshotValue(LIGHT_THEME.action.danger));
+    expect(spanHex(shortcutSpan)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.action.warning),
+    );
+    expect(spanBgHex(deleteSpan)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.interaction.keyboardFocus),
+    );
+    expect(
+      themeContrast(LIGHT_THEME.action.danger, LIGHT_THEME.interaction.keyboardFocus),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+    expect(
+      themeContrast(LIGHT_THEME.action.warning, LIGHT_THEME.interaction.keyboardFocus),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
   });
 
   it("repaints in place when the external theme source changes", async () => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rgbColor, type StationRgbColor } from "../types.js";
+import { rgbColor, type StationTerminalTheme } from "../types.js";
 
 const RGB_SCHEMA = z.string().regex(/^#[0-9a-fA-F]{6}$/u);
 const RGB_OR_NULL_SCHEMA = RGB_SCHEMA.nullable();
@@ -35,37 +35,13 @@ const TERMINAL_COLORS_SCHEMA = z.strictObject({
   highlightForeground: RGB_OR_NULL_SCHEMA,
 });
 
-/** A complete, normalized snapshot of the terminal defaults and ANSI indices 0-15. */
-export type StationTerminalPaletteObservation = Readonly<{
-  defaultForeground: StationRgbColor;
-  defaultBackground: StationRgbColor;
-  ansi16: readonly [
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-    StationRgbColor,
-  ];
-}>;
-
 /**
  * Strictly parses raw OpenTUI terminal colors without applying OpenTUI's fallback normalizer.
  * Partial, unsupported, malformed, missing, or unexpectedly shaped responses return null.
  */
 export function parseStationTerminalPaletteObservation(
   value: unknown,
-): StationTerminalPaletteObservation | null {
+): StationTerminalTheme | null {
   const parsed = TERMINAL_COLORS_SCHEMA.safeParse(value);
   if (!parsed.success) {
     return null;
@@ -98,7 +74,7 @@ export function parseStationTerminalPaletteObservation(
 
 /** Returns the canonical signature of the 18 colors accepted by the strict parser. */
 export function stationTerminalPaletteObservationSignature(
-  observation: StationTerminalPaletteObservation,
+  observation: StationTerminalTheme,
 ): string {
   return [
     observation.defaultForeground.value,

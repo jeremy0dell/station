@@ -126,6 +126,23 @@ describe("Station theme controller", () => {
     expect(malformed.getSnapshot()).toBe(nativeStationTheme);
   });
 
+  it("recovers from a rejected query on the next theme invalidation", async () => {
+    const renderer = new FakeThemeRenderer();
+    renderer.enqueueFailure(new Error("palette unavailable"));
+    const controller = createStationThemeController(renderer);
+    await controller.start();
+    expect(controller.getSnapshot()).toBe(nativeStationTheme);
+
+    renderer.enqueue(darkTerminalColors);
+    renderer.enqueue(lightTerminalColors);
+    renderer.emitThemeMode();
+    await waitFor(
+      () => backgroundSnapshot(controller) === lightTerminalColors.defaultBackground,
+    );
+
+    expect(renderer.calls).toEqual(["get:16", "get:16", "clear", "get:16"]);
+  });
+
   it("does not notify for canonically equal observations", async () => {
     const renderer = new FakeThemeRenderer();
     renderer.enqueue(darkTerminalColors);
@@ -193,6 +210,27 @@ describe("Station theme controller", () => {
     );
     expect(renderer.calls.filter((call) => call.startsWith("get:")).length).toBe(3);
     expect(renderer.calls.filter((call) => call === "clear")).toHaveLength(1);
+  });
+
+  it("keeps burst palette events authoritative during an invalidated query", async () => {
+    const renderer = new FakeThemeRenderer();
+    renderer.enqueue(darkTerminalColors);
+    const drain = renderer.enqueueDeferred();
+    renderer.enqueue(lightTerminalColors);
+    const controller = createStationThemeController(renderer);
+    await controller.start();
+
+    renderer.emitThemeMode();
+    renderer.emitPalette(lightTerminalColors);
+    renderer.emitPalette(darkTerminalColors);
+    renderer.emitPalette(lightTerminalColors);
+    expect(backgroundSnapshot(controller)).toBe(lightTerminalColors.defaultBackground);
+
+    drain.resolve(darkTerminalColors);
+    await waitFor(() => renderer.calls.length === 4);
+
+    expect(renderer.calls).toEqual(["get:16", "get:16", "clear", "get:16"]);
+    expect(backgroundSnapshot(controller)).toBe(lightTerminalColors.defaultBackground);
   });
 
   it("does not let a stale initial query overwrite a newer palette event", async () => {
@@ -263,7 +301,6 @@ describe("Station theme controller", () => {
     controller.dispose();
     controller.dispose();
     await controller.start();
-    await controller.refresh();
     expect(renderer.calls).toEqual(["get:16"]);
   });
 });
