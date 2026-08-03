@@ -35,7 +35,7 @@ export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavio
     case "search":
       return searchScreenBehavior;
     case "persistentFilter":
-      return persistentFilterScreenBehavior;
+      return persistentFilterScreenBehavior(screen);
     case "projectCollapse":
       return projectCollapseScreenBehavior;
     case "projectSettingsPicker":

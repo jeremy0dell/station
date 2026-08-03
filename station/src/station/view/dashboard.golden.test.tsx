@@ -228,6 +228,10 @@ describe("dashboard golden frames", () => {
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
       setup.store.actions.handleKey({ input: "working" });
+      setup.store.actions.handleKey({ input: "i", ctrl: true });
+      setup.store.actions.handleKey({ input: "S" });
+      setup.store.actions.handleKey({ input: "3" });
+      setup.store.actions.handleKey({ input: "\r", return: true });
       setup.store.actions.handleKey({ input: "\r", return: true });
       await Promise.resolve();
     });
@@ -235,7 +239,7 @@ describe("dashboard golden frames", () => {
 
     const frame = setup.captureCharFrame();
     expect(frame).toMatchSnapshot();
-    expect(frame).toContain("FILTER working");
+    expect(frame).toContain("FILTER working · Status=Working");
     expect(frame).toContain("/ edit");
     expect(frame).toContain("Esc clear");
   });

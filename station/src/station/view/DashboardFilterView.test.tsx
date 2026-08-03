@@ -3,6 +3,7 @@ import { rgbToHex } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import {
   dashboardPersistentFilterHeaderModel,
+  dashboardPersistentFilterSummarySegments,
   type DashboardPersistentFilterProjection,
 } from "@station/dashboard-core";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
@@ -24,9 +25,14 @@ afterEach(() => {
 function projection(
   overrides: Partial<DashboardPersistentFilterProjection> = {},
 ): DashboardPersistentFilterProjection {
+  const query = overrides.query ?? "working";
+  const conditions = overrides.conditions ?? [];
   return {
     source: "draft",
-    query: "working",
+    query,
+    conditions,
+    summarySegments: dashboardPersistentFilterSummarySegments({ query, conditions }),
+    active: true,
     draft: { value: "working", cursor: 7 },
     matchCount: 2,
     totalCount: 8,
@@ -105,6 +111,35 @@ describe("DashboardFilterView", () => {
     const queryColumn = line.indexOf("working");
     expect(backgroundHex(spanAtFrameCell(setup.captureSpans(), 0, queryColumn))).toBe(
       stationColorSnapshotValue(nativeStationTheme.filter.appliedSurface),
+    );
+  });
+
+  it("syntax-colors Status, Project, and Agent values in the canonical summary", async () => {
+    const setup = await renderFilter(
+      {
+        source: "applied",
+        draft: undefined,
+        query: "queue",
+        conditions: [
+          { field: "status", values: [{ id: "working", label: "Working" }] },
+          { field: "project", values: [{ id: "api", label: "API" }] },
+          { field: "agent", values: [{ id: "codex", label: "Codex" }] },
+        ],
+      },
+      80,
+    );
+    const line = setup.captureCharFrame().split("\n")[0] ?? "";
+    const spans = setup.captureSpans();
+
+    expect(line).toContain("queue · Status=Working · Project=API · Agent=Codex");
+    expect(foregroundHex(spanAtFrameCell(spans, 0, line.indexOf("Working")))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.working),
+    );
+    expect(foregroundHex(spanAtFrameCell(spans, 0, line.indexOf("API")))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.action.primary),
+    );
+    expect(foregroundHex(spanAtFrameCell(spans, 0, line.indexOf("Codex")))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.accent),
     );
   });
 

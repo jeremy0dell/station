@@ -257,6 +257,59 @@ describe("station input through the station runtime", () => {
     expect(clearing.station.getState().input.activeOverlay).toBeNull();
   });
 
+  it("keeps condition input modal and click-away returns only to filter editing", () => {
+    const { view, runtime } = makeRuntime(true, {
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    runtime.handleSequence("/");
+    runtime.handleSequence("queue");
+    runtime.handleSequence("\t");
+    runtime.handleSequence("S");
+    runtime.handleSequence("3");
+    expect(view.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      conditionEditor: {
+        stage: "values",
+        field: "status",
+        selectedIds: ["working"],
+      },
+    });
+
+    runtime.dispatchMouse(
+      { kind: "station", target: { kind: "screenBackdrop" } },
+      LEFT_DOWN,
+    );
+
+    expect(view.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "queue", cursor: 5 },
+      draftConditions: [],
+    });
+  });
+
+  it("swallows condition-panel right clicks without opening the workspace context menu", () => {
+    const { view, station, runtime } = makeRuntime(true, {
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    runtime.handleSequence("/");
+    runtime.handleSequence("\t");
+    runtime.handleSequence("S");
+    const before = view.getState().screen;
+
+    for (const target of [
+      {
+        kind: "persistentFilterConditionValue" as const,
+        field: "status" as const,
+        valueId: "working",
+      },
+      { kind: "persistentFilterConditionAction" as const, actionId: "apply" as const },
+    ]) {
+      runtime.dispatchMouse({ kind: "station", target }, RIGHT_DOWN);
+      expect(view.getState().screen).toEqual(before);
+      expect(station.getState().input.contextMenu).toBeNull();
+    }
+  });
+
   it("routes applied-filter footer targets through the runtime without piercing modals", () => {
     const { view, runtime } = makeRuntime(true, {
       dashboardSearchExperience: persistentFilterExperience,

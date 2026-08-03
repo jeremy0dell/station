@@ -217,6 +217,9 @@ export function createTerminalPaletteTheme(
       matchForeground: defaultForeground,
       matchBackground: selected,
       zeroMatch: actionWarning,
+      conditionSurface: defaultBackground,
+      conditionSelected: compactFocus,
+      conditionBackdrop: nativeStationTheme.filter.conditionBackdrop,
     },
     welcome: {
       button: keyboardFocus,

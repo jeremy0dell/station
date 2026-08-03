@@ -284,37 +284,59 @@ renderer composition. With the flag off, `/`, the absolute legacy search prompt,
 selected experience or typed state; they do not read the flag.
 
 With the flag on, `/` opens a single-line editor in the complete table-header row. Its draft starts
-from the dashboard-local applied query. Editing performs a deterministic, locale-neutral
-case-insensitive soft preview over the complete session and optimistic-row universe plus project
-labels. Folded match offsets map back to source text before highlighting. Every rendered row keeps
-its current order, slot, collapse visibility, and viewport position; visible matches receive bounded
-highlight spans, while nonmatching rows and project headers are dimmed. Matches inside collapsed
-projects contribute to the global count and header state without revealing the children during
-editing. The header includes the live row count and any above-viewport context. A valid zero-result
-draft stays editable and uses an amber `0/N matches` cue rather than an error state. Long drafts
-follow the caret horizontally and never wrap into the body.
+from the dashboard-local applied free text and structured conditions. Editing performs a
+deterministic, locale-neutral case-insensitive soft preview over the complete session and
+optimistic-row universe plus project labels. Folded match offsets map back to source text before
+highlighting. Every rendered row keeps its current order, slot, collapse visibility, and viewport
+position; visible text matches receive bounded highlight spans, while nonmatching rows and project
+headers are dimmed. Matches inside collapsed projects contribute to the global count and header
+state without revealing the children during editing. The header includes the live row count and any
+above-viewport context. A valid zero-result draft stays editable and uses an amber `0/N matches`
+cue rather than an error state. Long drafts follow the caret horizontally and never wrap into the
+body.
 
-`Enter` applies a nonblank draft to optional dashboard-local persistent-filter state; applying a
-blank draft removes that optional state. An applied filter is a hard projection: nonmatching
-sessions, optimistic rows, projects, and orphaned project gaps are omitted without changing
-canonical order. A project-label match retains all of that project's children, while a child-only
-match retains only its project context and matching children. Matching children of a stored-collapsed
-project are temporarily visible while the disclosure marker and `collapsedProjectIds` stay
-unchanged; clearing restores the collapsed view.
+`Tab` opens the condition field chooser beneath the filter row without reflowing dashboard rows.
+Its disclosure rows use the standard shortcut accent for `S`, `P`, and `A`, show each field's
+current values (or `Any`), and use chevrons rather than checklist marks because activation opens a
+value submenu. Multiple values read as the first value plus a count (for example, `Idle +1`) or just
+the count when space is constrained. `S`, `P`, and `A` choose Status, Project, and Agent; arrows move,
+visible `1-9/a-z` slots or `Space`
+toggle values, and `Enter` or the panel's `[✓]` control applies the field. `Left` or `[←]` returns
+to the field chooser without applying the current values. Value slots remain stable while the
+panel is open, and long lists window around the cursor. `Esc` from either stage, or a safe
+click-away, closes the complete condition panel, discards only unapplied panel toggles, and
+returns to text editing. The panel blocks background activation and wheel input, dims only the
+dashboard body, and keeps its distinct `CONDITION` control footer undimmed. Cursor and `[✓]`
+markers ensure mode and selection do not rely on color.
 
-Matching is intentionally limited to text visible in project headers and session rows: project
+`Enter` applies any draft containing free text or conditions to optional dashboard-local state;
+applying a completely blank draft removes that state. `Ctrl-U` clears both parts of the draft.
+Reopening a field replaces its values, and applying no values removes that field. An applied
+filter is a hard projection: nonmatching sessions, optimistic rows, projects, and orphaned project
+gaps are omitted without changing canonical order. A project-label text match or a Project
+condition retains all of that project's children unless another row condition narrows them, while
+Status and Agent matches retain only matching rows and their project context. Matching children of a collapsed project remain hidden until its disclosure is expanded. Project
+collapse stays interactive while the filter is applied, so the marker and visible children always
+agree; clearing the filter leaves the user's latest collapse choices intact.
+
+Free text is intentionally limited to text visible in project headers and session rows: project
 label, displayed title, agent, and activity. Hidden branch values, provider identifiers, raw status
 values, and generated diagnostic reasons are not searched because they cannot provide a stable,
-user-verifiable result.
+user-verifiable result. Structured matching is `free text AND Status AND Project AND Agent`, with
+OR across selected values inside one field. Status uses normalized `AgentState`; Project and Agent
+match stable IDs while rendering labels. Optimistic rows participate when they carry project,
+agent, or starting-state evidence.
 
 Editing `Esc` discards the draft and reconciles back to the prior applied projection. On the
 dashboard, `Esc` clears an applied filter before the existing popup-dismiss path; `Q` closes or
 dismisses while retaining dashboard-local state. The bounded summary/count replaces the column row,
 and `/ edit` plus `Esc clear` are keyboard and pointer controls in the neutral dashboard footer.
 Narrow applied-filter footers shed secondary shortcuts before edit, clear, and close. While editing,
-the footer is a visually explicit bounded `FILTER` helper. Persistent filtering never uses the
-absolute `CommandPromptView` overlay. Sheets, Help, snapshot replacement, and warm popup reopen
-preserve the applied filter; covered footer targets remain inert outside dashboard mode.
+the footer is a visually explicit bounded `FILTER` helper; the nested panel uses `CONDITION`.
+Draft and applied summaries use one syntax-colored order—free text, Status, Project, Agent—and the
+applied summary truncates as one line. Persistent filtering never uses the absolute
+`CommandPromptView` overlay. Sheets, Help, snapshot replacement, and warm popup reopen preserve the
+applied filter; covered footer targets remain inert outside dashboard mode.
 
 | Verification | Flag off | Flag on |
 | --- | --- | --- |
@@ -323,8 +345,9 @@ preserve the applied filter; covered footer targets remain inert outside dashboa
 | `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
 | Zero matches | Legacy projection behavior | Amber, recoverable soft preview; applying yields an empty dashboard projection |
 | Hidden metadata only | Legacy search may retain the row | Ignores metadata that is not rendered in the dashboard |
+| Condition entry | Legacy Tab behavior | `Tab`, `S/P/A`, slots/arrows/Space, `[←]`/Left, `[✓]`/Enter, Esc, and click-away share core transitions |
 | Applied footer pointer | No persistent controls | `/ edit` and `Esc clear` share the keyboard transitions |
-| `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining the applied query |
+| `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining free text and conditions |
 
 ## Mouse Coverage Boundaries
 

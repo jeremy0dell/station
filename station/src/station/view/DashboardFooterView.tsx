@@ -35,11 +35,15 @@ export function DashboardFooterView({ state, columns }: DashboardFooterViewProps
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
   });
 
-  if (model.kind === "persistentFilterEditing" || model.kind === "persistentFilterApplied") {
+  if (
+    model.kind === "persistentFilterEditing" ||
+    model.kind === "persistentFilterCondition" ||
+    model.kind === "persistentFilterApplied"
+  ) {
     return (
       <DashboardFilterFooterView
         segments={model.segments}
-        variant={model.kind === "persistentFilterEditing" ? "editing" : "applied"}
+        variant={filterFooterVariant(model.kind)}
       />
     );
   }
@@ -48,11 +52,32 @@ export function DashboardFooterView({ state, columns }: DashboardFooterViewProps
   );
 }
 
+function filterFooterVariant(
+  kind:
+    | "persistentFilterEditing"
+    | "persistentFilterCondition"
+    | "persistentFilterApplied",
+): "editing" | "condition" | "applied" {
+  switch (kind) {
+    case "persistentFilterEditing":
+      return "editing";
+    case "persistentFilterCondition":
+      return "condition";
+    case "persistentFilterApplied":
+      return "applied";
+  }
+}
+
 function dashboardFooterColor(
   theme: StationTheme,
   model: Exclude<
     DashboardFooterModel,
-    { kind: "persistentFilterEditing" | "persistentFilterApplied" }
+    {
+      kind:
+        | "persistentFilterEditing"
+        | "persistentFilterCondition"
+        | "persistentFilterApplied";
+    }
   >,
 ): ColorInput {
   return toOpenTuiColor(model.kind === "loading" ? theme.text.muted : theme.text.primary);

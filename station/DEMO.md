@@ -176,13 +176,13 @@ shell can't receive them) until `Ctrl-O` closes it.
 - **Slot activation** — `1-9`/`a-z` (or click a row) launches/focuses that worktree's primary agent in a pane.
 - **`[+sh]` shell affordance** — click on a row opens a shell in that worktree's checkout; on a project header opens a shell at the project root.
 - **Clickable PR / checks links** — underlined segments open the GitHub URL in your browser.
-- **Persistent filter (opt-in)** — with `[feature_flags].dashboard_persistent_filter = true`, `/` opens a soft live preview over visible dashboard text; `Enter` hard-projects matching project context and sessions, `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer edit/clear labels are clickable.
-- **Collapsed-match reveal** — matching children appear temporarily without changing the saved disclosure marker.
+- **Persistent filter (opt-in)** — with `[feature_flags].dashboard_persistent_filter = true`, `/` opens a soft live preview over visible dashboard text; `Tab` opens structured conditions, `S/P/A` chooses Status/Project/Agent, slots or arrows + `Space` toggle values, and `Enter` or `[✓]` applies. `Left` or `[←]` returns to the field chooser; `Esc` closes the complete condition menu. Free text/fields are ANDed and values within a field are ORed. Applying hard-projects matching context and sessions; `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer and condition-panel controls are clickable, and panel click-away discards only unapplied toggles.
+- **Filtered project disclosure** — matching children remain behind collapsed project headers, and the disclosure keeps showing or hiding them while the filter is applied.
 - **Collapse/fold** — `C` then a slot key folds that project (state persists across toggles).
 - **Refresh snapshot** — `Z` forces a fresh observer snapshot.
 - **Help overlay** — `H` or `?` lists every keybinding by context; click backdrop to close.
 - **Close** — `Q` / `Esc` / click outside the popup; the backdrop absorbs stray clicks so they never fall through to the shell.
-- **View-state persistence** — applied filter text, scroll position, collapsed set, and open sheet survive closing/reopening the overlay; `Q` retains the filter through warm popup reopen.
+- **View-state persistence** — applied filter text and conditions, scroll position, collapsed set, and open sheet survive closing/reopening the overlay; `Q` retains the filter through warm popup reopen.
 
 ---
 
@@ -250,7 +250,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
   - **`scroll_on_output = "freeze" | "shift" | "follow"`** — what the viewport does when output arrives while you're scrolled up (freeze=hold lines, shift=slide, follow=snap to bottom).
   - **`welcome_on_boot = true|false`** — show the Welcome screen on cold boot.
 - **`[tui.widgets]`** — header widgets (shared `@station/config` loader).
-- **`[feature_flags].dashboard_persistent_filter = true`** — opt in to visible-text draft preview plus hard applied filtering and pointer edit/clear controls.
+- **`[feature_flags].dashboard_persistent_filter = true`** — opt in to visible-text draft preview, structured Status/Project/Agent conditions, hard applied filtering, and pointer controls.
 - **Shell auto-close overlay** — `STATION_SHELL_AUTOCLOSE=1` dismisses the overlay when a `[+sh]` shell opens.
 - **Hot reload (HMR)** — `--hot`; edits preserve panes/PTYs and reattach.
 - **React DevTools** — `bun run station:devtools`.
@@ -274,7 +274,9 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 | `↑`/`↓`, wheel | scroll project list (dashboard) |
 | `1-9`/`a-z` | start or focus visible row (slot) |
 | `N` `A` `R` `X` `C` | new / add-project / rename / remove / fold |
-| `/`, `Z` | search / refresh snapshot |
+| `/`, `Z` | edit filter / refresh snapshot |
+| `Tab`, `S/P/A` | open conditions / choose Status, Project, Agent |
+| slots or `Space` | toggle a condition value |
 | `H`, `?` | help |
 | `Q`/`Esc` | close / back / cancel |
 

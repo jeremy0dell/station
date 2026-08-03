@@ -34,6 +34,10 @@ export type DashboardFooterModel =
   | {
       kind: "persistentFilterEditing";
       segments: readonly DashboardFilterFooterSegment[];
+    }
+  | {
+      kind: "persistentFilterCondition";
+      segments: readonly DashboardFilterFooterSegment[];
     };
 
 export function dashboardFooterModel({
@@ -55,7 +59,9 @@ export function dashboardFooterModel({
     return { kind: "loading", text: fitFooterCandidates(columns, [quitHint]) };
   }
   if (screen?.name === "persistentFilter") {
-    return persistentFilterEditingFooter(columns);
+    return screen.conditionEditor === undefined
+      ? persistentFilterEditingFooter(columns)
+      : persistentFilterConditionFooter(columns, screen.conditionEditor.stage);
   }
   if (persistentFilter !== undefined) {
     const appliedQuitHint = quitHint === QUIT_HINT_CLOSE ? QUIT_HINT_FILTER_CLOSE : quitHint;
@@ -242,11 +248,13 @@ function persistentFilterEditingFooter(
     persistentFilterFooterSegments([
       ["←→", "cursor"],
       ["Enter", "apply"],
+      ["Tab", "condition"],
       ["Ctrl-U", "clear"],
       ["Esc", "cancel"],
     ]),
     persistentFilterFooterSegments([
       ["Enter", "apply"],
+      ["Tab", "condition"],
       ["^U", "clear"],
       ["Esc", "cancel"],
     ]),
@@ -262,10 +270,73 @@ function persistentFilterEditingFooter(
   };
 }
 
-function persistentFilterFooterSegments(
+function persistentFilterConditionFooter(
+  columns: number,
+  stage: "field" | "values",
+): Extract<DashboardFooterModel, { kind: "persistentFilterCondition" }> {
+  const width = normalizeTextLineWidth(columns);
+  const helpers =
+    stage === "field"
+      ? ([
+          ["S/P/A", "choose field"],
+          ["↑↓", "move"],
+          ["Enter", "select"],
+          ["Esc", "close"],
+        ] as const)
+      : ([
+          ["←", "fields"],
+          ["↑↓", "move"],
+          ["Space/slot", "toggle"],
+          ["Enter", "apply"],
+          ["Esc", "close"],
+        ] as const);
+  const full = persistentFilterFooterSegments(helpers, " CONDITION ");
+  const compact = compactConditionFooterSegments(
+    stage === "field"
+      ? [
+          ["S/P/A", "field"],
+          ["↵", "pick"],
+          ["Esc", "close"],
+        ]
+      : [
+          ["←", "menu"],
+          ["Sp", "toggle"],
+          ["Esc", "close"],
+        ],
+  );
+  return {
+    kind: "persistentFilterCondition",
+    segments: conditionFooterSegmentsForWidth(full, compact, width),
+  };
+}
+
+function compactConditionFooterSegments(
   helpers: readonly (readonly [key: string, description: string])[],
 ): DashboardFilterFooterSegment[] {
-  const segments: DashboardFilterFooterSegment[] = [{ text: " FILTER ", role: "badge" }];
+  const segments: DashboardFilterFooterSegment[] = [{ text: " CONDITION ", role: "badge" }];
+  for (const [key, description] of helpers) {
+    segments.push({ text: " ", role: "spacer" });
+    segments.push({ text: key, role: "key" });
+    segments.push({ text: ` ${description}`, role: "description" });
+  }
+  return segments;
+}
+
+function conditionFooterSegmentsForWidth(
+  full: readonly DashboardFilterFooterSegment[],
+  compact: readonly DashboardFilterFooterSegment[],
+  width: number,
+): readonly DashboardFilterFooterSegment[] {
+  if (textLineSegmentsWidth(full) <= width) return full;
+  if (textLineSegmentsWidth(compact) <= width) return compact;
+  return clipTextLineSegments(compact, width);
+}
+
+function persistentFilterFooterSegments(
+  helpers: readonly (readonly [key: string, description: string])[],
+  badge = " FILTER ",
+): DashboardFilterFooterSegment[] {
+  const segments: DashboardFilterFooterSegment[] = [{ text: badge, role: "badge" }];
   for (const [key, description] of helpers) {
     segments.push({ text: "  ", role: "spacer" });
     segments.push({ text: key, role: "key" });

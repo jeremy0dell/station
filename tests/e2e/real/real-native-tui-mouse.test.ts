@@ -240,30 +240,107 @@ describeReal("real native Station mouse input", () => {
         "The second deliberate native click did not collapse the project once.",
       );
       await ptyClient.write(Buffer.from(`/${branch}\r`, "utf8"));
-      const filtered = await waitForNativeFrame(
+      const collapsedFiltered = await waitForNativeFrame(
         runtime,
         (frame) =>
           frame.includes(`▶ ${PROJECT_LABEL}`) &&
-          frame.includes(branch) &&
+          !frame.includes(branch) &&
           frame.includes("/ edit") &&
           frame.includes("Esc clear"),
-        "An applied native filter did not temporarily reveal the collapsed matching session.",
+        "An applied native filter did not preserve the collapsed project disclosure.",
+      );
+      await writeSgrClick(ptyClient, projectCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && frame.includes(branch),
+        "The filtered native project did not expand to reveal its matching session.",
+      );
+      await writeSgrClick(ptyClient, projectCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
+        "The filtered native project did not collapse its matching session.",
       );
 
-      await writeSgrClick(ptyClient, cellForText(filtered, "/ edit"));
-      await waitForNativeFrame(
+      await writeSgrClick(ptyClient, cellForText(collapsedFiltered, "/ edit"));
+      const reopenedFilter = await waitForNativeFrame(
         runtime,
         (frame) => frame.includes(`FILTER /${branch}`),
         "Clicking the native applied-filter edit control did not reopen the header editor.",
       );
+      await ptyClient.write(Buffer.from("\t", "utf8"));
+      const conditionFields = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("ADD CONDITION") && frame.includes("S Status"),
+        "Tab did not open the native persistent-filter condition chooser.",
+      );
+      await writeSgrClick(ptyClient, cellForText(conditionFields, "Status"));
+      const statusValues = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("STATUS CONDITION") && frame.includes("Working"),
+        "Clicking Status did not open native condition values.",
+      );
+      await writeSgrClick(ptyClient, cellForText(statusValues, "[←]"));
+      const returnedFields = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("ADD CONDITION") && frame.includes("S Status"),
+        "The native condition back control did not return to the field chooser.",
+      );
+      await writeSgrClick(ptyClient, cellForText(returnedFields, "Status"));
+      const reopenedStatusValues = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("STATUS CONDITION") && frame.includes("Working"),
+        "Clicking Status after Back did not reopen native condition values.",
+      );
+      await writeSgrClick(ptyClient, cellForText(reopenedStatusValues, "Working"));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("[✓] Working"),
+        "Clicking Working did not toggle the native condition value.",
+      );
+      await writeSgrClick(ptyClient, cellForText(reopenedFilter, `FILTER /${branch}`));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`FILTER /${branch}`) && !frame.includes("STATUS CONDITION"),
+        "Native condition click-away did not return to filter text editing.",
+      );
+
+      await ptyClient.write(Buffer.from("\t", "utf8"));
+      const fieldsForCommit = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("ADD CONDITION") && frame.includes("S Status"),
+        "The native condition chooser did not reopen for apply.",
+      );
+      await writeSgrClick(ptyClient, cellForText(fieldsForCommit, "Status"));
+      const valuesForCommit = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("STATUS CONDITION") && frame.includes("Working"),
+        "The native Status values did not reopen for apply.",
+      );
+      await writeSgrClick(ptyClient, cellForText(valuesForCommit, "Working"));
+      const selectedForCommit = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("[✓] Working") && frame.includes("[←]"),
+        "The native Status value did not select before apply.",
+      );
+      await writeSgrClick(ptyClient, cellForTextOnLine(selectedForCommit, "[←]", "[✓]"));
+      await waitForNativeFrame(
+        runtime,
+        (frame) =>
+          frame.includes(`FILTER /${branch}`) &&
+          frame.includes("Status=Working") &&
+          !frame.includes("STATUS CONDITION"),
+        "The native condition apply control did not save the selected value.",
+      );
+
       await ptyClient.write(Buffer.from("\x1b", "utf8"));
       const reapplied = await waitForNativeFrame(
         runtime,
         (frame) =>
           frame.includes(`▶ ${PROJECT_LABEL}`) &&
-          frame.includes(branch) &&
+          !frame.includes(branch) &&
           frame.includes("Esc clear"),
-        "Cancelling native filter editing did not restore the applied collapsed-match reveal.",
+        "Cancelling native filter editing did not restore the applied collapsed project.",
       );
       await writeSgrClick(ptyClient, cellForText(reapplied, "Esc clear"));
       await waitForNativeFrame(
@@ -465,6 +542,21 @@ function cellForText(frame: string, needle: string): Cell {
   const column = row < 0 ? -1 : (lines[row]?.indexOf(needle) ?? -1);
   if (row < 0 || column < 0) {
     throw new Error(`Native frame does not contain ${JSON.stringify(needle)}.`);
+  }
+  return {
+    column: column + Math.floor(needle.length / 2) + 1,
+    row: row + 1,
+  };
+}
+
+function cellForTextOnLine(frame: string, lineNeedle: string, needle: string): Cell {
+  const lines = frame.split("\n");
+  const row = lines.findIndex((line) => line.includes(lineNeedle));
+  const column = row < 0 ? -1 : (lines[row]?.indexOf(needle) ?? -1);
+  if (row < 0 || column < 0) {
+    throw new Error(
+      `Native frame does not contain ${JSON.stringify(needle)} on the ${JSON.stringify(lineNeedle)} line.`,
+    );
   }
   return {
     column: column + Math.floor(needle.length / 2) + 1,

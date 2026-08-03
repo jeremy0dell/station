@@ -118,6 +118,7 @@ describe("dashboard project rows", () => {
         agent: "",
         activity: "starting session...",
       },
+      conditionValues: { status: "starting" },
     });
   });
 });

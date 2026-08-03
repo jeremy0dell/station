@@ -10,6 +10,7 @@ import type { DashboardPersistentFilter, TuiScreen } from "../../../src/state/ty
 const FILTER_SCREEN: TuiScreen = {
   name: "persistentFilter",
   draft: { value: "alpha", cursor: 5 },
+  draftConditions: [],
 };
 
 function footer(
@@ -38,8 +39,8 @@ function footer(
 }
 
 function editingFooterText(model: DashboardFooterModel): string {
-  if (model.kind !== "persistentFilterEditing") {
-    throw new Error("Expected a persistent filter editing footer.");
+  if (model.kind !== "persistentFilterEditing" && model.kind !== "persistentFilterCondition") {
+    throw new Error("Expected a persistent filter mode footer.");
   }
   return model.segments.map((segment) => segment.text).join("");
 }
@@ -92,6 +93,44 @@ describe("dashboard persistent filter footer", () => {
     expect(fullText).toContain("Ctrl-U clear");
     expect(compactText).toContain("↵ apply");
     expect(cellWidth(compactText)).toBeLessThanOrEqual(32);
+  });
+
+  it("uses a distinct bounded CONDITION mode footer for both nested stages", () => {
+    const fieldText = editingFooterText(
+      footer({
+        columns: 80,
+        screen: {
+          ...FILTER_SCREEN,
+          conditionEditor: { stage: "field", cursor: 0 },
+        },
+      }),
+    );
+    const valueModel = footer({
+      columns: 60,
+      screen: {
+        ...FILTER_SCREEN,
+        conditionEditor: {
+          stage: "values",
+          field: "status",
+          cursor: 0,
+          options: [{ id: "working", label: "Working" }],
+          selectedIds: [],
+        },
+      },
+    });
+    if (valueModel.kind !== "persistentFilterCondition") {
+      throw new Error("expected condition footer");
+    }
+    const valueText = valueModel.segments.map((segment) => segment.text).join("");
+
+    expect(fieldText).toContain("CONDITION");
+    expect(fieldText).toContain("S/P/A choose field");
+    expect(valueText).toContain("CONDITION");
+    expect(valueText).toContain("← menu");
+    expect(valueText).toContain("Sp toggle");
+    expect(valueText).toContain("Esc close");
+    expect(valueText).not.toContain("commit");
+    expect(cellWidth(valueText)).toBeLessThanOrEqual(60);
   });
 
   it("keeps typed applied-filter controls visible while shedding lower-priority help", () => {

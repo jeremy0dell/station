@@ -109,6 +109,11 @@ function routeSurfaceClick(
         store.actions.dispatch({ type: "dashboard.addProject" });
       }
       return true;
+    case "persistentFilterAction":
+      if (mode === "dashboard") {
+        store.getState().dispatch({ type: target.actionId });
+      }
+      return true;
     case "scrollIndicator":
       pageInMode(store, target.direction, mode);
       return true;
@@ -214,6 +219,33 @@ function routeModalClick(
     return true;
   }
   switch (target.kind) {
+    case "persistentFilterConditionField":
+      if (mode === "persistentFilterConditionField") {
+        store.getState().dispatch({
+          type: "persistentFilter.condition.selectField",
+          field: target.field,
+        });
+      }
+      return true;
+    case "persistentFilterConditionValue":
+      if (mode === "persistentFilterConditionValues") {
+        store.getState().dispatch({
+          type: "persistentFilter.condition.toggleValue",
+          field: target.field,
+          valueId: target.valueId,
+        });
+      }
+      return true;
+    case "persistentFilterConditionAction":
+      if (mode === "persistentFilterConditionValues") {
+        store.getState().dispatch({
+          type:
+            target.actionId === "back"
+              ? "persistentFilter.condition.back"
+              : "persistentFilter.condition.apply",
+        });
+      }
+      return true;
     case "sheetChoice":
       if (SHEET_CHOICE_MODES.has(mode)) {
         store.actions.handleKey({ input: target.choiceKey });

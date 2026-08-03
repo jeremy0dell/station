@@ -30,6 +30,7 @@ describe("persistent-filter screen", () => {
     expect(opened.screen).toEqual({
       name: "persistentFilter",
       draft: { value: "working", cursor: 7 },
+      draftConditions: [],
     });
     expect(opened.persistentFilter).toEqual({ query: "working" });
     expect(opened.searchQuery).toBe("");
@@ -48,6 +49,7 @@ describe("persistent-filter screen", () => {
     expect(typed.screen).toEqual({
       name: "persistentFilter",
       draft: { value: "abc", cursor: 3 },
+      draftConditions: [],
     });
     expect(moved.screen).toMatchObject({ draft: { value: "abc", cursor: 2 } });
     expect(inserted.screen).toMatchObject({ draft: { value: "abXc", cursor: 3 } });

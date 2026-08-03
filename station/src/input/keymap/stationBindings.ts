@@ -325,7 +325,10 @@ export function createStationMouseBindings(
       if (
         isRightMouseEvent(event) &&
         target.target.kind !== "screenBackdrop" &&
-        target.target.kind !== "sheetBackdrop"
+        target.target.kind !== "sheetBackdrop" &&
+        target.target.kind !== "persistentFilterConditionAction" &&
+        target.target.kind !== "persistentFilterConditionField" &&
+        target.target.kind !== "persistentFilterConditionValue"
       ) {
         return {
           kind: "context-menu-open",

@@ -7,6 +7,8 @@ export type TuiInputMode =
   | "help"
   | "search"
   | "persistentFilter"
+  | "persistentFilterConditionField"
+  | "persistentFilterConditionValues"
   | "projectCollapse"
   | "projectSettingsPicker"
   | "removeChooseSlot"
@@ -41,6 +43,8 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
     case "search":
       return "search";
     case "persistentFilter":
+      if (screen.conditionEditor?.stage === "field") return "persistentFilterConditionField";
+      if (screen.conditionEditor?.stage === "values") return "persistentFilterConditionValues";
       return "persistentFilter";
     case "projectCollapse":
       return "projectCollapse";

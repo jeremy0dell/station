@@ -10,6 +10,7 @@ import {
   isRemoveProjectArmed,
   LIST_REGISTRY,
   type AddProjectActionId,
+  type DashboardFilterConditionField,
   type ForkSessionActionId,
   type NewSessionActionId,
   type PersistentFilterActionId,
@@ -59,6 +60,16 @@ export type StationMouseTarget =
   | { kind: "firstProjectAdd" }
   /** Applied-filter footer controls, guarded so covered dashboard targets remain inert. */
   | { kind: "persistentFilterAction"; actionId: PersistentFilterActionId }
+  | { kind: "persistentFilterConditionField"; field: DashboardFilterConditionField }
+  | {
+      kind: "persistentFilterConditionValue";
+      field: DashboardFilterConditionField;
+      valueId: string;
+    }
+  | {
+      kind: "persistentFilterConditionAction";
+      actionId: "back" | "apply";
+    }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
@@ -235,6 +246,37 @@ export function routeStationMouse(
       return mode === "dashboard"
         ? fromKeyOutcome(dispatchStationAction(store, { type: target.actionId }))
         : { kind: "handled" };
+    case "persistentFilterConditionField":
+      return mode === "persistentFilterConditionField"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "persistentFilter.condition.selectField",
+              field: target.field,
+            }),
+          )
+        : { kind: "handled" };
+    case "persistentFilterConditionValue":
+      return mode === "persistentFilterConditionValues"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "persistentFilter.condition.toggleValue",
+              field: target.field,
+              valueId: target.valueId,
+            }),
+          )
+        : { kind: "handled" };
+    case "persistentFilterConditionAction":
+      if (mode !== "persistentFilterConditionValues") {
+        return { kind: "handled" };
+      }
+      if (target.actionId === "back") {
+        return fromKeyOutcome(
+          dispatchStationAction(store, { type: "persistentFilter.condition.back" }),
+        );
+      }
+      return fromKeyOutcome(
+        dispatchStationAction(store, { type: "persistentFilter.condition.apply" }),
+      );
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };

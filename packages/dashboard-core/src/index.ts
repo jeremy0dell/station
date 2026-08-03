@@ -1,5 +1,6 @@
 export * from "./components/BottomSheetFrame/layout.js";
 export * from "./components/Dashboard/content.js";
+export * from "./components/Dashboard/filterConditionPanel.js";
 export * from "./components/Dashboard/footer.js";
 export * from "./components/Dashboard/layout.js";
 export * from "./components/Dashboard/tableHeader.js";
@@ -22,6 +23,7 @@ export * from "./flows/addProject/state.js";
 export * from "./flows/addProject/types.js";
 export * from "./flows/newSession.js";
 export * from "./flows/stepWizard.js";
+export * from "./selectors/dashboardFilterConditions.js";
 export * from "./selectors/dashboardPersistentFilter.js";
 export * from "./selectors/dashboardSearchProjection.js";
 export * from "./selectors/dashboardSessionRows.js";

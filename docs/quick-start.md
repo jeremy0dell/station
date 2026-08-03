@@ -70,12 +70,18 @@ The persistent free-text workflow is currently default-off. Enable it in
 dashboard_persistent_filter = true
 ```
 
-Press `/` to edit a soft preview: rows stay in place while matches highlight and nonmatches dim.
-The filter searches only text visible in dashboard project headers and session rows. Press `Enter`
-to apply a hard filter that keeps only matching project context and sessions. Matches inside
-collapsed projects appear temporarily without changing the saved collapse state. Use `/ edit` or
-`Esc clear` from the footer with either keyboard or pointer. `Q` closes while retaining the applied
-filter for the next warm reopen.
+Press `/` to edit a soft preview: rows stay in place while visible-text matches highlight and
+nonmatches dim. Press `Tab`, then `S`, `P`, or `A` to add a Status, Project, or Agent condition.
+Toggle values with their visible slot keys or with arrows plus `Space`; `Enter` or `[✓]` applies
+the condition, while `Left` or `[←]` returns to the field chooser. `Esc` from either stage, or
+clicking outside the panel, closes the condition menu and discards only its unapplied changes.
+
+Free text and separate fields are ANDed; values inside one field are ORed. `Ctrl-U` clears the
+complete draft. Press `Enter` from text editing to apply a hard filter—even when free text is blank
+and conditions are selected. Matches inside collapsed projects still contribute to the count;
+the project disclosure remains clickable so you can show or hide those matching sessions. Use
+`/ edit` or `Esc clear` from the footer with either keyboard or
+pointer. `Q` closes while retaining the applied free text and conditions for the next warm reopen.
 
 ## 6. Leave and Return
 
