@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentPrepareExternalLaunchParams, AgentPrepareExternalLaunchResult } from "@station/client";
 import type { StationCommand, StationSnapshot, WorktreeRow } from "@station/contracts";
-import { createDashboardRuntime } from "@station/dashboard-core";
 import { selectStationOverlayVisible } from "../../state/selectors.js";
 import { createStationStore } from "../../state/store.js";
 import { STATION_OVERLAY_ID, type PaneId } from "../../state/types.js";
 import { manyProjectsSnapshot } from "../../station/fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../../station/test/support/fakeStationSource.js";
+import { createStationTestDashboardRuntime } from "../../station/test/support/makeStationTestRuntime.js";
 import type {
   ManagedTerminalAttacher,
   ManagedTerminalFactory,
@@ -167,8 +167,9 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
     prepareCalls.push(params);
     return prepare === undefined ? observerService.nextPreparedLaunch : await prepare(params);
   };
-  const dashboardRuntime = createDashboardRuntime({
-    source: new FakeStationSource(snapshot),
+  const source = new FakeStationSource(snapshot);
+  const dashboardRuntime = createStationTestDashboardRuntime({
+    source,
     service: observerService,
     initialSnapshot: snapshot,
     persistentPopup: true,
@@ -219,6 +220,7 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
   return {
     store,
     dashboardRuntime,
+    source,
     observerService,
     prepareCalls,
     calls,
@@ -268,6 +270,48 @@ describe("createManagedLaunchAttempt", () => {
     expect(harness.lastToast()).toMatchObject({ kind: "info" });
     expect(harness.lastToast()?.message).toContain("detached");
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
+  it("resolves existing-session targets from client truth when dashboard projection is stale", async () => {
+    const existing: AgentPrepareExternalLaunchResult = {
+      kind: "existing-session",
+      sessionId: "ses_elsewhere",
+      harnessProvider: "codex",
+    };
+    const harness = attemptHarness({ prepared: existing });
+    harness.source.setSnapshot(withoutTerminal());
+
+    expect(
+      harness.dashboardRuntime.state.getState().snapshot?.rows.find(
+        (row) => row.id === WORKTREE_ID,
+      )?.terminal?.provider,
+    ).toBe("tmux");
+    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(harness.observerService.dispatched).toEqual([
+      { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
+    ]);
+  });
+
+  it("acknowledges readiness from client truth when dashboard projection is stale", async () => {
+    const harness = attemptHarness();
+    harness.source.setSnapshot(withTurnReadiness());
+
+    expect(
+      harness.dashboardRuntime.state.getState().snapshot?.rows.find(
+        (row) => row.id === WORKTREE_ID,
+      )?.agent?.turnReadiness,
+    ).toBeUndefined();
+    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(
+      harness.observerService.dispatched.some(
+        (command) =>
+          command.type === "session.acknowledgeTurn" &&
+          command.payload.sessionId === ROW_ID &&
+          command.payload.token === "report_station_ready",
+      ),
+    ).toBe(true);
   });
 
   it("deduplicates preparation while one pane launch is in flight", async () => {

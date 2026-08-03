@@ -1,4 +1,4 @@
-import { createStationClientRuntime, type StationClientRuntime } from "@station/client";
+import type { StationClientStateSource } from "@station/client";
 import type {
   CommandReceipt,
   StationCommand,
@@ -27,7 +27,6 @@ import {
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
 } from "./localRows.js";
-import { bridgeOperationService, createObserverBridgeHooks } from "./observerBridge.js";
 import {
   createTuiLocalOperationRunner,
   type TuiLocalOperationRunner,
@@ -37,10 +36,10 @@ import {
   prepareFocusCommandForRuntime,
   type TuiFocusTarget,
 } from "./operations/runtimeCommands.js";
-import { createInitialTuiState, replaceSnapshot } from "./screen.js";
+import { createInitialTuiState } from "./screen.js";
 import { applyAddProjectFolderRefreshed } from "./screens/addProjectScreen.js";
 import { submitQuickSession } from "./screens/quickSession.js";
-import { applySnapshotSourceState, type TuiSnapshotSource } from "./sourceBridge.js";
+import { applySnapshotSourceState } from "./sourceBridge.js";
 import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
 import { handleTuiKey, type TuiTransition } from "./transition.js";
@@ -63,11 +62,13 @@ export type DashboardStateSource = {
   ): () => void;
 };
 
-/** Construction options for a dashboard runtime and its private state store. */
+/**
+ * Construction options for a dashboard-local projection over one externally
+ * owned canonical client source and convergence-safe service.
+ */
 export type DashboardRuntimeOptions = {
   service: ObserverService;
-  source?: TuiSnapshotSource;
-  initialSnapshot?: StationSnapshot;
+  source: StationClientStateSource;
   initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot" | "runtime">;
   exitOnFocusSuccess?: boolean;
   focusOrigin?: TerminalFocusOrigin;
@@ -92,10 +93,11 @@ export type DashboardRuntime = {
 };
 
 /**
- * Create a dashboard runtime around a private data-only Zustand store.
+ * Create a dashboard-local projection over an external canonical client source.
  *
- * The returned state wrapper deliberately omits `setState`; callers mutate only
- * through {@link DashboardActions}.
+ * The private Zustand store mirrors snapshot identity and owns only local UI
+ * state. Its public wrapper omits `setState`; callers mutate through
+ * {@link DashboardActions} and Observer operations use the supplied service.
  */
 export function createDashboardRuntime(options: DashboardRuntimeOptions): DashboardRuntime {
   const runtime = createRuntimeOptions(options);
@@ -103,27 +105,9 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
   const dashboardSearchExperience = options.dashboardSearchExperience ?? legacySearchExperience;
   const source = options.source;
   let store: StoreApi<DashboardState>;
-  let operations: TuiLocalOperationRunner;
-  const clientRuntime =
-    source === undefined
-      ? createStationClientRuntime({
-          service: options.service,
-          clientLabel: runtime.clientLabel,
-          ...(options.initialSnapshot === undefined
-            ? {}
-            : { initialSnapshot: options.initialSnapshot }),
-          hooks: createObserverBridgeHooks({
-            getStore: () => store,
-            getOperations: () => operations,
-          }),
-        })
-      : undefined;
-  operations = createTuiLocalOperationRunner({
+  const operations = createTuiLocalOperationRunner({
     getStore: () => store,
-    service:
-      clientRuntime === undefined
-        ? options.service
-        : bridgeOperationService(options.service, clientRuntime),
+    service: options.service,
     folderService,
     runtime,
     clientLabel: runtime.clientLabel,
@@ -136,13 +120,12 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
       );
     },
   });
+  const initialSnapshot = source.getState().snapshot;
 
   store = createStore<DashboardState>()(() =>
     createInitialTuiState({
       ...(options.initialState ?? {}),
-      ...(options.initialSnapshot === undefined
-        ? {}
-        : { initialSnapshot: options.initialSnapshot }),
+      ...(initialSnapshot === undefined ? {} : { initialSnapshot }),
       runtime: {
         persistentPopup: runtime.persistentPopup,
         canDismissPopup: runtime.onDismiss !== undefined,
@@ -159,7 +142,6 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
       applyTransition(
         store,
         options.service,
-        clientRuntime,
         runtime,
         operations,
         handleTuiKey(
@@ -176,7 +158,6 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
       applyTransition(
         store,
         options.service,
-        clientRuntime,
         runtime,
         operations,
         handleTuiAction(store.getState(), action, {
@@ -188,7 +169,6 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
       applyTransition(
         store,
         options.service,
-        clientRuntime,
         runtime,
         operations,
         submitQuickSession(store.getState(), projectId),
@@ -251,16 +231,7 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
         return;
       }
       started = true;
-      if (source !== undefined) {
-        stopSnapshotUpdates = attachSnapshotSource(store, source);
-      } else if (clientRuntime === undefined) {
-        throw new Error("createDashboardRuntime requires a runtime when no source is provided.");
-      } else {
-        clientRuntime.start();
-        stopSnapshotUpdates = () => {
-          void clientRuntime.stop();
-        };
-      }
+      stopSnapshotUpdates = attachSnapshotSource(store, source);
       stopDirectoryPolling = attachAddProjectDirectoryPolling(store, folderService);
     },
     dispose: (): void => {
@@ -278,7 +249,7 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
 
 function attachSnapshotSource(
   store: StoreApi<DashboardState>,
-  source: TuiSnapshotSource,
+  source: StationClientStateSource,
 ): () => void {
   const apply = (): void => {
     store.setState(applySnapshotSourceState(store.getState(), source.getState(), Date.now()), true);
@@ -405,7 +376,6 @@ function createRuntimeOptions(options: DashboardRuntimeOptions): RuntimeOptions 
 function applyTransition(
   store: StoreApi<DashboardState>,
   service: ObserverService,
-  clientRuntime: StationClientRuntime | undefined,
   runtime: RuntimeOptions,
   operations: TuiLocalOperationRunner,
   transition: TuiTransition,
@@ -417,7 +387,7 @@ function applyTransition(
   }
   // State lands before effects so one-shot control intents observe the transition they represent.
   store.setState(replacement, true);
-  void applyTransitionEffects(store, service, clientRuntime, runtime, operations, transition);
+  void applyTransitionEffects(store, service, runtime, operations, transition);
   const result: DashboardActionResult = { dismissPopup: transition.dismissPopup === true };
   if (transition.exitCode !== undefined) {
     result.exitCode = transition.exitCode;
@@ -431,7 +401,6 @@ function applyTransition(
 async function applyTransitionEffects(
   store: StoreApi<DashboardState>,
   service: ObserverService,
-  clientRuntime: StationClientRuntime | undefined,
   runtime: RuntimeOptions,
   operations: TuiLocalOperationRunner,
   transition: TuiTransition,
@@ -445,7 +414,7 @@ async function applyTransitionEffects(
   }
 
   if (transition.reconcileReason !== undefined) {
-    await reconcileSnapshot(store, service, clientRuntime, transition.reconcileReason, runtime);
+    await reconcileSnapshot(store, service, transition.reconcileReason, runtime);
   }
 
   for (const command of transition.commands ?? []) {
@@ -467,20 +436,13 @@ async function applyTransitionEffects(
 async function reconcileSnapshot(
   store: StoreApi<DashboardState>,
   service: ObserverService,
-  clientRuntime: StationClientRuntime | undefined,
   reason: string,
   runtime: Pick<RuntimeOptions, "clientLabel">,
 ): Promise<void> {
   try {
-    if (clientRuntime === undefined) {
-      const snapshot = await service.reconcile(reason);
-      store.setState(replaceSnapshot(store.getState(), snapshot));
-    } else {
-      await clientRuntime.reconcile(reason);
-      // The reconciled snapshot, connected transition, and recovery toast land
-      // through the runtime's refresh hook before reconcile resolves; only the
-      // reconcile feedback toast is added here.
-    }
+    // The client service commits the reconciled snapshot before resolving; the
+    // source subscription projects it here before the feedback toast is added.
+    await service.reconcile(reason);
     store.setState(
       addTuiToast(store.getState(), {
         kind: "success",

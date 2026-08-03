@@ -1,8 +1,6 @@
 import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type {
-  DashboardSnapshotView,
-  DashboardStateSource,
-} from "@station/dashboard-core";
+import type { StationClientStateSource } from "@station/client";
+import type { StationSnapshot } from "@station/contracts";
 import type { ColorInput } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
@@ -25,7 +23,8 @@ import { TerminalPane } from "./TerminalPane.js";
 
 export type PaneGridProps = {
   store: StationStore;
-  dashboardState?: DashboardStateSource;
+  /** Canonical client snapshot used for pane titles; absent before client composition. */
+  clientState?: StationClientStateSource;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   /** Forwarded to every pane so a completed drag/word/line selection is copied. */
   onCopySelection?: (text: string) => void;
@@ -36,7 +35,7 @@ type RenderCtx = {
   store: StationStore;
   activePaneId: PaneId | null;
   workspace: StationState["workspace"];
-  snapshot: DashboardSnapshotView | undefined;
+  snapshot: StationSnapshot | undefined;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   onCopySelection: ((text: string) => void) | undefined;
 };
@@ -48,7 +47,7 @@ type RenderCtx = {
  */
 export function PaneGrid({
   store,
-  dashboardState,
+  clientState,
   dispatchMouse,
   onCopySelection,
 }: PaneGridProps) {
@@ -60,7 +59,7 @@ export function PaneGrid({
   const workspace = useSyncExternalStore(store.subscribe, getWorkspace, getWorkspace);
   const panes = workspace.panes;
   const activePaneId = useSyncExternalStore(store.subscribe, getActivePaneId, getActivePaneId);
-  const snapshot = useStationSnapshot(dashboardState);
+  const snapshot = useClientSnapshot(clientState);
   const tree = useMemo(() => selectActivePaneTree(panes, activePaneId), [panes, activePaneId]);
   if (tree === null) {
     return null;
@@ -135,9 +134,9 @@ type PaneAccent = {
   inactive: ColorInput;
 };
 
-function useStationSnapshot(
-  state: DashboardStateSource | undefined,
-): DashboardSnapshotView | undefined {
+function useClientSnapshot(
+  state: StationClientStateSource | undefined,
+): StationSnapshot | undefined {
   const subscribe = useCallback(
     (listener: () => void) => (state === undefined ? () => {} : state.subscribe(listener)),
     [state],
@@ -188,7 +187,7 @@ function stableIndex(value: string, size: number): number {
 function paneSemanticTitle(
   paneId: PaneId,
   workspace: StationState["workspace"],
-  snapshot: DashboardSnapshotView | undefined,
+  snapshot: StationSnapshot | undefined,
 ): string | undefined {
   const primaryAgent = primaryAgentForPane(workspace, paneId);
   if (primaryAgent !== undefined) {

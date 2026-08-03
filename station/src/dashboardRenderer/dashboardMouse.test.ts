@@ -4,7 +4,6 @@ import {
   addProjectSelectedIndex,
   removeProjectConfirmPhrase,
   selectDashboardViewport,
-  type DashboardRuntime,
   type DashboardRuntimeOptions,
 } from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
@@ -13,7 +12,10 @@ import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
-import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
+import {
+  makeStationTestRuntime,
+  type StationTestDashboardRuntime,
+} from "../station/test/support/makeStationTestRuntime.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import * as dashboardMouse from "./dashboardMouse.js";
 
@@ -75,7 +77,7 @@ const SCROLL_DOWN: StationMouseEvent = {
 function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: DashboardRuntime,
+  store: StationTestDashboardRuntime,
   effects: DashboardRendererEffects = TEST_EFFECTS,
 ): void {
   dashboardMouse.routeDashboardMouse(target, event, store, effects);
@@ -84,7 +86,7 @@ function routeDashboardMouse(
 function makeStore(
   snapshot?: StationSnapshot,
   initialState?: DashboardRuntimeOptions["initialState"],
-): DashboardRuntime {
+): StationTestDashboardRuntime {
   return makeStationTestRuntime({
     terminalRows: 14,
     ...(snapshot === undefined ? {} : { snapshot }),
@@ -92,7 +94,7 @@ function makeStore(
   }).runtime;
 }
 
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) throw new Error("store has no snapshot");
   const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
@@ -425,6 +427,43 @@ describe("routeDashboardMouse", () => {
     );
     expect(modal.state.getState().screen).toEqual({ name: "help" });
     expect(modal.state.getState().dashboardFocus).toBeUndefined();
+  });
+
+  it("resolves standalone shell targets from client truth when dashboard projection is stale", () => {
+    const fixture = makeStationTestRuntime({ terminalRows: 14 });
+    const canonical = manyProjectsSnapshot();
+    const canonicalRoot = "/canonical/station";
+    const canonicalWorktree = "/canonical/station/pty-buffer";
+    fixture.source.setSnapshot({
+      ...canonical,
+      projects: canonical.projects.map((project) =>
+        project.id === "station" ? { ...project, root: canonicalRoot } : project,
+      ),
+      rows: canonical.rows.map((row) =>
+        row.id === "wt_station_idle" ? { ...row, path: canonicalWorktree } : row,
+      ),
+    });
+    const openedShells: string[] = [];
+    const effects = {
+      openShell: ({ cwd }: { cwd: string }) => openedShells.push(cwd),
+      openUrl: () => {},
+    };
+
+    routeDashboardMouse(
+      { kind: "openShellForProject", projectId: "station" },
+      LEFT_DOWN,
+      fixture.runtime,
+      effects,
+    );
+    routeDashboardMouse(
+      { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      fixture.runtime,
+      effects,
+    );
+
+    expect(fixture.runtime.state.getState().snapshot?.projects[0]?.root).not.toBe(canonicalRoot);
+    expect(openedShells).toEqual([canonicalRoot, canonicalWorktree]);
   });
 
   it("routes project shell, quick-session, and agent-picker actions", async () => {
