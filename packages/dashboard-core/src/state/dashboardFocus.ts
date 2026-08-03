@@ -174,8 +174,9 @@ export function focusedSelectableRow(state: TuiState): DashboardSessionRow | und
 }
 
 /**
- * Preserves stable focus across dashboard list-shape changes, then falls forward
- * from the old item position before falling back to the preceding focusable item.
+ * Reconciles against each state's active filter projection, preserving identity before falling
+ * forward/backward. Clearing a filter returns a temporarily revealed collapsed child to its stored
+ * project header.
  */
 export function reconcileDashboardFocus(previous: TuiState, next: TuiState): TuiState {
   if (next.snapshot === undefined) {
@@ -202,8 +203,32 @@ export function reconcileDashboardFocus(previous: TuiState, next: TuiState): Tui
   if (previousIndex === undefined) {
     return clearDashboardFocus(withClampedScroll(next, nextItems.length));
   }
+  const collapsedHeaderIndex = collapsedChildHeaderIndex(next, nextItems, focus);
+  if (collapsedHeaderIndex !== undefined) {
+    return focusItem(next, nextItems, collapsedHeaderIndex);
+  }
   const following = nextFocusable.find((index) => index >= previousIndex);
   return focusItem(next, nextItems, following ?? lastFocusableIndex(nextFocusable));
+}
+
+function collapsedChildHeaderIndex(
+  state: TuiState,
+  items: readonly DashboardViewportItem[],
+  focus: DashboardFocus,
+): number | undefined {
+  if (focus.kind !== "session") {
+    return undefined;
+  }
+  const projectId = state.snapshot?.sessions.find(
+    (session) => session.id === focus.sessionId,
+  )?.projectId;
+  if (projectId === undefined || !state.collapsedProjectIds.has(projectId)) {
+    return undefined;
+  }
+  const index = items.findIndex(
+    (item) => item.type === "projectHeader" && item.project.id === projectId,
+  );
+  return index === -1 ? undefined : index;
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {

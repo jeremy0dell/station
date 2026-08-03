@@ -13,6 +13,7 @@ import {
   type AddProjectActionId,
   type ForkSessionActionId,
   type NewSessionActionId,
+  type PersistentFilterActionId,
   type ProjectHeaderControl,
   type ProjectSettingsItemId,
   type RemoveWorktreeActionId,
@@ -51,6 +52,8 @@ export type StationMouseTarget =
   | { kind: "showDefaultAgentPickerForProject"; projectId: string }
   /** The zero-project dashboard CTA; guarded against stale non-empty snapshots. */
   | { kind: "firstProjectAdd" }
+  /** Applied-filter footer controls, guarded so covered dashboard targets remain inert. */
+  | { kind: "persistentFilterAction"; actionId: PersistentFilterActionId }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
@@ -222,6 +225,10 @@ export function routeStationMouse(
     case "firstProjectAdd":
       return mode === "dashboard"
         ? fromKeyOutcome(dispatchStationAction(store, { type: "dashboard.addProject" }))
+        : { kind: "handled" };
+    case "persistentFilterAction":
+      return mode === "dashboard"
+        ? fromKeyOutcome(dispatchStationAction(store, { type: target.actionId }))
         : { kind: "handled" };
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {

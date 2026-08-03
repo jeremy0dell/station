@@ -12,6 +12,23 @@ export type DashboardPersistentFilterVisibleFields = {
   activity?: string;
 };
 
+export type DashboardPersistentFilterHiddenField = "branch" | "status" | "reason" | "terminal";
+
+/** Normalized searchable fields that are not guaranteed to appear in the rendered session row. */
+export type DashboardPersistentFilterHiddenFields = {
+  branch?: string;
+  status?: string;
+  reason?: string;
+  terminal?: string;
+};
+
+/** The first hidden-only match in branch → status → reason → terminal order. */
+export type DashboardPersistentFilterMatchReason = {
+  field: DashboardPersistentFilterHiddenField;
+  value: string;
+  ranges: readonly DashboardPersistentFilterMatchRange[];
+};
+
 export type DashboardPersistentFilterProjectCandidate = {
   projectId: ProjectId;
   projectLabel: string;
@@ -22,6 +39,7 @@ export type DashboardPersistentFilterCandidate = {
   id: string;
   projectId: ProjectId;
   visibleFields: DashboardPersistentFilterVisibleFields;
+  hiddenFields?: DashboardPersistentFilterHiddenFields;
 };
 
 export type DashboardPersistentFilterRowMatch = {
@@ -33,6 +51,7 @@ export type DashboardPersistentFilterRowMatch = {
     activity: readonly DashboardPersistentFilterMatchRange[];
     projectLabel: readonly DashboardPersistentFilterMatchRange[];
   };
+  reason?: DashboardPersistentFilterMatchReason;
 };
 
 export type DashboardPersistentFilterProjectMatch = {
@@ -41,8 +60,8 @@ export type DashboardPersistentFilterProjectMatch = {
 };
 
 /**
- * Draft text overrides the applied query only while editing, while applied state remains
- * dashboard-local.
+ * Draft state is a soft all-row preview, while a nonblank applied query drives hard viewport
+ * projection. Every hard-projected hidden-only row carries at most one deterministic explanation.
  */
 export type DashboardPersistentFilterProjection = {
   source: "draft" | "applied";
@@ -88,17 +107,25 @@ export function selectDashboardPersistentFilter({
       activity: matchRanges(candidate.visibleFields.activity ?? "", foldedQuery),
       projectLabel: projectLabelRanges.get(candidate.projectId) ?? [],
     };
-    const matched =
-      foldedQuery.length === 0 ||
+    const visibleMatched =
       ranges.title.length > 0 ||
       ranges.agent.length > 0 ||
       ranges.activity.length > 0 ||
       ranges.projectLabel.length > 0;
+    const reason =
+      foldedQuery.length === 0 || visibleMatched
+        ? undefined
+        : hiddenMatchReason(candidate.hiddenFields, foldedQuery);
+    const matched = foldedQuery.length === 0 || visibleMatched || reason !== undefined;
     if (matched) {
       matchCount += 1;
       projectsWithMatchedRows.add(candidate.projectId);
     }
-    rows.set(candidate.id, { matched, dimmed: !matched, ranges });
+    const rowMatch: DashboardPersistentFilterRowMatch = { matched, dimmed: !matched, ranges };
+    if (reason !== undefined) {
+      rowMatch.reason = reason;
+    }
+    rows.set(candidate.id, rowMatch);
   }
 
   const projectMatches = new Map<ProjectId, DashboardPersistentFilterProjectMatch>();
@@ -121,6 +148,33 @@ export function selectDashboardPersistentFilter({
     projection.draft = screen.draft;
   }
   return projection;
+}
+
+const HIDDEN_FIELD_ORDER: readonly DashboardPersistentFilterHiddenField[] = [
+  "branch",
+  "status",
+  "reason",
+  "terminal",
+];
+
+function hiddenMatchReason(
+  fields: DashboardPersistentFilterHiddenFields | undefined,
+  foldedQuery: string,
+): DashboardPersistentFilterMatchReason | undefined {
+  if (fields === undefined) {
+    return undefined;
+  }
+  for (const field of HIDDEN_FIELD_ORDER) {
+    const value = fields[field];
+    if (value === undefined) {
+      continue;
+    }
+    const ranges = matchRanges(value, foldedQuery);
+    if (ranges.length > 0) {
+      return { field, value, ranges };
+    }
+  }
+  return undefined;
 }
 
 function selectedPersistentFilterQuery(

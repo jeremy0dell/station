@@ -83,6 +83,7 @@ describeReal("real native Station mouse input", () => {
       repo,
       codexCommand,
       installCodexHooks: true,
+      dashboardPersistentFilter: true,
     });
     await runStationJson(env, {
       configPath: config.configPath,
@@ -238,6 +239,39 @@ describeReal("real native Station mouse input", () => {
         (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
         "The second deliberate native click did not collapse the project once.",
       );
+      await ptyClient.write(Buffer.from(`/${branch}\r`, "utf8"));
+      const filtered = await waitForNativeFrame(
+        runtime,
+        (frame) =>
+          frame.includes(`▶ ${PROJECT_LABEL}`) &&
+          frame.includes(branch) &&
+          frame.includes("/ edit") &&
+          frame.includes("Esc clear"),
+        "An applied native filter did not temporarily reveal the collapsed matching session.",
+      );
+
+      await writeSgrClick(ptyClient, cellForText(filtered, "/ edit"));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`FILTER /${branch}`),
+        "Clicking the native applied-filter edit control did not reopen the header editor.",
+      );
+      await ptyClient.write(Buffer.from("\x1b", "utf8"));
+      const reapplied = await waitForNativeFrame(
+        runtime,
+        (frame) =>
+          frame.includes(`▶ ${PROJECT_LABEL}`) &&
+          frame.includes(branch) &&
+          frame.includes("Esc clear"),
+        "Cancelling native filter editing did not restore the applied collapsed-match reveal.",
+      );
+      await writeSgrClick(ptyClient, cellForText(reapplied, "Esc clear"));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
+        "Clicking the native clear control did not restore the stored collapsed view.",
+      );
+
       await writeSgrClick(ptyClient, projectCell);
       const reexpanded = await waitForNativeFrame(
         runtime,

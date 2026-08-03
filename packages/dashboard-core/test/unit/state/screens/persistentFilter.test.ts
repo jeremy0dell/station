@@ -2,6 +2,8 @@ import {
   createInitialTuiState,
   handleTuiKey,
   persistentFilterExperience,
+  replaceSnapshot,
+  selectDashboardItems,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
@@ -54,7 +56,7 @@ describe("persistent-filter screen", () => {
     expect(clearedBeforeCursor.screen).toMatchObject({ draft: { value: "", cursor: 0 } });
   });
 
-  it("applies a nonblank draft without changing legacy search, focus, order, or scroll", () => {
+  it("applies a nonblank hard projection, retains matching focus, and clamps scroll", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       searchQuery: "",
@@ -70,7 +72,7 @@ describe("persistent-filter screen", () => {
     expect(applied.screen).toEqual({ name: "dashboard" });
     expect(applied.persistentFilter).toEqual({ query: "NaV" });
     expect(applied.searchQuery).toBe("");
-    expect(applied.scrollOffset).toBe(3);
+    expect(applied.scrollOffset).toBe(0);
     expect(applied.dashboardFocus).toEqual(base.dashboardFocus);
   });
 
@@ -86,6 +88,35 @@ describe("persistent-filter screen", () => {
 
     expect(cancelled.screen).toEqual({ name: "dashboard" });
     expect(cancelled.persistentFilter).toEqual({ query: "working" });
+  });
+
+  it("uses the draft projection for snapshot replacement and reconciles cancel to applied state", () => {
+    const snapshot = createDashboardSnapshot();
+    const base = createInitialTuiState({
+      initialSnapshot: snapshot,
+      persistentFilter: { query: "working" },
+      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
+    });
+    const opened = handle(base, { input: "/" });
+    const edited = handle(opened, { input: " missing" });
+    const withoutApi = {
+      ...snapshot,
+      projects: snapshot.projects.filter((project) => project.id !== "api"),
+      rows: snapshot.rows.filter((row) => row.projectId !== "api"),
+      sessions: snapshot.sessions.filter((session) => session.projectId !== "api"),
+    };
+
+    const replaced = replaceSnapshot(edited, withoutApi);
+    expect(
+      selectDashboardItems(withoutApi, replaced).filter((item) => item.type === "session"),
+    ).toHaveLength(6);
+
+    const cancelled = handle(replaced, { input: "", escape: true });
+    expect(cancelled.persistentFilter).toEqual({ query: "working" });
+    expect(selectDashboardItems(withoutApi, cancelled).map((item) => item.id)).toEqual([
+      "project:web",
+      "session:ses_wt_web_working",
+    ]);
   });
 
   it("removes the optional applied state instead of assigning undefined when blank is applied", () => {

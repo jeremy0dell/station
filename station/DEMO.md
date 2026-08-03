@@ -27,7 +27,7 @@ station/scripts/run-container.sh --mock
 **Run-mode features to mention:**
 
 | Feature | Trigger |
-|---|---|
+| --- | --- |
 | **Host run mode** | `run-host.sh` (Bun + Node sidecar on the host) |
 | **Container run mode** | `run-container.sh` (Docker, named volumes for `node_modules`/Bun cache) |
 | **Mock data source** | `--mock` or `STATION_SOURCE=mock` |
@@ -176,12 +176,13 @@ shell can't receive them) until `Ctrl-O` closes it.
 - **Slot activation** — `1-9`/`a-z` (or click a row) launches/focuses that worktree's primary agent in a pane.
 - **`[+sh]` shell affordance** — click on a row opens a shell in that worktree's checkout; on a project header opens a shell at the project root.
 - **Clickable PR / checks links** — underlined segments open the GitHub URL in your browser.
-- **Search/filter** — `/` opens a live filter over branches/projects; `Enter` applies, `Esc` cancels.
+- **Persistent filter (opt-in)** — with `[feature_flags].dashboard_persistent_filter = true`, `/` opens a soft live preview; `Enter` hard-projects matching project context and sessions, `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer edit/clear labels are clickable.
+- **Hidden-match explanation** — branch, raw status, reason, and terminal-provider-only matches add one inert highlighted `↳ field: value` line; collapsed matching children appear temporarily without changing the disclosure marker.
 - **Collapse/fold** — `C` then a slot key folds that project (state persists across toggles).
 - **Refresh snapshot** — `Z` forces a fresh observer snapshot.
 - **Help overlay** — `H` or `?` lists every keybinding by context; click backdrop to close.
 - **Close** — `Q` / `Esc` / click outside the popup; the backdrop absorbs stray clicks so they never fall through to the shell.
-- **View-state persistence** — search text, scroll position, collapsed set, and open sheet survive closing/reopening the overlay.
+- **View-state persistence** — applied filter text, scroll position, collapsed set, and open sheet survive closing/reopening the overlay; `Q` retains the filter through warm popup reopen.
 
 ---
 
@@ -234,7 +235,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 - **loading** — "Loading observer snapshot…" before the first snapshot.
 - **reconnecting since HH:MM:SS** (yellow) — retrying; last-good snapshot stays visible; commands queue.
 - **display-only since HH:MM:SS (last good snapshot shown)** (yellow) — extended outage, read-only.
-- **halted: <message>** (red) — permanent failure, frozen at last-good snapshot.
+- **`halted: <message>`** (red) — permanent failure, frozen at last-good snapshot.
 - **idle** (gray) — mock/never-queried.
 - **Snapshot alerts** — e.g. the "Static many-projects fixture" banner that self-identifies mock data.
 - **Resilience** — broken `[workspace]` config boots with defaults; missing host falls back to cold shells; failed clipboard tool doesn't block copy.
@@ -249,6 +250,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
   - **`scroll_on_output = "freeze" | "shift" | "follow"`** — what the viewport does when output arrives while you're scrolled up (freeze=hold lines, shift=slide, follow=snap to bottom).
   - **`welcome_on_boot = true|false`** — show the Welcome screen on cold boot.
 - **`[tui.widgets]`** — header widgets (shared `@station/config` loader).
+- **`[feature_flags].dashboard_persistent_filter = true`** — opt in to soft draft preview plus hard applied filtering, hidden-field explanations, and pointer edit/clear controls.
 - **Shell auto-close overlay** — `STATION_SHELL_AUTOCLOSE=1` dismisses the overlay when a `[+sh]` shell opens.
 - **Hot reload (HMR)** — `--hot`; edits preserve panes/PTYs and reattach.
 - **React DevTools** — `bun run station:devtools`.
@@ -260,7 +262,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 ## Appendix A — Keybinding cheat-sheet (from in-app Help, `?`)
 
 | Key | Action |
-|---|---|
+| --- | --- |
 | `Ctrl-O` | open/close project view (dashboard) |
 | `Ctrl-Q` | quit Station |
 | `Ctrl-\` | split pane right |

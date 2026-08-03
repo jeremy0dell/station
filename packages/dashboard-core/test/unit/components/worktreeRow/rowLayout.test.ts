@@ -1,6 +1,9 @@
 import { layoutWorktreeRowGrid, type RowGridLayout, segmentsWidth } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { worktreeStyleRowGridInput } from "../../../../src/components/WorktreeRow/rowInput.js";
+import {
+  persistentFilterMatchReasonRowGridInput,
+  worktreeStyleRowGridInput,
+} from "../../../../src/components/WorktreeRow/rowInput.js";
 
 function rowText(layout: RowGridLayout): string {
   return layout.segments.map((segment) => (segment.kind === "text" ? segment.text : "·")).join("");
@@ -114,6 +117,31 @@ describe("worktree row layout and filter semantics", () => {
         .filter((segment) => segment.kind === "text" && segment.text.trim().length > 0)
         .every((segment) => segment.dimmed === true),
     ).toBe(true);
+  });
+
+  it("renders a bounded hidden-field explanation with only the exact match highlighted", () => {
+    const [layout] = layoutWorktreeRowGrid({
+      columns: 32,
+      rows: [
+        persistentFilterMatchReasonRowGridInput({
+          id: "reason:session:alpha",
+          reason: {
+            field: "branch",
+            value: "feature/alpha-long-name",
+            ranges: [{ start: 8, end: 13 }],
+          },
+        }),
+      ],
+    });
+
+    expect(layout).toBeDefined();
+    expect(segmentsWidth(layout.segments)).toBeLessThanOrEqual(32);
+    expect(
+      layout.segments
+        .filter((segment) => segment.kind === "text" && segment.highlighted === true)
+        .map((segment) => (segment.kind === "text" ? segment.text : "")),
+    ).toEqual(["alpha"]);
+    expect(rowText(layout as RowGridLayout)).toContain("↳ branch:");
   });
 
   it("preserves a Unicode title highlight while clipping by terminal cells", () => {

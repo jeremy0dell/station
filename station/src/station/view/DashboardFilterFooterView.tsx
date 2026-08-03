@@ -6,49 +6,48 @@ import {
   useStationTheme,
   type StationTheme,
 } from "../../theme/index.js";
+import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
 export function DashboardFilterFooterView({
   segments,
+  variant,
 }: {
   segments: readonly DashboardFilterFooterSegment[];
+  variant: "editing" | "applied";
 }) {
   const theme = useStationTheme();
+  const dispatch = useStationMouse();
   return (
     <box
       height={1}
       width="100%"
-      backgroundColor={toOpenTuiOpaqueColor(theme.filter.editorSurface)}
+      flexDirection="row"
+      {...(variant === "editing"
+        ? { backgroundColor: toOpenTuiOpaqueColor(theme.filter.editorSurface) }
+        : {})}
     >
-      <text width="100%">
-        {segments.map((segment, index) => (
-          <DashboardFilterFooterSegmentView
+      {segments.map((segment, index) => {
+        const badge = segment.role === "badge";
+        const key = segment.role === "key";
+        return (
+          <text
             key={`${segment.role}:${index}`}
-            segment={segment}
-            theme={theme}
-          />
-        ))}
-      </text>
+            flexShrink={0}
+            fg={footerSegmentForeground(theme, segment)}
+            {...(badge ? { bg: toOpenTuiColor(theme.filter.editorRail) } : {})}
+            attributes={badge || key ? TextAttributes.BOLD : TextAttributes.NONE}
+            {...(segment.action === undefined
+              ? {}
+              : stationMouseProps(dispatch, {
+                  kind: "persistentFilterAction",
+                  actionId: segment.action,
+                }))}
+          >
+            {segment.text}
+          </text>
+        );
+      })}
     </box>
-  );
-}
-
-function DashboardFilterFooterSegmentView({
-  segment,
-  theme,
-}: {
-  segment: DashboardFilterFooterSegment;
-  theme: StationTheme;
-}) {
-  const badge = segment.role === "badge";
-  const key = segment.role === "key";
-  return (
-    <span
-      fg={footerSegmentForeground(theme, segment)}
-      {...(badge ? { bg: toOpenTuiColor(theme.filter.editorRail) } : {})}
-      attributes={badge || key ? TextAttributes.BOLD : TextAttributes.NONE}
-    >
-      {segment.text}
-    </span>
   );
 }
 

@@ -517,19 +517,119 @@ describe("dashboard viewport selector", () => {
     });
   });
 
-  it("attaches filter state to expanded, collapsed, and empty project headers", () => {
+  it("counts collapsed rows globally while keeping draft preview collapse visibility soft", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      collapsedProjectIds: ["api"],
+    });
+    const preview = selectDashboardViewport(snapshot, state, {
+      name: "persistentFilter",
+      draft: { value: "queue-worker", cursor: 12 },
+    });
+
+    expect(preview.persistentFilter).toMatchObject({
+      source: "draft",
+      matchCount: 1,
+      totalCount: 7,
+    });
+    expect(preview.items.map((item) => item.id)).not.toContain("session:ses_wt_api_working");
+    expect(preview.items.find((item) => item.id === "project:api")).toMatchObject({
+      collapsed: true,
+      persistentFilterMatch: { matched: true },
+    });
+  });
+
+  it("hard-projects applied row matches and rebuilds gaps only between retained projects", () => {
+    const snapshot = createDashboardSnapshot();
+    const viewport = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        persistentFilter: { query: "queue-worker" },
+      }),
+    );
+
+    expect(viewport.items.map((item) => item.id)).toEqual([
+      "project:api",
+      "session:ses_wt_api_working",
+    ]);
+    expect(viewport.displayRowChoices.map((choice) => choice.value.id)).toEqual([
+      "ses_wt_api_working",
+    ]);
+    expect(viewport.sessionOverflow).toEqual({ above: 0, below: 0, visible: 1, total: 1 });
+  });
+
+  it("retains every child when an applied filter matches the project label", () => {
+    const snapshot = createDashboardSnapshot();
+    const viewport = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        persistentFilter: { query: "web" },
+      }),
+    );
+
+    expect(viewport.items.map((item) => item.id)).toEqual([
+      "project:web",
+      "session:ses_wt_web_working",
+      "session:ses_wt_web_attention",
+      "session:ses_wt_web_exited",
+      "session:ses_wt_web_idle",
+      "session:ses_wt_web_unknown",
+      "session:ses_wt_web_stuck",
+    ]);
+  });
+
+  it("temporarily reveals collapsed hidden-field matches with one inert explanation row", () => {
+    const base = createDashboardSnapshot();
+    const snapshot = {
+      ...base,
+      rows: base.rows.map((row) =>
+        row.id === "wt_web_idle" ? { ...row, title: "Readable task" } : row,
+      ),
+    };
+    const viewport = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        collapsedProjectIds: ["web"],
+        persistentFilter: { query: "fix-nav" },
+        terminalRows: 20,
+      }),
+    );
+
+    expect(viewport.items.map((item) => item.id)).toEqual([
+      "project:web",
+      "session:ses_wt_web_idle",
+      "reason:session:ses_wt_web_idle",
+    ]);
+    expect(viewport.items[0]).toMatchObject({ type: "projectHeader", collapsed: true });
+    expect(viewport.items[2]).toMatchObject({
+      type: "matchReason",
+      reason: {
+        field: "branch",
+        value: "fix-nav-mobile",
+        ranges: [{ start: 0, end: 7 }],
+      },
+    });
+    expect(viewport.displayRowChoices.map((choice) => choice.value.id)).toEqual([
+      "ses_wt_web_idle",
+    ]);
+    expect(viewport.sessionOverflow.total).toBe(1);
+  });
+
+  it("attaches filter state to expanded, collapsed, and empty project headers during drafts", () => {
     const base = createDashboardSnapshot();
     const snapshot = {
       ...base,
       sessions: base.sessions.filter((session) => session.projectId !== "web"),
     };
-    const unmatched = selectDashboardViewport(
-      snapshot,
-      createInitialTuiState({
-        collapsedProjectIds: ["api"],
-        persistentFilter: { query: "missing" },
-      }),
-    );
+    const state = createInitialTuiState({ collapsedProjectIds: ["api"] });
+    const unmatched = selectDashboardViewport(snapshot, state, {
+      name: "persistentFilter",
+      draft: { value: "missing", cursor: 7 },
+    });
 
     expect(unmatched.items).toContainEqual(
       expect.objectContaining({ type: "emptyProject", id: "empty:web" }),
@@ -545,16 +645,50 @@ describe("dashboard viewport selector", () => {
       persistentFilterMatch: { matched: false, labelRanges: [] },
     });
 
-    const matchedCollapsed = selectDashboardViewport(
-      snapshot,
-      createInitialTuiState({
-        collapsedProjectIds: ["api"],
-        persistentFilter: { query: "api" },
-      }),
-    );
+    const matchedCollapsed = selectDashboardViewport(snapshot, state, {
+      name: "persistentFilter",
+      draft: { value: "api", cursor: 3 },
+    });
     expect(matchedCollapsed.items.find((item) => item.id === "project:api")).toMatchObject({
       persistentFilterMatch: { matched: true, labelRanges: [{ start: 0, end: 3 }] },
     });
+  });
+
+  it("hard-projects an optimistic row retained only by its hidden branch", () => {
+    const snapshot = createDashboardSnapshot();
+    const viewport = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        persistentFilter: { query: "e91f2b" },
+        localRows: {
+          pendingCreate: [
+            {
+              localId: "local_hidden_branch",
+              projectId: "web",
+              title: "Readable pending task",
+              branch: "station-e91f2b",
+              createdAt: "2026-05-31T12:00:00.000Z",
+            },
+          ],
+          failedCreate: [],
+          pendingRemove: [],
+          pendingStart: [],
+        },
+      }),
+    );
+
+    expect(viewport.items.map((item) => item.id)).toEqual([
+      "project:web",
+      "create:local_hidden_branch",
+      "reason:create:local_hidden_branch",
+    ]);
+    expect(viewport.items[2]).toMatchObject({
+      type: "matchReason",
+      reason: { field: "branch", value: "station-e91f2b" },
+    });
+    expect(viewport.sessionOverflow.total).toBe(1);
+    expect(viewport.rowChoices).toEqual([]);
   });
 
   it("includes optimistic rows in persistent-preview counts and metadata", () => {

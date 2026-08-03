@@ -1,4 +1,5 @@
 import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
+import type { DashboardPersistentFilterMatchReason } from "../../selectors/dashboardPersistentFilter.js";
 import { type TextMatchRange, textMatchSegments } from "../TextMatch/segments.js";
 import {
   type RowColor,
@@ -81,6 +82,34 @@ export function worktreeRowGridInput({
     input.focused = true;
   }
   return worktreeStyleRowGridInput(input);
+}
+
+/** Builds one inert, single-line explanation aligned to the shared dashboard row grid. */
+export function persistentFilterMatchReasonRowGridInput({
+  id,
+  reason,
+}: {
+  id: string;
+  reason: DashboardPersistentFilterMatchReason;
+}): RowGridRowInput {
+  return {
+    id,
+    cells: {
+      identity: {
+        key: "identity",
+        segments: [textSegment(" ".repeat(7), { color: "gray" })],
+        importance: "required",
+      },
+      title: {
+        key: "title",
+        segments: [
+          textSegment(`↳ ${reason.field}: `, { color: "gray" }),
+          ...highlightedTextSegments(reason.value, "gray", reason.ranges),
+        ],
+        importance: "required",
+      },
+    },
+  };
 }
 
 export function worktreeStyleRowGridInput(input: {

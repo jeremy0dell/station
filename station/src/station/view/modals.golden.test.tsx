@@ -84,6 +84,7 @@ const CASES: ModalCase[] = [
       "split pane right",
       "1-9/a-z",
       "open visible session",
+      "edit/apply/cancel-clear/retain-close filter",
       "╭",
       "╰",
     ],
