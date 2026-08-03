@@ -115,7 +115,7 @@ function resolveIntentHarnessSelection(
   return resolveHarnessSelection(normalizeHarnessSelectionFacts(facts), intent.harnessSelection);
 }
 
-export async function collectSetupFactsForCommand(
+export function collectSetupFactsForCommand(
   mode: SetupMode,
   commandOptions: SetupCommandOptions,
   deps: SetupCommandDeps,
