@@ -10,7 +10,9 @@ import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyReg
 // preserved v2 registry would leave hot-reloaded panes without them.
 // v4: registries gained configurable scrollback; a preserved v3 registry would
 // ignore the refreshed depth when lazily creating screens after a hot reload.
-export const STATION_HOT_RUNTIME_VERSION = 4;
+// v5: registries/screens gained the terminal-projection update seam; a preserved
+// v4 registry cannot accept the native composition's projection refresh.
+export const STATION_HOT_RUNTIME_VERSION = 5;
 
 export type StationHotRenderer = { destroy(): void };
 

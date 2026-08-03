@@ -65,6 +65,11 @@ export type StationVtScreenOptions = {
   flushIntervalMs?: number;
   /** Max hold for an open synchronized frame before the escape hatch flushes; injectable for tests. */
   syncHoldMaxMs?: number;
+  /**
+   * Initial terminal-semantic projection for defaults, ANSI indices 0-15, and
+   * OSC 10/11 replies. Explicit RGB and ANSI indices 16-255 remain independent.
+   * Direct low-level callers may omit it to use Station's built-in projection.
+   */
   theme?: StationTerminalTheme;
   /**
    * Terminal query replies (DA1/DA2/DSR/CPR/DECRQM from xterm, OSC 10/11 from
@@ -110,6 +115,12 @@ export type VtBufferStats = {
 export type StationVtScreen = {
   feed(data: string): void;
   resize(size: StationTerminalSize): void;
+  /**
+   * Replace terminal defaults and ANSI indices 0-15 for existing and future
+   * row projections and OSC 10/11 replies. Parsed text, explicit RGB cells,
+   * fixed ANSI indices 16-255, buffer state, and PTY I/O remain unchanged.
+   */
+  updateTerminalTheme(theme: StationTerminalTheme): void;
   /**
    * Style-merged spans for the rows currently in view (the live viewport, or
    * scrolled-back history when `getScrollOffset() > 0`). OSC 8 URIs follow the
@@ -209,10 +220,11 @@ export type StationVtScreen = {
 };
 
 export function createStationVtScreen(options: StationVtScreenOptions): StationVtScreen {
-  const theme = options.theme ?? nativeStationTheme.terminal;
-  const palette = buildVtPalette256(theme.ansi16.map((color) => color.value));
-  const defaultForeground = theme.defaultForeground.value;
-  const defaultBackground = theme.defaultBackground.value;
+  const initialTheme = options.theme ?? nativeStationTheme.terminal;
+  let terminalProjection = {
+    theme: initialTheme,
+    palette: buildVtPalette256(initialTheme.ansi16.map((color) => color.value)),
+  };
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const syncHoldMaxMs = options.syncHoldMaxMs ?? SYNC_OUTPUT_HOLD_MAX_MS;
   const requestedScrollback = options.scrollback ?? DEFAULT_SCROLLBACK_LINES;
@@ -417,7 +429,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       return false;
     }
     emitResponse(
-      `${VtPrefix.Osc}${OscCommand.DefaultForeground};${toOscRgb(defaultForeground)}${VtTerminator.Bell}`,
+      `${VtPrefix.Osc}${OscCommand.DefaultForeground};${toOscRgb(terminalProjection.theme.defaultForeground.value)}${VtTerminator.Bell}`,
     );
     return true;
   });
@@ -426,7 +438,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       return false;
     }
     emitResponse(
-      `${VtPrefix.Osc}${OscCommand.DefaultBackground};${toOscRgb(defaultBackground)}${VtTerminator.Bell}`,
+      `${VtPrefix.Osc}${OscCommand.DefaultBackground};${toOscRgb(terminalProjection.theme.defaultBackground.value)}${VtTerminator.Bell}`,
     );
     return true;
   });
@@ -638,11 +650,23 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       reanchorScroll();
       scheduleFlush();
     },
+    updateTerminalTheme: (nextTheme) => {
+      if (disposed) {
+        return;
+      }
+      const nextProjection = {
+        theme: nextTheme,
+        palette: buildVtPalette256(nextTheme.ansi16.map((color) => color.value)),
+      };
+      terminalProjection = nextProjection;
+      // Projection changes invalidate rows only; never feed/replay bytes or emit a PTY response.
+      notifyListeners();
+    },
     buildRows: (rowOptions) =>
       buildVisibleRows(terminal, {
         cursorVisible: rowOptions?.cursorVisible ?? cursorVisible,
         offset: scrollOffset,
-        palette,
+        palette: terminalProjection.palette,
       }),
     scrollBy: (deltaLines) => {
       if (disposed || deltaLines === 0) {

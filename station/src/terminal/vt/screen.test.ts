@@ -1,11 +1,34 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { nativeStationTheme, rgbColor } from "../../theme/index.js";
+import {
+  nativeStationTheme,
+  rgbColor,
+  type StationTerminalTheme,
+} from "../../theme/index.js";
 import { DecMode } from "../protocol/decset.js";
 import { CsiCommand } from "../protocol/identifiers.js";
 import { KittyFlagUpdateMode, KittySequence } from "../protocol/kitty.js";
 import { VtPrefix } from "../protocol/syntax.js";
 import { waitFor } from "../testing/waitFor.js";
+import type { VtRow } from "./rows.js";
 import { createStationVtScreen, type StationVtScreen } from "./screen.js";
+
+function terminalTheme(
+  defaultForeground: `#${string}`,
+  defaultBackground: `#${string}`,
+  ansiBlack: `#${string}`,
+  ansiRed: `#${string}`,
+): StationTerminalTheme {
+  const [, , ...ansiTail] = nativeStationTheme.terminal.ansi16;
+  return {
+    defaultForeground: rgbColor(defaultForeground),
+    defaultBackground: rgbColor(defaultBackground),
+    ansi16: [rgbColor(ansiBlack), rgbColor(ansiRed), ...ansiTail],
+  };
+}
+
+function foregroundForText(rows: readonly VtRow[], text: string): string | undefined {
+  return rows.flatMap((row) => row.spans).find((span) => span.text.includes(text))?.fg;
+}
 
 describe("createStationVtScreen", () => {
   const cleanups: Array<() => void> = [];
@@ -170,6 +193,110 @@ describe("createStationVtScreen", () => {
     screen.feed("\x1b[30mX");
     await screen.whenIdle();
     expect(screen.buildRows({ cursorVisible: false })[0]?.spans[0]?.fg).toBe("#010203");
+  });
+
+  it("updates terminal color projection without mutating the parsed screen", async () => {
+    const initialTheme = terminalTheme("#101112", "#131415", "#161718", "#192021");
+    const nextTheme = terminalTheme("#a0a1a2", "#a3a4a5", "#a6a7a8", "#a9aaab");
+    const responses: string[] = [];
+    const screen = track(
+      createStationVtScreen({
+        size: { cols: 40, rows: 3 },
+        theme: initialTheme,
+        onResponse: (data) => responses.push(data),
+      }),
+    );
+    screen.feed(
+      "D\x1b[31mI\x1b[38;5;196mF\x1b[38;2;1;2;3mT\x1b[0m" +
+        "\x1b]8;;https://example.com/theme\x1b\\L\x1b]8;;\x1b\\" +
+        "\r\none\r\ntwo\r\nthree" +
+        "\x1b]2;theme-proof\x07\x1b[?2004h\x1b[?1000h\x1b[?1h\x1b[=1u" +
+        "\x1b]10;?\x07\x1b]11;?\x07",
+    );
+    await screen.whenIdle();
+    await waitFor(() => screen.getVersion() > 0);
+    screen.scrollBy(1);
+
+    expect(responses).toEqual([
+      "\x1b]10;rgb:1010/1111/1212\x07",
+      "\x1b]11;rgb:1313/1414/1515\x07",
+    ]);
+    const beforeRows = screen.buildRows({ cursorVisible: false });
+    expect(foregroundForText(beforeRows, "D")).toBeUndefined();
+    expect(foregroundForText(beforeRows, "I")).toBe("#192021");
+    expect(foregroundForText(beforeRows, "F")).toBe("#ff0000");
+    expect(foregroundForText(beforeRows, "T")).toBe("#010203");
+
+    const buffer = screen.unsafeEngine.buffer.active;
+    const parsedState = {
+      bufferContents: Array.from({ length: buffer.length }, (_, index) =>
+        buffer.getLine(index)?.translateToString(false),
+      ),
+      visibleText: Array.from({ length: screen.bufferStats().rows }, (_, index) =>
+        screen.viewRowText(index),
+      ),
+      cursor: screen.cursor(),
+      scrollOffset: screen.getScrollOffset(),
+      geometry: screen.bufferStats(),
+      modes: {
+        alt: screen.isAltScreen(),
+        applicationCursor: screen.isApplicationCursorKeys(),
+        bracketedPaste: screen.isBracketedPasteEnabled(),
+        cursorVisible: screen.isCursorVisible(),
+        kittyKeyboard: screen.isKittyKeyboardEnabled(),
+        mouse: screen.mouseProtocol(),
+      },
+      links: beforeRows.flatMap((row) => row.spans.map((span) => span.link)),
+      title: screen.getTitle(),
+    };
+    responses.length = 0;
+    let invalidations = 0;
+    screen.subscribe(() => {
+      invalidations += 1;
+    });
+    const versionBeforeUpdate = screen.getVersion();
+
+    screen.updateTerminalTheme(nextTheme);
+
+    expect(screen.getVersion()).toBe(versionBeforeUpdate + 1);
+    expect(invalidations).toBe(1);
+    expect(responses).toEqual([]);
+    const nextRows = screen.buildRows({ cursorVisible: false });
+    expect(foregroundForText(nextRows, "D")).toBeUndefined();
+    expect(foregroundForText(nextRows, "I")).toBe("#a9aaab");
+    expect(foregroundForText(nextRows, "F")).toBe("#ff0000");
+    expect(foregroundForText(nextRows, "T")).toBe("#010203");
+    expect({
+      bufferContents: Array.from({ length: buffer.length }, (_, index) =>
+        buffer.getLine(index)?.translateToString(false),
+      ),
+      visibleText: Array.from({ length: screen.bufferStats().rows }, (_, index) =>
+        screen.viewRowText(index),
+      ),
+      cursor: screen.cursor(),
+      scrollOffset: screen.getScrollOffset(),
+      geometry: screen.bufferStats(),
+      modes: {
+        alt: screen.isAltScreen(),
+        applicationCursor: screen.isApplicationCursorKeys(),
+        bracketedPaste: screen.isBracketedPasteEnabled(),
+        cursorVisible: screen.isCursorVisible(),
+        kittyKeyboard: screen.isKittyKeyboardEnabled(),
+        mouse: screen.mouseProtocol(),
+      },
+      links: nextRows.flatMap((row) => row.spans.map((span) => span.link)),
+      title: screen.getTitle(),
+    }).toEqual(parsedState);
+
+    screen.feed("\x1b]10;#ffffff\x07\x1b]11;#000000\x07");
+    await screen.whenIdle();
+    expect(responses).toEqual([]);
+    screen.feed("\x1b]10;?\x07\x1b]11;?\x07");
+    await waitFor(() => responses.length === 2);
+    expect(responses).toEqual([
+      "\x1b]10;rgb:a0a0/a1a1/a2a2\x07",
+      "\x1b]11;rgb:a3a3/a4a4/a5a5\x07",
+    ]);
   });
 
   // Executable proof of the headless gap: xterm's browser ThemeService is the

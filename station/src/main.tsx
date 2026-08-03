@@ -207,6 +207,7 @@ async function startStationMain(
     stationConfig.config,
     restorePlan?.workspace,
   );
+  stationRuntime.registry.updateTerminalTheme(nativeStationTheme.terminal);
   const { store } = stationRuntime;
   // Seed each restored pane's spawn cwd / host placement into the registry BEFORE the
   // reconciler runs its no-option ensure (which would otherwise capture
