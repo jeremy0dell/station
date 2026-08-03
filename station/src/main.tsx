@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import type { UiShutdownReason } from "@station/contracts";
+import { createStationHostClient } from "@station/host";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
@@ -30,7 +31,11 @@ import { applyRestoreSeeds, planLayoutRestoreColdShells } from "./state/layout/r
 import { savedCwdExists } from "./state/layout/savedCwdExists.js";
 import { wireTerminalDiagnostics } from "./terminal/diagnostics.js";
 import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
-import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
+import {
+  createHostAttachedTerminal,
+  type HostAttachedTerminalOptions,
+} from "./terminal/pty/hostAttachedTerminal.js";
+import { createStationHostManagedTerminalAttacher } from "./terminal/pty/managedTerminalAttacher.js";
 import { playStationAttentionSound } from "./sources/attentionSound.js";
 import { createStationClient } from "./sources/createStationClient.js";
 import { openExternalUrl } from "./openUrl.js";
@@ -71,8 +76,9 @@ function readShellAutoCloseOverlay(value: string | undefined): boolean {
 
 /**
  * Callable native OpenTUI process entry and semantic lifecycle witness boundary.
- * It acquires TTY ownership before other startup work, flushes fatal and normal
- * shutdown evidence before exit, and releases ownership only after renderer shutdown.
+ * It acquires TTY ownership before other startup work, binds one validated run
+ * context into Host terminal factories, flushes shutdown evidence, and releases
+ * ownership only after renderer shutdown.
  */
 export async function runStationMain(options: RunStationMainOptions = {}): Promise<void> {
   const ownershipResult = await acquireStationTtyOwnership();
@@ -150,12 +156,30 @@ async function startStationMain(
     console.error(`[station] persistent shells disabled: ${(error as Error).message}`);
   }
 
+  const createHostClient = (socketPath: string) =>
+    createStationHostClient({ socketPath, uiContext });
+  const createHostTerminal = (terminalOptions: HostAttachedTerminalOptions) =>
+    createHostAttachedTerminal({ ...terminalOptions, uiContext });
+  const auxShellPlacement =
+    hostSocketPath === undefined
+      ? undefined
+      : resolveAuxShellPlacement(hostSocketPath, createHostClient);
+  const managedTerminalAttacher =
+    hostSocketPath === undefined
+      ? undefined
+      : createStationHostManagedTerminalAttacher(hostSocketPath, {
+          listHost: (socketPath) => listLiveHostPtys(socketPath, { createClient: createHostClient }),
+          createTerminal: createHostTerminal,
+        });
+
   // Compatibility errors must escape before cold restore can drop warm panes or
   // layout persistence can rewrite the saved session.
   let liveHostPtys: Awaited<ReturnType<typeof listLiveHostPtys>>;
   try {
     liveHostPtys =
-      hostSocketPath === undefined ? undefined : await listLiveHostPtys(hostSocketPath);
+      hostSocketPath === undefined
+        ? undefined
+        : await listLiveHostPtys(hostSocketPath, { createClient: createHostClient });
   } catch (error) {
     const safeError = toSafeError(error, {
       tag: "TerminalProviderError",
@@ -182,7 +206,7 @@ async function startStationMain(
         cwdExists: savedCwdExists,
         listHost: async () => liveHostPtys,
         makeHostTerminal: (entry) => (options) =>
-          createHostAttachedTerminal({
+          createHostTerminal({
             hostSocketPath: socket,
             ptyId: entry.ptyId,
             size: { cols: options.size?.cols ?? 80, rows: options.size?.rows ?? 24 },
@@ -190,7 +214,7 @@ async function startStationMain(
             // closes the PTY; an agent reattach stays observer-owned (detach only).
             ...(entry.kind === "aux" ? { owned: true } : {}),
           }),
-        resolveAuxShellPlacement: resolveAuxShellPlacement(socket),
+        resolveAuxShellPlacement: resolveAuxShellPlacement(socket, createHostClient),
       });
     }
   }
@@ -293,7 +317,8 @@ async function startStationMain(
     ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),
     ...(tuiConfig.configPath === undefined ? {} : { tuiConfigPath: tuiConfig.configPath }),
     shellAutoCloseOverlay: readShellAutoCloseOverlay(env.STATION_SHELL_AUTOCLOSE),
-    ...(hostSocketPath === undefined ? {} : { hostSocketPath }),
+    ...(auxShellPlacement === undefined ? {} : { resolveAuxShellPlacement: auxShellPlacement }),
+    ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),
     ...(layoutPath === undefined ? {} : { layout: { path: layoutPath } }),
     ...(ptyRuntime === undefined ? {} : { createTerminal: ptyRuntime.createTerminal }),
     shutdown: () => finishProcessShutdown("ctrl_q"),

@@ -15,6 +15,7 @@ import type { StationInputRuntime } from "../input/stationInput.js";
 import type { StationLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import type { StationStore } from "../state/store.js";
 import type { StationClient } from "../sources/types.js";
+import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type {
@@ -70,13 +71,9 @@ export type CreateStationOptions = {
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
   /** Existing registry to reuse across Bun HMR without killing live PTYs. */
   registry?: PtyRegistry;
-  /**
-   * Station-host socket path. When set, aux shells spawn into the host (warm
-   * reattach across UI restarts) when it is up, falling back to a local shell
-   * otherwise. Absent in tests/mock mode ⇒ aux shells are always local.
-   */
-  hostSocketPath?: string;
-  /** Test seam for resolving observer-advertised managed-terminal attachments. */
+  /** Composition-supplied host placement; absent means aux shells remain local. */
+  resolveAuxShellPlacement?: AuxShellPlacement;
+  /** Composition-supplied resolver for observer-advertised managed terminals. */
   managedTerminalAttacher?: ManagedTerminalAttacher;
   /**
    * Persist the aux-pane layout to disk so a cold restart restores it. Absent in

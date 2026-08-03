@@ -28,6 +28,7 @@ type ManagedTerminalAttacherDeps = {
   createTerminal?: (options: HostAttachedTerminalOptions) => StationTerminalProcess;
 };
 
+/** Bind Host inventory and terminal factories at renderer composition for managed attachments. */
 export function createStationHostManagedTerminalAttacher(
   hostSocketPath: string,
   deps: ManagedTerminalAttacherDeps = {},

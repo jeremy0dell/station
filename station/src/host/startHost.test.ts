@@ -60,6 +60,21 @@ describe("startStationHost", () => {
     }
   });
 
+  it("closes after a one-way client shutdown notification over a real socket", async () => {
+    const socketPath = await startOnTempSocket();
+    const client = createStationHostClient({ socketPath });
+    await client.list();
+
+    client.dispose();
+    await Promise.race([
+      host?.close(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Station Host close timed out.")), 1_000);
+      }),
+    ]);
+    host = undefined;
+  });
+
   it("records the selected PTY implementation at startup", async () => {
     const records: Array<{ message: string; attributes: Record<string, unknown> }> = [];
     const dir = await mkdtemp(join(tmpdir(), "station-host-log-"));
@@ -82,6 +97,47 @@ describe("startStationHost", () => {
         buildVersion: stationBuildInfo().version,
       },
     });
+  });
+
+  it("records PTY spawn and exit independently from attachment lifecycle", async () => {
+    const records: Array<{
+      lifecycle?: { kind: string; ptyId?: string; pid?: number; exitCode?: number };
+    }> = [];
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const dir = await mkdtemp(join(tmpdir(), "station-host-pty-lifecycle-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      ptyTableOptions: { createTerminal: () => scripted.terminal },
+      logger: { log: async (record: (typeof records)[number]) => records.push(record) } as never,
+    });
+    const client = createStationHostClient({ socketPath: join(dir, "station-host.sock") });
+    try {
+      const { ptyId } = await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      scripted.helpers.emitExit({ exitCode: 17 });
+      await waitFor(() => records.some((record) => record.lifecycle?.kind === "host.pty.exited"));
+
+      const lifecycle = records.map((record) => record.lifecycle).filter(Boolean);
+      expect(lifecycle.find((event) => event?.kind === "host.pty.spawned")).toMatchObject({
+        kind: "host.pty.spawned",
+        ptyId,
+        pid: scripted.terminal.pid,
+      });
+      expect(lifecycle.find((event) => event?.kind === "host.pty.exited")).toMatchObject({
+        kind: "host.pty.exited",
+        ptyId,
+        exitCode: 17,
+      });
+    } finally {
+      client.dispose();
+    }
   });
 
   it("handles host.focus (best-effort) over a real unix socket", async () => {

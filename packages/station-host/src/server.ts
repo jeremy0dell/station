@@ -1,5 +1,6 @@
-import type { SafeError } from "@station/contracts";
+import type { SafeError, UiLifecycleEventInputFor } from "@station/contracts";
 import type { NdjsonConnection } from "@station/protocol";
+import { z } from "zod";
 import {
   type StationHostErrorCode,
   stationHostErrorFromUnknown,
@@ -10,6 +11,8 @@ import {
   type HostAttachParams,
   HostAttachParamsSchema,
   type HostClientIdentity,
+  HostClientShutdownNotificationSchema,
+  type HostCompatibilityIdentity,
   HostDetachParamsSchema,
   type HostFrame,
   HostRequestSchema,
@@ -32,43 +35,94 @@ export type HostAttachmentSource = {
  * method answers with a classified `HOST_BAD_REQUEST` rather than crashing.
  */
 export type HostHandlers = {
-  /** Exact identity required on every operational request; lifecycle negotiation is exempt. */
-  hostIdentity: HostClientIdentity;
-  unary?: Record<string, (params: unknown) => Promise<unknown> | unknown>;
-  attach?: (params: HostAttachParams) => HostAttachmentSource | Promise<HostAttachmentSource>;
+  /** Exact build identity required on every operational request. */
+  hostIdentity: HostCompatibilityIdentity;
+  unary?: Record<
+    string,
+    (params: unknown, client: HostClientIdentity | undefined) => Promise<unknown> | unknown
+  >;
+  attach?: (
+    params: HostAttachParams,
+    client: HostClientIdentity,
+  ) => HostAttachmentSource | Promise<HostAttachmentSource>;
   /** Called only after a successful unary response has been written to the connection. */
   afterUnaryResponseSent?: (method: string) => void;
 };
 
+type HostLifecycleEventInput = UiLifecycleEventInputFor<"station-host">;
+
 export type HostServerLogger = {
   onError?(error: SafeError): void;
-  /** Lifecycle observability — redaction-safe ids/counts only. */
+  /** Frozen operational timeline and replay metrics; redaction-safe ids/counts only. */
   onEvent?(event: string, attributes: Record<string, unknown>): void;
+  /** Typed correlation, attachment reason, and client teardown evidence. */
+  onLifecycle?(event: HostLifecycleEventInput): void;
+};
+
+type ActiveAttachment = {
+  attachmentId: string;
+  ptyId: string;
+  iterator: AsyncIterator<HostFrame>;
+  client: HostClientIdentity;
+  reason?: Extract<HostLifecycleEventInput, { kind: "host.attachment.detached" }>["reason"];
+};
+
+type ConnectionState = {
+  client?: HostClientIdentity;
+  clientDetachReason: Extract<HostLifecycleEventInput, { kind: "host.client.detached" }>["reason"];
+  attachments: Map<string, ActiveAttachment>;
+  attachmentByPty: Map<string, ActiveAttachment>;
+  inFlight: Set<Promise<void>>;
 };
 
 /**
  * Dispatch host requests concurrently so long-lived `host.attach` streams do
- * not block write/resize/detach on the same multiplexed socket.
+ * not block write/resize/detach on the same multiplexed socket. The first
+ * operational request binds one diagnostic client identity to the connection;
+ * teardown then classifies every attachment before the client witness closes.
  */
 export async function serveHostConnection(
   connection: NdjsonConnection,
   handlers: HostHandlers,
   logger: HostServerLogger = {},
 ): Promise<void> {
-  // Per-connection attachments so `host.detach` can stop one pane's stream
-  // without closing the shared connection (other panes stay attached).
-  const attachments = new Map<string, AsyncIterator<HostFrame>>();
+  const state: ConnectionState = {
+    clientDetachReason: "socket_closed",
+    attachments: new Map(),
+    attachmentByPty: new Map(),
+    inFlight: new Set(),
+  };
   try {
     for await (const message of connection.messages()) {
-      void handleMessage(connection, handlers, logger, attachments, message);
+      if (HostClientShutdownCandidateSchema.safeParse(message).success) {
+        handleClientShutdownNotification(handlers, logger, state, message);
+        continue;
+      }
+      const task = handleMessage(connection, handlers, logger, state, message);
+      state.inFlight.add(task);
+      void task.finally(() => state.inFlight.delete(task));
     }
   } catch {
+    state.clientDetachReason = "stream_failed";
     connection.close();
   } finally {
-    for (const iterator of attachments.values()) {
-      void iterator.return?.();
+    for (const attachment of state.attachments.values()) {
+      attachment.reason ??= state.clientDetachReason;
+      void attachment.iterator.return?.();
     }
-    attachments.clear();
+    await Promise.allSettled([...state.inFlight]);
+    state.attachments.clear();
+    state.attachmentByPty.clear();
+    if (state.client !== undefined) {
+      logger.onLifecycle?.({
+        kind: "host.client.detached",
+        uiRunId: state.client.uiRunId,
+        connectionId: state.client.connectionId,
+        rendererPid: state.client.rendererPid,
+        clientKind: state.client.clientKind,
+        reason: state.clientDetachReason,
+      });
+    }
   }
 }
 
@@ -76,7 +130,7 @@ async function handleMessage(
   connection: NdjsonConnection,
   handlers: HostHandlers,
   logger: HostServerLogger,
-  attachments: Map<string, AsyncIterator<HostFrame>>,
+  state: ConnectionState,
   message: unknown,
 ): Promise<void> {
   const parsed = HostRequestSchema.safeParse(message);
@@ -85,35 +139,34 @@ async function handleMessage(
     return;
   }
   const request = parsed.data;
-
-  if (
-    request.method !== "host.health" &&
-    request.method !== "host.stopIfIdle" &&
-    (request.protocolVersion !== handlers.hostIdentity.protocolVersion ||
-      request.buildVersion !== handlers.hostIdentity.buildVersion)
-  ) {
-    fail(
-      connection,
-      logger,
-      request.id,
-      "HOST_VERSION_INCOMPATIBLE",
-      `Station host build "${handlers.hostIdentity.buildVersion}" rejected a client without matching protocol and build identity.`,
-      "Use the Station build that started this host, or let the current build negotiate a guarded idle replacement.",
-    );
-    return;
+  const lifecycleRequest = request.method === "host.health" || request.method === "host.stopIfIdle";
+  if (!lifecycleRequest) {
+    const binding = bindClientIdentity(request.client, handlers.hostIdentity, state, logger);
+    if (!binding.ok) {
+      fail(connection, logger, request.id, binding.code, binding.message, binding.hint);
+      return;
+    }
   }
 
   if (request.method === "host.attach") {
-    await runAttach(connection, handlers, logger, attachments, request.id, request.params);
+    await runAttach(connection, handlers, logger, state, request.id, request.params);
     return;
   }
 
   if (request.method === "host.detach") {
     const params = HostDetachParamsSchema.safeParse(request.params);
-    if (params.success) {
-      const iterator = attachments.get(params.data.ptyId);
-      attachments.delete(params.data.ptyId);
-      await iterator?.return?.();
+    if (!params.success) {
+      fail(connection, logger, request.id, "HOST_BAD_REQUEST", "Malformed host detach request.");
+      return;
+    }
+    const attachment = state.attachments.get(params.data.attachmentId);
+    if (attachment !== undefined && attachment.ptyId === params.data.ptyId) {
+      attachment.reason = params.data.reason;
+      state.attachments.delete(attachment.attachmentId);
+      if (state.attachmentByPty.get(attachment.ptyId) === attachment) {
+        state.attachmentByPty.delete(attachment.ptyId);
+      }
+      await attachment.iterator.return?.();
     }
     connection.send(hostSuccess(request.id, { ok: true }));
     return;
@@ -133,7 +186,7 @@ async function handleMessage(
 
   let result: unknown;
   try {
-    result = await handler(request.params);
+    result = await handler(request.params, request.client);
   } catch (error) {
     const safeError = stationHostErrorFromUnknown(error, {
       code: "HOST_REQUEST_FAILED",
@@ -147,22 +200,90 @@ async function handleMessage(
   handlers.afterUnaryResponseSent?.(request.method);
 }
 
+type ClientBinding =
+  | { ok: true; client: HostClientIdentity }
+  | {
+      ok: false;
+      code: StationHostErrorCode;
+      message: string;
+      hint?: string;
+    };
+
+function bindClientIdentity(
+  client: HostClientIdentity | undefined,
+  hostIdentity: HostCompatibilityIdentity,
+  state: ConnectionState,
+  logger: HostServerLogger,
+): ClientBinding {
+  if (
+    client !== undefined &&
+    (client.protocolVersion !== hostIdentity.protocolVersion ||
+      client.buildVersion !== hostIdentity.buildVersion)
+  ) {
+    return {
+      ok: false,
+      code: "HOST_VERSION_INCOMPATIBLE",
+      message: `Station host build "${hostIdentity.buildVersion}" rejected a client with an incompatible protocol or build.`,
+      hint: "Use the Station build that started this host, or let the current build negotiate a guarded idle replacement.",
+    };
+  }
+  if (client === undefined) {
+    return {
+      ok: false,
+      code: "HOST_CLIENT_IDENTITY_MISMATCH",
+      message: "Station host rejected an operational request without client correlation identity.",
+    };
+  }
+  if (state.client === undefined) {
+    state.client = client;
+    logger.onLifecycle?.({
+      kind: "host.client.attached",
+      uiRunId: client.uiRunId,
+      connectionId: client.connectionId,
+      rendererPid: client.rendererPid,
+      clientKind: client.clientKind,
+    });
+    return { ok: true, client };
+  }
+  if (!sameClient(state.client, client)) {
+    return {
+      ok: false,
+      code: "HOST_CLIENT_IDENTITY_MISMATCH",
+      message:
+        "Station host rejected a request whose correlation identity changed on one connection.",
+    };
+  }
+  return { ok: true, client };
+}
+
+function sameClient(left: HostClientIdentity, right: HostClientIdentity): boolean {
+  return (
+    left.protocolVersion === right.protocolVersion &&
+    left.buildVersion === right.buildVersion &&
+    left.uiRunId === right.uiRunId &&
+    left.rendererPid === right.rendererPid &&
+    left.clientKind === right.clientKind &&
+    left.connectionId === right.connectionId
+  );
+}
+
 async function runAttach(
   connection: NdjsonConnection,
   handlers: HostHandlers,
   logger: HostServerLogger,
-  attachments: Map<string, AsyncIterator<HostFrame>>,
+  state: ConnectionState,
   id: string,
   rawParams: unknown,
 ): Promise<void> {
-  if (handlers.attach === undefined) {
+  if (handlers.attach === undefined || state.client === undefined) {
     fail(connection, logger, id, "HOST_BAD_REQUEST", "Host does not support host.attach.");
     return;
   }
   let attachment: HostAttachmentSource;
+  let params: HostAttachParams;
   try {
-    const params = HostAttachParamsSchema.parse(rawParams);
-    attachment = await handlers.attach(params);
+    params = HostAttachParamsSchema.parse(rawParams);
+    attachment = await handlers.attach(params, state.client);
   } catch (error) {
     const safeError = stationHostErrorFromUnknown(error, {
       code: "HOST_ATTACH_GONE",
@@ -174,15 +295,20 @@ async function runAttach(
   }
 
   const iterator = attachment.frames[Symbol.asyncIterator]();
-  // Defensive: if this connection somehow re-attaches the same ptyId, end the
-  // previous stream so its iterator can't be orphaned (one pane = one attach).
-  const previous = attachments.get(attachment.ack.ptyId);
+  const active: ActiveAttachment = {
+    attachmentId: params.attachmentId,
+    ptyId: attachment.ack.ptyId,
+    iterator,
+    client: state.client,
+  };
+  const previous = state.attachmentByPty.get(active.ptyId);
   if (previous !== undefined) {
-    void previous.return?.();
+    previous.reason = "attachment_replaced";
+    state.attachments.delete(previous.attachmentId);
+    void previous.iterator.return?.();
   }
-  // Register before sending the ack so a detach that the client issues after the
-  // ack always finds this attachment.
-  attachments.set(attachment.ack.ptyId, iterator);
+  state.attachments.set(active.attachmentId, active);
+  state.attachmentByPty.set(active.ptyId, active);
   connection.send(hostSuccess(id, attachment.ack));
   const replayBytes = attachment.ack.replay.events.reduce(
     (total, event) =>
@@ -198,34 +324,55 @@ async function runAttach(
     rows: attachment.ack.rows,
     captureDurationMs: attachment.captureDurationMs,
   });
+  logger.onLifecycle?.({
+    kind: "host.attachment.attached",
+    uiRunId: active.client.uiRunId,
+    connectionId: active.client.connectionId,
+    attachmentId: active.attachmentId,
+    rendererPid: active.client.rendererPid,
+    clientKind: active.client.clientKind,
+    ptyId: active.ptyId,
+  });
 
-  // End this stream when the socket closes — a disconnected client must not leave
-  // the host streaming. One handler, not a per-frame race against connection.closed
-  // (which would pile a continuation onto the stable closed promise per frame).
-  let socketClosed = false;
   void connection.closed.then(() => {
-    socketClosed = true;
+    active.reason ??= state.clientDetachReason;
     void iterator.return?.();
   });
 
   try {
-    for (;;) {
-      const next = await iterator.next();
-      if (next.done || socketClosed) {
-        return;
+    let next = await iterator.next();
+    while (!next.done) {
+      const frame = next.value;
+      connection.send(frame);
+      if (frame.type === "exit") {
+        active.reason = "pty_exited";
       }
-      connection.send(next.value);
+      next = await iterator.next();
     }
+    active.reason ??= "stream_failed";
   } catch {
-    // A socket write or iterator fault during streaming: stop cleanly.
+    active.reason ??=
+      state.clientDetachReason === "socket_closed" ? "stream_failed" : state.clientDetachReason;
   } finally {
-    // Evict only our OWN registration — a later attach for the same ptyId on this
-    // connection may have already replaced it.
-    if (attachments.get(attachment.ack.ptyId) === iterator) {
-      attachments.delete(attachment.ack.ptyId);
+    if (state.attachments.get(active.attachmentId) === active) {
+      state.attachments.delete(active.attachmentId);
+    }
+    if (state.attachmentByPty.get(active.ptyId) === active) {
+      state.attachmentByPty.delete(active.ptyId);
     }
     await iterator.return?.();
-    logger.onEvent?.("agent.detach", { ptyId: attachment.ack.ptyId });
+    const reason = active.reason ?? "stream_failed";
+    logger.onEvent?.("agent.detach", { ptyId: active.ptyId });
+    logger.onLifecycle?.({
+      kind: "host.attachment.detached",
+      uiRunId: active.client.uiRunId,
+      connectionId: active.client.connectionId,
+      attachmentId: active.attachmentId,
+      rendererPid: active.client.rendererPid,
+      clientKind: active.client.clientKind,
+      ptyId: active.ptyId,
+      reason,
+    });
   }
 }
 
@@ -242,14 +389,45 @@ function fail(
   connection.send(hostFailure(id, safeError));
 }
 
-function requestId(message: unknown): string {
-  if (
-    message !== null &&
-    typeof message === "object" &&
-    "id" in message &&
-    typeof (message as { id: unknown }).id === "string"
-  ) {
-    return (message as { id: string }).id;
+const HostClientShutdownCandidateSchema = z
+  .object({ method: z.literal("host.clientShutdown") })
+  .passthrough();
+const HostRequestIdCarrierSchema = z.object({ id: z.string().min(1) }).passthrough();
+
+function handleClientShutdownNotification(
+  handlers: HostHandlers,
+  logger: HostServerLogger,
+  state: ConnectionState,
+  message: unknown,
+): void {
+  const notification = HostClientShutdownNotificationSchema.safeParse(message);
+  if (!notification.success) {
+    logger.onError?.(
+      stationHostSafeError(
+        "HOST_BAD_REQUEST",
+        "Malformed Station host client shutdown notification.",
+      ),
+    );
+    return;
   }
-  return "unknown";
+  const binding = bindClientIdentity(
+    notification.data.client,
+    handlers.hostIdentity,
+    state,
+    logger,
+  );
+  if (!binding.ok) {
+    logger.onError?.(stationHostSafeError(binding.code, binding.message));
+    return;
+  }
+  state.clientDetachReason = "client_shutdown";
+  for (const attachment of state.attachments.values()) {
+    attachment.reason ??= "client_shutdown";
+    void attachment.iterator.return?.();
+  }
+}
+
+function requestId(message: unknown): string {
+  const parsed = HostRequestIdCarrierSchema.safeParse(message);
+  return parsed.success ? parsed.data.id : "unknown";
 }

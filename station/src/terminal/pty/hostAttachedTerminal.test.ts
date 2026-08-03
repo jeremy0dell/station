@@ -52,6 +52,7 @@ function controllableAttachment(
     }
   };
   const attachment: HostAttachment = {
+    attachmentId: "att-test",
     ack,
     frames: {
       [Symbol.asyncIterator]: () => ({
@@ -1194,6 +1195,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     "HOST_ATTACH_GONE",
     "HOST_SNAPSHOT_FAILED",
     "HOST_VERSION_INCOMPATIBLE",
+    "HOST_CLIENT_IDENTITY_MISMATCH",
     "HOST_UPGRADE_BLOCKED",
     "HOST_BAD_REQUEST",
   ] as const) {

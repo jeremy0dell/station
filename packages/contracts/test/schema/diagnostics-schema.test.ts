@@ -94,6 +94,24 @@ describe("diagnostics schemas", () => {
     expect(UiShutdownReasonSchema.safeParse("signal").success).toBe(false);
     expect(UiSurfaceChangeReasonSchema.safeParse("startup").success).toBe(false);
     expect(UiLifecycleSurfaceSchema.parse("welcome")).toBe("welcome");
+    const hostDetach = {
+      timestamp: rendererExit.timestamp,
+      component: "station-host",
+      eventId: "host:3",
+      kind: "host.attachment.detached",
+      uiRunId: rendererExit.uiRunId,
+      source: { id: "host", sequence: 3, pid: 200 },
+      connectionId: "conn-1",
+      attachmentId: "att-1",
+      rendererPid: 101,
+      clientKind: "native_renderer",
+      ptyId: "pty-1",
+      reason: "client_shutdown",
+    };
+    expect(UiLifecycleEventSchema.parse(hostDetach)).toEqual(hostDetach);
+    expect(UiLifecycleEventSchema.safeParse({ ...hostDetach, reason: "unknown" }).success).toBe(
+      false,
+    );
     expect(
       UiRunContextSchema.parse({
         uiRunId: rendererExit.uiRunId,

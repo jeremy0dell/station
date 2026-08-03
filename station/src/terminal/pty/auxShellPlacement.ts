@@ -22,9 +22,10 @@ export type AuxShellPlacement = (
   paneId: PaneId,
 ) => ((options: StationTerminalSpawnOptions) => StationTerminalProcess) | undefined;
 
+/** Bind optional Host client identity at composition while retaining per-spawn reachability fallback. */
 export function resolveAuxShellPlacement(
   socketPath: string,
-  /** Test seam; production dials the host unix socket. */
+  /** Composition seam; native main supplies the renderer-correlated client factory. */
   clientFactory?: (socketPath: string) => StationHostClient,
 ): AuxShellPlacement {
   return (paneId) => {
