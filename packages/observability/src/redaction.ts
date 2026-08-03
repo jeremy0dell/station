@@ -1,7 +1,7 @@
 import type { RedactionReport } from "@station/contracts";
 
 export const REDACTION_POLICY_VERSION = "station-redaction-v1";
-export const REDACTED_VALUE = "[REDACTED]";
+const REDACTED_VALUE = "[REDACTED]";
 
 export type RedactionResult<T> = {
   value: T;
