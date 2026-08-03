@@ -210,6 +210,14 @@ export function createTerminalPaletteTheme(
       border,
       hairline,
     },
+    filter: {
+      editorRail: actionPrimary,
+      editorSurface: keyboardFocus,
+      appliedSurface: hover,
+      matchForeground: defaultForeground,
+      matchBackground: selected,
+      zeroMatch: actionWarning,
+    },
     welcome: {
       button: keyboardFocus,
       buttonMuted: background,

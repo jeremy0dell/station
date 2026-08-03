@@ -1,16 +1,18 @@
 import type { ProjectView } from "@station/contracts";
 import stringWidth from "string-width";
+import type { DashboardPersistentFilterRowMatch } from "../../selectors/dashboardPersistentFilter.js";
 import type {
   DashboardSessionOverflow,
   DashboardViewportItem,
 } from "../../selectors/dashboardViewport.js";
 
-import { dashboardFooterLabel } from "../../state/keymap.js";
 import type { DashboardFocus, TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
-import type { RowGridLayout, RowGridRowInput } from "../WorktreeRow/layout.js";
-import { worktreeRowGridInput, worktreeStyleRowGridInput } from "../WorktreeRow/rowInput.js";
-
-export { dashboardFooterLabel };
+import type { RowGridRowInput } from "../WorktreeRow/layout.js";
+import {
+  type WorktreeRowTextHighlights,
+  worktreeRowGridInput,
+  worktreeStyleRowGridInput,
+} from "../WorktreeRow/rowInput.js";
 
 export type DashboardHeaderStatus = {
   full: string;
@@ -22,52 +24,6 @@ export type TopRowWidgetText = {
   /** Narrower form tried before the strip starts dropping widgets outright. */
   compact?: string;
 };
-
-export type DashboardTableHeaderModel =
-  | { kind: "columns"; layout: RowGridLayout }
-  | { kind: "aboveOverflow"; overflow: DashboardSessionOverflow }
-  | { kind: "empty" };
-
-export function dashboardTableHeaderModel({
-  layout,
-  overflow,
-}: {
-  layout: RowGridLayout | undefined;
-  overflow: DashboardSessionOverflow;
-}): DashboardTableHeaderModel {
-  // The position cue owns the shared row whenever sessions are hidden above.
-  if (overflow.above > 0) {
-    return { kind: "aboveOverflow", overflow };
-  }
-  if (layout !== undefined) {
-    return { kind: "columns", layout };
-  }
-  return { kind: "empty" };
-}
-
-export type DashboardFooterModel =
-  | { kind: "loading"; text: string }
-  | { kind: "dashboard"; text: string };
-
-export function dashboardFooterModel({
-  columns,
-  quitHint,
-  hasSnapshot,
-  firstRun,
-}: {
-  columns: number;
-  quitHint: string;
-  hasSnapshot: boolean;
-  firstRun: boolean;
-}): DashboardFooterModel {
-  if (!hasSnapshot) {
-    return { kind: "loading", text: quitHint };
-  }
-  return {
-    kind: "dashboard",
-    text: dashboardFooterLabel({ columns, quitHint, firstRun }),
-  };
-}
 
 /**
  * The frame's right-embedded strip: observer status (when present) then the
@@ -177,67 +133,114 @@ export function rowGridInputForViewportItem(
   keyByRow: ReadonlyMap<string, string>,
   dashboardFocus?: DashboardFocus,
 ): RowGridRowInput | undefined {
+  if (item.type !== "session" && item.type !== "createLocalRow") {
+    return undefined;
+  }
+  const decorations = rowDecorationsForViewportItem(item, dashboardFocus);
   if (item.type === "session") {
-    const focused = dashboardFocus?.kind === "session" && item.row.id === dashboardFocus.sessionId;
     if (item.pendingRemove !== undefined) {
       return worktreeStyleRowGridInput({
         id: item.id,
         slot: undefined,
         marker: { kind: "throbber", variant: "braille" },
-        title: item.displayTitle,
-        activity: "removing session...",
+        title: item.presentation.title,
+        activity: item.presentation.activity ?? "",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
-        ...(focused ? { focused: true } : {}),
+        ...decorations,
       });
     }
     if (item.pendingStart !== undefined) {
-      const activity =
-        item.pendingStart.operation === "resumeAgent" ? "resuming..." : "starting...";
       return worktreeStyleRowGridInput({
         id: item.id,
         slot: keyByRow.get(item.row.id),
         marker: { kind: "throbber", variant: "braille" },
-        title: item.displayTitle,
-        activity,
+        title: item.presentation.title,
+        activity: item.presentation.activity ?? "",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
-        ...(focused ? { focused: true } : {}),
+        ...decorations,
       });
     }
     return worktreeRowGridInput({
       id: item.id,
       row: item.row.presentation,
       slot: keyByRow.get(item.row.id),
-      title: item.displayTitle,
-      focused,
+      presentation: {
+        title: item.presentation.title,
+        agent: item.presentation.agent ?? "",
+        activity: item.presentation.activity ?? "",
+      },
+      ...decorations,
     });
-  }
-  if (item.type !== "createLocalRow") {
-    return undefined;
   }
   if (item.row.status === "failed") {
     return worktreeStyleRowGridInput({
       id: item.id,
       slot: undefined,
       marker: { kind: "text", text: "!" },
-      title: item.row.title,
-      activity: item.row.error.message,
+      title: item.presentation.title,
+      activity: item.presentation.activity ?? "",
       activityImportance: "meaningful",
       activityOverflow: "rowSlack",
       color: "red",
+      ...decorations,
     });
   }
   return worktreeStyleRowGridInput({
     id: item.id,
     slot: undefined,
     marker: { kind: "throbber", variant: "braille" },
-    title: item.row.title,
-    agent: item.row.harnessProvider ?? "",
-    activity: "starting session...",
+    title: item.presentation.title,
+    agent: item.presentation.agent ?? "",
+    activity: item.presentation.activity ?? "",
     activityImportance: "meaningful",
     activityOverflow: "rowSlack",
+    ...decorations,
   });
+}
+
+type DashboardRowViewportItem = Extract<
+  DashboardViewportItem,
+  { type: "session" | "createLocalRow" }
+>;
+
+type DashboardRowDecorations = {
+  focused?: true;
+  textHighlights?: WorktreeRowTextHighlights;
+  dimmed?: true;
+};
+
+function rowDecorationsForViewportItem(
+  item: DashboardRowViewportItem,
+  dashboardFocus: DashboardFocus | undefined,
+): DashboardRowDecorations {
+  const decorations: DashboardRowDecorations = {};
+  if (
+    item.type === "session" &&
+    dashboardFocus?.kind === "session" &&
+    item.row.id === dashboardFocus.sessionId
+  ) {
+    decorations.focused = true;
+  }
+  const match = item.persistentFilterMatch;
+  if (match !== undefined) {
+    decorations.textHighlights = persistentFilterRowHighlights(match);
+    if (match.dimmed) {
+      decorations.dimmed = true;
+    }
+  }
+  return decorations;
+}
+
+function persistentFilterRowHighlights(
+  match: DashboardPersistentFilterRowMatch,
+): WorktreeRowTextHighlights {
+  return {
+    title: match.ranges.title,
+    agent: match.ranges.agent,
+    activity: match.ranges.activity,
+  };
 }
 
 export type SnapshotLoadingLine = {

@@ -4,6 +4,7 @@ import type { StoreApi } from "zustand/vanilla";
 import {
   createTuiStore,
   legacySearchExperience,
+  type DashboardSearchExperience,
   type TuiFolderService,
   type TuiStore,
 } from "@station/dashboard-core";
@@ -19,6 +20,7 @@ export type MakeStationTestStoreOptions = {
   seedInitialSnapshot?: boolean | undefined;
   terminalRows?: number | undefined;
   folderService?: TuiFolderService | undefined;
+  dashboardSearchExperience?: DashboardSearchExperience | undefined;
 };
 
 export type StationTestStore = {
@@ -38,7 +40,8 @@ export function makeStationTestStore(options: MakeStationTestStoreOptions = {}):
   const store = createTuiStore({
     source,
     service,
-    dashboardSearchExperience: legacySearchExperience,
+    dashboardSearchExperience:
+      options.dashboardSearchExperience ?? legacySearchExperience,
     ...(snapshot === undefined || options.seedInitialSnapshot === false
       ? {}
       : { initialSnapshot: snapshot }),

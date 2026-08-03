@@ -81,6 +81,7 @@ export function handleTuiKey(
     case "help":
       return handleHelpKey(state, key);
     case "search":
+    case "persistentFilter":
       return dashboardSearchExperience.handleKey(state, key);
     case "projectCollapse":
       return handleProjectCollapseKey(state, key);

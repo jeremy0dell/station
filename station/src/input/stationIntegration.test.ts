@@ -7,7 +7,11 @@
 // overlay is down.
 import { describe, expect, it } from "bun:test";
 import type { StoreApi } from "zustand/vanilla";
-import type { TuiStore } from "@station/dashboard-core";
+import {
+  persistentFilterExperience,
+  type DashboardSearchExperience,
+  type TuiStore,
+} from "@station/dashboard-core";
 import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
@@ -24,8 +28,12 @@ import {
 } from "./keymap/stationBindings.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
-function makeViewStore(): StoreApi<TuiStore> {
-  return makeStationTestStore().store;
+function makeViewStore(
+  dashboardSearchExperience?: DashboardSearchExperience,
+): StoreApi<TuiStore> {
+  return makeStationTestStore({
+    ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
+  }).store;
 }
 
 const LEFT_DOWN: StationMouseEvent = {
@@ -167,8 +175,14 @@ describe("station overlay layer in the keymap stack", () => {
 });
 
 describe("station input through the station runtime", () => {
-  function makeRuntime(overlayOpen: boolean, options: { boot?: "empty" } = {}) {
-    const view = makeViewStore();
+  function makeRuntime(
+    overlayOpen: boolean,
+    options: {
+      boot?: "empty";
+      dashboardSearchExperience?: DashboardSearchExperience;
+    } = {},
+  ) {
+    const view = makeViewStore(options.dashboardSearchExperience);
     const station = makeStationStore(overlayOpen, options);
     const written: string[] = [];
     const pasted: string[] = [];
@@ -199,6 +213,72 @@ describe("station input through the station runtime", () => {
     expect(runtime.handleSequence("\x1b")).toBe(true); // dismiss overlay
     expect(station.getState().input.activeOverlay).toBeNull();
     expect(station.getState().input.focus.kind).toBe("pane");
+  });
+
+  it("drives persistent filter cancel, apply, retained close, and clear through the runtime", () => {
+    const { view, station, runtime } = makeRuntime(true, {
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+
+    expect(runtime.handleSequence("/")).toBe(true);
+    expect(runtime.handleSequence("working")).toBe(true);
+    expect(view.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "working", cursor: 7 },
+    });
+    expect(runtime.handleSequence("\x1b")).toBe(true);
+    expect(view.getState().screen).toEqual({ name: "dashboard" });
+    expect(view.getState().persistentFilter).toBeUndefined();
+
+    runtime.handleSequence("/");
+    runtime.handleSequence("working");
+    runtime.handleSequence("\r");
+    expect(view.getState().persistentFilter).toEqual({ query: "working" });
+
+    expect(runtime.handleSequence("Q")).toBe(true);
+    expect(station.getState().input.activeOverlay).toBeNull();
+    expect(view.getState().persistentFilter).toEqual({ query: "working" });
+
+    const clearing = makeRuntime(true, {
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    clearing.runtime.handleSequence("/");
+    clearing.runtime.handleSequence("working");
+    clearing.runtime.handleSequence("\r");
+    expect(
+      routeKey(
+        "\x1b",
+        clearing.station.getState(),
+        createStationKeymap(clearing.view),
+      ),
+    ).toEqual({ kind: "swallowed" });
+    expect(clearing.station.getState().input.activeOverlay).toBe(STATION_OVERLAY_ID);
+    expect(clearing.view.getState().persistentFilter).toBeUndefined();
+    expect(clearing.runtime.handleSequence("\x1b")).toBe(true);
+    expect(clearing.station.getState().input.activeOverlay).toBeNull();
+  });
+
+  it("sanitizes persistent-filter paste and reserves global chords from the draft", () => {
+    const { view, station, runtime } = makeRuntime(true, {
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    runtime.handleSequence("/");
+
+    runtime.handlePaste({
+      bytes: new TextEncoder().encode("sta\x1b[31mtion\x00\nover\rlay\x07"),
+      preventDefault: () => {},
+    });
+    expect(view.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "sta[31mtion over lay" },
+    });
+
+    expect(runtime.handleSequence(OVERLAY_TOGGLE_LEGACY)).toBe(true);
+    expect(station.getState().input.activeOverlay).toBeNull();
+    expect(view.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "sta[31mtion over lay" },
+    });
   });
 
   it("routes Ctrl-U through new-session edit-name without inserting a literal u", () => {

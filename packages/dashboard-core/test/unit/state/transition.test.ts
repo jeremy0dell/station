@@ -5,6 +5,7 @@ import {
   handleTuiKey,
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
+  persistentFilterExperience,
   replaceSnapshot,
   selectDashboardViewport,
   type TuiKey,
@@ -39,6 +40,44 @@ describe("TUI screen transitions", () => {
     const closedImmediately = handleTuiKey(state, { input: "Q" });
     expect(closedImmediately.dismissPopup).toBe(true);
     expect(closedImmediately.state.toasts).toHaveLength(1);
+  });
+
+  it("clears an applied persistent filter before Esc dismisses the dashboard popup", () => {
+    const state = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      persistentFilter: { query: "working" },
+      runtime: { persistentPopup: true, canDismissPopup: true },
+    });
+
+    const cleared = handleTuiKey(
+      state,
+      { input: "", escape: true },
+      undefined,
+      persistentFilterExperience,
+    );
+    expect("persistentFilter" in cleared.state).toBe(false);
+    expect(cleared.dismissPopup).toBeUndefined();
+
+    const dismissed = handleTuiKey(
+      cleared.state,
+      { input: "", escape: true },
+      undefined,
+      persistentFilterExperience,
+    );
+    expect(dismissed.dismissPopup).toBe(true);
+  });
+
+  it("retains applied dashboard-local filter state when Q closes", () => {
+    const state = createInitialTuiState({
+      initialSnapshot: createDashboardSnapshot(),
+      persistentFilter: { query: "working" },
+      runtime: { persistentPopup: true, canDismissPopup: true },
+    });
+
+    const closed = handleTuiKey(state, { input: "Q" }, undefined, persistentFilterExperience);
+
+    expect(closed.dismissPopup).toBe(true);
+    expect(closed.state.persistentFilter).toEqual({ query: "working" });
   });
 
   it("does not let a hidden error intercept Esc from an open modal", () => {

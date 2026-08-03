@@ -1,4 +1,5 @@
 import type { WorktreeRow as WorktreeRowModel } from "@station/contracts";
+import { type TextMatchRange, textMatchSegments } from "../TextMatch/segments.js";
 import {
   type RowColor,
   type RowGridCell,
@@ -11,21 +12,39 @@ import {
   type WorktreeRowMetadataGroups,
 } from "./layout.js";
 
+export type WorktreeRowTextHighlights = {
+  title?: readonly TextMatchRange[];
+  agent?: readonly TextMatchRange[];
+  activity?: readonly TextMatchRange[];
+};
+
+export type WorktreeRowPresentation = {
+  title: string;
+  agent: string;
+  activity: string;
+};
+
 export function worktreeRowGridInput({
   id,
   row,
   slot,
   title,
+  presentation,
   focused,
+  textHighlights,
+  dimmed,
 }: {
   id?: string;
   row: WorktreeRowModel;
   slot: string | undefined;
   title?: string | undefined;
+  presentation?: WorktreeRowPresentation | undefined;
   focused?: boolean | undefined;
+  textHighlights?: WorktreeRowTextHighlights | undefined;
+  dimmed?: true | undefined;
 }): RowGridRowInput {
   const marker = statusMarker(row);
-  const displayTitle = title ?? row.branch;
+  const visibleFields = presentation ?? worktreeRowVisibleFields(row, title);
   const activity = activityCellForRow(row);
   const ready = isReadyToRead(row);
   const state = row.agent?.state ?? "none";
@@ -33,15 +52,21 @@ export function worktreeRowGridInput({
     id: id ?? row.id,
     slot,
     marker,
-    title: displayTitle,
-    agent: row.agent?.harness ?? "-",
-    activity: activity.text,
+    title: visibleFields.title,
+    agent: visibleFields.agent,
+    activity: visibleFields.activity,
     activityImportance: activity.importance,
     // Let the status claim the row's trailing slack so it stretches to the end
     // instead of truncating while empty space remains, matching transient rows.
     activityOverflow: "rowSlack",
     metadataGroups: metadataGroups(row),
   };
+  if (textHighlights !== undefined) {
+    input.textHighlights = textHighlights;
+  }
+  if (dimmed === true) {
+    input.dimmed = true;
+  }
   // Tone colors the glyph + status label only — the session name must stay
   // foreground in every state (D12/D13).
   const tone = rowStatusTone(row, ready, state);
@@ -73,6 +98,8 @@ export function worktreeStyleRowGridInput(input: {
   agentColor?: RowColor;
   metadataGroups?: WorktreeRowMetadataGroups;
   focused?: true;
+  textHighlights?: WorktreeRowTextHighlights;
+  dimmed?: true;
 }): RowGridRowInput {
   const cells: Partial<Record<RowGridCellKey, RowGridCell>> = {};
   cells.identity = {
@@ -88,20 +115,28 @@ export function worktreeStyleRowGridInput(input: {
   };
   cells.title = {
     key: "title",
-    segments: [textSegment(input.title, { color: input.color })],
+    segments: highlightedTextSegments(input.title, input.color, input.textHighlights?.title ?? []),
     importance: "required",
   };
   if (input.agent !== undefined) {
     cells.agent = {
       key: "agent",
-      segments: [textSegment(input.agent, { color: input.agentColor ?? input.color })],
+      segments: highlightedTextSegments(
+        input.agent,
+        input.agentColor ?? input.color,
+        input.textHighlights?.agent ?? [],
+      ),
       importance: "optional",
     };
   }
   if (input.activity !== undefined) {
     cells.activity = {
       key: "activity",
-      segments: [textSegment(input.activity, { color: input.activityColor ?? input.color })],
+      segments: highlightedTextSegments(
+        input.activity,
+        input.activityColor ?? input.color,
+        input.textHighlights?.activity ?? [],
+      ),
       importance: input.activityImportance ?? "optional",
     };
     if (input.activityOverflow !== undefined) {
@@ -119,17 +154,47 @@ export function worktreeStyleRowGridInput(input: {
     }
   }
 
+  if (input.dimmed === true) {
+    for (const cell of Object.values(cells)) {
+      if (cell !== undefined) {
+        cell.segments = cell.segments.map(dimmedSegment);
+      }
+    }
+  }
+
   const row: RowGridRowInput = {
     id: input.id,
     cells,
   };
   if (input.metadataGroups !== undefined) {
-    row.metadataGroups = input.metadataGroups;
+    row.metadataGroups =
+      input.dimmed === true
+        ? {
+            diff: input.metadataGroups.diff.map(dimmedSegment),
+            pr: input.metadataGroups.pr.map(dimmedSegment),
+          }
+        : input.metadataGroups;
   }
   if (input.color !== undefined) {
     row.color = input.color;
   }
   return row;
+}
+
+function highlightedTextSegments(
+  text: string,
+  color: RowColor | undefined,
+  ranges: readonly TextMatchRange[],
+): RowSegment[] {
+  return textMatchSegments(text, ranges).map((segment) =>
+    segment.matched
+      ? textSegment(segment.text, { color, highlighted: true })
+      : textSegment(segment.text, { color }),
+  );
+}
+
+function dimmedSegment(segment: RowSegment): RowSegment {
+  return { ...segment, dimmed: true };
 }
 
 function identitySegments(
@@ -157,6 +222,17 @@ function identitySegments(
   }
   segments.push(textSegment(" ", { color }));
   return segments;
+}
+
+export function worktreeRowVisibleFields(
+  row: WorktreeRowModel,
+  title?: string,
+): WorktreeRowPresentation {
+  return {
+    title: title ?? row.branch,
+    agent: row.agent?.harness ?? "-",
+    activity: activityCellForRow(row).text,
+  };
 }
 
 function activityCellForRow(row: WorktreeRowModel): {

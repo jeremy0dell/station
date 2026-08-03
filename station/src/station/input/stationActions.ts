@@ -1,34 +1,22 @@
-// Execution layer for the STATION view's input. Keyboard and semantic controls
-// share dashboard-core transitions; this module adds only Station-owned pane
-// effects and direct state helpers for controls outside the semantic action model.
-// Native New Session creation intentionally intercepts the resolved Create action
-// after shared validation so it can launch a managed pane instead of dispatching
-// the standalone observer operation.
+// Execution layer for the STATION view's input. Native Station adds pane and
+// control effects around shared dashboard actions without owning dashboard state
+// transitions. New Session creation intercepts the resolved Create action after
+// shared validation so it can launch a managed pane instead of dispatching the
+// standalone observer operation.
 import type { StoreApi } from "zustand/vanilla";
 import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
-  addTuiToast,
   choiceValueByKey,
   deriveTuiInputMode,
-  focusDashboardProjectHeader,
   newSessionActionForInput,
   newSessionIntentForAction,
-  focusProjectSettingsItem as focusProjectSettingsItemState,
-  openWidgetSettings as openWidgetSettingsState,
   resolveQuickSessionIntent,
   safeErrorToToast,
-  selectAddProjectRow as selectAddProjectRowState,
   selectDashboardItems,
   selectDashboardSessionRow,
   selectDashboardViewport,
-  widgetSettingsAddFromPicker,
-  widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
-  type ProjectSettingsItemId,
   type TuiSemanticAction,
 } from "@station/dashboard-core";
-import { scrollDashboard } from "@station/dashboard-core";
 import { validateForkSessionCreate, validateNewSessionCreate } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
 import type {
@@ -79,7 +67,7 @@ export function dispatchStationAction(
   store: StoreApi<TuiStore>,
   action: TuiSemanticAction,
 ): StationKeyOutcome {
-  return outcomeForResult(store, store.getState().handleAction(action));
+  return outcomeForResult(store, store.getState().dispatch(action));
 }
 
 function outcomeForResult(
@@ -376,10 +364,14 @@ export function resolveQuickSessionSubmit(
   const intent = resolveQuickSessionIntent(store.getState(), projectId);
   if (intent.kind === "missing") return { kind: "none" };
   if (intent.kind === "blocked") {
-    store.setState(addTuiToast(store.getState(), safeErrorToToast(intent.error)));
+    store.getState().pushToast(safeErrorToToast(intent.error));
     return { kind: "none" };
   }
-  store.setState(focusDashboardProjectHeader(store.getState(), intent.projectId, "quickSession"));
+  store.getState().dispatch({
+    type: "dashboard.projectHeader.focus",
+    projectId: intent.projectId,
+    control: "quickSession",
+  });
   return {
     kind: "submit",
     projectId: intent.projectId,
@@ -387,43 +379,6 @@ export function resolveQuickSessionSubmit(
     branch: intent.branch,
     harness: intent.harnessProvider,
   };
-}
-
-/**
- * Station mouse extension: clicking a left-list item selects it and drops into
- * its detail pane. No single keyboard key maps to this (the keyboard path is
- * arrow-move then enter), so the pointer adapter owns this direct-focus helper.
- */
-export function focusProjectSettingsItem(
-  store: StoreApi<TuiStore>,
-  itemId: ProjectSettingsItemId,
-): void {
-  store.setState(focusProjectSettingsItemState(store.getState(), itemId));
-}
-
-/** Header `[+]` affordance: open the widget-settings panel from the dashboard. */
-export function openWidgetSettingsPanel(store: StoreApi<TuiStore>): void {
-  store.setState(openWidgetSettingsState(store.getState()));
-}
-
-export function toggleWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(widgetSettingsToggleAt(store.getState(), index));
-}
-
-export function selectAddProjectRow(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(selectAddProjectRowState(store.getState(), index));
-}
-
-export function removeWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(widgetSettingsRemoveAt(store.getState(), index));
-}
-
-export function openWidgetSettingsPicker(store: StoreApi<TuiStore>): void {
-  store.setState(widgetSettingsOpenPicker(store.getState()));
-}
-
-export function addWidgetSettingsPickerChoice(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(widgetSettingsAddFromPicker(store.getState(), index));
 }
 
 /**
@@ -463,11 +418,6 @@ export function resolveProjectPaneTarget(
     return undefined;
   }
   return { paneId: projectPaneId(project.id), cwd: project.root, role: "shell" };
-}
-
-/** Wheel/indicator scrolling via the shared scroll math. */
-export function scrollStationView(store: StoreApi<TuiStore>, delta: number): void {
-  store.setState(scrollDashboard(store.getState(), delta));
 }
 
 export function dismissStationToasts(store: StoreApi<TuiStore>): void {

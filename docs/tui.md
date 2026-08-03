@@ -244,6 +244,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the Station state store, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
 - Each renderer composition resolves one `StationTuiComposition` through `station/src/config/tuiConfig.ts` and passes that opaque composition into the dashboard store. This is the only feature-decision boundary: reducers and render/input leaves must not select search behavior or inspect feature flags; legacy session and optimistic-row matching remains centralized in the pure dashboard search projection.
+- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers to replace store state. Hosted workspace creation temporarily crosses into dashboard state through the named `addPendingCreateSession`, `failPendingCreateSession`, and `removePendingCreateSession` actions; Station still owns failure-retention timers and expiry scheduling until that lifecycle moves behind the runtime facade.
 - New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
@@ -272,6 +273,46 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Do not add a row-level inspect/debug panel. Use CLI JSON, `stn doctor`, `stn snapshot --json`, and debug bundles for support evidence.
 - Do not render `providerData` or raw provider debug payloads in ordinary UI surfaces.
 
+## Persistent Dashboard Filter Preview
+
+`[feature_flags].dashboard_persistent_filter` selects the dashboard search experience once at
+renderer composition. With the flag off, `/`, the absolute legacy search prompt, and applied
+`searchQuery` behavior remain unchanged. Reducers, selectors, input routing, and views consume the
+selected experience or typed state; they do not read the flag.
+
+With the flag on, `/` opens a single-line editor in the complete table-header row. Its draft starts
+from the dashboard-local applied query. Editing performs a deterministic, locale-neutral
+case-insensitive soft preview over visible row fields and project labels. Folded match offsets map
+back to the displayed source text before highlighting. Every row keeps its current order, slot,
+collapse visibility, and viewport position; visible matches receive bounded highlight spans, while
+nonmatching rows and project headers are dimmed. Collapsed and empty projects still receive header
+match state. The header includes the live row count and any above-viewport context. A valid
+zero-result draft stays editable and uses an amber `0/N matches` cue rather than an error state.
+Long drafts follow the
+caret horizontally and never wrap into the body.
+
+`Enter` applies a nonblank draft to optional dashboard-local persistent-filter state; applying a
+blank draft removes that optional state. Editing `Esc` discards the draft and restores the applied
+query exactly. On the dashboard, `Esc` clears an applied filter before the existing popup-dismiss
+path; `Q` closes or dismisses while retaining dashboard-local state. An applied query remains a soft
+projection in #395: its bounded summary/count replaces the column row and `/ edit` plus `Esc clear`
+appear in the neutral dashboard footer, but rows are not hidden or reordered. Narrow applied-filter
+footers shed secondary shortcuts before the edit, clear, and close controls. While editing, the
+footer is a visually explicit bounded `FILTER` helper. Persistent filtering never uses the absolute
+`CommandPromptView` overlay.
+
+Hard applied row/group omission, collapse override, hidden-field match explanations, pointer
+edit/clear parity, sheet-return parity, and real native/tmux terminal acceptance remain owned by
+[#396](https://github.com/jeremy0dell/station/issues/396).
+
+| Verification | Flag off | Flag on |
+| --- | --- | --- |
+| `/` at wide and minimum width | Legacy absolute prompt; no live preview | Header editor; live highlights/dimming/count; no wrapping |
+| Editing `Esc` | Cancels legacy draft | Restores the prior applied query |
+| `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Applies persistent state, then clears it without closing |
+| Zero matches | Legacy projection behavior | Amber, recoverable soft preview with all rows still present |
+| `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining the applied query |
+
 ## Mouse Coverage Boundaries
 
 OpenTUI `mockMouse` tests cover renderer composition, semantic hit targets, hover styling, modal
@@ -279,9 +320,9 @@ interception, and equivalence with keyboard transitions. They do not prove termi
 negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
 The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
-Workflow controls dispatch renderer-neutral semantic actions through `TuiStore.handleAction(...)`;
-direct hotkeys and focused Enter decode to the same pure intents before transitions or effects run.
-Dashboard-core owns action availability and resolution, while native Station and standalone/tmux
+Workflow controls dispatch renderer-neutral actions through `TuiStore.dispatch(...)`; direct hotkeys
+and focused Enter decode to the same pure intents before transitions or effects run. Dashboard-core
+owns action availability and resolution, while native Station and standalone/tmux
 retain their terminal-specific effects after shared resolution. Session rows are resolved by their
 exact current row ID before their visible slot key is dispatched, so
 observer-backed focus, start, resume, and picker behavior stays on the existing command path.
@@ -436,7 +477,7 @@ Station uses `bun test` (colocated `*.test.ts` / `*.test.tsx`), not vitest. `@st
 - Live command dispatch through the shared client (focus, jump-to-session, convergence, recovery) lives in `station/src/station/store/stationCommandDispatch.test.ts`.
 - Rendering correctness uses golden frames: `station/src/station/view/dashboard.golden.test.tsx` (scenario × size matrix) and `view/modals.golden.test.tsx`. Use golden frames when exact terminal text, spacing, layout, footer placement, or clipping matters.
 - Production popup acceptance lives in `integrations/terminal/tmux/test/integration/popup-real.test.ts`. Popup input and resize assertions must enter through an attached outer PTY, then prove the visible captured frame and converged nested-client/pane/renderer geometry; an internal store transition or command receipt is not sufficient evidence.
-- Isolation is enforced by `station/src/station/importBoundaries.test.ts`. It scans all production `station/src` modules for forbidden UI/provider imports and keeps exact, shrink-only inventories of temporary raw dashboard store imports, mutable store references, direct mutations, and runtime/operation internals. Dashboard-surface checks additionally enforce its linked `@station` package set, no local ported fork, and no `focusable`.
+- Isolation is enforced by `station/src/station/importBoundaries.test.ts`. It scans all production `station/src` modules for forbidden UI/provider imports and prohibits direct dashboard store mutation outright, while keeping exact, shrink-only inventories of temporary raw store imports, mutable store references, and runtime/operation internals. Dashboard-surface checks additionally enforce its linked `@station` package set, no local ported fork, and no `focusable`.
 - PTY/terminal behavior is tested under `station/src/terminal/` (VT conformance/stress) and via the smoke probes in the `test:pty` / `test:agents` scripts.
 
 Useful focused commands:

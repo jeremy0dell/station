@@ -6,6 +6,7 @@ export type TuiInputMode =
   | "dashboard"
   | "help"
   | "search"
+  | "persistentFilter"
   | "projectCollapse"
   | "projectSettingsPicker"
   | "removeChooseSlot"
@@ -39,6 +40,8 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
       return "help";
     case "search":
       return "search";
+    case "persistentFilter":
+      return "persistentFilter";
     case "projectCollapse":
       return "projectCollapse";
     case "projectSettingsPicker":
@@ -80,13 +83,6 @@ type DashboardKeyPattern =
 
 type DashboardNamedKey = Extract<DashboardKeyPattern, { kind: "named" }>["named"];
 
-type DashboardFooterVariant = "full" | "compact" | "firstRunFull" | "firstRunCompact";
-
-type DashboardFooterMetadata = {
-  order: number;
-  labels: Partial<Record<DashboardFooterVariant, string>>;
-};
-
 type DashboardBindingSpec = {
   id: string;
   pattern: DashboardKeyPattern;
@@ -95,7 +91,6 @@ type DashboardBindingSpec = {
   help?: {
     keys: string;
     label: string;
-    footer?: DashboardFooterMetadata;
   };
 };
 
@@ -136,15 +131,6 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "↵",
       label: "activate focus",
-      footer: {
-        order: 10,
-        labels: {
-          full: "activate",
-          compact: "activate",
-          firstRunFull: "add first project",
-          firstRunCompact: "add first project",
-        },
-      },
     },
   },
   {
@@ -157,10 +143,6 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "⇥",
       label: "next session needing you",
-      footer: {
-        order: 40,
-        labels: { full: "next-needs-me", compact: "next" },
-      },
     },
   },
   {
@@ -178,7 +160,6 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "?",
       label: "help",
-      footer: { order: 70, labels: { full: "help", compact: "help" } },
     },
   },
   {
@@ -193,6 +174,10 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "named", named: "escape" },
     action: "tui.popup.dismiss",
     outcome: "dismiss-popup",
+    help: {
+      keys: "Esc",
+      label: "clear persistent filter",
+    },
   },
   {
     id: "tui.dashboard.search",
@@ -202,7 +187,6 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "/",
       label: "search",
-      footer: { order: 50, labels: { full: "search", compact: "search" } },
     },
   },
   {
@@ -234,7 +218,6 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "X",
       label: "delete session",
-      footer: { order: 60, labels: { full: "delete", compact: "delete" } },
     },
   },
   {
@@ -245,7 +228,6 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "N",
       label: "new",
-      footer: { order: 20, labels: { full: "new", compact: "new" } },
     },
   },
   {
@@ -256,10 +238,6 @@ export const TUI_DASHBOARD_BINDINGS = [
     help: {
       keys: "A",
       label: "add",
-      footer: {
-        order: 30,
-        labels: { full: "add", firstRunFull: "add project" },
-      },
     },
   },
   {
@@ -313,49 +291,17 @@ export type TuiHelpContentLine =
   | { key: string; description: string };
 
 export const QUIT_HINT_CLOSE = "Q/esc:close";
+export const QUIT_HINT_FILTER_CLOSE = "Q:close";
 export const QUIT_HINT_DISMISS_ERROR = "Esc:dismiss  Q:close";
 
-export function dashboardFooterLabel({
-  columns,
-  quitHint,
-  firstRun = false,
-}: {
-  columns: number;
-  quitHint: string;
-  firstRun?: boolean;
-}): string {
-  const full = dashboardFooterCandidate(firstRun ? "firstRunFull" : "full", quitHint);
-  const compact = dashboardFooterCandidate(firstRun ? "firstRunCompact" : "compact", quitHint);
-  if (firstRun && full.length > columns) {
-    return quitHint === QUIT_HINT_DISMISS_ERROR && compact.length > columns ? quitHint : compact;
-  }
-  if (full.length <= columns) {
-    return full;
-  }
-  if (quitHint === QUIT_HINT_CLOSE) {
-    return compact;
-  }
-  return compact.length <= columns ? compact : quitHint;
-}
+export type TuiDashboardBindingId = (typeof TUI_DASHBOARD_BINDINGS)[number]["id"];
 
-function dashboardFooterCandidate(variant: DashboardFooterVariant, quitHint: string): string {
-  const bindings: readonly DashboardBindingSpec[] = TUI_DASHBOARD_BINDINGS;
-  // Presentation order stays in footer metadata so key-match precedence can remain independent.
-  const shortcuts = bindings
-    .flatMap((binding) => {
-      const help = binding.help;
-      if (help?.footer === undefined) {
-        return [];
-      }
-      const label = help.footer.labels[variant];
-      return label === undefined
-        ? []
-        : [{ order: help.footer.order, text: `${help.keys} ${label}` }];
-    })
-    .sort((left, right) => left.order - right.order)
-    .map(({ text }) => text)
-    .join("  ");
-  return shortcuts.length === 0 ? quitHint : `${shortcuts}  ${quitHint}`;
+/** Returns stable keyboard language without selecting a contextual footer layout. */
+export function dashboardBindingHelp(
+  id: TuiDashboardBindingId,
+): { keys: string; label: string } | undefined {
+  const binding = TUI_DASHBOARD_BINDINGS.find((candidate) => candidate.id === id);
+  return binding !== undefined && "help" in binding ? binding.help : undefined;
 }
 
 export function isSlotKey(key: TuiKey): boolean {

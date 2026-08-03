@@ -33,8 +33,6 @@ const policyNames = [
   "assessSetupPlan",
   "resolveHarnessSelection",
   "assessHarnessTracking",
-  "selectHarnessTrackingRepairTargets",
-  "deriveSetupReadiness",
   "planSetup",
   "deriveSetupResult",
   "transitionSetupSession",
@@ -115,7 +113,7 @@ describe("setup core boundaries", () => {
       }
     }
 
-    expect(markerCount).toBe(20);
+    expect(markerCount).toBe(18);
     expect(drivingPorts.sort()).toEqual([...drivingPortNames].sort());
     expect(policies.sort()).toEqual([...policyNames].sort());
     expect(drivenPorts.sort()).toEqual([...drivenPortNames].sort());

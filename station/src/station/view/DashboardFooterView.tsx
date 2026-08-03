@@ -13,6 +13,7 @@ import {
   type TuiStore,
 } from "@station/dashboard-core";
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
+import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
 
 export type DashboardFooterViewProps = {
   store: StoreApi<TuiStore>;
@@ -22,6 +23,8 @@ export type DashboardFooterViewProps = {
 export function DashboardFooterView({ store, columns }: DashboardFooterViewProps) {
   const theme = useStationTheme();
   const snapshot = useStore(store, (state) => state.snapshot);
+  const screen = useStore(store, (state) => state.screen);
+  const persistentFilter = useStore(store, (state) => state.persistentFilter);
   const quitHint = useStore(store, selectFooterQuitHint);
   const contentColumns = Math.max(1, Math.floor(columns));
   const model = dashboardFooterModel({
@@ -29,26 +32,23 @@ export function DashboardFooterView({ store, columns }: DashboardFooterViewProps
     quitHint,
     hasSnapshot: snapshot !== undefined,
     firstRun: snapshot !== undefined && snapshot.projects.length === 0,
+    screen,
+    ...(persistentFilter === undefined ? {} : { persistentFilter }),
   });
 
+  if (model.kind === "persistentFilterEditing") {
+    return <DashboardFilterFooterView segments={model.segments} />;
+  }
   return (
     <text fg={dashboardFooterColor(theme, model)}>{truncateCells(model.text, contentColumns)}</text>
   );
 }
 
-function dashboardFooterColor(theme: StationTheme, model: DashboardFooterModel): ColorInput {
-  switch (model.kind) {
-    case "loading":
-      return toOpenTuiColor(theme.text.muted);
-    case "dashboard":
-      return toOpenTuiColor(theme.text.primary);
-    default:
-      return assertNeverDashboardFooterModel(model);
-  }
-}
-
-function assertNeverDashboardFooterModel(_model: never): never {
-  throw new Error("Unhandled dashboard footer model.");
+function dashboardFooterColor(
+  theme: StationTheme,
+  model: Exclude<DashboardFooterModel, { kind: "persistentFilterEditing" }>,
+): ColorInput {
+  return toOpenTuiColor(model.kind === "loading" ? theme.text.muted : theme.text.primary);
 }
 
 function selectFooterQuitHint(state: Pick<TuiState, "screen" | "toasts">): string {

@@ -101,6 +101,8 @@ describe("terminal palette theme construction", () => {
         theme.interaction.hover,
         theme.interaction.keyboardFocus,
         theme.interaction.compactFocus,
+        theme.filter.editorSurface,
+        theme.filter.appliedSurface,
       ];
 
       for (const surface of surfaces) {
@@ -109,6 +111,24 @@ describe("terminal palette theme construction", () => {
             STATION_TEXT_CONTRAST_RATIO,
           );
         }
+      }
+    }
+  });
+
+  it("keeps adaptive filter role pairs readable", () => {
+    for (const fixture of [darkTerminalColors, lightTerminalColors]) {
+      const theme = terminalTheme(fixture);
+      const pairs = [
+        [theme.filter.editorRail, theme.filter.editorSurface],
+        [theme.filter.zeroMatch, theme.filter.editorSurface],
+        [theme.text.inverse, theme.filter.editorRail],
+        [theme.filter.matchForeground, theme.filter.matchBackground],
+      ] as const;
+
+      for (const [foreground, background] of pairs) {
+        expect(contrast(foreground, background)).toBeGreaterThanOrEqual(
+          STATION_TEXT_CONTRAST_RATIO,
+        );
       }
     }
   });
@@ -173,6 +193,7 @@ describe("terminal palette theme construction", () => {
     expect(Object.values(theme.status)).toHaveLength(7);
     expect(Object.values(theme.action)).toHaveLength(4);
     expect(Object.values(theme.interaction)).toHaveLength(5);
+    expect(Object.values(theme.filter)).toHaveLength(6);
     expect(Object.values(theme.welcome)).toHaveLength(9);
     expect(Object.values(theme.contextMenu)).toHaveLength(3);
     expect(Object.values(theme.island)).toHaveLength(5);
@@ -185,6 +206,9 @@ describe("terminal palette theme construction", () => {
       theme.interaction.hover,
       theme.interaction.keyboardFocus,
       theme.interaction.compactFocus,
+      theme.filter.editorSurface,
+      theme.filter.appliedSurface,
+      theme.filter.matchBackground,
       theme.welcome.button,
       theme.welcome.buttonMuted,
       theme.welcome.buttonHover,

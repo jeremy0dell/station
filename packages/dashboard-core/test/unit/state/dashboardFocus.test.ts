@@ -7,6 +7,7 @@ import {
   focusDashboardEmptyProjectAction,
   focusDashboardSession,
   handleTuiKey,
+  persistentFilterExperience,
   replaceSnapshot,
   selectDashboardItems,
 } from "@station/dashboard-core";
@@ -392,6 +393,38 @@ describe("dashboard focus", () => {
 
     expect(current.searchQuery).toBe("queue-worker");
     expect(current.dashboardFocus).toEqual(session("ses_wt_api_working"));
+  });
+
+  it("preserves focus, ordering, and scroll through persistent soft preview and apply", () => {
+    const initial = state({
+      terminalRows: 10,
+      scrollOffset: 3,
+      dashboardFocus: session("ses_wt_web_idle"),
+    });
+    const snapshot = initial.snapshot as StationSnapshot;
+    const initialIds = selectDashboardItems(snapshot, initial).map((item) => item.id);
+    const opened = handleTuiKey(
+      initial,
+      { input: "/" },
+      undefined,
+      persistentFilterExperience,
+    ).state;
+    const preview = handleTuiKey(
+      opened,
+      { input: "queue-worker" },
+      undefined,
+      persistentFilterExperience,
+    ).state;
+    const applied = handleTuiKey(preview, RETURN, undefined, persistentFilterExperience).state;
+
+    expect(selectDashboardItems(snapshot, preview, preview.screen).map((item) => item.id)).toEqual(
+      initialIds,
+    );
+    expect(selectDashboardItems(snapshot, applied).map((item) => item.id)).toEqual(initialIds);
+    expect(preview.dashboardFocus).toEqual(initial.dashboardFocus);
+    expect(applied.dashboardFocus).toEqual(initial.dashboardFocus);
+    expect(preview.scrollOffset).toBe(initial.scrollOffset);
+    expect(applied.scrollOffset).toBe(initial.scrollOffset);
   });
 
   it("keeps a focused header when accepted search hides only its sessions", () => {

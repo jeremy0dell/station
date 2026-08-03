@@ -21,13 +21,17 @@ import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/js
 type BuildSetupPlanOptions = {
   readonly configWrite?: ConfigWritePlan;
   readonly harnessSelection?: HarnessSelectionResolution;
+  readonly harnessTrackingSelection?: SetupPlanningIntent["harnessTrackingSelection"];
+  readonly linkStationLaunchers?: boolean;
   readonly installWorktrunkHooks?: boolean;
+  readonly installWorktrunkShell?: boolean;
+  readonly configureTmuxPopup?: boolean;
 };
 
 function buildSetupPlan(
   ...arguments_: [SetupFacts, BuildSetupPlanOptions?]
 ): ReturnType<ReturnType<typeof createJsonSetupPresenter>["project"]> {
-  return buildSetupPlans(...arguments_).compatibilityPlan;
+  return buildSetupPlans(...arguments_).jsonPlan;
 }
 
 function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
@@ -45,11 +49,11 @@ function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
     harnessSelection,
     installBootstrap: false,
     installHarnesses: [],
-    linkStationLaunchers: false,
-    harnessTrackingSelection: { kind: "automatic" },
+    linkStationLaunchers: options.linkStationLaunchers === true,
+    harnessTrackingSelection: options.harnessTrackingSelection ?? { kind: "automatic" },
     installWorktrunkHooks: options.installWorktrunkHooks === true,
-    installWorktrunkShell: false,
-    configureTmuxPopup: false,
+    installWorktrunkShell: options.installWorktrunkShell === true,
+    configureTmuxPopup: options.configureTmuxPopup === true,
   });
   const projectionInput =
     options.configWrite === undefined
@@ -58,7 +62,7 @@ function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
   return {
     semanticPlan,
     presentationView: projectSetupView(projectionInput),
-    compatibilityPlan: createJsonSetupPresenter().project(projectionInput),
+    jsonPlan: createJsonSetupPresenter().project(projectionInput),
   };
 }
 
@@ -100,7 +104,7 @@ describe("setup plan projection", () => {
     expect(source).not.toContain("ProjectSetupView");
   });
 
-  it("keeps the session JSON presenter independent from legacy and human projectors", () => {
+  it("keeps the session JSON presenter independent from retired and human projectors", () => {
     const source = readFileSync(
       new URL("../../src/commands/setup/presenters/json.ts", import.meta.url),
       "utf8",
@@ -127,14 +131,12 @@ describe("setup plan projection", () => {
         content: "schema_version = 1\n",
       },
     });
-    const mutatingActions = built.compatibilityPlan.actions.filter(
-      (action) => action.kind !== "noop",
-    );
+    const mutatingActions = built.jsonPlan.actions.filter((action) => action.kind !== "noop");
 
     expect(mutatingActions.length).toBeGreaterThan(0);
-    expect(
-      built.compatibilityPlan.actions.some((action) => action.id === "activate-observer-config"),
-    ).toBe(false);
+    expect(built.jsonPlan.actions.some((action) => action.id === "activate-observer-config")).toBe(
+      false,
+    );
     expect(
       built.semanticPlan.operations.some(
         (operation) => operation.kind === "activate-observer-config",
@@ -149,7 +151,7 @@ describe("setup plan projection", () => {
         .flatMap((check) => check.details)
         .some((detail) => detail.label.id === "detail.default-agent"),
     ).toBe(true);
-    expect(JSON.parse(JSON.stringify(built.compatibilityPlan))).toEqual(built.compatibilityPlan);
+    expect(JSON.parse(JSON.stringify(built.jsonPlan))).toEqual(built.jsonPlan);
   });
   it("reports all core checks ready and no selected actions", () => {
     const plan = buildSetupPlan(facts());
@@ -349,6 +351,69 @@ describe("setup plan projection", () => {
         command: ["brew", "install", "tmux"],
       },
     ]);
+  });
+
+  it("preserves semantic operation selection in machine actions", () => {
+    const baseFacts = facts();
+    const optional = buildSetupPlan(
+      facts({
+        launchers: {
+          ...baseFacts.launchers,
+          station: { ...baseFacts.launchers.station, source: "checkout" },
+        },
+        tmuxBinding: { ...baseFacts.tmuxBinding, insideTmux: true },
+      }),
+      {
+        linkStationLaunchers: true,
+        installWorktrunkShell: true,
+        configureTmuxPopup: true,
+      },
+    );
+    expect(optional.actions.filter((action) => action.selected).map((action) => action.id)).toEqual(
+      expect.arrayContaining([
+        "link-station-launchers",
+        "worktrunk-shell-integration",
+        "tmux-popup-binding",
+        "tmux-live-popup-binding",
+      ]),
+    );
+
+    const gated = buildSetupPlans(
+      facts({
+        worktrunk: { status: "missing", command: "wt", message: "Worktrunk missing." },
+        xcode: {
+          status: "missing",
+          applicable: true,
+          message: "Command Line Tools missing.",
+        },
+      }),
+    );
+    expect([
+      gated.semanticPlan.operations.find((operation) => operation.id === "install:worktrunk")
+        ?.selected,
+      gated.jsonPlan.actions.find((action) => action.id === "install-worktrunk")?.selected,
+    ]).toEqual([false, false]);
+
+    const declined = buildSetupPlans(
+      facts({
+        harnessTracking: [
+          {
+            harnessId: "codex",
+            capability: "supported",
+            requested: true,
+            installed: false,
+            detail: "Codex hooks are absent.",
+          },
+        ],
+      }),
+      { harnessTrackingSelection: { kind: "explicit", harnessIds: [] } },
+    );
+    expect([
+      declined.semanticPlan.operations.find(
+        (operation) => operation.id === "prepare-harness-tracking:codex",
+      )?.selected,
+      declined.jsonPlan.actions.find((action) => action.id === "codex-hooks")?.selected,
+    ]).toEqual([false, false]);
   });
 
   it("plans a Homebrew install for missing Bun", () => {
@@ -1208,14 +1273,14 @@ describe("setup plan projection", () => {
     });
   });
 
-  it("uses human agent wording without changing the legacy machine message", () => {
+  it("uses human agent wording without changing the frozen machine message", () => {
     const built = buildSetupPlans(
       facts({
         harnesses: harnesses([]),
         config: { status: "missing", path: "/tmp/config.toml", message: "Config missing." },
       }),
     );
-    const machine = built.compatibilityPlan.checks.find((check) => check.id === "harness");
+    const machine = built.jsonPlan.checks.find((check) => check.id === "harness");
     const human = built.presentationView.checks.find((check) => check.id === "harness");
 
     expect(machine?.message).toContain("supported harness CLI");

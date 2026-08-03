@@ -56,6 +56,14 @@ const sharedRoles = {
     border: rgb("#9ca3af"),
     hairline: rgb("#20252c"),
   },
+  filter: {
+    editorRail: rgb("#22d3ee"),
+    editorSurface: rgb("#11232c"),
+    appliedSurface: rgb("#171b20"),
+    matchForeground: rgb("#f1f5c4"),
+    matchBackground: rgb("#3f4a1b"),
+    zeroMatch: rgb("#fbbf24"),
+  },
   welcome: {
     button: rgb("#1f2937"),
     buttonMuted: rgb("#101316"),

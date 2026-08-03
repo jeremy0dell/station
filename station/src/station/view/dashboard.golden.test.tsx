@@ -7,7 +7,11 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import type { TuiToast } from "@station/dashboard-core";
+import {
+  persistentFilterExperience,
+  type DashboardSearchExperience,
+  type TuiToast,
+} from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
@@ -90,11 +94,15 @@ describe("dashboard golden frames", () => {
     hoverEnabled?: boolean;
     toast?: TuiToast;
     theme?: StationTheme;
+    dashboardSearchExperience?: DashboardSearchExperience;
   }): Promise<RenderedDashboard> {
     const { store } = makeStationTestStore({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
+      ...(input.dashboardSearchExperience === undefined
+        ? {}
+        : { dashboardSearchExperience: input.dashboardSearchExperience }),
     });
     store.getState().start();
     const dashboard = (
@@ -144,6 +152,110 @@ describe("dashboard golden frames", () => {
       });
     }
   }
+
+  it("renders the persistent filter soft-preview editor at wide width", async () => {
+    const setup = await renderDashboard({
+      width: 120,
+      height: 40,
+      snapshot: manyProjectsSnapshot(),
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    await act(async () => {
+      setup.store.getState().handleKey({ input: "/" });
+      setup.store.getState().handleKey({ input: "cli" });
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const frame = setup.captureCharFrame();
+    expect(frame).toMatchSnapshot();
+    expect(frame).toContain("FILTER /cli▏");
+    expect(frame).toContain("FILTER");
+    const lines = frame.split("\n");
+    const matchingRow = lines.findIndex((line) => line.includes("cli-help-man"));
+    const matchColumn = lines[matchingRow]?.indexOf("cli") ?? -1;
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), matchingRow, matchColumn))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.filter.matchBackground),
+    );
+    const nonmatchingRow = lines.findIndex((line) => line.includes("pty-buffer"));
+    const nonmatchColumn = lines[nonmatchingRow]?.indexOf("pty-buffer") ?? -1;
+    const nonmatchSpan = spanAtFrameCell(setup.captureSpans(), nonmatchingRow, nonmatchColumn);
+    expect(((nonmatchSpan?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(true);
+    const unmatchedProjectRow = lines.findIndex((line) => line.includes("▼ observer"));
+    const unmatchedProjectColumn = lines[unmatchedProjectRow]?.indexOf("observer") ?? -1;
+    const unmatchedProjectSpan = spanAtFrameCell(
+      setup.captureSpans(),
+      unmatchedProjectRow,
+      unmatchedProjectColumn,
+    );
+    expect(((unmatchedProjectSpan?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(true);
+    const matchedProjectRow = lines.findIndex((line) => line.includes("▼ station"));
+    const matchedProjectColumn = lines[matchedProjectRow]?.indexOf("station") ?? -1;
+    const matchedProjectSpan = spanAtFrameCell(
+      setup.captureSpans(),
+      matchedProjectRow,
+      matchedProjectColumn,
+    );
+    expect(((matchedProjectSpan?.attributes ?? 0) & TextAttributes.DIM) !== 0).toBe(false);
+  });
+
+  it("renders a recoverable zero-match persistent preview", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    await act(async () => {
+      setup.store.getState().handleKey({ input: "/" });
+      setup.store.getState().handleKey({ input: "no-such-session" });
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(setup.captureCharFrame()).toContain("0/10 matches");
+  });
+
+  it("renders an applied persistent summary at compact width", async () => {
+    const setup = await renderDashboard({
+      width: 60,
+      height: 16,
+      snapshot: manyProjectsSnapshot(),
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    await act(async () => {
+      setup.store.getState().handleKey({ input: "/" });
+      setup.store.getState().handleKey({ input: "working" });
+      setup.store.getState().handleKey({ input: "\r", return: true });
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const frame = setup.captureCharFrame();
+    expect(frame).toMatchSnapshot();
+    expect(frame).toContain("FILTER working");
+    expect(frame).toContain("/ edit");
+    expect(frame).toContain("Esc clear");
+  });
+
+  it("clips a long persistent draft at minimum dashboard size", async () => {
+    const setup = await renderDashboard({
+      width: 40,
+      height: 12,
+      snapshot: manyProjectsSnapshot(),
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    await act(async () => {
+      setup.store.getState().handleKey({ input: "/" });
+      setup.store.getState().handleKey({ input: "a-very-long-persistent-filter-draft" });
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    expect(setup.captureCharFrame()).toMatchSnapshot();
+    expect(setup.captureCharFrame().split("\n")).toHaveLength(13);
+  });
 
   it("renders the loading state", async () => {
     const setup = await renderDashboard({

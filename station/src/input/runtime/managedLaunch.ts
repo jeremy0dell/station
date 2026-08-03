@@ -6,13 +6,7 @@ import { agentWorktreePaneId, type PaneId } from "../../state/types.js";
 import { dispatchStationKey } from "../../station/input/stationActions.js";
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, SafeError, StationCommand } from "@station/contracts";
-import {
-  addPendingCreateSessionRow,
-  failPendingCreateSessionRow,
-  FAILED_CREATE_ROW_TTL_MS,
-  removeCreateSessionLocalRow,
-  type TuiStore,
-} from "@station/dashboard-core";
+import { FAILED_CREATE_ROW_TTL_MS, type TuiStore } from "@station/dashboard-core";
 import { inheritedForkHarness, waitForWorktreeByBranch } from "./stationRows.js";
 import {
   createManagedLaunchAttempt,
@@ -71,23 +65,16 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
   }
 
   function clearPendingCreateRow(localId: string): void {
-    if (stationViewStore !== undefined) {
-      stationViewStore.setState(removeCreateSessionLocalRow(stationViewStore.getState(), localId));
-    }
+    stationViewStore?.getState().removePendingCreateSession(localId);
   }
 
   function failPendingCreateRow(localId: string, error: SafeError): void {
     if (stationViewStore === undefined) {
       return;
     }
-    stationViewStore.setState(
-      failPendingCreateSessionRow(
-        stationViewStore.getState(),
-        localId,
-        error,
-        Date.now() + FAILED_CREATE_ROW_TTL_MS,
-      ),
-    );
+    stationViewStore
+      .getState()
+      .failPendingCreateSession(localId, error, Date.now() + FAILED_CREATE_ROW_TTL_MS);
     setTimeout(() => clearPendingCreateRow(localId), FAILED_CREATE_ROW_TTL_MS);
   }
 
@@ -127,16 +114,14 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
 
   function startHostedWorktreeLaunch(spec: HostedWorktreeLaunch): void {
     if (stationViewStore !== undefined) {
-      stationViewStore.setState(
-        addPendingCreateSessionRow(stationViewStore.getState(), {
-          localId: spec.localId,
-          projectId: spec.projectId,
-          title: spec.title,
-          branch: spec.branch,
-          createdAt: new Date().toISOString(),
-          harnessProvider: spec.harness,
-        }),
-      );
+      stationViewStore.getState().addPendingCreateSession({
+        localId: spec.localId,
+        projectId: spec.projectId,
+        title: spec.title,
+        branch: spec.branch,
+        createdAt: new Date().toISOString(),
+        harnessProvider: spec.harness,
+      });
     }
     void runHostedWorktreeLaunch(spec).catch((error) => {
       clearPendingCreateRow(spec.localId);
