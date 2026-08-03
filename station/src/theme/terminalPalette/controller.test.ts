@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { CliRenderEvents } from "@opentui/core";
-import { nativeStationTheme } from "./builtInTheme.js";
-import { createStationThemeController, type StationThemeRenderer } from "./themeController.js";
+import { nativeStationTheme } from "../builtInTheme.js";
+import { createStationThemeController, type StationThemeRenderer } from "./controller.js";
 import {
   darkTerminalColors,
   lightTerminalColors,
   malformedTerminalColors,
-} from "./test/terminalPaletteFixtures.js";
+} from "./test/fixtures.js";
 
 type EventName = CliRenderEvents.PALETTE | CliRenderEvents.THEME_MODE;
 type Listener = (payload: unknown) => void;

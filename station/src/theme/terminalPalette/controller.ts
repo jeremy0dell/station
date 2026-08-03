@@ -1,12 +1,12 @@
 import { CliRenderEvents } from "@opentui/core";
-import { nativeStationTheme } from "./builtInTheme.js";
-import { resolveStationTheme } from "./resolveStationTheme.js";
+import { nativeStationTheme } from "../builtInTheme.js";
+import { resolveStationTheme } from "../resolveStationTheme.js";
+import type { StationTheme } from "../types.js";
 import {
   parseStationTerminalPaletteObservation,
   stationTerminalPaletteObservationSignature,
   type StationTerminalPaletteObservation,
-} from "./terminalPaletteObservation.js";
-import type { StationTheme } from "./types.js";
+} from "./observation.js";
 
 const PALETTE_SIZE = 16 as const;
 type ThemeRendererEvent = CliRenderEvents.PALETTE | CliRenderEvents.THEME_MODE;

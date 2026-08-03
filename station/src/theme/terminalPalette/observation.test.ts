@@ -4,11 +4,11 @@ import {
   lightTerminalColors,
   malformedTerminalColors,
   unsupportedTerminalColors,
-} from "./test/terminalPaletteFixtures.js";
+} from "./test/fixtures.js";
 import {
   parseStationTerminalPaletteObservation,
   stationTerminalPaletteObservationSignature,
-} from "./terminalPaletteObservation.js";
+} from "./observation.js";
 
 function mutablePalette(value: typeof darkTerminalColors): Array<string | null> {
   return [...value.palette];

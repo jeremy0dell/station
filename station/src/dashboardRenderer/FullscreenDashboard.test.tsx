@@ -12,11 +12,11 @@ import {
   type StationTheme,
   type StationThemeSource,
 } from "../theme/index.js";
-import { parseStationTerminalPaletteObservation } from "../theme/terminalPaletteObservation.js";
+import { parseStationTerminalPaletteObservation } from "../theme/terminalPalette/observation.js";
 import {
   darkTerminalColors,
   lightTerminalColors,
-} from "../theme/test/terminalPaletteFixtures.js";
+} from "../theme/terminalPalette/test/fixtures.js";
 import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";

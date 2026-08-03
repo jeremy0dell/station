@@ -11,8 +11,8 @@ import {
   StationThemeProvider,
   type StationColor,
 } from "../../theme/index.js";
-import { parseStationTerminalPaletteObservation } from "../../theme/terminalPaletteObservation.js";
-import { lightTerminalColors } from "../../theme/test/terminalPaletteFixtures.js";
+import { parseStationTerminalPaletteObservation } from "../../theme/terminalPalette/observation.js";
+import { lightTerminalColors } from "../../theme/terminalPalette/test/fixtures.js";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import type { StoreApi } from "zustand/vanilla";
 import {

@@ -3,8 +3,8 @@ import { rgbToHex } from "@opentui/core";
 import { alphaColor, indexedColor, rgbColor, terminalDefaultColor } from "./types.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
 import { resolveStationTheme } from "./resolveStationTheme.js";
-import { parseStationTerminalPaletteObservation } from "./terminalPaletteObservation.js";
-import { darkTerminalColors } from "./test/terminalPaletteFixtures.js";
+import { parseStationTerminalPaletteObservation } from "./terminalPalette/observation.js";
+import { darkTerminalColors } from "./terminalPalette/test/fixtures.js";
 
 function rgba(value: ReturnType<typeof toOpenTuiColor>) {
   if (typeof value === "string") {

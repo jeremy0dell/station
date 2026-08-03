@@ -5,8 +5,8 @@ import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
 import { nativeStationTheme } from "./builtInTheme.js";
 import { toOpenTuiOpaqueColor } from "./openTuiColor.js";
 import { resolveStationTheme } from "./resolveStationTheme.js";
-import { parseStationTerminalPaletteObservation } from "./terminalPaletteObservation.js";
-import { darkTerminalColors, lightTerminalColors } from "./test/terminalPaletteFixtures.js";
+import { parseStationTerminalPaletteObservation } from "./terminalPalette/observation.js";
+import { darkTerminalColors, lightTerminalColors } from "./terminalPalette/test/fixtures.js";
 import {
   StationThemeProvider,
   useStationTheme,

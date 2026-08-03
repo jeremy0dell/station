@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rgbColor, type StationRgbColor } from "./types.js";
+import { rgbColor, type StationRgbColor } from "../types.js";
 
 const RGB_SCHEMA = z.string().regex(/^#[0-9a-fA-F]{6}$/u);
 const RGB_OR_NULL_SCHEMA = RGB_SCHEMA.nullable();

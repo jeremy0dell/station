@@ -5,10 +5,13 @@ import type { StationSemanticColor, StationTheme } from "./types.js";
 export { nativeStationTheme } from "./builtInTheme.js";
 export { toOpenTuiColor, toOpenTuiOpaqueColor } from "./openTuiColor.js";
 export { resolveStationTheme } from "./resolveStationTheme.js";
-export { parseStationTerminalPaletteObservation } from "./terminalPaletteObservation.js";
-export type { StationTerminalPaletteObservation } from "./terminalPaletteObservation.js";
-export { createStationThemeController } from "./themeController.js";
-export type { StationThemeController, StationThemeRenderer } from "./themeController.js";
+export { createStationThemeController } from "./terminalPalette/controller.js";
+export type {
+  StationThemeController,
+  StationThemeRenderer,
+} from "./terminalPalette/controller.js";
+export { parseStationTerminalPaletteObservation } from "./terminalPalette/observation.js";
+export type { StationTerminalPaletteObservation } from "./terminalPalette/observation.js";
 export {
   StationThemeProvider,
   useStationTheme,
