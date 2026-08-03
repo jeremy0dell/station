@@ -1,6 +1,6 @@
 import { isReadyToRead } from "../components/WorktreeRow/rowInput.js";
 import type { DashboardSnapshotView } from "../state/types.js";
-import { selectDashboardSessionRows } from "./selectors.js";
+import { selectDashboardSessionRows } from "./dashboardSessionRows.js";
 
 // Fleet triage counts derived client-side: the observer's snapshot.counts carry
 // only working/idle/attention/unknown and fold "ready" into idle, so the fleet

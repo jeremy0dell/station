@@ -6,6 +6,7 @@ import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import {
   addProjectSelectedIndex,
+  persistentFilterExperience,
   removeProjectConfirmPhrase,
   selectDashboardViewport,
   type DashboardRuntime,
@@ -388,6 +389,45 @@ describe("routeStationMouse", () => {
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().screen).toEqual(before.screen);
     expect(store.state.getState().searchQuery).toBe(before.searchQuery);
+  });
+
+  it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
+    const store = makeStationTestRuntime({
+      terminalRows: 14,
+      dashboardSearchExperience: persistentFilterExperience,
+      initialState: { persistentFilter: { query: "working" } },
+    }).runtime;
+
+    expect(
+      routeStationMouse(
+        { kind: "persistentFilterAction", actionId: "persistentFilter.edit" },
+        LEFT_DOWN,
+        store,
+      ),
+    ).toEqual({ kind: "handled" });
+    expect(store.state.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "working", cursor: 7 },
+    });
+
+    store.actions.handleKey({ input: "", escape: true });
+    store.actions.handleKey({ input: "H" });
+    routeStationMouse(
+      { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toEqual({ name: "help" });
+    expect(store.state.getState().persistentFilter).toEqual({ query: "working" });
+
+    store.actions.handleKey({ input: "", escape: true });
+    routeStationMouse(
+      { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().persistentFilter).toBeUndefined();
   });
 
   it("toggles project collapse on header click, dashboard mode only", () => {

@@ -5,7 +5,10 @@ import type { ReadonlyDeep } from "../readonly.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export const widgetSettingsScreenBehavior = { clickAway: backFromWidgetSettings };
+export const widgetSettingsScreenBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: backFromWidgetSettings,
+};
 
 /**
  * Widget types addable from the picker: the parameterless ones only. weather

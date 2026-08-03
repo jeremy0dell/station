@@ -395,7 +395,7 @@ describe("dashboard focus", () => {
     expect(current.dashboardFocus).toEqual(session("ses_wt_api_working"));
   });
 
-  it("preserves focus, ordering, and scroll through persistent soft preview and apply", () => {
+  it("keeps soft preview stable, then hard-projects apply with forward/backward focus fallback", () => {
     const initial = state({
       terminalRows: 10,
       scrollOffset: 3,
@@ -420,11 +420,35 @@ describe("dashboard focus", () => {
     expect(selectDashboardItems(snapshot, preview, preview.screen).map((item) => item.id)).toEqual(
       initialIds,
     );
-    expect(selectDashboardItems(snapshot, applied).map((item) => item.id)).toEqual(initialIds);
+    expect(selectDashboardItems(snapshot, applied, applied.screen).map((item) => item.id)).toEqual([
+      "project:api",
+      "session:ses_wt_api_working",
+    ]);
     expect(preview.dashboardFocus).toEqual(initial.dashboardFocus);
-    expect(applied.dashboardFocus).toEqual(initial.dashboardFocus);
-    expect(preview.scrollOffset).toBe(initial.scrollOffset);
-    expect(applied.scrollOffset).toBe(initial.scrollOffset);
+    expect(applied.dashboardFocus).toEqual(session("ses_wt_api_working"));
+    expect(applied.scrollOffset).toBe(0);
+  });
+
+  it("returns a temporarily revealed collapsed child to its project header when clearing", () => {
+    const filtered = state({
+      terminalRows: 10,
+      collapsedProjectIds: ["web"],
+      persistentFilter: { query: "fix-nav-mobile" },
+      dashboardFocus: session("ses_wt_web_idle"),
+    });
+
+    const cleared = handleTuiKey(
+      filtered,
+      { input: "", escape: true },
+      undefined,
+      persistentFilterExperience,
+    ).state;
+
+    expect(cleared.collapsedProjectIds).toEqual(new Set(["web"]));
+    expect(cleared.dashboardFocus).toEqual(header("web", "primary"));
+    expect(selectDashboardItems(cleared.snapshot as StationSnapshot, cleared)).not.toContainEqual(
+      expect.objectContaining({ type: "session", row: { id: "ses_wt_web_idle" } }),
+    );
   });
 
   it("keeps a focused header when accepted search hides only its sessions", () => {

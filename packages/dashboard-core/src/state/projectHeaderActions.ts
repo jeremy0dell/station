@@ -66,16 +66,6 @@ export function toggleDashboardProjectCollapsed(state: TuiState, projectId: Proj
     collapsedProjectIds.add(project.id);
   }
   const next: TuiState = { ...state, collapsedProjectIds };
-  const focus = state.dashboardFocus;
-  const focusedChildProjectId =
-    focus?.kind === "session"
-      ? state.snapshot?.sessions.find((session) => session.id === focus.sessionId)?.projectId
-      : focus?.kind === "emptyProjectAction"
-        ? focus.projectId
-        : undefined;
-  if (collapsing && focusedChildProjectId === project.id) {
-    return focusDashboardProjectHeader(next, project.id, "primary");
-  }
   return reconcileDashboardFocus(state, next);
 }
 

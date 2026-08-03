@@ -19,6 +19,8 @@ import type { DashboardScreenView, TuiState } from "./types.js";
  * workflow-specific behavior remains in the owning screen modules.
  */
 export type TuiScreenBehavior = {
+  /** Whether dashboard content behind the active screen may advertise pointer interaction. */
+  readonly dashboardHoverEnabled: boolean;
   /** Performs safe local cancellation and returns only state, never commands or operations. */
   readonly clickAway?: (state: TuiState) => TuiState;
 };

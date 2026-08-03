@@ -23,10 +23,11 @@ import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
+import { clearDashboardPersistentFilter } from "./persistentFilter.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
 import { openWidgetSettings } from "./widgetSettings.js";
 
-export const dashboardScreenBehavior = {};
+export const dashboardScreenBehavior = { dashboardHoverEnabled: true };
 
 export function handleDashboardKey(
   state: TuiState,
@@ -101,8 +102,7 @@ function handleDashboardAction(
       return exitOrDismissPopup(state);
     case "tui.popup.dismiss": {
       if (state.persistentFilter !== undefined) {
-        const { persistentFilter: _removed, ...withoutPersistentFilter } = state;
-        return { state: withoutPersistentFilter };
+        return clearDashboardPersistentFilter(state);
       }
       return state.runtime.persistentPopup && state.runtime.canDismissPopup
         ? { state, dismissPopup: true }

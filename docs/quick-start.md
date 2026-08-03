@@ -60,6 +60,23 @@ Station creates an isolated worktree, launches the selected agent, and opens its
 
 The on-screen footer and help overlay are the authoritative key reference for the active screen.
 
+### Optional persistent filter
+
+The persistent free-text workflow is currently default-off. Enable it in
+`~/.config/station/config.toml`, then reopen Station so renderer composition reads the flag:
+
+```toml
+[feature_flags]
+dashboard_persistent_filter = true
+```
+
+Press `/` to edit a soft preview: rows stay in place while matches highlight and nonmatches dim.
+The filter searches only text visible in dashboard project headers and session rows. Press `Enter`
+to apply a hard filter that keeps only matching project context and sessions. Matches inside
+collapsed projects appear temporarily without changing the saved collapse state. Use `/ edit` or
+`Esc clear` from the footer with either keyboard or pointer. `Q` closes while retaining the applied
+filter for the next warm reopen.
+
 ## 6. Leave and Return
 
 Exit the UI with `Ctrl-Q` or close the outer terminal. Station-owned panes continue running in the background host. Run `stn` again to restore the workspace and reattach to live panes.

@@ -42,10 +42,7 @@ export type DashboardPersistentFilterProjectMatch = {
   labelRanges: readonly DashboardPersistentFilterMatchRange[];
 };
 
-/**
- * Draft text overrides the applied query only while editing, while applied state remains
- * dashboard-local.
- */
+/** Draft state previews all rows softly; a nonblank applied query hard-projects visible matches. */
 export type DashboardPersistentFilterProjection = {
   source: "draft" | "applied";
   query: string;

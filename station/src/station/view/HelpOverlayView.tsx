@@ -18,17 +18,15 @@ const STATION_HELP_CONTENT = [
   { key: "Esc/↑↓", description: "context menu close/move" },
   { key: "Enter/Sp", description: "context menu select" },
   { text: "station project view", align: "center" as const },
-  { key: "↑/↓", description: "move cursor" },
+  { key: "↑/↓", description: "move cursor · wheel scroll" },
   { key: "↵", description: "open focused session" },
   { key: "tab", description: "next session needing you" },
-  { key: "wheel", description: "scroll project list" },
+  { key: "/ ↵ Esc Q", description: "edit/apply/cancel-clear/retain-close filter" },
   { key: "1-9/a-z", description: "open visible session" },
   { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
   { key: "W", description: "widgets" },
   { key: "X", description: "delete session" },
-  { key: "/, Z", description: "search / refresh snapshot" },
-  { key: "H/?", description: "help" },
-  { key: "Q/Esc", description: "close/back/cancel" },
+  { key: "H/?", description: "help · Z refresh" },
 ] as const;
 
 export function HelpOverlayView({ columns, rows }: { columns: number; rows: number }) {

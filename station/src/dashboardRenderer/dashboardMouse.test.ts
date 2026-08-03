@@ -42,6 +42,7 @@ const DASHBOARD_MOUSE_TARGET_KINDS = {
   newSessionAction: true,
   openShellForProject: true,
   openShellForRow: true,
+  persistentFilterAction: true,
   projectHeader: true,
   projectSettingsConfirmRemove: true,
   removeWorktreeAction: true,

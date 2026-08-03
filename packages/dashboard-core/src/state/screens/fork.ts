@@ -7,7 +7,7 @@ import {
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
 import { createNewSessionNameToken } from "../../flows/newSession.js";
-import { selectDashboardSessionRow } from "../../selectors/selectors.js";
+import { selectDashboardSessionRow } from "../../selectors/dashboardSessionRows.js";
 import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
@@ -21,8 +21,11 @@ type ForkDetailsScreenView = Extract<ForkScreenView, { step: "details" }>;
 
 export type ForkSessionActionId = "details.name" | "details.copyDirty" | "details.submit";
 
-const forkChooseSlotBehavior = {};
-const forkDetailsBehavior = { clickAway: backFromForkDetails };
+const forkChooseSlotBehavior = { dashboardHoverEnabled: true };
+const forkDetailsBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: backFromForkDetails,
+};
 
 export function forkScreenBehavior(screen: ForkScreenView) {
   switch (screen.step) {

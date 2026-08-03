@@ -903,6 +903,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     fixture.env.STATION_FOCUS_CLIENT_ID = "stale-startup-client";
 
     await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+    await tmuxExec(fixture.wrapper, ["set-option", "-g", "mouse", "on"], fixture.env);
     fixture.ptyClient = await startTmuxPtyClient({
       tmux: fixture.wrapper,
       sessionName: "base",
@@ -945,6 +946,25 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(afterEscPane.pid).toBe(firstPane.pid);
     expect(afterEscProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
 
+    await fixture.ptyClient.write(Buffer.from("/", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("FILTER /"),
+      "persistent filter editor did not open in the tmux popup",
+    );
+    await fixture.ptyClient.write(Buffer.from("notify-cleanup", "utf8"));
+    await fixture.ptyClient.write(Buffer.from("\r", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) =>
+        content.includes("FILTER notify-cleanup") &&
+        content.includes("notify-cleanup") &&
+        !content.includes("station-design"),
+      "applied tmux filter did not hard-project the matching session",
+    );
+
     await fixture.ptyClient.write(Buffer.from("Q", "utf8"));
     await waitForNestedClientGone(fixture);
     await expectSuccessfulExit(qPopup, 10_000);
@@ -956,7 +976,29 @@ describeRealTmux("real tmux dev popup routing", () => {
       isDashboardContent,
       "dashboard did not reopen after Q",
     );
+    const retainedFilter = await waitForPaneContent(
+      fixture,
+      failedFocusPopup,
+      (content) =>
+        content.includes("FILTER notify-cleanup") &&
+        content.includes("notify-cleanup") &&
+        !content.includes("station-design"),
+      "warm tmux reopen did not retain the hard applied filter",
+    );
     const otherNestedClient = await waitForNestedClient(fixture);
+    const outerDimensions = await readOuterClientDimensions(fixture, otherClient.clientName);
+    const clearOuter = centeredPopupOuterCell(
+      outerDimensions,
+      otherNestedClient,
+      paneCell(retainedFilter, "Esc clear"),
+    );
+    await writeSgrClick(otherClient, clearOuter);
+    await waitForPaneContent(
+      fixture,
+      failedFocusPopup,
+      (content) => content.includes("station-design") && !content.includes("FILTER notify-cleanup"),
+      "tmux pointer clear did not restore the unfiltered dashboard",
+    );
     const otherPane = await readPaneEvidence(fixture);
     const otherProcesses = await waitForDashboardProcessEvidence(fixture, otherPane);
     recordRuntimeEvidence(fixture, otherNestedClient, otherPane, otherProcesses);
@@ -1575,6 +1617,9 @@ async function writeDashboardConfig(input: {
       "",
       "[repository.github]",
       "enabled = false",
+      "",
+      "[feature_flags]",
+      "dashboard_persistent_filter = true",
       "",
       "[[projects]]",
       'id = "popup-real"',

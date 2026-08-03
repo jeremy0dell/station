@@ -24,6 +24,7 @@ export * from "./flows/newSession.js";
 export * from "./flows/stepWizard.js";
 export * from "./selectors/dashboardPersistentFilter.js";
 export * from "./selectors/dashboardSearchProjection.js";
+export * from "./selectors/dashboardSessionRows.js";
 export * from "./selectors/dashboardViewport.js";
 export * from "./selectors/fleetSummary.js";
 export * from "./selectors/selectors.js";

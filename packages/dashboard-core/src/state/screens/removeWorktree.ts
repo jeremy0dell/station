@@ -3,7 +3,7 @@ import {
   type DashboardSessionRow,
   selectDashboardSessionRow,
   sessionRowDisplayTitle,
-} from "../../selectors/selectors.js";
+} from "../../selectors/dashboardSessionRows.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
 import { buildRemoveWorktreeCommand, cleanupForceRequired } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
@@ -19,8 +19,11 @@ type RemoveWorktreeScreenView = Extract<DashboardScreenView, { name: "removeWork
 
 export type RemoveWorktreeActionId = "confirm.delete" | "confirm.keep";
 
-const removeWorktreeChooseSlotBehavior = {};
-const removeWorktreeDismissBehavior = { clickAway: cancelRemoveWorktree };
+const removeWorktreeChooseSlotBehavior = { dashboardHoverEnabled: true };
+const removeWorktreeDismissBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: cancelRemoveWorktree,
+};
 
 export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreenView) {
   switch (screen.step) {

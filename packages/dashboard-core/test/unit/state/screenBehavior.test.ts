@@ -146,6 +146,23 @@ describe("TUI screen behavior", () => {
     expect(presence).toBe(expected);
   });
 
+  it("declares dashboard hover separately from click-away behavior", () => {
+    const persistentFilter = tuiScreenBehavior({
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+    });
+    const newSession = tuiScreenBehavior({ name: "newSession", flow: newReview });
+
+    expect(tuiScreenBehavior({ name: "dashboard" }).dashboardHoverEnabled).toBe(true);
+    expect(persistentFilter.dashboardHoverEnabled).toBe(false);
+    expect(persistentFilter.clickAway).toBeUndefined();
+    expect(newSession.dashboardHoverEnabled).toBe(false);
+    expect(newSession.clickAway).toBeTypeOf("function");
+    expect(
+      tuiScreenBehavior({ name: "removeWorktree", step: "chooseSlot" }).dashboardHoverEnabled,
+    ).toBe(true);
+  });
+
   it("backs nested New Session steps to review and discards the nested draft", () => {
     const edited: NewSessionFlowState = {
       ...newEdit,

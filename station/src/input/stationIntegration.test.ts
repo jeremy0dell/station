@@ -257,6 +257,48 @@ describe("station input through the station runtime", () => {
     expect(clearing.station.getState().input.activeOverlay).toBeNull();
   });
 
+  it("routes applied-filter footer targets through the runtime without piercing modals", () => {
+    const { view, runtime } = makeRuntime(true, {
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    runtime.handleSequence("/");
+    runtime.handleSequence("working");
+    runtime.handleSequence("\r");
+
+    expect(
+      runtime.dispatchMouse(
+        {
+          kind: "station",
+          target: { kind: "persistentFilterAction", actionId: "persistentFilter.edit" },
+        },
+        LEFT_DOWN,
+      ),
+    ).toBe(true);
+    expect(view.state.getState().screen).toMatchObject({ name: "persistentFilter" });
+
+    runtime.handleSequence("\x1b");
+    runtime.handleSequence("H");
+    runtime.dispatchMouse(
+      {
+        kind: "station",
+        target: { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
+      },
+      LEFT_DOWN,
+    );
+    expect(view.state.getState().screen).toEqual({ name: "help" });
+    expect(view.state.getState().persistentFilter).toEqual({ query: "working" });
+
+    runtime.handleSequence("\x1b");
+    runtime.dispatchMouse(
+      {
+        kind: "station",
+        target: { kind: "persistentFilterAction", actionId: "persistentFilter.clear" },
+      },
+      LEFT_DOWN,
+    );
+    expect(view.state.getState().persistentFilter).toBeUndefined();
+  });
+
   it("sanitizes persistent-filter paste and reserves global chords from the draft", () => {
     const { view, station, runtime } = makeRuntime(true, {
       dashboardSearchExperience: persistentFilterExperience,

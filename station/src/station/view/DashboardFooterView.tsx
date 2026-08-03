@@ -35,8 +35,13 @@ export function DashboardFooterView({ state, columns }: DashboardFooterViewProps
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
   });
 
-  if (model.kind === "persistentFilterEditing") {
-    return <DashboardFilterFooterView segments={model.segments} />;
+  if (model.kind === "persistentFilterEditing" || model.kind === "persistentFilterApplied") {
+    return (
+      <DashboardFilterFooterView
+        segments={model.segments}
+        variant={model.kind === "persistentFilterEditing" ? "editing" : "applied"}
+      />
+    );
   }
   return (
     <text fg={dashboardFooterColor(theme, model)}>{truncateCells(model.text, contentColumns)}</text>
@@ -45,7 +50,10 @@ export function DashboardFooterView({ state, columns }: DashboardFooterViewProps
 
 function dashboardFooterColor(
   theme: StationTheme,
-  model: Exclude<DashboardFooterModel, { kind: "persistentFilterEditing" }>,
+  model: Exclude<
+    DashboardFooterModel,
+    { kind: "persistentFilterEditing" | "persistentFilterApplied" }
+  >,
 ): ColorInput {
   return toOpenTuiColor(model.kind === "loading" ? theme.text.muted : theme.text.primary);
 }
