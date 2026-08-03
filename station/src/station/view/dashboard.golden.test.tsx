@@ -823,6 +823,39 @@ describe("dashboard golden frames", () => {
     );
   });
 
+  it("suppresses dashboard row hovers while the persistent filter editor owns input", async () => {
+    const setup = await renderDashboard({
+      width: 120,
+      height: 24,
+      snapshot: manyProjectsSnapshot(),
+      dashboardSearchExperience: persistentFilterExperience,
+    });
+    await act(async () => {
+      setup.store.getState().handleKey({ input: "/" });
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const lines = setup.captureCharFrame().split("\n");
+    const projectRow = lines.findIndex((line) => line.includes("▼ station"));
+    const shellColumn = lines[projectRow]?.indexOf("[shell]") ?? -1;
+    await setup.mockMouse.moveTo(shellColumn, projectRow);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), projectRow, shellColumn))).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+
+    const sessionRow = lines.findIndex((line) => line.includes("docs-cleanup"));
+    const sessionColumn = lines[sessionRow]?.indexOf("docs-cleanup") ?? -1;
+    await setup.mockMouse.moveTo(sessionColumn, sessionRow);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await setup.flush();
+    expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), sessionRow, 118))).not.toBe(
+      stationColorSnapshotValue(nativeStationTheme.interaction.hover),
+    );
+  });
+
   it("suppresses popup hover styling without removing click targets", async () => {
     let clicked: StationMouseTarget | undefined;
     const setup = await renderDashboard({

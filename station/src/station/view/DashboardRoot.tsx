@@ -54,7 +54,11 @@ export function DashboardRoot({ store, columns, rows, onCopyNotice }: DashboardR
   const hoverEnabled = useStationHoverEnabled();
 
   const toastHiddenByScreen = isTuiToastHiddenByScreen(screen);
-  const backgroundHoverEnabled = hoverEnabled && tuiScreenBehavior(screen).clickAway === undefined;
+  // The inline filter editor owns input, so the blocked dashboard targets must not advertise hover.
+  const backgroundHoverEnabled =
+    hoverEnabled &&
+    screen.name !== "persistentFilter" &&
+    tuiScreenBehavior(screen).clickAway === undefined;
   const wasToastHiddenByScreen = useRef(toastHiddenByScreen);
 
   // The store's terminalRows feeds the keyboard scroll-clamping machinery;
