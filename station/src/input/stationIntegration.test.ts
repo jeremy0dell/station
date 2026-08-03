@@ -9,11 +9,9 @@ import { describe, expect, it } from "bun:test";
 import {
   persistentFilterExperience,
   type DashboardSearchExperience,
+  type DashboardRuntime,
 } from "@station/dashboard-core";
-import {
-  makeStationTestRuntime,
-  type StationTestDashboardRuntime,
-} from "../station/test/support/makeStationTestRuntime.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import type { StationMouseEvent } from "./mouse.js";
@@ -31,7 +29,7 @@ import { createStationInputRuntime } from "./stationInput.js";
 
 function makeViewStore(
   dashboardSearchExperience?: DashboardSearchExperience,
-): StationTestDashboardRuntime {
+): DashboardRuntime {
   return makeStationTestRuntime({
     ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
   }).runtime;

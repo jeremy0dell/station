@@ -1,17 +1,29 @@
-import type { StationClientConnectionState, StationClientState } from "@station/client";
+import type { StationClientConnectionState } from "@station/client";
+import type { StationSnapshot } from "@station/contracts";
 import { safeErrorEquals } from "../services/errors/errors.js";
 import { replaceSnapshot } from "./screen.js";
 import { OBSERVER_RECOVERY_TOAST_THRESHOLD_MS } from "./timing.js";
 import { addTuiToast } from "./toasts.js";
 import type { TuiObserverConnectionStatus, TuiState } from "./types.js";
 
+export type TuiSnapshotSourceState = {
+  snapshot?: StationSnapshot;
+  connection: StationClientConnectionState;
+};
+
+export interface TuiSnapshotSource {
+  getState(): TuiSnapshotSourceState;
+  subscribe(listener: () => void): () => void;
+}
+
 /**
- * Projects canonical client state into dashboard-local state without changing
- * snapshot identity; recovery after a long outage emits the dashboard toast.
+ * Mirrors the runtime-hook path for callers that already own a subscribable
+ * snapshot source: fresh snapshots replace and clamp state, while recovery
+ * after a long outage emits the same user-facing reconnection toast.
  */
 export function applySnapshotSourceState(
   state: TuiState,
-  sourceState: StationClientState,
+  sourceState: TuiSnapshotSourceState,
   nowMs: number,
 ): TuiState {
   let next = state;

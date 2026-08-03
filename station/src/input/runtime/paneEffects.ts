@@ -13,13 +13,17 @@ import {
   type PaneSplitDirection,
 } from "../../state/types.js";
 import type { Automation } from "../../config/stationConfig.js";
-import type { StationClientStateSource } from "@station/client";
-import type { WorktreeRow } from "@station/contracts";
+import type {
+  DashboardSnapshotView,
+  DashboardStateSource,
+} from "@station/dashboard-core";
 import { paneInputBytes } from "./sequenceNormalize.js";
 import type { OpenPaneSpawn } from "../stationInput.js";
 
 /** Lines of scrollback per wheel tick, and arrow repeats per tick when a
  * fullscreen pager owns the screen. Not yet configurable. */
+type DashboardWorktreeRowView = DashboardSnapshotView["rows"][number];
+
 const WHEEL_LINES = 3;
 
 const SPLIT_PANE_ID_PREFIX = "pane-split-";
@@ -67,7 +71,7 @@ export type PaneEffects = {
 
 type PaneEffectsDeps = {
   store: StationStore;
-  clientState: StationClientStateSource | undefined;
+  dashboardState: DashboardStateSource | undefined;
   registry: PtyRegistry | undefined;
   resolveAuxShellPlacement: AuxShellPlacement | undefined;
   autoCloseOverlay: boolean;
@@ -77,7 +81,7 @@ type PaneEffectsDeps = {
 };
 
 export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
-  const { store, clientState, registry, resolveAuxShellPlacement, autoCloseOverlay, automations } =
+  const { store, dashboardState, registry, resolveAuxShellPlacement, autoCloseOverlay, automations } =
     deps;
   // Monotonic split-id source, seeded above any existing split id so restored / HMR-surviving
   // splits keep theirs and a fresh split can't collide with one already in the store.
@@ -152,7 +156,7 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
   }
 
   function splitCwdForAnchor(anchorPaneId: PaneId): string | undefined {
-    const rows = clientState?.getState().snapshot?.rows;
+    const rows = dashboardState?.getState().snapshot?.rows;
     if (rows === undefined) {
       return undefined;
     }
@@ -166,7 +170,7 @@ export function createPaneEffects(deps: PaneEffectsDeps): PaneEffects {
   // nested split, so any fixed cap would truncate deep-but-legal chains.
   function worktreeIdForPane(
     paneId: PaneId,
-    rows: readonly WorktreeRow[],
+    rows: readonly DashboardWorktreeRowView[],
   ): string | undefined {
     const visited = new Set<PaneId>();
     let current: PaneId | undefined = paneId;

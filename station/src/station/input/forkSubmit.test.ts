@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { createDashboardRuntime } from "@station/dashboard-core";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
-import { createStationTestDashboardRuntime } from "../test/support/makeStationTestRuntime.js";
 import { resolveForkSessionSubmit, resolveKeyForkSessionSubmit } from "./stationActions.js";
 
 // Station hosts a fork in a pane (worktree.fork + managed launch) rather than
@@ -11,7 +11,7 @@ import { resolveForkSessionSubmit, resolveKeyForkSessionSubmit } from "./station
 // Enter and invalid input fall through to the shared screen transition.
 function newStore() {
   const snapshot = manyProjectsSnapshot();
-  return createStationTestDashboardRuntime({
+  return createDashboardRuntime({
     source: new FakeStationSource(snapshot),
     service: new FakeTuiObserverService(snapshot),
     initialSnapshot: snapshot,

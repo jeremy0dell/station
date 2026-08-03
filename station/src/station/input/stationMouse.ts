@@ -4,7 +4,6 @@
 // dispatching the same semantic entry points keyboard uses. Hover is
 // deliberately absent: it is component-local presentation state and must
 // never touch the store.
-import type { StationClientStateSource } from "@station/client";
 import type { ProviderId } from "@station/contracts";
 import {
   deriveTuiInputMode,
@@ -39,7 +38,6 @@ import {
 
 type StationMouseDashboard = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
 };
 

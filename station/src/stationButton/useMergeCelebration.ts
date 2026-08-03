@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { StationClientStateSource } from "@station/client";
+import type { DashboardStateSource } from "@station/dashboard-core";
 import type { IslandCelebration } from "./layout.js";
 
 export const CELEBRATION_MS = 4_000;
@@ -13,7 +13,7 @@ type SeenPr = { number: number; state: string };
  * stays quiet.
  */
 export function useMergeCelebration(
-  clientState: StationClientStateSource,
+  dashboardState: DashboardStateSource,
   ttlMs: number = CELEBRATION_MS,
 ): IslandCelebration | undefined {
   const [celebration, setCelebration] = useState<IslandCelebration | undefined>(undefined);
@@ -22,7 +22,7 @@ export function useMergeCelebration(
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const check = (): void => {
-      const rows = clientState.getState().snapshot?.rows;
+      const rows = dashboardState.getState().snapshot?.rows;
       if (rows === undefined) {
         return;
       }
@@ -55,12 +55,12 @@ export function useMergeCelebration(
       timer = setTimeout(() => setCelebration(undefined), ttlMs);
     };
     check();
-    const unsubscribe = clientState.subscribe(check);
+    const unsubscribe = dashboardState.subscribe(check);
     return () => {
       unsubscribe();
       clearTimeout(timer);
     };
-  }, [clientState, ttlMs]);
+  }, [dashboardState, ttlMs]);
 
   return celebration;
 }

@@ -114,7 +114,7 @@ describe("observer client service", () => {
     });
 
     try {
-      await expect(runtime.service.loadSnapshot()).rejects.toMatchObject({
+      await expect(runtime.refresh()).rejects.toMatchObject({
         code: "OBSERVER_BUILD_MISMATCH",
       });
       expect(snapshotCalls).toBe(0);
@@ -474,9 +474,6 @@ function fakeApi(
         projected: false,
         scheduledReconcile: true,
       })),
-    getSessionRecoveryReadiness:
-      overrides.getSessionRecoveryReadiness ??
-      (async () => ({ resumeEnabled: true, harnesses: [] })),
     prepareExternalLaunch:
       overrides.prepareExternalLaunch ??
       (async (params) => ({
@@ -603,7 +600,6 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       projected: false,
       scheduledReconcile: true,
     }),
-    getSessionRecoveryReadiness: async () => ({ resumeEnabled: true, harnesses: [] }),
     prepareExternalLaunch: async (params) => ({
       kind: "existing-session",
       sessionId: `ses_${params.worktreeId}`,

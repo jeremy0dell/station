@@ -1,4 +1,5 @@
 import {
+  createDashboardRuntime,
   createInitialTuiState,
   type DashboardSearchExperience,
   handleTuiKey,
@@ -6,7 +7,6 @@ import {
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
-import { createTestDashboardRuntime } from "../../support/fakeClientStateSource.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
@@ -101,7 +101,7 @@ describe("dashboard search experience selection", () => {
         };
       },
     };
-    const store = createTestDashboardRuntime({
+    const store = createDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       dashboardSearchExperience: selectedExperience,

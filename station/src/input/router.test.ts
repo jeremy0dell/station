@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { selectDashboardSessionRows } from "@station/dashboard-core";
+import { createDashboardRuntime, selectDashboardSessionRows } from "@station/dashboard-core";
 import type { StationSnapshot } from "@station/contracts";
 import {
   attentionAndFailuresSnapshot,
@@ -7,7 +7,6 @@ import {
 } from "../station/fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
-import { createStationTestDashboardRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { createStationStore } from "../state/store.js";
 import {
   agentWorktreePaneId,
@@ -341,7 +340,7 @@ describe("routePaste", () => {
 
 describe("the station-button layer (island ↵ jump)", () => {
   function keymapFor(snapshot: StationSnapshot) {
-    const dashboardRuntime = createStationTestDashboardRuntime({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,

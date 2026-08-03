@@ -80,18 +80,6 @@ export type StationClientRuntimeState = {
   inFlightRefresh: boolean;
 };
 
-/** Canonical snapshot and connection truth shared by Station client consumers. */
-export type StationClientState = Pick<StationClientRuntimeState, "snapshot" | "connection">;
-
-/**
- * Identity-preserving source for the client runtime's canonical state.
- * Implementations notify after swapping the state object and never copy snapshots.
- */
-export interface StationClientStateSource {
-  getState(): StationClientState;
-  subscribe(listener: () => void): () => void;
-}
-
 export type StationClientRefreshOutcome =
   | { status: "loaded"; snapshot: StationSnapshot }
   | { status: "connectFailure"; error: SafeError }
@@ -100,9 +88,8 @@ export type StationClientRefreshOutcome =
 /**
  * Bridge callbacks for apps that need per-event and per-refresh side effects
  * (toasts, local-operation reconciliation). Hooks fire synchronously after the
- * runtime swaps its own state and before listeners are notified. Managed
- * refreshes and service reconciliation fire refresh hooks; service snapshot
- * loads do not.
+ * runtime swaps its own state and before listeners are notified, and only for
+ * runtime-initiated work; the public `refresh()` fires no hooks.
  */
 export type StationClientRuntimeHooks = {
   onEvent?(event: StationEvent, application: ApplyStationEventResult | undefined): void;
@@ -150,14 +137,13 @@ type StationClientRuntimeSocketOptions = {
 export type StationClientRuntimeOptions = StationClientRuntimeSharedOptions &
   (StationClientRuntimeServiceOptions | StationClientRuntimeSocketOptions);
 
-/**
- * One live client projection and the convergence-safe service that mutates it.
- * Snapshot loads and reconciliation commit to runtime state before resolving.
- */
 export type StationClientRuntime = {
-  service: ObserverService;
   start(): void;
   stop(): Promise<void>;
   getState(): StationClientRuntimeState;
   subscribe(listener: () => void): () => void;
+  refresh(reason?: string): Promise<void>;
+  reconcile(reason?: string): Promise<void>;
+  dispatch(command: StationCommand): Promise<CommandReceipt>;
+  waitForCommand(commandId: CommandId): Promise<StationClientCommandCompletion>;
 };

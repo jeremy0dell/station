@@ -255,7 +255,7 @@ describe("observer client runtime", () => {
     expect(runtime.getState().snapshot?.counts.worktrees).toBe(1);
   });
 
-  it("commits service snapshot loads before resolving without firing hooks", async () => {
+  it("applies caller-owned refresh without firing hooks and rethrows failures untouched", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeObserverService(snapshot);
     const outcomes: StationClientRefreshOutcome[] = [];
@@ -272,21 +272,10 @@ describe("observer client runtime", () => {
       }),
     );
 
-    runtime.start();
-    await waitFor(() => service.subscribeCount === 1);
-    const operationLoaded: StationSnapshot = {
-      ...snapshot,
-      rows: snapshot.rows.map((row) => ({ ...row, branch: "operation-loaded" })),
-    };
-    service.setSnapshot(operationLoaded);
-    const loaded = await runtime.service.loadSnapshot();
-    expect(loaded).toBe(runtime.getState().snapshot);
-    expect(loaded).toBe(operationLoaded);
+    service.setSnapshot(createZeroWorktreeSnapshot());
+    await runtime.refresh("operation-driven");
+    expect(runtime.getState().snapshot?.counts.worktrees).toBe(0);
     expect(outcomes).toEqual([]);
-
-    service.emit(rowUpdateEvent());
-    await waitFor(() => runtime.getState().snapshot?.rows[0]?.display.statusLabel === "working");
-    expect(runtime.getState().snapshot?.rows[0]?.branch).toBe("operation-loaded");
 
     const failing = new FakeObserverService(snapshot);
     failing.loadSnapshot = async () => {
@@ -296,7 +285,7 @@ describe("observer client runtime", () => {
       createStationClientRuntime({ service: failing, reconnect: RECONNECT_OPTIONS }),
     );
     const before = failingRuntime.getState();
-    await expect(failingRuntime.service.loadSnapshot()).rejects.toThrow("load exploded");
+    await expect(failingRuntime.refresh()).rejects.toThrow("load exploded");
     expect(failingRuntime.getState().snapshot).toBe(before.snapshot);
     expect(failingRuntime.getState().connection).toEqual(before.connection);
   });
@@ -318,33 +307,22 @@ describe("observer client runtime", () => {
       }),
     );
 
-    runtime.start();
-    await waitFor(() => service.subscribeCount === 1);
-    const operationLoaded: StationSnapshot = {
-      ...snapshot,
-      rows: snapshot.rows.map((row) => ({ ...row, branch: "reconciled-base" })),
-    };
-    service.setSnapshot(operationLoaded);
-    const reconciled = await runtime.service.reconcile("manual");
+    service.setSnapshot(createZeroWorktreeSnapshot());
+    await runtime.reconcile("manual");
     expect(service.reconcileReasons).toEqual(["manual"]);
-    expect(reconciled).toBe(runtime.getState().snapshot);
-    expect(reconciled).toBe(operationLoaded);
-    expect(outcomes).toEqual([{ status: "loaded", snapshot: operationLoaded }]);
-
-    service.emit(rowUpdateEvent());
-    await waitFor(() => runtime.getState().snapshot?.rows[0]?.display.statusLabel === "working");
-    expect(runtime.getState().snapshot?.rows[0]?.branch).toBe("reconciled-base");
+    expect(runtime.getState().snapshot?.counts.worktrees).toBe(0);
+    expect(outcomes).toEqual([{ status: "loaded", snapshot: runtime.getState().snapshot }]);
 
     service.reconcile = async () => {
       throw new Error("reconcile exploded");
     };
     const before = runtime.getState();
-    await expect(runtime.service.reconcile("again")).rejects.toThrow("reconcile exploded");
+    await expect(runtime.reconcile("again")).rejects.toThrow("reconcile exploded");
     expect(runtime.getState()).toBe(before);
     expect(outcomes).toHaveLength(1);
   });
 
-  it("passes dispatch and completion waits through the runtime-owned service", async () => {
+  it("passes dispatch and waitForCommand through to the service", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeObserverService(snapshot);
     const runtime = track(
@@ -355,14 +333,14 @@ describe("observer client runtime", () => {
       }),
     );
 
-    const receipt = await runtime.service.dispatch({
+    const receipt = await runtime.dispatch({
       type: "observer.reconcile",
       payload: { reason: "passthrough" },
     });
     expect(receipt).toBe(service.nextReceipt);
     expect(service.dispatched).toHaveLength(1);
 
-    const completion = await runtime.service.waitForCommandCompletion(receipt.commandId);
+    const completion = await runtime.waitForCommand(receipt.commandId);
     expect(completion).toBe(service.nextCompletion);
     expect(service.waitedForCommandIds).toEqual([receipt.commandId]);
   });

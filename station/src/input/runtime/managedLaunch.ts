@@ -3,12 +3,7 @@ import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
 import type { StationStore } from "../../state/store.js";
 import { agentWorktreePaneId, type PaneId } from "../../state/types.js";
 import { dispatchStationKey } from "../../station/input/stationActions.js";
-import {
-  safeErrorToNotice,
-  toSafeError,
-  type ObserverService,
-  type StationClientStateSource,
-} from "@station/client";
+import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, SafeError, StationCommand } from "@station/contracts";
 import {
   FAILED_CREATE_ROW_TTL_MS,
@@ -23,7 +18,6 @@ import {
 
 type ManagedLaunchDashboard = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<
     DashboardActions,
     | "addPendingCreateSession"
@@ -184,7 +178,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
     }
     // A bare worktree does not prune the optimistic row; only the matching canonical session does.
     const row = await waitForWorktreeByBranch(
-      dashboardRuntime.clientState,
+      dashboardRuntime.state,
       spec.projectId,
       spec.branch,
     );
@@ -242,7 +236,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
         dashboardRuntime === undefined
           ? undefined
           : inheritedForkHarness(
-              dashboardRuntime.clientState,
+              dashboardRuntime.state,
               target.projectId,
               target.sourceWorktreeId,
             );

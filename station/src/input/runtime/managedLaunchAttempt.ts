@@ -1,9 +1,4 @@
-import {
-  safeErrorToNotice,
-  toSafeError,
-  type ObserverService,
-  type StationClientStateSource,
-} from "@station/client";
+import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, SafeError } from "@station/contracts";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { StationHostProviderError } from "@station/host";
@@ -25,7 +20,6 @@ import {
 
 type ManagedLaunchDashboard = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "pushToast">;
 };
 
@@ -118,7 +112,7 @@ function createContext(
     turnReadiness:
       runtime.dashboardRuntime === undefined
         ? undefined
-        : readinessForWorktree(runtime.dashboardRuntime.clientState, target.worktreeId),
+        : readinessForWorktree(runtime.dashboardRuntime.state, target.worktreeId),
   };
 }
 
@@ -159,7 +153,7 @@ async function runPreflight(
   const unreachable =
     runtime.dashboardRuntime === undefined
       ? undefined
-      : unreachableTerminalRow(runtime.dashboardRuntime.clientState, context.target.worktreeId);
+      : unreachableTerminalRow(runtime.dashboardRuntime.state, context.target.worktreeId);
   if (unreachable !== undefined) {
     pushToast(
       runtime,
@@ -227,7 +221,7 @@ function resolveExistingSession(
     runtime.dashboardRuntime === undefined
       ? undefined
       : nonFocusableStationTerminalForWorktree(
-          runtime.dashboardRuntime.clientState,
+          runtime.dashboardRuntime.state,
           target.worktreeId,
         );
   if (nonFocusableStation !== undefined) {
@@ -240,7 +234,7 @@ function resolveExistingSession(
     runtime.dashboardRuntime === undefined
       ? undefined
       : externalTerminalProviderForWorktree(
-          runtime.dashboardRuntime.clientState,
+          runtime.dashboardRuntime.state,
           target.worktreeId,
         );
   if (externalProvider !== undefined) {

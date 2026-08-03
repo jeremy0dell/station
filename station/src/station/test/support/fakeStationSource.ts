@@ -1,18 +1,15 @@
-import type {
-  StationClientConnectionState,
-  StationClientState,
-  StationClientStateSource,
-} from "@station/client";
+import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
+import type { StationState, StationStateSource } from "../../../sources/types.js";
 
 /**
  * Controllable source for tests: drives source state (setSnapshot/setConnection),
  * one boundary up from FakeTuiObserverService, which drives observer events.
  */
-export class FakeStationSource implements StationClientStateSource {
+export class FakeStationSource implements StationStateSource {
   started = 0;
   stopped = 0;
-  private state: StationClientState;
+  private state: StationState;
   private readonly listeners = new Set<() => void>();
 
   constructor(snapshot?: StationSnapshot, connection?: StationClientConnectionState) {
@@ -30,7 +27,7 @@ export class FakeStationSource implements StationClientStateSource {
     this.stopped += 1;
   }
 
-  getState(): StationClientState {
+  getState(): StationState {
     return this.state;
   }
 

@@ -1,4 +1,3 @@
-import type { StationClientStateSource } from "@station/client";
 import type {
   DashboardActions,
   DashboardRuntime,
@@ -23,12 +22,11 @@ import type {
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
 
-/** Props for the pure `<StationApp />` view with canonical client truth separated from dashboard projection. */
+/** Props for the pure `<StationApp />` view; `createStation` supplies read-only dashboard state and named effects. */
 export type StationAppProps = {
   store: StationStore;
   registry: PtyRegistry;
   dashboardState: DashboardStateSource;
-  clientState: StationClientStateSource;
   dashboardActions: Pick<
     DashboardActions,
     "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
