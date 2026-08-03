@@ -213,7 +213,6 @@ function ShimmerLabel({
               ? theme.welcome.wordmark
               : theme.welcome.muted;
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed-width static button label
           <text
             key={index}
             fg={toOpenTuiColor(fg)}

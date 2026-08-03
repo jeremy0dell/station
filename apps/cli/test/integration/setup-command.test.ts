@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { runCli as runCliBase } from "@station/cli";
+import * as stationCli from "@station/cli";
 import { CliSetupPlanSchema } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
@@ -9,13 +9,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 import { configBackedHarnessHooksProbe } from "../fixtures/setupTrackingSupport.js";
 
-async function runCli(...args: Parameters<typeof runCliBase>) {
+async function runCli(...args: Parameters<typeof stationCli.runCli>) {
   const options = args[1] ?? {};
   const deps = options.setupDeps;
   if (deps === undefined || deps.probeHarnessHooksStatus !== undefined) {
-    return runCliBase(...args);
+    return stationCli.runCli(...args);
   }
-  return runCliBase(args[0], {
+  return stationCli.runCli(args[0], {
     ...options,
     setupDeps: {
       ...deps,

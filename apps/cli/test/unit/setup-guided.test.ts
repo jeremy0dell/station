@@ -8,11 +8,7 @@ import {
   tmuxPopupBindingBlock,
   tmuxPopupRunShellCommand,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
-import {
-  runSetupCommand as runSetupCommandBase,
-  type SetupCommandDeps,
-  type SetupPromptAdapter,
-} from "../../src/commands/setup/index.js";
+import * as setupCommand from "../../src/commands/setup/index.js";
 import {
   configBackedHarnessHooksProbe,
   type GuidedPromptFixture,
@@ -21,20 +17,20 @@ import {
   withRequiredTrackingConsent,
 } from "../fixtures/setupTrackingSupport.js";
 
-type GuidedSetupCommandDeps = Omit<SetupCommandDeps, "prompt"> & {
+type GuidedSetupCommandDeps = Omit<setupCommand.SetupCommandDeps, "prompt"> & {
   readonly prompt?: GuidedPromptFixture;
 };
 
 type GuidedSetupCommandArguments = [
-  argv: Parameters<typeof runSetupCommandBase>[0],
-  options: Parameters<typeof runSetupCommandBase>[1],
+  argv: Parameters<typeof setupCommand.runSetupCommand>[0],
+  options: Parameters<typeof setupCommand.runSetupCommand>[1],
   deps?: GuidedSetupCommandDeps,
 ];
 
 async function runSetupCommand(...args: GuidedSetupCommandArguments) {
   const deps = args[2] ?? {};
   const { prompt: promptFixture, ...baseDeps } = deps;
-  return runSetupCommandBase(args[0], args[1], {
+  return setupCommand.runSetupCommand(args[0], args[1], {
     ...baseDeps,
     ...(promptFixture === undefined
       ? {}
@@ -623,7 +619,7 @@ describe("guided setup command", () => {
     const fs = fakeFs({});
     const chunks: string[] = [];
 
-    const result = await runSetupCommandBase(
+    const result = await setupCommand.runSetupCommand(
       [],
       {},
       {
@@ -679,7 +675,7 @@ describe("guided setup command", () => {
     const fs = fakeFs({});
     const cancellations: string[] = [];
 
-    const result = await runSetupCommandBase(
+    const result = await setupCommand.runSetupCommand(
       [],
       {},
       {
@@ -2403,7 +2399,7 @@ function noopActivateObserverConfig(): Promise<void> {
   return Promise.resolve();
 }
 
-function cancellingSetupPrompt(cancellations: string[]): SetupPromptAdapter {
+function cancellingSetupPrompt(cancellations: string[]): setupCommand.SetupPromptAdapter {
   const noop = () => undefined;
   return {
     isInteractiveTerminal: () => true,

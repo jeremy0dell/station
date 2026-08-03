@@ -11,7 +11,7 @@ import {
   type ProviderHookScriptOptions,
   providerHookScriptOptions,
 } from "@station/runtime";
-import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeHookEventName } from "./hooks/hookConstants.js";
+import { CLAUDE_HOOK_EVENT_NAMES, type ClaudeForwardedEventType } from "./hooks/hookConstants.js";
 import { ClaudeHookSetupError } from "./hooks/hookErrors.js";
 import {
   resolveClaudeHookScriptPath,
@@ -29,7 +29,7 @@ import {
   stringifyClaudeSettings,
 } from "./hooks/hookSettings.js";
 
-export type { ClaudeHookEventName } from "./hooks/hookConstants.js";
+export type { ClaudeForwardedEventType } from "./hooks/hookConstants.js";
 export { resolveClaudeSettingsArtifactPath } from "./hooks/hookPaths.js";
 export { expectedClaudeHookScript };
 
@@ -62,8 +62,8 @@ export type ClaudeHookPlan = {
   settingsPath: string;
   userSettingsPath: string;
   hookScriptPath: string;
-  events: readonly ClaudeHookEventName[];
-  missing: ClaudeHookEventName[];
+  events: readonly ClaudeForwardedEventType[];
+  missing: ClaudeForwardedEventType[];
   changed: boolean;
   settingsChanged: boolean;
   scriptChanged: boolean;
@@ -90,7 +90,7 @@ export type ClaudeHookDoctorResult = {
   hookScriptPath: string;
   status: "ok" | "warn";
   installed: boolean;
-  missing: ClaudeHookEventName[];
+  missing: ClaudeForwardedEventType[];
   artifactInvalid: boolean;
   userSettingsCleanup: ClaudeUserSettingsCleanup;
   message: string;
@@ -182,7 +182,7 @@ function doctorMessage(input: {
   installed: boolean;
   artifactInvalid: boolean;
   staleUserEntries: boolean;
-  missing: ClaudeHookEventName[];
+  missing: ClaudeForwardedEventType[];
   scriptChanged: boolean;
 }): string {
   if (input.artifactInvalid) {

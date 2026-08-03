@@ -25,14 +25,12 @@ type DashboardCreateSessionLocalRow =
   | ({ readonly status: "pending" } & DashboardPendingCreateSessionRowView)
   | ({ readonly status: "failed" } & DashboardFailedCreateSessionRowView);
 
-type DashboardRowPresentation = DashboardPersistentFilterVisibleFields;
-
 export type DashboardSessionItem = {
   type: "session";
   id: string;
   row: DashboardSessionRow;
   displayTitle: string;
-  presentation: DashboardRowPresentation;
+  presentation: DashboardPersistentFilterVisibleFields;
   pendingRemove?: DashboardPendingRemoveWorktreeRowView;
   pendingStart?: DashboardPendingStartAgentRowView;
   persistentFilterMatch?: DashboardPersistentFilterRowMatch;
@@ -42,7 +40,7 @@ export type DashboardCreateLocalItem = {
   type: "createLocalRow";
   id: string;
   row: DashboardCreateSessionLocalRow;
-  presentation: DashboardRowPresentation;
+  presentation: DashboardPersistentFilterVisibleFields;
   persistentFilterMatch?: DashboardPersistentFilterRowMatch;
 };
 
@@ -174,7 +172,7 @@ function sessionRowPresentation(
   displayTitle: string,
   pendingRemove: DashboardPendingRemoveWorktreeRowView | undefined,
   pendingStart: DashboardPendingStartAgentRowView | undefined,
-): DashboardRowPresentation {
+): DashboardPersistentFilterVisibleFields {
   if (pendingRemove !== undefined) {
     return { title: displayTitle, activity: "removing session..." };
   }
@@ -194,7 +192,7 @@ function sessionRowPresentation(
 
 function createSessionRowPresentation(
   row: DashboardCreateSessionLocalRow,
-): DashboardRowPresentation {
+): DashboardPersistentFilterVisibleFields {
   if (row.status === "failed") {
     return { title: row.title, activity: row.error.message };
   }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { parse as parseToml } from "smol-toml";
+import { parse } from "smol-toml";
 import { z } from "zod";
 import { resolvePath } from "./observerPaths.js";
 
@@ -85,7 +85,7 @@ function readObserverTomlSection(
   }
   let parsed: unknown;
   try {
-    parsed = parseToml(text);
+    parsed = parse(text);
   } catch {
     return undefined;
   }

@@ -8,7 +8,7 @@ import { observerCommandSummary } from "../../src/commands/observer.js";
 import {
   createLocalObserverReap,
   type ObserverReapDeps,
-  runObserverReap as runObserverReapAdapter,
+  runObserverReap,
 } from "../../src/observerReap.js";
 
 const SOCK = "/Users/u/.local/state/station/observer.sock";
@@ -17,12 +17,12 @@ const BUILD = `1.2.3+station.${"a".repeat(64)}`;
 const TOKEN = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
 const SOCKET_IDENTITY = { ino: 1n, birthtimeNs: 2n };
 
-function runObserverReap(
+function runTestObserverReap(
   socketPath: string,
   options: { force: boolean; graceMs?: number },
   deps: ObserverReapDeps,
 ) {
-  return runObserverReapAdapter(
+  return runObserverReap(
     socketPath,
     options,
     createLocalObserverReap({
@@ -164,7 +164,7 @@ describe("runObserverReap", () => {
 
   it("dry-run lists without signaling", async () => {
     const signals: unknown[] = [];
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: false },
       {
@@ -197,7 +197,7 @@ describe("runObserverReap", () => {
   it("force terminates duplicates and never the keeper", async () => {
     const dead = new Set<number>();
     const sent: Array<[number, string | number]> = [];
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: true, graceMs: 0 },
       {
@@ -232,7 +232,7 @@ describe("runObserverReap", () => {
 
   it("does not signal a PID whose start token changed (PID reuse)", async () => {
     const sent: Array<[number, string | number]> = [];
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: true, graceMs: 0 },
       {
@@ -262,7 +262,7 @@ describe("runObserverReap", () => {
 
   it("aborts when the socket owner changes mid-reap", async () => {
     let calls = 0;
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: true, graceMs: 0 },
       {

@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { dirname, join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
+import * as timers from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   acquireStationTtyOwnership,
@@ -357,7 +357,7 @@ describe("control protocol and HMR", () => {
     reused.ownership.setTakeoverHandler(() => newCalls++);
 
     expect(await sendRawFrame(socketPath(root), "takeover\n")).toBe("accepted");
-    await delay(5);
+    await timers.setTimeout(5);
     expect({ oldCalls, newCalls }).toEqual({ oldCalls: 0, newCalls: 1 });
   });
 
@@ -527,7 +527,7 @@ async function waitForPath(path: string, child?: TestChild): Promise<void> {
     if (child !== undefined && child.process.exitCode !== null) {
       throw new Error(`fixture exited ${child.process.exitCode}: ${child.stderr()}`);
     }
-    await delay(10);
+    await timers.setTimeout(10);
   }
   if (!existsSync(path)) throw new Error(`Timed out waiting for ${path}`);
 }

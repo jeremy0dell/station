@@ -1,5 +1,5 @@
-import { spawn as nodeSpawn } from "node:child_process";
-import { existsSync as nodeExistsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 
 type SpawnedSoundProcess = {
   on(event: "error", listener: () => void): unknown;
@@ -38,17 +38,17 @@ export function playStationAttentionSound(
     return { status: "skipped", reason: "unsupported-platform" };
   }
 
-  const existsSync = options.existsSync ?? nodeExistsSync;
-  if (!existsSync(macAttentionSound.player)) {
+  const soundExists = options.existsSync ?? existsSync;
+  if (!soundExists(macAttentionSound.player)) {
     return { status: "skipped", reason: "missing-player" };
   }
-  if (!existsSync(macAttentionSound.soundPath)) {
+  if (!soundExists(macAttentionSound.soundPath)) {
     return { status: "skipped", reason: "missing-sound" };
   }
 
-  const spawn = options.spawn ?? defaultSpawnSound;
+  const spawnSound = options.spawn ?? defaultSpawnSound;
   try {
-    const child = spawn(macAttentionSound.player, [macAttentionSound.soundPath], {
+    const child = spawnSound(macAttentionSound.player, [macAttentionSound.soundPath], {
       detached: true,
       stdio: "ignore",
     });
@@ -64,4 +64,4 @@ export function playStationAttentionSound(
   }
 }
 
-const defaultSpawnSound: SpawnSound = (command, args, options) => nodeSpawn(command, args, options);
+const defaultSpawnSound: SpawnSound = (command, args, options) => spawn(command, args, options);

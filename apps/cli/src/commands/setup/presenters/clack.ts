@@ -1,15 +1,5 @@
 import type { Readable, Writable } from "node:stream";
-import {
-  cancel as clackCancel,
-  confirm as clackConfirm,
-  intro as clackIntro,
-  isCancel as clackIsCancel,
-  log as clackLog,
-  multiselect as clackMultiselect,
-  note as clackNote,
-  outro as clackOutro,
-  select as clackSelect,
-} from "@clack/prompts";
+import * as clack from "@clack/prompts";
 import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
 import type { SetupPromptAdapter, SetupPromptAnswer, SetupPromptChoice } from "../types.js";
 
@@ -74,15 +64,15 @@ export type CreateClackSetupPresenterOptions = {
 };
 
 const productionClack: ClackFunctions = {
-  confirm: clackConfirm,
-  select: clackSelect,
-  multiselect: clackMultiselect,
-  isCancel: clackIsCancel,
-  intro: clackIntro,
-  outro: clackOutro,
-  cancel: clackCancel,
-  note: clackNote,
-  log: clackLog,
+  confirm: clack.confirm,
+  select: clack.select,
+  multiselect: clack.multiselect,
+  isCancel: clack.isCancel,
+  intro: clack.intro,
+  outro: clack.outro,
+  cancel: clack.cancel,
+  note: clack.note,
+  log: clack.log,
 };
 
 /**

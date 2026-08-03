@@ -37,13 +37,12 @@ export function forkScreenBehavior(screen: ForkScreenView) {
   return assertNever(screen);
 }
 
-type ForkSnapshotView = DashboardSnapshotView;
-type ForkWorktreeRowView = ForkSnapshotView["rows"][number];
+type ForkWorktreeRowView = DashboardSnapshotView["rows"][number];
 
 export type ForkSessionCreateValidation =
   | {
       ok: true;
-      project: ForkSnapshotView["projects"][number];
+      project: DashboardSnapshotView["projects"][number];
       sourceWorktreeId: ForkDetailsScreenView["sourceWorktreeId"];
       title: string;
       branch: string;
@@ -54,7 +53,7 @@ export type ForkSessionCreateValidation =
 // Single source of truth for fork submit validation, shared by the machine's
 // submitFork (inline error) and the native station submit resolver (intercept).
 export function validateForkSessionCreate(
-  snapshot: ForkSnapshotView,
+  snapshot: DashboardSnapshotView,
   screen: ForkDetailsScreenView,
 ): ForkSessionCreateValidation {
   const title = screen.draftTitle.value.trim();

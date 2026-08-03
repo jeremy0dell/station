@@ -1,6 +1,6 @@
 import { type ClaudeForwardedEventType, claudeForwardedEventTypes } from "../ingressRules.js";
 
-export type ClaudeHookEventName = ClaudeForwardedEventType;
+export type { ClaudeForwardedEventType };
 
 export const CLAUDE_STATION_SETTINGS_FILE = "station-claude-settings.json";
 export const CLAUDE_USER_SETTINGS_FILE = "settings.json";

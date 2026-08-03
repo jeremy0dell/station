@@ -1,7 +1,7 @@
-import { safeErrorToNotice, toSafeError as toClientSafeError } from "@station/client";
+import * as client from "@station/client";
 import type { SafeError } from "@station/contracts";
 
-export const safeErrorToToast = safeErrorToNotice;
+export const safeErrorToToast = client.safeErrorToNotice;
 
 export type ToSafeErrorOptions = {
   clientLabel?: string;
@@ -9,7 +9,7 @@ export type ToSafeErrorOptions = {
 
 export function toSafeError(error: unknown, options: ToSafeErrorOptions = {}): SafeError {
   const clientLabel = options.clientLabel ?? "TUI";
-  return toClientSafeError(error, { clientLabel });
+  return client.toSafeError(error, { clientLabel });
 }
 
 /**

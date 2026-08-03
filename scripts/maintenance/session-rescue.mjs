@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFile as execFileCallback } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { SessionRescueManifestSchema } from "../../packages/contracts/dist/index.js";
 
-const execFile = promisify(execFileCallback);
+const execFileAsync = promisify(execFile);
 const manifestName = "manifest.json";
 const incompleteName = "INCOMPLETE";
 const archiveVersion = 1;
@@ -893,7 +893,7 @@ export function environmentWithoutGitLocals(source) {
 }
 
 function run(command, args, options = {}) {
-  return execFile(command, args, {
+  return execFileAsync(command, args, {
     encoding: options.encoding ?? "utf8",
     env: options.env ?? process.env,
     maxBuffer: maxCommandOutput,

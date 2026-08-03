@@ -13,12 +13,10 @@ import {
   type MouseEncodingValue,
 } from "../protocol/mouse.js";
 
-export type MouseReportButton = MouseButtonName;
-
 export type MouseReportEvent = {
   /** press = button down, release = button up, motion = buttonless hover move. */
   action: "press" | "release" | "motion";
-  button: MouseReportButton;
+  button: MouseButtonName;
   /** 1-based PTY grid cell. */
   col: number;
   row: number;

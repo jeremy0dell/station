@@ -11,7 +11,7 @@ import {
 } from "@station/dashboard-core";
 import { useEffect, useState } from "react";
 import {
-  toastBorderColor as toastBorderThemeColor,
+  toastBorderThemeColor,
   toOpenTuiColor,
   toOpenTuiOpaqueColor,
   useStationTheme,
