@@ -25,7 +25,7 @@ export function componentLogPath(stateDir: string, component: LogRecord["compone
   return join(stateDir, "logs", fileName);
 }
 
-export function createLogRecord(
+function createLogRecord(
   input: Omit<LogRecord, "timestamp"> & { timestamp?: string; clock?: { now(): Date } },
 ): LogRecord {
   const { clock, attributes, ...record } = input;
@@ -64,7 +64,7 @@ export function createJsonlLogger(options: CreateJsonlLoggerOptions): JsonlLogge
   };
 }
 
-export async function appendJsonl(path: string, record: LogRecord): Promise<void> {
+async function appendJsonl(path: string, record: LogRecord): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await writeFile(path, `${JSON.stringify(record)}\n`, {
     flag: "a",

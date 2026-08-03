@@ -18,7 +18,7 @@ export function createTraceContext(options: CreateTraceContextOptions = {}): Tra
   };
 }
 
-export function stableOperationName(input: string): string {
+function stableOperationName(input: string): string {
   return input
     .trim()
     .replaceAll(/\s+/g, ".")

@@ -51,10 +51,6 @@ const codexIngressRuleByEventType: ReadonlyMap<string, CodexIngressRule> = new M
   codexIngressRules.map((rule) => [rule.eventType, rule]),
 );
 
-export function codexIngressRuleForEventType(value: string): CodexIngressRule | undefined {
-  return codexIngressRuleByEventType.get(value);
-}
-
 export function isCodexForwardedEventType(value: string): value is CodexForwardedEventType {
   return codexIngressRuleByEventType.has(value);
 }

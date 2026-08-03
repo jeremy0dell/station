@@ -1582,253 +1582,6 @@
       ]
     },
     {
-      "path": "apps/observer/src/commands/session/index.ts",
-      "exports": [
-        {
-          "name": "assertNoCurrentAgent",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "buildEnsureAgentWorkspaceIntent",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "commandValidationError",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionAcknowledgeTurnHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionAcknowledgeTurnHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCloseHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionCloseHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCreateHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
-        },
-        {
-          "name": "CreateSessionCreateHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionImportRecoveryHandleHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership."
-        },
-        {
-          "name": "CreateSessionImportRecoveryHandleHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionResumeAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
-        },
-        {
-          "name": "CreateSessionResumeAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionStartAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
-        },
-        {
-          "name": "CreateSessionStartAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "defaultSessionCommandIdFactory",
-          "kind": "const",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "discardSessionSeedBestEffort",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "findProjectOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "launchHarnessInTerminal",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "lookupWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "publishSessionCreated",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "rememberedHarnessProviderForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "removeWorktreeBestEffort",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "resolveHarnessProviderOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "resolveTerminalProviderOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "runProviderMutation",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "seedSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandIdFactory",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandLookupRuntime",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandRuntime",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "throwIfAborted",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "validateSnapshotRow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "worktreeObservationFromRow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./acknowledgeTurn.js",
-          "resolvedPath": "apps/observer/src/commands/session/acknowledgeTurn.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./close.js",
-          "resolvedPath": "apps/observer/src/commands/session/close.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./create.js",
-          "resolvedPath": "apps/observer/src/commands/session/create.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./importRecoveryHandle.js",
-          "resolvedPath": "apps/observer/src/commands/session/importRecoveryHandle.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./resumeAgent.js",
-          "resolvedPath": "apps/observer/src/commands/session/resumeAgent.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./shared.js",
-          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./startAgent.js",
-          "resolvedPath": "apps/observer/src/commands/session/startAgent.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        }
-      ]
-    },
-    {
       "path": "apps/observer/src/commands/session/rename.ts",
       "exports": [
         {
@@ -2904,31 +2657,6 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["RuntimeClock"]
-        }
-      ]
-    },
-    {
-      "path": "apps/observer/src/commands/worktree/index.ts",
-      "exports": [
-        {
-          "name": "createWorktreeRemoveHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
-        },
-        {
-          "name": "CreateWorktreeRemoveHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./remove.js",
-          "resolvedPath": "apps/observer/src/commands/worktree/remove.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
         }
       ]
     },
@@ -4137,20 +3865,8 @@
           "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
-          "name": "agentStateChangedEventsFromReconcile",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "AppliedObserverSqliteMigration",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "assertNoCurrentAgent",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4168,12 +3884,6 @@
         },
         {
           "name": "assertWorktreeRemovalAllowed",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "buildEnsureAgentWorkspaceIntent",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -4247,12 +3957,6 @@
         {
           "name": "CommandQueue",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "commandValidationError",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4479,78 +4183,6 @@
           "purpose": null
         },
         {
-          "name": "createSessionAcknowledgeTurnHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionAcknowledgeTurnHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCloseHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionCloseHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCreateHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
-        },
-        {
-          "name": "CreateSessionCreateHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionImportRecoveryHandleHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership."
-        },
-        {
-          "name": "CreateSessionImportRecoveryHandleHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionResumeAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
-        },
-        {
-          "name": "CreateSessionResumeAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionStartAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
-        },
-        {
-          "name": "CreateSessionStartAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "createSqliteObserverPersistence",
           "kind": "function",
           "role": "ADAPTER",
@@ -4605,26 +4237,8 @@
           "purpose": null
         },
         {
-          "name": "createWorktreeRemoveHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
-        },
-        {
-          "name": "CreateWorktreeRemoveHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "CurrentProviderObservationKind",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "defaultSessionCommandIdFactory",
-          "kind": "const",
           "role": null,
           "purpose": null
         },
@@ -4655,12 +4269,6 @@
         {
           "name": "DiagnosticRecentLogEvidence",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "discardSessionSeedBestEffort",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4703,12 +4311,6 @@
         {
           "name": "EventRecordOptions",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "findProjectOrThrow",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4785,20 +4387,8 @@
           "purpose": null
         },
         {
-          "name": "launchHarnessInTerminal",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "ListSessionRecoveryHandlesOptions",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "lookupWorktree",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -5397,12 +4987,6 @@
           "purpose": null
         },
         {
-          "name": "publishSessionCreated",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "publishSessionRemoved",
           "kind": "function",
           "role": null,
@@ -5499,18 +5083,6 @@
           "purpose": null
         },
         {
-          "name": "rememberedHarnessProviderForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "removeWorktreeBestEffort",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "removeWorktreeThroughProvider",
           "kind": "function",
           "role": null,
@@ -5535,12 +5107,6 @@
           "purpose": null
         },
         {
-          "name": "resolveHarnessProviderOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "resolveRowForSession",
           "kind": "function",
           "role": null,
@@ -5548,12 +5114,6 @@
         },
         {
           "name": "resolveSessionOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "resolveTerminalProviderOrThrow",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5595,12 +5155,6 @@
           "purpose": null
         },
         {
-          "name": "runProviderMutation",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "runSqliteTransactionEffect",
           "kind": "function",
           "role": null,
@@ -5608,12 +5162,6 @@
         },
         {
           "name": "safeErrorToProviderHealth",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "seedSession",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5627,24 +5175,6 @@
         {
           "name": "selectObserverReapPlan",
           "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandIdFactory",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandLookupRuntime",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandRuntime",
-          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -5668,30 +5198,6 @@
         },
         {
           "name": "SessionTurnReadinessMutation",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlDatabase",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlParam",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlRunResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlStatement",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5745,19 +5251,7 @@
           "purpose": null
         },
         {
-          "name": "throwIfAborted",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "toSafeError",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "validateSnapshotRow",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5805,12 +5299,6 @@
           "purpose": "Maintains the current worktree metadata cache independently of repository adapters."
         },
         {
-          "name": "worktreeObservationFromRow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "WorktreeRemovalTargetResolution",
           "kind": "type",
           "role": null,
@@ -5849,12 +5337,6 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./commands/session/index.js",
-          "resolvedPath": "apps/observer/src/commands/session/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
           "specifier": "./commands/terminal.js",
           "resolvedPath": "apps/observer/src/commands/terminal.ts",
           "edgeKind": "runtime",
@@ -5863,12 +5345,6 @@
         {
           "specifier": "./commands/terminalIntentRunner.js",
           "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./commands/worktree/index.js",
-          "resolvedPath": "apps/observer/src/commands/worktree/index.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -6063,12 +5539,6 @@
           "resolvedPath": "apps/observer/src/sqlite.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
-        },
-        {
-          "specifier": "./sqlite/driver.js",
-          "resolvedPath": "apps/observer/src/sqlite/driver.ts",
-          "edgeKind": "type-only",
-          "bindings": ["SqlDatabase", "SqlParam", "SqlRunResult", "SqlStatement"]
         }
       ]
     },
@@ -9721,12 +9191,6 @@
       "path": "apps/observer/src/runtime/api.ts",
       "exports": [
         {
-          "name": "agentStateChangedEventsFromReconcile",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
@@ -9859,12 +9323,6 @@
           "resolvedPath": "apps/observer/src/reconcile/core.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverCore"]
-        },
-        {
-          "specifier": "./agentEvents.js",
-          "resolvedPath": "apps/observer/src/runtime/agentEvents.ts",
-          "edgeKind": "runtime",
-          "bindings": ["agentStateChangedEventsFromReconcile"]
         },
         {
           "specifier": "./eventBus.js",

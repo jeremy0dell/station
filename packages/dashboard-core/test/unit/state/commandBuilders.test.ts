@@ -1,5 +1,4 @@
 import {
-  buildCleanupCommand,
   buildCreateSessionCommand,
   buildFocusCommand,
   buildForkSessionCommand,
@@ -173,65 +172,11 @@ describe("TUI command builders", () => {
     });
   });
 
-  it("builds cleanup commands and omits force when guards are not required", () => {
-    const snapshot = createCommandSnapshot("idle");
-    const row = snapshot.rows[0];
-
-    expect(buildCleanupCommand(row, "close-harness", false)).toEqual({
-      type: "session.close",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-        mode: "harness",
-      },
-    });
-    expect(buildCleanupCommand(row, "close-terminal", false)).toEqual({
-      type: "terminal.close",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-      },
-    });
-    expect(buildCleanupCommand(row, "close-all", false)).toEqual({
-      type: "session.close",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-        mode: "all",
-      },
-    });
-    expect(buildCleanupCommand(row, "remove-worktree", false)).toEqual({
-      type: "worktree.remove",
-      payload: {
-        projectId: "web",
-        worktreeId: "wt_web_idle",
-        expectedPath: "/tmp/station/web/worktrees/fix-nav-mobile",
-        expectedBranch: "fix-nav-mobile",
-        expectedRegistrationIdentity: "git-registration:wt_web_idle",
-      },
-    });
-  });
-
-  it("adds force only for guarded cleanup confirmations", () => {
+  it("computes cleanup force requirements", () => {
     const snapshot = createCommandSnapshot("idle", { dirty: true });
     const row = snapshot.rows[0];
 
     expect(cleanupForceRequired(row, "remove-worktree")).toBe(true);
     expect(cleanupForceRequired(row, "close-terminal")).toBe(true);
-    expect(buildCleanupCommand(row, "remove-worktree", true)).toEqual({
-      type: "worktree.remove",
-      payload: {
-        projectId: "web",
-        worktreeId: "wt_web_idle",
-        expectedPath: "/tmp/station/web/worktrees/fix-nav-mobile",
-        expectedBranch: "fix-nav-mobile",
-        expectedRegistrationIdentity: "git-registration:wt_web_idle",
-        force: true,
-      },
-    });
-    expect(buildCleanupCommand(row, "close-terminal", true)).toEqual({
-      type: "terminal.close",
-      payload: {
-        sessionId: "ses_wt_web_idle",
-        force: true,
-      },
-    });
   });
 });
