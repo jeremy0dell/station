@@ -37,7 +37,6 @@ export * from "./state/experiences/dashboardSearch.js";
 export * from "./state/index.js";
 export * from "./state/keymap.js";
 export * from "./state/localRows.js";
-export { bridgeOperationService } from "./state/observerBridge.js";
 export type { TuiFocusTarget } from "./state/operations/runtimeCommands.js";
 export * from "./state/screens/addProjectScreen.js";
 export * from "./state/screens/fork.js";

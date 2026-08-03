@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
-  createDashboardRuntime,
   FAILED_CREATE_ROW_TTL_MS,
   selectDashboardViewport,
-  type DashboardRuntime,
 } from "@station/dashboard-core";
 import { selectActivePaneId, selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore } from "../state/store.js";
@@ -32,6 +30,10 @@ import type { AgentPrepareExternalLaunchResult } from "@station/client";
 import type { StationSnapshot, WorktreeRow } from "@station/contracts";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
+import {
+  createStationTestDashboardRuntime,
+  type StationTestDashboardRuntime,
+} from "../station/test/support/makeStationTestRuntime.js";
 import { resolveForkSessionSubmit, resolveNewSessionSubmit } from "../station/input/stationActions.js";
 import type { StationMouseEvent } from "./mouse.js";
 import { createStationInputRuntime } from "./stationInput.js";
@@ -75,7 +77,7 @@ const wheel = (direction: "up" | "down"): StationMouseEvent => ({
 describe("createStationInputRuntime", () => {
   function harness(options?: {
     pasteToTerminal?: (paneId: PaneId, text: string) => boolean;
-    dashboardRuntime?: DashboardRuntime;
+    dashboardRuntime?: StationTestDashboardRuntime;
     automations?: readonly Automation[];
   }) {
     const scripted = createScriptedTerminal();
@@ -161,7 +163,7 @@ describe("createStationInputRuntime", () => {
           },
         })),
       };
-      const dashboardRuntime = createDashboardRuntime({
+      const dashboardRuntime = createStationTestDashboardRuntime({
         source: new FakeStationSource(snapshot),
         service: new FakeTuiObserverService(snapshot),
         initialSnapshot: snapshot,
@@ -183,6 +185,62 @@ describe("createStationInputRuntime", () => {
       expect(scripted.helpers.writes.join("")).toBe("\x1b[13;2u");
     });
   }
+
+  it("reads modified-enter capability from client truth when dashboard projection is stale", () => {
+    const base = manyProjectsSnapshot();
+    const stale: StationSnapshot = {
+      ...base,
+      sessions: base.sessions.map((session) => ({
+        ...session,
+        harness: {
+          ...session.harness,
+          capabilities: {
+            ...session.harness.capabilities,
+            supportsModifiedEnterSoftNewline: false,
+          },
+        },
+      })),
+    };
+    const canonical: StationSnapshot = {
+      ...stale,
+      sessions: stale.sessions.map((session) => ({
+        ...session,
+        harness: {
+          ...session.harness,
+          capabilities: {
+            ...session.harness.capabilities,
+            supportsModifiedEnterSoftNewline: session.id === "ses_wt_station_idle",
+          },
+        },
+      })),
+    };
+    const source = new FakeStationSource(stale);
+    const dashboardRuntime = createStationTestDashboardRuntime({
+      source,
+      service: new FakeTuiObserverService(stale),
+      persistentPopup: true,
+      onDismiss: async () => {},
+    });
+    source.setSnapshot(canonical);
+    const { runtime, scripted, store, registry } = harness({ dashboardRuntime });
+    const paneId = agentWorktreePaneId("wt_station_idle");
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: "ses_wt_station_idle",
+      terminalTargetId: "native:wt_station_idle",
+      harnessProvider: "codex",
+    });
+    store.actions.focusPane(paneId);
+    registry.resize(paneId, { cols: 36, rows: 8 });
+
+    expect(
+      dashboardRuntime.state.getState().snapshot?.sessions.find(
+        (session) => session.id === "ses_wt_station_idle",
+      )?.harness.capabilities.supportsModifiedEnterSoftNewline,
+    ).toBe(false);
+    expect(runtime.handleSequence("\x1b[27;2;13~")).toBe(true);
+    expect(scripted.helpers.writes.join("")).toBe("\x1b[13;2u");
+  });
 
   it("matches arrow-key bytes to the focused pane's cursor-key mode", async () => {
     const { runtime, scripted, registry } = harness();
@@ -305,7 +363,7 @@ describe("createStationInputRuntime", () => {
 
   it("context-menu Rename from a primary-agent pane opens directly and Esc closes to the dashboard", () => {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -494,7 +552,7 @@ describe("createStationInputRuntime", () => {
 
   it("ignores an overlay paste that sanitizes to nothing", () => {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -672,7 +730,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
     storeOptions?: Parameters<typeof createStationStore>[0];
   }) {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -852,7 +910,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
 
   it("passes STATION link clicks to the external URL opener", () => {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -888,7 +946,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
   // captured cwd — closing the gap the plan flagged as manual-smoke-only.
   it("threads the worktree cwd to the spawned shell through the real reconciler", () => {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -945,7 +1003,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
 
 describe("createStationInputRuntime STATION context-menu actions", () => {
   function contextMenuHarness(snapshot: StationSnapshot = manyProjectsSnapshot()) {
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -1149,7 +1207,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   ) {
     const observerService = new FakeTuiObserverService(snapshot);
     observerService.nextPreparedLaunch = prepared;
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: observerService,
       initialSnapshot: snapshot,
@@ -1752,7 +1810,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
 
   it("toasts when launched with no observer service (no spawn)", async () => {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -1927,7 +1985,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     const snapshot = manyProjectsSnapshot();
     const observerService = new FakeTuiObserverService(snapshot);
     const source = new FakeStationSource(snapshot);
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source,
       service: observerService,
       initialSnapshot: snapshot,
@@ -2203,7 +2261,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
 
   it("toasts and clears the optimistic row when there is no observer connection", async () => {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -2295,7 +2353,7 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     const snapshot = manyProjectsSnapshot();
     const observerService = new FakeTuiObserverService(snapshot);
     const source = new FakeStationSource(snapshot);
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source,
       service: observerService,
       initialSnapshot: snapshot,
@@ -2548,7 +2606,10 @@ describe("createStationInputRuntime Fork hosted launch", () => {
 
 describe("createStationInputRuntime pane split/focus/close", () => {
   function harness(
-    options: { dashboardRuntime?: DashboardRuntime; automations?: readonly Automation[] } = {},
+    options: {
+      dashboardRuntime?: StationTestDashboardRuntime;
+      automations?: readonly Automation[];
+    } = {},
   ) {
     const spawnOptions: StationTerminalSpawnOptions[] = [];
     const registry = createPtyRegistry({
@@ -2584,7 +2645,7 @@ describe("createStationInputRuntime pane split/focus/close", () => {
     if (row === undefined) {
       throw new Error(`fixture row ${worktreeId} is missing`);
     }
-    const dashboardRuntime = createDashboardRuntime({
+    const dashboardRuntime = createStationTestDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
