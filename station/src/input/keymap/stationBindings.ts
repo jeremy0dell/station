@@ -24,7 +24,7 @@ import {
   wheelDirection,
   type StationMouseEvent,
 } from "../mouse.js";
-import { ControlByte } from "../../terminal/protocol/controlBytes.js";
+import { C0 } from "../../terminal/protocol/syntax.js";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
 
 type StationDashboardInput = {
@@ -44,11 +44,7 @@ export const SPLIT_RIGHT_LEGACY = "\x1c"; // Ctrl-\
 export const SPLIT_BELOW_LEGACY = "\x1e"; // Ctrl-^
 export const FOCUS_NEXT_LEGACY = "\x1d"; // Ctrl-]
 export const CLOSE_PANE_LEGACY = "\x1f"; // Ctrl-_
-export const ESC_LEGACY = ControlByte.Esc;
-export const ENTER_LEGACY = "\r";
 export const SPACE_LEGACY = " ";
-export const ARROW_UP_LEGACY = ARROW_KEYS.up.normal;
-export const ARROW_DOWN_LEGACY = ARROW_KEYS.down.normal;
 
 function stationOverlayToggleOutcome(state: StationState): RouteOutcome {
   if (state.input.activeOverlay === STATION_OVERLAY_ID) {
@@ -107,7 +103,7 @@ const welcomeLayer: KeymapLayer<RouteOutcome> = {
     state.input.activeOverlay === null && state.input.focus.kind === "welcome",
   bindings: [
     {
-      keys: [ENTER_LEGACY, SPACE_LEGACY],
+      keys: [C0.CarriageReturn, SPACE_LEGACY],
       action: (state) =>
         state.workspace.panes.length > 0
           ? { kind: "welcome-dismiss" }
@@ -116,7 +112,7 @@ const welcomeLayer: KeymapLayer<RouteOutcome> = {
     {
       // Esc slips past the intro into the sessions underneath; with none there is
       // nothing to dismiss into, so swallow.
-      keys: [ESC_LEGACY],
+      keys: [C0.Escape],
       action: (state) =>
         state.workspace.panes.length > 0
           ? { kind: "welcome-dismiss" }
@@ -131,19 +127,19 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
   isActive: (state) => state.input.focus.kind === "contextMenu" && state.input.contextMenu !== null,
   bindings: [
     {
-      keys: [ESC_LEGACY, OVERLAY_TOGGLE_LEGACY],
+      keys: [C0.Escape, OVERLAY_TOGGLE_LEGACY],
       action: () => ({ kind: "context-menu-close" }),
     },
     {
-      keys: [ARROW_UP_LEGACY],
+      keys: [ARROW_KEYS.up.normal],
       action: () => ({ kind: "context-menu-move", delta: -1 }),
     },
     {
-      keys: [ARROW_DOWN_LEGACY],
+      keys: [ARROW_KEYS.down.normal],
       action: () => ({ kind: "context-menu-move", delta: 1 }),
     },
     {
-      keys: [ENTER_LEGACY, SPACE_LEGACY],
+      keys: [C0.CarriageReturn, SPACE_LEGACY],
       action: () => ({ kind: "context-menu-select" }),
     },
   ],
@@ -173,7 +169,7 @@ function createStationButtonLayer(
       attentionRow() !== undefined,
     bindings: [
       {
-        keys: [ENTER_LEGACY],
+        keys: [C0.CarriageReturn],
         action: (state) => {
           const row = attentionRow();
           if (row === undefined) {

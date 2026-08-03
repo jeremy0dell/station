@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ARROW_KEYS, cursorKeyBytes } from "./cursorKeys.js";
+import { ARROW_KEYS, CURSOR_KEY_BYTES } from "./cursorKeys.js";
 
 describe("cursor-key (DECCKM) vocabulary", () => {
   // Wire contract: the arrow bytes every consumer (stationInput, wheelForward,
@@ -12,7 +12,7 @@ describe("cursor-key (DECCKM) vocabulary", () => {
   });
 
   it("normalizes either cursor-key form to the same {normal, application} pair", () => {
-    const map = cursorKeyBytes();
+    const map = CURSOR_KEY_BYTES;
     // The normalizer's whole job: CSI (DECCKM off) and SS3 (DECCKM on) forms of
     // one arrow resolve to a single pair, so stationInput can re-emit in either
     // mode regardless of which form the child app sent.
@@ -25,8 +25,7 @@ describe("cursor-key (DECCKM) vocabulary", () => {
   });
 
   it("returns undefined for non-arrow sequences", () => {
-    const map = cursorKeyBytes();
-    expect(map.get("\x1b[Z")).toBeUndefined(); // shift-tab, not an arrow
-    expect(map.get("x")).toBeUndefined();
+    expect(CURSOR_KEY_BYTES.get("\x1b[Z")).toBeUndefined(); // shift-tab, not an arrow
+    expect(CURSOR_KEY_BYTES.get("x")).toBeUndefined();
   });
 });
