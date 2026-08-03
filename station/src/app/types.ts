@@ -27,7 +27,10 @@ export type StationAppProps = {
   store: StationStore;
   registry: PtyRegistry;
   dashboardState: DashboardStateSource;
-  dashboardActions: DashboardActions;
+  dashboardActions: Pick<
+    DashboardActions,
+    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
+  >;
   dispatchMouse: StationInputRuntime["dispatchMouse"];
   onCopySelection: (text: string) => void;
   /** Configured automations surfaced in the pane context menu. */

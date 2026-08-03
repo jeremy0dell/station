@@ -5,14 +5,29 @@ import { agentWorktreePaneId, type PaneId } from "../../state/types.js";
 import { dispatchStationKey } from "../../station/input/stationActions.js";
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, SafeError, StationCommand } from "@station/contracts";
-import { FAILED_CREATE_ROW_TTL_MS, type DashboardRuntime } from "@station/dashboard-core";
+import {
+  FAILED_CREATE_ROW_TTL_MS,
+  type DashboardActions,
+  type DashboardStateSource,
+} from "@station/dashboard-core";
 import { inheritedForkHarness, waitForWorktreeByBranch } from "./stationRows.js";
 import {
   createManagedLaunchAttempt,
   type ManagedLaunchTarget,
 } from "./managedLaunchAttempt.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type ManagedLaunchDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    | "addPendingCreateSession"
+    | "dispatch"
+    | "failPendingCreateSession"
+    | "handleKey"
+    | "pushToast"
+    | "removePendingCreateSession"
+  >;
+};
 
 export type { ManagedLaunchTarget } from "./managedLaunchAttempt.js";
 
@@ -47,7 +62,7 @@ export type ManagedLaunch = {
 
 type ManagedLaunchDeps = {
   store: StationStore;
-  dashboardRuntime: DashboardInput | undefined;
+  dashboardRuntime: ManagedLaunchDashboard | undefined;
   observerService: ObserverService | undefined;
   registry: PtyRegistry | undefined;
   managedTerminalAttacher: ManagedTerminalAttacher | undefined;
@@ -162,7 +177,11 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       return;
     }
     // A bare worktree does not prune the optimistic row; only the matching canonical session does.
-    const row = await waitForWorktreeByBranch(dashboardRuntime, spec.projectId, spec.branch);
+    const row = await waitForWorktreeByBranch(
+      dashboardRuntime.state,
+      spec.projectId,
+      spec.branch,
+    );
     if (row === undefined) {
       clearPendingCreateRow(spec.localId);
       pushLaunchToast(missingWorktreeMessage(spec.verb), "info");
@@ -216,7 +235,11 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       const harness =
         dashboardRuntime === undefined
           ? undefined
-          : inheritedForkHarness(dashboardRuntime, target.projectId, target.sourceWorktreeId);
+          : inheritedForkHarness(
+              dashboardRuntime.state,
+              target.projectId,
+              target.sourceWorktreeId,
+            );
       if (harness === undefined) {
         pushLaunchError({
           tag: "CommandValidationError",

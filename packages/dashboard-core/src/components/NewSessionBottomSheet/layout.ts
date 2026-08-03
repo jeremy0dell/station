@@ -1,9 +1,12 @@
-import type { NewSessionFlowState } from "../../flows/newSession.js";
+import type { NewSessionFlowStateView } from "../../flows/newSession.js";
 import { SELECTION_KEYS } from "../../selectors/selectors.js";
 
 export const MAX_PICKER_OPTIONS = SELECTION_KEYS.length;
 
-export function newSessionContentRowCount(state: NewSessionFlowState, optionCount: number): number {
+export function newSessionContentRowCount(
+  state: NewSessionFlowStateView,
+  optionCount: number,
+): number {
   if (state.mode === "pickProject" || state.mode === "pickAgent") {
     return Math.min(optionCount, MAX_PICKER_OPTIONS) + 4;
   }

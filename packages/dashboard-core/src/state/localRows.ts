@@ -7,6 +7,7 @@ import type {
   StationSnapshot,
   WorktreeId,
 } from "@station/contracts";
+import type { ReadonlyDeep } from "./readonly.js";
 import type { TuiState } from "./types.js";
 
 export type PendingCreateSessionRow = {
@@ -73,6 +74,9 @@ export type TuiLocalRows = {
   pendingRenameTitles?: Readonly<Record<SessionId, PendingRenameSessionTitle>>;
   pendingProjectDefaults?: Readonly<Record<ProjectId, PendingProjectDefaultHarness>>;
 };
+
+/** Deep-readonly local-row projection consumed by selectors and presentation. */
+export type TuiLocalRowsView = ReadonlyDeep<TuiLocalRows>;
 
 export function createEmptyTuiLocalRows(): TuiLocalRows {
   return {
@@ -331,8 +335,8 @@ export function removePendingProjectDefaultHarness(
 }
 
 export function pendingProjectDefaultHarnesses(
-  localRows: TuiLocalRows,
-): Readonly<Record<ProjectId, PendingProjectDefaultHarness>> {
+  localRows: TuiLocalRowsView,
+): Readonly<Record<ProjectId, ReadonlyDeep<PendingProjectDefaultHarness>>> {
   return localRows.pendingProjectDefaults ?? {};
 }
 
@@ -372,8 +376,8 @@ export function pruneLocalRowsForSnapshot(
 }
 
 export function pendingRenameTitles(
-  localRows: TuiLocalRows,
-): Readonly<Record<SessionId, PendingRenameSessionTitle>> {
+  localRows: TuiLocalRowsView,
+): Readonly<Record<SessionId, ReadonlyDeep<PendingRenameSessionTitle>>> {
   return localRows.pendingRenameTitles ?? {};
 }
 

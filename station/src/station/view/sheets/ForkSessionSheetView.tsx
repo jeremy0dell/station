@@ -1,6 +1,9 @@
 // Fork details share semantic controls across pointer and keyboard activation;
 // native Station intercepts only submit so Copy-focused Enter remains a core toggle.
-import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core";
+import {
+  bottomSheetContentWidth,
+  type DashboardScreenView,
+} from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
@@ -16,7 +19,7 @@ import {
   SheetMessageLine,
 } from "./parts.js";
 
-type ForkScreen = Extract<TuiScreen, { name: "fork" }>;
+type ForkScreen = Extract<DashboardScreenView, { name: "fork" }>;
 type ForkDetailsScreen = Extract<ForkScreen, { step: "details" }>;
 
 export type ForkSessionSheetViewProps = {

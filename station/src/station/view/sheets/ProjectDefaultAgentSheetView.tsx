@@ -1,20 +1,21 @@
-import type { ProviderId, StationSnapshot } from "@station/contracts";
+import type { ProviderId } from "@station/contracts";
 import {
   bottomSheetContentWidth,
   selectNewSessionHarnessChoices,
+  type DashboardScreenView,
+  type DashboardSnapshotView,
+  type DashboardStateView,
   type KeyedChoice,
   type NewSessionHarnessOption,
-  type TuiScreen,
-  type TuiSelectionState,
 } from "@station/dashboard-core";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetFooter, SheetLine } from "./parts.js";
 
 export type ProjectDefaultAgentSheetViewProps = {
-  snapshot: StationSnapshot;
-  screen: Extract<TuiScreen, { name: "projectDefaultAgent" }>;
-  selection: TuiSelectionState;
+  snapshot: DashboardSnapshotView;
+  screen: Extract<DashboardScreenView, { name: "projectDefaultAgent" }>;
+  selection: DashboardStateView["selection"];
   columns: number;
   rows: number;
 };

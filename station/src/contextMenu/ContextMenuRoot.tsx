@@ -1,6 +1,6 @@
 import { useTerminalDimensions } from "@opentui/react";
 import { useSyncExternalStore } from "react";
-import type { DashboardState, DashboardStateSource } from "@station/dashboard-core";
+import type { DashboardStateSource, DashboardStateView } from "@station/dashboard-core";
 import { buildContextMenuItems } from "./items.js";
 import { measureContextMenu, placeContextMenu } from "./placement.js";
 import { ContextMenuLayer } from "./ContextMenuLayer.js";
@@ -28,7 +28,7 @@ export function ContextMenuRoot({
     store.getState,
     store.getState,
   );
-  const stationState = useSyncExternalStore<DashboardState>(
+  const stationState = useSyncExternalStore<DashboardStateView>(
     dashboardState.subscribe,
     dashboardState.getState,
     dashboardState.getState,

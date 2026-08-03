@@ -1,6 +1,6 @@
 import type { MouseEvent } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { useCallback } from "react";
 import { useStore } from "zustand/react";
 import { normalizeStationMouseEvent } from "../input/mouse.js";
@@ -16,7 +16,20 @@ import {
 import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { routeDashboardMouse } from "./dashboardMouse.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type FullscreenDashboardInput = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    | "createQuickSession"
+    | "dismissToasts"
+    | "dispatch"
+    | "expireToasts"
+    | "handleKey"
+    | "pushToast"
+    | "refreshActiveToastExpiry"
+    | "setTerminalRows"
+  >;
+};
 
 /**
  * The standalone dashboard, rendered to fill the terminal. This is the
@@ -29,7 +42,7 @@ type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
  * shared dashboard actions and delegates terminal effects to its environment.
  */
 export type FullscreenDashboardProps = {
-  runtime: DashboardInput;
+  runtime: FullscreenDashboardInput;
   effects: DashboardRendererEffects;
   onCopyNotice: (text: string) => void;
   hoverEnabled?: boolean;

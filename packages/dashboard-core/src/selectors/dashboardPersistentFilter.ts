@@ -1,5 +1,7 @@
 import type { ProjectId } from "@station/contracts";
-import type { DashboardPersistentFilter, TuiScreen } from "../state/types.js";
+import type { DashboardScreenView, DashboardViewState } from "../state/types.js";
+
+type DashboardPersistentFilterView = NonNullable<DashboardViewState["persistentFilter"]>;
 
 export type DashboardPersistentFilterMatchRange = {
   start: number;
@@ -63,8 +65,8 @@ export function selectDashboardPersistentFilter({
 }: {
   candidates: readonly DashboardPersistentFilterCandidate[];
   projects: readonly DashboardPersistentFilterProjectCandidate[];
-  screen: TuiScreen;
-  applied?: DashboardPersistentFilter;
+  screen: DashboardScreenView;
+  applied?: DashboardPersistentFilterView;
 }): DashboardPersistentFilterProjection | undefined {
   const selected = selectedPersistentFilterQuery(screen, applied);
   if (selected === undefined) {
@@ -124,8 +126,8 @@ export function selectDashboardPersistentFilter({
 }
 
 function selectedPersistentFilterQuery(
-  screen: TuiScreen,
-  applied: DashboardPersistentFilter | undefined,
+  screen: DashboardScreenView,
+  applied: DashboardPersistentFilterView | undefined,
 ): { source: "draft" | "applied"; query: string } | undefined {
   if (screen.name === "persistentFilter") {
     return { source: "draft", query: screen.draft.value };

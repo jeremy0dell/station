@@ -19,9 +19,10 @@ import {
 import { validateForkSessionCreate, validateNewSessionCreate } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
 import type {
-  TuiControlIntent,
   DashboardActionResult,
-  DashboardRuntime,
+  DashboardActions,
+  DashboardStateSource,
+  TuiControlIntent,
 } from "@station/dashboard-core";
 import {
   agentWorktreePaneId,
@@ -32,7 +33,17 @@ import {
 } from "../../state/types.js";
 import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type DashboardStateInput = {
+  state: DashboardStateSource;
+};
+
+type DashboardTransitionInput = DashboardStateInput & {
+  actions: Pick<DashboardActions, "dispatch" | "handleKey" | "pushToast">;
+};
+
+type DashboardToastDismissal = {
+  actions: Pick<DashboardActions, "dismissToasts">;
+};
 
 export type StationKeyOutcome =
   /** Dispatched into the machine; the overlay stays up. */
@@ -52,7 +63,10 @@ export type StationKeyOutcome =
  * transition meta to an outcome. Modal by construction — every sequence is
  * consumed whether or not it meant anything.
  */
-export function handleStationSequence(store: DashboardInput, sequence: string): StationKeyOutcome {
+export function handleStationSequence(
+  store: DashboardTransitionInput,
+  sequence: string,
+): StationKeyOutcome {
   const key = sequenceToTuiKey(sequence);
   if (key === undefined) {
     return { kind: "unmapped" };
@@ -60,19 +74,22 @@ export function handleStationSequence(store: DashboardInput, sequence: string): 
   return outcomeForResult(store, store.actions.handleKey(key));
 }
 
-export function dispatchStationKey(store: DashboardInput, key: TuiKey): StationKeyOutcome {
+export function dispatchStationKey(
+  store: DashboardTransitionInput,
+  key: TuiKey,
+): StationKeyOutcome {
   return outcomeForResult(store, store.actions.handleKey(key));
 }
 
 export function dispatchStationAction(
-  store: DashboardInput,
+  store: DashboardTransitionInput,
   action: TuiSemanticAction,
 ): StationKeyOutcome {
   return outcomeForResult(store, store.actions.dispatch(action));
 }
 
 function outcomeForResult(
-  store: DashboardInput,
+  store: DashboardTransitionInput,
   result: DashboardActionResult,
 ): StationKeyOutcome {
   if (result.dismissPopup || result.exitCode !== undefined) {
@@ -84,7 +101,7 @@ function outcomeForResult(
 }
 
 function outcomeForControlIntent(
-  store: DashboardInput,
+  store: DashboardTransitionInput,
   intent: TuiControlIntent,
 ): StationKeyOutcome {
   switch (intent.type) {
@@ -113,7 +130,10 @@ function assertNeverControlIntent(intent: never): never {
  * (dashboard: open session; remove/rename choose-slot: choose this row).
  * Rows without a slot (pending-operation rows) are inert.
  */
-export function dispatchRowSlot(store: DashboardInput, rowId: string): StationKeyOutcome {
+export function dispatchRowSlot(
+  store: DashboardTransitionInput,
+  rowId: string,
+): StationKeyOutcome {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     return { kind: "handled" };
@@ -160,7 +180,7 @@ export type RowAgentTarget =
  * Resolve a row to observer-prepared managed launch identity; absent/stale rows
  * produce an inert `none`.
  */
-export function resolveRowAgentTarget(store: DashboardInput, rowId: string): RowAgentTarget {
+export function resolveRowAgentTarget(store: DashboardStateInput, rowId: string): RowAgentTarget {
   const snapshot = store.state.getState().snapshot;
   if (snapshot === undefined) {
     return { kind: "none" };
@@ -188,7 +208,7 @@ export function resolveRowAgentTarget(store: DashboardInput, rowId: string): Row
  * non-slot keys fall back to the shared machine.
  */
 export function resolveKeyRowAgentTarget(
-  store: DashboardInput,
+  store: DashboardStateInput,
   sequence: string,
 ): RowAgentTarget {
   const state = store.state.getState();
@@ -207,7 +227,7 @@ export function resolveKeyRowAgentTarget(
  * snapshot, or an operation is already pending on it.
  */
 export function resolveKeyFocusedRowAgentTarget(
-  store: DashboardInput,
+  store: DashboardStateInput,
   sequence: string,
 ): RowAgentTarget {
   if (sequenceToTuiKey(sequence)?.return !== true) {
@@ -251,7 +271,7 @@ export type NewSessionSubmitTarget =
  * creates a worktree and managed pane instead of dispatching standalone session.create.
  */
 export function resolveNewSessionSubmit(
-  store: DashboardInput,
+  store: DashboardStateInput,
   action: TuiSemanticAction,
 ): NewSessionSubmitTarget {
   const state = store.state.getState();
@@ -282,7 +302,7 @@ export function resolveNewSessionSubmit(
  * with the overlay keyboard boundary.
  */
 export function resolveKeyNewSessionSubmit(
-  store: DashboardInput,
+  store: DashboardStateInput,
   sequence: string,
 ): NewSessionSubmitTarget {
   const key = sequenceToTuiKey(sequence);
@@ -312,7 +332,7 @@ export type ForkSessionSubmitTarget =
  * intercepted here so the launch hosts the agent in Station rather than running
  * the machine's tmux-bound session.fork.
  */
-export function resolveForkSessionSubmit(store: DashboardInput): ForkSessionSubmitTarget {
+export function resolveForkSessionSubmit(store: DashboardStateInput): ForkSessionSubmitTarget {
   const state = store.state.getState();
   if (state.screen.name !== "fork" || state.screen.step !== "details") {
     return { kind: "none" };
@@ -335,7 +355,7 @@ export function resolveForkSessionSubmit(store: DashboardInput): ForkSessionSubm
 }
 
 export function resolveKeyForkSessionSubmit(
-  store: DashboardInput,
+  store: DashboardStateInput,
   sequence: string,
 ): ForkSessionSubmitTarget {
   if (sequenceToTuiKey(sequence)?.return !== true) {
@@ -359,7 +379,7 @@ export type QuickSessionSubmitTarget =
   | { kind: "none" };
 
 export function resolveQuickSessionSubmit(
-  store: DashboardInput,
+  store: DashboardTransitionInput,
   projectId: string,
 ): QuickSessionSubmitTarget {
   const intent = resolveQuickSessionIntent(store.state.getState(), projectId);
@@ -387,7 +407,7 @@ export function resolveQuickSessionSubmit(
  * pending operation to hide the row from `rowChoices`.
  */
 export function resolveRowPaneTarget(
-  store: DashboardInput,
+  store: DashboardStateInput,
   rowId: string,
 ): OpenPaneTarget | undefined {
   const snapshot = store.state.getState().snapshot;
@@ -407,7 +427,7 @@ export function resolveRowPaneTarget(
  * Projects come straight off the snapshot (headers are not row choices).
  */
 export function resolveProjectPaneTarget(
-  store: DashboardInput,
+  store: DashboardStateInput,
   projectId: string,
 ): OpenPaneTarget | undefined {
   const snapshot = store.state.getState().snapshot;
@@ -421,6 +441,6 @@ export function resolveProjectPaneTarget(
   return { paneId: projectPaneId(project.id), cwd: project.root, role: "shell" };
 }
 
-export function dismissStationToasts(store: DashboardInput): void {
+export function dismissStationToasts(store: DashboardToastDismissal): void {
   store.actions.dismissToasts();
 }

@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { DashboardStateSource } from "@station/dashboard-core";
-import type { StationSnapshot } from "@station/contracts";
+import type {
+  DashboardSnapshotView,
+  DashboardStateSource,
+} from "@station/dashboard-core";
 import type { ColorInput } from "@opentui/core";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
@@ -34,7 +36,7 @@ type RenderCtx = {
   store: StationStore;
   activePaneId: PaneId | null;
   workspace: StationState["workspace"];
-  snapshot: StationSnapshot | undefined;
+  snapshot: DashboardSnapshotView | undefined;
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   onCopySelection: ((text: string) => void) | undefined;
 };
@@ -133,7 +135,9 @@ type PaneAccent = {
   inactive: ColorInput;
 };
 
-function useStationSnapshot(state: DashboardStateSource | undefined): StationSnapshot | undefined {
+function useStationSnapshot(
+  state: DashboardStateSource | undefined,
+): DashboardSnapshotView | undefined {
   const subscribe = useCallback(
     (listener: () => void) => (state === undefined ? () => {} : state.subscribe(listener)),
     [state],
@@ -184,7 +188,7 @@ function stableIndex(value: string, size: number): number {
 function paneSemanticTitle(
   paneId: PaneId,
   workspace: StationState["workspace"],
-  snapshot: StationSnapshot | undefined,
+  snapshot: DashboardSnapshotView | undefined,
 ): string | undefined {
   const primaryAgent = primaryAgentForPane(workspace, paneId);
   if (primaryAgent !== undefined) {

@@ -34,6 +34,7 @@ import {
   applyAddProjectFolderReviewFailed,
   applyAddProjectFolderReviewed,
   applyAddProjectSubmitted,
+  createInitialTuiState,
   handleTuiKey,
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
@@ -532,13 +533,32 @@ describe("modal flow golden frames", () => {
     }).runtime;
   }
 
+  function prepareModalState(
+    modal: ModalCase,
+    snapshot: ReturnType<typeof manyProjectsSnapshot>,
+  ): DashboardState | undefined {
+    if (modal.prepare === undefined) {
+      return undefined;
+    }
+    let state = createInitialTuiState({ initialSnapshot: snapshot });
+    for (const key of modal.keys) {
+      const context = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
+      state =
+        modal.dashboardSearchExperience === undefined
+          ? handleTuiKey(state, key, context).state
+          : handleTuiKey(state, key, context, modal.dashboardSearchExperience).state;
+    }
+    return modal.prepare(state);
+  }
+
   for (const modal of CASES) {
     it(`renders the ${modal.name}`, async () => {
-      const store = makeStore(modal.snapshot?.(), modal.dashboardSearchExperience);
+      const snapshot = modal.snapshot?.() ?? manyProjectsSnapshot();
+      const store = makeStore(snapshot, modal.dashboardSearchExperience);
       for (const key of modal.keys) {
         store.actions.handleKey(key);
       }
-      const prepared = modal.prepare?.(store.state.getState());
+      const prepared = prepareModalState(modal, snapshot);
       const state = prepared === undefined ? store.state : staticDashboardState(prepared);
       const size = modal.size ?? SIZE;
       const setup = await testRender(
@@ -614,11 +634,12 @@ describe("modal flow golden frames", () => {
       if (modal === undefined) {
         throw new Error(`Missing modal fixture ${representative.name}.`);
       }
-      const store = makeStore(modal.snapshot?.());
+      const snapshot = modal.snapshot?.() ?? manyProjectsSnapshot();
+      const store = makeStore(snapshot);
       for (const key of modal.keys) {
         store.actions.handleKey(key);
       }
-      const prepared = modal.prepare?.(store.state.getState());
+      const prepared = prepareModalState(modal, snapshot);
       const state = prepared === undefined ? store.state : staticDashboardState(prepared);
       const size = modal.size ?? SIZE;
       const setup = await testRender(

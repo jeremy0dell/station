@@ -34,6 +34,15 @@ const LINKED_STATION_VIEW_PACKAGES = new Set([
 ]);
 const TEST_ONLY_DIRECTORIES = new Set(["fixtures", "test", "testing", "__fixtures__", "__tests__"]);
 const DASHBOARD_CORE_ROOT_IMPORT = "@station/dashboard-core";
+const PRIVATE_DASHBOARD_STATE_TYPES = new Set([
+  "AddProjectFlowState",
+  "DashboardState",
+  "NewSessionFlowState",
+  "TuiLocalRows",
+  "TuiScreen",
+  "TuiState",
+  "TuiViewState",
+]);
 const DASHBOARD_CORE_INTERNAL_PATHS = [
   "@station/dashboard-core/state/runtime",
   "@station/dashboard-core/state/observerBridge",
@@ -438,6 +447,11 @@ const DASHBOARD_RUNTIME_INTERNAL_EXPORTS = dashboardRuntimeInternalExports();
 const RAW_DASHBOARD_STORE_MODULES = [] as const;
 const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {};
 const DIRECT_DASHBOARD_MUTATION_INVENTORY: DirectDashboardMutationInventory = {};
+const DASHBOARD_RUNTIME_IMPORT_INVENTORY = [
+  "app/createStation.ts: import DashboardRuntime from @station/dashboard-core",
+  "app/types.ts: import DashboardRuntime from @station/dashboard-core",
+  "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core",
+] as const;
 const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [
   "sources/observerStationClient.ts: import bridgeOperationService from @station/dashboard-core",
 ] as const;
@@ -531,6 +545,21 @@ describe("station production boundaries", () => {
     expect(unexpectedReferences.sort()).toEqual([]);
   });
 
+  it("rejects private mutable dashboard state models", () => {
+    const failures = PRODUCTION_MODULES.flatMap((module) =>
+      moduleReferencesOf(module).flatMap((reference) => {
+        if (!reference.specifier.startsWith(DASHBOARD_CORE_ROOT_IMPORT)) {
+          return [];
+        }
+        const mutableNames = reference.importedNames.filter((name) =>
+          PRIVATE_DASHBOARD_STATE_TYPES.has(name),
+        );
+        return referenceDescriptors(module, reference, mutableNames);
+      }),
+    ).sort();
+    expect(failures).toEqual([]);
+  });
+
   it("prohibits direct dashboard store mutations", () => {
     const expected = Object.entries(DIRECT_DASHBOARD_MUTATION_INVENTORY)
       .flatMap(([path, inventory]) =>
@@ -542,22 +571,26 @@ describe("station production boundaries", () => {
     expect(directSetStateCalls(PRODUCTION_MODULES)).toEqual(expected);
   });
 
-  it("freezes imports of dashboard runtime and operation internals", () => {
-    const actual: string[] = [];
+  it("freezes imports of the full dashboard runtime and operation internals", () => {
+    const runtimeImports: string[] = [];
+    const internalImports: string[] = [];
     for (const module of PRODUCTION_MODULES) {
       for (const reference of moduleReferencesOf(module)) {
         if (isDashboardInternalPath(reference.specifier)) {
-          actual.push(...referenceDescriptors(module, reference));
+          internalImports.push(...referenceDescriptors(module, reference));
           continue;
         }
         if (reference.specifier !== DASHBOARD_CORE_ROOT_IMPORT) continue;
+        const runtimeNames = reference.importedNames.filter((name) => name === "DashboardRuntime");
+        runtimeImports.push(...referenceDescriptors(module, reference, runtimeNames));
         const internalNames = reference.importedNames.filter((name) =>
           DASHBOARD_RUNTIME_INTERNAL_EXPORTS.has(name),
         );
-        actual.push(...referenceDescriptors(module, reference, internalNames));
+        internalImports.push(...referenceDescriptors(module, reference, internalNames));
       }
     }
-    expect(actual.sort()).toEqual([...DASHBOARD_INTERNAL_IMPORT_INVENTORY].sort());
+    expect(runtimeImports.sort()).toEqual([...DASHBOARD_RUNTIME_IMPORT_INVENTORY].sort());
+    expect(internalImports.sort()).toEqual([...DASHBOARD_INTERNAL_IMPORT_INVENTORY].sort());
   });
 });
 

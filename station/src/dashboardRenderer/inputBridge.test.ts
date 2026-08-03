@@ -1,4 +1,4 @@
-import type { TuiControlIntent, TuiKey, DashboardRuntime } from "@station/dashboard-core";
+import type { TuiControlIntent, TuiKey } from "@station/dashboard-core";
 import { describe, expect, it } from "bun:test";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
@@ -22,7 +22,7 @@ function harness(resultIntent?: TuiControlIntent): {
         };
       },
     },
-  } as unknown as DashboardRuntime;
+  };
   return {
     handle: createDashboardSequenceHandler(store, (intent) => intents.push(intent)),
     keys,

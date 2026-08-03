@@ -15,8 +15,9 @@ import {
   type ProjectHeaderControl,
   type ProjectSettingsItemId,
   type RemoveWorktreeActionId,
+  type DashboardActions,
+  type DashboardStateSource,
   type TuiInputMode,
-  type DashboardRuntime,
 } from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
@@ -34,7 +35,10 @@ import {
   type StationKeyOutcome,
 } from "./stationActions.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type StationMouseDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
+};
 
 export type StationMouseTarget =
   | { kind: "row"; rowId: string }
@@ -168,7 +172,7 @@ const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
 export function routeStationMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: DashboardInput,
+  store: StationMouseDashboard,
 ): StationMouseOutcome {
   const eventKind = stationMouseEventKind(event);
   if (eventKind === undefined) {
@@ -341,7 +345,7 @@ export function routeStationMouse(
 }
 
 function routeForkSessionAction(
-  store: DashboardInput,
+  store: StationMouseDashboard,
   actionId: ForkSessionActionId,
 ): StationMouseOutcome {
   const action = { type: "forkSession.activate", actionId } as const;
@@ -362,7 +366,7 @@ function routeForkSessionAction(
 }
 
 function routeProjectHeaderActivation(
-  store: DashboardInput,
+  store: StationMouseDashboard,
   mode: TuiInputMode,
   projectId: string,
   actionId: ProjectHeaderControl,
@@ -379,7 +383,10 @@ function routeProjectHeaderActivation(
   );
 }
 
-function routeDashboardRow(store: DashboardInput, rowId: string): StationMouseOutcome {
+function routeDashboardRow(
+  store: StationMouseDashboard,
+  rowId: string,
+): StationMouseOutcome {
   const target = resolveRowAgentTarget(store, rowId);
   return target.kind === "launch-managed"
     ? fromRowAgentTarget(target)
@@ -411,7 +418,7 @@ const SHEET_CHOICE_MODES: ReadonlySet<TuiInputMode> = new Set(
 function routeStationWheel(
   target: StationMouseTarget,
   eventKind: "scroll-up" | "scroll-down",
-  store: DashboardInput,
+  store: StationMouseDashboard,
   mode: TuiInputMode,
 ): StationMouseOutcome {
   // Sheets and prompts must not scroll the dashboard beneath them.

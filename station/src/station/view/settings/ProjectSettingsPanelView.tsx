@@ -4,7 +4,6 @@
 // dashboard, like HelpOverlayView. Keyboard/focus live in the dashboard-core
 // machine; this layer is render + mouse targets only.
 import { TextAttributes } from "@opentui/core";
-import type { StationSnapshot } from "@station/contracts";
 import type { ProviderId } from "@station/contracts";
 import {
   isRemoveProjectArmed,
@@ -14,9 +13,9 @@ import {
   removeProjectConfirmPhrase,
   selectNewSessionHarnessChoices,
   selectProjectDefaultHarness,
-  type TuiLocalRows,
-  type TuiScreen,
-  type TuiSelectionState,
+  type DashboardScreenView,
+  type DashboardSnapshotView,
+  type DashboardStateView,
 } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
@@ -28,15 +27,16 @@ import {
 } from "../stationMouseContext.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 
-type ProjectSettingsScreen = Extract<TuiScreen, { name: "projectSettings" }>;
+type ProjectSettingsScreen = Extract<DashboardScreenView, { name: "projectSettings" }>;
+type DashboardLocalRowsView = DashboardStateView["localRows"];
 
 export type ProjectSettingsPanelViewProps = {
-  snapshot: StationSnapshot;
+  snapshot: DashboardSnapshotView;
   screen: ProjectSettingsScreen;
-  selection: TuiSelectionState;
+  selection: DashboardStateView["selection"];
   columns: number;
   rows: number;
-  localRows: TuiLocalRows;
+  localRows: DashboardLocalRowsView;
 };
 
 export function ProjectSettingsPanelView({
@@ -170,11 +170,11 @@ function DetailPane({
   localRows,
   selectedAgentId,
 }: {
-  snapshot: StationSnapshot;
+  snapshot: DashboardSnapshotView;
   screen: ProjectSettingsScreen;
   width: number;
   focused: boolean;
-  localRows: TuiLocalRows;
+  localRows: DashboardLocalRowsView;
   selectedAgentId?: ProviderId;
 }) {
   if (screen.activeId === "remove") {
@@ -200,11 +200,11 @@ function AgentDetail({
   localRows,
   selectedAgentId,
 }: {
-  snapshot: StationSnapshot;
+  snapshot: DashboardSnapshotView;
   screen: ProjectSettingsScreen;
   width: number;
   focused: boolean;
-  localRows: TuiLocalRows;
+  localRows: DashboardLocalRowsView;
   selectedAgentId?: ProviderId;
 }) {
   const theme = useStationTheme();

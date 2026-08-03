@@ -1,13 +1,11 @@
 // Maps the active screen to an absolute OpenTUI layer above the dashboard.
 // The dashboard never reflows for overlays.
-import type { StationSnapshot } from "@station/contracts";
 import {
   tuiScreenBehavior,
-  type TuiLocalRows,
-  type TuiScreen,
-  type TuiSelectionState,
+  type DashboardScreenView,
+  type DashboardSnapshotView,
+  type DashboardStateView,
 } from "@station/dashboard-core";
-import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import type { ReactNode } from "react";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";
 import { HelpOverlayView } from "./HelpOverlayView.js";
@@ -22,14 +20,14 @@ import { ForkSessionSheetView } from "./sheets/ForkSessionSheetView.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";
 
 export type ActiveScreenOverlayViewProps = {
-  snapshot: StationSnapshot;
-  screen: TuiScreen;
-  selection: TuiSelectionState;
+  snapshot: DashboardSnapshotView;
+  screen: DashboardScreenView;
+  selection: DashboardStateView["selection"];
   columns: number;
   rows: number;
-  localRows: TuiLocalRows;
+  localRows: DashboardStateView["localRows"];
   /** Live session widget set for the widget-settings panel. */
-  widgets?: readonly TuiWidgetConfig[];
+  widgets?: DashboardStateView["widgets"];
   /** False when widget edits cannot be written back to config.toml. */
   widgetsPersisted?: boolean;
 };

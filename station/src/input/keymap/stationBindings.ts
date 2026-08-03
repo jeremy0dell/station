@@ -3,7 +3,11 @@ import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
 import { rowNeedsUser } from "../../stationButton/status.js";
-import { selectDashboardSessionRows, type DashboardRuntime } from "@station/dashboard-core";
+import {
+  selectDashboardSessionRows,
+  type DashboardActions,
+  type DashboardStateSource,
+} from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import {
   paneLaunchForkSessionOutcome,
@@ -23,7 +27,10 @@ import {
 import { ControlByte } from "../../terminal/protocol/controlBytes.js";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type StationDashboardInput = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
+};
 
 export const STATION_EXIT_LEGACY = "\x11"; // Ctrl-Q
 export const OVERLAY_TOGGLE_LEGACY = "\x0f"; // Ctrl-O
@@ -150,10 +157,10 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
  * Everywhere else Enter falls through to terminal passthrough untouched.
  */
 function createStationButtonLayer(
-  dashboardRuntime: DashboardInput,
+  dashboardState: DashboardStateSource,
 ): KeymapLayer<RouteOutcome> {
   const attentionRow = () => {
-    const snapshot = dashboardRuntime.state.getState().snapshot;
+    const snapshot = dashboardState.getState().snapshot;
     return snapshot === undefined
       ? undefined
       : selectDashboardSessionRows(snapshot).find((row) => rowNeedsUser(row.presentation));
@@ -230,7 +237,7 @@ const workspaceLayer: KeymapLayer<RouteOutcome> = {
 
 /** The registration site: adding a Station chord is one binding here. */
 export function createStationKeymap(
-  dashboardRuntime?: DashboardInput,
+  dashboardRuntime?: StationDashboardInput,
 ): KeymapStack<RouteOutcome> {
   const overlayLayer =
     dashboardRuntime === undefined ? placeholderOverlayLayer : createStationOverlayLayer(dashboardRuntime);
@@ -242,7 +249,7 @@ export function createStationKeymap(
     welcomeLayer,
   ];
   if (dashboardRuntime !== undefined) {
-    layers.push(createStationButtonLayer(dashboardRuntime));
+    layers.push(createStationButtonLayer(dashboardRuntime.state));
   }
   return createKeymapStack(layers);
 }
@@ -253,7 +260,9 @@ export function createStationKeymap(
  * is not guarded by the overlay itself. Pane clicks do not focus through an
  * active overlay.
  */
-export function createStationMouseBindings(dashboardRuntime?: DashboardInput): MouseBindings {
+export function createStationMouseBindings(
+  dashboardRuntime?: StationDashboardInput,
+): MouseBindings {
   const anchorFrom = (event: StationMouseEvent) => ({ x: event.x, y: event.y });
   return {
     header: (_target, state, event) => {

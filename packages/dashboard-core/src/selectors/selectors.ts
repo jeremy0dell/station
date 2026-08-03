@@ -1,20 +1,6 @@
-import type {
-  ProjectId,
-  ProjectView,
-  ProviderHealth,
-  ProviderId,
-  SessionId,
-  SessionView,
-  SnapshotHarness,
-  StationSnapshot,
-  WorktreeRow,
-} from "@station/contracts";
-import {
-  pendingProjectDefaultHarnesses,
-  pendingRenameTitles,
-  type TuiLocalRows,
-} from "../state/localRows.js";
-import type { TuiViewState } from "../state/types.js";
+import type { ProjectId, ProviderHealth, ProviderId, SessionId } from "@station/contracts";
+import { pendingProjectDefaultHarnesses, pendingRenameTitles } from "../state/localRows.js";
+import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
 import { matchesDashboardSessionSearch } from "./dashboardSearchProjection.js";
 
 export const SELECTION_KEYS = [
@@ -62,12 +48,20 @@ export type KeyedChoice<T> = {
   value: T;
 };
 
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
+type DashboardWorktreeRowView = DashboardSnapshotView["rows"][number];
+type DashboardSessionView = DashboardSnapshotView["sessions"][number];
+type DashboardProviderHealthView = DashboardSnapshotView["providerHealth"][ProviderId];
+type DashboardSnapshotHarnessView = NonNullable<DashboardSnapshotView["harnesses"]>[number];
+type DashboardLocalRowsView = DashboardViewState["localRows"];
+type Mutable<T> = { -readonly [TKey in keyof T]: T[TKey] };
+
 export type DashboardSessionRow = {
   /** Dashboard identity is the canonical session id, never the checkout id. */
   id: SessionId;
-  session: SessionView;
-  worktree: WorktreeRow;
-  presentation: WorktreeRow;
+  session: DashboardSessionView;
+  worktree: DashboardWorktreeRowView;
+  presentation: DashboardWorktreeRowView;
 };
 
 export type NewSessionHarnessOption = {
@@ -75,7 +69,7 @@ export type NewSessionHarnessOption = {
   label: string;
   status: ProviderHealth["status"];
   createBlocked: boolean;
-  health?: ProviderHealth;
+  health?: DashboardProviderHealthView;
   /** Set only when the snapshot knows both versions and they differ (M10 badge). */
   update?: { installed: string; latest: string };
 };
@@ -101,7 +95,7 @@ export function isSelectionKey(input: string): input is SelectionKey {
   return SELECTION_KEYS.includes(input as SelectionKey);
 }
 
-export function selectProjectGroups(snapshot: StationSnapshot, state: TuiViewState) {
+export function selectProjectGroups(snapshot: DashboardSnapshotView, state: DashboardViewState) {
   const sessionRows = selectDashboardSessionRows(snapshot);
   return snapshot.projects.map((project) => {
     const collapsed = state.collapsedProjectIds.has(project.id);
@@ -130,7 +124,7 @@ export function selectProjectGroups(snapshot: StationSnapshot, state: TuiViewSta
   });
 }
 
-export function selectDashboardSessionRows(snapshot: StationSnapshot): DashboardSessionRow[] {
+export function selectDashboardSessionRows(snapshot: DashboardSnapshotView): DashboardSessionRow[] {
   const worktreesById = new Map(snapshot.rows.map((row) => [row.id, row]));
   return snapshot.sessions.flatMap((session) => {
     const source = worktreesById.get(session.worktreeId);
@@ -142,7 +136,7 @@ export function selectDashboardSessionRows(snapshot: StationSnapshot): Dashboard
 }
 
 export function selectDashboardSessionRow(
-  snapshot: StationSnapshot,
+  snapshot: DashboardSnapshotView,
   sessionId: SessionId,
 ): DashboardSessionRow | undefined {
   return selectDashboardSessionRows(snapshot).find((row) => row.id === sessionId);
@@ -154,29 +148,29 @@ export function selectDashboardSessionRow(
  * view can key off the snapshot alone and stay in exact agreement.
  */
 export function selectProjectChooserChoices(
-  snapshot: StationSnapshot,
-): Array<KeyedChoice<ProjectView>> {
+  snapshot: DashboardSnapshotView,
+): Array<KeyedChoice<DashboardProjectView>> {
   return keyChoices(snapshot.projects);
 }
 
 export function selectNewSessionProject(
-  snapshot: StationSnapshot,
+  snapshot: DashboardSnapshotView,
   selectedProjectId: ProjectId,
-): ProjectView | undefined {
+): DashboardProjectView | undefined {
   return (
     snapshot.projects.find((project) => project.id === selectedProjectId) ?? snapshot.projects[0]
   );
 }
 
 export function selectNewSessionProjectChoices(
-  snapshot: StationSnapshot,
-): Array<KeyedChoice<ProjectView>> {
+  snapshot: DashboardSnapshotView,
+): Array<KeyedChoice<DashboardProjectView>> {
   return keyChoices(snapshot.projects);
 }
 
 export function selectNewSessionHarnessOptions(
-  snapshot: StationSnapshot,
-  _project: ProjectView,
+  snapshot: DashboardSnapshotView,
+  _project: DashboardProjectView,
 ): NewSessionHarnessOption[] {
   const configured = configuredHarnesses(snapshot);
   const labels = new Map(configured.map((harness) => [harness.id, harness.label]));
@@ -215,16 +209,16 @@ export function selectNewSessionHarnessOptions(
 }
 
 export function selectNewSessionHarnessChoices(
-  snapshot: StationSnapshot,
-  project: ProjectView,
+  snapshot: DashboardSnapshotView,
+  project: DashboardProjectView,
 ): Array<KeyedChoice<NewSessionHarnessOption>> {
   return keyChoices(selectNewSessionHarnessOptions(snapshot, project));
 }
 
 export function sessionForWorktreeRow(
-  row: WorktreeRow,
-  sessions: readonly SessionView[],
-): SessionView | undefined {
+  row: DashboardWorktreeRowView,
+  sessions: readonly DashboardSessionView[],
+): DashboardSessionView | undefined {
   const sessionId = row.agent?.sessionId;
   if (sessionId !== undefined) {
     const direct = sessions.find(
@@ -246,7 +240,7 @@ export function sessionForWorktreeRow(
 
 export function sessionRowDisplayTitle(
   row: Pick<DashboardSessionRow, "session" | "worktree">,
-  localRows: TuiLocalRows,
+  localRows: DashboardLocalRowsView,
 ): string {
   return pendingRenameTitles(localRows)[row.session.id]?.title ?? row.worktree.title;
 }
@@ -258,8 +252,8 @@ export function sessionRowDisplayTitle(
  * cue while the change is in flight.
  */
 export function selectProjectDefaultHarness(
-  localRows: TuiLocalRows,
-  project: ProjectView,
+  localRows: DashboardLocalRowsView,
+  project: DashboardProjectView,
 ): { harness: ProviderId; pending: boolean } {
   const pending = pendingProjectDefaultHarnesses(localRows)[project.id];
   if (pending === undefined) {
@@ -271,7 +265,7 @@ export function selectProjectDefaultHarness(
 function compareRows(
   left: DashboardSessionRow,
   right: DashboardSessionRow,
-  localRows: TuiLocalRows,
+  localRows: DashboardLocalRowsView,
 ): number {
   return (
     sessionRowDisplayTitle(left, localRows).localeCompare(
@@ -283,7 +277,10 @@ function compareRows(
   );
 }
 
-function dashboardSessionRow(session: SessionView, source: WorktreeRow): DashboardSessionRow {
+function dashboardSessionRow(
+  session: DashboardSessionView,
+  source: DashboardWorktreeRowView,
+): DashboardSessionRow {
   return {
     id: session.id,
     session,
@@ -292,8 +289,11 @@ function dashboardSessionRow(session: SessionView, source: WorktreeRow): Dashboa
   };
 }
 
-function sessionPresentation(session: SessionView, source: WorktreeRow): WorktreeRow {
-  const row: WorktreeRow = {
+function sessionPresentation(
+  session: DashboardSessionView,
+  source: DashboardWorktreeRowView,
+): DashboardWorktreeRowView {
+  const row: Mutable<DashboardWorktreeRowView> = {
     ...source,
     display: sessionDisplay(session),
   };
@@ -310,10 +310,10 @@ function sessionPresentation(session: SessionView, source: WorktreeRow): Worktre
 }
 
 function sessionAgent(
-  session: SessionView,
-  source: WorktreeRow,
-): NonNullable<WorktreeRow["agent"]> {
-  const agent: NonNullable<WorktreeRow["agent"]> = {
+  session: DashboardSessionView,
+  source: DashboardWorktreeRowView,
+): NonNullable<DashboardWorktreeRowView["agent"]> {
+  const agent: Mutable<NonNullable<DashboardWorktreeRowView["agent"]>> = {
     harness: session.harness.provider,
     state: session.status.value,
     confidence: session.status.confidence,
@@ -330,16 +330,19 @@ function sessionAgent(
   return agent;
 }
 
-function sourceAgentMatchesSession(source: WorktreeRow, session: SessionView): boolean {
+function sourceAgentMatchesSession(
+  source: DashboardWorktreeRowView,
+  session: DashboardSessionView,
+): boolean {
   if (session.origin === "station") {
     return source.agent?.sessionId === session.id;
   }
   return session.harness.runId !== undefined && source.agent?.runId === session.harness.runId;
 }
 
-function sessionDisplay(session: SessionView): WorktreeRow["display"] {
+function sessionDisplay(session: DashboardSessionView): DashboardWorktreeRowView["display"] {
   const value = session.status.value;
-  const display: WorktreeRow["display"] = {
+  const display: Mutable<DashboardWorktreeRowView["display"]> = {
     statusLabel:
       value === "needs_attention" ? "needs attention" : value === "none" ? "no agent" : value,
     sortPriority: sessionStatusPriority(value),
@@ -350,7 +353,7 @@ function sessionDisplay(session: SessionView): WorktreeRow["display"] {
   return display;
 }
 
-function sessionStatusPriority(value: SessionView["status"]["value"]): number {
+function sessionStatusPriority(value: DashboardSessionView["status"]["value"]): number {
   switch (value) {
     case "needs_attention":
       return 10;
@@ -371,7 +374,9 @@ function sessionStatusPriority(value: SessionView["status"]["value"]): number {
   }
 }
 
-function configuredHarnesses(snapshot: StationSnapshot): readonly SnapshotHarness[] {
+function configuredHarnesses(
+  snapshot: DashboardSnapshotView,
+): readonly DashboardSnapshotHarnessView[] {
   if (snapshot.harnesses !== undefined) {
     return snapshot.harnesses;
   }

@@ -12,6 +12,7 @@ import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
 import type { TuiToast } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
+import type { ReadonlyDeep } from "./readonly.js";
 import type { TuiSelectionState } from "./selection/types.js";
 
 /** Stable control identities for the four project-header action segments. */
@@ -51,7 +52,7 @@ export type TuiViewState = {
 };
 
 /**
- * Data-only state owned by the dashboard runtime.
+ * Private reducer/store data model owned by the dashboard runtime.
  *
  * External mutation is available only through {@link DashboardActions}; action
  * and lifecycle methods are never stored in dashboard snapshots.
@@ -73,8 +74,20 @@ export type DashboardState = TuiViewState & {
   widgetsPersisted: boolean;
 };
 
-/** Temporary data-only alias retained while pure reducer naming is migrated. */
+/** Temporary private reducer/store alias retained while pure reducer naming is migrated. */
 export type TuiState = DashboardState;
+
+/** Recursively readonly public projection of the private dashboard store model. */
+export type DashboardStateView = ReadonlyDeep<DashboardState>;
+
+/** Readonly Observer snapshot exposed through {@link DashboardStateView}. */
+export type DashboardSnapshotView = NonNullable<DashboardStateView["snapshot"]>;
+
+/** Readonly active-screen projection exposed through {@link DashboardStateView}. */
+export type DashboardScreenView = DashboardStateView["screen"];
+
+/** Readonly dashboard presentation state shared by pure selectors. */
+export type DashboardViewState = ReadonlyDeep<TuiViewState>;
 
 export type TuiToastEntry = {
   id: string;

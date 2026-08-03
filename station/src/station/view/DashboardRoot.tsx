@@ -28,7 +28,10 @@ import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 
 export type DashboardRootProps = {
   state: DashboardStateSource;
-  actions: DashboardActions;
+  actions: Pick<
+    DashboardActions,
+    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
+  >;
   /** The overlay's content area, in terminal cells. */
   columns: number;
   rows: number;

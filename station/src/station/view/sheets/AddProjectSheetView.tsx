@@ -3,7 +3,7 @@ import {
   addProjectRows,
   addProjectSelectedIndexForFlow,
   bottomSheetContentWidth,
-  type AddProjectFlowState,
+  type AddProjectFlowStateView,
   type TuiSelectionState,
 } from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
@@ -23,7 +23,7 @@ import {
 } from "./parts.js";
 
 export type AddProjectSheetViewProps = {
-  state: AddProjectFlowState;
+  state: AddProjectFlowStateView;
   selection: TuiSelectionState;
   columns: number;
   rows: number;
@@ -47,7 +47,7 @@ export function AddProjectSheetView({ state, selection, columns, rows }: AddProj
 }
 
 function renderState(
-  state: AddProjectFlowState,
+  state: AddProjectFlowStateView,
   selectedIndex: number | undefined,
   width: number,
   contentRows: number,
@@ -87,7 +87,7 @@ function StartChoices({
   width,
   contentRows,
 }: {
-  state: Extract<AddProjectFlowState, { mode: "start" }>;
+  state: Extract<AddProjectFlowStateView, { mode: "start" }>;
   selectedIndex: number | undefined;
   width: number;
   contentRows: number;
@@ -120,7 +120,7 @@ function FolderPicker({
   width,
   contentRows,
 }: {
-  state: Extract<AddProjectFlowState, { mode: "choose" }>;
+  state: Extract<AddProjectFlowStateView, { mode: "choose" }>;
   selectedIndex: number | undefined;
   width: number;
   contentRows: number;
@@ -210,7 +210,7 @@ function rowDetail(rowKind: ReturnType<typeof addProjectRows>[number]["kind"]): 
   return rowKind === "search" ? "match" : "folder";
 }
 
-function matchSummary(state: Extract<AddProjectFlowState, { mode: "choose" }>, count: number) {
+function matchSummary(state: Extract<AddProjectFlowStateView, { mode: "choose" }>, count: number) {
   const suffix = state.searchTruncated ? "+" : "";
   return state.searching ? `${count}${suffix} matches, searching` : `${count}${suffix} matches`;
 }
@@ -219,7 +219,7 @@ function Review({
   state,
   width,
 }: {
-  state: Extract<AddProjectFlowState, { mode: "review" }>;
+  state: Extract<AddProjectFlowStateView, { mode: "review" }>;
   width: number;
 }) {
   return (
@@ -259,7 +259,7 @@ function Success({
   state,
   width,
 }: {
-  state: Extract<AddProjectFlowState, { mode: "success" }>;
+  state: Extract<AddProjectFlowStateView, { mode: "success" }>;
   width: number;
 }) {
   return (
@@ -280,7 +280,7 @@ function Failure({
   width,
   contentRows,
 }: {
-  state: Extract<AddProjectFlowState, { mode: "failed" }>;
+  state: Extract<AddProjectFlowStateView, { mode: "failed" }>;
   width: number;
   contentRows: number;
 }) {
@@ -310,7 +310,7 @@ function Failure({
 }
 
 function failureMetadataRows(
-  error: Extract<AddProjectFlowState, { mode: "failed" }>["error"],
+  error: Extract<AddProjectFlowStateView, { mode: "failed" }>["error"],
 ): Array<{ label: string; value: string }> {
   const rows = [{ label: "Code", value: error.code }];
   if (error.traceId !== undefined) rows.push({ label: "Trace", value: error.traceId });
@@ -319,7 +319,7 @@ function failureMetadataRows(
   return rows;
 }
 
-function reviewHelper(state: Extract<AddProjectFlowState, { mode: "review" }>): string {
+function reviewHelper(state: Extract<AddProjectFlowStateView, { mode: "review" }>): string {
   if (state.editingId !== undefined) {
     const action =
       state.editIdActionFocus === "back" ? "Enter back without saving" : "Enter save project id";
@@ -337,7 +337,7 @@ function reviewHelper(state: Extract<AddProjectFlowState, { mode: "review" }>): 
   }
 }
 
-function titleForState(state: AddProjectFlowState): string {
+function titleForState(state: AddProjectFlowStateView): string {
   if (state.mode === "start") return state.firstProject ? "Add Your First Project" : "Add Project";
   if (state.mode === "choose") return "Choose Project Folder";
   if (state.mode === "review") return "Add Project: Review";
@@ -355,7 +355,7 @@ function AddProjectActionBar({
   selectedIndex,
 }: {
   width: number;
-  state: AddProjectFlowState;
+  state: AddProjectFlowStateView;
   selectedIndex?: number;
 }) {
   const actions = addProjectActions(state, selectedIndex);

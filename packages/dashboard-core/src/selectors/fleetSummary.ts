@@ -1,5 +1,5 @@
-import type { StationSnapshot } from "@station/contracts";
 import { isReadyToRead } from "../components/WorktreeRow/rowInput.js";
+import type { DashboardSnapshotView } from "../state/types.js";
 import { selectDashboardSessionRows } from "./selectors.js";
 
 // Fleet triage counts derived client-side: the observer's snapshot.counts carry
@@ -16,7 +16,7 @@ export type FleetSummary = {
   unknown: number;
 };
 
-export function selectFleetSummary(snapshot: StationSnapshot): FleetSummary {
+export function selectFleetSummary(snapshot: DashboardSnapshotView): FleetSummary {
   const summary: FleetSummary = {
     ready: 0,
     working: 0,

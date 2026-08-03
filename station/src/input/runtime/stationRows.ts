@@ -1,25 +1,28 @@
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type {
+  DashboardSnapshotView,
+  DashboardStateSource,
+} from "@station/dashboard-core";
 import { STATION_HOST_PROVIDER_ID } from "@station/host";
-import type { ProviderId, WorktreeRow } from "@station/contracts";
+import type { ProviderId } from "@station/contracts";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type DashboardWorktreeRowView = DashboardSnapshotView["rows"][number];
 
 /** How long to wait for a freshly created worktree's row to reach the snapshot. */
 const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
 
 export function findWorktreeRowById(
-  store: DashboardInput,
+  store: DashboardStateSource,
   worktreeId: string,
-): WorktreeRow | undefined {
-  return store.state.getState().snapshot?.rows.find((row) => row.id === worktreeId);
+): DashboardWorktreeRowView | undefined {
+  return store.getState().snapshot?.rows.find((row) => row.id === worktreeId);
 }
 
 export function findWorktreeRowByBranch(
-  store: DashboardInput,
+  store: DashboardStateSource,
   projectId: string,
   branch: string,
-): WorktreeRow | undefined {
-  return store.state
+): DashboardWorktreeRowView | undefined {
+  return store
     .getState()
     .snapshot?.rows.find((row) => row.projectId === projectId && row.branch === branch);
 }
@@ -27,11 +30,11 @@ export function findWorktreeRowByBranch(
 // The harness a fork inherits: the source's live/recovery harness, else the
 // project default — shared by the optimistic row and the launch.
 export function inheritedForkHarness(
-  store: DashboardInput,
+  store: DashboardStateSource,
   projectId: string,
   sourceWorktreeId: string,
 ): ProviderId | undefined {
-  const snapshot = store.state.getState().snapshot;
+  const snapshot = store.getState().snapshot;
   const source = snapshot?.rows.find((row) => row.id === sourceWorktreeId);
   const project = snapshot?.projects.find((candidate) => candidate.id === projectId);
   return source?.agent?.harness ?? source?.recovery?.provider ?? project?.defaults.harness;
@@ -43,7 +46,7 @@ export function inheritedForkHarness(
  * agent can't be shown in Station rather than focus it to no visible effect.
  */
 export function externalTerminalProviderForWorktree(
-  store: DashboardInput,
+  store: DashboardStateSource,
   worktreeId: string,
 ): string | undefined {
   const provider = findWorktreeRowById(store, worktreeId)?.terminal?.provider;
@@ -51,7 +54,7 @@ export function externalTerminalProviderForWorktree(
 }
 
 export function nonFocusableStationTerminalForWorktree(
-  store: DashboardInput,
+  store: DashboardStateSource,
   worktreeId: string,
 ): { label: string } | undefined {
   const row = findWorktreeRowById(store, worktreeId);
@@ -68,7 +71,7 @@ export function nonFocusableStationTerminalForWorktree(
  * terminal or a row with no terminal both fall through to the normal launch path.
  */
 export function unreachableTerminalRow(
-  store: DashboardInput,
+  store: DashboardStateSource,
   worktreeId: string,
 ): { label: string; provider: string; state: string } | undefined {
   const row = findWorktreeRowById(store, worktreeId);
@@ -83,7 +86,7 @@ export function unreachableTerminalRow(
 }
 
 export function readinessForWorktree(
-  store: DashboardInput,
+  store: DashboardStateSource,
   worktreeId: string,
 ): { sessionId: string; token: string } | undefined {
   const agent = findWorktreeRowById(store, worktreeId)?.agent;
@@ -103,22 +106,22 @@ export function readinessForWorktree(
  * carrying the row.
  */
 export function waitForWorktreeByBranch(
-  store: DashboardInput,
+  store: DashboardStateSource,
   projectId: string,
   branch: string,
-): Promise<WorktreeRow | undefined> {
+): Promise<DashboardWorktreeRowView | undefined> {
   const existing = findWorktreeRowByBranch(store, projectId, branch);
   if (existing !== undefined) {
     return Promise.resolve(existing);
   }
   return new Promise((resolve) => {
-    const settle = (row: WorktreeRow | undefined): void => {
+    const settle = (row: DashboardWorktreeRowView | undefined): void => {
       clearTimeout(timer);
       unsubscribe();
       resolve(row);
     };
     const timer = setTimeout(() => settle(undefined), WORKTREE_APPEAR_TIMEOUT_MS);
-    const unsubscribe = store.state.subscribe(() => {
+    const unsubscribe = store.subscribe(() => {
       const row = findWorktreeRowByBranch(store, projectId, branch);
       if (row !== undefined) {
         settle(row);

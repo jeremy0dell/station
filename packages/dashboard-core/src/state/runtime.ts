@@ -44,13 +44,23 @@ import { applySnapshotSourceState, type TuiSnapshotSource } from "./sourceBridge
 import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
 import { handleTuiKey, type TuiTransition } from "./transition.js";
-import type { CreateInitialTuiStateOptions, DashboardState, TuiState } from "./types.js";
+import type {
+  CreateInitialTuiStateOptions,
+  DashboardState,
+  DashboardStateView,
+  TuiState,
+} from "./types.js";
 
-/** Read-only dashboard state source compatible with Zustand's React selector contract. */
+/**
+ * Type-level readonly state source that preserves Zustand state and notification identity.
+ * Values are projected structurally without copying, proxying, or freezing them at runtime.
+ */
 export type DashboardStateSource = {
-  getState(): DashboardState;
-  getInitialState(): DashboardState;
-  subscribe(listener: (state: DashboardState, previous: DashboardState) => void): () => void;
+  getState(): DashboardStateView;
+  getInitialState(): DashboardStateView;
+  subscribe(
+    listener: (state: DashboardStateView, previous: DashboardStateView) => void,
+  ): () => void;
 };
 
 /** Construction options for a dashboard runtime and its private state store. */

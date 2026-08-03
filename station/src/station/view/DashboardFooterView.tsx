@@ -9,7 +9,7 @@ import {
   truncateCells,
   type DashboardFooterModel,
   type DashboardStateSource,
-  type TuiState,
+  type DashboardStateView,
 } from "@station/dashboard-core";
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
@@ -50,7 +50,9 @@ function dashboardFooterColor(
   return toOpenTuiColor(model.kind === "loading" ? theme.text.muted : theme.text.primary);
 }
 
-function selectFooterQuitHint(state: Pick<TuiState, "screen" | "toasts">): string {
+function selectFooterQuitHint(
+  state: Pick<DashboardStateView, "screen" | "toasts">,
+): string {
   const activeToast = activeTuiToast(state);
   return !isTuiToastHiddenByScreen(state.screen) && activeToast?.toast.kind === "error"
     ? QUIT_HINT_DISMISS_ERROR

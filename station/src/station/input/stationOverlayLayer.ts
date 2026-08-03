@@ -17,7 +17,7 @@ import {
   type RouteOutcome,
 } from "../../input/router.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
   handleStationSequence,
   resolveKeyFocusedRowAgentTarget,
@@ -26,10 +26,13 @@ import {
   resolveKeyRowAgentTarget,
 } from "./stationActions.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type StationOverlayDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "dispatch" | "handleKey" | "pushToast">;
+};
 
 export function createStationOverlayLayer(
-  dashboardRuntime: DashboardInput,
+  dashboardRuntime: StationOverlayDashboard,
 ): KeymapLayer<RouteOutcome> {
   return {
     id: "overlay",

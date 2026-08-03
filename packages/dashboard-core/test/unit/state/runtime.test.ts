@@ -20,7 +20,7 @@ import {
 } from "@station/dashboard-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDashboardRuntime } from "../../../src/state/runtime.js";
-import type { DashboardState } from "../../../src/state/types.js";
+import type { DashboardStateView } from "../../../src/state/types.js";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
@@ -51,6 +51,33 @@ describe("dashboard runtime boundary", () => {
     expect(runtime.state.getInitialState()).not.toHaveProperty("dispose");
   });
 
+  it("projects state without copying, freezing, or changing notification identity", () => {
+    const snapshot = createDashboardSnapshot();
+    const runtime = createDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+    });
+    const initialState = runtime.state.getState();
+    let notifications = 0;
+    const unsubscribe = runtime.state.subscribe((state, previous) => {
+      notifications += 1;
+      expect(state).toBe(runtime.state.getState());
+      expect(previous).toBe(initialState);
+    });
+
+    expect(runtime.state.getInitialState()).toBe(initialState);
+    expect(initialState.snapshot).toBe(snapshot);
+    expect(Object.isFrozen(initialState)).toBe(false);
+    expect(Object.isFrozen(initialState.snapshot)).toBe(false);
+
+    runtime.actions.setTerminalRows(initialState.terminalRows + 1);
+
+    expect(notifications).toBe(1);
+    expect(runtime.state.getState()).not.toBe(initialState);
+    expect(runtime.state.getState().snapshot).toBe(snapshot);
+    unsubscribe();
+  });
+
   it("starts once and disposes subscriptions repeat-safely", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
@@ -67,6 +94,45 @@ describe("dashboard runtime boundary", () => {
     runtime.start();
     await Promise.resolve();
     expect(service.subscribeCount).toBe(1);
+  });
+
+  it("does not notify subscribers when a source re-emits an equal failure", () => {
+    const now = Date.parse(fixtureNow);
+    const sourceError: SafeError = {
+      tag: "ProtocolError",
+      code: "PROTOCOL_CONNECT_FAILED",
+      message: "Could not connect to the observer socket.",
+    };
+    const source = mutableSnapshotSource({
+      connection: { state: "loading", since: now },
+    });
+    const runtime = createDashboardRuntime({
+      service: new FakeTuiObserverService(createDashboardSnapshot()),
+      source,
+    });
+    let notifications = 0;
+    const unsubscribe = runtime.state.subscribe(() => {
+      notifications += 1;
+    });
+
+    runtime.start();
+    source.setConnection({ state: "reconnecting", since: now, lastError: sourceError });
+    expect(notifications).toBe(1);
+
+    source.setConnection({
+      state: "reconnecting",
+      since: now,
+      lastError: { ...sourceError },
+    });
+    source.setConnection({
+      state: "reconnecting",
+      since: now,
+      lastError: { ...sourceError },
+    });
+    expect(notifications).toBe(1);
+
+    unsubscribe();
+    runtime.dispose();
   });
 
   it("deletes an absent persistent filter during full replacement", () => {
@@ -1097,17 +1163,17 @@ function folderEntry(name: string, path: string): TuiFolderEntry {
   return { name, path, kind: "directory" };
 }
 
-function selectedAddProjectPath(state: DashboardState): string | undefined {
+function selectedAddProjectPath(state: DashboardStateView): string | undefined {
   return selectedAddProjectFolderRow(state)?.path;
 }
 
-function activeAddProjectPath(state: DashboardState): string | undefined {
+function activeAddProjectPath(state: DashboardStateView): string | undefined {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.currentPath
     : undefined;
 }
 
-function addProjectEntryNames(state: DashboardState): string[] {
+function addProjectEntryNames(state: DashboardStateView): string[] {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.entries.map((entry) => entry.name)
     : [];
@@ -1198,11 +1264,11 @@ function entriesForPath(path: string) {
   ];
 }
 
-function screenMode(state: DashboardState) {
+function screenMode(state: DashboardStateView) {
   return state.screen.name === "addProject" ? state.screen.flow.mode : undefined;
 }
 
-function addProjectSearchResultCount(state: DashboardState) {
+function addProjectSearchResultCount(state: DashboardStateView) {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.searchEntries.length
     : 0;

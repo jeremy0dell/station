@@ -1,12 +1,14 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type { ProjectView } from "@station/contracts";
 import {
   projectHeaderLabelParts,
   textMatchSegments,
   truncateCells,
   type DashboardPersistentFilterProjectMatch,
+  type DashboardSnapshotView,
   type ProjectHeaderControl,
 } from "@station/dashboard-core";
+
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import {
@@ -31,7 +33,7 @@ export function ProjectHeaderView({
   persistentFilterMatch,
 }: {
   columns: number;
-  project: ProjectView;
+  project: DashboardProjectView;
   collapsed: boolean;
   focus?: ProjectHeaderControl | undefined;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
@@ -91,7 +93,7 @@ function ProjectHeaderPrimary({
   dimmed,
   persistentFilterMatch,
 }: {
-  project: ProjectView;
+  project: DashboardProjectView;
   collapsed: boolean;
   width: number;
   focused: boolean;
@@ -172,7 +174,7 @@ function ProjectHeaderLabel({
   dimmed,
   persistentFilterMatch,
 }: {
-  project: ProjectView;
+  project: DashboardProjectView;
   collapsed: boolean;
   width: number;
   dimmed: boolean;

@@ -6,7 +6,6 @@ import {
   loadConfig,
   setTuiWidgetsInConfig,
   type TuiConfig,
-  type TuiWidgetConfig,
 } from "@station/config";
 import {
   legacySearchExperience,
@@ -14,6 +13,7 @@ import {
   type DashboardActions,
   type DashboardSearchExperience,
   type DashboardStateSource,
+  type DashboardStateView,
 } from "@station/dashboard-core";
 import { FeatureFlagDefinitions } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
@@ -85,9 +85,11 @@ export type WidgetConfigWrites = {
   flush(): Promise<void>;
 };
 
+type DashboardWidgetView = DashboardStateView["widgets"][number];
+
 type WidgetChange = {
-  before: readonly TuiWidgetConfig[];
-  after: readonly TuiWidgetConfig[];
+  before: readonly DashboardWidgetView[];
+  after: readonly DashboardWidgetView[];
 };
 
 const WIDGET_LOCK_TIMEOUT_MS = 5_000;
@@ -156,8 +158,8 @@ async function persistWidgetChange(configPath: string, change: WidgetChange): Pr
 
 function rebaseWidgetChange(
   change: WidgetChange,
-  latest: readonly TuiWidgetConfig[],
-): readonly TuiWidgetConfig[] {
+  latest: readonly DashboardWidgetView[],
+): readonly DashboardWidgetView[] {
   if (isDeepStrictEqual(change.before, change.after)) {
     return latest;
   }
@@ -217,8 +219,8 @@ function rebaseWidgetChange(
 }
 
 function findWidgetPositions(
-  widgets: readonly TuiWidgetConfig[],
-  latest: readonly TuiWidgetConfig[],
+  widgets: readonly DashboardWidgetView[],
+  latest: readonly DashboardWidgetView[],
 ): number[] | undefined {
   const positions: number[] = [];
   let latestIndex = 0;

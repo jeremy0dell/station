@@ -12,7 +12,7 @@ import { removeWorktreeScreenBehavior } from "./screens/removeWorktree.js";
 import { renameSessionScreenBehavior } from "./screens/renameSession.js";
 import { searchScreenBehavior } from "./screens/search.js";
 import { widgetSettingsScreenBehavior } from "./screens/widgetSettings.js";
-import type { TuiScreen, TuiState } from "./types.js";
+import type { DashboardScreenView, TuiState } from "./types.js";
 
 /**
  * Cross-screen behavior consumed uniformly by shared dashboard composition and input routing;
@@ -24,7 +24,7 @@ export type TuiScreenBehavior = {
 };
 
 /** Exhaustively resolves shared behavior so every future screen makes an explicit decision. */
-export function tuiScreenBehavior(screen: TuiScreen): TuiScreenBehavior {
+export function tuiScreenBehavior(screen: DashboardScreenView): TuiScreenBehavior {
   switch (screen.name) {
     case "dashboard":
       return dashboardScreenBehavior;

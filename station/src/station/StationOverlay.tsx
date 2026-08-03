@@ -15,7 +15,10 @@ export type StationOverlayProps = {
   /** Read-only dashboard state owned by the renderer composition. */
   state: DashboardStateSource;
   /** Named dashboard effects required by the rendered surface. */
-  actions: DashboardActions;
+  actions: Pick<
+    DashboardActions,
+    "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
+  >;
   topRowWidgets?: readonly TopRowWidgetView[];
   /** The Station input runtime's mouse entry point. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;

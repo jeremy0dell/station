@@ -1,10 +1,19 @@
 import { loadConfigFromToml } from "../load/index.js";
 import { atomicWriteConfig, loadConfigSource } from "../projects/source.js";
-import type { StationConfig, TuiWidgetConfig } from "../schema.js";
+import type { StationConfig, TuiTimezoneZone, TuiWidgetConfig } from "../schema.js";
 import { quoteTomlString, trimRepeatedBlankLines } from "../tomlEdit.js";
 
+type TuiTimezoneWidgetConfig = Extract<TuiWidgetConfig, { type: "tz" }>;
+
+/** Read-only widget input accepted by the config serializer. */
+export type TuiWidgetConfigInput =
+  | Readonly<Exclude<TuiWidgetConfig, TuiTimezoneWidgetConfig>>
+  | (Readonly<Omit<TuiTimezoneWidgetConfig, "zones">> & {
+      readonly zones: readonly Readonly<TuiTimezoneZone>[];
+    });
+
 export type SetTuiWidgetsOptions = {
-  widgets: readonly TuiWidgetConfig[];
+  widgets: readonly TuiWidgetConfigInput[];
   configPath?: string;
   homeDir?: string;
 };
@@ -45,7 +54,10 @@ export async function setTuiWidgetsInConfig(
   };
 }
 
-export function replaceTuiWidgets(source: string, widgets: readonly TuiWidgetConfig[]): string {
+export function replaceTuiWidgets(
+  source: string,
+  widgets: readonly TuiWidgetConfigInput[],
+): string {
   const withoutWidgets = removeExistingTuiWidgets(source.split("\n"));
   const formatted = formatTuiWidgets(widgets);
   const insertAt = tuiInsertIndex(withoutWidgets);
@@ -164,7 +176,7 @@ function appendTuiSection(lines: readonly string[], formatted: readonly string[]
   return [...lines, ...prefix, "[tui]", ...formatted];
 }
 
-function formatTuiWidgets(widgets: readonly TuiWidgetConfig[]): string[] {
+function formatTuiWidgets(widgets: readonly TuiWidgetConfigInput[]): string[] {
   if (widgets.length === 0) {
     return ["widgets = []"];
   }
@@ -175,7 +187,7 @@ function formatTuiWidgets(widgets: readonly TuiWidgetConfig[]): string[] {
   ]);
 }
 
-function formatTuiWidget(widget: TuiWidgetConfig): string[] {
+function formatTuiWidget(widget: TuiWidgetConfigInput): string[] {
   const lines = [`type = ${quoteTomlString(widget.type)}`];
   if (widget.enabled !== undefined) {
     lines.push(`enabled = ${widget.enabled ? "true" : "false"}`);

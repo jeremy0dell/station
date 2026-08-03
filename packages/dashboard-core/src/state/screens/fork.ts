@@ -1,4 +1,4 @@
-import type { SessionId, WorktreeRow } from "@station/contracts";
+import type { SessionId } from "@station/contracts";
 import { isRunningAgentState } from "@station/contracts";
 import { stableName } from "@station/runtime";
 import {
@@ -12,18 +12,19 @@ import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardScreenView, DashboardSnapshotView, TuiState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
 export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
-type ForkScreen = Extract<TuiState["screen"], { name: "fork" }>;
+type ForkScreenView = Extract<DashboardScreenView, { name: "fork" }>;
+type ForkDetailsScreenView = Extract<ForkScreenView, { step: "details" }>;
 
 export type ForkSessionActionId = "details.name" | "details.copyDirty" | "details.submit";
 
 const forkChooseSlotBehavior = {};
 const forkDetailsBehavior = { clickAway: backFromForkDetails };
 
-export function forkScreenBehavior(screen: ForkScreen) {
+export function forkScreenBehavior(screen: ForkScreenView) {
   switch (screen.step) {
     case "chooseSlot":
       return forkChooseSlotBehavior;
@@ -33,13 +34,14 @@ export function forkScreenBehavior(screen: ForkScreen) {
   return assertNever(screen);
 }
 
-type ForkSnapshot = NonNullable<TuiState["snapshot"]>;
+type ForkSnapshotView = DashboardSnapshotView;
+type ForkWorktreeRowView = ForkSnapshotView["rows"][number];
 
 export type ForkSessionCreateValidation =
   | {
       ok: true;
-      project: ForkSnapshot["projects"][number];
-      sourceWorktreeId: ForkDetailsScreen["sourceWorktreeId"];
+      project: ForkSnapshotView["projects"][number];
+      sourceWorktreeId: ForkDetailsScreenView["sourceWorktreeId"];
       title: string;
       branch: string;
       copyDirty: boolean;
@@ -49,8 +51,8 @@ export type ForkSessionCreateValidation =
 // Single source of truth for fork submit validation, shared by the machine's
 // submitFork (inline error) and the native station submit resolver (intercept).
 export function validateForkSessionCreate(
-  snapshot: ForkSnapshot,
-  screen: ForkDetailsScreen,
+  snapshot: ForkSnapshotView,
+  screen: ForkDetailsScreenView,
 ): ForkSessionCreateValidation {
   const title = screen.draftTitle.value.trim();
   if (title.length === 0) {
@@ -179,8 +181,8 @@ function generatedForkBranch(sourceBranch: string, token: string): string {
 
 function availableForkBranch(
   base: string,
-  rows: readonly WorktreeRow[],
-  projectId: WorktreeRow["projectId"],
+  rows: readonly ForkWorktreeRowView[],
+  projectId: ForkWorktreeRowView["projectId"],
 ): string {
   // Only the source project's worktrees can collide in the current snapshot.
   const taken = new Set(rows.filter((row) => row.projectId === projectId).map((row) => row.branch));

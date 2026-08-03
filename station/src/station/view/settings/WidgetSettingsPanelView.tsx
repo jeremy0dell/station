@@ -1,12 +1,14 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type { WidgetSettingsFocus } from "@station/dashboard-core";
+import type {
+  DashboardScreenView,
+  DashboardStateView,
+  WidgetSettingsFocus,
+} from "@station/dashboard-core";
 import {
   widgetSettingsPanelLayout,
   widgetSettingsPanelModel,
-  type TuiScreen,
   type WidgetSettingsLine,
 } from "@station/dashboard-core";
-import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { fit } from "../sheets/parts.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import {
@@ -18,8 +20,8 @@ import {
 const UNSELECTABLE_TEXT = { selectable: false } as const;
 
 export type WidgetSettingsPanelViewProps = {
-  screen: Extract<TuiScreen, { name: "widgetSettings" }>;
-  widgets: readonly TuiWidgetConfig[];
+  screen: Extract<DashboardScreenView, { name: "widgetSettings" }>;
+  widgets: DashboardStateView["widgets"];
   widgetsPersisted: boolean;
   columns: number;
   rows: number;

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "tsBuildInfoFile": "dist/tsconfig.type-tests.tsbuildinfo"
+  },
+  "include": ["test/unit/**/*.typecheck.test.ts"]
+}

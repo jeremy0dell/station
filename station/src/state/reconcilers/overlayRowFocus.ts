@@ -1,14 +1,17 @@
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { paneTreeIds } from "../paneTree.js";
 import type { StationStore } from "../store.js";
 import { STATION_OVERLAY_ID } from "../types.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type DashboardFocusInput = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "clearDashboardFocus" | "focusDashboardSession">;
+};
 
 /** Synchronizes native-pane identity to the dashboard cursor once per overlay open. */
 export function createOverlayRowFocusReconciler(
   store: StationStore,
-  dashboardRuntime: DashboardInput,
+  dashboardRuntime: DashboardFocusInput,
 ): () => void {
   let previousOverlay = store.getState().input.activeOverlay;
   let pendingSessionId: string | undefined;

@@ -1,4 +1,4 @@
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
   deriveTuiInputMode,
   isRemoveProjectArmed,
@@ -16,7 +16,13 @@ import {
   type DashboardRendererEffects,
 } from "./dashboardEffects.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type DashboardMouseInput = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    "createQuickSession" | "dismissToasts" | "dispatch" | "handleKey" | "pushToast"
+  >;
+};
 
 const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
   "dashboard",
@@ -36,7 +42,7 @@ const SCROLL_PAGE_ROWS = 5;
 export function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: DashboardInput,
+  store: DashboardMouseInput,
   effects: DashboardRendererEffects,
 ): void {
   const mode = deriveTuiInputMode(store.state.getState());
@@ -69,7 +75,7 @@ export function routeDashboardMouse(
 
 function routeSurfaceClick(
   target: StationMouseTarget,
-  store: DashboardInput,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
   effects: DashboardRendererEffects,
 ): boolean {
@@ -116,14 +122,18 @@ function routeSurfaceClick(
   }
 }
 
-function activateRowInMode(store: DashboardInput, rowId: string, mode: TuiInputMode): void {
+function activateRowInMode(
+  store: DashboardMouseInput,
+  rowId: string,
+  mode: TuiInputMode,
+): void {
   if (ROW_INTERACTIVE_MODES.has(mode)) {
     activateCurrentRow(store, rowId);
   }
 }
 
 function activateProjectHeaderInMode(
-  store: DashboardInput,
+  store: DashboardMouseInput,
   projectId: string,
   actionId: ProjectHeaderControl,
   mode: TuiInputMode,
@@ -143,7 +153,7 @@ function activateProjectHeaderInMode(
 }
 
 function activateEmptyProjectInMode(
-  store: DashboardInput,
+  store: DashboardMouseInput,
   projectId: string,
   mode: TuiInputMode,
   effects: DashboardRendererEffects,
@@ -167,7 +177,7 @@ function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardRende
 }
 
 function openRowShellInMode(
-  store: DashboardInput,
+  store: DashboardMouseInput,
   rowId: string,
   mode: TuiInputMode,
   effects: DashboardRendererEffects,
@@ -177,7 +187,11 @@ function openRowShellInMode(
   }
 }
 
-function pageInMode(store: DashboardInput, direction: "up" | "down", mode: TuiInputMode): void {
+function pageInMode(
+  store: DashboardMouseInput,
+  direction: "up" | "down",
+  mode: TuiInputMode,
+): void {
   if (!ROW_INTERACTIVE_MODES.has(mode)) {
     return;
   }
@@ -189,7 +203,7 @@ function pageInMode(store: DashboardInput, direction: "up" | "down", mode: TuiIn
 
 function routeModalClick(
   target: StationMouseTarget,
-  store: DashboardInput,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
 ): boolean {
   if (target.kind === "sheetBackdrop") {
@@ -250,7 +264,7 @@ function routeModalClick(
   }
 }
 
-function confirmProjectRemoval(store: DashboardInput, mode: TuiInputMode): void {
+function confirmProjectRemoval(store: DashboardMouseInput, mode: TuiInputMode): void {
   const screen = store.state.getState().screen;
   if (
     mode === "projectSettings" &&
@@ -263,7 +277,7 @@ function confirmProjectRemoval(store: DashboardInput, mode: TuiInputMode): void 
 
 function routeWidgetClick(
   target: StationMouseTarget,
-  store: DashboardInput,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
 ): boolean {
   switch (target.kind) {
@@ -297,7 +311,7 @@ function routeWidgetClick(
   }
 }
 
-function activateCurrentRow(store: DashboardInput, rowId: string): void {
+function activateCurrentRow(store: DashboardMouseInput, rowId: string): void {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     showStaleDashboardTargetNotice(store);

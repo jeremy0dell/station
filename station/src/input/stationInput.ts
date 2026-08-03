@@ -14,7 +14,7 @@ import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { dispatchStationKey } from "../station/input/stationActions.js";
 import type { ObserverService } from "@station/client";
 import type { ProviderId } from "@station/contracts";
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
   routeKey,
   routeMouse,
@@ -36,7 +36,19 @@ import { executeOutcome } from "./runtime/executeOutcome.js";
 import { createPaneEffects } from "./runtime/paneEffects.js";
 import { createManagedLaunch, type ManagedLaunchTarget } from "./runtime/managedLaunch.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type StationInputDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    | "addPendingCreateSession"
+    | "dismissToasts"
+    | "dispatch"
+    | "failPendingCreateSession"
+    | "handleKey"
+    | "pushToast"
+    | "removePendingCreateSession"
+  >;
+};
 
 /**
  * What an open-pane effect spawns: the cwd plus, for a primary agent, the
@@ -54,7 +66,7 @@ export type OpenPaneSpawn = {
 
 export type StationInputEffects = {
   store: StationStore;
-  dashboardRuntime?: DashboardInput;
+  dashboardRuntime?: StationInputDashboard;
   /** Configured automations, surfaced in the pane context menu. */
   automations: readonly Automation[];
   runCommand(commandId: StationCommandId): void;
@@ -158,7 +170,7 @@ export type StationInputRuntimeOptions = {
   store: StationStore;
   shutdown(): void;
   /** Registers the STATION dashboard layer + mouse targets when provided. */
-  dashboardRuntime?: DashboardInput;
+  dashboardRuntime?: StationInputDashboard;
   keymap?: KeymapStack<RouteOutcome>;
   mouseBindings?: MouseBindings;
   /** Runtime PTY resources; terminal writes/pastes resolve through it. */
@@ -199,7 +211,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
 
   const paneEffects = createPaneEffects({
     store: options.store,
-    dashboardRuntime: options.dashboardRuntime,
+    dashboardState: options.dashboardRuntime?.state,
     registry,
     resolveAuxShellPlacement: options.resolveAuxShellPlacement,
     autoCloseOverlay: options.autoCloseOverlayOnPaneOpen ?? false,

@@ -1,10 +1,23 @@
 import {
   selectDashboardSessionRow,
+  type DashboardActions,
+  type DashboardStateSource,
   type TuiControlIntent,
-  type DashboardRuntime,
 } from "@station/dashboard-core";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type DashboardTargetInput = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "pushToast">;
+};
+
+type DashboardControlInput = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "createQuickSession" | "pushToast">;
+};
+
+type DashboardNoticeInput = {
+  actions: Pick<DashboardActions, "pushToast">;
+};
 
 export type DashboardRendererEffects = {
   openShell(target: { cwd: string }): void;
@@ -16,7 +29,7 @@ const STALE_TARGET_MESSAGE = "That dashboard item is no longer available.";
 /** Consumes a one-shot core control intent at the standalone/tmux renderer boundary. */
 export function executeDashboardControlIntent(
   intent: TuiControlIntent,
-  store: DashboardInput,
+  store: DashboardControlInput,
   effects: DashboardRendererEffects,
 ): void {
   switch (intent.type) {
@@ -33,7 +46,7 @@ export function executeDashboardControlIntent(
 
 /** Resolves a current dashboard row before delegating its shell effect. */
 export function openDashboardRowShell(
-  store: DashboardInput,
+  store: DashboardTargetInput,
   rowId: string,
   effects: DashboardRendererEffects,
 ): void {
@@ -50,7 +63,7 @@ export function openDashboardRowShell(
 }
 
 function openProjectShell(
-  store: DashboardInput,
+  store: DashboardTargetInput,
   projectId: string,
   effects: DashboardRendererEffects,
 ): void {
@@ -65,7 +78,7 @@ function openProjectShell(
 }
 
 /** Reports an inert renderer target that disappeared before activation. */
-export function showStaleDashboardTargetNotice(store: DashboardInput): void {
+export function showStaleDashboardTargetNotice(store: DashboardNoticeInput): void {
   store.actions.pushToast({ kind: "info", message: STALE_TARGET_MESSAGE });
 }
 

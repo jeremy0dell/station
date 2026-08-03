@@ -1,4 +1,4 @@
-import { isRunningAgentState, type SessionId, type StationSnapshot } from "@station/contracts";
+import { isRunningAgentState, type SessionId } from "@station/contracts";
 import {
   type DashboardSessionRow,
   selectDashboardSessionRow,
@@ -11,17 +11,18 @@ import { isReturnKey } from "../keys.js";
 import { addPendingRemoveWorktreeRow } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardScreenView, DashboardSnapshotView, TuiState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
 type RemoveWorktreeScreen = Extract<TuiState["screen"], { name: "removeWorktree" }>;
+type RemoveWorktreeScreenView = Extract<DashboardScreenView, { name: "removeWorktree" }>;
 
 export type RemoveWorktreeActionId = "confirm.delete" | "confirm.keep";
 
 const removeWorktreeChooseSlotBehavior = {};
 const removeWorktreeDismissBehavior = { clickAway: cancelRemoveWorktree };
 
-export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreen) {
+export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreenView) {
   switch (screen.step) {
     case "chooseSlot":
       return removeWorktreeChooseSlotBehavior;
@@ -61,7 +62,7 @@ export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransi
 
 export function isExternalAgentRemovalUnavailable(
   row: DashboardSessionRow,
-  snapshot: StationSnapshot,
+  snapshot: DashboardSnapshotView,
 ): boolean {
   return snapshot.sessions.some(
     (session) =>
@@ -232,7 +233,10 @@ function deleteRemoveWorktree(
   };
 }
 
-function removeWorktreeForceRequired(row: DashboardSessionRow, snapshot: StationSnapshot): boolean {
+function removeWorktreeForceRequired(
+  row: DashboardSessionRow,
+  snapshot: DashboardSnapshotView,
+): boolean {
   return (
     cleanupForceRequired(row.worktree, "remove-worktree") ||
     snapshot.sessions.some(

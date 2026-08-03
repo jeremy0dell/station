@@ -1,6 +1,6 @@
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, SafeError } from "@station/contracts";
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { StationHostProviderError } from "@station/host";
 import { selectPaneRecord } from "../../state/selectors.js";
 import type { StationStore } from "../../state/store.js";
@@ -18,7 +18,10 @@ import {
   unreachableTerminalRow,
 } from "./stationRows.js";
 
-type DashboardInput = Pick<DashboardRuntime, "state" | "actions">;
+type ManagedLaunchDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "pushToast">;
+};
 
 /** What a managed primary-agent launch needs to ask the observer to prepare it. */
 export type ManagedLaunchTarget = {
@@ -46,7 +49,7 @@ export type ManagedLaunchTarget = {
 
 type ManagedLaunchAttemptDeps = {
   store: StationStore;
-  dashboardRuntime: DashboardInput | undefined;
+  dashboardRuntime: ManagedLaunchDashboard | undefined;
   observerService: ObserverService | undefined;
   registry: PtyRegistry | undefined;
   managedTerminalAttacher: ManagedTerminalAttacher | undefined;
@@ -109,7 +112,7 @@ function createContext(
     turnReadiness:
       runtime.dashboardRuntime === undefined
         ? undefined
-        : readinessForWorktree(runtime.dashboardRuntime, target.worktreeId),
+        : readinessForWorktree(runtime.dashboardRuntime.state, target.worktreeId),
   };
 }
 
@@ -150,7 +153,7 @@ async function runPreflight(
   const unreachable =
     runtime.dashboardRuntime === undefined
       ? undefined
-      : unreachableTerminalRow(runtime.dashboardRuntime, context.target.worktreeId);
+      : unreachableTerminalRow(runtime.dashboardRuntime.state, context.target.worktreeId);
   if (unreachable !== undefined) {
     pushToast(
       runtime,
@@ -217,7 +220,10 @@ function resolveExistingSession(
   const nonFocusableStation =
     runtime.dashboardRuntime === undefined
       ? undefined
-      : nonFocusableStationTerminalForWorktree(runtime.dashboardRuntime, target.worktreeId);
+      : nonFocusableStationTerminalForWorktree(
+          runtime.dashboardRuntime.state,
+          target.worktreeId,
+        );
   if (nonFocusableStation !== undefined) {
     return {
       kind: "notice",
@@ -227,7 +233,10 @@ function resolveExistingSession(
   const externalProvider =
     runtime.dashboardRuntime === undefined
       ? undefined
-      : externalTerminalProviderForWorktree(runtime.dashboardRuntime, target.worktreeId);
+      : externalTerminalProviderForWorktree(
+          runtime.dashboardRuntime.state,
+          target.worktreeId,
+        );
   if (externalProvider !== undefined) {
     return {
       kind: "notice",

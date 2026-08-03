@@ -9,6 +9,7 @@ import type {
   TuiFolderReview,
   TuiFolderSearchResult,
 } from "../../services/folderService.js";
+import type { ReadonlyDeep } from "../../state/readonly.js";
 import type { StepWizardState } from "../stepWizard.js";
 
 export type AddProjectStep = "start" | "choose" | "review" | "success" | "failed";
@@ -79,6 +80,10 @@ export type AddProjectFlowState =
   | AddProjectReviewState
   | AddProjectSuccessState
   | AddProjectFailedState;
+
+/** Deep-readonly Add Project flow consumed by presentation and selection readers. */
+export type AddProjectFlowStateView = ReadonlyDeep<AddProjectFlowState>;
+export type AddProjectChooseStateView = ReadonlyDeep<AddProjectChooseState>;
 
 export type CreateAddProjectFlowInput = {
   cwd: string;

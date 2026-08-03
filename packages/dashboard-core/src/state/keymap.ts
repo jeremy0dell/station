@@ -1,6 +1,6 @@
 import { SELECTION_KEYS, type SelectionKey } from "../selectors/selectors.js";
 import type { TuiKey } from "./keys.js";
-import type { TuiState } from "./types.js";
+import type { DashboardStateView } from "./types.js";
 
 export type TuiInputMode =
   | "dashboard"
@@ -31,7 +31,7 @@ export type TuiInputMode =
   | "addProjectFailed"
   | "widgetSettings";
 
-export function deriveTuiInputMode(state: TuiState): TuiInputMode {
+export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
   const screen = state.screen;
   switch (screen.name) {
     case "dashboard":
