@@ -4,11 +4,13 @@ import type { TuiIslandConfig } from "@station/config";
 import type { DashboardStateSource } from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
+import { isAttentionDismissed } from "../state/attentionDismissal.js";
 import { selectPaneRecord, selectStationOverlayVisible } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import { agentWorktreePaneId } from "../state/types.js";
 import { DynamicStationButton } from "./DynamicStationButton.js";
 import {
+  attentionKeysFromSnapshot,
   selectStationButtonStatus,
   type StationButtonStatus,
   stationButtonStatusEqual,
@@ -51,7 +53,16 @@ export function StationButton({
     [clientState, dashboardState],
   );
   const status = useSyncExternalStore(subscribe, getStatus, getStatus);
+  // The record reference is stable between store actions, so this subscription
+  // re-renders only on actual dismiss changes.
+  const getDismissed = useCallback(
+    () => store.getState().feedback.dismissedAttention,
+    [store],
+  );
+  const dismissedAttention = useSyncExternalStore(store.subscribe, getDismissed, getDismissed);
   const celebration = useMergeCelebration(clientState);
+
+  const attention = status.attention && anyFlaggedNotDismissed(clientState, dismissedAttention);
 
   const onHeader = useCallback(
     (event: StationMouseEvent) => {
@@ -62,6 +73,10 @@ export function StationButton({
 
   const onFocusSession = useCallback(
     (event: StationMouseEvent) => {
+      // Acting on the alert quiets every session currently asking for the user.
+      store.actions.dismissAttentionKeys(
+        attentionKeysFromSnapshot(clientState.getState().snapshot),
+      );
       const worktreeId = status.attentionWorktreeId;
       const sessionId = status.attentionSessionId;
       // A worktree can contain multiple canonical sessions, while its local
@@ -79,24 +94,37 @@ export function StationButton({
         store.actions.focusPane(paneId);
         return;
       }
-      // No local pane runs the flagged session — open the dashboard so the user
-      // can act on it. Only when the overlay is closed, so we never toggle a
-      // visible dashboard shut.
+      // Only when the overlay is closed, so we never toggle a visible dashboard shut.
       if (!selectStationOverlayVisible(store.getState())) {
         dispatchMouse({ kind: "header" }, event);
       }
     },
-    [dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
+    [clientState, dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
   );
 
   return (
     <DynamicStationButton
-      input={{ status, restCounts: island?.restCounts, celebration }}
+      input={{
+        status: { ...status, attention },
+        restCounts: island?.restCounts,
+        celebration,
+      }}
       onHoverChange={store.actions.setStationButtonHover}
       onToggleStation={onHeader}
       onContextMenu={onHeader}
       onFocusSession={onFocusSession}
     />
+  );
+}
+
+/** True when any session asking for the user has not been dismissed. */
+function anyFlaggedNotDismissed(
+  clientState: StationClientStateSource,
+  dismissed: Readonly<Record<string, number>>,
+): boolean {
+  const now = Date.now();
+  return attentionKeysFromSnapshot(clientState.getState().snapshot).some(
+    (key) => !isAttentionDismissed(dismissed, key, now),
   );
 }
 

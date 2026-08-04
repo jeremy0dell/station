@@ -69,6 +69,12 @@ export type StationStoreActions = {
   setContextMenuActiveIndex(activeIndex: number): void;
   /** Track mouse-over on the floating island (gates its hover-scoped ↵ jump). */
   setStationButtonHover(hovered: boolean): void;
+  /**
+   * Quiet the island's attention alert for the given attention keys (all
+   * currently flagged sessions). Timestamps the dismissal so a future timeout
+   * mode can re-alert; dismissal resets on relaunch.
+   */
+  dismissAttentionKeys(keys: readonly string[]): void;
   /** Show a bottom-right app toast (e.g. a copy confirmation). */
   showToast(message: string, kind?: "info" | "error"): void;
   /** Clear the toast if it still carries `token` (ignores a superseded timer). */
@@ -318,16 +324,40 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
         }
         setState({ ...state, input: { ...state.input, stationButtonHover: hovered } });
       },
+      dismissAttentionKeys: (keys) => {
+        if (keys.length === 0) {
+          return;
+        }
+        const now = Date.now();
+        let changed = false;
+        const dismissed = { ...state.feedback.dismissedAttention };
+        for (const key of keys) {
+          if (dismissed[key] === undefined) {
+            dismissed[key] = now;
+            changed = true;
+          }
+        }
+        if (!changed) {
+          return;
+        }
+        setState({ ...state, feedback: { ...state.feedback, dismissedAttention: dismissed } });
+      },
       showToast: (message, kind = "info") => {
         toastToken += 1;
-        setState({ ...state, feedback: { toast: { token: toastToken, message, kind } } });
+        setState({
+          ...state,
+          feedback: { toast: { token: toastToken, message, kind }, dismissedAttention: state.feedback.dismissedAttention },
+        });
       },
       dismissToast: (token) => {
         const current = state.feedback.toast;
         if (current === null || current.token !== token) {
           return;
         }
-        setState({ ...state, feedback: { toast: null } });
+        setState({
+          ...state,
+          feedback: { toast: null, dismissedAttention: state.feedback.dismissedAttention },
+        });
       },
     },
   };
