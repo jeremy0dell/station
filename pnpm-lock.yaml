@@ -17,6 +17,9 @@ importers:
       '@typescript/native':
         specifier: npm:typescript@7.0.2
         version: typescript@7.0.2
+      '@typescript/typescript6':
+        specifier: 6.0.2
+        version: 6.0.2
       d3:
         specifier: ^7.9.0
         version: 7.9.0
@@ -30,8 +33,8 @@ importers:
         specifier: ^2.9.15
         version: 2.9.15
       typescript:
-        specifier: npm:@typescript/typescript6@6.0.2
-        version: '@typescript/typescript6@6.0.2'
+        specifier: 7.0.2
+        version: 7.0.2
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.12.4)(jiti@2.7.0)(yaml@2.9.0)
