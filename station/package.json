@@ -40,10 +40,14 @@
     "zod": "^4.1.12",
     "zustand": "^5.0.14"
   },
+  "overrides": {
+    "@typescript/old": "npm:typescript@6.0.3"
+  },
   "devDependencies": {
     "@earendil-works/pi-tui": "0.80.10",
+    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "^25.9.3",
     "@types/react": "19.2.17",
-    "typescript": "5.9.3"
+    "typescript": "npm:@typescript/typescript6@6.0.2"
   }
 }

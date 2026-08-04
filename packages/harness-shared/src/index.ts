@@ -6,6 +6,7 @@ export {
 } from "./compaction.js";
 export {
   HarnessProviderError,
+  type HarnessProviderErrorClass,
   harnessProviderErrorClass,
   harnessProviderErrorFromUnknown,
 } from "./errors.js";
