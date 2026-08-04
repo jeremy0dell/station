@@ -91,9 +91,9 @@ describe("dashboard popup lifecycle keys", () => {
 
 describe("dashboard footer binding metadata", () => {
   it("exposes stable keys and labels without contextual layout policy", () => {
-    expect(dashboardBindingHelp("tui.dashboard.search")).toEqual({
+    expect(dashboardBindingHelp("tui.dashboard.filter")).toEqual({
       keys: "/",
-      label: "search",
+      label: "filter",
     });
     expect(dashboardBindingHelp("tui.dashboard.dismissEsc")).toEqual({
       keys: "Esc",

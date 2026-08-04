@@ -11,7 +11,6 @@ import {
   openRemoveWorktreeConfirmForRow,
   openRenameEditForRow,
   openWidgetSettings,
-  persistentFilterExperience,
   scrollDashboard,
   selectAddProjectRow,
   type TuiState,
@@ -205,12 +204,11 @@ describe("semantic TUI actions", () => {
   it("routes condition pointer intents through the same field and value transitions as keys", () => {
     const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const opened = handleTuiKey(
-      handleTuiKey(state, { input: "/" }, context, persistentFilterExperience).state,
+      handleTuiKey(state, { input: "/" }, context).state,
       { input: "i", ctrl: true },
       context,
-      persistentFilterExperience,
     ).state;
-    const fieldByKey = handleTuiKey(opened, { input: "S" }, context, persistentFilterExperience);
+    const fieldByKey = handleTuiKey(opened, { input: "S" }, context);
     const fieldByAction = handleTuiAction(
       opened,
       { type: "persistentFilter.condition.selectField", field: "status" },
@@ -218,12 +216,7 @@ describe("semantic TUI actions", () => {
     );
     expect(fieldByAction).toEqual(fieldByKey);
 
-    const valueByKey = handleTuiKey(
-      fieldByKey.state,
-      { input: "3" },
-      context,
-      persistentFilterExperience,
-    );
+    const valueByKey = handleTuiKey(fieldByKey.state, { input: "3" }, context);
     const valueByAction = handleTuiAction(
       fieldByAction.state,
       {
@@ -235,12 +228,7 @@ describe("semantic TUI actions", () => {
     );
     expect(valueByAction).toEqual(valueByKey);
 
-    const doneByKey = handleTuiKey(
-      valueByKey.state,
-      { input: "\r", return: true },
-      context,
-      persistentFilterExperience,
-    );
+    const doneByKey = handleTuiKey(valueByKey.state, { input: "\r", return: true }, context);
     const doneByAction = handleTuiAction(
       valueByAction.state,
       { type: "persistentFilter.condition.done" },
@@ -248,12 +236,7 @@ describe("semantic TUI actions", () => {
     );
     expect(doneByAction).toEqual(doneByKey);
 
-    const appliedByKey = handleTuiKey(
-      doneByKey.state,
-      { input: "F" },
-      context,
-      persistentFilterExperience,
-    );
+    const appliedByKey = handleTuiKey(doneByKey.state, { input: "F" }, context);
     const appliedByAction = handleTuiAction(
       doneByAction.state,
       { type: "persistentFilter.applyDraft" },
@@ -261,12 +244,7 @@ describe("semantic TUI actions", () => {
     );
     expect(appliedByAction).toEqual(appliedByKey);
 
-    const backByKey = handleTuiKey(
-      fieldByKey.state,
-      { input: "", leftArrow: true },
-      context,
-      persistentFilterExperience,
-    );
+    const backByKey = handleTuiKey(fieldByKey.state, { input: "", leftArrow: true }, context);
     const backByAction = handleTuiAction(
       fieldByAction.state,
       { type: "persistentFilter.condition.back" },
@@ -274,12 +252,7 @@ describe("semantic TUI actions", () => {
     );
     expect(backByAction).toEqual(backByKey);
 
-    const closedByKey = handleTuiKey(
-      fieldByKey.state,
-      { input: "", escape: true },
-      context,
-      persistentFilterExperience,
-    );
+    const closedByKey = handleTuiKey(fieldByKey.state, { input: "", escape: true }, context);
     const closedByAction = handleTuiAction(
       fieldByAction.state,
       { type: "persistentFilter.condition.close" },

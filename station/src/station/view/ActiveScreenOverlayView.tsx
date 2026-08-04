@@ -88,7 +88,6 @@ function renderActiveScreenOverlay({
 }: ActiveScreenOverlayViewProps): ReactNode {
   switch (screen.name) {
     case "dashboard":
-    case "search":
       return null;
     case "persistentFilter": {
       if (screen.conditionEditor === undefined) return null;

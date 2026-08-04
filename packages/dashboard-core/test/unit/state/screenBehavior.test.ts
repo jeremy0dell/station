@@ -69,7 +69,6 @@ const screenBehaviorCases: readonly [
   expected: "present" | "absent",
 ][] = [
   ["dashboard", { name: "dashboard" }, "absent"],
-  ["search", { name: "search", value: "api" }, "absent"],
   [
     "persistent filter",
     {
@@ -335,7 +334,6 @@ describe("TUI screen behavior", () => {
       { name: "removeWorktree", step: "chooseSlot" },
       { name: "renameSession", step: "chooseSlot" },
       { name: "fork", step: "chooseSlot" },
-      { name: "search", value: "api" },
       {
         name: "persistentFilter",
         draft: createEditableTextInputState("api"),

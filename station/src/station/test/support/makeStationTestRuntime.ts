@@ -2,10 +2,8 @@ import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import {
   createDashboardRuntime,
-  legacySearchExperience,
   type DashboardRuntime,
   type DashboardRuntimeOptions,
-  type DashboardSearchExperience,
   type TuiFolderService,
 } from "@station/dashboard-core";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
@@ -21,7 +19,6 @@ export type MakeStationTestRuntimeOptions = {
   terminalRows?: number | undefined;
   initialState?: DashboardRuntimeOptions["initialState"];
   folderService?: TuiFolderService | undefined;
-  dashboardSearchExperience?: DashboardSearchExperience | undefined;
 };
 
 export type StationTestRuntime = {
@@ -43,8 +40,6 @@ export function makeStationTestRuntime(
   const runtime = createDashboardRuntime({
     source,
     service,
-    dashboardSearchExperience:
-      options.dashboardSearchExperience ?? legacySearchExperience,
     ...(snapshot === undefined || options.seedInitialSnapshot === false
       ? {}
       : { initialSnapshot: snapshot }),

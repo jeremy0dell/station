@@ -1,7 +1,6 @@
 import type { SessionId } from "@station/contracts";
 import { pendingRenameTitles } from "../state/localRows.js";
 import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
-import { matchesDashboardSessionSearch } from "./dashboardSearchProjection.js";
 
 type DashboardWorktreeRowView = DashboardSnapshotView["rows"][number];
 type DashboardSessionView = DashboardSnapshotView["sessions"][number];
@@ -19,8 +18,6 @@ export type DashboardSessionRow = {
 export type SelectProjectGroupsOptions = {
   /** Includes canonical children while preserving the stored collapsed marker. */
   includeCollapsedRows?: boolean;
-  /** Defaults to the legacy dashboard search projection. */
-  applySearch?: boolean;
 };
 
 export function selectProjectGroups(
@@ -33,22 +30,6 @@ export function selectProjectGroups(
     const collapsed = state.collapsedProjectIds.has(project.id);
     const matchingRows = sessionRows
       .filter((row) => row.worktree.projectId === project.id)
-      .filter(
-        (row) =>
-          options.applySearch === false ||
-          matchesDashboardSessionSearch(
-            {
-              displayTitle: sessionRowDisplayTitle(row, state.localRows),
-              branch: row.worktree.branch,
-              projectLabel: project.label,
-              statusValue: row.session.status.value,
-              statusReason: row.session.status.reason,
-              harnessProvider: row.session.harness.provider,
-              terminalProvider: row.session.terminal?.provider,
-            },
-            state.searchQuery,
-          ),
-      )
       .sort((left, right) => compareRows(left, right, state.localRows));
     return {
       project,

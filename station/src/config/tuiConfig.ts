@@ -7,24 +7,14 @@ import {
   setTuiWidgetsInConfig,
   type TuiConfig,
 } from "@station/config";
-import {
-  legacySearchExperience,
-  persistentFilterExperience,
-  type DashboardActions,
-  type DashboardSearchExperience,
-  type DashboardStateSource,
-  type DashboardStateView,
+import type {
+  DashboardActions,
+  DashboardStateSource,
+  DashboardStateView,
 } from "@station/dashboard-core";
-import { FeatureFlagDefinitions } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
 
-export type StationTuiComposition = {
-  /** Resolved once at renderer composition; downstream dashboard code never reads feature flags. */
-  dashboardSearchExperience: DashboardSearchExperience;
-};
-
 export type StationTuiConfigLoadResult = {
-  composition: StationTuiComposition;
   config?: TuiConfig;
   configPath?: string;
   warning?: string;
@@ -38,16 +28,7 @@ export async function loadStationTuiConfig(options?: {
   try {
     const loaded =
       configPath === undefined ? await loadConfig() : await loadConfig({ configPath });
-    const dashboardPersistentFilter =
-      loaded.config.featureFlags?.dashboardPersistentFilter ??
-      FeatureFlagDefinitions.dashboardPersistentFilter.defaultValue;
-    const result: StationTuiConfigLoadResult = {
-      composition: {
-        dashboardSearchExperience: dashboardPersistentFilter
-          ? persistentFilterExperience
-          : legacySearchExperience,
-      },
-    };
+    const result: StationTuiConfigLoadResult = {};
     if (loaded.config.tui !== undefined) {
       result.config = loaded.config.tui;
     }
@@ -61,7 +42,7 @@ export async function loadStationTuiConfig(options?: {
     return result;
   } catch (cause) {
     if (cause instanceof ConfigError && cause.code === "CONFIG_FILE_NOT_FOUND") {
-      return { composition: { dashboardSearchExperience: legacySearchExperience } };
+      return {};
     }
     const error =
       cause instanceof ConfigError
@@ -72,7 +53,6 @@ export async function loadStationTuiConfig(options?: {
             message: "Could not load STATION TUI widget config",
           });
     return {
-      composition: { dashboardSearchExperience: legacySearchExperience },
       warning: `${error.message}; widgets disabled.`,
     };
   }

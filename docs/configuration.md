@@ -400,7 +400,6 @@ Strict boolean record. Unknown flag names are rejected.
 | --- | --- | --- | --- |
 | `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. Session migration requires this to already be enabled in the running target Observer; migration never edits the config. |
 | `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. Session migration requires the running target to report persistent native launch capability. |
-| `dashboard_persistent_filter` | bool | `false` | Opt in to the persistent free-text dashboard filter. Drafts preview without moving rows; applied queries hard-project matching project context and sessions, persist across sheets and warm popup reopen, and can be edited or cleared from the footer. Read at renderer composition/startup. |
 
 ---
 

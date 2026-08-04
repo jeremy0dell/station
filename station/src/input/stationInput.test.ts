@@ -1066,7 +1066,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     expect(dashboardRuntime.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
-  it("does not clobber active STATION search flow from an inert row context menu", () => {
+  it("does not clobber active STATION filter flow from an inert row context menu", () => {
     const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
     dashboardRuntime.actions.handleKey({ input: "/" });
     dashboardRuntime.actions.handleKey({ input: "pty" });
@@ -1074,7 +1074,10 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     rightClickRow();
     expect(runtime.handleSequence("\r")).toBe(true);
 
-    expect(dashboardRuntime.state.getState().screen).toEqual({ name: "search", value: "pty" });
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "pty", cursor: 3 },
+    });
   });
 
   it("opens the default-agent picker from a project-header context menu", () => {
