@@ -3,7 +3,6 @@ import {
   attentionLines,
   celebrationText,
   COLLAPSED_BASE_COLS,
-  COLLAPSED_COUNTS_COLS,
   islandDisplay,
   type IslandDisplayInput,
   targetDims,
@@ -85,6 +84,7 @@ describe("targetDims", () => {
       dims(input({ workingCount, readyCount, idleCount }, { restCounts: true }), false);
     const workingOnly = at(1, 0, 0);
     const readyOnly = at(0, 1, 0);
+    const both = at(1, 1, 1);
 
     expect(at(0, 0, 0).width).toBe(COLLAPSED_BASE_COLS);
     expect(at(0, 0, 9).width).toBe(COLLAPSED_BASE_COLS);
@@ -93,8 +93,8 @@ describe("targetDims", () => {
     expect(readyOnly).toEqual(at(0, 99, 12));
     expect(workingOnly.width).toBe(readyOnly.width);
     expect(workingOnly.width).toBeGreaterThan(COLLAPSED_BASE_COLS);
-    expect(workingOnly.width).toBeLessThan(COLLAPSED_COUNTS_COLS);
-    expect(at(1, 1, 1).width).toBe(COLLAPSED_COUNTS_COLS);
+    expect(workingOnly.width).toBeLessThan(both.width);
+    expect(both).toEqual(at(99, 99, 12));
   });
 
   it("keeps the roll-up card width fixed while height tracks project count", () => {

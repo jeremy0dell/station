@@ -9,17 +9,11 @@ import type {
   WorktreeId,
   WorktreeRow,
 } from "@station/contracts";
-import { isRunningAgentState, normalizeObservedPath } from "@station/contracts";
+import { normalizeObservedPath } from "@station/contracts";
 
 type TerminalLayout = NonNullable<
   Extract<StationCommand, { type: "session.create" }>["payload"]["terminal"]["layout"]
 >;
-
-export type CleanupActionKind =
-  | "close-harness"
-  | "close-terminal"
-  | "close-all"
-  | "remove-worktree";
 
 export type CreateSessionCommandInput = {
   project: ProjectView;
@@ -129,14 +123,6 @@ export function buildResumeAgentCommand(
       },
     },
   };
-}
-
-export function cleanupForceRequired(row: WorktreeRow, action: CleanupActionKind): boolean {
-  const running = isRunningAgentState(row.agent?.state);
-  if (action === "remove-worktree") {
-    return row.worktree.dirty === true || running;
-  }
-  return running;
 }
 
 export function buildRemoveWorktreeCommand(row: WorktreeRow, force: boolean): StationCommand {

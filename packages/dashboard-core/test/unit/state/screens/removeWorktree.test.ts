@@ -8,7 +8,7 @@ import {
   type TuiTransition,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
-import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
+import { createCommandSnapshot, createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const CTX = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 const ENTER: TuiKey = { input: "\r", return: true };
@@ -16,10 +16,19 @@ const LEFT: TuiKey = { input: "", leftArrow: true };
 const RIGHT: TuiKey = { input: "", rightArrow: true };
 const ESC: TuiKey = { input: "", escape: true };
 
-function openConfirm(): TuiState {
+function openConfirm(rowId = "ses_wt_web_idle"): TuiState {
   return openRemoveWorktreeConfirmForRow(
     createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-    "ses_wt_web_idle",
+    rowId,
+  );
+}
+
+function openNoAgentConfirm(dirty = false): TuiState {
+  return openRemoveWorktreeConfirmForRow(
+    createInitialTuiState({
+      initialSnapshot: createCommandSnapshot("none", { dirty }),
+    }),
+    "ses_wt_web_no_agent",
   );
 }
 
@@ -41,6 +50,12 @@ describe("remove worktree confirmation", () => {
     expect(confirmScreen(opened).actionFocus).toBe("keep");
     expect(step(opened, ENTER).state.screen).toEqual({ name: "dashboard" });
     expect(step(opened, ENTER).operations).toBeUndefined();
+  });
+
+  it("requires force for dirty or running sessions", () => {
+    expect(confirmScreen(openNoAgentConfirm()).forceRequired).toBe(false);
+    expect(confirmScreen(openNoAgentConfirm(true)).forceRequired).toBe(true);
+    expect(confirmScreen(openConfirm("ses_wt_web_working")).forceRequired).toBe(true);
   });
 
   it("moves horizontally without wrapping", () => {

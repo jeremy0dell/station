@@ -33,23 +33,10 @@ export function rowColumnsOrdered(
   }
   const start = row === ordered.startY ? ordered.startX : 0;
   const endExclusive = row === ordered.endY ? ordered.endX + 1 : width;
-  const lo = clamp(start, 0, width);
-  const hi = clamp(endExclusive, 0, width);
+  const lo = Math.max(0, Math.min(width, start));
+  const hi = Math.max(0, Math.min(width, endExclusive));
   if (hi <= lo) {
     return null;
   }
   return { start: lo, end: hi };
-}
-
-/** Convenience wrapper for a single-row lookup. */
-export function rowColumns(
-  selection: CellSelection,
-  row: number,
-  width: number,
-): RowColumns | null {
-  return rowColumnsOrdered(orderSelection(selection), row, width);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }

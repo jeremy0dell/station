@@ -2,10 +2,10 @@ import {
   buildCreateSessionCommand,
   buildFocusCommand,
   buildForkSessionCommand,
+  buildRemoveWorktreeCommand,
   buildRenameSessionCommand,
   buildResumeAgentCommand,
   buildStartAgentCommand,
-  cleanupForceRequired,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
@@ -172,11 +172,15 @@ describe("TUI command builders", () => {
     });
   });
 
-  it("computes cleanup force requirements", () => {
+  it("builds remove-worktree commands with explicit force policy", () => {
     const snapshot = createCommandSnapshot("idle", { dirty: true });
     const row = snapshot.rows[0];
 
-    expect(cleanupForceRequired(row, "remove-worktree")).toBe(true);
-    expect(cleanupForceRequired(row, "close-terminal")).toBe(true);
+    expect(buildRemoveWorktreeCommand(row, false)).toMatchObject({
+      type: "worktree.remove",
+      payload: { worktreeId: "wt_web_idle" },
+    });
+    expect(buildRemoveWorktreeCommand(row, false).payload).not.toHaveProperty("force");
+    expect(buildRemoveWorktreeCommand(row, true)).toMatchObject({ payload: { force: true } });
   });
 });
