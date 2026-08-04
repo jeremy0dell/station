@@ -167,6 +167,26 @@ describe("TerminalScreenRenderable selection", () => {
     }
   });
 
+  it("preserves selection across terminal projection updates", async () => {
+    const { setup, screen } = await renderPane("hello world");
+    try {
+      await setup.mockMouse.drag(0, 0, 4, 0);
+      await setup.renderOnce();
+      const versionBeforeUpdate = screen.getVersion();
+
+      screen.updateTerminalTheme(nativeStationTheme.terminal);
+      await setup.renderOnce();
+
+      const selected = spanAtFrameCell(setup.captureSpans(), 0, 0);
+      expect(selected?.bg === undefined ? undefined : rgbToHex(selected.bg)).toBe(
+        stationColorSnapshotValue(nativeStationTheme.pane.selection),
+      );
+      expect(screen.getVersion()).toBe(versionBeforeUpdate + 1);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
   it("copies the dragged range on release", async () => {
     const { setup, screen, copied } = await renderPane("hello world");
     try {

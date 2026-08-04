@@ -250,16 +250,16 @@ describe("createStationVtScreen", () => {
       title: screen.getTitle(),
     };
     responses.length = 0;
-    let invalidations = 0;
-    screen.subscribe(() => {
-      invalidations += 1;
+    const invalidations: string[] = [];
+    screen.subscribe((invalidation) => {
+      invalidations.push(invalidation);
     });
     const versionBeforeUpdate = screen.getVersion();
 
     screen.updateTerminalTheme(nextTheme);
 
     expect(screen.getVersion()).toBe(versionBeforeUpdate + 1);
-    expect(invalidations).toBe(1);
+    expect(invalidations).toEqual(["repaint"]);
     expect(responses).toEqual([]);
     const nextRows = screen.buildRows({ cursorVisible: false });
     expect(foregroundForText(nextRows, "D")).toBeUndefined();

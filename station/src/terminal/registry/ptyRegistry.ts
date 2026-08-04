@@ -540,9 +540,16 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     },
 
     updateTerminalTheme: (theme) => {
+      const updates = [...entries.values()].flatMap((entry) =>
+        entry.screen === null ? [] : [entry.screen.prepareTerminalThemeUpdate(theme)],
+      );
       terminalTheme = theme;
-      for (const entry of entries.values()) {
-        entry.screen?.updateTerminalTheme(theme);
+      // Publish every complete projection before any repaint listener can observe another screen.
+      for (const update of updates) {
+        update.publish();
+      }
+      for (const update of updates) {
+        update.invalidate();
       }
     },
 

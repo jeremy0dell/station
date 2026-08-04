@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { nativeStationTheme, type StationTerminalTheme } from "../../theme/index.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../testing/scriptedTerminal.js";
+import { waitFor } from "../testing/waitFor.js";
 import type {
   StationTerminalDisposable,
   StationTerminalProcess,
@@ -8,10 +9,12 @@ import type {
   StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../types.js";
+import type { StationVtScreen } from "../vt/screen.js";
 import { createPtyRegistry } from "./ptyRegistry.js";
 
 const PANE_A = "pane-a";
 const PANE_B = "pane-b";
+const PANE_C = "pane-c";
 const SIZE: StationTerminalSize = { cols: 36, rows: 8 };
 
 function oscRgb(color: StationTerminalTheme["defaultForeground"]): string {
@@ -33,6 +36,10 @@ function terminalTheme(
     defaultBackground,
     ansi16: [ansiBlack, ansiRed, ...ansiTail],
   };
+}
+
+function firstForeground(screen: StationVtScreen): string | undefined {
+  return screen.buildRows({ cursorVisible: false })[0]?.spans[0]?.fg;
 }
 
 /** A registry whose PTYs are scripted terminals handed out in spawn order. */
@@ -355,6 +362,73 @@ describe("createPtyRegistry", () => {
       expect(scripted.helpers.isDisposed()).toBe(false);
     }
     expect(spawned).toEqual([first.terminal, second.terminal]);
+  });
+
+  it("publishes terminal projection atomically before repainting screens", async () => {
+    const initialTheme = terminalTheme(
+      nativeStationTheme.text.primary,
+      nativeStationTheme.surfaces.canvas,
+      nativeStationTheme.status.warning,
+    );
+    const nextTheme = terminalTheme(
+      nativeStationTheme.action.primary,
+      nativeStationTheme.contextMenu.surface,
+      nativeStationTheme.status.accent,
+    );
+    const { registry, scripted } = harness({ count: 3 });
+    registry.updateTerminalTheme(initialTheme);
+    registry.resize(PANE_A, SIZE);
+    registry.resize(PANE_B, SIZE);
+    const firstScreen = registry.get(PANE_A)?.screen;
+    const secondScreen = registry.get(PANE_B)?.screen;
+    if (
+      firstScreen === null ||
+      firstScreen === undefined ||
+      secondScreen === null ||
+      secondScreen === undefined
+    ) {
+      throw new Error("Expected both existing screens to be initialized.");
+    }
+    scripted[0].helpers.emitData("\x1b[31mA");
+    scripted[1].helpers.emitData("\x1b[31mB");
+    await Promise.all([firstScreen.whenIdle(), secondScreen.whenIdle()]);
+    await waitFor(() => firstScreen.getVersion() > 0 && secondScreen.getVersion() > 0);
+
+    let firstRepaints = 0;
+    let secondRepaints = 0;
+    let observedDuringFirstRepaint: readonly (string | undefined)[] = [];
+    firstScreen.subscribe((invalidation) => {
+      if (invalidation !== "repaint") {
+        return;
+      }
+      firstRepaints += 1;
+      registry.resize(PANE_C, SIZE);
+      observedDuringFirstRepaint = [
+        firstForeground(firstScreen),
+        firstForeground(secondScreen),
+      ];
+    });
+    secondScreen.subscribe((invalidation) => {
+      if (invalidation === "repaint") {
+        secondRepaints += 1;
+      }
+    });
+
+    registry.updateTerminalTheme(nextTheme);
+
+    expect(observedDuringFirstRepaint).toEqual([
+      nextTheme.ansi16[1].value,
+      nextTheme.ansi16[1].value,
+    ]);
+    expect(firstRepaints).toBe(1);
+    expect(secondRepaints).toBe(1);
+    const lazyScreen = registry.get(PANE_C)?.screen;
+    expect(lazyScreen).not.toBeNull();
+    scripted[2].helpers.emitData("\x1b[31mC");
+    await lazyScreen?.whenIdle();
+    expect(
+      lazyScreen === null || lazyScreen === undefined ? undefined : firstForeground(lazyScreen),
+    ).toBe(nextTheme.ansi16[1].value);
   });
 
   it("disables scrollback when the configured depth is zero", async () => {

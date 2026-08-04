@@ -110,12 +110,10 @@ export class TerminalScreenRenderable extends Renderable {
     this.#resetSelection();
     this.#middleDown = null;
     if (value !== null) {
-      this.#unsubscribe = value.subscribe(() => {
-        // Output or a scroll changes what the selection's viewport cells show,
-        // so a settled selection's highlight/deferred copy would go stale. Drop
-        // it — but leave an in-progress drag (anchor set) to finish and copy on
-        // release.
-        if (this.#anchor === null) {
+      this.#unsubscribe = value.subscribe((invalidation) => {
+        // Output or a scroll changes what selected viewport cells show; repaint-only
+        // updates preserve the selection while rebuilding its color projection.
+        if (invalidation === "content" && this.#anchor === null) {
           this.#resetSelection();
         }
         this.requestRender();
