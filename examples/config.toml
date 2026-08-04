@@ -69,7 +69,7 @@ welcome_on_boot = true      # show the welcome intro over the restored layout on
 # id = "triage"
 # label = "Triage"
 #   [[workspace.automations.steps]]
-#   command = "git diff | diffnav"
+#   command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
 
 [[hooks.event]]
 id = "notify-agent-state"

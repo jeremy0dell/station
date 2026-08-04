@@ -23,8 +23,8 @@ import { makeStationTestRuntime } from "../station/test/support/makeStationTestR
 const SURFACE = { width: 40, height: 12 };
 const PRIMARY_BORDER_ACTIVE = stationColorSnapshotValue(nativeStationTheme.pane.primary.active);
 const PRIMARY_BORDER_INACTIVE = stationColorSnapshotValue(nativeStationTheme.pane.primary.inactive);
-// One pane filling the surface: TerminalPane border + padding eat 2 cells each side.
-const FULL_INTERIOR = { cols: SURFACE.width - 4, rows: SURFACE.height - 4 };
+// One pane filling the surface: TerminalPane's border eats 1 cell each side.
+const FULL_INTERIOR = { cols: SURFACE.width - 2, rows: SURFACE.height - 2 };
 
 describe("PaneGrid", () => {
   const teardowns: Array<() => void> = [];
@@ -244,10 +244,10 @@ describe("PaneGrid", () => {
     expect(screen!.mouseProtocol()).not.toBeNull();
 
     const before = terminals[0]!.helpers.writes.length;
-    // TerminalPane's border+padding put the screen interior origin at (2,2), so
-    // an absolute click at (5,5) lands on local cell (3,3) -> 1-based col 4, row 4.
+    // TerminalPane's border puts the screen interior origin at (1,1), so an
+    // absolute click at (5,5) lands on local cell (4,4) -> 1-based col 5, row 5.
     await setup.mockMouse.click(5, 5);
-    expect(terminals[0]!.helpers.writes.slice(before)).toEqual(["\x1b[<0;4;4M", "\x1b[<0;4;4m"]);
+    expect(terminals[0]!.helpers.writes.slice(before)).toEqual(["\x1b[<0;5;5M", "\x1b[<0;5;5m"]);
   });
 
   it("suppresses click forwarding while the STATION overlay owns input", async () => {

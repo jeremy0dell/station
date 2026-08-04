@@ -96,8 +96,7 @@ describe("setup core flow e2e", () => {
         "codex",
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
       );
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      await writeShim(bin, "hunk", "exit 0\n");
       const env = {
         ...process.env,
         ...codexOnlyHarnessEnv(bin, home),
@@ -216,9 +215,8 @@ describe("setup core flow e2e", () => {
         'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 0\n',
       );
       await writeShim(bin, "npm", "echo 0.1.0\n");
-      // diffnav + delta are required; the checks only need the binaries on PATH.
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      // Hunk is required; the check only needs its binary on PATH.
+      await writeShim(bin, "hunk", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
       const env: NodeJS.ProcessEnv = {
         ...process.env,
@@ -374,9 +372,8 @@ describe("setup core flow e2e", () => {
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
       );
       await writeShim(bin, "npm", "echo 0.1.0\n");
-      // diffnav + delta are required; without them config write is blocked.
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      // Hunk is required; without it config write is blocked.
+      await writeShim(bin, "hunk", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
       run("git", ["init", "-b", "main"], {
         cwd: repo,
@@ -516,9 +513,8 @@ describe("setup core flow e2e", () => {
         "pnpm",
         'if [ "$1" = "--version" ]; then echo "11.0.0"; exit 0; fi\nexit 2\n',
       );
-      // diffnav + delta are required for `setup system` readiness.
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      // Hunk is required for `setup system` readiness.
+      await writeShim(bin, "hunk", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
 
       const result = run("scripts/setup/setup-system-dependencies.sh", [], {

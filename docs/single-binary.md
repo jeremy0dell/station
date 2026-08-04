@@ -22,7 +22,7 @@ independently landable and CI-green.
 ## Goal and non-goals
 
 Goal: download one verified file, run `stn`, get the native TUI connected
-to a live observer. Everything else (worktrunk, tmux, diffnav, git-delta,
+to a live observer. Everything else (worktrunk, tmux, Hunk,
 agent CLIs) gates *features*, never launch — captured precisely by the
 `launchReady` vs `workflowReady` split below.
 
@@ -182,7 +182,7 @@ what "required" means), split the setup summary into two truths:
   extracted executable assets can run there. Nothing else. Bare `stn` gates
   on this.
 - `workflowReady` — core worktree workflow prerequisites: Git, worktrunk,
-  tmux, diffnav, git-delta, the effective default/selected agent CLI, valid core
+  tmux, Hunk, the effective default/selected agent CLI, valid core
   config, and current Station-owned tracking artifacts for required Claude,
   Codex, Cursor, or OpenCode harnesses. Artifact preparation does not prove
   provider trust or runtime event delivery. It is independent of the current

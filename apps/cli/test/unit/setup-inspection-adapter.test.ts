@@ -145,32 +145,21 @@ describe("setup inspection adapter", () => {
 
   it("resolves operation dependencies at execution time", async () => {
     const calls: Array<{ readonly command: string; readonly path: string | undefined }> = [];
-    let currentDeps = operationDeps("/first/bin", calls);
+    const currentDeps = operationDeps("/first/bin", calls);
     const execute = createSetupOperationAdapter({
       facts: facts(),
       deps: () => currentDeps,
     });
 
     await execute({
-      id: "install:diffnav",
+      id: "install:diff-viewer",
       kind: "install-tool",
       tier: "recommended",
       selected: true,
-      tool: "diffnav",
-    });
-    currentDeps = operationDeps("/refreshed/bin", calls);
-    await execute({
-      id: "install:git-delta",
-      kind: "install-tool",
-      tier: "recommended",
-      selected: true,
-      tool: "git-delta",
+      tool: "diff-viewer",
     });
 
-    expect(calls).toEqual([
-      { command: "brew install diffnav", path: "/first/bin" },
-      { command: "brew install git-delta", path: "/refreshed/bin" },
-    ]);
+    expect(calls).toEqual([{ command: "brew install hunk", path: "/first/bin" }]);
   });
 });
 
@@ -224,8 +213,7 @@ function facts(): SetupFacts {
     tmux: { status: "ok", command: "tmux" },
     bun: { status: "ok", command: "bun" },
     stationUi: { status: "skipped" },
-    diffnav: { status: "ok", command: "diffnav" },
-    gitDelta: { status: "ok", command: "delta" },
+    diffViewer: { status: "ok", command: "hunk" },
     brew: { status: "ok", command: "brew" },
     xcode: { status: "ok", applicable: false },
     launchers: {

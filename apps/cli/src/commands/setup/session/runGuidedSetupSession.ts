@@ -13,6 +13,7 @@ import {
 import { type SetupMessageRef, setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type { SetupComposition, SetupSessionProjection } from "../composition.js";
+import { defaultDiffViewer } from "../defaultDiffViewer.js";
 import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
 import { formatSetupCommand } from "../presenters/text.js";
@@ -39,16 +40,14 @@ const homebrewFormulaUrls = {
   worktrunk: "https://formulae.brew.sh/formula/worktrunk",
   tmux: "https://formulae.brew.sh/formula/tmux",
   bun: "https://formulae.brew.sh/formula/bun",
-  diffnav: "https://formulae.brew.sh/formula/diffnav",
-  "git-delta": "https://formulae.brew.sh/formula/git-delta",
+  [defaultDiffViewer.id]: defaultDiffViewer.formulaUrl,
 } satisfies Record<SetupToolInstallOperation["tool"], string>;
 
 const setupToolLabelRefs = {
   worktrunk: setupMessageRef("label.worktrunk"),
   tmux: setupMessageRef("label.tmux"),
   bun: setupMessageRef("label.bun"),
-  diffnav: setupMessageRef("label.diffnav"),
-  "git-delta": setupMessageRef("label.git-delta"),
+  [defaultDiffViewer.id]: setupMessageRef("label.diff-viewer"),
 } satisfies Record<SetupToolInstallOperation["tool"], SetupMessageRef>;
 
 /**
@@ -615,8 +614,7 @@ function coreToolsNeedHomebrew(facts: SetupFacts): boolean {
     facts.worktrunk.status !== "ok" ||
     facts.tmux.status !== "ok" ||
     facts.bun.status !== "ok" ||
-    facts.diffnav.status !== "ok" ||
-    facts.gitDelta.status !== "ok"
+    facts.diffViewer.status !== "ok"
   );
 }
 

@@ -208,8 +208,7 @@ function missingRecoveryTitle(input: {
   if (input.id === "worktrunk") return setupMessageRef("recovery.worktrunk");
   if (input.id === "tmux") return setupMessageRef("recovery.tmux");
   if (input.id === "bun") return setupMessageRef("recovery.bun");
-  if (input.id === "diffnav") return setupMessageRef("recovery.diffnav");
-  if (input.id === "git-delta") return setupMessageRef("recovery.git-delta");
+  if (input.id === "diff-viewer") return setupMessageRef("recovery.diff-viewer");
   return input.fallback;
 }
 
@@ -223,7 +222,7 @@ function recoveryCommands(facts: SetupFacts): readonly (readonly string[])[] {
   ) {
     return [["stn", "setup", "check"]];
   }
-  if (facts.diffnav.status === "missing" || facts.gitDelta.status === "missing") {
+  if (facts.diffViewer.status === "missing") {
     return [["stn", "setup", "check"]];
   }
   return [["stn", "setup", "check"]];
