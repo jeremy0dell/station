@@ -41,15 +41,6 @@ export function rowColumnsOrdered(
   return { start: lo, end: hi };
 }
 
-/** Convenience wrapper for a single-row lookup. */
-export function rowColumns(
-  selection: CellSelection,
-  row: number,
-  width: number,
-): RowColumns | null {
-  return rowColumnsOrdered(orderSelection(selection), row, width);
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }

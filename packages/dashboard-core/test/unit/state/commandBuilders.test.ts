@@ -5,7 +5,6 @@ import {
   buildRenameSessionCommand,
   buildResumeAgentCommand,
   buildStartAgentCommand,
-  cleanupForceRequired,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
@@ -170,13 +169,5 @@ describe("TUI command builders", () => {
         title: "Readable feature task",
       },
     });
-  });
-
-  it("computes cleanup force requirements", () => {
-    const snapshot = createCommandSnapshot("idle", { dirty: true });
-    const row = snapshot.rows[0];
-
-    expect(cleanupForceRequired(row, "remove-worktree")).toBe(true);
-    expect(cleanupForceRequired(row, "close-terminal")).toBe(true);
   });
 });
