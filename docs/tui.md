@@ -100,11 +100,13 @@ with unrelated Station foreground roles.
 
 A valid embedded palette resolves one complete provider-neutral semantic theme.
 Terminal-default and indexed intent retain their observed snapshots. Weak ANSI
-roles are deterministically corrected toward the observed foreground so they
-remain readable on both the canvas and adaptive interaction fills;
-muted/border/interaction roles derive from foreground/background blends. The
-observed luminance and contrast determine dark/light behavior; OpenTUI's theme
-mode label does not.
+roles are deterministically repaired in OKLab by shifting lightness toward the
+observed foreground while holding hue and chroma, so they remain readable on
+both the canvas and adaptive interaction fills without washing out; surface and
+muted/border/interaction roles mix in OKLCH from foreground/background blends
+and keep a minimum separation from the canvas so layered surfaces stay
+distinguishable. The observed luminance and contrast determine dark/light
+behavior; OpenTUI's theme mode label does not.
 
 OpenTUI emits palette responses before `getPalette()` resolves and treats theme
 mode changes as cache invalidation followed by a palette refresh. Station treats
