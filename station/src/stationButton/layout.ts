@@ -21,6 +21,7 @@ const COLLAPSED_ATTENTION_ROWS = 5; // ! / icon / ! + border
 
 const EXPANDED_BORDER_ROWS = 2;
 const EXPANDED_BOTTOM_PAD_ROWS = 1;
+const EXPANDED_BASE_ROWS = EXPANDED_BORDER_ROWS + 1 + 2 + EXPANDED_BOTTOM_PAD_ROWS;
 const EXPANDED_ATTENTION_ROWS = EXPANDED_BORDER_ROWS + 1 + 1 + 2 + EXPANDED_BOTTOM_PAD_ROWS;
 const EXPANDED_RIGHT_PAD = 3;
 export const CONTENT_INDENT = ICON_COLS + 1; // body clears the corner icon
@@ -191,7 +192,7 @@ export function targetDims(display: IslandDisplay): Dims {
       const needsYouLineRows = display.needsYou > 0 ? 1 : 0;
       return {
         width: Math.max(ICON_COLS, body) + EXPANDED_RIGHT_PAD + 2,
-        height: EXPANDED_BORDER_ROWS + 1 + 2 + needsYouLineRows + EXPANDED_BOTTOM_PAD_ROWS,
+        height: EXPANDED_BASE_ROWS + needsYouLineRows,
       };
     }
   }

@@ -27,9 +27,8 @@ export type StationButtonProps = {
   island?: TuiIslandConfig | undefined;
 };
 
-// Reuses the existing `{ kind: "header" }` mouse path so the route to STATION mode
-// survives the header's removal (some terminals never deliver Ctrl-O). Attention
-// clicks focus the flagged session instead of toggling, and quiet the alert.
+// Reuses the existing `{ kind: "header" }` mouse path so the route to STATION
+// mode survives the header's removal (some terminals never deliver Ctrl-O).
 export function StationButton({ store, dashboardState, dispatchMouse, island }: StationButtonProps) {
   const getStatus = useStableStatus(dashboardState, island?.projectRollup === true);
   const subscribe = useCallback(
@@ -37,8 +36,8 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
     [dashboardState],
   );
   const status = useSyncExternalStore(subscribe, getStatus, getStatus);
-  // The dismissal record reference is stable between store actions, so this
-  // subscription only re-renders on actual dismiss changes.
+  // The record reference is stable between store actions, so this subscription
+  // re-renders only on actual dismiss changes.
   const getDismissed = useCallback(
     () => store.getState().feedback.dismissedAttention,
     [store],
@@ -46,8 +45,6 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
   const dismissedAttention = useSyncExternalStore(store.subscribe, getDismissed, getDismissed);
   const celebration = useMergeCelebration(dashboardState);
 
-  // The alert stays up only while some flagged session is not dismissed; a
-  // dismissed queue still paints its needs-you count but stops alerting.
   const attention = status.attention && anyFlaggedNotDismissed(dashboardState, dismissedAttention);
 
   const onHeader = useCallback(
@@ -80,9 +77,7 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
         store.actions.focusPane(paneId);
         return;
       }
-      // No local pane runs the flagged session — open the dashboard so the user
-      // can act on it. Only when the overlay is closed, so we never toggle a
-      // visible dashboard shut.
+      // Only when the overlay is closed, so we never toggle a visible dashboard shut.
       if (!selectStationOverlayVisible(store.getState())) {
         dispatchMouse({ kind: "header" }, event);
       }
