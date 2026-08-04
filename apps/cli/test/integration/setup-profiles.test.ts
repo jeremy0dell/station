@@ -84,8 +84,7 @@ function profileExecutablePaths(state: ProfileState): Set<string> {
     [state.worktrunk, "wt"],
     [state.tmux, "tmux"],
     [state.bun, "bun"],
-    [state.diffnav, "diffnav"],
-    [state.gitDelta, "delta"],
+    [state.diffViewer, "hunk"],
   ] as const;
   return new Set(
     tools.flatMap(([presence, binary]) => (presence === "present" ? [`/fake/bin/${binary}`] : [])),

@@ -22,8 +22,7 @@ export type MachineProfileState = {
   tmux: ToolPresence;
   // Bun runtime; bare `stn` renders the TUI through `bun run`, so it is required.
   bun: ToolPresence;
-  diffnav: ToolPresence;
-  gitDelta: ToolPresence;
+  diffViewer: ToolPresence;
   // Detected agent CLIs, e.g. ["codex"]. Empty means no supported harness.
   harnesses: string[];
   // Deterministic provider hook-status results keyed by harness id.
@@ -60,8 +59,7 @@ const linuxAllTools: MachineProfileState = {
   worktrunk: "present",
   tmux: "present",
   bun: "present",
-  diffnav: "present",
-  gitDelta: "present",
+  diffViewer: "present",
   harnesses: ["codex"],
   harnessTracking: { codex: "prepared" },
 };
@@ -107,8 +105,7 @@ export const machineProfiles: readonly MachineProfile[] = [
         "git-project": "ok",
         harness: "ok",
         "harness-tracking:codex": "ok",
-        diffnav: "ok",
-        "git-delta": "ok",
+        "diff-viewer": "ok",
         config: "ok",
       },
     },
@@ -127,8 +124,7 @@ export const machineProfiles: readonly MachineProfile[] = [
         bun: "ok",
         "git-project": "ok",
         harness: "ok",
-        diffnav: "ok",
-        "git-delta": "ok",
+        "diff-viewer": "ok",
         config: "missing",
         "observer-socket-evidence": "warning",
       },
@@ -165,13 +161,13 @@ export const machineProfiles: readonly MachineProfile[] = [
     },
   },
   {
-    name: "no-diffnav",
-    description: "diffnav + delta missing; now a required-tier failure (See diff automation).",
-    state: { ...linuxAllTools, diffnav: "absent", gitDelta: "absent" },
+    name: "no-diff-viewer",
+    description: "Hunk missing; required-tier failure for the See diff automation.",
+    state: { ...linuxAllTools, diffViewer: "absent" },
     expect: {
       exitCode: 1,
       requiredOk: false,
-      checks: { diffnav: "missing", "git-delta": "missing", worktrunk: "ok", tmux: "ok" },
+      checks: { "diff-viewer": "missing", worktrunk: "ok", tmux: "ok" },
     },
   },
   {
@@ -203,8 +199,7 @@ export const machineProfiles: readonly MachineProfile[] = [
       worktrunk: "absent",
       tmux: "absent",
       bun: "absent",
-      diffnav: "absent",
-      gitDelta: "absent",
+      diffViewer: "absent",
     },
     expect: {
       exitCode: 1,
@@ -213,8 +208,7 @@ export const machineProfiles: readonly MachineProfile[] = [
         worktrunk: "missing",
         tmux: "missing",
         bun: "missing",
-        diffnav: "missing",
-        "git-delta": "missing",
+        "diff-viewer": "missing",
       },
     },
   },
@@ -230,8 +224,7 @@ export const machineProfiles: readonly MachineProfile[] = [
       worktrunk: "absent",
       tmux: "absent",
       bun: "absent",
-      diffnav: "absent",
-      gitDelta: "absent",
+      diffViewer: "absent",
       harnesses: [],
     },
     expect: {

@@ -147,11 +147,11 @@ function projectRecovery(plan: SetupPlan, facts: SetupFacts): readonly SetupReco
       },
     ];
   }
-  if (facts.diffnav.status === "missing" || facts.gitDelta.status === "missing") {
+  if (facts.diffViewer.status === "missing") {
     return [
       {
         kind: "instruction",
-        message: setupMessageRef("next.install-diff-tools"),
+        message: setupMessageRef("next.install-diff-viewer"),
         command: ["stn", "setup", "check"],
       },
     ];

@@ -32,7 +32,7 @@ Exit codes:
 - `1`: required core setup is missing, harness selection is unresolved, or an apply action failed.
 - `2`: invalid setup command arguments.
 
-`stn setup check` and `stn setup plan` do not mutate config, provider homes, sockets, or durable Observer state. Their state-directory readiness check creates and removes a temporary probe file and can leave a newly created empty state directory. A plan exits zero when it was produced; its JSON `summary.requiredOk` reports readiness. `stn setup apply --dry-run` performs no config writes or installs, shares the same state-directory probe, and reports ambiguous harness selection as blocked. `stn setup apply --yes` also refuses ambiguous selection before mutating config or provider files. Direct `stn setup system` requires an explicit mode: use `--check` for read-only reporting or `--yes` to apply Homebrew installs for missing Worktrunk, tmux, Bun, diffnav, and git-delta.
+`stn setup check` and `stn setup plan` do not mutate config, provider homes, sockets, or durable Observer state. Their state-directory readiness check creates and removes a temporary probe file and can leave a newly created empty state directory. A plan exits zero when it was produced; its JSON `summary.requiredOk` reports readiness. `stn setup apply --dry-run` performs no config writes or installs, shares the same state-directory probe, and reports ambiguous harness selection as blocked. `stn setup apply --yes` also refuses ambiguous selection before mutating config or provider files. Direct `stn setup system` requires an explicit mode: use `--check` for read-only reporting or `--yes` to apply Homebrew installs for missing Worktrunk, tmux, Bun, and Hunk.
 
 ## Dependency Tiers
 
@@ -44,7 +44,7 @@ workflow, not for launch:
 - Worktrunk / `wt`
 - tmux
 - Bun — only a source-checkout launcher shells out to `bun run`; the compiled binary embeds the renderer
-- diffnav and git-delta (`delta`) — diffnav powers the "See diff (split right)" automation and renders through delta, so the two are required together
+- Hunk — powers the "See diff (split right)" automation
 - git (the binary); select an existing git repository explicitly after setup
 - the effective global default agent CLI, plus each CLI explicitly selected in the current guided setup: Claude Code, Codex, Cursor Agent, OpenCode, or Pi
 - current Station-owned tracking artifacts for required Claude, Codex, Cursor,

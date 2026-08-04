@@ -342,7 +342,7 @@ describe("createStationInputRuntime", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     const { runtime, scripted, store, registry } = harness({ automations: [automation] });
@@ -361,12 +361,12 @@ describe("createStationInputRuntime", () => {
     );
     expect(selectActivePaneId(store.getState())).toBe("pane-split-0");
     // The command is held until the pane's PTY spawns on first layout/resize.
-    expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
+    expect(scripted.helpers.writes).not.toContain("echo automation\r");
 
     registry.resize("pane-split-0", { cols: 36, rows: 8 });
-    await waitFor(() => scripted.helpers.writes.includes("git diff | diffnav\r"));
+    await waitFor(() => scripted.helpers.writes.includes("echo automation\r"));
     // Executed with a trailing CR — Station's Enter byte, not a bare LF.
-    expect(scripted.helpers.writes).toContain("git diff | diffnav\r");
+    expect(scripted.helpers.writes).toContain("echo automation\r");
   });
 
   it("writes (without Enter) a step whose run mode is write, leaving it for the user to submit", async () => {
@@ -423,7 +423,7 @@ describe("createStationInputRuntime", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     const { runtime, scripted, registry } = harness({ automations: [automation] });
@@ -436,7 +436,7 @@ describe("createStationInputRuntime", () => {
     // entry gone, stops listening, and never writes the command into a dead pane.
     registry.dispose("pane-split-0");
 
-    expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
+    expect(scripted.helpers.writes).not.toContain("echo automation\r");
   });
 
   it("drops a queued automation command when its pane never lays out before the timeout", () => {
@@ -445,7 +445,7 @@ describe("createStationInputRuntime", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     // Fire the 10s send-timeout (the registry-subscription leak guard) deterministically
@@ -476,7 +476,7 @@ describe("createStationInputRuntime", () => {
 
       // A layout arriving after the timeout finds no subscriber: the command is dropped.
       registry.resize("pane-split-0", { cols: 36, rows: 8 });
-      expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
+      expect(scripted.helpers.writes).not.toContain("echo automation\r");
     } finally {
       globalThis.setTimeout = realSetTimeout;
     }
@@ -2655,7 +2655,7 @@ describe("createStationInputRuntime pane split/focus/close", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     const { runtime, registry, spawnOptions, row, agentPaneId } = worktreeSplitHarness(

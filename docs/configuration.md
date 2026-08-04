@@ -319,6 +319,16 @@ Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 | (automation) `enabled` | bool | `true` | `false` hides it from the menu. |
 | (automation) `steps` | `AutomationStep[]` | **required** | One or more steps. |
 
+The built-in **See diff** automation runs Hunk against the `origin/main` merge
+base, watches working-tree changes, and includes untracked files. Explicit
+`automations` are user-owned, including `automations = []`; Station does not
+rewrite a custom legacy `diffnav` command. To migrate one, replace its command
+with:
+
+```toml
+command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
+```
+
 ### `[tui]` — runtime TUI widgets (optional, best-effort)
 
 > **Decorative widgets only** — not the same as `[workspace]`. `[tui]` is the

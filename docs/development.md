@@ -749,7 +749,7 @@ codex --version
 ```
 
 Take a `dev-ready-before-station` snapshot before authenticating. Do not
-preinstall Station, Worktrunk, tmux, diffnav, or git-delta; this lane must prove
+preinstall Station, Worktrunk, tmux, or Hunk; this lane must prove
 that guided setup identifies and installs the missing Station dependencies.
 Authenticate GitHub and confirm private-repository access:
 
@@ -872,7 +872,7 @@ For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
 and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
-guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
+guided setup to install Worktrunk, tmux, and Hunk, select one or
 more authenticated agents, consent to required Station tracking artifacts, and
 optionally install the tmux binding. Confirm the first selection becomes the
 default only for a new config, every explicit selection receives its own harness
