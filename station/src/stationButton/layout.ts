@@ -196,7 +196,6 @@ export function targetDims(display: IslandDisplay): Dims {
 // count ticks can't slide the box out from under an approaching cursor.
 const STABLE_COUNT_LANE_COLS = 1 + 2;
 const STABLE_COUNT_LANE_GAP_COLS = 1;
-export const COLLAPSED_COUNTS_COLS = collapsedCountCols(2);
 
 function countLaneCount(display: Extract<IslandDisplay, { kind: "counts" }>): number {
   return Number(display.working > 0) + Number(display.ready > 0);

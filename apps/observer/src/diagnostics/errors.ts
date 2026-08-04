@@ -1,8 +1,6 @@
 import type { ErrorEnvelope, SafeError } from "@station/contracts";
 import * as observability from "@station/observability";
 
-export type { ErrorEnvelopeInput } from "@station/observability";
-
 export function toSafeError(
   error: unknown,
   fallback: observability.SafeErrorFallback = {
