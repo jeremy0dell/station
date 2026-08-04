@@ -554,7 +554,8 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
 `STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
 `STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
-`STATION_OBSERVER_BUILD_VERSION`, `STATION_UI_RUN_ID`, `STATION_PANE`, `STATION_OUTER_TMUX`,
+`STATION_OBSERVER_BUILD_VERSION`, `STATION_UI_RUN_ID`, `STATION_PANE`,
+`STATION_SEMANTIC_COPY`, `STATION_OUTER_TMUX`,
 `STATION_OUTER_TMUX_PANE`, `STATION_TUI_POPUP`,
 `STATION_TUI_PERSISTENT`,
 `STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
@@ -568,13 +569,17 @@ operation checks the socket owner on the same connection without running Git or
 hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the
 renderer requires its lifecycle-control IPC channel; it is not a standalone
 launch mode. Native Station child PTYs also receive standard terminal values
-`TERM=xterm-256color`, `COLORTERM=truecolor`, and `TERM_PROGRAM=Station` after
-inherited and per-launch environment merging. Outer-renderer identity and feature
+`TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=Station`, and
+`STATION_SEMANTIC_COPY=1` after inherited and per-launch environment merging.
+Outer-renderer identity and feature
 hints, including inherited hyperlink overrides, are removed at that boundary.
 Station does not advertise OSC 8 until both a coordinated child detector and an
 outer-terminal capability gate are available, while ordinary locale,
 authentication, provider, project, worktree, and user environment passes
 through. This includes functional values such as Git askpass configuration.
+`STATION_SEMANTIC_COPY` advertises the versioned, provider-neutral row-boundary
+protocol documented in [Terminal Semantic Copy](terminal-semantic-copy.md); it is
+not a hand-authored override, and existing PTYs retain their spawn-time value.
 Local PTYs preserve inherited `NO_COLOR` / `FORCE_COLOR` preferences, while
 persistent Host PTYs discard daemon-inherited copies and preserve only values
 carried by the explicit launch request; a Host may have been auto-started from a

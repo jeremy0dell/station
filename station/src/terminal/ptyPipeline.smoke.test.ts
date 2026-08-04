@@ -135,6 +135,7 @@ describe("pty pipeline smoke", () => {
         "TERM=xterm-256color",
         "COLORTERM=truecolor",
         "TERM_PROGRAM=Station",
+        "STATION_SEMANTIC_COPY=1",
         "FORCE_HYPERLINK=unset",
         "GHOSTTY=unset",
         "KITTY=unset",

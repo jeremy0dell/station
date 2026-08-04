@@ -1,12 +1,19 @@
+import {
+  STATION_TERMINAL_MAX_SCROLLBACK_ROWS,
+  type SemanticCopySnapshot,
+} from "@station/contracts";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
-import { MAX_SCROLLBACK_LINES } from "../config/stationConfig.js";
 import { EraseDisplayMode } from "../terminal/protocol/csi.js";
 import { EscSequence } from "../terminal/protocol/esc.js";
 import { CsiCommand, EscCommand } from "../terminal/protocol/identifiers.js";
 import { OscCommand } from "../terminal/protocol/osc.js";
 import { VtPrefix, VtTerminator } from "../terminal/protocol/syntax.js";
+import {
+  createSemanticCopyState,
+  type SemanticCopyState,
+} from "../terminal/protocol/semanticCopy.js";
 import {
   TerminalSnapshotUnsupportedStateError,
   TerminalSupplementalState,
@@ -24,14 +31,19 @@ type PinnedXtermParserState = {
   };
 };
 
+export type SemanticTerminalCapture = {
+  serializedVt: string;
+  semanticCopy: SemanticCopySnapshot;
+};
+
 export type SemanticTerminalModel = {
   write(data: string): void;
   resize(cols: number, rows: number): void;
   /**
-   * Capture exact restoration VT, or reject with classified, content-free
-   * diagnostics and recovery data sampled at the same queue boundary.
+   * Atomically captures exact restoration VT and content-free semantic-copy
+   * row state, or rejects with classified diagnostics and boundary recovery data.
    */
-  capture(): Promise<string[]>;
+  capture(): Promise<SemanticTerminalCapture>;
   dispose(): void;
 };
 
@@ -76,13 +88,15 @@ export function terminalSnapshotFailure(error: unknown): TerminalSnapshotFailure
 
 /**
  * A bounded headless terminal whose write, resize, and capture operations share
- * one queue. Enqueuing capture establishes the attachment boundary: later PTY
- * output cannot mutate the model until serialization has completed.
+ * one queue. Enqueuing capture establishes the attachment boundary: serialized
+ * VT and its content-free semantic-copy sidecar are sampled before later PTY
+ * output can mutate either model.
  */
 export class SemanticTerminalSnapshot implements SemanticTerminalModel {
   readonly #terminal: Terminal;
   readonly #serializer: SerializeAddon;
   readonly #supplementalState: TerminalSupplementalState;
+  readonly #semanticCopy: SemanticCopyState;
   readonly #subscriptions: Array<{ dispose(): void }>;
   #tail = Promise.resolve();
   #failure: unknown;
@@ -93,12 +107,13 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     this.#terminal = new Terminal({
       cols,
       rows,
-      scrollback: MAX_SCROLLBACK_LINES,
+      scrollback: STATION_TERMINAL_MAX_SCROLLBACK_ROWS,
       allowProposedApi: true,
       logLevel: "off",
     });
     this.#terminal.loadAddon(new Unicode11Addon() as never);
     this.#terminal.unicode.activeVersion = "11";
+    this.#semanticCopy = createSemanticCopyState(this.#terminal);
     this.#serializer = serializer;
     this.#terminal.loadAddon(this.#serializer as never);
     this.#supplementalState = new TerminalSupplementalState(this.#terminal);
@@ -148,7 +163,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
     }).catch(() => undefined);
   }
 
-  capture(): Promise<string[]> {
+  capture(): Promise<SemanticTerminalCapture> {
     return this.#schedule(() => {
       if (this.#failure !== undefined) {
         throw new TerminalSnapshotUnavailableError(
@@ -173,10 +188,12 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
         );
       }
       try {
-        return [
-          EscSequence.ResetToInitialState +
+        return {
+          serializedVt:
+            EscSequence.ResetToInitialState +
             this.#supplementalState.restoreSerialization(serialized, title),
-        ];
+          semanticCopy: this.#semanticCopy.snapshot(),
+        };
       } catch (error) {
         if (error instanceof TerminalSnapshotUnsupportedStateError) {
           throw new TerminalSnapshotUnavailableError(
@@ -206,6 +223,7 @@ export class SemanticTerminalSnapshot implements SemanticTerminalModel {
         subscription.dispose();
       }
       this.#supplementalState.dispose();
+      this.#semanticCopy.dispose();
       this.#terminal.dispose();
     });
   }

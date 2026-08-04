@@ -8,6 +8,7 @@ process.stdout.write(
     `TERM=${value("TERM")}`,
     `COLORTERM=${value("COLORTERM")}`,
     `TERM_PROGRAM=${value("TERM_PROGRAM")}`,
+    `STATION_SEMANTIC_COPY=${value("STATION_SEMANTIC_COPY")}`,
     `FORCE_HYPERLINK=${value("FORCE_HYPERLINK")}`,
     `GHOSTTY=${value("GHOSTTY_RESOURCES_DIR")}`,
     `KITTY=${value("KITTY_WINDOW_ID")}`,

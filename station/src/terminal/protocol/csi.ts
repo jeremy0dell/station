@@ -4,6 +4,8 @@ import { VtPrefix } from "./syntax.js";
 
 /** ED parameters supported by Station. */
 export const EraseDisplayMode = {
+  CursorToEnd: 0,
+  StartToCursor: 1,
   EntireDisplay: 2,
   Scrollback: 3,
 } as const;

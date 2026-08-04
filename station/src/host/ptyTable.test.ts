@@ -7,10 +7,13 @@ import type {
 import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { createPtyTable } from "./ptyTable.js";
 import {
+  type SemanticTerminalCapture,
   type SemanticTerminalModel,
   TerminalSnapshotPendingError,
   TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
+
+const EMPTY_SEMANTIC_COPY = { normal: [], alternate: [] } as const;
 
 const baseParams: HostSpawnParams = {
   kind: "agent",
@@ -199,7 +202,12 @@ describe("createPtyTable", () => {
     expect(await iterator.next()).toMatchObject({
       value: { type: "resize", cols: 100, rows: 30 },
     });
-    expect((await table.attach(ptyId)).ack.replay.events).toEqual([
+    const replay = (await table.attach(ptyId)).ack.replay;
+    expect(replay.kind).toBe("raw-complete");
+    if (replay.kind !== "raw-complete") {
+      throw new Error("Expected complete raw replay.");
+    }
+    expect(replay.events).toEqual([
       { type: "data", data: "before" },
       { type: "data", data: "\x1b[1;23r\x1b[" },
       { type: "resize", cols: 100, rows: 30 },
@@ -228,7 +236,10 @@ describe("createPtyTable", () => {
       const semantic: SemanticTerminalModel = {
         write() {},
         resize() {},
-        capture: async () => ["semantic-state"],
+        capture: async () => ({
+          serializedVt: "\x1bcsemantic-state",
+          semanticCopy: { normal: [], alternate: [] },
+        }),
         dispose() {},
       };
       return {
@@ -248,13 +259,14 @@ describe("createPtyTable", () => {
       kind: "semantic-truncation-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [{ type: "data", data: "semantic-state" }],
+      serializedVt: "\x1bcsemantic-state",
+      semanticCopy: { normal: [], alternate: [] },
     });
   });
 
   it("captures behind a registered sink so boundary output is delivered once as live data", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
-    const capture = Promise.withResolvers<string[]>();
+    const capture = Promise.withResolvers<SemanticTerminalCapture>();
     const operations: string[] = [];
     const semantic: SemanticTerminalModel = {
       write(data) {
@@ -281,7 +293,10 @@ describe("createPtyTable", () => {
     const attaching = table.attach(ptyId);
     scripted.helpers.emitData("during");
     table.resize(ptyId, 100, 30);
-    capture.resolve(["snapshot-at-boundary"]);
+    capture.resolve({
+      serializedVt: "\x1bcsnapshot-at-boundary",
+      semanticCopy: { normal: [], alternate: [] },
+    });
     const attached = await attaching;
     const frames = attached.frames[Symbol.asyncIterator]();
 
@@ -292,7 +307,8 @@ describe("createPtyTable", () => {
         kind: "semantic-truncation-recovery",
         initialCols: 80,
         initialRows: 24,
-        events: [{ type: "data", data: "snapshot-at-boundary" }],
+        serializedVt: "\x1bcsnapshot-at-boundary",
+        semanticCopy: EMPTY_SEMANTIC_COPY,
       },
     });
     expect(await frames.next()).toMatchObject({ value: { type: "data", data: "during" } });
@@ -340,7 +356,6 @@ describe("createPtyTable", () => {
       kind: "live-reset-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [],
       resetData,
     });
     expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({
@@ -388,7 +403,6 @@ describe("createPtyTable", () => {
       kind: "live-reset-recovery",
       initialCols: 80,
       initialRows: 24,
-      events: [],
       resetData,
     });
     expect(events.find(({ event }) => event === "pty.snapshot.degraded")).toEqual({

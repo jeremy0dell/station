@@ -24,6 +24,7 @@ export const CsiCommand = {
   ResetDecPrivateMode: { prefix: "?", final: "l" },
   CursorPosition: { final: "H" },
   EraseInDisplay: { final: "J" },
+  EraseInLine: { final: "K" },
   EraseCharacters: { final: "X" },
   SelectGraphicRendition: { final: "m" },
   SetScrollingRegion: { final: "r" },

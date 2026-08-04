@@ -27,6 +27,11 @@ import {
 } from "../protocol/kitty.js";
 import { OscCommand } from "../protocol/osc.js";
 import {
+  createSemanticCopyState,
+  type SemanticCopySnapshot,
+  type SemanticCopyRestoreResult,
+} from "../protocol/semanticCopy.js";
+import {
   MouseEncoding,
   type MouseEncodingValue,
   type MouseTrackingValue,
@@ -109,6 +114,14 @@ export type VtBufferStats = {
   length: number;
 };
 
+export type RowCopyBoundary =
+  | { kind: "terminal-soft" }
+  | { kind: "application-hard"; leadingColumns: number }
+  | {
+      kind: "application-soft";
+      leadingColumns: number;
+      separatorSpaces: number;
+    };
 /** Why projected rows must be rebuilt and repainted. */
 export type VtScreenInvalidation = "content" | "repaint";
 
@@ -160,11 +173,16 @@ export type StationVtScreen = {
    */
   viewRowText(viewRow: number, startCol?: number, endCol?: number): string;
   /**
-   * Whether an in-view row is a soft-wrap continuation of the row above it
-   * (xterm `IBufferLine.isWrapped`). Lets copy join a wrapped logical line
-   * back into one line instead of inserting a newline at each wrap boundary.
+   * Copy semantics for an in-view row. Native xterm wraps are authoritative;
+   * an application boundary contributes a cursor-derived non-semantic prefix,
+   * plus a bounded separator-space count only when it continues the prior row.
    */
-  isViewRowWrapped(viewRow: number): boolean;
+  viewRowCopyBoundary(viewRow: number): RowCopyBoundary | undefined;
+  /**
+   * Clears existing application row-boundary state and restores a validated
+   * sidecar, reporting entries that no longer map to the restored buffers.
+   */
+  restoreSemanticCopySnapshot(snapshot: SemanticCopySnapshot): SemanticCopyRestoreResult;
   /**
    * The cell column where the character at `charIndex` of `viewRowText(viewRow)`
    * begins. Inverse of slicing `viewRowText`: a wide char is one code point but
@@ -256,6 +274,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // tables. Without this, every cell after an emoji drifts one column.
   terminal.loadAddon(new Unicode11Addon() as never);
   terminal.unicode.activeVersion = "11";
+  const semanticCopy = createSemanticCopyState(terminal);
 
   const scrollOnOutput = options.scrollOnOutput ?? DEFAULT_SCROLL_ON_OUTPUT;
   let version = 0;
@@ -737,10 +756,28 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       const line = buffer.getLine(buffer.baseY - scrollOffset + viewRow);
       return line?.translateToString(false, startCol, endCol) ?? "";
     },
-    isViewRowWrapped: (viewRow) => {
+    viewRowCopyBoundary: (viewRow) => {
       const buffer = terminal.buffer.active;
-      return buffer.getLine(buffer.baseY - scrollOffset + viewRow)?.isWrapped ?? false;
+      const bufferRow = buffer.baseY - scrollOffset + viewRow;
+      if (buffer.getLine(bufferRow)?.isWrapped === true) {
+        return { kind: "terminal-soft" };
+      }
+      const boundary = semanticCopy.boundaryForBufferRow(
+        buffer.type === "alternate" ? "alternate" : "normal",
+        bufferRow,
+      );
+      if (boundary === undefined) {
+        return undefined;
+      }
+      return boundary.kind === "hard"
+        ? { kind: "application-hard", leadingColumns: boundary.leadingColumns }
+        : {
+            kind: "application-soft",
+            leadingColumns: boundary.leadingColumns,
+            separatorSpaces: boundary.separatorSpaces,
+          };
     },
+    restoreSemanticCopySnapshot: (snapshot) => semanticCopy.restore(snapshot),
     cellColumnForCharIndex: (viewRow, charIndex) => {
       if (charIndex <= 0) {
         return 0;
@@ -864,6 +901,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       disposeScrollAnchor();
       listeners.clear();
       titleListeners.clear();
+      semanticCopy.dispose();
       terminal.dispose();
     },
   };

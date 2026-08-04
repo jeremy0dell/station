@@ -1,4 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import {
+  resetTerminalDiagnosticsForTest,
+  terminalCorruptionCounters,
+} from "../diagnostics.js";
 import { nativeStationTheme, type StationTerminalTheme } from "../../theme/index.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../testing/scriptedTerminal.js";
 import { waitFor } from "../testing/waitFor.js";
@@ -558,6 +562,118 @@ describe("createPtyRegistry", () => {
     expect(screen?.viewRowText(0)).toBe("X2345");
     expect(screen?.viewRowText(1).trimEnd()).toBe("");
     expect(screen?.cursor()).toEqual({ x: 1, y: 0 });
+  });
+
+  it("applies control-only live reset data as one typed replay payload", async () => {
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+    screen?.feed("dirty\x1b[?1049halt");
+    await screen?.whenIdle();
+
+    await replay({
+      kind: "live-reset-recovery",
+      initialSize: { cols: 10, rows: 4 },
+      resetData: "\x1bcreset",
+    });
+
+    expect(screen?.isAltScreen()).toBe(false);
+    expect(screen?.viewRowText(0).trimEnd()).toBe("reset");
+  });
+
+  it("restores semantic-copy metadata after exact VT replay and before live output", async () => {
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+
+    await replay({
+      kind: "semantic-truncation-recovery",
+      initialSize: { cols: 10, rows: 4 },
+      serializedVt: "  first\r\n│ second",
+      semanticCopy: {
+        normal: [
+          { kind: "hard", row: 0, leadingColumns: 2 },
+          { kind: "soft", row: 1, leadingColumns: 2, separatorSpaces: 1 },
+        ],
+        alternate: [],
+      },
+    });
+
+    expect(screen?.viewRowCopyBoundary(0)).toEqual({
+      kind: "application-hard",
+      leadingColumns: 2,
+    });
+    expect(screen?.viewRowCopyBoundary(1)).toEqual({
+      kind: "application-soft",
+      leadingColumns: 2,
+      separatorSpaces: 1,
+    });
+  });
+
+  it("an explicit empty semantic-copy sidecar clears stale metadata", async () => {
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+    screen?.feed("first\r\n\x1b]6973;station-copy;1;0\x1b\\stale");
+    await screen?.whenIdle();
+    expect(screen?.viewRowCopyBoundary(1)?.kind).toBe("application-soft");
+
+    await replay({
+      kind: "semantic-truncation-recovery",
+      initialSize: { cols: 10, rows: 4 },
+      serializedVt: "\x1bcfirst\r\nhard",
+      semanticCopy: { normal: [], alternate: [] },
+    });
+
+    expect(screen?.viewRowCopyBoundary(1)).toBeUndefined();
+  });
+
+  it("reports semantic-copy rows that do not map to the restored buffer", async () => {
+    resetTerminalDiagnosticsForTest();
+    const { registry, replay } = orderedGeometryHarness();
+    try {
+      await replay({
+        kind: "semantic-truncation-recovery",
+        initialSize: { cols: 10, rows: 4 },
+        serializedVt: "restored",
+        semanticCopy: {
+          normal: [{ kind: "soft", row: 99, leadingColumns: 0, separatorSpaces: 0 }],
+          alternate: [],
+        },
+      });
+
+      expect(terminalCorruptionCounters()).toMatchObject({
+        "terminal_diagnostic:semantic_copy_restore_dropped": 1,
+      });
+    } finally {
+      registry.disposeAll();
+      resetTerminalDiagnosticsForTest();
+    }
+  });
+
+  it("clears stale state and reports an invalid local semantic-copy sidecar", async () => {
+    resetTerminalDiagnosticsForTest();
+    const { registry, replay } = orderedGeometryHarness();
+    const screen = registry.get(PANE_A)?.screen;
+    try {
+      screen?.feed("first\r\n\x1b]6973;station-copy;1;0\x1b\\stale");
+      await screen?.whenIdle();
+
+      await replay({
+        kind: "semantic-truncation-recovery",
+        initialSize: { cols: 10, rows: 4 },
+        serializedVt: "hard",
+        semanticCopy: {
+          normal: [{ kind: "soft", row: 1, leadingColumns: 0, separatorSpaces: 1025 }],
+          alternate: [],
+        },
+      } as unknown as StationTerminalReplay);
+
+      expect(screen?.viewRowCopyBoundary(1)).toBeUndefined();
+      expect(terminalCorruptionCounters()).toMatchObject({
+        "terminal_diagnostic:semantic_copy_restore_invalid": 1,
+      });
+    } finally {
+      registry.disposeAll();
+      resetTerminalDiagnosticsForTest();
+    }
   });
 
   it("parses pre-barrier output at 10 columns before reflowing it to 5", async () => {

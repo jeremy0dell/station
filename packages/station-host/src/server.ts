@@ -17,6 +17,9 @@ import {
   hostSuccess,
 } from "./protocol.js";
 
+const SEMANTIC_RECOVERY_REPLAY_PARTS = 2;
+const LIVE_RESET_REPLAY_PARTS = 1;
+
 /** A single attachment produced after Host's asynchronous replay-capture barrier. */
 export type HostAttachmentSource = {
   ack: HostAttachAck;
@@ -184,15 +187,33 @@ async function runAttach(
   // ack always finds this attachment.
   attachments.set(attachment.ack.ptyId, iterator);
   connection.send(hostSuccess(id, attachment.ack));
-  const replayBytes = attachment.ack.replay.events.reduce(
-    (total, event) =>
-      event.type === "data" ? total + Buffer.byteLength(event.data, "utf8") : total,
-    0,
-  );
+  const replay = attachment.ack.replay;
+  let replayEntries: number;
+  let replayBytes: number;
+  switch (replay.kind) {
+    case "raw-complete":
+      replayEntries = replay.events.length;
+      replayBytes = replay.events.reduce(
+        (total, event) =>
+          event.type === "data" ? total + Buffer.byteLength(event.data, "utf8") : total,
+        0,
+      );
+      break;
+    case "semantic-truncation-recovery":
+      replayEntries = SEMANTIC_RECOVERY_REPLAY_PARTS;
+      replayBytes = Buffer.byteLength(replay.serializedVt, "utf8");
+      break;
+    case "live-reset-recovery":
+      replayEntries = LIVE_RESET_REPLAY_PARTS;
+      replayBytes = Buffer.byteLength(replay.resetData, "utf8");
+      break;
+    default:
+      throw new Error("Unexpected Station Host replay kind.");
+  }
   logger.onEvent?.("agent.attach", {
     ptyId: attachment.ack.ptyId,
-    replayKind: attachment.ack.replay.kind,
-    replayEntries: attachment.ack.replay.events.length,
+    replayKind: replay.kind,
+    replayEntries,
     replayBytes,
     cols: attachment.ack.cols,
     rows: attachment.ack.rows,

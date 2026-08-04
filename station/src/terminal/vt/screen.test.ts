@@ -662,12 +662,12 @@ describe("createStationVtScreen", () => {
     expect(screen.mouseProtocol()).toEqual({ tracking: "vt200", encoding: "x10" });
   });
 
-  it("flags soft-wrap continuation rows", async () => {
+  it("reports native soft-wrap continuation rows for copy", async () => {
     const screen = track(createStationVtScreen({ size: { cols: 20, rows: 6 } }));
     screen.feed("abcdefghijklmnopqrstuvwxyz0123"); // 30 chars -> wraps at col 20
     await screen.whenIdle();
-    expect(screen.isViewRowWrapped(0)).toBe(false);
-    expect(screen.isViewRowWrapped(1)).toBe(true);
+    expect(screen.viewRowCopyBoundary(0)).toBeUndefined();
+    expect(screen.viewRowCopyBoundary(1)).toEqual({ kind: "terminal-soft" });
   });
 
   it("maps char indices to cell columns across wide chars", async () => {

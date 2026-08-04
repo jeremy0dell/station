@@ -18,6 +18,7 @@ export * from "./sessionRecovery.js";
 export * from "./setupTypes.js";
 export * from "./snapshot.js";
 export * from "./terminalIntents.js";
+export * from "./terminalSemanticCopy.js";
 export * from "./terminalTargets.js";
 export * from "./tuiRendererControl.js";
 export * from "./uiLifecycle.js";
