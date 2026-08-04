@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { getLinkId } from "@opentui/core";
 import { createElement } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
 
@@ -34,7 +35,13 @@ async function mountNarrowPane(feed: string): Promise<Mounted> {
   screen.feed(`\x1b[?25l${feed}`); // hide the cursor so only fed glyphs paint
   await screen.whenIdle();
   const setup = await testRender(
-    createElement("terminalScreen", { screen, width: PANE_COLS, height: "100%" }),
+    createElement("terminalScreen", {
+      screen,
+      width: PANE_COLS,
+      height: "100%",
+      defaultForeground: nativeStationTheme.terminal.defaultForeground.value,
+      selectionBackground: stationColorSnapshotValue(nativeStationTheme.pane.selection),
+    }),
     FRAME,
   );
   teardowns.push(() => {

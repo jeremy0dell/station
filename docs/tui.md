@@ -112,9 +112,31 @@ query can repopulate a cache already cleared by the event.
 The standalone renderer owns the controller beside its OpenTUI renderer. The
 controller starts from the complete built-in fallback, and palette I/O does not
 delay root rendering; normal exit, errors, and Bun HMR unmount the React root and
-dispose palette listeners before destroying OpenTUI. Live propagation of native
-pane VT palette state remains tracked by #417 and is not part of embedded
-appearance selection.
+dispose palette listeners before destroying OpenTUI.
+
+Native composition applies the resolved theme's `StationTerminalTheme`
+projection to the PTY registry before restored panes can create lazy screens.
+The registry is only the lifecycle fan-out point: it remembers the latest
+projection for future screens and updates existing screens without becoming an
+appearance authority or changing a PTY's process, environment, geometry,
+identity, or replay state. A compatible HMR composition retains its live PTYs
+and reapplies the current projection.
+
+`StationVtScreen` owns terminal-semantic color state. Updating its projection
+rebuilds the ANSI palette used when rows are projected, so default and ANSI
+indices 0-15 can repaint while the xterm buffer retains their original color
+intent. The fixed ANSI-256 tail at indices 16-255 and explicit RGB/truecolor
+cells remain stable. OSC 10/11 queries use the current default foreground and
+background; changing the projection itself never feeds or replays bytes and
+never sends an unsolicited reply to the child.
+
+`TerminalPane` and the active theme provider own UI paint presentation: the
+render-ready default foreground and `theme.pane.selection` flow directly to the
+custom terminal renderable. The native canvas continues to supply blank/default
+background cells through `theme.surfaces.canvas`, and the cursor remains inverse
+cell composition over the resolved cell/default colors. Native `auto` remains
+the exact opaque built-in Station appearance; user selection and native outer-
+palette observation remain deferred to #421.
 
 You can also run the renderer directly during development:
 
