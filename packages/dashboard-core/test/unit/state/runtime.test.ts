@@ -15,7 +15,6 @@ import type {
 } from "@station/dashboard-core";
 import {
   ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS,
-  persistentFilterExperience,
   selectedAddProjectFolderRow,
 } from "@station/dashboard-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -141,7 +140,6 @@ describe("dashboard runtime boundary", () => {
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { persistentFilter: { query: "working" } },
-      dashboardSearchExperience: persistentFilterExperience,
     });
 
     runtime.actions.handleKey({ input: "/" });

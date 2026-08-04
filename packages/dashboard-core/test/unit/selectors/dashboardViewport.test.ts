@@ -113,24 +113,6 @@ describe("dashboard viewport selector", () => {
     expect(viewport.visibleItems.at(-1)?.id).toBe("session:ses_wt_api_working");
   });
 
-  it("keeps empty project rows in the flattened body when no worktrees match", () => {
-    const snapshot = createDashboardSnapshot();
-    const viewport = selectDashboardViewport(
-      snapshot,
-      createInitialTuiState({
-        searchQuery: "missing-row",
-      }),
-    );
-
-    expect(viewport.items.map((item) => item.id)).toEqual([
-      "project:web",
-      "empty:web",
-      "gap:api",
-      "project:api",
-      "empty:api",
-    ]);
-  });
-
   it("renders pending create local rows under the matching project without key choices", () => {
     const snapshot = createDashboardSnapshot();
     const viewport = selectDashboardViewport(
@@ -282,9 +264,9 @@ describe("dashboard viewport selector", () => {
     ]);
   });
 
-  it("searches optimistic rows by both title and hidden branch", () => {
+  it("filters optimistic rows by visible title but ignores hidden branch", () => {
     const snapshot = createDashboardSnapshot();
-    const state = createInitialTuiState({
+    const base = {
       initialSnapshot: snapshot,
       localRows: {
         pendingCreate: [
@@ -300,19 +282,26 @@ describe("dashboard viewport selector", () => {
         pendingRemove: [],
         pendingStart: [],
       },
-    });
+    };
 
-    for (const searchQuery of ["hexagonal", "e91f2b"]) {
-      const items = selectDashboardItems(snapshot, { ...state, searchQuery });
-      expect(items.some((item) => item.type === "createLocalRow")).toBe(true);
-    }
+    const byTitle = selectDashboardItems(
+      snapshot,
+      createInitialTuiState({ ...base, persistentFilter: { query: "hexagonal" } }),
+    );
+    expect(byTitle.some((item) => item.type === "createLocalRow")).toBe(true);
+
+    const byBranch = selectDashboardItems(
+      snapshot,
+      createInitialTuiState({ ...base, persistentFilter: { query: "e91f2b" } }),
+    );
+    expect(byBranch.some((item) => item.type === "createLocalRow")).toBe(false);
   });
 
-  it("searches only pending optimistic rows by their harness", () => {
+  it("filters optimistic rows by agent, matching pending but not failed", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       initialSnapshot: snapshot,
-      searchQuery: "  CoDeX  ",
+      persistentFilter: { query: "  CoDeX  " },
       localRows: {
         pendingCreate: [
           {

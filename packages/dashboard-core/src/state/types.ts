@@ -86,7 +86,6 @@ export type DashboardPersistentFilter = {
 };
 
 export type TuiViewState = {
-  searchQuery: string;
   /** Dashboard-local applied filter; absence means no persistent filter is applied. */
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds: ReadonlySet<string>;
@@ -154,7 +153,6 @@ export type TuiObserverConnectionStatus =
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
-  | { name: "search"; value: string }
   | {
       name: "persistentFilter";
       draft: EditableTextInputState;
@@ -223,7 +221,6 @@ export type ProjectSettingsItemId = "agent" | "remove";
 
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;
-  searchQuery?: string;
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds?: Iterable<string>;
   scrollOffset?: number;

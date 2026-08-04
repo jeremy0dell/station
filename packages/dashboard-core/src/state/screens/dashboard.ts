@@ -11,7 +11,6 @@ import {
   moveDashboardFocusHorizontal,
 } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
-import type { DashboardSearchExperience } from "../experiences/dashboardSearch.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import {
@@ -23,7 +22,10 @@ import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
-import { clearDashboardPersistentFilter } from "./persistentFilter.js";
+import {
+  clearDashboardPersistentFilter,
+  openDashboardPersistentFilter,
+} from "./persistentFilter.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
 import { openWidgetSettings } from "./widgetSettings.js";
 
@@ -33,7 +35,6 @@ export function handleDashboardKey(
   state: TuiState,
   key: TuiKey,
   context: TuiRuntimeContext,
-  dashboardSearchExperience: DashboardSearchExperience,
 ): TuiTransition {
   const mouseScrollDelta = mouseScrollDeltaForKey(key);
   if (mouseScrollDelta !== 0) {
@@ -47,7 +48,7 @@ export function handleDashboardKey(
     return { state };
   }
 
-  return handleDashboardAction(state, binding.action, context, key, dashboardSearchExperience);
+  return handleDashboardAction(state, binding.action, context, key);
 }
 
 function handleDashboardAction(
@@ -55,7 +56,6 @@ function handleDashboardAction(
   action: TuiDashboardAction,
   context: TuiRuntimeContext,
   key: TuiKey,
-  dashboardSearchExperience: DashboardSearchExperience,
 ): TuiTransition {
   switch (action) {
     case "tui.focus.up":
@@ -108,8 +108,8 @@ function handleDashboardAction(
         ? { state, dismissPopup: true }
         : { state };
     }
-    case "tui.search.open":
-      return dashboardSearchExperience.open(state);
+    case "tui.filter.open":
+      return openDashboardPersistentFilter(state);
     case "tui.rename.open":
       return {
         state: {

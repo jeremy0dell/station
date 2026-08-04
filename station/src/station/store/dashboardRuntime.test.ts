@@ -1,8 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  selectDashboardViewport,
-  type DashboardSearchExperience,
-} from "@station/dashboard-core";
+import { selectDashboardViewport } from "@station/dashboard-core";
 import type { TuiFolderService } from "@station/dashboard-core";
 import type { DashboardRuntime } from "@station/dashboard-core";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -12,7 +9,7 @@ import { createStationStubObserverService } from "./stubObserverService.js";
 import { createStationDashboardRuntime } from "./dashboardRuntime.js";
 
 describe("createStationDashboardRuntime", () => {
-  it("composes the legacy dashboard search experience", () => {
+  it("applies the persistent filter through the native composition", () => {
     const store = makeStore();
 
     store.actions.handleKey({ input: "/" });
@@ -20,32 +17,7 @@ describe("createStationDashboardRuntime", () => {
     store.actions.handleKey({ input: "\r", return: true });
 
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.state.getState().searchQuery).toBe("pty");
-  });
-
-  it("forwards a supplied resolved search experience without selecting one", () => {
-    const dashboardSearchExperience: DashboardSearchExperience = {
-      open: (state) => ({
-        state: { ...state, screen: { name: "search", value: "resolved:" } },
-      }),
-      handleKey: (state, key) => {
-        if (state.screen.name !== "search") {
-          return { state };
-        }
-        return {
-          state: {
-            ...state,
-            screen: { name: "search", value: `${state.screen.value}${key.input}` },
-          },
-        };
-      },
-    };
-    const store = makeStore(undefined, dashboardSearchExperience);
-
-    store.actions.handleKey({ input: "/" });
-    store.actions.handleKey({ input: "native" });
-
-    expect(store.state.getState().screen).toEqual({ name: "search", value: "resolved:native" });
+    expect(store.state.getState().persistentFilter).toEqual({ query: "pty" });
   });
 
   it("routes row activation through the stubbed command service with real pending state", async () => {
@@ -133,19 +105,12 @@ describe("createStationDashboardRuntime", () => {
   });
 });
 
-function makeStore(
-  folderService?: TuiFolderService,
-  dashboardSearchExperience?: DashboardSearchExperience,
-): DashboardRuntime {
+function makeStore(folderService?: TuiFolderService): DashboardRuntime {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
-  const options: Parameters<typeof createStationDashboardRuntime>[1] = {
-  };
+  const options: Parameters<typeof createStationDashboardRuntime>[1] = {};
   if (folderService !== undefined) {
     options.folderService = folderService;
-  }
-  if (dashboardSearchExperience !== undefined) {
-    options.dashboardSearchExperience = dashboardSearchExperience;
   }
   const store = createStationDashboardRuntime(
     {

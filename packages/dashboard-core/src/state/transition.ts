@@ -1,8 +1,4 @@
 import type { ProjectId, StationCommand } from "@station/contracts";
-import {
-  type DashboardSearchExperience,
-  legacySearchExperience,
-} from "./experiences/dashboardSearch.js";
 import type { TuiKey } from "./keys.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
@@ -10,6 +6,7 @@ import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleForkKey } from "./screens/fork.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
+import { handleDashboardPersistentFilterKey } from "./screens/persistentFilter.js";
 import { handleProjectCollapseKey } from "./screens/projectCollapse.js";
 import { handleProjectDefaultAgentKey } from "./screens/projectDefaultAgent.js";
 import { handleProjectSettingsKey } from "./screens/projectSettings.js";
@@ -45,7 +42,6 @@ export function handleTuiKey(
   state: TuiState,
   key: TuiKey,
   context: TuiRuntimeContext = { cwd: process.cwd(), homeDir: process.env.HOME ?? "" },
-  dashboardSearchExperience: DashboardSearchExperience = legacySearchExperience,
 ): TuiTransition {
   if (key.ctrl === true && key.input === "c") {
     return {
@@ -77,12 +73,11 @@ export function handleTuiKey(
 
   switch (state.screen.name) {
     case "dashboard":
-      return handleDashboardKey(state, key, context, dashboardSearchExperience);
+      return handleDashboardKey(state, key, context);
     case "help":
       return handleHelpKey(state, key);
-    case "search":
     case "persistentFilter":
-      return dashboardSearchExperience.handleKey(state, key);
+      return handleDashboardPersistentFilterKey(state, key);
     case "projectCollapse":
       return handleProjectCollapseKey(state, key);
     case "projectSettingsPicker":

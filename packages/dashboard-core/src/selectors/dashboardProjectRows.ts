@@ -6,7 +6,6 @@ import type {
   DashboardPersistentFilterRowMatch,
   DashboardPersistentFilterVisibleFields,
 } from "./dashboardPersistentFilter.js";
-import { matchesDashboardOptimisticSearch } from "./dashboardSearchProjection.js";
 import {
   type DashboardSessionRow,
   selectProjectGroups,
@@ -52,10 +51,6 @@ export type DashboardProjectRowGroup = {
   rows: DashboardRowItem[];
 };
 
-type DashboardProjectRowsOptions = {
-  applyLegacySearch: boolean;
-};
-
 type GroupDashboardRow =
   | {
       type: "session";
@@ -69,16 +64,14 @@ type GroupDashboardRow =
 export function selectDashboardProjectRowGroups(
   snapshot: DashboardSnapshotView,
   state: DashboardViewState,
-  options: DashboardProjectRowsOptions,
 ): DashboardProjectRowGroup[] {
   const localRows = visibleCreateSessionLocalRows(snapshot, state);
   return selectProjectGroups(snapshot, state, {
     includeCollapsedRows: true,
-    applySearch: options.applyLegacySearch,
   }).map((group) => ({
     project: group.project,
     collapsed: group.collapsed,
-    rows: projectRows(group.rows, group.project, localRows, state, options),
+    rows: projectRows(group.rows, group.project, localRows, state),
   }));
 }
 
@@ -126,31 +119,10 @@ function projectRows(
   project: DashboardProjectView,
   localRows: readonly DashboardCreateSessionLocalRow[],
   state: DashboardViewState,
-  options: DashboardProjectRowsOptions,
 ): DashboardRowItem[] {
-  const projectLocalRows = localRows.filter(
-    (row) =>
-      row.projectId === project.id &&
-      (!options.applyLegacySearch || localRowMatchesSearch(row, project, state)),
-  );
+  const projectLocalRows = localRows.filter((row) => row.projectId === project.id);
   return mergeDashboardRows(sessionRows, projectLocalRows, state).map((row) =>
     row.type === "session" ? sessionItem(row.row, state) : createLocalItem(row.row),
-  );
-}
-
-function localRowMatchesSearch(
-  row: DashboardCreateSessionLocalRow,
-  project: DashboardProjectView,
-  state: DashboardViewState,
-): boolean {
-  return matchesDashboardOptimisticSearch(
-    {
-      title: row.title,
-      branch: row.branch,
-      projectLabel: project.label,
-      pendingHarnessProvider: row.status === "pending" ? row.harnessProvider : undefined,
-    },
-    state.searchQuery,
   );
 }
 

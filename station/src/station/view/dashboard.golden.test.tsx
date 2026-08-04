@@ -9,8 +9,6 @@ import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import {
   type ClientNotice,
-  persistentFilterExperience,
-  type DashboardSearchExperience,
 } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
@@ -94,15 +92,11 @@ describe("dashboard golden frames", () => {
     hoverEnabled?: boolean;
     toast?: ClientNotice;
     theme?: StationTheme;
-    dashboardSearchExperience?: DashboardSearchExperience;
   }): Promise<RenderedDashboard> {
     const { runtime: store } = makeStationTestRuntime({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
-      ...(input.dashboardSearchExperience === undefined
-        ? {}
-        : { dashboardSearchExperience: input.dashboardSearchExperience }),
     });
     store.start();
     const dashboard = (
@@ -159,7 +153,6 @@ describe("dashboard golden frames", () => {
       width: 120,
       height: 40,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -205,7 +198,6 @@ describe("dashboard golden frames", () => {
       width: 80,
       height: 24,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -223,7 +215,6 @@ describe("dashboard golden frames", () => {
       width: 60,
       height: 16,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -256,7 +247,6 @@ describe("dashboard golden frames", () => {
       width: 80,
       height: 24,
       snapshot,
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -278,7 +268,6 @@ describe("dashboard golden frames", () => {
       width: 40,
       height: 12,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -875,7 +864,6 @@ describe("dashboard golden frames", () => {
       width: 120,
       height: 24,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });

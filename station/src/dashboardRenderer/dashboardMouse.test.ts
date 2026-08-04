@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
 import {
   addProjectSelectedIndex,
-  persistentFilterExperience,
   removeProjectConfirmPhrase,
   selectDashboardViewport,
   type DashboardRuntime,
@@ -211,7 +210,6 @@ describe("routeDashboardMouse", () => {
   it("routes condition header and footer controls through the standalone renderer", () => {
     const doneStore = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     doneStore.actions.handleKey({ input: "/" });
     doneStore.actions.handleKey({ input: "i", ctrl: true });
@@ -242,7 +240,6 @@ describe("routeDashboardMouse", () => {
 
     const backStore = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     backStore.actions.handleKey({ input: "/" });
     backStore.actions.handleKey({ input: "i", ctrl: true });

@@ -83,7 +83,6 @@ describeReal("real native Station mouse input", () => {
       repo,
       codexCommand,
       installCodexHooks: true,
-      dashboardPersistentFilter: true,
     });
     await runStationJson(env, {
       configPath: config.configPath,
