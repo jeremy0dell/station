@@ -141,13 +141,13 @@ describe("DynamicStationButton", () => {
 
   it("collapsed shows the needs-you lane without restCounts when sessions ask", async () => {
     const frame = await captureFrame(
-      <DynamicStationButton input={input({ needsYouCount: 2, workingCount: 1 })} />,
+      <DynamicStationButton input={input({ needsYouCount: 2, workingCount: 1, readyCount: 3 })} />,
     );
     expect(frame).toContain(STATION_ICON);
     expect(frame).toContain("!2");
-    expect(frame).toContain("1");
-    // Without restCounts the calm lanes stay hidden.
+    // Without restCounts the calm working/ready lanes stay hidden.
     expect(frame).not.toContain("●");
+    expect(frame).not.toContain("3");
     // A quieted alert never paints the framed mark.
     expect(frame).not.toContain("!!!!");
   });

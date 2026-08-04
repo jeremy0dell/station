@@ -100,15 +100,13 @@ export function islandDisplay(input: IslandDisplayInput, expanded: boolean): Isl
   }
   // The needs-you lane paints whenever sessions ask for the user, without the
   // restCounts opt-in; working/ready lanes stay opt-in.
-  if (
-    status.needsYouCount > 0 ||
-    (input.restCounts === true && status.workingCount + status.readyCount > 0)
-  ) {
+  const restCounts = input.restCounts === true;
+  if (status.needsYouCount > 0 || (restCounts && status.workingCount + status.readyCount > 0)) {
     return {
       kind: "counts",
       needsYou: status.needsYouCount,
-      working: status.workingCount,
-      ready: status.readyCount,
+      working: restCounts ? status.workingCount : 0,
+      ready: restCounts ? status.readyCount : 0,
     };
   }
   return { kind: "mark" };
