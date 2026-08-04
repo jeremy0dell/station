@@ -31,8 +31,7 @@ export type SetupMessageArguments = {
   "label.tmux-popup": undefined;
   "label.worktrunk-hooks": undefined;
   "label.harness-tracking": { harness: string };
-  "label.diffnav": undefined;
-  "label.git-delta": undefined;
+  "label.diff-viewer": undefined;
   "label.doctor": undefined;
   "label.config-diagnostics": undefined;
   "label.command-line-tools": undefined;
@@ -85,10 +84,6 @@ export type SetupMessageArguments = {
   "check.tracking-disabled": { harness: string };
   "check.tracking-missing": { harnessId: string };
   "check.tracking-prepared": { harness: string };
-  "check.diffnav-ready": undefined;
-  "check.diffnav-missing": undefined;
-  "check.git-delta-ready": undefined;
-  "check.git-delta-missing": undefined;
   "check.git-outside-repository": undefined;
   "check.git-repository-ready": undefined;
   "check.harness-selection-ambiguous": { harnesses: string };
@@ -130,7 +125,7 @@ export type SetupMessageArguments = {
   "next.install-worktrunk": undefined;
   "next.install-tmux": undefined;
   "next.install-bun": undefined;
-  "next.install-diff-tools": undefined;
+  "next.install-diff-viewer": undefined;
   "next.resolve-required": undefined;
   "progress.start": { label: string };
   "progress.complete": { label: string };
@@ -164,8 +159,7 @@ export type SetupMessageArguments = {
   "recovery.tmux": undefined;
   "recovery.bun": undefined;
   "recovery.tracking": undefined;
-  "recovery.diffnav": undefined;
-  "recovery.git-delta": undefined;
+  "recovery.diff-viewer": undefined;
   "recovery.core-incomplete": undefined;
   "recovery.then-run": undefined;
   "recovery.run-command": { command: string };

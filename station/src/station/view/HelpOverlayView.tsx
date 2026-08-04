@@ -1,9 +1,15 @@
 // OpenTUI port of apps/tui's HelpOverlay: centered box-drawn panel above the
 // dashboard (absolute + zIndex; the dashboard must never reflow for it).
 // Lines come from the shared panel generator over Station's visible help copy.
-import { helpPanelLayout, helpPanelLines } from "@station/dashboard-core";
+import {
+  DASHBOARD_FILTER_CONDITION_KEYS,
+  helpPanelLayout,
+  helpPanelLines,
+} from "@station/dashboard-core";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+
+const FILTER_CONDITION_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
 
 const STATION_HELP_CONTENT = [
   { text: "station help", align: "center" as const },
@@ -22,7 +28,11 @@ const STATION_HELP_CONTENT = [
   { key: "↵", description: "open focused session" },
   { key: "tab", description: "next session needing you" },
   { key: "/ ↵ Esc Q", description: "edit/apply/cancel-clear/retain-close filter" },
-  { key: "1-9/a-z", description: "open visible session" },
+  {
+    key: `Tab ${FILTER_CONDITION_KEY_HINT}`,
+    description: "build filter conditions · F applies builder",
+  },
+  { key: "1-9/a-z", description: "open visible session or toggle condition" },
   { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
   { key: "W", description: "widgets" },
   { key: "X", description: "delete session" },

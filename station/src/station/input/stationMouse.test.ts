@@ -6,7 +6,6 @@ import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import {
   addProjectSelectedIndex,
-  persistentFilterExperience,
   removeProjectConfirmPhrase,
   selectDashboardViewport,
   type DashboardRuntimeOptions,
@@ -390,13 +389,12 @@ describe("routeStationMouse", () => {
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().screen).toEqual(before.screen);
-    expect(store.state.getState().searchQuery).toBe(before.searchQuery);
+    expect(store.state.getState().screen).toMatchObject({ name: "persistentFilter" });
   });
 
   it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
     const store = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
       initialState: { persistentFilter: { query: "working" } },
     }).runtime;
 
@@ -410,6 +408,7 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().screen).toEqual({
       name: "persistentFilter",
       draft: { value: "working", cursor: 7 },
+      draftConditions: [],
     });
 
     store.actions.handleKey({ input: "", escape: true });
@@ -432,6 +431,113 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().persistentFilter).toBeUndefined();
   });
 
+  it("routes condition building and final apply clicks through the same transitions as keys", () => {
+    const clicked = makeStationTestRuntime({
+      terminalRows: 14,
+    }).runtime;
+    const keyed = makeStationTestRuntime({
+      terminalRows: 14,
+    }).runtime;
+    for (const store of [clicked, keyed]) {
+      store.actions.handleKey({ input: "/" });
+      store.actions.handleKey({ input: "i", ctrl: true });
+    }
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionField", field: "status" },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "S" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+
+    routeStationMouse(
+      {
+        kind: "persistentFilterConditionValue",
+        field: "status",
+        valueId: "working",
+      },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "3" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "done" },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "\r", return: true });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+    expect(clicked.state.getState().screen).toMatchObject({
+      draftConditions: [
+        { field: "status", values: [{ id: "working", label: "Working" }] },
+      ],
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "applyFilter" },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "F" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+    expect(clicked.state.getState().persistentFilter).toEqual(
+      keyed.state.getState().persistentFilter,
+    );
+  });
+
+  it("routes the top back and close controls independently", () => {
+    const store = makeStationTestRuntime({
+      terminalRows: 14,
+    }).runtime;
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    store.actions.handleKey({ input: "S" });
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "back" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "close" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "", cursor: 0 },
+      draftConditions: [],
+    });
+  });
+
+  it("click-away discards only the active field's unretained changes", () => {
+    const store = makeStationTestRuntime({
+      terminalRows: 14,
+    }).runtime;
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "draft" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    store.actions.handleKey({ input: "S" });
+    store.actions.handleKey({ input: "3" });
+
+    routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
+
+    expect(store.state.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "draft", cursor: 5 },
+      draftConditions: [],
+    });
+  });
+
   it("toggles project collapse on header click, dashboard mode only", () => {
     const store = makeStore();
 
@@ -449,6 +555,22 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
+  });
+
+  it("keeps project disclosure interactive while a persistent filter is applied", () => {
+    const store = makeStore(undefined, { persistentFilter: { query: "station" } });
+    const snapshot = store.state.getState().snapshot;
+    if (snapshot === undefined) throw new Error("expected snapshot");
+    const visibleSessions = () =>
+      selectDashboardViewport(snapshot, store.state.getState()).items.filter(
+        (item) => item.type === "session",
+      ).length;
+
+    expect(visibleSessions()).toBeGreaterThan(0);
+    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    expect(visibleSessions()).toBe(0);
+    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    expect(visibleSessions()).toBeGreaterThan(0);
   });
 
   it("scrolls on wheel in row-interactive modes and nowhere else", () => {
@@ -537,7 +659,10 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "", escape: true });
     store.actions.handleKey({ input: "/" });
     routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
-    expect(store.state.getState().screen).toMatchObject({ name: "search", value: "" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "", cursor: 0 },
+    });
   });
 
   it("treats right-click as inert at the STATION router layer", () => {
@@ -666,7 +791,7 @@ describe("routeStationMouse", () => {
 
   it("gates the open-shell affordance to dashboard mode", () => {
     const store = makeStore();
-    store.actions.handleKey({ input: "/" }); // enter search (non-dashboard) mode
+    store.actions.handleKey({ input: "/" }); // enter filter (non-dashboard) mode
 
     expect(
       routeStationMouse(
@@ -797,7 +922,7 @@ describe("routeStationMouse", () => {
 
   it("gates quick-session and default-agent picker to dashboard mode", () => {
     const store = makeStore();
-    store.actions.handleKey({ input: "/" }); // enter search mode
+    store.actions.handleKey({ input: "/" }); // enter filter mode
 
     expect(
       routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
@@ -986,7 +1111,7 @@ function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
     throw new Error("store has no snapshot");
   }
   // Mirrors the viewport selector the actions module uses; resolved through
-  // the store so the slot reflects current scroll/search state.
+  // the store so the slot reflects current scroll/filter state.
   const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
     (candidate) => candidate.value.id === rowId,
   );

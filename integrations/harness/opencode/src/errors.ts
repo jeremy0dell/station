@@ -1,5 +1,6 @@
 import {
   type HarnessProviderError,
+  type HarnessProviderErrorClass,
   harnessProviderErrorClass,
   harnessProviderErrorFromUnknown,
 } from "@station/harness-shared";
@@ -12,10 +13,11 @@ export type OpenCodeHarnessErrorCode =
   | "HARNESS_OPENCODE_EVENT_INGEST_FAILED"
   | "HARNESS_OPENCODE_PLUGIN_INSTALL_FAILED";
 
-export const OpenCodeHarnessProviderError = harnessProviderErrorClass<OpenCodeHarnessErrorCode>({
-  name: "OpenCodeHarnessProviderError",
-  provider: "opencode",
-});
+export const OpenCodeHarnessProviderError: HarnessProviderErrorClass<OpenCodeHarnessErrorCode> =
+  harnessProviderErrorClass<OpenCodeHarnessErrorCode>({
+    name: "OpenCodeHarnessProviderError",
+    provider: "opencode",
+  });
 
 export function openCodeHarnessError(
   code: OpenCodeHarnessErrorCode,

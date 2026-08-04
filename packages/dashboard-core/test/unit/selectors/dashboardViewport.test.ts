@@ -113,24 +113,6 @@ describe("dashboard viewport selector", () => {
     expect(viewport.visibleItems.at(-1)?.id).toBe("session:ses_wt_api_working");
   });
 
-  it("keeps empty project rows in the flattened body when no worktrees match", () => {
-    const snapshot = createDashboardSnapshot();
-    const viewport = selectDashboardViewport(
-      snapshot,
-      createInitialTuiState({
-        searchQuery: "missing-row",
-      }),
-    );
-
-    expect(viewport.items.map((item) => item.id)).toEqual([
-      "project:web",
-      "empty:web",
-      "gap:api",
-      "project:api",
-      "empty:api",
-    ]);
-  });
-
   it("renders pending create local rows under the matching project without key choices", () => {
     const snapshot = createDashboardSnapshot();
     const viewport = selectDashboardViewport(
@@ -282,9 +264,9 @@ describe("dashboard viewport selector", () => {
     ]);
   });
 
-  it("searches optimistic rows by both title and hidden branch", () => {
+  it("filters optimistic rows by visible title but ignores hidden branch", () => {
     const snapshot = createDashboardSnapshot();
-    const state = createInitialTuiState({
+    const base = {
       initialSnapshot: snapshot,
       localRows: {
         pendingCreate: [
@@ -300,19 +282,26 @@ describe("dashboard viewport selector", () => {
         pendingRemove: [],
         pendingStart: [],
       },
-    });
+    };
 
-    for (const searchQuery of ["hexagonal", "e91f2b"]) {
-      const items = selectDashboardItems(snapshot, { ...state, searchQuery });
-      expect(items.some((item) => item.type === "createLocalRow")).toBe(true);
-    }
+    const byTitle = selectDashboardItems(
+      snapshot,
+      createInitialTuiState({ ...base, persistentFilter: { query: "hexagonal" } }),
+    );
+    expect(byTitle.some((item) => item.type === "createLocalRow")).toBe(true);
+
+    const byBranch = selectDashboardItems(
+      snapshot,
+      createInitialTuiState({ ...base, persistentFilter: { query: "e91f2b" } }),
+    );
+    expect(byBranch.some((item) => item.type === "createLocalRow")).toBe(false);
   });
 
-  it("searches only pending optimistic rows by their harness", () => {
+  it("filters optimistic rows by agent, matching pending but not failed", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       initialSnapshot: snapshot,
-      searchQuery: "  CoDeX  ",
+      persistentFilter: { query: "  CoDeX  " },
       localRows: {
         pendingCreate: [
           {
@@ -496,6 +485,7 @@ describe("dashboard viewport selector", () => {
     const editing = selectDashboardViewport(snapshot, state, {
       name: "persistentFilter",
       draft: { value: "QUEUE", cursor: 5 },
+      draftConditions: [],
     });
 
     expect(editing.items.map((item) => item.id)).toEqual(resting.items.map((item) => item.id));
@@ -526,6 +516,7 @@ describe("dashboard viewport selector", () => {
     const preview = selectDashboardViewport(snapshot, state, {
       name: "persistentFilter",
       draft: { value: "queue-worker", cursor: 12 },
+      draftConditions: [],
     });
 
     expect(preview.persistentFilter).toMatchObject({
@@ -560,6 +551,81 @@ describe("dashboard viewport selector", () => {
     expect(viewport.sessionOverflow).toEqual({ above: 0, below: 0, visible: 1, total: 1 });
   });
 
+  it("retains every selected-project child while row conditions keep only matching context", () => {
+    const snapshot = createDashboardSnapshot();
+    const selectedProject = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        persistentFilter: {
+          query: "",
+          conditions: [{ field: "project", values: [{ id: "web", label: "web" }] }],
+        },
+      }),
+    );
+    const workingInWeb = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        persistentFilter: {
+          query: "",
+          conditions: [
+            { field: "status", values: [{ id: "working", label: "Working" }] },
+            { field: "project", values: [{ id: "web", label: "web" }] },
+          ],
+        },
+      }),
+    );
+
+    expect(selectedProject.items.map((item) => item.id)).toEqual([
+      "project:web",
+      "session:ses_wt_web_working",
+      "session:ses_wt_web_attention",
+      "session:ses_wt_web_exited",
+      "session:ses_wt_web_idle",
+      "session:ses_wt_web_unknown",
+      "session:ses_wt_web_stuck",
+    ]);
+    expect(workingInWeb.items.map((item) => item.id)).toEqual([
+      "project:web",
+      "session:ses_wt_web_working",
+    ]);
+  });
+
+  it("matches optimistic rows from project, agent, and starting-state evidence", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      persistentFilter: {
+        query: "",
+        conditions: [
+          { field: "status", values: [{ id: "starting", label: "Starting" }] },
+          { field: "project", values: [{ id: "web", label: "web" }] },
+          { field: "agent", values: [{ id: "codex", label: "codex" }] },
+        ],
+      },
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "local_starting",
+            projectId: "web",
+            title: "Pending launch",
+            branch: "pending-launch",
+            harnessProvider: "codex",
+            createdAt: "2026-05-31T12:00:00.000Z",
+          },
+        ],
+        failedCreate: [],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+
+    const viewport = selectDashboardViewport(snapshot, state);
+
+    expect(viewport.items.map((item) => item.id)).toEqual(["project:web", "create:local_starting"]);
+  });
+
   it("retains every child when an applied filter matches the project label", () => {
     const snapshot = createDashboardSnapshot();
     const viewport = selectDashboardViewport(
@@ -581,7 +647,7 @@ describe("dashboard viewport selector", () => {
     ]);
   });
 
-  it("temporarily reveals collapsed visible matches without adding synthetic rows", () => {
+  it("keeps applied matches behind the project disclosure until expanded", () => {
     const base = createDashboardSnapshot();
     const snapshot = {
       ...base,
@@ -589,7 +655,7 @@ describe("dashboard viewport selector", () => {
         row.id === "wt_web_idle" ? { ...row, title: "Readable fix-nav task" } : row,
       ),
     };
-    const viewport = selectDashboardViewport(
+    const collapsed = selectDashboardViewport(
       snapshot,
       createInitialTuiState({
         initialSnapshot: snapshot,
@@ -598,16 +664,23 @@ describe("dashboard viewport selector", () => {
         terminalRows: 20,
       }),
     );
+    const expanded = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        persistentFilter: { query: "fix-nav" },
+        terminalRows: 20,
+      }),
+    );
 
-    expect(viewport.items.map((item) => item.id)).toEqual([
+    expect(collapsed.items.map((item) => item.id)).toEqual(["project:web"]);
+    expect(collapsed.items[0]).toMatchObject({ type: "projectHeader", collapsed: true });
+    expect(collapsed.displayRowChoices).toEqual([]);
+    expect(collapsed.sessionOverflow.total).toBe(0);
+    expect(expanded.items.map((item) => item.id)).toEqual([
       "project:web",
       "session:ses_wt_web_idle",
     ]);
-    expect(viewport.items[0]).toMatchObject({ type: "projectHeader", collapsed: true });
-    expect(viewport.displayRowChoices.map((choice) => choice.value.id)).toEqual([
-      "ses_wt_web_idle",
-    ]);
-    expect(viewport.sessionOverflow.total).toBe(1);
   });
 
   it("attaches filter state to expanded, collapsed, and empty project headers during drafts", () => {
@@ -620,6 +693,7 @@ describe("dashboard viewport selector", () => {
     const unmatched = selectDashboardViewport(snapshot, state, {
       name: "persistentFilter",
       draft: { value: "missing", cursor: 7 },
+      draftConditions: [],
     });
 
     expect(unmatched.items).toContainEqual(
@@ -639,6 +713,7 @@ describe("dashboard viewport selector", () => {
     const matchedCollapsed = selectDashboardViewport(snapshot, state, {
       name: "persistentFilter",
       draft: { value: "api", cursor: 3 },
+      draftConditions: [],
     });
     expect(matchedCollapsed.items.find((item) => item.id === "project:api")).toMatchObject({
       persistentFilterMatch: { matched: true, labelRanges: [{ start: 0, end: 3 }] },

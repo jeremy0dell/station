@@ -6,7 +6,6 @@ import type {
   DashboardPersistentFilterRowMatch,
   DashboardPersistentFilterVisibleFields,
 } from "./dashboardPersistentFilter.js";
-import { matchesDashboardOptimisticSearch } from "./dashboardSearchProjection.js";
 import {
   type DashboardSessionRow,
   selectProjectGroups,
@@ -52,10 +51,6 @@ export type DashboardProjectRowGroup = {
   rows: DashboardRowItem[];
 };
 
-type DashboardProjectRowsOptions = {
-  applyLegacySearch: boolean;
-};
-
 type GroupDashboardRow =
   | {
       type: "session";
@@ -69,27 +64,45 @@ type GroupDashboardRow =
 export function selectDashboardProjectRowGroups(
   snapshot: DashboardSnapshotView,
   state: DashboardViewState,
-  options: DashboardProjectRowsOptions,
 ): DashboardProjectRowGroup[] {
   const localRows = visibleCreateSessionLocalRows(snapshot, state);
   return selectProjectGroups(snapshot, state, {
     includeCollapsedRows: true,
-    applySearch: options.applyLegacySearch,
   }).map((group) => ({
     project: group.project,
     collapsed: group.collapsed,
-    rows: projectRows(group.rows, group.project, localRows, state, options),
+    rows: projectRows(group.rows, group.project, localRows, state),
   }));
 }
 
 export function persistentFilterCandidateForDashboardRow(
   item: DashboardRowItem,
 ): DashboardPersistentFilterCandidate {
+  if (item.type === "session") {
+    return {
+      kind: "session",
+      id: item.id,
+      projectId: item.row.worktree.projectId,
+      visibleFields: item.presentation,
+      conditionValues: {
+        status: item.pendingStart === undefined ? item.row.session.status.value : "starting",
+        agent: item.row.session.harness.provider,
+      },
+    };
+  }
+  const conditionValues: DashboardPersistentFilterCandidate["conditionValues"] = {};
+  if (item.row.status === "pending") {
+    conditionValues.status = "starting";
+    if (item.row.harnessProvider !== undefined) {
+      conditionValues.agent = item.row.harnessProvider;
+    }
+  }
   return {
-    kind: item.type === "session" ? "session" : "optimistic",
+    kind: "optimistic",
     id: item.id,
-    projectId: item.type === "session" ? item.row.worktree.projectId : item.row.projectId,
+    projectId: item.row.projectId,
     visibleFields: item.presentation,
+    conditionValues,
   };
 }
 
@@ -106,31 +119,10 @@ function projectRows(
   project: DashboardProjectView,
   localRows: readonly DashboardCreateSessionLocalRow[],
   state: DashboardViewState,
-  options: DashboardProjectRowsOptions,
 ): DashboardRowItem[] {
-  const projectLocalRows = localRows.filter(
-    (row) =>
-      row.projectId === project.id &&
-      (!options.applyLegacySearch || localRowMatchesSearch(row, project, state)),
-  );
+  const projectLocalRows = localRows.filter((row) => row.projectId === project.id);
   return mergeDashboardRows(sessionRows, projectLocalRows, state).map((row) =>
     row.type === "session" ? sessionItem(row.row, state) : createLocalItem(row.row),
-  );
-}
-
-function localRowMatchesSearch(
-  row: DashboardCreateSessionLocalRow,
-  project: DashboardProjectView,
-  state: DashboardViewState,
-): boolean {
-  return matchesDashboardOptimisticSearch(
-    {
-      title: row.title,
-      branch: row.branch,
-      projectLabel: project.label,
-      pendingHarnessProvider: row.status === "pending" ? row.harnessProvider : undefined,
-    },
-    state.searchQuery,
   );
 }
 

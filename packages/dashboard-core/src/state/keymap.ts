@@ -5,8 +5,9 @@ import type { DashboardStateView } from "./types.js";
 export type TuiInputMode =
   | "dashboard"
   | "help"
-  | "search"
   | "persistentFilter"
+  | "persistentFilterConditionField"
+  | "persistentFilterConditionValues"
   | "projectCollapse"
   | "projectSettingsPicker"
   | "removeChooseSlot"
@@ -38,9 +39,9 @@ export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
       return "dashboard";
     case "help":
       return "help";
-    case "search":
-      return "search";
     case "persistentFilter":
+      if (screen.conditionEditor?.stage === "field") return "persistentFilterConditionField";
+      if (screen.conditionEditor?.stage === "values") return "persistentFilterConditionValues";
       return "persistentFilter";
     case "projectCollapse":
       return "projectCollapse";
@@ -180,13 +181,13 @@ export const TUI_DASHBOARD_BINDINGS = [
     },
   },
   {
-    id: "tui.dashboard.search",
+    id: "tui.dashboard.filter",
     pattern: { kind: "char", char: "/" },
-    action: "tui.search.open",
+    action: "tui.filter.open",
     outcome: "handled",
     help: {
       keys: "/",
-      label: "search",
+      label: "filter",
     },
   },
   {

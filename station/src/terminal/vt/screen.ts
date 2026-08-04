@@ -65,6 +65,11 @@ export type StationVtScreenOptions = {
   flushIntervalMs?: number;
   /** Max hold for an open synchronized frame before the escape hatch flushes; injectable for tests. */
   syncHoldMaxMs?: number;
+  /**
+   * Initial terminal-semantic projection for defaults, ANSI indices 0-15, and
+   * OSC 10/11 replies. Explicit RGB and ANSI indices 16-255 remain independent.
+   * Direct low-level callers may omit it to use Station's built-in projection.
+   */
   theme?: StationTerminalTheme;
   /**
    * Terminal query replies (DA1/DA2/DSR/CPR/DECRQM from xterm, OSC 10/11 from
@@ -104,12 +109,32 @@ export type VtBufferStats = {
   length: number;
 };
 
+/** Why projected rows must be rebuilt and repainted. */
+export type VtScreenInvalidation = "content" | "repaint";
+
+/** Two-phase theme publication used to update every registry screen atomically. */
+export type StationVtThemeUpdate = Readonly<{
+  publish(): void;
+  invalidate(): void;
+}>;
+
 // The engine (xterm) must not escape this type: everything above vt/ consumes
 // this view, which is what keeps the conformance catalog and the renderer
 // engine-agnostic if the engine is ever swapped.
 export type StationVtScreen = {
   feed(data: string): void;
   resize(size: StationTerminalSize): void;
+  /**
+   * Replace terminal defaults and ANSI indices 0-15 for existing and future
+   * row projections and OSC 10/11 replies. Parsed text, explicit RGB cells,
+   * fixed ANSI indices 16-255, buffer state, and PTY I/O remain unchanged.
+   */
+  updateTerminalTheme(theme: StationTerminalTheme): void;
+  /**
+   * Build a complete replacement before registry-wide publication. Callers
+   * publish every prepared screen before invalidating any render listener.
+   */
+  prepareTerminalThemeUpdate(theme: StationTerminalTheme): StationVtThemeUpdate;
   /**
    * Style-merged spans for the rows currently in view (the live viewport, or
    * scrolled-back history when `getScrollOffset() > 0`). OSC 8 URIs follow the
@@ -181,7 +206,7 @@ export type StationVtScreen = {
   cursor(): VtCursor;
   isAltScreen(): boolean;
   bufferStats(): VtBufferStats;
-  subscribe(listener: () => void): () => void;
+  subscribe(listener: (invalidation: VtScreenInvalidation) => void): () => void;
   /**
    * The latest OSC 0/2 window title the child app set (trimmed, non-empty), or
    * undefined when no app has set one. This is the same signal terminal
@@ -209,10 +234,11 @@ export type StationVtScreen = {
 };
 
 export function createStationVtScreen(options: StationVtScreenOptions): StationVtScreen {
-  const theme = options.theme ?? nativeStationTheme.terminal;
-  const palette = buildVtPalette256(theme.ansi16.map((color) => color.value));
-  const defaultForeground = theme.defaultForeground.value;
-  const defaultBackground = theme.defaultBackground.value;
+  const initialTheme = options.theme ?? nativeStationTheme.terminal;
+  let terminalProjection = {
+    theme: initialTheme,
+    palette: buildVtPalette256(initialTheme.ansi16.map((color) => color.value)),
+  };
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const syncHoldMaxMs = options.syncHoldMaxMs ?? SYNC_OUTPUT_HOLD_MAX_MS;
   const requestedScrollback = options.scrollback ?? DEFAULT_SCROLLBACK_LINES;
@@ -324,13 +350,45 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // with scrollback eviction, so it tracks how far content has scrolled even at
   // the scrollback cap where baseY plateaus. `shift` never anchors (it slides).
   let scrollAnchor: IMarker | undefined;
-  const listeners = new Set<() => void>();
+  const listeners = new Set<(invalidation: VtScreenInvalidation) => void>();
 
-  const notifyListeners = (): void => {
+  const notifyListeners = (invalidation: VtScreenInvalidation): void => {
     version += 1;
     for (const listener of [...listeners]) {
-      listener();
+      listener(invalidation);
     }
+  };
+
+  const prepareTerminalThemeUpdate = (
+    nextTheme: StationTerminalTheme,
+  ): StationVtThemeUpdate => {
+    const nextProjection = {
+      theme: nextTheme,
+      palette: buildVtPalette256(nextTheme.ansi16.map((color) => color.value)),
+    };
+    let published = false;
+    let invalidated = false;
+    return {
+      publish: () => {
+        if (disposed || published) {
+          return;
+        }
+        terminalProjection = nextProjection;
+        published = true;
+      },
+      invalidate: () => {
+        if (disposed || invalidated) {
+          return;
+        }
+        if (!published) {
+          terminalProjection = nextProjection;
+          published = true;
+        }
+        invalidated = true;
+        // Projection changes never feed/replay bytes or emit a PTY response.
+        notifyListeners("repaint");
+      },
+    };
   };
 
   const clampScrollOffset = (): void => {
@@ -417,7 +475,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       return false;
     }
     emitResponse(
-      `${VtPrefix.Osc}${OscCommand.DefaultForeground};${toOscRgb(defaultForeground)}${VtTerminator.Bell}`,
+      `${VtPrefix.Osc}${OscCommand.DefaultForeground};${toOscRgb(terminalProjection.theme.defaultForeground.value)}${VtTerminator.Bell}`,
     );
     return true;
   });
@@ -426,7 +484,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       return false;
     }
     emitResponse(
-      `${VtPrefix.Osc}${OscCommand.DefaultBackground};${toOscRgb(defaultBackground)}${VtTerminator.Bell}`,
+      `${VtPrefix.Osc}${OscCommand.DefaultBackground};${toOscRgb(terminalProjection.theme.defaultBackground.value)}${VtTerminator.Bell}`,
     );
     return true;
   });
@@ -594,7 +652,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     applyScrollOnOutput();
     clampScrollOffset();
     reanchorScroll();
-    notifyListeners();
+    notifyListeners("content");
     scanForEscapeFragments();
   };
 
@@ -638,11 +696,17 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       reanchorScroll();
       scheduleFlush();
     },
+    updateTerminalTheme: (nextTheme) => {
+      const update = prepareTerminalThemeUpdate(nextTheme);
+      update.publish();
+      update.invalidate();
+    },
+    prepareTerminalThemeUpdate,
     buildRows: (rowOptions) =>
       buildVisibleRows(terminal, {
         cursorVisible: rowOptions?.cursorVisible ?? cursorVisible,
         offset: scrollOffset,
-        palette,
+        palette: terminalProjection.palette,
       }),
     scrollBy: (deltaLines) => {
       if (disposed || deltaLines === 0) {
@@ -655,7 +719,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       }
       scrollOffset = next;
       reanchorScroll();
-      notifyListeners();
+      notifyListeners("content");
       return true;
     },
     scrollToBottom: () => {
@@ -664,7 +728,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       }
       scrollOffset = 0;
       disposeScrollAnchor();
-      notifyListeners();
+      notifyListeners("content");
       return true;
     },
     getScrollOffset: () => scrollOffset,

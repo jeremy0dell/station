@@ -92,7 +92,7 @@ function PaneLeaf({ paneId, ctx }: { paneId: PaneId; ctx: RenderCtx }): ReactNod
   const active = paneId === ctx.activePaneId;
   const presentation = panePresentation(theme, paneId, active, ctx);
   // A transparent (no border/padding) mouse-capturing wrapper keeps focus/menu
-  // routing per pane while TerminalPane keeps its own 4-cell chrome. Clicking
+  // routing per pane while TerminalPane keeps its own border chrome. Clicking
   // anywhere in the pane focuses it; right-click opens its context menu.
   return (
     <box

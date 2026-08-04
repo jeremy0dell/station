@@ -2,7 +2,11 @@ import { basename } from "node:path";
 import type { ColorInput } from "@opentui/core";
 import "./TerminalScreenRenderable.js";
 import type { PaneId } from "../state/types.js";
-import { toOpenTuiColor, useStationTheme } from "../theme/index.js";
+import {
+  stationColorSnapshotValue,
+  toOpenTuiColor,
+  useStationTheme,
+} from "../theme/index.js";
 import { usePaneTerminal } from "./registry/paneTerminalContext.js";
 
 export type TerminalPaneProps = {
@@ -18,6 +22,9 @@ export type TerminalPaneProps = {
   /** Visual only: the pane border color. PaneGrid passes the active accent. */
   borderColor?: ColorInput;
   title?: string;
+  /** Interior padding in cells between the border and the terminal screen. */
+  paddingX?: number;
+  paddingY?: number;
 };
 
 /**
@@ -30,6 +37,8 @@ export function TerminalPane({
   onForwardInput,
   borderColor,
   title,
+  paddingX = 0,
+  paddingY = 0,
 }: TerminalPaneProps) {
   const theme = useStationTheme();
   const term = usePaneTerminal(paneId);
@@ -42,12 +51,15 @@ export function TerminalPane({
       border
       borderColor={resolvedBorderColor}
       title={paneTitle(title, term.status, term.oscTitle, term.cwd)}
-      padding={1}
+      paddingX={paddingX}
+      paddingY={paddingY}
     >
       <terminalScreen
         width="100%"
         flexGrow={1}
         screen={term.screen}
+        defaultForeground={theme.terminal.defaultForeground.value}
+        selectionBackground={stationColorSnapshotValue(theme.pane.selection)}
         onViewportResize={term.reportSize}
         onCopySelection={onCopySelection}
         onForwardInput={onForwardInput}

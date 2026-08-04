@@ -1,6 +1,7 @@
 import type { DashboardPersistentFilterProjection } from "../../selectors/dashboardPersistentFilter.js";
 import type { DashboardSessionOverflow } from "../../selectors/dashboardViewport.js";
-import { cellWidth, type RowGridLayout, truncateCells } from "../WorktreeRow/layout.js";
+import type { DashboardFilterConditionField } from "../../state/types.js";
+import { cellWidth, type RowGridLayout } from "../WorktreeRow/layout.js";
 import {
   clipTextLineSegments,
   normalizeTextLineWidth,
@@ -13,12 +14,18 @@ export type DashboardFilterHeaderSegmentRole =
   | "slash"
   | "query"
   | "caret"
+  | "conditionSeparator"
+  | "conditionField"
+  | "conditionOperator"
+  | "conditionValue"
   | "spacer"
   | "count";
 
 export type DashboardFilterHeaderSegment = {
   text: string;
   role: DashboardFilterHeaderSegmentRole;
+  field?: DashboardFilterConditionField;
+  valueId?: string;
 };
 
 /** A persistent filter rendered in the dashboard table-header slot. */
@@ -90,14 +97,19 @@ function editingPersistentFilterHeader(
   const countWidth = cellWidth(count);
   const prefixWidth = textLineSegmentsWidth(prefix);
   const countGap = columns >= prefixWidth + countWidth + 3 ? 2 : 0;
-  const queryWidth = Math.max(
+  const summaryWidth = Math.max(
     1,
     columns - prefixWidth - (countGap > 0 ? countWidth + countGap : 0),
   );
+  const conditionSegments = persistentFilterConditionSummary(projection);
+  const conditionWidth = textLineSegmentsWidth(conditionSegments);
+  const reservedConditionWidth = Math.min(conditionWidth, Math.floor(summaryWidth / 2));
+  const queryWidth = Math.max(1, summaryWidth - reservedConditionWidth);
   const draft = projection.draft ?? { value: projection.query, cursor: projection.query.length };
   const content = [
     ...prefix,
     ...persistentFilterEditorWindow(draft.value, draft.cursor, queryWidth),
+    ...conditionSegments,
   ];
   const segments =
     countGap > 0 ? appendPersistentFilterCount(content, count, columns, countGap) : content;
@@ -121,9 +133,10 @@ function appliedPersistentFilterHeader(
   const prefixWidth = textLineSegmentsWidth(prefix);
   const showCount = columns >= prefixWidth + countWidth + 3;
   const summaryWidth = Math.max(0, columns - prefixWidth - (showCount ? countWidth + 2 : 0));
+  const summary = persistentFilterSummary(projection);
   const content: DashboardFilterHeaderSegment[] = [
     ...prefix,
-    { text: truncateCells(projection.query, summaryWidth), role: "query" },
+    ...clipTextLineSegments(summary, summaryWidth),
   ];
   const segments = showCount ? appendPersistentFilterCount(content, count, columns, 2) : content;
   return {
@@ -131,6 +144,49 @@ function appliedPersistentFilterHeader(
     segments: clipTextLineSegments(segments, columns),
     zeroMatches: projection.zeroMatches,
   };
+}
+
+function persistentFilterSummary(
+  projection: DashboardPersistentFilterProjection,
+): DashboardFilterHeaderSegment[] {
+  return projection.summarySegments.map((segment) => {
+    const built: DashboardFilterHeaderSegment = {
+      text: segment.text,
+      role: dashboardFilterHeaderRole(segment.role),
+    };
+    if (segment.field !== undefined) built.field = segment.field;
+    if (segment.valueId !== undefined) built.valueId = segment.valueId;
+    return built;
+  });
+}
+
+function dashboardFilterHeaderRole(
+  role: DashboardPersistentFilterProjection["summarySegments"][number]["role"],
+): DashboardFilterHeaderSegmentRole {
+  switch (role) {
+    case "text":
+      return "query";
+    case "separator":
+      return "conditionSeparator";
+    case "field":
+      return "conditionField";
+    case "operator":
+      return "conditionOperator";
+    case "value":
+      return "conditionValue";
+  }
+}
+
+function persistentFilterConditionSummary(
+  projection: DashboardPersistentFilterProjection,
+): DashboardFilterHeaderSegment[] {
+  const segments = persistentFilterSummary(projection).filter(
+    (segment) => segment.role !== "query",
+  );
+  if (segments.length > 0 && segments[0]?.role !== "conditionSeparator") {
+    return [{ text: " ", role: "spacer" }, ...segments];
+  }
+  return segments;
 }
 
 function persistentFilterEditorPrefix(columns: number): DashboardFilterHeaderSegment[] {

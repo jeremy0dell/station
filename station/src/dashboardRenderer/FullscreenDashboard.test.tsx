@@ -142,6 +142,34 @@ describe("FullscreenDashboard surface ownership", () => {
     ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
   });
 
+  it("keeps focused light controls visually distinct from the canvas", async () => {
+    const size = { width: 120, height: 40 };
+    const fixture = makeStationTestRuntime({
+      terminalRows: size.height,
+      initialState: {
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+      },
+    });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.runtime, size, TEST_EFFECTS, lightSource);
+    const frame = setup.captureCharFrame();
+    const addSession = cellFor(frame, "[ + add session ]");
+    const title = cellFor(frame, "station · overview");
+    const controlSpan = spanAtFrameCell(setup.captureSpans(), addSession.row, addSession.col);
+    const canvasSpan = spanAtFrameCell(setup.captureSpans(), title.row, title.col);
+
+    expect(spanBgHex(controlSpan)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.interaction.compactFocus),
+    );
+    expect(spanBgHex(canvasSpan)).toBe(stationColorSnapshotValue(LIGHT_THEME.surfaces.canvas));
+    expect(
+      themeContrast(LIGHT_THEME.interaction.compactFocus, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThan(1.1);
+  });
+
   it("keeps focused light sheet-button roles readable", async () => {
     const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     const lightSource: StationThemeSource = {

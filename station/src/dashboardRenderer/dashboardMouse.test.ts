@@ -45,6 +45,9 @@ const DASHBOARD_MOUSE_TARGET_KINDS = {
   openShellForProject: true,
   openShellForRow: true,
   persistentFilterAction: true,
+  persistentFilterConditionAction: true,
+  persistentFilterConditionField: true,
+  persistentFilterConditionValue: true,
   projectHeader: true,
   projectSettingsConfirmRemove: true,
   removeWorktreeAction: true,
@@ -204,6 +207,54 @@ describe("routeDashboardMouse", () => {
     routeDashboardMouse({ kind: "screenBackdrop" }, SCROLL_DOWN, store);
     routeDashboardMouse({ kind: "sheetBackdrop" }, SCROLL_DOWN, store);
     expect(store.state.getState().scrollOffset).toBe(0);
+  });
+
+  it("routes condition header and footer controls through the standalone renderer", () => {
+    const doneStore = makeStationTestRuntime({
+      terminalRows: 14,
+    }).runtime;
+    doneStore.actions.handleKey({ input: "/" });
+    doneStore.actions.handleKey({ input: "i", ctrl: true });
+    doneStore.actions.handleKey({ input: "S" });
+    doneStore.actions.handleKey({ input: "3" });
+
+    routeDashboardMouse(
+      { kind: "persistentFilterConditionAction", actionId: "done" },
+      LEFT_DOWN,
+      doneStore,
+    );
+    expect(doneStore.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draftConditions: [
+        { field: "status", values: [{ id: "working", label: "Working" }] },
+      ],
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
+    routeDashboardMouse(
+      { kind: "persistentFilterConditionAction", actionId: "applyFilter" },
+      LEFT_DOWN,
+      doneStore,
+    );
+    expect(doneStore.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(doneStore.state.getState().persistentFilter).toMatchObject({
+      conditions: [{ field: "status" }],
+    });
+
+    const backStore = makeStationTestRuntime({
+      terminalRows: 14,
+    }).runtime;
+    backStore.actions.handleKey({ input: "/" });
+    backStore.actions.handleKey({ input: "i", ctrl: true });
+    backStore.actions.handleKey({ input: "S" });
+    routeDashboardMouse(
+      { kind: "persistentFilterConditionAction", actionId: "back" },
+      LEFT_DOWN,
+      backStore,
+    );
+    expect(backStore.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
   });
 
   it("opens first-project onboarding from the empty-dashboard CTA", () => {

@@ -5,6 +5,5 @@ brew "bun"
 # External tools
 brew "worktrunk"
 brew "tmux"
-# diffnav powers the station "See diff (split right)" automation; it renders via delta.
-brew "diffnav"
-brew "git-delta"
+# Hunk powers the Station "See diff (split right)" automation.
+brew "hunk"

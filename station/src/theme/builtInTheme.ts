@@ -1,4 +1,4 @@
-import { rgbColor, type StationTheme } from "./types.js";
+import { alphaColor, rgbColor, type StationTheme } from "./types.js";
 
 // This file is Station's sole production raw-color authority; renderers consume semantic roles.
 const palette = {
@@ -118,6 +118,9 @@ const sharedRoles = {
     matchForeground: palette.filterMatchForeground,
     matchBackground: palette.filterMatchBackground,
     zeroMatch: palette.yellow,
+    conditionSurface: palette.menuSurface,
+    conditionSelected: palette.compactFocus,
+    conditionBackdrop: alphaColor(palette.overlay, 0.55),
   },
   welcome: {
     button: palette.welcomeButton,

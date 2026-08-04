@@ -1,7 +1,6 @@
 import {
   createInitialTuiState,
   handleTuiKey,
-  persistentFilterExperience,
   replaceSnapshot,
   selectDashboardItems,
 } from "@station/dashboard-core";
@@ -15,7 +14,7 @@ function handle(
   state: ReturnType<typeof createInitialTuiState>,
   key: Parameters<typeof handleTuiKey>[1],
 ) {
-  return handleTuiKey(state, key, KEY_CONTEXT, persistentFilterExperience).state;
+  return handleTuiKey(state, key, KEY_CONTEXT).state;
 }
 
 describe("persistent-filter screen", () => {
@@ -30,9 +29,9 @@ describe("persistent-filter screen", () => {
     expect(opened.screen).toEqual({
       name: "persistentFilter",
       draft: { value: "working", cursor: 7 },
+      draftConditions: [],
     });
     expect(opened.persistentFilter).toEqual({ query: "working" });
-    expect(opened.searchQuery).toBe("");
   });
 
   it("uses the shared text editor for insertion, movement, deletion, and Ctrl-U", () => {
@@ -48,6 +47,7 @@ describe("persistent-filter screen", () => {
     expect(typed.screen).toEqual({
       name: "persistentFilter",
       draft: { value: "abc", cursor: 3 },
+      draftConditions: [],
     });
     expect(moved.screen).toMatchObject({ draft: { value: "abc", cursor: 2 } });
     expect(inserted.screen).toMatchObject({ draft: { value: "abXc", cursor: 3 } });
@@ -59,7 +59,6 @@ describe("persistent-filter screen", () => {
   it("applies a nonblank hard projection, retains matching focus, and clamps scroll", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
-      searchQuery: "",
       scrollOffset: 3,
       terminalRows: 10,
       dashboardFocus: { kind: "session", sessionId: "ses_wt_web_idle" },
@@ -71,7 +70,6 @@ describe("persistent-filter screen", () => {
 
     expect(applied.screen).toEqual({ name: "dashboard" });
     expect(applied.persistentFilter).toEqual({ query: "NaV" });
-    expect(applied.searchQuery).toBe("");
     expect(applied.scrollOffset).toBe(0);
     expect(applied.dashboardFocus).toEqual(base.dashboardFocus);
   });

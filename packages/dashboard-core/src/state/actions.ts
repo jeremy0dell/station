@@ -20,9 +20,17 @@ import {
 } from "./screens/fork.js";
 import { handleNewSessionAction } from "./screens/newSession.js";
 import {
+  applyDashboardPersistentFilter,
   clearDashboardPersistentFilter,
   openDashboardPersistentFilter,
 } from "./screens/persistentFilter.js";
+import {
+  backPersistentFilterConditionEditor,
+  cancelPersistentFilterConditionEditor,
+  donePersistentFilterConditionEditor,
+  selectPersistentFilterConditionField,
+  togglePersistentFilterConditionValue,
+} from "./screens/persistentFilterConditions.js";
 import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
 import { focusProjectSettingsItem, openProjectSettings } from "./screens/projectSettings.js";
 import {
@@ -40,7 +48,12 @@ import {
   widgetSettingsToggleAt,
 } from "./screens/widgetSettings.js";
 import type { TuiControlIntent, TuiRuntimeContext, TuiTransition } from "./transition.js";
-import type { ProjectHeaderControl, ProjectSettingsItemId, TuiState } from "./types.js";
+import type {
+  DashboardFilterConditionField,
+  ProjectHeaderControl,
+  ProjectSettingsItemId,
+  TuiState,
+} from "./types.js";
 
 /** Result of a dashboard action, including any one-shot renderer-owned control intent. */
 export type DashboardActionResult = {
@@ -86,6 +99,19 @@ export type PersistentFilterActionId = "persistentFilter.edit" | "persistentFilt
 export type TuiSemanticAction =
   | { type: "dashboard.addProject" }
   | { type: PersistentFilterActionId }
+  | {
+      type: "persistentFilter.condition.selectField";
+      field: DashboardFilterConditionField;
+    }
+  | {
+      type: "persistentFilter.condition.toggleValue";
+      field: DashboardFilterConditionField;
+      valueId: string;
+    }
+  | { type: "persistentFilter.condition.back" }
+  | { type: "persistentFilter.condition.close" }
+  | { type: "persistentFilter.condition.done" }
+  | { type: "persistentFilter.applyDraft" }
   | {
       type: "dashboard.projectHeader.activate";
       projectId: ProjectId;
@@ -136,6 +162,20 @@ export function handleTuiAction(
       return openDashboardPersistentFilter(state);
     case "persistentFilter.clear":
       return clearDashboardPersistentFilter(state);
+    case "persistentFilter.condition.selectField":
+      return stateTransition(selectPersistentFilterConditionField(state, action.field));
+    case "persistentFilter.condition.toggleValue":
+      return stateTransition(
+        togglePersistentFilterConditionValue(state, action.field, action.valueId),
+      );
+    case "persistentFilter.condition.back":
+      return stateTransition(backPersistentFilterConditionEditor(state));
+    case "persistentFilter.condition.close":
+      return stateTransition(cancelPersistentFilterConditionEditor(state));
+    case "persistentFilter.condition.done":
+      return stateTransition(donePersistentFilterConditionEditor(state));
+    case "persistentFilter.applyDraft":
+      return applyDashboardPersistentFilter(state);
     case "dashboard.projectHeader.activate":
       return activateProjectHeaderControl(state, action.projectId, action.actionId);
     case "dashboard.emptyProject.activate":

@@ -28,6 +28,32 @@ const APPLIED_SEGMENTS: readonly DashboardFilterFooterSegment[] = [
 ];
 
 describe("DashboardFilterFooterView", () => {
+  it("renders a distinct CONDITION badge and bounded helper line", async () => {
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardFilterFooterView
+          segments={[
+            { text: " CONDITION ", role: "badge" },
+            { text: "  ", role: "spacer" },
+            { text: "←", role: "key" },
+            { text: " fields", role: "description" },
+            { text: "  ", role: "spacer" },
+            { text: "Esc", role: "key" },
+            { text: " close", role: "description" },
+          ]}
+          variant="condition"
+        />
+      </StationThemeProvider>,
+      { width: 40, height: 1 },
+    );
+    teardowns.push(() => setup.renderer.destroy());
+    await act(async () => setup.renderOnce());
+
+    expect(setup.captureCharFrame().split("\n")[0]?.trimEnd()).toBe(
+      " CONDITION   ← fields  Esc close",
+    );
+  });
+
   it("renders the applied footer neutrally and exposes bounded edit/clear targets", async () => {
     const targets: StationMouseTarget[] = [];
     const setup = await testRender(

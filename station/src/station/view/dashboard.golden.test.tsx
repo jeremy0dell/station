@@ -9,8 +9,6 @@ import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import {
   type ClientNotice,
-  persistentFilterExperience,
-  type DashboardSearchExperience,
 } from "@station/dashboard-core";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
@@ -94,15 +92,11 @@ describe("dashboard golden frames", () => {
     hoverEnabled?: boolean;
     toast?: ClientNotice;
     theme?: StationTheme;
-    dashboardSearchExperience?: DashboardSearchExperience;
   }): Promise<RenderedDashboard> {
     const { runtime: store } = makeStationTestRuntime({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
-      ...(input.dashboardSearchExperience === undefined
-        ? {}
-        : { dashboardSearchExperience: input.dashboardSearchExperience }),
     });
     store.start();
     const dashboard = (
@@ -159,7 +153,6 @@ describe("dashboard golden frames", () => {
       width: 120,
       height: 40,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -205,7 +198,6 @@ describe("dashboard golden frames", () => {
       width: 80,
       height: 24,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -223,19 +215,22 @@ describe("dashboard golden frames", () => {
       width: 60,
       height: 16,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
       setup.store.actions.handleKey({ input: "working" });
+      setup.store.actions.handleKey({ input: "i", ctrl: true });
+      setup.store.actions.handleKey({ input: "S" });
+      setup.store.actions.handleKey({ input: "3" });
       setup.store.actions.handleKey({ input: "\r", return: true });
+      setup.store.actions.handleKey({ input: "F" });
       await Promise.resolve();
     });
     await setup.flush();
 
     const frame = setup.captureCharFrame();
     expect(frame).toMatchSnapshot();
-    expect(frame).toContain("FILTER working");
+    expect(frame).toContain("FILTER working · Status=Working");
     expect(frame).toContain("/ edit");
     expect(frame).toContain("Esc clear");
   });
@@ -252,7 +247,6 @@ describe("dashboard golden frames", () => {
       width: 80,
       height: 24,
       snapshot,
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -274,7 +268,6 @@ describe("dashboard golden frames", () => {
       width: 40,
       height: 12,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -871,7 +864,6 @@ describe("dashboard golden frames", () => {
       width: 120,
       height: 24,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });

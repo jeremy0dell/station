@@ -6,7 +6,6 @@ import {
   focusDashboardEmptyProjectAction,
   focusDashboardSession,
   handleTuiKey,
-  persistentFilterExperience,
   replaceSnapshot,
   selectDashboardItems,
 } from "@station/dashboard-core";
@@ -76,10 +75,7 @@ describe("dashboard focus", () => {
     expect(focused.scrollOffset).toBe(3);
   });
 
-  it("clears synchronized session focus when search or collapse hides it", () => {
-    const searched = state({ searchQuery: "cache-refactor", scrollOffset: 2 });
-    expect("dashboardFocus" in focusDashboardSession(searched, "ses_wt_api_working")).toBe(false);
-
+  it("clears synchronized session focus when collapse hides it", () => {
     const collapsed = state({ collapsedProjectIds: ["api"], scrollOffset: 2 });
     expect("dashboardFocus" in focusDashboardSession(collapsed, "ses_wt_api_working")).toBe(false);
   });
@@ -260,7 +256,7 @@ describe("dashboard focus", () => {
     expect(handleTuiKey(expanded, DOWN).state.dashboardFocus).toEqual(emptyAction("web"));
   });
 
-  it("preserves empty-action identity through accepted search and resize", () => {
+  it("preserves empty-action identity through an accepted filter and resize", () => {
     let current = focusDashboardEmptyProjectAction(
       createInitialTuiState({
         initialSnapshot: createZeroWorktreeSnapshot(),
@@ -269,8 +265,9 @@ describe("dashboard focus", () => {
       "api",
     );
     current = handleTuiKey(current, { input: "/" }).state;
-    current = handleTuiKey(current, { input: "no-match" }).state;
+    current = handleTuiKey(current, { input: "api" }).state;
     current = handleTuiKey(current, RETURN).state;
+    expect(current.persistentFilter).toEqual({ query: "api" });
     expect(current.dashboardFocus).toEqual(emptyAction("api"));
 
     const snapshot = createZeroWorktreeSnapshot();
@@ -382,7 +379,7 @@ describe("dashboard focus", () => {
     expect(transition.operations).toBeUndefined();
   });
 
-  it("reconciles an accepted search at the old visual position", () => {
+  it("reconciles an accepted filter at the old visual position", () => {
     let current = state({
       terminalRows: 40,
       dashboardFocus: session("ses_wt_web_idle"),
@@ -391,7 +388,7 @@ describe("dashboard focus", () => {
     current = handleTuiKey(current, { input: "queue-worker" }).state;
     current = handleTuiKey(current, RETURN).state;
 
-    expect(current.searchQuery).toBe("queue-worker");
+    expect(current.persistentFilter).toEqual({ query: "queue-worker" });
     expect(current.dashboardFocus).toEqual(session("ses_wt_api_working"));
   });
 
@@ -403,19 +400,9 @@ describe("dashboard focus", () => {
     });
     const snapshot = initial.snapshot as StationSnapshot;
     const initialIds = selectDashboardItems(snapshot, initial).map((item) => item.id);
-    const opened = handleTuiKey(
-      initial,
-      { input: "/" },
-      undefined,
-      persistentFilterExperience,
-    ).state;
-    const preview = handleTuiKey(
-      opened,
-      { input: "queue-worker" },
-      undefined,
-      persistentFilterExperience,
-    ).state;
-    const applied = handleTuiKey(preview, RETURN, undefined, persistentFilterExperience).state;
+    const opened = handleTuiKey(initial, { input: "/" }).state;
+    const preview = handleTuiKey(opened, { input: "queue-worker" }).state;
+    const applied = handleTuiKey(preview, RETURN).state;
 
     expect(selectDashboardItems(snapshot, preview, preview.screen).map((item) => item.id)).toEqual(
       initialIds,
@@ -429,20 +416,15 @@ describe("dashboard focus", () => {
     expect(applied.scrollOffset).toBe(0);
   });
 
-  it("returns a temporarily revealed collapsed child to its project header when clearing", () => {
+  it("preserves collapsed project-header focus when clearing an applied filter", () => {
     const filtered = state({
       terminalRows: 10,
       collapsedProjectIds: ["web"],
       persistentFilter: { query: "fix-nav-mobile" },
-      dashboardFocus: session("ses_wt_web_idle"),
+      dashboardFocus: header("web", "primary"),
     });
 
-    const cleared = handleTuiKey(
-      filtered,
-      { input: "", escape: true },
-      undefined,
-      persistentFilterExperience,
-    ).state;
+    const cleared = handleTuiKey(filtered, { input: "", escape: true }).state;
 
     expect(cleared.collapsedProjectIds).toEqual(new Set(["web"]));
     expect(cleared.dashboardFocus).toEqual(header("web", "primary"));
@@ -451,16 +433,16 @@ describe("dashboard focus", () => {
     );
   });
 
-  it("keeps a focused header when accepted search hides only its sessions", () => {
+  it("keeps a focused header when the accepted filter retains its project", () => {
     let current = state({
       terminalRows: 40,
       dashboardFocus: header("web", "shell"),
     });
     current = handleTuiKey(current, { input: "/" }).state;
-    current = handleTuiKey(current, { input: "queue-worker" }).state;
+    current = handleTuiKey(current, { input: "web" }).state;
     current = handleTuiKey(current, RETURN).state;
 
-    expect(current.searchQuery).toBe("queue-worker");
+    expect(current.persistentFilter).toEqual({ query: "web" });
     expect(current.dashboardFocus).toEqual(header("web", "shell"));
   });
 

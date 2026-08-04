@@ -22,7 +22,7 @@ export function DashboardFilterView({ model }: { model: DashboardFilterHeaderMod
       overflow="hidden"
       backgroundColor={toOpenTuiOpaqueColor(background)}
     >
-      <text width="100%">
+      <text width="100%" selectable={false}>
         {model.segments.map((segment, index) => (
           <span
             key={`${segment.role}:${index}`}
@@ -49,7 +49,13 @@ function filterSegmentForeground(
       return theme.filter.editorRail;
     case "label":
     case "spacer":
+    case "conditionSeparator":
+    case "conditionOperator":
       return theme.text.muted;
+    case "conditionField":
+      return theme.action.primary;
+    case "conditionValue":
+      return conditionValueForeground(theme, segment);
     case "count":
       return zeroMatches ? theme.filter.zeroMatch : theme.text.muted;
     case "query":
@@ -57,8 +63,34 @@ function filterSegmentForeground(
   }
 }
 
+function conditionValueForeground(
+  theme: StationTheme,
+  segment: DashboardFilterHeaderSegment,
+): StationColor {
+  if (segment.field === "project") return theme.action.primary;
+  if (segment.field === "agent") return theme.status.accent;
+  switch (segment.valueId) {
+    case "needs_attention":
+    case "stuck":
+      return theme.status.danger;
+    case "working":
+    case "starting":
+      return theme.status.working;
+    case "idle":
+      return theme.status.success;
+    case "unknown":
+      return theme.status.warning;
+    case "none":
+    case "exited":
+    default:
+      return theme.status.neutral;
+  }
+}
+
 function filterSegmentAttributes(segment: DashboardFilterHeaderSegment): number {
-  return segment.role === "caret" || segment.role === "label"
+  return segment.role === "caret" ||
+    segment.role === "label" ||
+    segment.role === "conditionField"
     ? TextAttributes.BOLD
     : TextAttributes.NONE;
 }

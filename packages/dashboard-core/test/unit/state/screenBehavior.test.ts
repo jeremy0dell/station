@@ -69,11 +69,24 @@ const screenBehaviorCases: readonly [
   expected: "present" | "absent",
 ][] = [
   ["dashboard", { name: "dashboard" }, "absent"],
-  ["search", { name: "search", value: "api" }, "absent"],
   [
     "persistent filter",
-    { name: "persistentFilter", draft: createEditableTextInputState("api") },
+    {
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [],
+    },
     "absent",
+  ],
+  [
+    "persistent filter condition panel",
+    {
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [],
+      conditionEditor: { stage: "field", cursor: 0 },
+    },
+    "present",
   ],
   ["help", { name: "help" }, "present"],
   ["project collapse picker", { name: "projectCollapse" }, "present"],
@@ -150,6 +163,7 @@ describe("TUI screen behavior", () => {
     const persistentFilter = tuiScreenBehavior({
       name: "persistentFilter",
       draft: createEditableTextInputState("api"),
+      draftConditions: [],
     });
     const newSession = tuiScreenBehavior({ name: "newSession", flow: newReview });
 
@@ -161,6 +175,27 @@ describe("TUI screen behavior", () => {
     expect(
       tuiScreenBehavior({ name: "removeWorktree", step: "chooseSlot" }).dashboardHoverEnabled,
     ).toBe(true);
+  });
+
+  it("click-away closes only the condition panel and preserves the filter draft", () => {
+    const state = withScreen({
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
+      conditionEditor: {
+        stage: "values",
+        field: "status",
+        cursor: 2,
+        options: [{ id: "working", label: "Working" }],
+        selectedIds: [],
+      },
+    });
+
+    expect(clickAway(state).screen).toEqual({
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
+    });
   });
 
   it("backs nested New Session steps to review and discards the nested draft", () => {
@@ -299,8 +334,11 @@ describe("TUI screen behavior", () => {
       { name: "removeWorktree", step: "chooseSlot" },
       { name: "renameSession", step: "chooseSlot" },
       { name: "fork", step: "chooseSlot" },
-      { name: "search", value: "api" },
-      { name: "persistentFilter", draft: createEditableTextInputState("api") },
+      {
+        name: "persistentFilter",
+        draft: createEditableTextInputState("api"),
+        draftConditions: [],
+      },
       { name: "dashboard" },
     ] satisfies TuiScreen[]) {
       const state = withScreen(screen);

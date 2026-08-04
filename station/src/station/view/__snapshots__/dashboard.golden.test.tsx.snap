@@ -24,7 +24,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -68,7 +68,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
 "
 `;
 
@@ -88,7 +88,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown
  [6] x batch-export            opencode  exited        #8 ✓ 
 ▼ 4 below · showing 6 of 10                                 
 ─────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/e… 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
 `;
 
@@ -104,7 +104,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
  [4] + session-resume      starting     
 ▼ 6 below · showing 4 of 10             
 ─────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X… 
+↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
 
@@ -132,7 +132,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0
                                                                                 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -176,7 +176,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
 "
 `;
 
@@ -196,7 +196,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown
  [6] ! sqlite-cleanup     opencode  Agent needs appr… #6 x1 
                                                             
 ─────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/e… 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
 `;
 
@@ -212,7 +212,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3
  [4] ⠋ pr-info                          
 ▼ 2 below · showing 4 of 6              
 ─────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X… 
+↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
 
@@ -324,64 +324,6 @@ exports[`dashboard golden frames renders no-projects at 40x12 1`] = `
 "
 `;
 
-exports[`dashboard golden frames wraps the complete actionable error at wide and narrow widths 1`] = `
-"
-FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle         4 · 10 · 9
-──────────────────────────────────────────────────────────────────────────────────────────────────
-       SESSION                                   AGENT     STATUS                        DIFF · PR
-▼ station  5 sessions · 4 agents                                       [shell] [quick session] [▾]
- [1] ○ cli-help-man                              codex     idle                       +14 -6 #70 ✓
- [2] - docs-cleanup                              codex     no agent
- [3] ○ pty-buffer                                codex     idle                              #73 ✓
- [4] + session-resume                            codex     starting
- [5] ⠋ station-overlay                           codex     working                  +412 -96 #76 …
-
-▼ observer  3 sessions · 3 agents                                      [shell] [quick session] [▾]
- [6] x batch-export                              opencode  exited                             #8 ✓
- [7] ⠋ provider-hooks                            opencode  working                    +32 -8 #16 …
- [8] ○ trace-bundle      ┌──────────────────────────────────────────────────────────────────────┐✓
-                         │ needs attention                                 [ copy ] [ dismiss ] │
-▼ scripts  2 sessions · 2│ Worktrunk failed to remove the selected checkout because the main    │]
- [9] ○ api-cache         │ worktree cannot be removed while Station is running there.           │1
- [a] ? metadata-refresh  │ Open a different linked checkout, select the session again, and      │0
-                         │ retry after confirming the worktree path and branch. | trace         │
-▼ empty-project  0 sessio│ trace_worktree_remove_123 | diagnostic diag_worktree_remove_456      │]
- no sessions yet · [ + ad└──────────────────────────────────────────────────────────────────────┘
-
-──────────────────────────────────────────────────────────────────────────────────────────────────
-↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Esc:dismiss  Q:close
-"
-`;
-
-exports[`dashboard golden frames wraps the complete actionable error at wide and narrow widths 2`] = `
-"
-FLEET  ● 0 ready  ⠋ 2 working  ! 0
-───────────────────────────────────────
-       SESSION             STATUS
-▼ station  5 sessions · … [sh] [qs] [▾]
- [1] ○ cli-help-man        idle
- [┌──────────────────────────────────┐
- [│ needs       [ copy ] [ dismiss ] │
- [│ attention                        │
- [│ Worktrunk failed to remove the   │
-  │ selected checkout because the    │
-▼ │ main worktree cannot be removed  │]
- [│ while Station is running there.  │
- [│ Open a different linked          │
- [│ checkout, select the session     │
-  │ again, and retry after           │
-▼ │ confirming the worktree path     │]
- [│ and branch. | trace              │
- [│ trace_worktree_remove_123 |      │
-  │ diagnostic                       │
-▼ │ diag_worktree_remove_456         │]
- n└──────────────────────────────────┘
-
-───────────────────────────────────────
-Esc:dismiss  Q:close
-"
-`;
-
 exports[`dashboard golden frames renders the persistent filter soft-preview editor at wide width 1`] = `
 "                                                                                                                        
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle     4 projects · 10 sessions · 9 agents 
@@ -422,7 +364,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
- FILTER   ←→ cursor  Enter apply  Ctrl-U clear  Esc cancel                                                              
+ FILTER   ←→ cursor  Enter apply  Tab condition  Ctrl-U clear  Esc cancel                                               
 "
 `;
 
@@ -450,7 +392,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
- FILTER   ←→ cursor  Enter apply  Ctrl-U clear  Esc cancel                      
+ FILTER   ←→ cursor  Enter apply  Tab condition  Ctrl-U clear  Esc cancel       
 "
 `;
 
@@ -458,7 +400,7 @@ exports[`dashboard golden frames renders an applied persistent summary at compac
 "                                                            
 FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown   
 ─────────────────────────────────────────────────────────── 
-FILTER working                                 2/10 matches 
+FILTER working · Status=Working                2/10 matches 
 ▼ station  5 sessions · 4 agents              [sh] [qs] [▾] 
  [1] ⠋ station-overlay         codex     working      #76 … 
                                                             
@@ -487,5 +429,63 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
 ▼ 6 below · showing 4 of 10             
 ─────────────────────────────────────── 
  FILTER   ↵ apply  Esc cancel           
+"
+`;
+
+exports[`dashboard golden frames wraps the complete actionable error at wide and narrow widths 1`] = `
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4 idle         4 · 10 · 9
+──────────────────────────────────────────────────────────────────────────────────────────────────
+       SESSION                                   AGENT     STATUS                        DIFF · PR
+▼ station  5 sessions · 4 agents                                       [shell] [quick session] [▾]
+ [1] ○ cli-help-man                              codex     idle                       +14 -6 #70 ✓
+ [2] - docs-cleanup                              codex     no agent
+ [3] ○ pty-buffer                                codex     idle                              #73 ✓
+ [4] + session-resume                            codex     starting
+ [5] ⠋ station-overlay                           codex     working                  +412 -96 #76 …
+
+▼ observer  3 sessions · 3 agents                                      [shell] [quick session] [▾]
+ [6] x batch-export                              opencode  exited                             #8 ✓
+ [7] ⠋ provider-hooks                            opencode  working                    +32 -8 #16 …
+ [8] ○ trace-bundle      ┌──────────────────────────────────────────────────────────────────────┐✓
+                         │ needs attention                                 [ copy ] [ dismiss ] │
+▼ scripts  2 sessions · 2│ Worktrunk failed to remove the selected checkout because the main    │]
+ [9] ○ api-cache         │ worktree cannot be removed while Station is running there.           │1
+ [a] ? metadata-refresh  │ Open a different linked checkout, select the session again, and      │0
+                         │ retry after confirming the worktree path and branch. | trace         │
+▼ empty-project  0 sessio│ trace_worktree_remove_123 | diagnostic diag_worktree_remove_456      │]
+ no sessions yet · [ + ad└──────────────────────────────────────────────────────────────────────┘
+
+──────────────────────────────────────────────────────────────────────────────────────────────────
+↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Esc:dismiss  Q:close
+"
+`;
+
+exports[`dashboard golden frames wraps the complete actionable error at wide and narrow widths 2`] = `
+"
+FLEET  ● 0 ready  ⠋ 2 working  ! 0
+───────────────────────────────────────
+       SESSION             STATUS
+▼ station  5 sessions · … [sh] [qs] [▾]
+ [1] ○ cli-help-man        idle
+ [┌──────────────────────────────────┐
+ [│ needs       [ copy ] [ dismiss ] │
+ [│ attention                        │
+ [│ Worktrunk failed to remove the   │
+  │ selected checkout because the    │
+▼ │ main worktree cannot be removed  │]
+ [│ while Station is running there.  │
+ [│ Open a different linked          │
+ [│ checkout, select the session     │
+  │ again, and retry after           │
+▼ │ confirming the worktree path     │]
+ [│ and branch. | trace              │
+ [│ trace_worktree_remove_123 |      │
+  │ diagnostic                       │
+▼ │ diag_worktree_remove_456         │]
+ n└──────────────────────────────────┘
+
+───────────────────────────────────────
+Esc:dismiss  Q:close
 "
 `;

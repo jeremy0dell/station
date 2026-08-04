@@ -19,10 +19,6 @@ import {
   reconcileDashboardFocus,
 } from "./dashboardFocus.js";
 import {
-  type DashboardSearchExperience,
-  legacySearchExperience,
-} from "./experiences/dashboardSearch.js";
-import {
   addPendingCreateSessionRow,
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
@@ -79,7 +75,6 @@ export type DashboardRuntimeOptions = {
   onExit?: (code: number) => void;
   folderService?: TuiFolderService;
   clientLabel?: string;
-  dashboardSearchExperience?: DashboardSearchExperience;
 };
 
 /** Read-only state, closed actions, and lifecycle owned by one dashboard composition. */
@@ -102,7 +97,6 @@ export type DashboardRuntime = {
 export function createDashboardRuntime(options: DashboardRuntimeOptions): DashboardRuntime {
   const runtime = createRuntimeOptions(options);
   const folderService = options.folderService ?? createNodeFolderService();
-  const dashboardSearchExperience = options.dashboardSearchExperience ?? legacySearchExperience;
   const source = options.source;
   let store: StoreApi<DashboardState>;
   const operations = createTuiLocalOperationRunner({
@@ -144,15 +138,10 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
         options.service,
         runtime,
         operations,
-        handleTuiKey(
-          store.getState(),
-          key,
-          {
-            cwd: folderService.cwd(),
-            homeDir: folderService.homeDir(),
-          },
-          dashboardSearchExperience,
-        ),
+        handleTuiKey(store.getState(), key, {
+          cwd: folderService.cwd(),
+          homeDir: folderService.homeDir(),
+        }),
       ),
     dispatch: (action): DashboardActionResult =>
       applyTransition(

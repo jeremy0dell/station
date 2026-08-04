@@ -42,9 +42,9 @@ describe("dashboard project rows", () => {
       },
     });
 
-    const web = selectDashboardProjectRowGroups(titled, state, {
-      applyLegacySearch: false,
-    }).find((group) => group.project.id === "web");
+    const web = selectDashboardProjectRowGroups(titled, state).find(
+      (group) => group.project.id === "web",
+    );
 
     expect(web?.rows.slice(0, 3).map((row) => row.id)).toEqual([
       "session:ses_wt_web_stuck",
@@ -73,19 +73,18 @@ describe("dashboard project rows", () => {
       collapsedProjectIds: ["web"],
     });
 
-    const web = selectDashboardProjectRowGroups(snapshot, state, {
-      applyLegacySearch: false,
-    }).find((group) => group.project.id === "web");
+    const web = selectDashboardProjectRowGroups(snapshot, state).find(
+      (group) => group.project.id === "web",
+    );
 
     expect(web?.collapsed).toBe(true);
     expect(web?.rows.map((row) => row.id)).toContain("session:ses_wt_web_idle");
   });
 
-  it("keeps legacy hidden-field search outside the visible filter candidate", () => {
+  it("keeps hidden-field branch evidence outside the persistent filter candidate", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       initialSnapshot: snapshot,
-      searchQuery: "e91f2b",
       localRows: {
         pendingCreate: [
           {
@@ -102,12 +101,10 @@ describe("dashboard project rows", () => {
       },
     });
 
-    const row = selectDashboardProjectRowGroups(snapshot, state, {
-      applyLegacySearch: true,
-    })
+    const row = selectDashboardProjectRowGroups(snapshot, state)
       .flatMap((group) => group.rows)
       .find((candidate) => candidate.id === "create:local_hidden_branch");
-    if (row === undefined) throw new Error("legacy branch search did not retain optimistic row");
+    if (row === undefined) throw new Error("optimistic row missing");
 
     expect(persistentFilterCandidateForDashboardRow(row)).toEqual({
       kind: "optimistic",
@@ -118,6 +115,7 @@ describe("dashboard project rows", () => {
         agent: "",
         activity: "starting session...",
       },
+      conditionValues: { status: "starting" },
     });
   });
 });

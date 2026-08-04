@@ -3,7 +3,8 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+// TypeScript 7 has no stable compiler API, so AST checks use its official TS6 compatibility package.
+import ts from "@typescript/typescript6";
 
 const STATION_VIEW_ROOT = fileURLToPath(new URL(".", import.meta.url));
 const STATION_SOURCE_ROOT = fileURLToPath(new URL("../", import.meta.url));

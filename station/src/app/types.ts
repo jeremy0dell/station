@@ -2,7 +2,6 @@ import type { StationClientStateSource } from "@station/client";
 import type {
   DashboardActions,
   DashboardRuntime,
-  DashboardSearchExperience,
   DashboardStateSource,
 } from "@station/dashboard-core";
 import type {
@@ -68,8 +67,6 @@ export type CreateStationOptions = {
   openExternalUrl?: (url: string) => void;
   tuiConfig?: TuiConfig;
   tuiConfigPath?: string;
-  /** Resolved dashboard search behavior; direct and test callers default to legacy. */
-  dashboardSearchExperience?: DashboardSearchExperience;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
   /** Existing registry to reuse across Bun HMR without killing live PTYs. */
   registry?: PtyRegistry;

@@ -13,7 +13,6 @@ import type {
 } from "@station/dashboard-core";
 import {
   ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS,
-  persistentFilterExperience,
   selectedAddProjectFolderRow,
 } from "@station/dashboard-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -143,7 +142,6 @@ describe("dashboard runtime boundary", () => {
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { persistentFilter: { query: "working" } },
-      dashboardSearchExperience: persistentFilterExperience,
     });
 
     runtime.actions.handleKey({ input: "/" });
@@ -319,10 +317,8 @@ describe("dashboard runtime", () => {
       service: new FakeTuiObserverService(snapshot),
       source,
       initialState: {
-        searchQuery: "keep-local",
         persistentFilter: { query: "idle" },
         collapsedProjectIds: ["web"],
-        dashboardFocus: { kind: "session", sessionId: "ses_wt_web_idle" },
       },
     });
     store.actions.addPendingCreateSession({
@@ -351,13 +347,8 @@ describe("dashboard runtime", () => {
 
     const projected = store.state.getState();
     expect(projected.snapshot).toBe(updated);
-    expect(projected.searchQuery).toBe("keep-local");
     expect(projected.persistentFilter).toEqual({ query: "idle" });
     expect(projected.collapsedProjectIds.has("web")).toBe(true);
-    expect(projected.dashboardFocus).toEqual({
-      kind: "session",
-      sessionId: "ses_wt_web_idle",
-    });
     expect(projected.localRows.pendingCreate[0]?.localId).toBe("local-source-projection");
     store.dispose();
   });

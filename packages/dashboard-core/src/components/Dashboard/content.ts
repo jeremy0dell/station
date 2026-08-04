@@ -305,9 +305,8 @@ export type CommandPromptLine = { text: string; color: "yellow" | "red" };
 
 /**
  * The prompt line per screen (the special-cased rename-slot and
- * remove-confirm lines plus textPromptForScreen below), flattened to
- * text+color so render adapters only render. Lives beside
- * commandPromptRows, which guards the same screens.
+ * remove-confirm lines), flattened to text+color so render adapters only
+ * render. Lives beside commandPromptRows, which guards the same screens.
  */
 export function commandPromptLineForScreen(
   screen: DashboardScreenView,
@@ -315,26 +314,10 @@ export function commandPromptLineForScreen(
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
     return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", color: "yellow" };
   }
-  const prompt = textPromptForScreen(screen);
-  if (prompt === undefined) {
-    return undefined;
-  }
-  return { text: `${prompt.label}: ${prompt.value}`, color: "yellow" };
-}
-
-function textPromptForScreen(
-  screen: DashboardScreenView,
-): { label: string; value: string } | undefined {
-  if (screen.name === "search") {
-    return { label: "search", value: screen.value };
-  }
   return undefined;
 }
 
 export function commandPromptRows(screen: DashboardScreenView): number {
-  if (screen.name === "search") {
-    return 2;
-  }
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
     return 2;
   }

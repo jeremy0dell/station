@@ -3,6 +3,12 @@ import { nativeStationTheme } from "./builtInTheme.js";
 import type { StationTheme } from "./types.js";
 
 const rgb = (value: `#${string}`) => ({ kind: "rgb" as const, value });
+const alpha = (value: `#${string}`, opacity: number) => ({
+  kind: "alpha" as const,
+  color: rgb(value),
+  alpha: opacity,
+});
+
 const terminal = {
   defaultForeground: rgb("#d4d4d8"),
   defaultBackground: rgb("#101316"),
@@ -63,6 +69,9 @@ const sharedRoles = {
     matchForeground: rgb("#f1f5c4"),
     matchBackground: rgb("#3f4a1b"),
     zeroMatch: rgb("#fbbf24"),
+    conditionSurface: rgb("#15191e"),
+    conditionSelected: rgb("#1b3448"),
+    conditionBackdrop: alpha("#000000", 0.55),
   },
   welcome: {
     button: rgb("#1f2937"),

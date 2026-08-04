@@ -14,6 +14,7 @@ const candidates: DashboardPersistentFilterCandidate[] = [
       agent: "Codex",
       activity: "working",
     },
+    conditionValues: { status: "working", agent: "codex" },
   },
   {
     kind: "optimistic",
@@ -24,6 +25,7 @@ const candidates: DashboardPersistentFilterCandidate[] = [
       agent: "Pi",
       activity: "starting session...",
     },
+    conditionValues: { status: "starting", agent: "pi" },
   },
 ];
 
@@ -41,6 +43,7 @@ describe("dashboard persistent filter selector", () => {
       screen: {
         name: "persistentFilter",
         draft: { value: "  ALPHA  ", cursor: 9 },
+        draftConditions: [],
       },
       applied: { query: "beta" },
     });
@@ -66,6 +69,37 @@ describe("dashboard persistent filter selector", () => {
       },
     });
     expect(projection?.rows.get("create:beta")?.dimmed).toBe(true);
+  });
+
+  it("previews the active field selection before it is retained", () => {
+    const projection = selectDashboardPersistentFilter({
+      candidates,
+      projects,
+      screen: {
+        name: "persistentFilter",
+        draft: { value: "", cursor: 0 },
+        draftConditions: [],
+        conditionEditor: {
+          stage: "values",
+          field: "status",
+          cursor: 2,
+          options: [
+            { id: "needs_attention", label: "Needs attention" },
+            { id: "stuck", label: "Stuck" },
+            { id: "working", label: "Working" },
+          ],
+          selectedIds: ["working"],
+        },
+      },
+    });
+
+    expect(projection).toMatchObject({
+      source: "draft",
+      conditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
+      matchCount: 1,
+    });
+    expect(projection?.rows.get("session:alpha")?.matched).toBe(true);
+    expect(projection?.rows.get("create:beta")?.matched).toBe(false);
   });
 
   it("matches visible agent, status, and project labels for session and optimistic rows", () => {
@@ -96,6 +130,60 @@ describe("dashboard persistent filter selector", () => {
     expect(byProject?.projects.get("web")?.labelRanges).toEqual([{ start: 4, end: 11 }]);
   });
 
+  it("ORs values within a field and ANDs text with separate condition fields", () => {
+    const byStatuses = selectDashboardPersistentFilter({
+      candidates,
+      projects,
+      screen: { name: "dashboard" },
+      applied: {
+        query: "",
+        conditions: [
+          {
+            field: "status",
+            values: [
+              { id: "working", label: "Working" },
+              { id: "starting", label: "Starting" },
+            ],
+          },
+        ],
+      },
+    });
+    const byProjectAndAgent = selectDashboardPersistentFilter({
+      candidates,
+      projects,
+      screen: { name: "dashboard" },
+      applied: {
+        query: "pending",
+        conditions: [
+          { field: "project", values: [{ id: "api", label: "API" }] },
+          { field: "agent", values: [{ id: "pi", label: "Pi" }] },
+        ],
+      },
+    });
+
+    expect(byStatuses?.matchCount).toBe(2);
+    expect(byProjectAndAgent?.matchCount).toBe(1);
+    expect(byProjectAndAgent?.rows.get("session:alpha")?.matched).toBe(false);
+    expect(byProjectAndAgent?.rows.get("create:beta")?.matched).toBe(true);
+  });
+
+  it("retains every row for a selected project when no row condition narrows it", () => {
+    const projection = selectDashboardPersistentFilter({
+      candidates,
+      projects,
+      screen: { name: "dashboard" },
+      applied: {
+        query: "",
+        conditions: [{ field: "project", values: [{ id: "web", label: "Web Console" }] }],
+      },
+    });
+
+    expect(projection?.rows.get("session:alpha")?.matched).toBe(true);
+    expect(projection?.rows.get("create:beta")?.matched).toBe(false);
+    expect(projection?.projects.get("web")?.matched).toBe(true);
+    expect(projection?.projects.get("api")?.matched).toBe(false);
+  });
+
   it("matches only the visible row and project fields supplied by the viewport", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
@@ -118,6 +206,7 @@ describe("dashboard persistent filter selector", () => {
         id: "session:unicode",
         projectId: "web",
         visibleFields: { title: "İx CAFÉ" },
+        conditionValues: {},
       },
     ];
     const byExpansion = selectDashboardPersistentFilter({
@@ -162,7 +251,11 @@ describe("dashboard persistent filter selector", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
-      screen: { name: "persistentFilter", draft: { value: "   ", cursor: 3 } },
+      screen: {
+        name: "persistentFilter",
+        draft: { value: "   ", cursor: 3 },
+        draftConditions: [],
+      },
     });
 
     expect(projection).toMatchObject({

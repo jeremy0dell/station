@@ -5,7 +5,6 @@ import {
   handleTuiKey,
   openProjectDefaultAgentPicker,
   openRenameEditForRow,
-  persistentFilterExperience,
   replaceSnapshot,
   selectDashboardViewport,
   type TuiKey,
@@ -49,21 +48,11 @@ describe("TUI screen transitions", () => {
       runtime: { persistentPopup: true, canDismissPopup: true },
     });
 
-    const cleared = handleTuiKey(
-      state,
-      { input: "", escape: true },
-      undefined,
-      persistentFilterExperience,
-    );
+    const cleared = handleTuiKey(state, { input: "", escape: true });
     expect("persistentFilter" in cleared.state).toBe(false);
     expect(cleared.dismissPopup).toBeUndefined();
 
-    const dismissed = handleTuiKey(
-      cleared.state,
-      { input: "", escape: true },
-      undefined,
-      persistentFilterExperience,
-    );
+    const dismissed = handleTuiKey(cleared.state, { input: "", escape: true });
     expect(dismissed.dismissPopup).toBe(true);
   });
 
@@ -74,7 +63,7 @@ describe("TUI screen transitions", () => {
       runtime: { persistentPopup: true, canDismissPopup: true },
     });
 
-    const closed = handleTuiKey(state, { input: "Q" }, undefined, persistentFilterExperience);
+    const closed = handleTuiKey(state, { input: "Q" });
 
     expect(closed.dismissPopup).toBe(true);
     expect(closed.state.persistentFilter).toEqual({ query: "working" });
@@ -635,11 +624,15 @@ describe("TUI screen transitions", () => {
     expect(openRenameEditForRow(dashboard, "missing")).toBe(dashboard);
     expect(openRenameEditForRow(dashboard, "wt_web_no_agent")).toBe(dashboard);
 
-    const search = {
+    const filter = {
       ...createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-      screen: { name: "search", value: "" } as const,
+      screen: {
+        name: "persistentFilter",
+        draft: { value: "", cursor: 0 },
+        draftConditions: [],
+      } as const,
     };
-    expect(openRenameEditForRow(search, "ses_wt_web_idle")).toBe(search);
+    expect(openRenameEditForRow(filter, "ses_wt_web_idle")).toBe(filter);
   });
 
   it("does not open rename for external session membership", () => {
@@ -1221,7 +1214,7 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("resets dashboard scroll when a search query is applied", () => {
+  it("resets dashboard scroll when a filter is applied", () => {
     const opened = handleTuiKey(
       createInitialTuiState({
         initialSnapshot: createDashboardSnapshot(),
@@ -1233,7 +1226,7 @@ describe("TUI screen transitions", () => {
     const typed = handleTuiKey(opened.state, { input: "nav" });
     const transition = handleTuiKey(typed.state, { input: "\r", return: true });
 
-    expect(transition.state.searchQuery).toBe("nav");
+    expect(transition.state.persistentFilter).toEqual({ query: "nav" });
     expect(transition.state.scrollOffset).toBe(0);
   });
 

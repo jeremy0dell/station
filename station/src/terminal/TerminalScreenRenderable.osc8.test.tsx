@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { Writable } from "node:stream";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
 import { waitFor } from "./testing/waitFor.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
@@ -60,7 +61,13 @@ async function mount(hyperlinks: boolean, width = 30): Promise<Mounted> {
   let setup: Awaited<ReturnType<typeof testRender>>;
   try {
     setup = await testRender(
-      <terminalScreen screen={screen} width="100%" height="100%" />,
+      <terminalScreen
+        screen={screen}
+        width="100%"
+        height="100%"
+        defaultForeground={nativeStationTheme.terminal.defaultForeground.value}
+        selectionBackground={stationColorSnapshotValue(nativeStationTheme.pane.selection)}
+      />,
       {
         width,
         height: rows,

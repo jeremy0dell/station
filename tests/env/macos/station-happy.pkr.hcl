@@ -44,8 +44,7 @@ build {
     inline = [
       "set -euo pipefail",
       "brew update",
-      "brew install node@24 bun tmux git-delta",
-      "brew install diffnav",
+      "brew install node@24 bun tmux hunk",
       "brew install worktrunk",
     ]
   }

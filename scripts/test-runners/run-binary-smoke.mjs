@@ -2198,8 +2198,7 @@ async function verifyCompiledGitFailure({ binaryPath, installedRoot, root }) {
     ),
     writeFile(join(fakeBin, "wt"), "#!/bin/sh\necho 'worktrunk 1.2.3'\n", { mode: 0o700 }),
     writeFile(join(fakeBin, "tmux"), "#!/bin/sh\necho 'tmux 3.5a'\n", { mode: 0o700 }),
-    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
-    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "hunk"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
     writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
     writeFile(
       configPath,
@@ -2280,8 +2279,7 @@ async function verifyCompiledSetupApplyLauncherWarning({ binaryPath, installedRo
       "#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux 3.5a'; exit 0; fi\nexit 1\n",
       { mode: 0o700 },
     ),
-    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
-    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "hunk"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
     writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
     writeFile(
       configPath,

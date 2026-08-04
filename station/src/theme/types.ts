@@ -134,6 +134,9 @@ export type StationTheme = Readonly<{
     matchForeground: StationForegroundColor;
     matchBackground: StationOpaqueBackgroundColor;
     zeroMatch: StationSemanticColor;
+    conditionSurface: StationOpaqueBackgroundColor;
+    conditionSelected: StationOpaqueBackgroundColor;
+    conditionBackdrop: StationSemanticColor;
   }>;
   welcome: Readonly<{
     button: StationOpaqueBackgroundColor;

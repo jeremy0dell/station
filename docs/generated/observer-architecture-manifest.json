@@ -11607,7 +11607,7 @@
       "declaration": "runTuiCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns Observer startup, resolved-config propagation, renderer process selection, and persistent popup control wiring.",
+      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup, resolved-config propagation, exact child outcome evidence, renderer selection, and persistent popup control wiring.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/tuiRendererControl.ts",

@@ -193,11 +193,72 @@ describe("semantic TUI actions", () => {
     expect(edited.screen).toEqual({
       name: "persistentFilter",
       draft: { value: "working", cursor: 7 },
+      draftConditions: [],
     });
 
     const cleared = handleTuiAction(applied, { type: "persistentFilter.clear" }, context).state;
     expect(cleared.screen).toEqual({ name: "dashboard" });
     expect(cleared.persistentFilter).toBeUndefined();
+  });
+
+  it("routes condition pointer intents through the same field and value transitions as keys", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const opened = handleTuiKey(
+      handleTuiKey(state, { input: "/" }, context).state,
+      { input: "i", ctrl: true },
+      context,
+    ).state;
+    const fieldByKey = handleTuiKey(opened, { input: "S" }, context);
+    const fieldByAction = handleTuiAction(
+      opened,
+      { type: "persistentFilter.condition.selectField", field: "status" },
+      context,
+    );
+    expect(fieldByAction).toEqual(fieldByKey);
+
+    const valueByKey = handleTuiKey(fieldByKey.state, { input: "3" }, context);
+    const valueByAction = handleTuiAction(
+      fieldByAction.state,
+      {
+        type: "persistentFilter.condition.toggleValue",
+        field: "status",
+        valueId: "working",
+      },
+      context,
+    );
+    expect(valueByAction).toEqual(valueByKey);
+
+    const doneByKey = handleTuiKey(valueByKey.state, { input: "\r", return: true }, context);
+    const doneByAction = handleTuiAction(
+      valueByAction.state,
+      { type: "persistentFilter.condition.done" },
+      context,
+    );
+    expect(doneByAction).toEqual(doneByKey);
+
+    const appliedByKey = handleTuiKey(doneByKey.state, { input: "F" }, context);
+    const appliedByAction = handleTuiAction(
+      doneByAction.state,
+      { type: "persistentFilter.applyDraft" },
+      context,
+    );
+    expect(appliedByAction).toEqual(appliedByKey);
+
+    const backByKey = handleTuiKey(fieldByKey.state, { input: "", leftArrow: true }, context);
+    const backByAction = handleTuiAction(
+      fieldByAction.state,
+      { type: "persistentFilter.condition.back" },
+      context,
+    );
+    expect(backByAction).toEqual(backByKey);
+
+    const closedByKey = handleTuiKey(fieldByKey.state, { input: "", escape: true }, context);
+    const closedByAction = handleTuiAction(
+      fieldByAction.state,
+      { type: "persistentFilter.condition.close" },
+      context,
+    );
+    expect(closedByAction).toEqual(closedByKey);
   });
 
   it("activates Add Project review controls identically through hotkey, focused Enter, and action", () => {

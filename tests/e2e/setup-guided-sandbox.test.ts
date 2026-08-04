@@ -87,9 +87,9 @@ describe("manual guided setup sandbox", () => {
       expect(opening).toContain("Checking local tools and Station configuration...");
       expect(opening).toContain("Required tools");
       expect(opening).toContain("Install Worktrunk");
-      expect(opening).toContain("Install git-delta");
-      expect(opening.match(/Official formula ↗/g)).toHaveLength(5);
-      for (const formula of ["worktrunk", "tmux", "bun", "diffnav", "git-delta"]) {
+      expect(opening).toContain("Install Hunk");
+      expect(opening.match(/Official formula ↗/g)).toHaveLength(4);
+      for (const formula of ["worktrunk", "tmux", "bun", "hunk"]) {
         expect(result.rawOutput).toContain(
           `\u001b]8;;https://formulae.brew.sh/formula/${formula}\u001b\\`,
         );

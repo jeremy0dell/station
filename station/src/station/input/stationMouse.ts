@@ -11,6 +11,7 @@ import {
   isRemoveProjectArmed,
   LIST_REGISTRY,
   type AddProjectActionId,
+  type DashboardFilterConditionField,
   type ForkSessionActionId,
   type NewSessionActionId,
   type PersistentFilterActionId,
@@ -61,6 +62,16 @@ export type StationMouseTarget =
   | { kind: "firstProjectAdd" }
   /** Applied-filter footer controls, guarded so covered dashboard targets remain inert. */
   | { kind: "persistentFilterAction"; actionId: PersistentFilterActionId }
+  | { kind: "persistentFilterConditionField"; field: DashboardFilterConditionField }
+  | {
+      kind: "persistentFilterConditionValue";
+      field: DashboardFilterConditionField;
+      valueId: string;
+    }
+  | {
+      kind: "persistentFilterConditionAction";
+      actionId: "back" | "close" | "done" | "applyFilter";
+    }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
@@ -237,6 +248,50 @@ export function routeStationMouse(
       return mode === "dashboard"
         ? fromKeyOutcome(dispatchStationAction(store, { type: target.actionId }))
         : { kind: "handled" };
+    case "persistentFilterConditionField":
+      return mode === "persistentFilterConditionField"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "persistentFilter.condition.selectField",
+              field: target.field,
+            }),
+          )
+        : { kind: "handled" };
+    case "persistentFilterConditionValue":
+      return mode === "persistentFilterConditionValues"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "persistentFilter.condition.toggleValue",
+              field: target.field,
+              valueId: target.valueId,
+            }),
+          )
+        : { kind: "handled" };
+    case "persistentFilterConditionAction":
+      if (target.actionId === "close") {
+        return mode === "persistentFilterConditionField" ||
+          mode === "persistentFilterConditionValues"
+          ? fromKeyOutcome(
+              dispatchStationAction(store, { type: "persistentFilter.condition.close" }),
+            )
+          : { kind: "handled" };
+      }
+      if (target.actionId === "applyFilter") {
+        return mode === "persistentFilterConditionField"
+          ? fromKeyOutcome(dispatchStationAction(store, { type: "persistentFilter.applyDraft" }))
+          : { kind: "handled" };
+      }
+      if (mode !== "persistentFilterConditionValues") {
+        return { kind: "handled" };
+      }
+      return fromKeyOutcome(
+        dispatchStationAction(store, {
+          type:
+            target.actionId === "back"
+              ? "persistentFilter.condition.back"
+              : "persistentFilter.condition.done",
+        }),
+      );
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };

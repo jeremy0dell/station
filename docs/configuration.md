@@ -319,6 +319,16 @@ Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 | (automation) `enabled` | bool | `true` | `false` hides it from the menu. |
 | (automation) `steps` | `AutomationStep[]` | **required** | One or more steps. |
 
+The built-in **See diff** automation runs Hunk against the `origin/main` merge
+base, watches working-tree changes, and includes untracked files. Explicit
+`automations` are user-owned, including `automations = []`; Station does not
+rewrite a custom legacy `diffnav` command. To migrate one, replace its command
+with:
+
+```toml
+command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
+```
+
 ### `[tui]` — runtime TUI widgets (optional, best-effort)
 
 > **Decorative widgets only** — not the same as `[workspace]`. `[tui]` is the
@@ -400,7 +410,6 @@ Strict boolean record. Unknown flag names are rejected.
 | --- | --- | --- | --- |
 | `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. Session migration requires this to already be enabled in the running target Observer; migration never edits the config. |
 | `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. Session migration requires the running target to report persistent native launch capability. |
-| `dashboard_persistent_filter` | bool | `false` | Opt in to the persistent free-text dashboard filter. Drafts preview without moving rows; applied queries hard-project matching project context and sessions, persist across sheets and warm popup reopen, and can be edited or cleared from the footer. Read at renderer composition/startup. |
 
 ---
 
@@ -542,13 +551,15 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
 `STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
 `STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
-`STATION_OBSERVER_BUILD_VERSION`, `STATION_PANE`, `STATION_OUTER_TMUX`,
+`STATION_OBSERVER_BUILD_VERSION`, `STATION_UI_RUN_ID`, `STATION_PANE`, `STATION_OUTER_TMUX`,
 `STATION_OUTER_TMUX_PANE`, `STATION_TUI_POPUP`,
 `STATION_TUI_PERSISTENT`,
 `STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
 build variables as a pair: the first identifies the renderer artifact and the
-second pins it to the exact Observer selector the CLI accepted. A directly
-launched source renderer falls back to its own verified built selector. The
+second pins it to the exact Observer selector the CLI accepted. The launcher
+also mints `STATION_UI_RUN_ID` as content-free correlation for one renderer
+child; a direct source renderer mints and preserves its own ID across Bun HMR.
+A directly launched source renderer falls back to its own verified built selector. The
 renderer fixes that selector when it creates its Observer client; each later
 operation checks the socket owner on the same connection without running Git or
 hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the
