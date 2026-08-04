@@ -85,22 +85,23 @@ export function terminalPalettePolarity(
 export function resolveEmbeddedStationTheme(
   observation: StationTerminalTheme | null | undefined,
 ): StationTheme {
-  if (
-    observation === undefined ||
-    observation === null ||
-    contrastRatio(observation.defaultForeground, observation.defaultBackground) <
-      STATION_TEXT_CONTRAST_RATIO
-  ) {
-    // Whole-theme fallback prevents terminal surfaces from mixing with unrelated Station roles.
+  if (observation === undefined || observation === null) {
     return nativeStationTheme;
   }
   return createTerminalPaletteTheme(observation);
 }
 
-/** Creates one complete embedded theme from a validated, readable terminal palette. */
+/** Creates one complete embedded theme from a readable terminal palette observation. */
 export function createTerminalPaletteTheme(
   observation: StationTerminalTheme,
 ): StationTheme {
+  if (
+    contrastRatio(observation.defaultForeground, observation.defaultBackground) <
+    STATION_TEXT_CONTRAST_RATIO
+  ) {
+    // Whole-theme fallback prevents terminal surfaces from mixing with unrelated Station roles.
+    return nativeStationTheme;
+  }
   const foreground = observation.defaultForeground;
   const background = observation.defaultBackground;
   const defaultForeground = terminalDefaultColor("foreground", foreground);

@@ -117,4 +117,33 @@ describe("terminal palette color math", () => {
       );
     }
   });
+
+  it("holds searched lightness and hue for out-of-gamut saturated accents", () => {
+    // The green hue is far outside sRGB gamut at the target foreground
+    // lightness; the correction must hold lightness (and with it hue) rather
+    // than drifting toward the hue's cusp and collapsing onto the foreground.
+    const background = rgbColor("#f9fafb");
+    const saturated = rgbColor("#7bff7b");
+    const foreground = rgbColor("#1f2937");
+    const corrected = adjustLightnessForContrast(
+      saturated,
+      foreground,
+      [background],
+      STATION_TEXT_CONTRAST_RATIO,
+    );
+    const source = oklch("#7bff7b");
+    const result = oklch(corrected.value);
+    const target = oklch("#1f2937");
+
+    expect(contrastRatio(corrected, background)).toBeGreaterThanOrEqual(
+      STATION_TEXT_CONTRAST_RATIO,
+    );
+    expect(corrected).not.toEqual(foreground);
+    expect(hueDistance(result[2], source[2])).toBeLessThan(6);
+    // The minimal lightness shift lands between source and foreground instead
+    // of collapsing onto the foreground's own lightness.
+    expect(result[0]).toBeLessThan(source[0]);
+    expect(result[0]).toBeGreaterThan(target[0]);
+    expect(Math.abs(result[0] - target[0])).toBeGreaterThan(0.05);
+  });
 });

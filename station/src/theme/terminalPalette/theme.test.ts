@@ -2,13 +2,16 @@ import { describe, expect, it } from "bun:test";
 import { convert, hexToRGB, OKLCH, sRGB } from "@texel/color";
 import { nativeStationTheme } from "../builtInTheme.js";
 import { stationColorSnapshot, type StationColor, type StationTheme } from "../types.js";
-import { contrastRatio, STATION_TEXT_CONTRAST_RATIO } from "./contrast.js";
+import { contrastRatio, STATION_BOUNDARY_CONTRAST_RATIO, STATION_TEXT_CONTRAST_RATIO } from "./contrast.js";
 import { parseStationTerminalPaletteObservation } from "./observation.js";
 import {
   darkTerminalColors,
+  grayTerminalColors,
   lightTerminalColors,
   lowContrastTerminalColors,
   nearWhiteTerminalColors,
+  saturatedDarkTerminalColors,
+  saturatedLightTerminalColors,
   veryDarkTerminalColors,
   veryLightTerminalColors,
   weakAnsiLightTerminalColors,
@@ -78,6 +81,12 @@ describe("terminal palette theme construction", () => {
     ).toBe(nativeStationTheme);
   });
 
+  it("guards direct construction against unreadable default contrast", () => {
+    expect(createTerminalPaletteTheme(observation(lowContrastTerminalColors))).toBe(
+      nativeStationTheme,
+    );
+  });
+
   it("derives a terminal theme only from complete readable embedded evidence", () => {
     const observed = observation(darkTerminalColors);
     const theme = resolveEmbeddedStationTheme(observed);
@@ -107,6 +116,8 @@ describe("terminal palette theme construction", () => {
       lightTerminalColors,
       nearWhiteTerminalColors,
       weakAnsiLightTerminalColors,
+      saturatedLightTerminalColors,
+      saturatedDarkTerminalColors,
     ]) {
       const theme = terminalTheme(fixture);
       const foregrounds = [
@@ -168,8 +179,13 @@ describe("terminal palette theme construction", () => {
     }
   });
 
-  it("keeps layered light surfaces distinct from the canvas and each other", () => {
-    for (const fixture of [lightTerminalColors, nearWhiteTerminalColors]) {
+  it("keeps layered surfaces distinct from the canvas and each other", () => {
+    for (const fixture of [
+      lightTerminalColors,
+      nearWhiteTerminalColors,
+      veryLightTerminalColors,
+      veryDarkTerminalColors,
+    ]) {
       const theme = terminalTheme(fixture);
       const layered = [
         theme.surfaces.canvas,
@@ -213,12 +229,53 @@ describe("terminal palette theme construction", () => {
     }
   });
 
+  it("repairs saturated accents without collapsing onto the foreground", () => {
+    for (const fixture of [
+      saturatedLightTerminalColors,
+      saturatedDarkTerminalColors,
+    ]) {
+      const observed = observation(fixture);
+      const theme = terminalTheme(fixture);
+      const primary = stationColorSnapshot(theme.text.primary).value;
+      const roles = [
+        ["danger", 9],
+        ["success", 10],
+        ["warning", 11],
+        ["working", 12],
+        ["accent", 13],
+        ["info", 14],
+      ] as const;
+
+      for (const [role, index] of roles) {
+        const color = theme.status[role];
+        const source = oklchOf(observed.ansi16[index]);
+        const corrected = oklchOf(color);
+
+        expect(contrast(color, theme.surfaces.canvas)).toBeGreaterThanOrEqual(
+          STATION_TEXT_CONTRAST_RATIO,
+        );
+        if (color.kind === "rgb") {
+          // Out-of-gamut hues must hold their searched lightness and hue instead
+          // of drifting toward the hue's cusp and collapsing to the foreground.
+          expect(stationColorSnapshot(color).value).not.toBe(primary);
+          expect(hueDistance(corrected[2], source[2])).toBeLessThan(6);
+          expect(corrected[1]).toBeGreaterThanOrEqual(0.5 * source[1]);
+        } else {
+          expect(corrected[2]).toBe(source[2]);
+          expect(corrected[1]).toBe(source[1]);
+        }
+      }
+    }
+  });
+
   it("keeps chromatic status roles recognizably distinct", () => {
     for (const fixture of [
       darkTerminalColors,
       lightTerminalColors,
       nearWhiteTerminalColors,
       weakAnsiLightTerminalColors,
+      saturatedLightTerminalColors,
+      saturatedDarkTerminalColors,
     ]) {
       const theme = terminalTheme(fixture);
       const hues = ["danger", "warning", "success", "working", "info", "accent"] as const;
@@ -234,6 +291,41 @@ describe("terminal palette theme construction", () => {
       }
 
       expect(minimumDistance).toBeGreaterThanOrEqual(30);
+    }
+  });
+
+  it("resolves a readable, deterministic theme from a chroma-less gray palette", () => {
+    const theme = terminalTheme(grayTerminalColors);
+    const repeated = terminalTheme(grayTerminalColors);
+
+    // A fully neutral palette affords no hue separation; every corrected role
+    // converges on the same readable gray. Contrast floors still hold.
+    for (const color of Object.values(theme.status)) {
+      expect(color.kind).toBe("rgb");
+      expect(contrast(color, theme.surfaces.canvas)).toBeGreaterThanOrEqual(
+        STATION_TEXT_CONTRAST_RATIO,
+      );
+    }
+    const roleValues = Object.values(theme.status).map((color) =>
+      stationColorSnapshot(color).value,
+    );
+    expect(new Set(roleValues)).toHaveLength(1);
+    expect(theme).toEqual(repeated);
+  });
+
+  it("keeps pane accents and their inactive fills distinct on light palettes", () => {
+    const theme = terminalTheme(lightTerminalColors);
+    const pairs = [
+      [theme.pane.primary.active, theme.pane.primary.inactive],
+      [theme.pane.shells[0].active, theme.pane.shells[0].inactive],
+    ] as const;
+
+    for (const [active, inactive] of pairs) {
+      expect(stationColorSnapshot(inactive)).not.toEqual(stationColorSnapshot(active));
+      expect(contrast(inactive, theme.surfaces.canvas)).toBeGreaterThanOrEqual(
+        STATION_BOUNDARY_CONTRAST_RATIO,
+      );
+      expect(contrast(active, inactive)).toBeGreaterThan(1.1);
     }
   });
 

@@ -6,6 +6,7 @@ import {
   gamutMapOKLCH,
   hexToRGB,
   lerpAngle,
+  MapToL,
   OKLab,
   OKLCH,
   RGBToHex,
@@ -106,6 +107,10 @@ function rgbFromOklab(oklab: readonly [number, number, number]): StationRgbColor
           [lightness, chroma, constrainAngle((Math.atan2(b, a) * 180) / Math.PI)],
           sRGBGamut,
           OKLCH,
+          undefined,
+          // Hold the searched lightness; cusp mapping would move L to the hue's
+          // cusp and defeat contrast searches on saturated accents.
+          MapToL,
         );
   return rgbFromSrgb(convert(lch, OKLCH, sRGB));
 }
