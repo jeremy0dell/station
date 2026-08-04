@@ -21,11 +21,11 @@ import { createScriptedTerminal, type ScriptedTerminal } from "./testing/scripte
 import { waitFor } from "./testing/waitFor.js";
 import type { StationTerminalSize, StationTerminalSpawnOptions } from "./types.js";
 
-// Pane chrome: 1 border + 1 padding on each side. The origin-anchor test
-// below derives this empirically; everything else trusts the constant.
-const ORIGIN = { x: 2, y: 2 };
+// Pane chrome: 1 border on each side. The origin-anchor test below derives
+// this empirically; everything else trusts the constant.
+const ORIGIN = { x: 1, y: 1 };
 const SURFACE = { width: 40, height: 12 };
-const GRID = { cols: SURFACE.width - 4, rows: SURFACE.height - 4 };
+const GRID = { cols: SURFACE.width - 2, rows: SURFACE.height - 2 };
 
 type PaneSetup = {
   setup: Awaited<ReturnType<typeof testRender>>;
@@ -317,11 +317,11 @@ describe("TerminalPane frame rendering", () => {
     await feedAndFlush(pane, "before");
     pane.setup.resize(60, 20);
     await waitFor(() =>
-      pane.scripted.helpers.resizes.some((size) => size.cols === 56 && size.rows === 16),
+      pane.scripted.helpers.resizes.some((size) => size.cols === 58 && size.rows === 18),
     );
-    await feedAndFlush(pane, `\r\n${"=".repeat(56)}`);
-    const frame = await waitForPaneFrame(pane, (f) => f.includes("=".repeat(56)));
-    expect(frameChar(frame, ORIGIN.y + 1, ORIGIN.x + 55)).toBe("=");
+    await feedAndFlush(pane, `\r\n${"=".repeat(58)}`);
+    const frame = await waitForPaneFrame(pane, (f) => f.includes("=".repeat(58)));
+    expect(frameChar(frame, ORIGIN.y + 1, ORIGIN.x + 57)).toBe("=");
   });
 
   it("shrinking leaves no stale cells outside the new pane bounds", async () => {
@@ -331,7 +331,7 @@ describe("TerminalPane frame rendering", () => {
     await waitForPaneFrame(pane, (f) => f.includes("#"));
     pane.setup.resize(30, 10);
     await waitFor(() =>
-      pane.scripted.helpers.resizes.some((size) => size.cols === 26 && size.rows === 6),
+      pane.scripted.helpers.resizes.some((size) => size.cols === 28 && size.rows === 8),
     );
     await feedAndFlush(pane, "\x1b[2J\x1b[Hcompact");
     const frame = await waitForPaneFrame(pane, (f) => f.includes("compact"));
@@ -426,11 +426,11 @@ describe("TerminalPane frame rendering", () => {
     pane.setup.resize(60, 20);
     pane.setup.resize(50, 14);
     await waitFor(() =>
-      pane.scripted.helpers.resizes.some((size) => size.cols === 46 && size.rows === 10),
+      pane.scripted.helpers.resizes.some((size) => size.cols === 48 && size.rows === 12),
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
     const last = pane.scripted.helpers.resizes[pane.scripted.helpers.resizes.length - 1];
-    expect(last).toEqual({ cols: 46, rows: 10 });
+    expect(last).toEqual({ cols: 48, rows: 12 });
   });
 
   it("renders a consistent final frame after a burst", async () => {
