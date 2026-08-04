@@ -32,6 +32,7 @@ import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
 import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
 import { playStationAttentionSound } from "./sources/attentionSound.js";
 import { createStationClient } from "./sources/createStationClient.js";
+import { attentionKey } from "./state/attentionDismissal.js";
 import { openExternalUrl } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
@@ -88,15 +89,7 @@ async function startStationMain(
   ttyOwnership: StationTtyOwnership | undefined,
 ): Promise<boolean> {
   const env = process.env;
-  const stationClient = createStationClient(env, {
-    onAttentionNeeded: () => {
-      playStationAttentionSound();
-    },
-  });
-  // Started now so the observer subscribe + snapshot resync overlaps the boot
-  // phases below and the first painted frame is already populated. createStation's
-  // lifecycle calls start() again — a guarded no-op.
-  stationClient.start();
+  // Configs load before the store/client exist; see the client creation below.
 
   const configsLoading = Promise.all([loadStationConfig({ env }), loadStationTuiConfig({ env })]);
 
@@ -142,7 +135,8 @@ async function startStationMain(
       provider: "native",
     });
     writeStartupError(safeError);
-    await stationClient.stop();
+    // The station client is created after the store (below), so there is no
+    // subscription to stop on this pre-store exit path.
     process.exitCode = 1;
     return false;
   }
@@ -208,6 +202,20 @@ async function startStationMain(
     restorePlan?.workspace,
   );
   const { store } = stationRuntime;
+  // The client is created after the store so a fresh needs_attention transition
+  // can re-arm a dismissed alert. Started now so the observer subscribe +
+  // snapshot resync overlaps the remaining boot phases and the first painted
+  // frame is already populated; createStation's lifecycle calls start() again
+  // (a guarded no-op).
+  const stationClient = createStationClient(env, {
+    onAttentionNeeded: (event) => {
+      // Observer events fire only on state transitions, so every needs_attention
+      // event is a new request: re-arm the dismissed alert, then alert as usual.
+      store.actions.rearmAttentionKey(attentionKey(event.agent?.sessionId, event.worktreeId));
+      playStationAttentionSound();
+    },
+  });
+  stationClient.start();
   // Seed each restored pane's spawn cwd / host placement into the registry BEFORE the
   // reconciler runs its no-option ensure (which would otherwise capture
   // no cwd), so a freshly respawned shell reopens in its saved directory and a

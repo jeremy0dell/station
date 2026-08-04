@@ -3,11 +3,13 @@ import type { TuiIslandConfig } from "@station/config";
 import type { DashboardStateSource } from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
+import { isAttentionDismissed } from "../state/attentionDismissal.js";
 import { selectPaneRecord, selectStationOverlayVisible } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import { agentWorktreePaneId } from "../state/types.js";
 import { DynamicStationButton } from "./DynamicStationButton.js";
 import {
+  attentionKeysFromSnapshot,
   selectStationButtonStatus,
   type StationButtonStatus,
   stationButtonStatusEqual,
@@ -27,7 +29,7 @@ export type StationButtonProps = {
 
 // Reuses the existing `{ kind: "header" }` mouse path so the route to STATION mode
 // survives the header's removal (some terminals never deliver Ctrl-O). Attention
-// clicks focus the flagged session instead of toggling.
+// clicks focus the flagged session instead of toggling, and quiet the alert.
 export function StationButton({ store, dashboardState, dispatchMouse, island }: StationButtonProps) {
   const getStatus = useStableStatus(dashboardState, island?.projectRollup === true);
   const subscribe = useCallback(
@@ -35,7 +37,18 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
     [dashboardState],
   );
   const status = useSyncExternalStore(subscribe, getStatus, getStatus);
+  // The dismissal record reference is stable between store actions, so this
+  // subscription only re-renders on actual dismiss/re-arm changes.
+  const getDismissed = useCallback(
+    () => store.getState().feedback.dismissedAttention,
+    [store],
+  );
+  const dismissedAttention = useSyncExternalStore(store.subscribe, getDismissed, getDismissed);
   const celebration = useMergeCelebration(dashboardState);
+
+  // The alert stays up only while some flagged session is not dismissed; a
+  // dismissed queue still paints its needs-you count but stops alerting.
+  const attention = status.attention && anyFlaggedNotDismissed(dashboardState, dismissedAttention);
 
   const onHeader = useCallback(
     (event: StationMouseEvent) => {
@@ -46,6 +59,11 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
 
   const onFocusSession = useCallback(
     (event: StationMouseEvent) => {
+      // Acting on the alert quiets every session currently asking for the user;
+      // a fresh needs_attention transition re-arms.
+      store.actions.dismissAttentionKeys(
+        attentionKeysFromSnapshot(dashboardState.getState().snapshot),
+      );
       const worktreeId = status.attentionWorktreeId;
       const sessionId = status.attentionSessionId;
       // A worktree can contain multiple canonical sessions, while its local
@@ -70,17 +88,32 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
         dispatchMouse({ kind: "header" }, event);
       }
     },
-    [dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
+    [dashboardState, dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
   );
 
   return (
     <DynamicStationButton
-      input={{ status, restCounts: island?.restCounts, celebration }}
+      input={{
+        status: { ...status, attention },
+        restCounts: island?.restCounts,
+        celebration,
+      }}
       onHoverChange={store.actions.setStationButtonHover}
       onToggleStation={onHeader}
       onContextMenu={onHeader}
       onFocusSession={onFocusSession}
     />
+  );
+}
+
+/** True when any session asking for the user has not been dismissed. */
+function anyFlaggedNotDismissed(
+  dashboardState: DashboardStateSource,
+  dismissed: Readonly<Record<string, number>>,
+): boolean {
+  const now = Date.now();
+  return attentionKeysFromSnapshot(dashboardState.getState().snapshot).some(
+    (key) => !isAttentionDismissed(dismissed, key, now),
   );
 }
 

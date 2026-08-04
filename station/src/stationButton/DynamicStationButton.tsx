@@ -169,7 +169,12 @@ function StationButtonContent(props: {
       return <CollapsedAttention color={color} />;
     case "counts":
       return (
-        <CollapsedCounts iconColor={color.icon} working={display.working} ready={display.ready} />
+        <CollapsedCounts
+          iconColor={color.icon}
+          needsYou={display.needsYou}
+          working={display.working}
+          ready={display.ready}
+        />
       );
     case "celebration":
       return (
@@ -207,6 +212,7 @@ function StationButtonContent(props: {
           iconPadX={iconPadX}
           iconPadY={iconPadY}
           reveal={reveal}
+          needsYou={display.needsYou}
           working={display.working}
           idle={display.idle}
         />
@@ -296,9 +302,11 @@ function CollapsedAttention({ color }: { color: StationButtonStateColors }): Rea
   );
 }
 
-// Collapsed fleet counts show only active lanes: braille working and ● ready.
+// Collapsed fleet counts show the needs-you lane always and the active
+// working/ready lanes on opt-in; a "!" lane keeps the dismissed queue visible.
 function CollapsedCounts(props: {
   iconColor: StationColor;
+  needsYou: number;
   working: number;
   ready: number;
 }): ReactNode {
@@ -307,16 +315,26 @@ function CollapsedCounts(props: {
     <box flexDirection="row" paddingLeft={ICON_PAD}>
       <IconGlyph color={props.iconColor} />
       <text>
-        <span> </span>
+        {props.needsYou > 0 ? (
+          <>
+            <span> </span>
+            <span fg={toOpenTuiColor(theme.status.danger)}>
+              {`!${paintedCount(props.needsYou)}`}
+            </span>
+          </>
+        ) : null}
         {props.working > 0 ? (
           <>
+            <span> </span>
             <Throbber variant="braille" fg={toOpenTuiColor(theme.status.working)} />
             <span fg={toOpenTuiColor(theme.status.working)}>{paintedCount(props.working)}</span>
           </>
         ) : null}
-        {props.working > 0 && props.ready > 0 ? <span> </span> : null}
         {props.ready > 0 ? (
-          <span fg={toOpenTuiColor(theme.status.success)}>{`●${paintedCount(props.ready)}`}</span>
+          <>
+            <span> </span>
+            <span fg={toOpenTuiColor(theme.status.success)}>{`●${paintedCount(props.ready)}`}</span>
+          </>
         ) : null}
       </text>
     </box>
@@ -347,14 +365,24 @@ function ExpandedBase(props: {
   iconPadX: number;
   iconPadY: number;
   reveal: number;
+  needsYou: number;
   working: number;
   idle: number;
 }): ReactNode {
   const { color, reveal } = props;
+  const theme = useStationTheme();
   return (
     <box flexDirection="column">
       <IconRow color={color.icon} padX={props.iconPadX} padY={props.iconPadY} />
       <box flexDirection="column" paddingLeft={CONTENT_INDENT}>
+        {/* The queue line paints in the alert color so it reads at a glance in hover. */}
+        {props.needsYou > 0 ? (
+          <GradientText
+            text={sessionSummary(props.needsYou, "need you")}
+            reveal={reveal}
+            color={theme.status.danger}
+          />
+        ) : null}
         <GradientText
           text={sessionSummary(props.working, "working")}
           reveal={reveal}

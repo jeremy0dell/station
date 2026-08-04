@@ -892,3 +892,44 @@ describe("createStationStore toasts", () => {
     expect(store.getState().feedback.toast).toBeNull();
   });
 });
+
+describe("createStationStore attention dismissal", () => {
+  it("dismisses attention keys with a timestamp and is a reference no-op when known", () => {
+    const store = createStationStore();
+    const before = store.getState();
+    store.actions.dismissAttentionKeys(["ses_a", "ses_b"]);
+    const dismissed = store.getState().feedback.dismissedAttention;
+    expect(Object.keys(dismissed).sort()).toEqual(["ses_a", "ses_b"]);
+    expect(dismissed.ses_a).toBeGreaterThan(0);
+    expect(dismissed.ses_b).toBeGreaterThan(0);
+    expect(store.getState()).not.toBe(before);
+
+    const after = store.getState();
+    store.actions.dismissAttentionKeys(["ses_b"]);
+    expect(store.getState()).toBe(after);
+
+    store.actions.dismissAttentionKeys([]);
+    expect(store.getState()).toBe(after);
+  });
+
+  it("re-arms a dismissed key and ignores an unknown one", () => {
+    const store = createStationStore();
+    store.actions.dismissAttentionKeys(["ses_a"]);
+    store.actions.rearmAttentionKey("ses_a");
+    expect(store.getState().feedback.dismissedAttention).toEqual({});
+
+    const before = store.getState();
+    store.actions.rearmAttentionKey("ses_unknown");
+    expect(store.getState()).toBe(before);
+  });
+
+  it("keeps dismissal state when a toast is shown or dismissed", () => {
+    const store = createStationStore();
+    store.actions.dismissAttentionKeys(["ses_a"]);
+    store.actions.showToast("Copied");
+    expect(store.getState().feedback.dismissedAttention.ses_a).toBeGreaterThan(0);
+    const token = store.getState().feedback.toast?.token ?? -1;
+    store.actions.dismissToast(token);
+    expect(store.getState().feedback.dismissedAttention.ses_a).toBeGreaterThan(0);
+  });
+});

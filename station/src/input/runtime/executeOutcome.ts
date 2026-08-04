@@ -1,5 +1,6 @@
 import { buildContextMenuItems, resolveContextMenuAction } from "../../contextMenu/items.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";
+import { attentionKeysFromSnapshot } from "../../stationButton/status.js";
 import type { RouteOutcome } from "../router.js";
 import type { OpenPaneSpawn, StationInputEffects } from "../stationInput.js";
 
@@ -32,6 +33,9 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
       // the overlay later lands on the workspace, not back on the intro. No-op
       // when the intro is not showing.
       effects.store.actions.dismissWelcomeIntro();
+      if (outcome.overlayId === STATION_OVERLAY_ID) {
+        dismissCurrentAttention(effects);
+      }
       effects.store.actions.openOverlay(outcome.overlayId);
       return true;
     case "welcome-dismiss":
@@ -166,6 +170,7 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
           rowId: action.rowId,
           returnTo: "dashboard",
         });
+        dismissCurrentAttention(effects);
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
@@ -191,8 +196,15 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
           rowId: action.rowId,
           returnTo: "dashboard",
         });
+        dismissCurrentAttention(effects);
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
   }
+}
+
+/** Quiet the island alert for every session currently asking for the user. */
+function dismissCurrentAttention(effects: StationInputEffects): void {
+  const snapshot = effects.dashboardRuntime?.state.getState().snapshot;
+  effects.store.actions.dismissAttentionKeys(attentionKeysFromSnapshot(snapshot));
 }

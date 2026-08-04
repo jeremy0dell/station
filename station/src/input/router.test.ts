@@ -8,6 +8,8 @@ import {
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { createStationStore } from "../state/store.js";
+import { attentionKey } from "../state/attentionDismissal.js";
+import { attentionKeysFromSnapshot } from "../stationButton/status.js";
 import {
   agentWorktreePaneId,
   MAIN_PANE_ID,
@@ -441,6 +443,38 @@ describe("the station-button layer (island ↵ jump)", () => {
       kind: "terminal-write",
       paneId: MAIN_PANE_ID,
       bytes: "\r",
+    });
+  });
+
+  it("leaves ↵ with the focused pane when the flagged sessions are dismissed", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const store = createStationStore();
+    store.actions.dismissAttentionKeys(
+      attentionKeysFromSnapshot(snapshot),
+    );
+    store.actions.setStationButtonHover(true);
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "terminal-write",
+      paneId: MAIN_PANE_ID,
+      bytes: "\r",
+    });
+  });
+
+  it("re-arms the jump when only one flagged session is dismissed", () => {
+    const snapshot = attentionAndFailuresSnapshot();
+    const flagged = flaggedSession(snapshot);
+    const store = createStationStore();
+    // Dismiss every session except the first flagged one; the alert and its
+    // jump must stay live for it.
+    store.actions.dismissAttentionKeys(
+      attentionKeysFromSnapshot(snapshot).filter(
+        (key) => key !== attentionKey(flagged.session.id, flagged.worktree.id),
+      ),
+    );
+    store.actions.setStationButtonHover(true);
+    expect(routeKey("\r", store.getState(), keymapFor(snapshot))).toEqual({
+      kind: "overlay-open",
+      overlayId: STATION_OVERLAY_ID,
     });
   });
 

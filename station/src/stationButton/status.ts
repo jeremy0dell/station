@@ -7,6 +7,7 @@ import {
   type DashboardSessionRow,
   type DashboardStateView,
 } from "@station/dashboard-core";
+import { attentionKey } from "../state/attentionDismissal.js";
 
 /** Worst agent status across a project's sessions, calmest last. */
 export type ProjectRollupStatus = "needsYou" | "working" | "ready" | "idle";
@@ -47,6 +48,18 @@ const EMPTY_STATUS: StationButtonStatus = {
 /** The row is asking for the user (needs-attention or stuck) — the island's alert predicate. */
 export function rowNeedsUser(row: DashboardSessionRow["presentation"]): boolean {
   return row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck";
+}
+
+/** The attention keys of every session currently asking for the user. */
+export function attentionKeysFromSnapshot(
+  snapshot: DashboardStateView["snapshot"],
+): readonly string[] {
+  if (snapshot === undefined) {
+    return [];
+  }
+  return selectDashboardSessionRows(snapshot)
+    .filter((row) => rowNeedsUser(row.presentation))
+    .map((row) => attentionKey(row.session.id, row.worktree.id));
 }
 
 // Counts come from the client-side fleet breakdown, not snapshot.counts: the

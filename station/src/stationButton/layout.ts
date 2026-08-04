@@ -21,14 +21,14 @@ const COLLAPSED_ATTENTION_ROWS = 5; // ! / icon / ! + border
 
 const EXPANDED_BORDER_ROWS = 2;
 const EXPANDED_BOTTOM_PAD_ROWS = 1;
-const EXPANDED_BASE_ROWS = EXPANDED_BORDER_ROWS + 1 + 2 + EXPANDED_BOTTOM_PAD_ROWS;
 const EXPANDED_ATTENTION_ROWS = EXPANDED_BORDER_ROWS + 1 + 1 + 2 + EXPANDED_BOTTOM_PAD_ROWS;
 const EXPANDED_RIGHT_PAD = 3;
 export const CONTENT_INDENT = ICON_COLS + 1; // body clears the corner icon
-const ATTENTION_SINGLE_LINE = "needs your attention";
 const ATTENTION_HINT_LINE = "↵ or click to focus";
 // Width budget only; the painted first line comes from attentionLines (queue-aware).
-const ATTENTION_LINES = [ATTENTION_SINGLE_LINE, ATTENTION_HINT_LINE] as const;
+// The budget keeps the legacy single-session line (the widest painted variant) so
+// the card width never tracks the live session name or queue depth.
+const ATTENTION_LINES = ["needs your attention", ATTENTION_HINT_LINE] as const;
 // Stable count (2 digits, plural) so card width doesn't resize under cursor on count changes.
 const STABLE_SUMMARY_COUNT = 88;
 // Fixed name budget so a live session-name change can't resize this top-right-anchored card out
@@ -64,11 +64,11 @@ export type IslandDisplayInput = {
 export type IslandDisplay =
   | { kind: "mark" }
   | { kind: "alertMark" }
-  | { kind: "counts"; working: number; ready: number }
+  | { kind: "counts"; needsYou: number; working: number; ready: number }
   | { kind: "celebration"; celebration: IslandCelebration }
   | { kind: "alertCard"; sessionName: string; needsYouCount: number }
   | { kind: "rollup"; entries: readonly ProjectRollupEntry[] }
-  | { kind: "summary"; working: number; idle: number };
+  | { kind: "summary"; needsYou: number; working: number; idle: number };
 
 /** The island's single display-priority ladder, per hover state. */
 export function islandDisplay(input: IslandDisplayInput, expanded: boolean): IslandDisplay {
@@ -86,6 +86,7 @@ export function islandDisplay(input: IslandDisplayInput, expanded: boolean): Isl
     }
     return {
       kind: "summary",
+      needsYou: status.needsYouCount,
       working: status.workingCount,
       // Ready sessions read as idle in the totals (the fleet breakdown keeps them disjoint).
       idle: status.readyCount + status.idleCount,
@@ -97,14 +98,18 @@ export function islandDisplay(input: IslandDisplayInput, expanded: boolean): Isl
   if (input.celebration !== undefined) {
     return { kind: "celebration", celebration: input.celebration };
   }
-  if (input.restCounts === true) {
-    if (status.workingCount > 0 || status.readyCount > 0) {
-      return {
-        kind: "counts",
-        working: status.workingCount,
-        ready: status.readyCount,
-      };
-    }
+  // The needs-you lane paints whenever sessions ask for the user, without the
+  // restCounts opt-in; working/ready lanes stay opt-in.
+  if (
+    status.needsYouCount > 0 ||
+    (input.restCounts === true && status.workingCount + status.readyCount > 0)
+  ) {
+    return {
+      kind: "counts",
+      needsYou: status.needsYouCount,
+      working: status.workingCount,
+      ready: status.readyCount,
+    };
   }
   return { kind: "mark" };
 }
@@ -117,11 +122,9 @@ export function paintedCount(count: number): number {
   return Math.min(count, MAX_PAINTED_COUNT);
 }
 
-/** The attention card's message lines; the first swaps to the queue when several ask. */
+/** The attention card's message lines; the count always leads. */
 export function attentionLines(needsYouCount: number): readonly [string, string] {
-  const first =
-    needsYouCount > 1 ? `! ${paintedCount(needsYouCount)} need you ›` : ATTENTION_SINGLE_LINE;
-  return [first, ATTENTION_HINT_LINE];
+  return [`! ${paintedCount(Math.max(1, needsYouCount))} need you ›`, ATTENTION_HINT_LINE];
 }
 
 export function celebrationText(celebration: IslandCelebration): string {
@@ -183,10 +186,14 @@ export function targetDims(display: IslandDisplay): Dims {
       // Measure with a stable count, not the live values: the card is anchored top-right, so a width
       // change on a count tick slides it out from under a stationary cursor and reads as a hover leave.
       const body =
-        CONTENT_INDENT + Math.max(summaryColumns("working"), summaryColumns("idle"));
+        CONTENT_INDENT +
+        Math.max(summaryColumns("working"), summaryColumns("idle"), summaryColumns("need you"));
+      // The needs-you line paints only while sessions ask for the user; height
+      // growth is safe (only width changes would slide the anchored card).
+      const needsYouLineRows = display.needsYou > 0 ? 1 : 0;
       return {
         width: Math.max(ICON_COLS, body) + EXPANDED_RIGHT_PAD + 2,
-        height: EXPANDED_BASE_ROWS,
+        height: EXPANDED_BORDER_ROWS + 1 + 2 + needsYouLineRows + EXPANDED_BOTTOM_PAD_ROWS,
       };
     }
   }
@@ -196,10 +203,12 @@ export function targetDims(display: IslandDisplay): Dims {
 // count ticks can't slide the box out from under an approaching cursor.
 const STABLE_COUNT_LANE_COLS = 1 + 2;
 const STABLE_COUNT_LANE_GAP_COLS = 1;
-export const COLLAPSED_COUNTS_COLS = collapsedCountCols(2);
+export const COLLAPSED_COUNTS_COLS = collapsedCountCols(3);
 
 function countLaneCount(display: Extract<IslandDisplay, { kind: "counts" }>): number {
-  return Number(display.working > 0) + Number(display.ready > 0);
+  return (
+    Number(display.needsYou > 0) + Number(display.working > 0) + Number(display.ready > 0)
+  );
 }
 
 function collapsedCountCols(laneCount: number): number {
