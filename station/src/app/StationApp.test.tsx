@@ -174,7 +174,7 @@ describe("Station app composition", () => {
 
     await waitFor(() => overlayVisible(station));
     expect(station.store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
-    // Clicking the alert quiets every flagged session, and the alert frame goes away.
+    // Clicking the alert quiets every flagged session.
     expect(station.store.getState().feedback.dismissedAttention[flagged.id]).toBeGreaterThan(0);
     await waitForFrame(station, (frame) => !frame.includes("!!!!"));
   });

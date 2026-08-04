@@ -302,8 +302,7 @@ function CollapsedAttention({ color }: { color: StationButtonStateColors }): Rea
   );
 }
 
-// Collapsed fleet counts show the needs-you lane always and the active
-// working/ready lanes on opt-in; a "!" lane keeps the dismissed queue visible.
+// Collapsed fleet counts show the needs-you lane always; working/ready lanes are opt-in.
 function CollapsedCounts(props: {
   iconColor: StationColor;
   needsYou: number;

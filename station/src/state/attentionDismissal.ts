@@ -1,13 +1,12 @@
 // Dismissal policy for the island's attention alert: quiet a session's alert
-// once the user acts on it (island click, dashboard open). Dismissals reset on
-// relaunch; sessions that were never dismissed still alert when flagged.
+// once the user acts on it (island click, dashboard open); dismissal resets on
+// relaunch.
 
 /**
  * How a dismissed attention episode comes back.
  * `"indefinite"` keeps it quiet for the rest of the Station session (reset on
  * relaunch); `"timeout"` re-alerts `timeoutMs` after dismissal. Station ships
- * in indefinite mode; the timeout branch exists and is tested so flipping the
- * constant is the whole rollout.
+ * in indefinite mode; flipping the constant enables the timeout branch.
  */
 export type AttentionDismissalMode =
   | { kind: "indefinite" }
