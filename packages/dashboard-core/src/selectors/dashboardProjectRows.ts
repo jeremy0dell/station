@@ -85,11 +85,31 @@ export function selectDashboardProjectRowGroups(
 export function persistentFilterCandidateForDashboardRow(
   item: DashboardRowItem,
 ): DashboardPersistentFilterCandidate {
+  if (item.type === "session") {
+    return {
+      kind: "session",
+      id: item.id,
+      projectId: item.row.worktree.projectId,
+      visibleFields: item.presentation,
+      conditionValues: {
+        status: item.pendingStart === undefined ? item.row.session.status.value : "starting",
+        agent: item.row.session.harness.provider,
+      },
+    };
+  }
+  const conditionValues: DashboardPersistentFilterCandidate["conditionValues"] = {};
+  if (item.row.status === "pending") {
+    conditionValues.status = "starting";
+    if (item.row.harnessProvider !== undefined) {
+      conditionValues.agent = item.row.harnessProvider;
+    }
+  }
   return {
-    kind: item.type === "session" ? "session" : "optimistic",
+    kind: "optimistic",
     id: item.id,
-    projectId: item.type === "session" ? item.row.worktree.projectId : item.row.projectId,
+    projectId: item.row.projectId,
     visibleFields: item.presentation,
+    conditionValues,
   };
 }
 

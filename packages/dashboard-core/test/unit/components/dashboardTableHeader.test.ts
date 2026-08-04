@@ -4,6 +4,7 @@ import {
   dashboardTableHeaderModel,
 } from "../../../src/components/Dashboard/tableHeader.js";
 import { cellWidth, type RowGridLayout } from "../../../src/components/WorktreeRow/layout.js";
+import { dashboardPersistentFilterSummarySegments } from "../../../src/selectors/dashboardFilterConditions.js";
 import type { DashboardPersistentFilterProjection } from "../../../src/selectors/dashboardPersistentFilter.js";
 
 const HEADER_LAYOUT: RowGridLayout = {
@@ -16,9 +17,14 @@ const NO_OVERFLOW = { above: 0, below: 0, visible: 4, total: 4 };
 function projection(
   overrides: Partial<DashboardPersistentFilterProjection> = {},
 ): DashboardPersistentFilterProjection {
+  const query = overrides.query ?? "alpha";
+  const conditions = overrides.conditions ?? [];
   return {
     source: "draft",
-    query: "alpha",
+    query,
+    conditions,
+    summarySegments: dashboardPersistentFilterSummarySegments({ query, conditions }),
+    active: true,
     draft: { value: "alpha", cursor: 5 },
     matchCount: 1,
     totalCount: 7,
@@ -97,6 +103,30 @@ describe("dashboard persistent filter header", () => {
     expect(model.zeroMatches).toBe(true);
     expect(lineText(model)).toContain("↑2 · 0/7 matches");
     expect(model.segments.find((segment) => segment.role === "count")?.text).toContain("0/7");
+  });
+
+  it("renders free text and structured conditions in one canonical applied summary", () => {
+    const model = dashboardPersistentFilterHeaderModel({
+      columns: 80,
+      projection: projection({
+        source: "applied",
+        query: "queue",
+        conditions: [
+          { field: "agent", values: [{ id: "codex", label: "Codex" }] },
+          { field: "project", values: [{ id: "api", label: "API" }] },
+          { field: "status", values: [{ id: "working", label: "Working" }] },
+        ],
+        draft: undefined,
+      }),
+      overflow: NO_OVERFLOW,
+    });
+
+    expect(lineText(model)).toContain("FILTER queue · Status=Working · Project=API · Agent=Codex");
+    expect(model.segments.filter((segment) => segment.role === "conditionValue")).toMatchObject([
+      { field: "status", valueId: "working" },
+      { field: "project", valueId: "api" },
+      { field: "agent", valueId: "codex" },
+    ]);
   });
 
   it("truncates an applied summary without wrapping while preserving the count", () => {

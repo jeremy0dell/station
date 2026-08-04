@@ -1,6 +1,8 @@
 import type { TuiWidgetConfig } from "@station/config";
 import type {
+  AgentState,
   ProjectId,
+  ProviderId,
   SafeError,
   SessionId,
   StationSnapshot,
@@ -33,9 +35,54 @@ export type TuiRuntimeState = {
   focusOrigin?: TerminalFocusOrigin;
 };
 
+export type DashboardFilterConditionField = "status" | "project" | "agent";
+
+export type DashboardFilterStatusConditionValue = {
+  id: AgentState;
+  label: string;
+};
+
+export type DashboardFilterProjectConditionValue = {
+  id: ProjectId;
+  label: string;
+};
+
+export type DashboardFilterAgentConditionValue = {
+  id: ProviderId;
+  label: string;
+};
+
+/**
+ * Stable condition IDs pair with visible labels; values are ORed within a field while free text
+ * and separate Status, Project, and Agent fields are ANDed in canonical field order.
+ */
+export type DashboardFilterCondition =
+  | { field: "status"; values: readonly DashboardFilterStatusConditionValue[] }
+  | { field: "project"; values: readonly DashboardFilterProjectConditionValue[] }
+  | { field: "agent"; values: readonly DashboardFilterAgentConditionValue[] };
+
+export type DashboardFilterConditionOption = {
+  id: string;
+  label: string;
+};
+
+export type DashboardFilterConditionEditor =
+  | { stage: "field"; cursor: number }
+  | {
+      stage: "values";
+      field: DashboardFilterConditionField;
+      cursor: number;
+      /** Frozen for the panel lifetime so snapshots cannot reassign visible slot keys. */
+      options: readonly DashboardFilterConditionOption[];
+      selectedIds: readonly string[];
+    };
+
+/** Dashboard-local applied free text plus normalized structured conditions. */
 export type DashboardPersistentFilter = {
-  /** Nonblank dashboard-local query whose applied projection omits nonmatching groups and rows. */
+  /** Blank remains valid when at least one structured condition is selected. */
   query: string;
+  /** Omitted is the normalized empty selection for query-only compatibility. */
+  conditions?: readonly DashboardFilterCondition[];
 };
 
 export type TuiViewState = {
@@ -108,7 +155,12 @@ export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
   | { name: "search"; value: string }
-  | { name: "persistentFilter"; draft: EditableTextInputState }
+  | {
+      name: "persistentFilter";
+      draft: EditableTextInputState;
+      draftConditions: readonly DashboardFilterCondition[];
+      conditionEditor?: DashboardFilterConditionEditor;
+    }
   | { name: "projectCollapse" }
   | { name: "projectSettingsPicker" }
   | { name: "removeWorktree"; step: "chooseSlot" }

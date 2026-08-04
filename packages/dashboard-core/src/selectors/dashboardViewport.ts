@@ -161,7 +161,7 @@ function flattenDashboardGroups(
   groups: readonly DashboardProjectRowGroup[],
   projection?: DashboardPersistentFilterProjection,
 ): DashboardViewportItem[] {
-  const applied = projection?.source === "applied" && projection.query.length > 0;
+  const applied = projection?.source === "applied" && projection.active;
   const visibleGroups = applied
     ? groups.filter((group) => projection.projects.get(group.project.id)?.matched)
     : groups;
@@ -184,7 +184,7 @@ function projectGroupItems(
         projection === undefined ? row : withDashboardRowFilterMatch(row, projection),
       ),
     );
-  } else if (group.rows.length === 0 && (!group.collapsed || applied)) {
+  } else if (group.rows.length === 0 && !group.collapsed) {
     items.push(emptyProjectItem(group.project));
   }
   return items;
@@ -195,10 +195,11 @@ function visibleProjectRows(
   projection: DashboardPersistentFilterProjection | undefined,
   applied: boolean,
 ): readonly DashboardRowItem[] {
+  if (group.collapsed) return [];
   if (applied && projection !== undefined) {
     return group.rows.filter((row) => projection.rows.get(row.id)?.matched === true);
   }
-  return group.collapsed ? [] : group.rows;
+  return group.rows;
 }
 
 function projectGapItem(

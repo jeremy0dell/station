@@ -120,6 +120,61 @@ const CASES: ModalCase[] = [
     reject: ["search: api"],
   },
   {
+    name: "persistent filter condition field chooser",
+    keys: [{ input: "/" }, { input: "i", ctrl: true }],
+    dashboardSearchExperience: persistentFilterExperience,
+    expect: [
+      "FILTER CONDITIONS",
+      "[×]",
+      "S Status",
+      "P Project",
+      "Any ›",
+      "Apply filter (F)",
+      "F apply filter",
+    ],
+  },
+  {
+    name: "persistent filter status condition values",
+    keys: [{ input: "/" }, { input: "i", ctrl: true }, { input: "S" }, { input: "3" }],
+    dashboardSearchExperience: persistentFilterExperience,
+    expect: [
+      "STATUS CONDITION",
+      "3 [✓] Working",
+      "[←]",
+      "[×]",
+      "Done (Enter)",
+      "CONDITION",
+      "Enter done",
+      "Esc close",
+    ],
+  },
+  {
+    name: "persistent filter condition values at minimum size",
+    keys: [
+      { input: "/" },
+      { input: "i", ctrl: true },
+      { input: "S" },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+      { input: "", downArrow: true },
+    ],
+    size: { width: 40, height: 12 },
+    dashboardSearchExperience: persistentFilterExperience,
+    expect: [
+      "STATUS CONDITION ↑5",
+      "▸ 7 [ ] No agent",
+      "[←]",
+      "[×]",
+      "Done (Enter)",
+      "CONDITION",
+      "← fields",
+      "Esc clo",
+    ],
+  },
+  {
     name: "collapse project sheet",
     keys: [{ input: "C" }],
     trimSnapshotTrailingWhitespace: true,
@@ -690,6 +745,46 @@ describe("modal flow golden frames", () => {
       subscribe: () => () => {},
     };
   }
+
+  it("keeps condition controls undimmed beneath the modal backdrop", async () => {
+    const store = makeStore(manyProjectsSnapshot(), persistentFilterExperience);
+    for (const key of [
+      { input: "/" },
+      { input: "i", ctrl: true },
+      { input: "S" },
+    ]) {
+      store.actions.handleKey(key);
+    }
+    const setup = await testRender(
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardRoot
+          state={store.state}
+          actions={store.actions}
+          columns={SIZE.width}
+          rows={SIZE.height}
+          onCopyNotice={() => {}}
+        />
+      </StationThemeProvider>,
+      SIZE,
+    );
+    teardowns.push(() => {
+      setup.renderer.destroy();
+    });
+    await setup.renderOnce();
+
+    const footerRow = setup
+      .captureCharFrame()
+      .split("\n")
+      .findIndex((line) => line.includes("Esc close"));
+    const closeHelp = setup
+      .captureSpans()
+      .lines[footerRow]?.spans.find((span) => span.text.includes(" close"));
+
+    expect(closeHelp).toBeDefined();
+    expect(closeHelp === undefined ? undefined : rgbToHex(closeHelp.bg)).toBe(
+      stationColorSnapshotValue(nativeStationTheme.filter.conditionSurface),
+    );
+  });
 
   it("keeps widget settings text out of OpenTUI selection", async () => {
     const setup = await testRender(

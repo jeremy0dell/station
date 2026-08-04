@@ -17,7 +17,7 @@ export function DashboardFilterFooterView({
   variant,
 }: {
   segments: readonly DashboardFilterFooterSegment[];
-  variant: "editing" | "applied";
+  variant: "editing" | "condition" | "applied";
 }) {
   const theme = useStationTheme();
   return (
@@ -42,6 +42,7 @@ function FilterFooterSegment({ segment }: { segment: DashboardFilterFooterSegmen
     <text
       flexShrink={0}
       fg={footerSegmentForeground(theme, segment)}
+      selectable={false}
       attributes={emphasized ? TextAttributes.BOLD : TextAttributes.NONE}
       {...footerSegmentBackground(theme, segment)}
       {...footerSegmentInteraction(dispatch, segment)}
@@ -53,11 +54,15 @@ function FilterFooterSegment({ segment }: { segment: DashboardFilterFooterSegmen
 
 function footerBackground(
   theme: StationTheme,
-  variant: "editing" | "applied",
+  variant: "editing" | "condition" | "applied",
 ): { backgroundColor?: ColorInput } {
-  return variant === "editing"
-    ? { backgroundColor: toOpenTuiOpaqueColor(theme.filter.editorSurface) }
-    : {};
+  if (variant === "editing") {
+    return { backgroundColor: toOpenTuiOpaqueColor(theme.filter.editorSurface) };
+  }
+  if (variant === "condition") {
+    return { backgroundColor: toOpenTuiOpaqueColor(theme.filter.conditionSurface) };
+  }
+  return {};
 }
 
 function footerSegmentBackground(

@@ -240,30 +240,107 @@ describeReal("real native Station mouse input", () => {
         "The second deliberate native click did not collapse the project once.",
       );
       await ptyClient.write(Buffer.from(`/${branch}\r`, "utf8"));
-      const filtered = await waitForNativeFrame(
+      const collapsedFiltered = await waitForNativeFrame(
         runtime,
         (frame) =>
           frame.includes(`▶ ${PROJECT_LABEL}`) &&
-          frame.includes(branch) &&
+          !frame.includes(branch) &&
           frame.includes("/ edit") &&
           frame.includes("Esc clear"),
-        "An applied native filter did not temporarily reveal the collapsed matching session.",
+        "An applied native filter did not preserve the collapsed project disclosure.",
+      );
+      await writeSgrClick(ptyClient, projectCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && frame.includes(branch),
+        "The filtered native project did not expand to reveal its matching session.",
+      );
+      await writeSgrClick(ptyClient, projectCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
+        "The filtered native project did not collapse its matching session.",
       );
 
-      await writeSgrClick(ptyClient, cellForText(filtered, "/ edit"));
-      await waitForNativeFrame(
+      await writeSgrClick(ptyClient, cellForText(collapsedFiltered, "/ edit"));
+      const reopenedFilter = await waitForNativeFrame(
         runtime,
         (frame) => frame.includes(`FILTER /${branch}`),
         "Clicking the native applied-filter edit control did not reopen the header editor.",
       );
-      await ptyClient.write(Buffer.from("\x1b", "utf8"));
+      await ptyClient.write(Buffer.from("\t", "utf8"));
+      const conditionFields = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("FILTER CONDITIONS") && frame.includes("S Status"),
+        "Tab did not open the native persistent-filter condition chooser.",
+      );
+      await writeSgrClick(ptyClient, cellForText(conditionFields, "Status"));
+      const statusValues = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("STATUS CONDITION") && frame.includes("Working"),
+        "Clicking Status did not open native condition values.",
+      );
+      await writeSgrClick(ptyClient, cellForText(statusValues, "[←]"));
+      const returnedFields = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("FILTER CONDITIONS") && frame.includes("S Status"),
+        "The native condition back control did not return to the field chooser.",
+      );
+      await writeSgrClick(ptyClient, cellForText(returnedFields, "Status"));
+      const reopenedStatusValues = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("STATUS CONDITION") && frame.includes("Working"),
+        "Clicking Status after Back did not reopen native condition values.",
+      );
+      await writeSgrClick(ptyClient, cellForText(reopenedStatusValues, "Working"));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("[✓] Working"),
+        "Clicking Working did not toggle the native condition value.",
+      );
+      await writeSgrClick(ptyClient, cellForText(reopenedFilter, `FILTER /${branch}`));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`FILTER /${branch}`) && !frame.includes("STATUS CONDITION"),
+        "Native condition click-away did not return to filter text editing.",
+      );
+
+      await ptyClient.write(Buffer.from("\t", "utf8"));
+      const fieldsForBuild = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("FILTER CONDITIONS") && frame.includes("S Status"),
+        "The native condition chooser did not reopen for staged editing.",
+      );
+      await writeSgrClick(ptyClient, cellForText(fieldsForBuild, "Status"));
+      const valuesForBuild = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("STATUS CONDITION") && frame.includes("Working"),
+        "The native Status values did not reopen for staged editing.",
+      );
+      await writeSgrClick(ptyClient, cellForText(valuesForBuild, "Working"));
+      const selectedForBuild = await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes("[✓] Working") && frame.includes("Done (Enter)"),
+        "The native Status value did not select before returning to the builder.",
+      );
+      await writeSgrClick(ptyClient, cellForText(selectedForBuild, "Done (Enter)"));
+      const builtFilter = await waitForNativeFrame(
+        runtime,
+        (frame) =>
+          frame.includes("FILTER CONDITIONS") &&
+          frame.includes("Working") &&
+          frame.includes("Apply filter (F)"),
+        "The native Done control did not retain the selected Status value.",
+      );
+      await writeSgrClick(ptyClient, cellForText(builtFilter, "Apply filter (F)"));
       const reapplied = await waitForNativeFrame(
         runtime,
         (frame) =>
           frame.includes(`▶ ${PROJECT_LABEL}`) &&
-          frame.includes(branch) &&
+          !frame.includes(branch) &&
+          frame.includes("Status=Working") &&
           frame.includes("Esc clear"),
-        "Cancelling native filter editing did not restore the applied collapsed-match reveal.",
+        "The native Apply filter control did not apply the complete staged filter.",
       );
       await writeSgrClick(ptyClient, cellForText(reapplied, "Esc clear"));
       await waitForNativeFrame(

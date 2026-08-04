@@ -408,6 +408,7 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().screen).toEqual({
       name: "persistentFilter",
       draft: { value: "working", cursor: 7 },
+      draftConditions: [],
     });
 
     store.actions.handleKey({ input: "", escape: true });
@@ -430,6 +431,117 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().persistentFilter).toBeUndefined();
   });
 
+  it("routes condition building and final apply clicks through the same transitions as keys", () => {
+    const clicked = makeStationTestRuntime({
+      terminalRows: 14,
+      dashboardSearchExperience: persistentFilterExperience,
+    }).runtime;
+    const keyed = makeStationTestRuntime({
+      terminalRows: 14,
+      dashboardSearchExperience: persistentFilterExperience,
+    }).runtime;
+    for (const store of [clicked, keyed]) {
+      store.actions.handleKey({ input: "/" });
+      store.actions.handleKey({ input: "i", ctrl: true });
+    }
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionField", field: "status" },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "S" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+
+    routeStationMouse(
+      {
+        kind: "persistentFilterConditionValue",
+        field: "status",
+        valueId: "working",
+      },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "3" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "done" },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "\r", return: true });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+    expect(clicked.state.getState().screen).toMatchObject({
+      draftConditions: [
+        { field: "status", values: [{ id: "working", label: "Working" }] },
+      ],
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "applyFilter" },
+      LEFT_DOWN,
+      clicked,
+    );
+    keyed.actions.handleKey({ input: "F" });
+    expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
+    expect(clicked.state.getState().persistentFilter).toEqual(
+      keyed.state.getState().persistentFilter,
+    );
+  });
+
+  it("routes the top back and close controls independently", () => {
+    const store = makeStationTestRuntime({
+      terminalRows: 14,
+      dashboardSearchExperience: persistentFilterExperience,
+    }).runtime;
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    store.actions.handleKey({ input: "S" });
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "back" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      conditionEditor: { stage: "field", cursor: 0 },
+    });
+
+    routeStationMouse(
+      { kind: "persistentFilterConditionAction", actionId: "close" },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "", cursor: 0 },
+      draftConditions: [],
+    });
+  });
+
+  it("click-away discards only the active field's unretained changes", () => {
+    const store = makeStationTestRuntime({
+      terminalRows: 14,
+      dashboardSearchExperience: persistentFilterExperience,
+    }).runtime;
+    store.actions.handleKey({ input: "/" });
+    store.actions.handleKey({ input: "draft" });
+    store.actions.handleKey({ input: "i", ctrl: true });
+    store.actions.handleKey({ input: "S" });
+    store.actions.handleKey({ input: "3" });
+
+    routeStationMouse({ kind: "screenBackdrop" }, LEFT_DOWN, store);
+
+    expect(store.state.getState().screen).toEqual({
+      name: "persistentFilter",
+      draft: { value: "draft", cursor: 5 },
+      draftConditions: [],
+    });
+  });
+
   it("toggles project collapse on header click, dashboard mode only", () => {
     const store = makeStore();
 
@@ -447,6 +559,22 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
+  });
+
+  it("keeps project disclosure interactive while a persistent filter is applied", () => {
+    const store = makeStore(undefined, { persistentFilter: { query: "station" } });
+    const snapshot = store.state.getState().snapshot;
+    if (snapshot === undefined) throw new Error("expected snapshot");
+    const visibleSessions = () =>
+      selectDashboardViewport(snapshot, store.state.getState()).items.filter(
+        (item) => item.type === "session",
+      ).length;
+
+    expect(visibleSessions()).toBeGreaterThan(0);
+    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    expect(visibleSessions()).toBe(0);
+    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    expect(visibleSessions()).toBeGreaterThan(0);
   });
 
   it("scrolls on wheel in row-interactive modes and nowhere else", () => {

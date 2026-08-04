@@ -62,6 +62,16 @@ describe("legacy dashboard search experience", () => {
     expect(cancelled.scrollOffset).toBe(2);
   });
 
+  it("keeps flag-off Tab on the legacy prompt instead of opening conditions", () => {
+    const state = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    const opened = handleTuiKey(state, { input: "/" }, KEY_CONTEXT, experience).state;
+
+    const tab = handleTuiKey(opened, { input: "i", ctrl: true }, KEY_CONTEXT, experience).state;
+
+    expect(tab.screen).toEqual({ name: "search", value: "i" });
+    expect(tab.persistentFilter).toBeUndefined();
+  });
+
   it("applies the draft, resets scroll, and reconciles dashboard focus", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),

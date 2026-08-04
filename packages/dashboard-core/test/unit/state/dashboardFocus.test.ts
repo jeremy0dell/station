@@ -429,12 +429,12 @@ describe("dashboard focus", () => {
     expect(applied.scrollOffset).toBe(0);
   });
 
-  it("returns a temporarily revealed collapsed child to its project header when clearing", () => {
+  it("preserves collapsed project-header focus when clearing an applied filter", () => {
     const filtered = state({
       terminalRows: 10,
       collapsedProjectIds: ["web"],
       persistentFilter: { query: "fix-nav-mobile" },
-      dashboardFocus: session("ses_wt_web_idle"),
+      dashboardFocus: header("web", "primary"),
     });
 
     const cleared = handleTuiKey(
