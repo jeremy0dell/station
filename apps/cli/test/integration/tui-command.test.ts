@@ -748,7 +748,7 @@ describe("CLI tui command", () => {
     const fixture = await createTempState();
     const stationUiInstalled = vi.fn(async () => false);
     const spawnProcess = vi.fn(() => {
-      const child = new EventEmitter();
+      const child = Object.assign(new EventEmitter(), { pid: 4321 });
       queueMicrotask(() => child.emit("exit", 0));
       return child as never;
     });
@@ -790,7 +790,7 @@ describe("CLI tui command", () => {
     const fixture = await createTempState();
     const stationUiInstalled = vi.fn(async () => true);
     const spawnProcess = vi.fn(() => {
-      const child = new EventEmitter();
+      const child = Object.assign(new EventEmitter(), { pid: 4321 });
       queueMicrotask(() => child.emit("exit", 0));
       return child as never;
     });
@@ -863,7 +863,7 @@ describe("CLI tui command", () => {
     const fixture = await createTempState();
     const stationUiInstalled = vi.fn(async () => false);
     const spawnProcess = vi.fn(() => {
-      const child = new EventEmitter();
+      const child = Object.assign(new EventEmitter(), { pid: 4321 });
       queueMicrotask(() => child.emit("exit", 0));
       return child as never;
     });
@@ -1555,6 +1555,38 @@ describe("CLI tui command", () => {
     });
   });
 
+  it.each([
+    "error-first",
+    "exit-first",
+  ] as const)("records only spawn failure when an unspawned child emits $case", async (eventOrder) => {
+    const fixture = await createTempState();
+    const child = new EventEmitter();
+    const spawnProcess = vi.fn(() => child as never);
+    const resultPromise = runTuiCommand(
+      [],
+      { config: fixture.config },
+      {
+        observer: runningObserverDeps(),
+        selfExecRuntime: { compiled: true, execPath: "/opt/station/stn" },
+        spawnProcess: spawnProcess as never,
+      },
+    );
+    await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce());
+
+    const error = Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" });
+    if (eventOrder === "error-first") {
+      child.emit("error", error);
+      child.emit("exit", null, null);
+    } else {
+      child.emit("exit", null, null);
+      child.emit("error", error);
+    }
+
+    await expect(resultPromise).resolves.toEqual({ status: "exited", code: 1 });
+    const records = await readJsonlLog(join(fixture.stateDir, "logs", "cli.jsonl"));
+    expect(records.map((record) => record.lifecycle?.kind)).toEqual(["renderer.spawn_failed"]);
+  });
+
   it("rejects invalid fake dashboard count flags before observer startup", async () => {
     const fixture = await createTempState();
 
@@ -1653,6 +1685,7 @@ async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise
 
 class FakeRendererChild extends EventEmitter {
   connected = true;
+  readonly pid = 4321;
   readonly sent: unknown[] = [];
 
   constructor(private readonly sendError: Error | null = null) {

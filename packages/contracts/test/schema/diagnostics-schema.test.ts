@@ -12,6 +12,7 @@ import {
   STATION_SCHEMA_VERSION,
   TraceContextSchema,
   UiLifecycleEventSchema,
+  UiLifecycleSurfaceSchema,
   UiRunContextSchema,
   UiShutdownReasonSchema,
   UiSurfaceChangeReasonSchema,
@@ -82,6 +83,8 @@ describe("diagnostics schemas", () => {
       signal: "SIGTERM",
     };
     expect(UiLifecycleEventSchema.parse(rendererExit)).toEqual(rendererExit);
+    const { rendererPid: _rendererPid, ...pidlessRendererExit } = rendererExit;
+    expect(UiLifecycleEventSchema.safeParse(pidlessRendererExit).success).toBe(false);
     expect(UiLifecycleEventSchema.safeParse({ ...rendererExit, signal: "TERM" }).success).toBe(
       false,
     );
@@ -90,6 +93,7 @@ describe("diagnostics schemas", () => {
     ).toBe(false);
     expect(UiShutdownReasonSchema.safeParse("signal").success).toBe(false);
     expect(UiSurfaceChangeReasonSchema.safeParse("startup").success).toBe(false);
+    expect(UiLifecycleSurfaceSchema.parse("welcome")).toBe("welcome");
     expect(
       UiRunContextSchema.parse({
         uiRunId: rendererExit.uiRunId,

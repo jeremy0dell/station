@@ -7,7 +7,6 @@ import type {
   UiSurfaceChangeReason,
 } from "@station/contracts";
 import { createUiLifecycleRecorder, type JsonlLogger } from "@station/observability";
-import { safeErrorFromUnknown } from "@station/runtime";
 
 export type UiLifecycleWitness = {
   readonly context: UiRunContext;
@@ -53,12 +52,12 @@ export function createUiLifecycleWitness(input: {
     }
   };
 
-  const fatal = async (error: unknown): Promise<void> => {
-    const safeError: SafeError = safeErrorFromUnknown(error, {
+  const fatal = async (_error: unknown): Promise<void> => {
+    const safeError: SafeError = {
       tag: "TuiRuntimeError",
       code: "TUI_FATAL",
       message: "The native Station UI failed.",
-    });
+    };
     await record(
       { kind: "ui.fatal", uiRunId: input.context.uiRunId, error: safeError },
       "error",

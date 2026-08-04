@@ -1,4 +1,5 @@
 import type { UiLifecycleSurface, UiSurfaceChangeReason } from "@station/contracts";
+import { selectWelcomeVisible } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import type { StationState } from "../state/types.js";
 import type { UiLifecycleWitness } from "./uiLifecycle.js";
@@ -7,25 +8,22 @@ type UiSurfaceObservation = {
   surface: UiLifecycleSurface;
   activeOverlay: string | null;
   contextMenuOpen: boolean;
-  introVisible: boolean;
-  hasPanes: boolean;
 };
 
 function observeSurface(state: StationState): UiSurfaceObservation {
   const contextMenuOpen = state.input.contextMenu !== null;
-  const hasPanes = state.workspace.panes.length > 0;
   let surface: UiLifecycleSurface = "workspace";
   if (contextMenuOpen) {
     surface = "context_menu";
-  } else if (state.input.introVisible || state.input.activeOverlay !== null || !hasPanes) {
+  } else if (state.input.activeOverlay !== null) {
     surface = "station_overlay";
+  } else if (selectWelcomeVisible(state)) {
+    surface = "welcome";
   }
   return {
     surface,
     activeOverlay: state.input.activeOverlay,
     contextMenuOpen,
-    introVisible: state.input.introVisible,
-    hasPanes,
   };
 }
 

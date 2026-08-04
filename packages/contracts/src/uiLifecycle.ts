@@ -39,7 +39,12 @@ export type UiRunContext = z.infer<typeof UiRunContextSchema>;
 export const UiRendererEntrySchema = z.enum(["station", "dashboard"]);
 export type UiRendererEntry = z.infer<typeof UiRendererEntrySchema>;
 
-export const UiLifecycleSurfaceSchema = z.enum(["workspace", "station_overlay", "context_menu"]);
+export const UiLifecycleSurfaceSchema = z.enum([
+  "welcome",
+  "workspace",
+  "station_overlay",
+  "context_menu",
+]);
 export type UiLifecycleSurface = z.infer<typeof UiLifecycleSurfaceSchema>;
 
 export const UiSurfaceChangeReasonSchema = z.enum([
@@ -134,7 +139,7 @@ export const UiLifecycleEventSchema = z.discriminatedUnion("kind", [
   UiLifecycleEventBaseSchema.extend({
     component: z.literal("cli"),
     kind: z.literal("renderer.exited"),
-    rendererPid: z.number().int().positive().optional(),
+    rendererPid: z.number().int().positive(),
     exitCode: z.number().int().nullable(),
     signal: UiRendererSignalSchema.nullable(),
   }).strict(),

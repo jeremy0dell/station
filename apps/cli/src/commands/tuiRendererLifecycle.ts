@@ -6,7 +6,7 @@ export type TuiRendererLifecycleWitness = {
   spawned(rendererPid: number): Promise<void>;
   spawnFailed(error: SafeError): Promise<void>;
   exited(input: {
-    rendererPid?: number;
+    rendererPid: number;
     exitCode: number | null;
     signal: UiRendererSignal | null;
   }): Promise<void>;
@@ -60,18 +60,17 @@ export function createTuiRendererLifecycleWitness(input: {
         },
         "error",
       ),
-    exited: ({ rendererPid, exitCode, signal }) => {
-      const event: Parameters<typeof recorder.record>[0] = {
-        kind: "renderer.exited",
-        uiRunId: input.uiRunId,
-        exitCode,
-        signal,
-      };
-      if (rendererPid !== undefined) {
-        event.rendererPid = rendererPid;
-      }
-      return record(event, "info");
-    },
+    exited: ({ rendererPid, exitCode, signal }) =>
+      record(
+        {
+          kind: "renderer.exited",
+          uiRunId: input.uiRunId,
+          rendererPid,
+          exitCode,
+          signal,
+        },
+        "info",
+      ),
     async flush() {
       try {
         await recorder.flush();

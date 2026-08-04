@@ -338,7 +338,8 @@ async function spawnRenderer(
     : undefined;
   return new Promise<TuiRunResult>((resolve) => {
     let settled = false;
-    const spawned = child.pid === undefined ? Promise.resolve() : lifecycle.spawned(child.pid);
+    const rendererPid = child.pid;
+    const spawned = rendererPid === undefined ? Promise.resolve() : lifecycle.spawned(rendererPid);
     const finish = async (result: TuiRunResult): Promise<void> => {
       if (settled) {
         return;
@@ -349,6 +350,9 @@ async function spawnRenderer(
       resolve(result);
     };
     child.once("error", (error) => {
+      if (rendererPid !== undefined || settled) {
+        return;
+      }
       void (async () => {
         await recordSpawnFailure(
           safeErrorFromUnknown(error, {
@@ -361,10 +365,13 @@ async function spawnRenderer(
       })();
     });
     child.once("exit", (exitCode, signal) => {
+      if (rendererPid === undefined || settled) {
+        return;
+      }
       void (async () => {
         await spawned;
         await lifecycle.exited({
-          ...(child.pid === undefined ? {} : { rendererPid: child.pid }),
+          rendererPid,
           exitCode,
           signal,
         });

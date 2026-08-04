@@ -154,12 +154,13 @@ bun run dashboard                     # interactive dashboard renderer without n
 ## Native UI Lifecycle Evidence
 
 The native renderer is an independent semantic witness in `logs/tui.jsonl`. It
-records startup/ready, typed workspace, Station-overlay, and context-menu
+records startup/ready, typed welcome, workspace, Station-overlay, and context-menu
 transitions, shutdown intent (`ctrl_q` or cooperative TTY takeover), fatal
-errors, and normal shutdown completion. Normal shutdown flushes this evidence
-before process exit; abrupt loss and exact process signals remain covered by the
-launcher. Ctrl-O is a surface transition inside one `uiRunId`, not a renderer
-restart. Direct development mints a valid run ID and preserves it across Bun HMR.
+errors normalized to the fixed content-free `TUI_FATAL` shape, and normal
+shutdown completion. Normal shutdown flushes this evidence before process exit;
+abrupt loss and exact process signals remain covered by the launcher. Ctrl-O is
+a surface transition inside one `uiRunId`, not a renderer restart. Direct
+development mints a valid run ID and preserves it across Bun HMR.
 
 This telemetry is local and content-free: it must not collect terminal output,
 prompts, key contents, foreground application names, environment variables,

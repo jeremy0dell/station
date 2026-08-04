@@ -5,7 +5,10 @@ import { componentLogPath, createJsonlLogger, readJsonlLog } from "@station/obse
 import { describe, expect, it } from "bun:test";
 import { createStationStore } from "../state/store.js";
 import { createUiLifecycleWitness } from "./uiLifecycle.js";
-import { observeUiSurfaceLifecycle } from "./uiSurfaceLifecycle.js";
+import {
+  observeUiSurfaceLifecycle,
+  selectUiLifecycleSurface,
+} from "./uiSurfaceLifecycle.js";
 
 const uiRunContext = {
   uiRunId: "ui_11111111-1111-4111-8111-111111111111",
@@ -13,15 +16,18 @@ const uiRunContext = {
   clientKind: "native_renderer" as const,
 };
 
-async function createHarness(name: string, welcomeIntroOnBoot = false) {
+async function createHarness(
+  name: string,
+  options: { boot?: "empty"; welcomeIntroOnBoot?: boolean } = {},
+) {
   const stateDir = await mkdtemp(join(tmpdir(), `${name}-`));
   const logger = createJsonlLogger({
     component: "tui",
     path: componentLogPath(stateDir, "tui"),
   });
   const witness = createUiLifecycleWitness({ logger, context: uiRunContext });
-  const store = createStationStore({ welcomeIntroOnBoot });
-  await witness.ready(welcomeIntroOnBoot ? "station_overlay" : "workspace");
+  const store = createStationStore(options);
+  await witness.ready(selectUiLifecycleSurface(store.getState()));
   const stop = observeUiSurfaceLifecycle({ store, witness });
   return { stateDir, store, witness, stop };
 }
@@ -66,7 +72,9 @@ describe("UI surface lifecycle observer", () => {
   });
 
   it("uses state_change when the welcome intro is dismissed", async () => {
-    const harness = await createHarness("station-ui-surface-welcome", true);
+    const harness = await createHarness("station-ui-surface-welcome", {
+      welcomeIntroOnBoot: true,
+    });
 
     harness.store.actions.dismissWelcomeIntro();
 
@@ -77,7 +85,29 @@ describe("UI surface lifecycle observer", () => {
         reason,
       })),
     ).toEqual([
-      { before: "station_overlay", after: "workspace", reason: "state_change" },
+      { before: "welcome", after: "workspace", reason: "state_change" },
+    ]);
+    harness.stop();
+  });
+
+  it("records the visible welcome surface for an empty boot", async () => {
+    const harness = await createHarness("station-ui-surface-empty", { boot: "empty" });
+    const records = await readJsonlLog(join(harness.stateDir, "logs", "tui.jsonl"));
+
+    expect(records[0]?.lifecycle).toMatchObject({ kind: "ui.ready", surface: "welcome" });
+
+    harness.store.actions.openOverlay("station");
+    await lifecycleChanges(harness);
+    harness.store.actions.closeOverlay();
+    expect(
+      (await lifecycleChanges(harness)).map(({ before, after, reason }) => ({
+        before,
+        after,
+        reason,
+      })),
+    ).toEqual([
+      { before: "welcome", after: "station_overlay", reason: "overlay_open" },
+      { before: "station_overlay", after: "welcome", reason: "overlay_close" },
     ]);
     harness.stop();
   });

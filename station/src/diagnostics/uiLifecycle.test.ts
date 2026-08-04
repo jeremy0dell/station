@@ -75,6 +75,52 @@ describe("UI lifecycle witness", () => {
     expect(JSON.stringify(records)).not.toContain("renderer failed");
   });
 
+  for (const { label, error, privateValue } of [
+    {
+      label: "SafeError",
+      error: {
+        tag: "FilesystemError",
+        code: "SECRET_PATH",
+        message: "Failed under /Users/private/project.",
+      },
+      privateValue: "/Users/private/project",
+    },
+    {
+      label: "ExternalCommandError",
+      error: {
+        tag: "ExternalCommandError",
+        code: "COMMAND_FAILED",
+        message: "A private command failed.",
+        command: "private-command --secret",
+        cwd: "/Users/private/project",
+        stderrSnippet: "secret output",
+      },
+      privateValue: "private-command --secret",
+    },
+  ] as const) {
+    it(`normalizes ${label} inputs to the fixed fatal contract`, async () => {
+      const stateDir = await mkdtemp(join(tmpdir(), "station-ui-fixed-fatal-"));
+      const logger = createJsonlLogger({
+        component: "tui",
+        path: componentLogPath(stateDir, "tui"),
+      });
+      const witness = createUiLifecycleWitness({ logger, context });
+
+      await witness.fatalShutdown(error);
+
+      const records = await readJsonlLog(join(stateDir, "logs", "tui.jsonl"));
+      expect(records.map((record) => record.lifecycle?.kind)).toEqual([
+        "ui.shutdown.requested",
+        "ui.fatal",
+      ]);
+      expect(records.at(-1)?.lifecycle).toMatchObject({
+        kind: "ui.fatal",
+        error: { code: "TUI_FATAL", message: "The native Station UI failed." },
+      });
+      expect(JSON.stringify(records)).not.toContain(privateValue);
+    });
+  }
+
   it("never lets lifecycle write or flush failures escape", async () => {
     const failure = new Error("disk failed");
     const witness = createUiLifecycleWitness({

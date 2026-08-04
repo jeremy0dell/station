@@ -259,11 +259,11 @@ async function startStationMain(
   const finishProcessShutdown = (reason: UiShutdownReason): void => {
     if (shutdownStarted) return;
     shutdownStarted = true;
+    stopSurfaceObservation?.();
     void (async () => {
       let exitCode = 0;
       await uiLifecycle.shutdownRequested(reason);
       try {
-        stopSurfaceObservation?.();
         rootForShutdown?.unmount();
         rendererForInput?.destroy();
         ptyRuntime?.dispose();
