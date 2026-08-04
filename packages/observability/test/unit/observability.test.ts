@@ -1,10 +1,11 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DiagnosticEvidenceIndex, DiagnosticSnapshot } from "@station/contracts";
+import { DiagnosticEvidenceIndexSchema, type DiagnosticSnapshot } from "@station/contracts";
 import {
   createErrorEnvelope,
   createJsonlLogger,
+  createUiLifecycleRecorder,
   DEFAULT_RETENTION_POLICY,
   mergeRetentionPolicy,
   readJsonlLog,
@@ -58,6 +59,49 @@ describe("observability helpers", () => {
         }),
       }),
     ]);
+  });
+
+  it("serializes and flushes source-ordered UI lifecycle records", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-ui-lifecycle-log-"));
+    const logger = createJsonlLogger({
+      component: "cli",
+      path: join(dir, "cli.jsonl"),
+      clock: { now: () => new Date(now) },
+    });
+    const lifecycle = createUiLifecycleRecorder({
+      logger,
+      component: "cli",
+      sourceId: "launcher-test",
+      pid: 100,
+      clock: { now: () => new Date(now) },
+    });
+    const uiRunId = "ui_11111111-1111-4111-8111-111111111111";
+
+    await Promise.all([
+      lifecycle.record(
+        { kind: "renderer.spawned", uiRunId, rendererPid: 101, entry: "station" },
+        "info",
+      ),
+      lifecycle.record(
+        {
+          kind: "renderer.exited",
+          uiRunId,
+          rendererPid: 101,
+          exitCode: null,
+          signal: "SIGTERM",
+        },
+        "warn",
+      ),
+    ]);
+    await lifecycle.flush();
+
+    const records = await readJsonlLog(logger.path);
+    expect(records.map((record) => record.lifecycle?.kind)).toEqual([
+      "renderer.spawned",
+      "renderer.exited",
+    ]);
+    expect(records.map((record) => record.lifecycle?.source.sequence)).toEqual([0, 1]);
+    expect(records.map((record) => record.level)).toEqual(["info", "warn"]);
   });
 
   it("keeps SafeError output safe while storing redacted internal envelopes", () => {
@@ -203,9 +247,15 @@ describe("observability helpers", () => {
     expect(manifest.traceIds).toEqual(["trc_1"]);
     const bundleText = await readFile(join(manifest.bundlePath, "errors.jsonl"), "utf8");
     expect(bundleText).not.toContain("sk-secret");
-    const index = JSON.parse(
-      await readFile(join(manifest.bundlePath, "diagnostic-index.json"), "utf8"),
-    ) as DiagnosticEvidenceIndex;
+    let rawIndex: unknown;
+    try {
+      rawIndex = JSON.parse(
+        await readFile(join(manifest.bundlePath, "diagnostic-index.json"), "utf8"),
+      );
+    } catch (error) {
+      throw new Error("The debug bundle diagnostic index was not valid JSON.", { cause: error });
+    }
+    const index = DiagnosticEvidenceIndexSchema.parse(rawIndex);
     expect(index.rootCauses.map((cause) => cause.code)).toContain("COMMAND_FAILED");
   });
 });

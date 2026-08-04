@@ -13,10 +13,12 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
+import { LogComponentSchema, LogLevelSchema } from "./logging.js";
 import { ObserverHealthSchema, ObserverSqliteHealthSummarySchema } from "./observer.js";
 import { ProviderHealthSchema, ProviderHookRuntimeSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
 import { StationSnapshotSchema } from "./snapshot.js";
+import { UiLifecycleEventSchema } from "./uiLifecycle.js";
 
 export const TraceIdSchema = nonEmptyStringSchema;
 export const SpanIdSchema = nonEmptyStringSchema;
@@ -32,16 +34,6 @@ export const TraceContextSchema = z
 
 export type TraceContext = z.infer<typeof TraceContextSchema>;
 
-export const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
-export const LogComponentSchema = z.enum([
-  "observer",
-  "cli",
-  "tui",
-  "hook",
-  "provider",
-  "station-host",
-]);
-
 export const LogRecordSchema = z
   .object({
     timestamp: TimestampSchema,
@@ -55,6 +47,7 @@ export const LogRecordSchema = z
     worktreeId: nonEmptyStringSchema.optional(),
     sessionId: nonEmptyStringSchema.optional(),
     provider: ProviderIdSchema.optional(),
+    lifecycle: UiLifecycleEventSchema.optional(),
     attributes: z.record(nonEmptyStringSchema, z.unknown()).optional(),
   })
   .strict();
