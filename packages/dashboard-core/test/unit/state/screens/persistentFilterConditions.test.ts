@@ -1,7 +1,6 @@
 import {
   createInitialTuiState,
   handleTuiKey,
-  persistentFilterExperience,
   type TuiKey,
   type TuiState,
 } from "@station/dashboard-core";
@@ -13,7 +12,7 @@ const RETURN = { input: "\r", return: true } as const;
 const TAB = { input: "i", ctrl: true } as const;
 
 function key(state: TuiState, input: TuiKey): TuiState {
-  return handleTuiKey(state, input, CONTEXT, persistentFilterExperience).state;
+  return handleTuiKey(state, input, CONTEXT).state;
 }
 
 function openFilter(): TuiState {

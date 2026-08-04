@@ -46,9 +46,6 @@ export function createStation(options: CreateStationOptions): Station {
   // edits are written back to config.toml when a config path exists.
   const dashboardRuntime = createStationDashboardRuntime(stationClient, {
     ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
-    ...(options.dashboardSearchExperience === undefined
-      ? {}
-      : { dashboardSearchExperience: options.dashboardSearchExperience }),
     widgetsPersisted: options.tuiConfigPath !== undefined,
   });
   const registry = setupRegistry(options, store, stationClient);

@@ -60,20 +60,12 @@ Station creates an isolated worktree, launches the selected agent, and opens its
 
 The on-screen footer and help overlay are the authoritative key reference for the active screen.
 
-### Optional persistent filter
+### Persistent filter
 
-The persistent free-text workflow is currently default-off. Enable it in
-`~/.config/station/config.toml`, then reopen Station so renderer composition reads the flag:
-
-```toml
-[feature_flags]
-dashboard_persistent_filter = true
-```
-
-Press `/` to edit a soft preview: rows stay in place while visible-text matches highlight and
-nonmatches dim. Press `Tab`, then `S`, `P`, or `A` to edit a Status, Project, or Agent condition.
-Toggle values with their visible slot keys or with arrows plus `Space`; the preview updates before
-the filter is applied. Use header `[←]`/Left or bottom `Done (Enter)` to retain that field and return
+Press `/` on the dashboard to edit a soft preview: rows stay in place while visible-text matches
+highlight and nonmatches dim. Press `Tab`, then `S`, `P`, or `A` to edit a Status, Project, or Agent
+condition. Toggle values with their visible slot keys or with arrows plus `Space`; the preview updates
+before the filter is applied. Use header `[←]`/Left or bottom `Done (Enter)` to retain that field and return
 to `FILTER CONDITIONS`, then edit another field. Header `[×]`, `Esc`, or click-away closes the
 builder; from a value list it discards only that field's unretained toggles.
 

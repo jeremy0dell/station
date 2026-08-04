@@ -10,7 +10,6 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     screen: { name: "dashboard" },
     toasts: [],
     observerConnectionStatus: { state: "connected" },
-    searchQuery: options.searchQuery ?? "",
     collapsedProjectIds: new Set(options.collapsedProjectIds ?? []),
     scrollOffset: options.scrollOffset ?? 0,
     terminalRows: options.terminalRows ?? 24,

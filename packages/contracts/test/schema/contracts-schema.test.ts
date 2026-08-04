@@ -538,11 +538,9 @@ describe("contract schemas", () => {
     expect(FeatureFlagConfigSchema.parse({})).toEqual({});
     expect(
       FeatureFlagConfigSchema.parse({
-        dashboardPersistentFilter: true,
         sessionResumeAgent: true,
       }),
     ).toEqual({
-      dashboardPersistentFilter: true,
       sessionResumeAgent: true,
     });
     expect(FeatureFlagConfigSchema.safeParse({ "test.fake": true }).success).toBe(false);
@@ -550,7 +548,7 @@ describe("contract schemas", () => {
       ClientFeatureFlagsSchema.safeParse({
         revision: "test",
         flags: {
-          dashboardPersistentFilter: true,
+          stationPersistentAgents: true,
           sessionResumeAgent: true,
         },
       }).success,

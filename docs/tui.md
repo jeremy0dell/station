@@ -292,7 +292,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Render normalized contracts from `@station/contracts` and use `@station/protocol` through the Station service/source layer.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the dashboard runtime, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
-- Each renderer composition resolves one `StationTuiComposition` through `station/src/config/tuiConfig.ts` and passes that opaque composition into its `DashboardRuntime`. This is the only feature-decision boundary: reducers and render/input leaves must not select search behavior or inspect feature flags; legacy session and optimistic-row matching remains centralized in the pure dashboard search projection.
+- Dashboard key/behavior is shared, not feature-gated: reducers and render/input leaves never select filter behavior or inspect feature flags; session and optimistic-row matching remains centralized in the pure persistent-filter projection.
 - Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is repeat-safe. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
 - Presentation receives the readonly `DashboardStateSource` unless a rendered effect requires specific `DashboardActions`. Input and effect adapters receive state plus actions, while native and standalone composition roots alone own full runtime lifecycle. Config persistence receives only the state subscription and `pushToast` capability it needs.
@@ -301,7 +301,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
 - Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
-  search, selection, and actions project those sessions and join `snapshot.rows` only for checkout
+  filtering, selection, and actions project those sessions and join `snapshot.rows` only for checkout
   metadata; bare worktrees remain inventory and do not appear in the primary session list.
 - `terminal.focusable` describes external dashboard control, not native Station
   interaction. Native row activation resolves an advertised managed attachment
@@ -327,12 +327,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 
 ## Persistent Dashboard Filter Preview
 
-`[feature_flags].dashboard_persistent_filter` selects the dashboard search experience once at
-renderer composition. With the flag off, `/`, the absolute legacy search prompt, and applied
-`searchQuery` behavior remain unchanged. Reducers, selectors, input routing, and views consume the
-selected experience or typed state; they do not read the flag.
-
-With the flag on, `/` opens a single-line editor in the complete table-header row. Its draft starts
+`/` opens a single-line editor in the complete table-header row. Its draft starts
 from the dashboard-local applied free text and structured conditions. Editing performs a
 deterministic, locale-neutral case-insensitive soft preview over the complete session and
 optimistic-row universe plus project labels. Folded match offsets map back to source text before
@@ -397,16 +392,16 @@ applied summary truncates as one line. Persistent filtering never uses the absol
 `CommandPromptView` overlay. Sheets, Help, snapshot replacement, and warm popup reopen preserve the
 applied filter; covered footer targets remain inert outside dashboard mode.
 
-| Verification | Flag off | Flag on |
-| --- | --- | --- |
-| `/` at wide and minimum width | Legacy absolute prompt; no live preview | Header editor; live highlights/dimming/global count; no wrapping |
-| Editing `Esc` | Cancels legacy draft | Restores the prior hard applied projection |
-| `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
-| Zero matches | Legacy projection behavior | Amber, recoverable soft preview; applying yields an empty dashboard projection |
-| Hidden metadata only | Legacy search may retain the row | Ignores metadata that is not rendered in the dashboard |
-| Condition entry | Legacy Tab behavior | `Tab`, `S/P/A`, slots/arrows/Space, header back/close, bottom Done, and final `F` Apply share core transitions |
-| Applied footer pointer | No persistent controls | `/ edit` and `Esc clear` share the keyboard transitions |
-| `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining free text and conditions |
+| Verification | Behavior |
+| --- | --- |
+| `/` at wide and minimum width | Header editor; live highlights/dimming/global count; no wrapping |
+| Editing `Esc` | Restores the prior hard applied projection |
+| `Enter`, then dashboard `Esc` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
+| Zero matches | Amber, recoverable soft preview; applying yields an empty dashboard projection |
+| Hidden metadata only | Ignores metadata that is not rendered in the dashboard |
+| Condition entry | `Tab`, `S/P/A`, slots/arrows/Space, header back/close, bottom Done, and final `F` Apply share core transitions |
+| Applied footer pointer | `/ edit` and `Esc clear` share the keyboard transitions |
+| `Q` from applied dashboard | Same close/dismiss behavior while retaining free text and conditions |
 
 ## Mouse Coverage Boundaries
 
@@ -445,7 +440,7 @@ again when the pointer leaves; no focus glyph is added.
 
 Collapse moves focus from a hidden session or empty-project action to that project's header
 `primary` and clamps scrolling; expanding and moving Down reaches the first visible child again.
-Snapshot replacement and accepted search changes preserve stable focus identity, otherwise choose
+Snapshot replacement and accepted filter changes preserve stable focus identity, otherwise choose
 the next focusable item at the old position before the preceding item; resize preserves identity
 and scrolls it into view. The Default Agent picker retains its header focus beneath the screen, so
 Escape, click-away, unchanged selection, and a successful change return to `defaultAgent`; project
@@ -460,7 +455,7 @@ backs up one step, or clears nested state. Active-screen controls retain hover, 
 sheets continue swallowing inside input;
 non-primary buttons, mouse-up, and wheel input remain consumed without dismissing or reaching the
 dashboard. Remove, rename, and fork choose-row modes expose no click-away behavior so row clicks
-and hover keep selecting; search and the dashboard likewise remain unchanged. In native Station,
+and hover keep selecting; the filter and the dashboard likewise remain unchanged. In native Station,
 the inner screen receives the click before the outer popup backdrop, so one click closes only the
 topmost safe surface.
 

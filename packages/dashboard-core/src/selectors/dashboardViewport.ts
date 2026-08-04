@@ -137,11 +137,7 @@ function selectDashboardItemsProjection(
   items: DashboardViewportItem[];
   persistentFilter: DashboardPersistentFilterProjection | undefined;
 } {
-  const persistentFilterSelected =
-    activeScreen.name === "persistentFilter" || state.persistentFilter !== undefined;
-  const groups = selectDashboardProjectRowGroups(snapshot, state, {
-    applyLegacySearch: !persistentFilterSelected,
-  });
+  const groups = selectDashboardProjectRowGroups(snapshot, state);
   const persistentFilter = selectDashboardPersistentFilter({
     candidates: groups.flatMap((group) => group.rows.map(persistentFilterCandidateForDashboardRow)),
     projects: groups.map((group) => ({

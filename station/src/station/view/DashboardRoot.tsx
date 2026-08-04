@@ -43,7 +43,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
   const snapshot = useStore(state, (state) => state.snapshot);
   const loading = useStore(state, (state) => state.loading);
   const screen = useStore(state, (state) => state.screen);
-  const searchQuery = useStore(state, (state) => state.searchQuery);
   const persistentFilter = useStore(state, (state) => state.persistentFilter);
   const collapsedProjectIds = useStore(state, (state) => state.collapsedProjectIds);
   const scrollOffset = useStore(state, (state) => state.scrollOffset);
@@ -128,7 +127,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
         <DashboardView
           snapshot={snapshot}
           viewState={{
-            searchQuery,
             collapsedProjectIds,
             scrollOffset,
             terminalRows: rows,

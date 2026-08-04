@@ -355,7 +355,11 @@ describe("buildContextMenuItems", () => {
     const store = createStationStore();
     const stationState = {
       ...createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() }),
-      screen: { name: "search", value: "" } as const,
+      screen: {
+        name: "persistentFilter",
+        draft: { value: "", cursor: 0 },
+        draftConditions: [],
+      } as const,
     };
 
     expect(
