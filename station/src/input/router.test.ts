@@ -460,7 +460,7 @@ describe("the station-button layer (island ↵ jump)", () => {
     });
   });
 
-  it("re-arms the jump when only one flagged session is dismissed", () => {
+  it("keeps the jump live while another flagged session is not dismissed", () => {
     const snapshot = attentionAndFailuresSnapshot();
     const flagged = flaggedSession(snapshot);
     const store = createStationStore();

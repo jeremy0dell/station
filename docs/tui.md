@@ -16,7 +16,11 @@ Both entry points load `[tui].widgets` from the runtime config and render the sa
 configured-widget title chrome; widget settings update that shared config when a
 config path is available.
 
-Launch is driven by `apps/cli/src/commands/tui.ts`. A source checkout uses the Node CLI to launch the Bun renderer:
+Launch is driven by `apps/cli/src/commands/tui.ts`. The launcher mints one
+`uiRunId` per renderer child, records exact spawn/exit code/signal evidence in
+`logs/cli.jsonl`, and passes that identity to the renderer.
+A null child exit code is never interpreted as success. A source checkout uses
+the Node CLI to launch the Bun renderer:
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).
 - Inside tmux, `stn` opens the interactive observer-backed dashboard in a
@@ -96,11 +100,13 @@ with unrelated Station foreground roles.
 
 A valid embedded palette resolves one complete provider-neutral semantic theme.
 Terminal-default and indexed intent retain their observed snapshots. Weak ANSI
-roles are deterministically corrected toward the observed foreground so they
-remain readable on both the canvas and adaptive interaction fills;
-muted/border/interaction roles derive from foreground/background blends. The
-observed luminance and contrast determine dark/light behavior; OpenTUI's theme
-mode label does not.
+roles are deterministically repaired in OKLab by shifting lightness toward the
+observed foreground while holding hue and chroma, so they remain readable on
+both the canvas and adaptive interaction fills without washing out; surface and
+muted/border/interaction roles mix in OKLCH from foreground/background blends
+and keep a minimum separation from the canvas so layered surfaces stay
+distinguishable. The observed luminance and contrast determine dark/light
+behavior; OpenTUI's theme mode label does not.
 
 OpenTUI emits palette responses before `getPalette()` resolves and treats theme
 mode changes as cache invalidation followed by a palette refresh. Station treats
@@ -112,9 +118,31 @@ query can repopulate a cache already cleared by the event.
 The standalone renderer owns the controller beside its OpenTUI renderer. The
 controller starts from the complete built-in fallback, and palette I/O does not
 delay root rendering; normal exit, errors, and Bun HMR unmount the React root and
-dispose palette listeners before destroying OpenTUI. Live propagation of native
-pane VT palette state remains tracked by #417 and is not part of embedded
-appearance selection.
+dispose palette listeners before destroying OpenTUI.
+
+Native composition applies the resolved theme's `StationTerminalTheme`
+projection to the PTY registry before restored panes can create lazy screens.
+The registry is only the lifecycle fan-out point: it remembers the latest
+projection for future screens and updates existing screens without becoming an
+appearance authority or changing a PTY's process, environment, geometry,
+identity, or replay state. A compatible HMR composition retains its live PTYs
+and reapplies the current projection.
+
+`StationVtScreen` owns terminal-semantic color state. Updating its projection
+rebuilds the ANSI palette used when rows are projected, so default and ANSI
+indices 0-15 can repaint while the xterm buffer retains their original color
+intent. The fixed ANSI-256 tail at indices 16-255 and explicit RGB/truecolor
+cells remain stable. OSC 10/11 queries use the current default foreground and
+background; changing the projection itself never feeds or replays bytes and
+never sends an unsolicited reply to the child.
+
+`TerminalPane` and the active theme provider own UI paint presentation: the
+render-ready default foreground and `theme.pane.selection` flow directly to the
+custom terminal renderable. The native canvas continues to supply blank/default
+background cells through `theme.surfaces.canvas`, and the cursor remains inverse
+cell composition over the resolved cell/default colors. Native `auto` remains
+the exact opaque built-in Station appearance; user selection and native outer-
+palette observation remain deferred to #421.
 
 You can also run the renderer directly during development:
 
@@ -123,6 +151,27 @@ cd station
 bun run station                       # native workspace, live observer
 STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
 bun run dashboard                     # interactive dashboard renderer without native panes
+```
+
+## Native UI Lifecycle Evidence
+
+The native renderer is an independent semantic witness in `logs/tui.jsonl`. It
+records startup/ready, typed welcome, workspace, Station-overlay, and context-menu
+transitions, shutdown intent (`ctrl_q` or cooperative TTY takeover), fatal
+errors normalized to the fixed content-free `TUI_FATAL` shape, and normal
+shutdown completion. Normal shutdown flushes this evidence before process exit;
+abrupt loss and exact process signals remain covered by the launcher. Ctrl-O is
+a surface transition inside one `uiRunId`, not a renderer restart. Direct
+development mints a valid run ID and preserves it across Bun HMR.
+
+This telemetry is local and content-free: it must not collect terminal output,
+prompts, key contents, foreground application names, environment variables,
+process lists, arbitrary cwd, or repository paths. Inspect it with bounded raw-event
+queries or the JSONL files:
+
+```bash
+stn debug logs "renderer." --component cli
+stn debug logs "ui." --component tui
 ```
 
 ## Native TTY Ownership

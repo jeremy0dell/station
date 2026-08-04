@@ -71,12 +71,10 @@ export type StationStoreActions = {
   setStationButtonHover(hovered: boolean): void;
   /**
    * Quiet the island's attention alert for the given attention keys (all
-   * currently flagged sessions) until a new needs_attention transition re-arms
-   * them. Timestamps the dismissal so a future timeout mode can re-alert.
+   * currently flagged sessions). Timestamps the dismissal so a future timeout
+   * mode can re-alert; dismissal resets on relaunch.
    */
   dismissAttentionKeys(keys: readonly string[]): void;
-  /** Re-arm a dismissed attention key: a fresh needs_attention transition. */
-  rearmAttentionKey(key: string): void;
   /** Show a bottom-right app toast (e.g. a copy confirmation). */
   showToast(message: string, kind?: "info" | "error"): void;
   /** Clear the toast if it still carries `token` (ignores a superseded timer). */
@@ -342,14 +340,6 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
         if (!changed) {
           return;
         }
-        setState({ ...state, feedback: { ...state.feedback, dismissedAttention: dismissed } });
-      },
-      rearmAttentionKey: (key) => {
-        if (state.feedback.dismissedAttention[key] === undefined) {
-          return;
-        }
-        const dismissed = { ...state.feedback.dismissedAttention };
-        delete dismissed[key];
         setState({ ...state, feedback: { ...state.feedback, dismissedAttention: dismissed } });
       },
       showToast: (message, kind = "info") => {

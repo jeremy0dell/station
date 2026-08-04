@@ -2,7 +2,11 @@ import { basename } from "node:path";
 import type { ColorInput } from "@opentui/core";
 import "./TerminalScreenRenderable.js";
 import type { PaneId } from "../state/types.js";
-import { toOpenTuiColor, useStationTheme } from "../theme/index.js";
+import {
+  stationColorSnapshotValue,
+  toOpenTuiColor,
+  useStationTheme,
+} from "../theme/index.js";
 import { usePaneTerminal } from "./registry/paneTerminalContext.js";
 
 export type TerminalPaneProps = {
@@ -48,6 +52,8 @@ export function TerminalPane({
         width="100%"
         flexGrow={1}
         screen={term.screen}
+        defaultForeground={theme.terminal.defaultForeground.value}
+        selectionBackground={stationColorSnapshotValue(theme.pane.selection)}
         onViewportResize={term.reportSize}
         onCopySelection={onCopySelection}
         onForwardInput={onForwardInput}

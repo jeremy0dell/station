@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { nativeStationTheme, type StationTerminalTheme } from "../../theme/index.js";
 import { createScriptedTerminal, type ScriptedTerminal } from "../testing/scriptedTerminal.js";
+import { waitFor } from "../testing/waitFor.js";
 import type {
   StationTerminalDisposable,
   StationTerminalProcess,
@@ -7,11 +9,38 @@ import type {
   StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../types.js";
+import type { StationVtScreen } from "../vt/screen.js";
 import { createPtyRegistry } from "./ptyRegistry.js";
 
 const PANE_A = "pane-a";
 const PANE_B = "pane-b";
+const PANE_C = "pane-c";
 const SIZE: StationTerminalSize = { cols: 36, rows: 8 };
+
+function oscRgb(color: StationTerminalTheme["defaultForeground"]): string {
+  const value = color.value.slice(1);
+  const red = value.slice(0, 2);
+  const green = value.slice(2, 4);
+  const blue = value.slice(4, 6);
+  return `rgb:${red}${red}/${green}${green}/${blue}${blue}`;
+}
+
+function terminalTheme(
+  defaultForeground: StationTerminalTheme["defaultForeground"],
+  defaultBackground: StationTerminalTheme["defaultBackground"],
+  ansiRed: StationTerminalTheme["ansi16"][1],
+): StationTerminalTheme {
+  const [ansiBlack, , ...ansiTail] = nativeStationTheme.terminal.ansi16;
+  return {
+    defaultForeground,
+    defaultBackground,
+    ansi16: [ansiBlack, ansiRed, ...ansiTail],
+  };
+}
+
+function firstForeground(screen: StationVtScreen): string | undefined {
+  return screen.buildRows({ cursorVisible: false })[0]?.spans[0]?.fg;
+}
 
 /** A registry whose PTYs are scripted terminals handed out in spawn order. */
 function harness(options?: { count?: number; resizeDebounceMs?: number }) {
@@ -227,6 +256,179 @@ describe("createPtyRegistry", () => {
 
     expect(registry.get(PANE_A)?.screen?.bufferStats().baseY).toBe(1);
     expect(registry.get(PANE_B)?.screen?.bufferStats().baseY).toBe(3);
+  });
+
+  it("fans the latest terminal projection to existing and future screens only", async () => {
+    const firstTheme = terminalTheme(
+      nativeStationTheme.text.primary,
+      nativeStationTheme.surfaces.canvas,
+      nativeStationTheme.status.warning,
+    );
+    const nextTheme = terminalTheme(
+      nativeStationTheme.action.primary,
+      nativeStationTheme.contextMenu.surface,
+      nativeStationTheme.status.accent,
+    );
+    const first = createScriptedTerminal();
+    const second = createScriptedTerminal();
+    let replay:
+      | ((value: StationTerminalReplay) => void | Promise<void>)
+      | undefined;
+    first.terminal.onReplay = (listener) => {
+      replay = listener;
+      return { dispose: () => {} };
+    };
+    const spawned: StationTerminalProcess[] = [];
+    let spawnIndex = 0;
+    const registry = createPtyRegistry({
+      createTerminal: () => {
+        const terminal = [first.terminal, second.terminal][spawnIndex];
+        if (terminal === undefined) {
+          throw new Error("scripted terminal pool exhausted");
+        }
+        spawnIndex += 1;
+        spawned.push(terminal);
+        return terminal;
+      },
+    });
+    registry.updateTerminalTheme(firstTheme);
+    registry.ensure(PANE_A);
+    registry.ensure(PANE_B);
+    let structuralNotifications = 0;
+    registry.subscribe(() => {
+      structuralNotifications += 1;
+    });
+
+    registry.resize(PANE_A, SIZE);
+    const firstEntry = registry.get(PANE_A);
+    const firstScreen = firstEntry?.screen;
+    const firstTerminal = firstEntry?.terminal;
+    expect(firstScreen).not.toBeNull();
+    expect(firstTerminal).toBe(first.terminal);
+
+    await replay?.({
+      kind: "raw-complete",
+      initialSize: SIZE,
+      events: [{ type: "data", data: "\x1b]10;?\x07" }],
+    });
+    expect(first.helpers.writes).toEqual([]);
+    first.helpers.emitData("D\x1b[31mI\x1b[38;5;196mF\x1b[38;2;1;2;3mT");
+    await firstScreen?.whenIdle();
+    const initialForegrounds = firstScreen
+      ?.buildRows({ cursorVisible: false })[0]
+      ?.spans.map((span) => span.fg);
+    expect(initialForegrounds?.[0]).toBeUndefined();
+    expect(initialForegrounds?.[1]).toBe(firstTheme.ansi16[1].value);
+
+    const notificationCount = structuralNotifications;
+    const writesBefore = [...first.helpers.writes];
+    const resizesBefore = [...first.helpers.resizes];
+    const statsBefore = firstScreen?.bufferStats();
+    registry.updateTerminalTheme(nextTheme);
+
+    expect(registry.get(PANE_A)?.screen).toBe(firstScreen);
+    expect(registry.get(PANE_A)?.terminal).toBe(firstTerminal);
+    expect(firstScreen?.bufferStats()).toEqual(statsBefore);
+    const updatedForegrounds = firstScreen
+      ?.buildRows({ cursorVisible: false })[0]
+      ?.spans.map((span) => span.fg);
+    expect(updatedForegrounds?.[0]).toBeUndefined();
+    expect(updatedForegrounds?.[1]).toBe(nextTheme.ansi16[1].value);
+    expect(updatedForegrounds?.slice(2)).toEqual(initialForegrounds?.slice(2));
+    expect(structuralNotifications).toBe(notificationCount);
+    expect(first.helpers.writes).toEqual(writesBefore);
+    expect(first.helpers.resizes).toEqual(resizesBefore);
+    expect(first.helpers.isDisposed()).toBe(false);
+    expect(spawned).toEqual([first.terminal]);
+
+    registry.resize(PANE_B, SIZE);
+    const secondScreen = registry.get(PANE_B)?.screen;
+    second.helpers.emitData("D\x1b[31mI\x1b[38;5;196mF\x1b[38;2;1;2;3mT");
+    await secondScreen?.whenIdle();
+    expect(
+      secondScreen?.buildRows({ cursorVisible: false })[0]?.spans.map((span) => span.fg),
+    ).toEqual(updatedForegrounds);
+
+    first.helpers.emitData("\x1b]10;?\x07\x1b]11;?\x07");
+    second.helpers.emitData("\x1b]10;?\x07\x1b]11;?\x07");
+    await Promise.all([firstScreen?.whenIdle(), secondScreen?.whenIdle()]);
+    for (const scripted of [first, second]) {
+      expect(scripted.helpers.writes).toContain(
+        `\x1b]10;${oscRgb(nextTheme.defaultForeground)}\x07`,
+      );
+      expect(scripted.helpers.writes).toContain(
+        `\x1b]11;${oscRgb(nextTheme.defaultBackground)}\x07`,
+      );
+      expect(scripted.helpers.isDisposed()).toBe(false);
+    }
+    expect(spawned).toEqual([first.terminal, second.terminal]);
+  });
+
+  it("publishes terminal projection atomically before repainting screens", async () => {
+    const initialTheme = terminalTheme(
+      nativeStationTheme.text.primary,
+      nativeStationTheme.surfaces.canvas,
+      nativeStationTheme.status.warning,
+    );
+    const nextTheme = terminalTheme(
+      nativeStationTheme.action.primary,
+      nativeStationTheme.contextMenu.surface,
+      nativeStationTheme.status.accent,
+    );
+    const { registry, scripted } = harness({ count: 3 });
+    registry.updateTerminalTheme(initialTheme);
+    registry.resize(PANE_A, SIZE);
+    registry.resize(PANE_B, SIZE);
+    const firstScreen = registry.get(PANE_A)?.screen;
+    const secondScreen = registry.get(PANE_B)?.screen;
+    if (
+      firstScreen === null ||
+      firstScreen === undefined ||
+      secondScreen === null ||
+      secondScreen === undefined
+    ) {
+      throw new Error("Expected both existing screens to be initialized.");
+    }
+    scripted[0].helpers.emitData("\x1b[31mA");
+    scripted[1].helpers.emitData("\x1b[31mB");
+    await Promise.all([firstScreen.whenIdle(), secondScreen.whenIdle()]);
+    await waitFor(() => firstScreen.getVersion() > 0 && secondScreen.getVersion() > 0);
+
+    let firstRepaints = 0;
+    let secondRepaints = 0;
+    let observedDuringFirstRepaint: readonly (string | undefined)[] = [];
+    firstScreen.subscribe((invalidation) => {
+      if (invalidation !== "repaint") {
+        return;
+      }
+      firstRepaints += 1;
+      registry.resize(PANE_C, SIZE);
+      observedDuringFirstRepaint = [
+        firstForeground(firstScreen),
+        firstForeground(secondScreen),
+      ];
+    });
+    secondScreen.subscribe((invalidation) => {
+      if (invalidation === "repaint") {
+        secondRepaints += 1;
+      }
+    });
+
+    registry.updateTerminalTheme(nextTheme);
+
+    expect(observedDuringFirstRepaint).toEqual([
+      nextTheme.ansi16[1].value,
+      nextTheme.ansi16[1].value,
+    ]);
+    expect(firstRepaints).toBe(1);
+    expect(secondRepaints).toBe(1);
+    const lazyScreen = registry.get(PANE_C)?.screen;
+    expect(lazyScreen).not.toBeNull();
+    scripted[2].helpers.emitData("\x1b[31mC");
+    await lazyScreen?.whenIdle();
+    expect(
+      lazyScreen === null || lazyScreen === undefined ? undefined : firstForeground(lazyScreen),
+    ).toBe(nextTheme.ansi16[1].value);
   });
 
   it("disables scrollback when the configured depth is zero", async () => {

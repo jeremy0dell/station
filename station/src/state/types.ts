@@ -140,7 +140,7 @@ export type StationToast = {
 /**
  * Attention episodes the user has quieted on the island: attention key
  * (`sessionId ?? worktreeId`) → dismissed-at epoch ms. The alert frame stays
- * down until a new `needs_attention` transition re-arms the key; the timestamp
+ * down for the rest of the Station session (reset on relaunch); the timestamp
  * is the expiry hook for a future timeout dismissal mode.
  */
 export type FeedbackSlice = {

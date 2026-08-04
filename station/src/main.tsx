@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import type { UiShutdownReason } from "@station/contracts";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
@@ -32,13 +33,21 @@ import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
 import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
 import { playStationAttentionSound } from "./sources/attentionSound.js";
 import { createStationClient } from "./sources/createStationClient.js";
-import { attentionKey } from "./state/attentionDismissal.js";
 import { openExternalUrl } from "./openUrl.js";
 import { listLiveHostPtys } from "./sources/listLiveHostPtys.js";
 import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js";
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
 import { nativeStationTheme, StationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
+import {
+  createUiLifecycleWitness,
+  type UiLifecycleWitness,
+} from "./diagnostics/uiLifecycle.js";
+import { resolveUiRunContext } from "./diagnostics/uiRunContext.js";
+import {
+  observeUiSurfaceLifecycle,
+  selectUiLifecycleSurface,
+} from "./diagnostics/uiSurfaceLifecycle.js";
 
 export type RunStationMainOptions = {
   /** Compiled entrypoint seam: prepare embedded PTY assets after state-dir resolution. */
@@ -61,9 +70,9 @@ function readShellAutoCloseOverlay(value: string | undefined): boolean {
 }
 
 /**
- * Callable native OpenTUI process entry; standalone and HMR module startup invoke it once.
- * It acquires TTY ownership before other startup work and releases it only after
- * renderer shutdown; compiled startup may inject packaged PTY preparation.
+ * Callable native OpenTUI process entry and semantic lifecycle witness boundary.
+ * It acquires TTY ownership before other startup work, flushes fatal and normal
+ * shutdown evidence before exit, and releases ownership only after renderer shutdown.
  */
 export async function runStationMain(options: RunStationMainOptions = {}): Promise<void> {
   const ownershipResult = await acquireStationTtyOwnership();
@@ -73,12 +82,18 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     return;
   }
   const ttyOwnership = ownershipResult.kind === "owned" ? ownershipResult.ownership : undefined;
+  let uiLifecycle: UiLifecycleWitness | undefined;
   try {
-    const started = await startStationMain(options, ttyOwnership);
+    const started = await startStationMain(options, ttyOwnership, (created) => {
+      uiLifecycle = created;
+    });
     if (!started) {
       ttyOwnership?.release();
     }
   } catch (error) {
+    if (uiLifecycle !== undefined) {
+      await uiLifecycle.fatalShutdown(error);
+    }
     ttyOwnership?.release();
     throw error;
   }
@@ -87,13 +102,27 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
 async function startStationMain(
   options: RunStationMainOptions,
   ttyOwnership: StationTtyOwnership | undefined,
+  onLifecycleCreated: (lifecycle: UiLifecycleWitness) => void,
 ): Promise<boolean> {
   const env = process.env;
-  // Configs load before the store/client exist; see the client creation below.
+  const stationClient = createStationClient(env, {
+    onAttentionNeeded: () => {
+      playStationAttentionSound();
+    },
+  });
+  // Started now so the observer subscribe + snapshot resync overlaps the boot
+  // phases below and the first painted frame is already populated. createStation's
+  // lifecycle calls start() again — a guarded no-op.
+  stationClient.start();
 
   const configsLoading = Promise.all([loadStationConfig({ env }), loadStationTuiConfig({ env })]);
 
   const stationGlobalSlots = stationHotSlots();
+  const uiContext = resolveUiRunContext({
+    env,
+    slots: stationGlobalSlots,
+    clientKind: "native_renderer",
+  });
 
   // Resolve the layout snapshot path defensively: a missing HOME/XDG just disables
   // persistence (warn, keep running) rather than crashing the UI at boot.
@@ -135,8 +164,7 @@ async function startStationMain(
       provider: "native",
     });
     writeStartupError(safeError);
-    // The station client is created after the store (below), so there is no
-    // subscription to stop on this pre-store exit path.
+    await stationClient.stop();
     process.exitCode = 1;
     return false;
   }
@@ -179,16 +207,20 @@ async function startStationMain(
   if (tuiConfig.warning !== undefined) {
     console.error(`[station] ${tuiConfig.warning}`);
   }
+  const tuiLogger = createJsonlLogger({
+    component: "tui",
+    path: componentLogPath(stationConfig.stateDir, "tui"),
+  });
+  const uiLifecycle = createUiLifecycleWitness({ logger: tuiLogger, context: uiContext });
+  onLifecycleCreated(uiLifecycle);
+  await uiLifecycle.started();
   const ptyRuntime = await options.preparePtyRuntime?.(stationConfig.stateDir);
 
   // Corruption telemetry sink: detectors count regardless; with this wired they
   // also log to logs/tui.jsonl and write pane evidence dumps under
   // diagnostics/panes/.
   wireTerminalDiagnostics({
-    logger: createJsonlLogger({
-      component: "tui",
-      path: componentLogPath(stationConfig.stateDir, "tui"),
-    }),
+    logger: tuiLogger,
     dumpDir: join(stationConfig.stateDir, "diagnostics", "panes"),
   });
 
@@ -201,21 +233,8 @@ async function startStationMain(
     stationConfig.config,
     restorePlan?.workspace,
   );
+  stationRuntime.registry.updateTerminalTheme(nativeStationTheme.terminal);
   const { store } = stationRuntime;
-  // The client is created after the store so a fresh needs_attention transition
-  // can re-arm a dismissed alert. Started now so the observer subscribe +
-  // snapshot resync overlaps the remaining boot phases and the first painted
-  // frame is already populated; createStation's lifecycle calls start() again
-  // (a guarded no-op).
-  const stationClient = createStationClient(env, {
-    onAttentionNeeded: (event) => {
-      // Observer events fire only on state transitions, so every needs_attention
-      // event is a new request: re-arm the dismissed alert, then alert as usual.
-      store.actions.rearmAttentionKey(attentionKey(event.agent?.sessionId, event.worktreeId));
-      playStationAttentionSound();
-    },
-  });
-  stationClient.start();
   // Seed each restored pane's spawn cwd / host placement into the registry BEFORE the
   // reconciler runs its no-option ensure (which would otherwise capture
   // no cwd), so a freshly respawned shell reopens in its saved directory and a
@@ -235,17 +254,29 @@ async function startStationMain(
 
   let rendererForInput: CliRenderer | undefined;
   let rootForShutdown: { unmount(): void } | undefined;
+  let stopSurfaceObservation: (() => void) | undefined;
   let shutdownStarted = false;
-  const finishProcessShutdown = (): void => {
+  const finishProcessShutdown = (reason: UiShutdownReason): void => {
     if (shutdownStarted) return;
     shutdownStarted = true;
+    stopSurfaceObservation?.();
     void (async () => {
-      rootForShutdown?.unmount();
-      rendererForInput?.destroy();
-      ptyRuntime?.dispose();
-      await stationClient.stop();
-      ttyOwnership?.release();
-      process.exit(0);
+      let exitCode = 0;
+      await uiLifecycle.shutdownRequested(reason);
+      try {
+        rootForShutdown?.unmount();
+        rendererForInput?.destroy();
+        ptyRuntime?.dispose();
+        await stationClient.stop();
+        await uiLifecycle.shutdownCompleted(reason);
+      } catch (error) {
+        exitCode = 1;
+        await uiLifecycle.fatal(error);
+      } finally {
+        await uiLifecycle.flush();
+        ttyOwnership?.release();
+        process.exit(exitCode);
+      }
     })();
   };
   const station = createStation({
@@ -257,7 +288,6 @@ async function startStationMain(
     overlayWidthPercent: stationConfig.config.overlay_width_percent,
     overlayHeightPercent: stationConfig.config.overlay_height_percent,
     automations: stationConfig.config.automations,
-    ...tuiConfig.composition,
     clipboardEffects,
     openExternalUrl,
     ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),
@@ -266,7 +296,7 @@ async function startStationMain(
     ...(hostSocketPath === undefined ? {} : { hostSocketPath }),
     ...(layoutPath === undefined ? {} : { layout: { path: layoutPath } }),
     ...(ptyRuntime === undefined ? {} : { createTerminal: ptyRuntime.createTerminal }),
-    shutdown: finishProcessShutdown,
+    shutdown: () => finishProcessShutdown("ctrl_q"),
   });
 
   // Under `bun --hot`, OpenTUI's stdin ownership is a process-global that outlives
@@ -279,14 +309,19 @@ async function startStationMain(
   if (ttyOwnership !== undefined && !currentStdinMatchesStationTty(ttyOwnership.identity)) {
     const error = stationTtyOwnershipUnavailableError();
     writeStartupError(error);
+    await uiLifecycle.fatalShutdown(error);
     await station.disposeForShutdown();
     ptyRuntime?.dispose();
     await stationClient.stop();
+    await uiLifecycle.flush();
     process.exitCode = 1;
     return false;
   }
   ttyOwnership?.setTakeoverHandler(() => {
-    void station.disposeForShutdown().then(finishProcessShutdown);
+    void (async () => {
+      await station.disposeForShutdown().catch(() => undefined);
+      finishProcessShutdown("tty_takeover");
+    })();
   });
 
   const copySelectedText = createOpenTuiSelectionCopyHandler(
@@ -329,9 +364,13 @@ async function startStationMain(
     ),
   );
 
+  await uiLifecycle.ready(selectUiLifecycleSurface(store.getState()));
+  stopSurfaceObservation = observeUiSurfaceLifecycle({ store, witness: uiLifecycle });
+
   if (import.meta.hot) {
     import.meta.hot.accept();
     import.meta.hot.dispose(() => {
+      stopSurfaceObservation?.();
       station.disposeForHotReload();
       root.unmount();
       renderer.destroy();

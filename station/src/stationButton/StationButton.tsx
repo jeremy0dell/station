@@ -38,7 +38,7 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
   );
   const status = useSyncExternalStore(subscribe, getStatus, getStatus);
   // The dismissal record reference is stable between store actions, so this
-  // subscription only re-renders on actual dismiss/re-arm changes.
+  // subscription only re-renders on actual dismiss changes.
   const getDismissed = useCallback(
     () => store.getState().feedback.dismissedAttention,
     [store],
@@ -59,8 +59,7 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
 
   const onFocusSession = useCallback(
     (event: StationMouseEvent) => {
-      // Acting on the alert quiets every session currently asking for the user;
-      // a fresh needs_attention transition re-arms.
+      // Acting on the alert quiets every session currently asking for the user.
       store.actions.dismissAttentionKeys(
         attentionKeysFromSnapshot(dashboardState.getState().snapshot),
       );

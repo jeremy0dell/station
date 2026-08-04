@@ -912,17 +912,6 @@ describe("createStationStore attention dismissal", () => {
     expect(store.getState()).toBe(after);
   });
 
-  it("re-arms a dismissed key and ignores an unknown one", () => {
-    const store = createStationStore();
-    store.actions.dismissAttentionKeys(["ses_a"]);
-    store.actions.rearmAttentionKey("ses_a");
-    expect(store.getState().feedback.dismissedAttention).toEqual({});
-
-    const before = store.getState();
-    store.actions.rearmAttentionKey("ses_unknown");
-    expect(store.getState()).toBe(before);
-  });
-
   it("keeps dismissal state when a toast is shown or dismissed", () => {
     const store = createStationStore();
     store.actions.dismissAttentionKeys(["ses_a"]);

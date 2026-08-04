@@ -345,7 +345,7 @@ is display order, left to right:
 button). `rest_counts` and `project_rollup` default off; the red `!N` needs-you
 lane (sessions asking for the user) paints in the collapsed and hovered island
 regardless of these settings, and the alert `!` frame stays quiet once you
-click it or open the dashboard until a new attention request arrives:
+click it or open the dashboard:
 
 | Key | Type | Notes |
 | --- | --- | --- |
@@ -545,13 +545,15 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
 `STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
 `STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
-`STATION_OBSERVER_BUILD_VERSION`, `STATION_PANE`, `STATION_OUTER_TMUX`,
+`STATION_OBSERVER_BUILD_VERSION`, `STATION_UI_RUN_ID`, `STATION_PANE`, `STATION_OUTER_TMUX`,
 `STATION_OUTER_TMUX_PANE`, `STATION_TUI_POPUP`,
 `STATION_TUI_PERSISTENT`,
 `STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
 build variables as a pair: the first identifies the renderer artifact and the
-second pins it to the exact Observer selector the CLI accepted. A directly
-launched source renderer falls back to its own verified built selector. The
+second pins it to the exact Observer selector the CLI accepted. The launcher
+also mints `STATION_UI_RUN_ID` as content-free correlation for one renderer
+child; a direct source renderer mints and preserves its own ID across Bun HMR.
+A directly launched source renderer falls back to its own verified built selector. The
 renderer fixes that selector when it creates its Observer client; each later
 operation checks the socket owner on the same connection without running Git or
 hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the

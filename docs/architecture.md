@@ -76,6 +76,11 @@ When these disagree, reconcile from config, providers, and current observer stat
   complete provider-neutral theme, and terminal providers do not participate in
   appearance selection. Native `auto` remains Station-owned; Station does not
   request or consume outer-palette evidence for native appearance selection.
+  Native composition supplies one resolved `StationTerminalTheme` projection
+  to the PTY registry, which remembers it for future emulator screens and fans
+  updates out to existing Station-owned screens without becoming appearance
+  authority. This visual operation changes no PTY identity, environment,
+  lifecycle, provider behavior, or Observer/Station Host contract.
   Every Station-owned child PTY receives Station's terminal
   identity and supported capabilities at the final native spawn boundary; local
   bridge, Bun, and Station Host paths must not expose outer-emulator identity as
