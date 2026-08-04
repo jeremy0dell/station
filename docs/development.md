@@ -9,6 +9,27 @@ Status: current living doc for development, test, and documentation workflow.
 - Use `pnpm station:link` only when you intentionally want all three launchers globally bound to the current checkout.
 - External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, Claude Code, Codex, Cursor, Pi, or OpenCode for real harness workflows, and `lsof` for fail-closed socket recovery or Observer handoff.
 
+## TypeScript Compiler And Editor
+
+Root and renderer build/typecheck commands use the native TypeScript 7 compiler. Repository tools
+that import the compiler API intentionally remain on the TypeScript 6 compatibility package until
+TypeScript 7 provides a stable replacement API. Verify the split with:
+
+```bash
+pnpm exec tsc --version
+node -p 'require("typescript").version'
+cd station && bun run tsc --version
+```
+
+VS Code does not select the native language server from this dependency split automatically. To opt
+in, install the official [TypeScript 7 extension](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview),
+then run **TypeScript: Enable TypeScript 7** or set `"js/ts.experimental.useTsgo": true` in a user or
+profile setting. Do not point `js/ts.tsdk.path` at `node_modules/typescript`; that package intentionally
+provides the TypeScript 6 API compatibility layer. Disable the setting or extension to return to VS
+Code's standard TypeScript service. Editors that accept a custom LSP command can start
+`pnpm exec tsc --lsp --stdio` with the repository root as the working directory; integrations that
+require `tsserver` should use the editor's bundled TypeScript service.
+
 ## Local TUI Workflow
 
 | Need | Command | Boundary |
