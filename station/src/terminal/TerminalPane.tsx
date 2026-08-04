@@ -22,6 +22,9 @@ export type TerminalPaneProps = {
   /** Visual only: the pane border color. PaneGrid passes the active accent. */
   borderColor?: ColorInput;
   title?: string;
+  /** Interior padding in cells between the border and the terminal screen. */
+  paddingX?: number;
+  paddingY?: number;
 };
 
 /**
@@ -34,6 +37,8 @@ export function TerminalPane({
   onForwardInput,
   borderColor,
   title,
+  paddingX = 0,
+  paddingY = 0,
 }: TerminalPaneProps) {
   const theme = useStationTheme();
   const term = usePaneTerminal(paneId);
@@ -46,7 +51,8 @@ export function TerminalPane({
       border
       borderColor={resolvedBorderColor}
       title={paneTitle(title, term.status, term.oscTitle, term.cwd)}
-      padding={1}
+      paddingX={paddingX}
+      paddingY={paddingY}
     >
       <terminalScreen
         width="100%"
