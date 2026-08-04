@@ -7,6 +7,7 @@
       "dependencies": {
         "@opentui/core": "0.4.1",
         "@opentui/react": "0.4.1",
+        "@texel/color": "^1.1.11",
         "@xterm/addon-serialize": "0.14.0",
         "@xterm/addon-unicode11": "^0.9.0",
         "@xterm/headless": "6.0.0",
@@ -53,6 +54,8 @@
     "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.4.1", "", { "os": "win32", "cpu": "x64" }, "sha512-s1kGBcloy4ksl3wFCMqqOUFtXWlTTpzxe6pkLFhFhzgqKsMXHE9pwebiS3pzJkkFUxah5MYG+kbcn2Dw2Gdncg=="],
 
     "@opentui/react": ["@opentui/react@0.4.1", "", { "dependencies": { "@opentui/core": "0.4.1", "react-reconciler": "^0.33.0" }, "peerDependencies": { "react": ">=19.2.0", "react-devtools-core": "^7.0.1", "ws": "^8.18.0" } }, "sha512-hYNS8yhwVA+aGru74rtaxI81TM+rEIhMVOdooQOZRHcyVlml3inmKcI5n0Kroy4Vj4M0rCiVAPhovvqf+xfxGA=="],
+
+    "@texel/color": ["@texel/color@1.1.11", "", {}, "sha512-/3kKgfBqzrRfLl4RsEccx+Yfj1kVL6Bh6DejVWZ+DPg/jJdcfdYZ5fpD1nXFwWd8OQNATjz+WqsfQfUynSsgRg=="],
 
     "@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
 
