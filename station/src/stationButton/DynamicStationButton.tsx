@@ -370,17 +370,15 @@ function ExpandedBase(props: {
   idle: number;
 }): ReactNode {
   const { color, reveal } = props;
-  const theme = useStationTheme();
   return (
     <box flexDirection="column">
       <IconRow color={color.icon} padX={props.iconPadX} padY={props.iconPadY} />
       <box flexDirection="column" paddingLeft={CONTENT_INDENT}>
-        {/* The queue line paints in the alert color so it reads at a glance in hover. */}
         {props.needsYou > 0 ? (
           <GradientText
             text={sessionSummary(props.needsYou, "need you")}
             reveal={reveal}
-            color={theme.status.danger}
+            color={color.text}
           />
         ) : null}
         <GradientText
