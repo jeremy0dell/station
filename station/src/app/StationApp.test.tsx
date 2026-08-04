@@ -174,6 +174,25 @@ describe("Station app composition", () => {
 
     await waitFor(() => overlayVisible(station));
     expect(station.store.getState().workspace.activePaneId).toBe(MAIN_PANE_ID);
+    // Clicking the alert quiets every flagged session.
+    expect(station.store.getState().feedback.dismissedAttention[flagged.id]).toBeGreaterThan(0);
+    await waitForFrame(station, (frame) => !frame.includes("!!!!"));
+  });
+
+  it("quiets the attention alert when the dashboard opens", async () => {
+    const base = attentionAndFailuresSnapshot();
+    const station = await renderComposedStation({ snapshot: base });
+    await waitForFrame(station, (frame) => frame.includes("!!!!"));
+
+    // Ctrl-O opens the dashboard, which dismisses the current alert.
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => overlayVisible(station));
+    expect(
+      Object.keys(station.store.getState().feedback.dismissedAttention).length,
+    ).toBeGreaterThan(0);
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => !overlayVisible(station));
+    await waitForFrame(station, (frame) => !frame.includes("!!!!"));
   });
 
   it("renders configured widgets in the Station overlay header", async () => {

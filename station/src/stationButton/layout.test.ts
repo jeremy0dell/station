@@ -51,6 +51,19 @@ describe("islandDisplay", () => {
     );
   });
 
+  it("shows the needs-you lane without the restCounts opt-in, and only then", () => {
+    expect(islandDisplay(input({ needsYouCount: 2 }), false)).toEqual({
+      kind: "counts",
+      needsYou: 2,
+      working: 0,
+      ready: 0,
+    });
+    // The alert frame still outranks the counts row while attention is active.
+    expect(islandDisplay(input({ attention: true, needsYouCount: 2 }), false).kind).toBe(
+      "alertMark",
+    );
+  });
+
   it("expands to the alert card, the roll-up, or the totals", () => {
     expect(islandDisplay(input({ attention: true, needsYouCount: 2 }), true).kind).toBe(
       "alertCard",
@@ -59,7 +72,14 @@ describe("islandDisplay", () => {
     expect(islandDisplay(input({ projectRollup: rollup }), true).kind).toBe("rollup");
     const summary = islandDisplay(input({ workingCount: 2, readyCount: 1, idleCount: 3 }), true);
     // Ready folds into the idle total.
-    expect(summary).toEqual({ kind: "summary", working: 2, idle: 4 });
+    expect(summary).toEqual({ kind: "summary", needsYou: 0, working: 2, idle: 4 });
+    // The dismissed queue rides on the totals card too.
+    expect(islandDisplay(input({ needsYouCount: 2, idleCount: 3 }), true)).toEqual({
+      kind: "summary",
+      needsYou: 2,
+      working: 0,
+      idle: 3,
+    });
   });
 });
 
@@ -80,20 +100,25 @@ describe("targetDims", () => {
     expect(width("main")).toBe(width("another/long-feature-branch-name-here"));
   });
 
-  it("sizes collapsed counts by visible working and ready lanes", () => {
-    const at = (workingCount: number, readyCount: number, idleCount: number) =>
-      dims(input({ workingCount, readyCount, idleCount }, { restCounts: true }), false);
-    const workingOnly = at(1, 0, 0);
-    const readyOnly = at(0, 1, 0);
+  it("sizes collapsed counts by visible needs-you, working, and ready lanes", () => {
+    const at = (needsYouCount: number, workingCount: number, readyCount: number) =>
+      dims(input({ needsYouCount, workingCount, readyCount }, { restCounts: true }), false);
+    const needsYouOnly = at(1, 0, 0);
+    const workingOnly = at(0, 1, 0);
+    const readyOnly = at(0, 0, 1);
 
     expect(at(0, 0, 0).width).toBe(COLLAPSED_BASE_COLS);
-    expect(at(0, 0, 9).width).toBe(COLLAPSED_BASE_COLS);
-    expect(workingOnly).toEqual(at(99, 0, 12));
-    expect(workingOnly).toEqual(at(150, 0, 0));
-    expect(readyOnly).toEqual(at(0, 99, 12));
+    expect(workingOnly).toEqual(at(0, 99, 0));
+    expect(workingOnly).toEqual(at(0, 150, 0));
+    expect(readyOnly).toEqual(at(0, 0, 99));
+    expect(needsYouOnly).toEqual(at(99, 0, 0));
+    expect(needsYouOnly.width).toBe(workingOnly.width);
     expect(workingOnly.width).toBe(readyOnly.width);
     expect(workingOnly.width).toBeGreaterThan(COLLAPSED_BASE_COLS);
     expect(workingOnly.width).toBeLessThan(COLLAPSED_COUNTS_COLS);
+    // Two lanes: needs-you + working.
+    expect(at(1, 1, 0).width).toBeGreaterThan(workingOnly.width);
+    // All three lanes cap at the stable maximum.
     expect(at(1, 1, 1).width).toBe(COLLAPSED_COUNTS_COLS);
   });
 
@@ -144,8 +169,8 @@ describe("celebrationText", () => {
 });
 
 describe("attentionLines", () => {
-  it("swaps to the queue line only when several sessions ask", () => {
-    expect(attentionLines(1)).toEqual(["needs your attention", "↵ or click to focus"]);
+  it("always leads with the painted queue count, clamped to two digits", () => {
+    expect(attentionLines(1)).toEqual(["! 1 need you ›", "↵ or click to focus"]);
     expect(attentionLines(3)).toEqual(["! 3 need you ›", "↵ or click to focus"]);
     expect(attentionLines(120)[0]).toBe("! 99 need you ›");
   });

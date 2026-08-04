@@ -351,12 +351,15 @@ is display order, left to right:
   optional `time_format` (`12h` \| `24h`).
 - **`type = "moon"`** — current moon phase.
 
-`[tui.island]` — opt-in display modes for the floating Station island (top-right
-button). Both default off:
+`[tui.island]` — display modes for the floating Station island (top-right
+button). `rest_counts` and `project_rollup` default off; the red `!N` needs-you
+lane (sessions asking for the user) paints in the collapsed and hovered island
+regardless of these settings, and the alert `!` frame stays quiet once you
+click it or open the dashboard:
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `rest_counts` | bool | Collapsed island shows active working/ready counts instead of the bare mark; idle and zero lanes are hidden. |
+| `rest_counts` | bool | Collapsed island also shows active working/ready counts; idle and zero lanes are hidden. |
 | `project_rollup` | bool | Hovering the island lists each project's worst agent status instead of the working/idle totals. |
 
 ### `[repository.github]` — repository metadata provider (optional)

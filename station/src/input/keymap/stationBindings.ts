@@ -1,4 +1,5 @@
 import { agentWorktreePaneId, STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
+import { isAttentionDismissed, attentionKey } from "../../state/attentionDismissal.js";
 import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
@@ -148,30 +149,41 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
 
 /**
  * The island's ↵ jump (C6): active only while the mouse is over the island, a
- * session is asking for the user, and no overlay owns the screen — the narrow
- * window where the expanded attention card is showing "↵ or click to focus".
- * Everywhere else Enter falls through to terminal passthrough untouched.
+ * session is asking for the user (and the alert is not dismissed), and no
+ * overlay owns the screen — the narrow window where the expanded attention
+ * card is showing "↵ or click to focus". Everywhere else Enter falls through to
+ * terminal passthrough untouched.
  */
 function createStationButtonLayer(
   dashboardState: DashboardStateSource,
 ): KeymapLayer<RouteOutcome> {
-  const attentionRow = () => {
+  const attentionRow = (state: StationState) => {
     const snapshot = dashboardState.getState().snapshot;
-    return snapshot === undefined
-      ? undefined
-      : selectDashboardSessionRows(snapshot).find((row) => rowNeedsUser(row.presentation));
+    if (snapshot === undefined) {
+      return undefined;
+    }
+    const now = Date.now();
+    return selectDashboardSessionRows(snapshot).find(
+      (row) =>
+        rowNeedsUser(row.presentation) &&
+        !isAttentionDismissed(
+          state.feedback.dismissedAttention,
+          attentionKey(row.session.id, row.worktree.id),
+          now,
+        ),
+    );
   };
   return {
     id: "station-button",
     isActive: (state) =>
       state.input.stationButtonHover &&
       state.input.activeOverlay === null &&
-      attentionRow() !== undefined,
+      attentionRow(state) !== undefined,
     bindings: [
       {
         keys: [C0.CarriageReturn],
         action: (state) => {
-          const row = attentionRow();
+          const row = attentionRow(state);
           if (row === undefined) {
             return { kind: "swallowed" };
           }
