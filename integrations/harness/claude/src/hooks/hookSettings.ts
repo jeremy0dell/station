@@ -1,7 +1,7 @@
 import { createJsonHookConfigEditor, isJsonObject } from "@station/harness-shared";
 import {
   CLAUDE_HOOK_EVENT_NAMES,
-  type ClaudeHookEventName,
+  type ClaudeForwardedEventType,
   GENERATED_HOOK_SCRIPT_NAME,
   GENERATED_HOOK_STATUS_MESSAGE,
 } from "./hookConstants.js";
@@ -9,7 +9,7 @@ import { ClaudeHookSetupError } from "./hookErrors.js";
 
 export type ClaudeSettingsDocument = Record<string, unknown>;
 
-const hookConfigEditor = createJsonHookConfigEditor<ClaudeHookEventName>({
+const hookConfigEditor = createJsonHookConfigEditor<ClaudeForwardedEventType>({
   eventNames: CLAUDE_HOOK_EVENT_NAMES,
   entryCommands: (entry) =>
     isJsonObject(entry) && Array.isArray(entry.hooks) ? entry.hooks : undefined,
@@ -32,7 +32,7 @@ export const settingsDocumentContainsCommand: (
   hookScriptPath: string,
 ) => boolean = hookConfigEditor.documentContainsCommand;
 
-function matcherForEvent(eventName: ClaudeHookEventName): string | undefined {
+function matcherForEvent(eventName: ClaudeForwardedEventType): string | undefined {
   if (eventName === "PreToolUse" || eventName === "PostToolUse") {
     return "*";
   }
@@ -40,7 +40,7 @@ function matcherForEvent(eventName: ClaudeHookEventName): string | undefined {
 }
 
 function generatedHookEntry(
-  eventName: ClaudeHookEventName,
+  eventName: ClaudeForwardedEventType,
   hookScriptPath: string,
 ): Record<string, unknown> {
   const entry: Record<string, unknown> = { hooks: [generatedHookCommand(hookScriptPath)] };
@@ -111,11 +111,11 @@ export function parseClaudeSettingsDocument(contents: string): ClaudeSettingsDoc
 export function missingClaudeHookEvents(
   document: ClaudeSettingsDocument,
   hookScriptPath: string,
-): ClaudeHookEventName[] {
+): ClaudeForwardedEventType[] {
   return hookConfigEditor.missingEvents(
     document,
     Object.fromEntries(
       CLAUDE_HOOK_EVENT_NAMES.map((eventName) => [eventName, hookScriptPath]),
-    ) as Record<ClaudeHookEventName, string>,
+    ) as Record<ClaudeForwardedEventType, string>,
   );
 }

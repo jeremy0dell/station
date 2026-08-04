@@ -12,10 +12,6 @@ export function appendObserverEventHookBlock(source: string, blockToml: string):
   return `${prefix}${blockToml.trim()}\n`;
 }
 
-export function removeObserverEventHookBlocksById(source: string, hookId: string): string {
-  return removeObserverEventHookBlocksByIdPredicate(source, (candidate) => candidate === hookId);
-}
-
 export function removeObserverEventHookBlocksByIdPredicate(
   source: string,
   predicate: (hookId: string) => boolean,

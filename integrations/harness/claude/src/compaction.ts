@@ -1,6 +1,6 @@
 import { compactPayloadByFieldNames, type PayloadCompactionResult } from "@station/harness-shared";
 
-export type ClaudePayloadCompactionResult = PayloadCompactionResult;
+export type { PayloadCompactionResult };
 
 const commonFieldNames = [
   "session_id",
@@ -58,7 +58,7 @@ function fieldNamesForEvent(eventName: string): string[] {
   return fields;
 }
 
-export function compactClaudeHookPayload(payload: unknown): ClaudePayloadCompactionResult {
+export function compactClaudeHookPayload(payload: unknown): PayloadCompactionResult {
   return compactPayloadByFieldNames(payload, {
     retainedFieldNames: (record) =>
       fieldNamesForEvent(typeof record.hook_event_name === "string" ? record.hook_event_name : ""),

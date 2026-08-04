@@ -178,10 +178,26 @@ describe("CLI manual-smoke commands", () => {
 
   it("resolves nested debug and project manual topics", async () => {
     const bundle = await runCli(["debug", "bundle", "--help"]);
+    const logsHelp = await runCli(["debug", "logs", "--help"]);
+    const logsManual = await runCli(["debug", "logs", "--man"]);
+    const traceHelp = await runCli(["debug", "trace", "--help"]);
+    const traceManual = await runCli(["debug", "trace", "--man"]);
     const projectAdd = await runCli(["project", "add", "--man"]);
 
     expect(bundle).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(bundle)).toContain("stn debug bundle --latest-failure");
+    expect(logsHelp).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(logsHelp)).toContain("operational-boundary evidence");
+    expect(logsManual).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(logsManual)).toContain(
+      "componentRole marks each record component as a logging location",
+    );
+    expect(traceHelp).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(traceHelp)).toContain("cause assessment and evidence-role metadata");
+    expect(traceManual).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(traceManual)).toContain(
+      "causeAssessment separates explicit diagnostic-index roots from observed failure codes",
+    );
     expect(projectAdd).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(projectAdd)).toContain("Usage:\n  stn project add <path>");
     expect(textOutput(projectAdd)).toContain("Behavior Notes:");

@@ -1,4 +1,4 @@
-import type { SessionId, WorktreeRow } from "@station/contracts";
+import type { SessionId } from "@station/contracts";
 import { isRunningAgentState } from "@station/contracts";
 import { stableName } from "@station/runtime";
 import {
@@ -7,21 +7,27 @@ import {
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
 import { createNewSessionNameToken } from "../../flows/newSession.js";
-import { selectDashboardSessionRow } from "../../selectors/selectors.js";
+import { selectDashboardSessionRow } from "../../selectors/dashboardSessionRows.js";
 import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardScreenView, DashboardSnapshotView, TuiState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
 export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
-type ForkScreen = Extract<TuiState["screen"], { name: "fork" }>;
+type ForkScreenView = Extract<DashboardScreenView, { name: "fork" }>;
+type ForkDetailsScreenView = Extract<ForkScreenView, { step: "details" }>;
 
-const forkChooseSlotBehavior = {};
-const forkDetailsBehavior = { clickAway: backFromForkDetails };
+export type ForkSessionActionId = "details.name" | "details.copyDirty" | "details.submit";
 
-export function forkScreenBehavior(screen: ForkScreen) {
+const forkChooseSlotBehavior = { dashboardHoverEnabled: true };
+const forkDetailsBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: backFromForkDetails,
+};
+
+export function forkScreenBehavior(screen: ForkScreenView) {
   switch (screen.step) {
     case "chooseSlot":
       return forkChooseSlotBehavior;
@@ -31,13 +37,13 @@ export function forkScreenBehavior(screen: ForkScreen) {
   return assertNever(screen);
 }
 
-type ForkSnapshot = NonNullable<TuiState["snapshot"]>;
+type ForkWorktreeRowView = DashboardSnapshotView["rows"][number];
 
 export type ForkSessionCreateValidation =
   | {
       ok: true;
-      project: ForkSnapshot["projects"][number];
-      sourceWorktreeId: ForkDetailsScreen["sourceWorktreeId"];
+      project: DashboardSnapshotView["projects"][number];
+      sourceWorktreeId: ForkDetailsScreenView["sourceWorktreeId"];
       title: string;
       branch: string;
       copyDirty: boolean;
@@ -47,8 +53,8 @@ export type ForkSessionCreateValidation =
 // Single source of truth for fork submit validation, shared by the machine's
 // submitFork (inline error) and the native station submit resolver (intercept).
 export function validateForkSessionCreate(
-  snapshot: ForkSnapshot,
-  screen: ForkDetailsScreen,
+  snapshot: DashboardSnapshotView,
+  screen: ForkDetailsScreenView,
 ): ForkSessionCreateValidation {
   const title = screen.draftTitle.value.trim();
   if (title.length === 0) {
@@ -86,14 +92,37 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
   return handleDetailsKey(state, key, state.screen);
 }
 
+/** Applies a visible Fork details action after validating the active screen. */
+export function handleForkSessionAction(
+  state: TuiState,
+  actionId: ForkSessionActionId,
+): TuiTransition {
+  if (state.screen.name !== "fork" || state.screen.step !== "details") {
+    return { state };
+  }
+  const screen = state.screen;
+  switch (actionId) {
+    case "details.name":
+      return { state: { ...state, screen: { ...screen, focus: "name" } } };
+    case "details.copyDirty":
+      return {
+        state: {
+          ...state,
+          screen: { ...screen, focus: "copyDirty", copyDirty: !screen.copyDirty },
+        },
+      };
+    case "details.submit":
+      return submitFork(state, screen);
+  }
+}
+
 export type OpenForkDetailsOptions = {
   returnTo?: "dashboard";
   /** Stable injection for deterministic callers; ordinary UI opens mint a fresh branch token. */
   branchToken?: string;
 };
 
-// Builds the fork details step from a dashboard row. Exported so the context menu can
-// open it directly for a clicked row (skipping chooseSlot), like renameSession.
+// The dashboard action resolver uses this pure transition to skip chooseSlot for context-menu entry.
 export function openForkDetailsForRow(
   state: TuiState,
   rowId: SessionId,
@@ -154,8 +183,8 @@ function generatedForkBranch(sourceBranch: string, token: string): string {
 
 function availableForkBranch(
   base: string,
-  rows: readonly WorktreeRow[],
-  projectId: WorktreeRow["projectId"],
+  rows: readonly ForkWorktreeRowView[],
+  projectId: ForkWorktreeRowView["projectId"],
 ): string {
   // Only the source project's worktrees can collide in the current snapshot.
   const taken = new Set(rows.filter((row) => row.projectId === projectId).map((row) => row.branch));
@@ -172,7 +201,10 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
   }
 
   if (isReturnKey(key)) {
-    return submitFork(state, screen);
+    return handleForkSessionAction(
+      state,
+      screen.focus === "copyDirty" ? "details.copyDirty" : "details.submit",
+    );
   }
 
   if (key.upArrow === true || key.downArrow === true) {
@@ -186,7 +218,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
 
   if (screen.focus === "copyDirty") {
     if (key.input === " " || key.leftArrow === true || key.rightArrow === true) {
-      return { state: { ...state, screen: { ...screen, copyDirty: !screen.copyDirty } } };
+      return handleForkSessionAction(state, "details.copyDirty");
     }
     return { state };
   }

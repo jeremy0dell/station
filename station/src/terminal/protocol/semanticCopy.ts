@@ -5,12 +5,9 @@ import {
   type SemanticCopySnapshotEntry,
 } from "@station/contracts";
 import { type IMarker, Terminal } from "@xterm/headless";
-import {
-  CsiFinal,
-  CsiIdentifier,
-  EraseInDisplayMode,
-  EscIdentifier,
-} from "./controlBytes.js";
+import { EraseDisplayMode } from "./csi.js";
+import { CsiCommand, EscCommand } from "./identifiers.js";
+import { VtPrefix, VtTerminator } from "./syntax.js";
 
 export type { SemanticCopySnapshot } from "@station/contracts";
 
@@ -72,7 +69,7 @@ export function semanticCopyContinuationMarker(separatorSpaces: number): string 
       `Semantic-copy separator spaces must be an integer from 0 to ${SEMANTIC_COPY_MAX_SEPARATOR_SPACES}.`,
     );
   }
-  return `\x1b]${STATION_SEMANTIC_COPY_OSC};station-copy;${STATION_SEMANTIC_COPY_VERSION};${separatorSpaces}\x1b\\`;
+  return `${VtPrefix.Osc}${STATION_SEMANTIC_COPY_OSC};station-copy;${STATION_SEMANTIC_COPY_VERSION};${separatorSpaces}${VtTerminator.String}`;
 }
 
 /**
@@ -114,19 +111,19 @@ class XtermSemanticCopyState implements SemanticCopyState {
       terminal.parser.registerOscHandler(STATION_SEMANTIC_COPY_OSC, (data) =>
         this.#handleOsc(data),
       ),
-      terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInLine }, () =>
+      terminal.parser.registerCsiHandler(CsiCommand.EraseInLine, () =>
         this.#clearActiveRow(),
       ),
-      terminal.parser.registerCsiHandler({ final: CsiFinal.EraseCharacter }, () =>
+      terminal.parser.registerCsiHandler(CsiCommand.EraseCharacters, () =>
         this.#clearActiveRow(),
       ),
-      terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) =>
+      terminal.parser.registerCsiHandler(CsiCommand.EraseInDisplay, (params) =>
         this.#handleDisplayErase(params),
       ),
-      terminal.parser.registerEscHandler(EscIdentifier.ResetToInitialState, () =>
+      terminal.parser.registerEscHandler(EscCommand.ResetToInitialState, () =>
         this.#handleReset(),
       ),
-      terminal.parser.registerCsiHandler(CsiIdentifier.SoftTerminalReset, () =>
+      terminal.parser.registerCsiHandler(CsiCommand.SoftReset, () =>
         this.#handleReset(),
       ),
     ];
@@ -237,18 +234,18 @@ class XtermSemanticCopyState implements SemanticCopyState {
     const rawMode = params[0];
     const mode = Array.isArray(rawMode)
       ? rawMode[0]
-      : (rawMode ?? EraseInDisplayMode.CursorToEnd);
+      : (rawMode ?? EraseDisplayMode.CursorToEnd);
     switch (mode) {
-      case EraseInDisplayMode.CursorToEnd:
+      case EraseDisplayMode.CursorToEnd:
         this.#clearRange(bufferType, cursorRow, lastViewportRow);
         break;
-      case EraseInDisplayMode.StartToCursor:
+      case EraseDisplayMode.StartToCursor:
         this.#clearRange(bufferType, firstViewportRow, cursorRow);
         break;
-      case EraseInDisplayMode.EntireDisplay:
+      case EraseDisplayMode.EntireDisplay:
         this.#clearRange(bufferType, firstViewportRow, lastViewportRow);
         break;
-      case EraseInDisplayMode.SavedLines:
+      case EraseDisplayMode.Scrollback:
         // ED3 renumbers saved-line markers when xterm clears scrollback, so all
         // application row boundaries in that buffer must fail closed beforehand.
         this.#clearBuffer(bufferType);

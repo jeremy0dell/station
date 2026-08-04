@@ -36,7 +36,7 @@ const addFailed = failedStateForError(addReview, addReview.selectedPath, {
   message: "Project review failed.",
 });
 const newReview = requiredNewSessionFlow();
-const newEdit = requiredNewSessionTransition(newReview, { type: "editName" });
+const newEdit = requiredNewSessionEdit(newReview);
 const newPickProject = requiredNewSessionTransition(newReview, { type: "pickProject" });
 const newPickAgent = requiredNewSessionTransition(newReview, { type: "pickAgent" });
 
@@ -69,7 +69,25 @@ const screenBehaviorCases: readonly [
   expected: "present" | "absent",
 ][] = [
   ["dashboard", { name: "dashboard" }, "absent"],
-  ["search", { name: "search", value: "api" }, "absent"],
+  [
+    "persistent filter",
+    {
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [],
+    },
+    "absent",
+  ],
+  [
+    "persistent filter condition panel",
+    {
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [],
+      conditionEditor: { stage: "field", cursor: 0 },
+    },
+    "present",
+  ],
   ["help", { name: "help" }, "present"],
   ["project collapse picker", { name: "projectCollapse" }, "present"],
   ["project settings picker", { name: "projectSettingsPicker" }, "present"],
@@ -84,6 +102,7 @@ const screenBehaviorCases: readonly [
       rowId: "ses_wt_web_idle",
       forceRequired: false,
       label: "web",
+      actionFocus: "keep",
     },
     "present",
   ],
@@ -138,6 +157,45 @@ describe("TUI screen behavior", () => {
   it.each(screenBehaviorCases)("resolves click-away for %s", (_label, screen, expected) => {
     const presence = tuiScreenBehavior(screen).clickAway === undefined ? "absent" : "present";
     expect(presence).toBe(expected);
+  });
+
+  it("declares dashboard hover separately from click-away behavior", () => {
+    const persistentFilter = tuiScreenBehavior({
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [],
+    });
+    const newSession = tuiScreenBehavior({ name: "newSession", flow: newReview });
+
+    expect(tuiScreenBehavior({ name: "dashboard" }).dashboardHoverEnabled).toBe(true);
+    expect(persistentFilter.dashboardHoverEnabled).toBe(false);
+    expect(persistentFilter.clickAway).toBeUndefined();
+    expect(newSession.dashboardHoverEnabled).toBe(false);
+    expect(newSession.clickAway).toBeTypeOf("function");
+    expect(
+      tuiScreenBehavior({ name: "removeWorktree", step: "chooseSlot" }).dashboardHoverEnabled,
+    ).toBe(true);
+  });
+
+  it("click-away closes only the condition panel and preserves the filter draft", () => {
+    const state = withScreen({
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
+      conditionEditor: {
+        stage: "values",
+        field: "status",
+        cursor: 2,
+        options: [{ id: "working", label: "Working" }],
+        selectedIds: [],
+      },
+    });
+
+    expect(clickAway(state).screen).toEqual({
+      name: "persistentFilter",
+      draft: createEditableTextInputState("api"),
+      draftConditions: [{ field: "status", values: [{ id: "working", label: "Working" }] }],
+    });
   });
 
   it("backs nested New Session steps to review and discards the nested draft", () => {
@@ -276,7 +334,11 @@ describe("TUI screen behavior", () => {
       { name: "removeWorktree", step: "chooseSlot" },
       { name: "renameSession", step: "chooseSlot" },
       { name: "fork", step: "chooseSlot" },
-      { name: "search", value: "api" },
+      {
+        name: "persistentFilter",
+        draft: createEditableTextInputState("api"),
+        draftConditions: [],
+      },
       { name: "dashboard" },
     ] satisfies TuiScreen[]) {
       const state = withScreen(screen);
@@ -300,6 +362,16 @@ function requiredNewSessionFlow(): Extract<NewSessionFlowState, { mode: "review"
     throw new Error("Expected the dashboard fixture to support New Session.");
   }
   return flow;
+}
+
+function requiredNewSessionEdit(
+  flow: NewSessionFlowState,
+): Extract<NewSessionFlowState, { mode: "editName" }> {
+  const transitioned = transitionNewSessionFlow(flow, { type: "editName" });
+  if (transitioned?.mode !== "editName") {
+    throw new Error("Expected the New Session name editor.");
+  }
+  return transitioned;
 }
 
 function requiredNewSessionTransition(

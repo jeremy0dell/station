@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
 import { basename, join, relative, sep } from "node:path";
-
-const require = createRequire(`${process.cwd()}/package.json`);
-const ts = require("typescript");
+// TypeScript 7 has no stable compiler API, so AST linting uses its official TS6 compatibility package.
+import ts from "@typescript/typescript6";
 
 const root = process.cwd();
 const defaultTargets = [

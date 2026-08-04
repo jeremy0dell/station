@@ -11,14 +11,21 @@ import {
   type TerminalCorruptionKind,
   writePaneEvidenceDump,
 } from "../diagnostics.js";
-import {
-  CsiFinal,
-  CsiIdentifier,
-  EraseInDisplayMode,
-  EscIdentifier,
-} from "../protocol/controlBytes.js";
+import { EraseDisplayMode } from "../protocol/csi.js";
 import { DecMode } from "../protocol/decset.js";
-import { KittyKeyboard } from "../protocol/kitty.js";
+import {
+  CsiCommand,
+  EscCommand,
+  isPrimaryCsiParameter,
+} from "../protocol/identifiers.js";
+import {
+  initialKittyKeyboardState,
+  type KittyKeyboardOperation,
+  type KittyKeyboardState,
+  normalizeKittyFlagUpdateMode,
+  reduceKittyKeyboardState,
+} from "../protocol/kitty.js";
+import { OscCommand } from "../protocol/osc.js";
 import {
   createSemanticCopyState,
   type SemanticCopySnapshot,
@@ -26,13 +33,14 @@ import {
 } from "../protocol/semanticCopy.js";
 import {
   MouseEncoding,
-  MouseTracking,
   type MouseEncodingValue,
   type MouseTrackingValue,
 } from "../protocol/mouse.js";
+import { VtPrefix, VtTerminator } from "../protocol/syntax.js";
 import type { StationTerminalSize } from "../types.js";
+import { nativeStationTheme, type StationTerminalTheme } from "../../theme/index.js";
+import { buildVtPalette256 } from "./palette.js";
 import { buildVisibleRows, type VtRow } from "./rows.js";
-import { type StationVtTheme, stationVtTheme } from "./theme.js";
 
 const DEFAULT_FLUSH_INTERVAL_MS = 33;
 const SYNC_OUTPUT_HOLD_MAX_MS = 1000;
@@ -62,7 +70,12 @@ export type StationVtScreenOptions = {
   flushIntervalMs?: number;
   /** Max hold for an open synchronized frame before the escape hatch flushes; injectable for tests. */
   syncHoldMaxMs?: number;
-  theme?: StationVtTheme;
+  /**
+   * Initial terminal-semantic projection for defaults, ANSI indices 0-15, and
+   * OSC 10/11 replies. Explicit RGB and ANSI indices 16-255 remain independent.
+   * Direct low-level callers may omit it to use Station's built-in projection.
+   */
+  theme?: StationTerminalTheme;
   /**
    * Terminal query replies (DA1/DA2/DSR/CPR/DECRQM from xterm, OSC 10/11 from
    * this store). These must be written back to the PTY verbatim: TUIs block
@@ -92,21 +105,6 @@ export type MouseProtocol = {
   encoding: MouseEncodingValue;
 };
 
-// xterm hands us tracking as one of a closed set of raw strings; translate it
-// into the catalog at this seam (and null for "none") so no downstream file is
-// coupled to xterm's vocabulary. Typed against xterm's union via `satisfies` so
-// dropping or renaming a mode is a compile error and the lookup stays total (no
-// undefined slipping past the null guard). Values match the engine's, so
-// behavior is unchanged.
-type XtermTrackingMode = "none" | "x10" | "vt200" | "drag" | "any";
-const XTERM_TRACKING = {
-  none: null,
-  x10: MouseTracking.X10,
-  vt200: MouseTracking.Vt200,
-  drag: MouseTracking.Drag,
-  any: MouseTracking.Any,
-} as const satisfies Record<XtermTrackingMode, MouseTrackingValue | null>;
-
 export type VtBufferStats = {
   cols: number;
   rows: number;
@@ -124,6 +122,14 @@ export type RowCopyBoundary =
       leadingColumns: number;
       separatorSpaces: number;
     };
+/** Why projected rows must be rebuilt and repainted. */
+export type VtScreenInvalidation = "content" | "repaint";
+
+/** Two-phase theme publication used to update every registry screen atomically. */
+export type StationVtThemeUpdate = Readonly<{
+  publish(): void;
+  invalidate(): void;
+}>;
 
 // The engine (xterm) must not escape this type: everything above vt/ consumes
 // this view, which is what keeps the conformance catalog and the renderer
@@ -131,6 +137,17 @@ export type RowCopyBoundary =
 export type StationVtScreen = {
   feed(data: string): void;
   resize(size: StationTerminalSize): void;
+  /**
+   * Replace terminal defaults and ANSI indices 0-15 for existing and future
+   * row projections and OSC 10/11 replies. Parsed text, explicit RGB cells,
+   * fixed ANSI indices 16-255, buffer state, and PTY I/O remain unchanged.
+   */
+  updateTerminalTheme(theme: StationTerminalTheme): void;
+  /**
+   * Build a complete replacement before registry-wide publication. Callers
+   * publish every prepared screen before invalidating any render listener.
+   */
+  prepareTerminalThemeUpdate(theme: StationTerminalTheme): StationVtThemeUpdate;
   /**
    * Style-merged spans for the rows currently in view (the live viewport, or
    * scrolled-back history when `getScrollOffset() > 0`). OSC 8 URIs follow the
@@ -207,7 +224,7 @@ export type StationVtScreen = {
   cursor(): VtCursor;
   isAltScreen(): boolean;
   bufferStats(): VtBufferStats;
-  subscribe(listener: () => void): () => void;
+  subscribe(listener: (invalidation: VtScreenInvalidation) => void): () => void;
   /**
    * The latest OSC 0/2 window title the child app set (trimmed, non-empty), or
    * undefined when no app has set one. This is the same signal terminal
@@ -235,7 +252,11 @@ export type StationVtScreen = {
 };
 
 export function createStationVtScreen(options: StationVtScreenOptions): StationVtScreen {
-  const theme = options.theme ?? stationVtTheme;
+  const initialTheme = options.theme ?? nativeStationTheme.terminal;
+  let terminalProjection = {
+    theme: initialTheme,
+    palette: buildVtPalette256(initialTheme.ansi16.map((color) => color.value)),
+  };
   const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   const syncHoldMaxMs = options.syncHoldMaxMs ?? SYNC_OUTPUT_HOLD_MAX_MS;
   const requestedScrollback = options.scrollback ?? DEFAULT_SCROLLBACK_LINES;
@@ -319,17 +340,25 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // Lines scrolled up from the live bottom (0 = at the bottom).
   let scrollOffset = 0;
   let normalBufferIsSynchronizedFrame = false;
-  type KittyKeyboardState = { flags: number; stack: number[] };
-  const kittyKeyboard = new Map<"alternate" | "normal", KittyKeyboardState>([
-    ["normal", { flags: 0, stack: [] }],
-    ["alternate", { flags: 0, stack: [] }],
+  type KittyBufferType = "alternate" | "normal";
+  const kittyKeyboard = new Map<KittyBufferType, KittyKeyboardState>([
+    ["normal", initialKittyKeyboardState()],
+    ["alternate", initialKittyKeyboardState()],
   ]);
+  const activeKittyBufferType = (): KittyBufferType =>
+    terminal.buffer.active.type === "alternate" ? "alternate" : "normal";
   const activeKittyKeyboard = (): KittyKeyboardState => {
-    const bufferType = terminal.buffer.active.type === "alternate" ? "alternate" : "normal";
+    const bufferType = activeKittyBufferType();
     const state = kittyKeyboard.get(bufferType);
     if (state === undefined) {
       throw new Error(`Missing kitty keyboard state for ${bufferType} buffer.`);
     }
+    return state;
+  };
+  const applyKittyKeyboard = (operation: KittyKeyboardOperation): KittyKeyboardState => {
+    const bufferType = activeKittyBufferType();
+    const state = reduceKittyKeyboardState(activeKittyKeyboard(), operation);
+    kittyKeyboard.set(bufferType, state);
     return state;
   };
   // The most recent OSC 0/2 title; mirrors xterm's onTitleChange so the pane
@@ -340,13 +369,45 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // with scrollback eviction, so it tracks how far content has scrolled even at
   // the scrollback cap where baseY plateaus. `shift` never anchors (it slides).
   let scrollAnchor: IMarker | undefined;
-  const listeners = new Set<() => void>();
+  const listeners = new Set<(invalidation: VtScreenInvalidation) => void>();
 
-  const notifyListeners = (): void => {
+  const notifyListeners = (invalidation: VtScreenInvalidation): void => {
     version += 1;
     for (const listener of [...listeners]) {
-      listener();
+      listener(invalidation);
     }
+  };
+
+  const prepareTerminalThemeUpdate = (
+    nextTheme: StationTerminalTheme,
+  ): StationVtThemeUpdate => {
+    const nextProjection = {
+      theme: nextTheme,
+      palette: buildVtPalette256(nextTheme.ansi16.map((color) => color.value)),
+    };
+    let published = false;
+    let invalidated = false;
+    return {
+      publish: () => {
+        if (disposed || published) {
+          return;
+        }
+        terminalProjection = nextProjection;
+        published = true;
+      },
+      invalidate: () => {
+        if (disposed || invalidated) {
+          return;
+        }
+        if (!published) {
+          terminalProjection = nextProjection;
+          published = true;
+        }
+        invalidated = true;
+        // Projection changes never feed/replay bytes or emit a PTY response.
+        notifyListeners("repaint");
+      },
+    };
   };
 
   const clampScrollOffset = (): void => {
@@ -428,24 +489,28 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // ThemeService is browser-only), but termenv/lipgloss-based TUIs wait on
   // them for background detection. Answer with Station's theme; non-query
   // payloads fall through to xterm's own color tracking.
-  terminal.parser.registerOscHandler(10, (data) => {
+  terminal.parser.registerOscHandler(OscCommand.DefaultForeground, (data) => {
     if (data !== "?") {
       return false;
     }
-    emitResponse(`\x1b]10;${toOscRgb(theme.foreground)}\x07`);
+    emitResponse(
+      `${VtPrefix.Osc}${OscCommand.DefaultForeground};${toOscRgb(terminalProjection.theme.defaultForeground.value)}${VtTerminator.Bell}`,
+    );
     return true;
   });
-  terminal.parser.registerOscHandler(11, (data) => {
+  terminal.parser.registerOscHandler(OscCommand.DefaultBackground, (data) => {
     if (data !== "?") {
       return false;
     }
-    emitResponse(`\x1b]11;${toOscRgb(theme.background)}\x07`);
+    emitResponse(
+      `${VtPrefix.Osc}${OscCommand.DefaultBackground};${toOscRgb(terminalProjection.theme.defaultBackground.value)}${VtTerminator.Bell}`,
+    );
     return true;
   });
 
   // The headless buffer API does not expose DECTCEM cursor visibility, so
   // track ?25h/?25l ourselves; returning false keeps default processing.
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+  terminal.parser.registerCsiHandler(CsiCommand.SetDecPrivateMode, (params) => {
     if (paramListIncludes(params, DecMode.CursorVisible)) {
       cursorVisible = true;
     }
@@ -454,7 +519,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+  terminal.parser.registerCsiHandler(CsiCommand.ResetDecPrivateMode, (params) => {
     if (paramListIncludes(params, DecMode.CursorVisible)) {
       cursorVisible = false;
     }
@@ -463,10 +528,9 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
-  terminal.parser.registerCsiHandler({ final: CsiFinal.EraseInDisplay }, (params) => {
+  terminal.parser.registerCsiHandler(CsiCommand.EraseInDisplay, (params) => {
     const isNormalBufferFullScreenErase =
-      params[0] === EraseInDisplayMode.EntireDisplay &&
-      terminal.buffer.active.type === "normal";
+      params[0] === EraseDisplayMode.EntireDisplay && terminal.buffer.active.type === "normal";
     const isSynchronizedFullScreenErase =
       isNormalBufferFullScreenErase && terminal.modes.synchronizedOutputMode;
     // Archive the transition into an app-owned screen, not its subsequent repaint frames.
@@ -481,13 +545,12 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
   // RIS and DECSTR both restore a visible cursor; without these a `reset`
   // after a cursor-hiding app leaves the pane cursorless forever. RIS also
   // clears mouse modes (xterm resets the flavor; clear our SGR bit to match).
-  terminal.parser.registerEscHandler(EscIdentifier.ResetToInitialState, () => {
+  terminal.parser.registerEscHandler(EscCommand.ResetToInitialState, () => {
     cursorVisible = true;
     sgrMouse = false;
     normalBufferIsSynchronizedFrame = false;
-    for (const state of kittyKeyboard.values()) {
-      state.flags = 0;
-      state.stack.length = 0;
+    for (const bufferType of kittyKeyboard.keys()) {
+      kittyKeyboard.set(bufferType, initialKittyKeyboardState());
     }
     if (oscTitle !== undefined) {
       oscTitle = undefined;
@@ -497,46 +560,32 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     }
     return false;
   });
-  terminal.parser.registerCsiHandler(CsiIdentifier.SoftTerminalReset, () => {
+  terminal.parser.registerCsiHandler(CsiCommand.SoftReset, () => {
     cursorVisible = true;
     normalBufferIsSynchronizedFrame = false;
     return false;
   });
-  terminal.parser.registerCsiHandler({ prefix: ">", final: "u" }, (params) => {
-    const state = activeKittyKeyboard();
-    if (state.stack.length === KittyKeyboard.StackLimit) {
-      state.stack.shift();
-    }
-    state.stack.push(state.flags);
-    state.flags = primaryParams(params)[0] ?? 0;
+  terminal.parser.registerCsiHandler(CsiCommand.KittyPushFlags, (params) => {
+    applyKittyKeyboard({ type: "push", flags: params.filter(isPrimaryCsiParameter)[0] ?? 0 });
     return true;
   });
-  terminal.parser.registerCsiHandler({ prefix: "=", final: "u" }, (params) => {
-    const state = activeKittyKeyboard();
-    const [flags = 0, mode = KittyKeyboard.FlagMode.Replace] = primaryParams(params);
-    if (mode === KittyKeyboard.FlagMode.Add) {
-      state.flags |= flags;
-    } else if (mode === KittyKeyboard.FlagMode.Remove) {
-      state.flags &= ~flags;
-    } else {
-      state.flags = flags;
-    }
+  terminal.parser.registerCsiHandler(CsiCommand.KittyUpdateFlags, (params) => {
+    const [flags = 0, mode] = params.filter(isPrimaryCsiParameter);
+    applyKittyKeyboard({
+      type: "update",
+      flags,
+      mode: normalizeKittyFlagUpdateMode(mode),
+    });
     return true;
   });
-  terminal.parser.registerCsiHandler({ prefix: "<", final: "u" }, (params) => {
-    const state = activeKittyKeyboard();
-    const count = Math.max(1, primaryParams(params)[0] ?? 1);
-    if (count > state.stack.length) {
-      state.flags = 0;
-      state.stack.length = 0;
-    } else {
-      state.flags = state.stack[state.stack.length - count] ?? 0;
-      state.stack.length -= count;
-    }
+  terminal.parser.registerCsiHandler(CsiCommand.KittyPopFlags, (params) => {
+    applyKittyKeyboard({ type: "pop", count: params.filter(isPrimaryCsiParameter)[0] ?? 1 });
     return true;
   });
-  terminal.parser.registerCsiHandler({ prefix: "?", final: "u" }, () => {
-    emitResponse(`\x1b[?${activeKittyKeyboard().flags}u`);
+  terminal.parser.registerCsiHandler(CsiCommand.KittyQueryFlags, () => {
+    emitResponse(
+      `${VtPrefix.Csi}${CsiCommand.KittyQueryFlags.prefix}${activeKittyKeyboard().flags}${CsiCommand.KittyQueryFlags.final}`,
+    );
     return true;
   });
 
@@ -622,7 +671,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     applyScrollOnOutput();
     clampScrollOffset();
     reanchorScroll();
-    notifyListeners();
+    notifyListeners("content");
     scanForEscapeFragments();
   };
 
@@ -666,10 +715,17 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       reanchorScroll();
       scheduleFlush();
     },
+    updateTerminalTheme: (nextTheme) => {
+      const update = prepareTerminalThemeUpdate(nextTheme);
+      update.publish();
+      update.invalidate();
+    },
+    prepareTerminalThemeUpdate,
     buildRows: (rowOptions) =>
       buildVisibleRows(terminal, {
         cursorVisible: rowOptions?.cursorVisible ?? cursorVisible,
         offset: scrollOffset,
+        palette: terminalProjection.palette,
       }),
     scrollBy: (deltaLines) => {
       if (disposed || deltaLines === 0) {
@@ -682,7 +738,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       }
       scrollOffset = next;
       reanchorScroll();
-      notifyListeners();
+      notifyListeners("content");
       return true;
     },
     scrollToBottom: () => {
@@ -691,7 +747,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
       }
       scrollOffset = 0;
       disposeScrollAnchor();
-      notifyListeners();
+      notifyListeners("content");
       return true;
     },
     getScrollOffset: () => scrollOffset,
@@ -787,8 +843,8 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
     isBracketedPasteEnabled: () => terminal.modes.bracketedPasteMode,
     isMouseReportingEnabled: () => terminal.modes.mouseTrackingMode !== "none",
     mouseProtocol: () => {
-      const tracking = XTERM_TRACKING[terminal.modes.mouseTrackingMode];
-      if (tracking === null) {
+      const tracking = terminal.modes.mouseTrackingMode;
+      if (tracking === "none") {
         return null;
       }
       return { tracking, encoding: sgrMouse ? MouseEncoding.Sgr : MouseEncoding.Legacy };
@@ -852,11 +908,7 @@ export function createStationVtScreen(options: StationVtScreenOptions): StationV
 }
 
 function paramListIncludes(params: (number | number[])[], target: number): boolean {
-  return primaryParams(params).includes(target);
-}
-
-function primaryParams(params: (number | number[])[]): number[] {
-  return params.filter((param): param is number => !Array.isArray(param));
+  return params.filter(isPrimaryCsiParameter).includes(target);
 }
 
 /** "#d4d4d8" -> "rgb:d4d4/d4d4/d8d8" (xterm's 16-bit-per-channel reply form). */

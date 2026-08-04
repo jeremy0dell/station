@@ -27,7 +27,7 @@ station/scripts/run-container.sh --mock
 **Run-mode features to mention:**
 
 | Feature | Trigger |
-|---|---|
+| --- | --- |
 | **Host run mode** | `run-host.sh` (Bun + Node sidecar on the host) |
 | **Container run mode** | `run-container.sh` (Docker, named volumes for `node_modules`/Bun cache) |
 | **Mock data source** | `--mock` or `STATION_SOURCE=mock` |
@@ -176,12 +176,13 @@ shell can't receive them) until `Ctrl-O` closes it.
 - **Slot activation** — `1-9`/`a-z` (or click a row) launches/focuses that worktree's primary agent in a pane.
 - **`[+sh]` shell affordance** — click on a row opens a shell in that worktree's checkout; on a project header opens a shell at the project root.
 - **Clickable PR / checks links** — underlined segments open the GitHub URL in your browser.
-- **Search/filter** — `/` opens a live filter over branches/projects; `Enter` applies, `Esc` cancels.
+- **Persistent filter** — `/` opens a soft live preview over visible dashboard text; `Tab` opens `FILTER CONDITIONS`, and `S/P/A` chooses Status/Project/Agent. Slots or arrows + `Space` toggle values; header `[←]`/Left or bottom `Done (Enter)` retains that field so the next one can be added. Header `[×]`/`Esc` closes the builder, while bottom `Apply filter (F)` applies free text and all staged fields once. Free text/fields are ANDed and values within a field are ORed. Applying hard-projects matching context and sessions; `/ edit` reopens it, and `Esc clear` restores the unfiltered collapse state. Footer and condition-panel controls are clickable, and click-away discards only the active field's unretained toggles.
+- **Filtered project disclosure** — matching children remain behind collapsed project headers, and the disclosure keeps showing or hiding them while the filter is applied.
 - **Collapse/fold** — `C` then a slot key folds that project (state persists across toggles).
 - **Refresh snapshot** — `Z` forces a fresh observer snapshot.
 - **Help overlay** — `H` or `?` lists every keybinding by context; click backdrop to close.
 - **Close** — `Q` / `Esc` / click outside the popup; the backdrop absorbs stray clicks so they never fall through to the shell.
-- **View-state persistence** — search text, scroll position, collapsed set, and open sheet survive closing/reopening the overlay.
+- **View-state persistence** — applied filter text and conditions, scroll position, collapsed set, and open sheet survive closing/reopening the overlay; `Q` retains the filter through warm popup reopen.
 
 ---
 
@@ -234,7 +235,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 - **loading** — "Loading observer snapshot…" before the first snapshot.
 - **reconnecting since HH:MM:SS** (yellow) — retrying; last-good snapshot stays visible; commands queue.
 - **display-only since HH:MM:SS (last good snapshot shown)** (yellow) — extended outage, read-only.
-- **halted: <message>** (red) — permanent failure, frozen at last-good snapshot.
+- **`halted: <message>`** (red) — permanent failure, frozen at last-good snapshot.
 - **idle** (gray) — mock/never-queried.
 - **Snapshot alerts** — e.g. the "Static many-projects fixture" banner that self-identifies mock data.
 - **Resilience** — broken `[workspace]` config boots with defaults; missing host falls back to cold shells; failed clipboard tool doesn't block copy.
@@ -249,6 +250,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
   - **`scroll_on_output = "freeze" | "shift" | "follow"`** — what the viewport does when output arrives while you're scrolled up (freeze=hold lines, shift=slide, follow=snap to bottom).
   - **`welcome_on_boot = true|false`** — show the Welcome screen on cold boot.
 - **`[tui.widgets]`** — header widgets (shared `@station/config` loader).
+- **Persistent filter** — `/` opens visible-text draft preview, structured Status/Project/Agent conditions, hard applied filtering, and pointer controls.
 - **Shell auto-close overlay** — `STATION_SHELL_AUTOCLOSE=1` dismisses the overlay when a `[+sh]` shell opens.
 - **Hot reload (HMR)** — `--hot`; edits preserve panes/PTYs and reattach.
 - **React DevTools** — `bun run station:devtools`.
@@ -260,7 +262,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 ## Appendix A — Keybinding cheat-sheet (from in-app Help, `?`)
 
 | Key | Action |
-|---|---|
+| --- | --- |
 | `Ctrl-O` | open/close project view (dashboard) |
 | `Ctrl-Q` | quit Station |
 | `Ctrl-\` | split pane right |
@@ -272,7 +274,11 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 | `↑`/`↓`, wheel | scroll project list (dashboard) |
 | `1-9`/`a-z` | start or focus visible row (slot) |
 | `N` `A` `R` `X` `C` | new / add-project / rename / remove / fold |
-| `/`, `Z` | search / refresh snapshot |
+| `/`, `Z` | edit filter / refresh snapshot |
+| `Tab`, `S/P/A` | open conditions / choose Status, Project, Agent |
+| slots or `Space` | toggle a condition value |
+| `Left`/`[←]`, `Enter`/Done | retain one field and return to the builder |
+| `F`/Apply filter | apply free text and all staged fields |
 | `H`, `?` | help |
 | `Q`/`Esc` | close / back / cancel |
 
@@ -294,7 +300,7 @@ Best shown with `STATION_SCENARIO=disconnected`, or by stopping the observer mid
 
 **Station Button:** collapsed base · hover-expand counts · attention frame + focus-flagged-pane · animated expand/collapse.
 
-**Dashboard overlay:** Ctrl-O toggle · input swallow · adaptive popup sizing · header + connection status + widgets · collapsible project headers · worktree rows (branch/status/diff/PR/checks/agent/session) · throbber · status labels · empty/first-run states · scroll indicators · footer · dividers · scroll · slot activation · `[+sh]` shell affordance (row + project) · clickable PR/checks links · search/filter · collapse/fold · refresh · help overlay · close/backdrop · view-state persistence · backdrop click absorb.
+**Dashboard overlay:** Ctrl-O toggle · input swallow · adaptive popup sizing · header + connection status + widgets · collapsible project headers · worktree rows (branch/status/diff/PR/checks/agent/session) · throbber · status labels · empty/first-run states · scroll indicators · footer · dividers · scroll · slot activation · `[+sh]` shell affordance (row + project) · clickable PR/checks links · persistent filter · collapse/fold · refresh · help overlay · close/backdrop · view-state persistence · backdrop click absorb.
 
 **Session lifecycle:** New Session wizard (review/name/project/agent) · Rename · Remove (+confirm) · Add Project (start/choose/review/success/failed + folder search) · editable text input · provider-health in pickers · toast notifications (success/warning/error, auto-expiry, click-dismiss).
 

@@ -1,23 +1,28 @@
-import type { ProjectId, ProjectView, StationSnapshot } from "@station/contracts";
+import type { ProjectId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import type {
-  FailedCreateSessionRow,
-  PendingCreateSessionRow,
-  PendingRemoveWorktreeRow,
-  PendingStartAgentRow,
-} from "../state/localRows.js";
-import type { TuiViewState } from "../state/types.js";
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardViewState,
+} from "../state/types.js";
 import {
-  type DashboardSessionRow,
-  type KeyedChoice,
-  keyChoices,
-  selectProjectGroups,
-  sessionRowDisplayTitle,
-} from "./selectors.js";
+  type DashboardPersistentFilterProjection,
+  type DashboardPersistentFilterProjectMatch,
+  selectDashboardPersistentFilter,
+} from "./dashboardPersistentFilter.js";
+import {
+  type DashboardCreateLocalItem,
+  type DashboardProjectRowGroup,
+  type DashboardRowItem,
+  type DashboardSessionItem,
+  persistentFilterCandidateForDashboardRow,
+  selectDashboardProjectRowGroups,
+  withDashboardRowFilterMatch,
+} from "./dashboardProjectRows.js";
+import type { DashboardSessionRow } from "./dashboardSessionRows.js";
+import { type KeyedChoice, keyChoices } from "./selectors.js";
 
-export type DashboardCreateSessionLocalRow =
-  | ({ status: "pending" } & PendingCreateSessionRow)
-  | ({ status: "failed" } & FailedCreateSessionRow);
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
 
 export type DashboardViewportItem =
   | {
@@ -28,27 +33,18 @@ export type DashboardViewportItem =
   | {
       type: "projectHeader";
       id: string;
-      project: ProjectView;
+      project: DashboardProjectView;
+      /** Stored disclosure state; applied matches may render children without changing it. */
       collapsed: boolean;
+      persistentFilterMatch?: DashboardPersistentFilterProjectMatch;
     }
   | {
       type: "emptyProject";
       id: string;
-      project: ProjectView;
+      project: DashboardProjectView;
     }
-  | {
-      type: "session";
-      id: string;
-      row: DashboardSessionRow;
-      displayTitle: string;
-      pendingRemove?: PendingRemoveWorktreeRow;
-      pendingStart?: PendingStartAgentRow;
-    }
-  | {
-      type: "createLocalRow";
-      id: string;
-      row: DashboardCreateSessionLocalRow;
-    };
+  | DashboardSessionItem
+  | DashboardCreateLocalItem;
 
 export type DashboardViewport = {
   bodyRows: number;
@@ -60,6 +56,7 @@ export type DashboardViewport = {
   rowChoices: Array<KeyedChoice<DashboardSessionRow>>;
   displayRowChoices: Array<KeyedChoice<DashboardSessionRow>>;
   sessionOverflow: DashboardSessionOverflow;
+  persistentFilter?: DashboardPersistentFilterProjection;
 };
 
 /** Session-row counts (not raw item counts) for the scroll-overflow labels. */
@@ -70,11 +67,19 @@ export type DashboardSessionOverflow = {
   total: number;
 };
 
+type DashboardViewportState = DashboardViewState & { readonly screen?: DashboardScreenView };
+
 export function selectDashboardViewport(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewportState,
+  activeScreen?: DashboardScreenView,
 ): DashboardViewport {
-  const items = selectDashboardItems(snapshot, state);
+  const selectedScreen = activeScreen ?? state.screen ?? { name: "dashboard" };
+  const { items, persistentFilter } = selectDashboardItemsProjection(
+    snapshot,
+    state,
+    selectedScreen,
+  );
   const bodyRows = dashboardBodyRows(state.terminalRows);
   const clampedScrollOffset = clampDashboardScrollOffset({
     bodyRows,
@@ -93,7 +98,7 @@ export function selectDashboardViewport(
   const above = countSessionRows(items.slice(0, clampedScrollOffset));
   const visible = countSessionRows(visibleItems);
   const total = countSessionRows(items);
-  return {
+  const viewport: DashboardViewport = {
     bodyRows,
     clampedScrollOffset,
     hiddenAbove,
@@ -106,78 +111,128 @@ export function selectDashboardViewport(
     displayRowChoices,
     sessionOverflow: { above, below: total - above - visible, visible, total },
   };
-}
-
-function countSessionRows(items: readonly DashboardViewportItem[]): number {
-  return items.filter((item) => item.type === "session" || item.type === "createLocalRow").length;
+  if (persistentFilter !== undefined) {
+    viewport.persistentFilter = persistentFilter;
+  }
+  return viewport;
 }
 
 export function selectDashboardItems(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewportState,
+  activeScreen?: DashboardScreenView,
 ): DashboardViewportItem[] {
-  const localRows = visibleCreateSessionLocalRows(snapshot, state);
-  return selectProjectGroups(snapshot, state).flatMap((group, index) => {
-    const items: DashboardViewportItem[] = [];
-    if (index > 0) {
-      items.push({
-        type: "projectGap",
-        id: `gap:${group.project.id}`,
-        projectId: group.project.id,
-      });
-    }
-    items.push({
-      type: "projectHeader",
-      id: `project:${group.project.id}`,
-      project: group.project,
-      collapsed: group.collapsed,
-    });
-    if (group.collapsed) {
-      return items;
-    }
-    const projectLocalRows = localRows
-      .filter((row) => row.projectId === group.project.id)
-      .filter((row) => localRowMatchesSearch(row, group.project, state.searchQuery));
-    const rows = mergeRowsAndCreateSessionLocalRows(group.rows, projectLocalRows, state);
-    if (rows.length === 0) {
-      items.push({
-        type: "emptyProject",
-        id: `empty:${group.project.id}`,
-        project: group.project,
-      });
-      return items;
-    }
-    for (const row of rows) {
-      if (row.type === "session") {
-        const item: Extract<DashboardViewportItem, { type: "session" }> = {
-          type: "session",
-          id: `session:${row.row.id}`,
-          row: row.row,
-          displayTitle: sessionRowDisplayTitle(row.row, state.localRows),
-        };
-        const pendingRemove = state.localRows.pendingRemove.find(
-          (localRow) => localRow.worktreeId === row.row.worktree.id,
-        );
-        if (pendingRemove !== undefined) {
-          item.pendingRemove = pendingRemove;
-        }
-        const pendingStart = state.localRows.pendingStart.find(
-          (localRow) => localRow.worktreeId === row.row.worktree.id,
-        );
-        if (pendingStart !== undefined) {
-          item.pendingStart = pendingStart;
-        }
-        items.push(item);
-      } else {
-        items.push({
-          type: "createLocalRow",
-          id: `create:${row.row.localId}`,
-          row: row.row,
-        });
-      }
-    }
-    return items;
+  return selectDashboardItemsProjection(
+    snapshot,
+    state,
+    activeScreen ?? state.screen ?? { name: "dashboard" },
+  ).items;
+}
+
+function selectDashboardItemsProjection(
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewState,
+  activeScreen: DashboardScreenView,
+): {
+  items: DashboardViewportItem[];
+  persistentFilter: DashboardPersistentFilterProjection | undefined;
+} {
+  const groups = selectDashboardProjectRowGroups(snapshot, state);
+  const persistentFilter = selectDashboardPersistentFilter({
+    candidates: groups.flatMap((group) => group.rows.map(persistentFilterCandidateForDashboardRow)),
+    projects: groups.map((group) => ({
+      projectId: group.project.id,
+      projectLabel: group.project.label,
+    })),
+    screen: activeScreen,
+    ...(state.persistentFilter === undefined ? {} : { applied: state.persistentFilter }),
   });
+  return {
+    items: flattenDashboardGroups(groups, persistentFilter),
+    persistentFilter,
+  };
+}
+
+function flattenDashboardGroups(
+  groups: readonly DashboardProjectRowGroup[],
+  projection?: DashboardPersistentFilterProjection,
+): DashboardViewportItem[] {
+  const applied = projection?.source === "applied" && projection.active;
+  const visibleGroups = applied
+    ? groups.filter((group) => projection.projects.get(group.project.id)?.matched)
+    : groups;
+  return visibleGroups.flatMap((group, index) => [
+    ...(index === 0 ? [] : [projectGapItem(group.project.id)]),
+    ...projectGroupItems(group, projection, applied),
+  ]);
+}
+
+function projectGroupItems(
+  group: DashboardProjectRowGroup,
+  projection: DashboardPersistentFilterProjection | undefined,
+  applied: boolean,
+): DashboardViewportItem[] {
+  const items: DashboardViewportItem[] = [projectHeaderItem(group, projection)];
+  const rows = visibleProjectRows(group, projection, applied);
+  if (rows.length > 0) {
+    items.push(
+      ...rows.map((row) =>
+        projection === undefined ? row : withDashboardRowFilterMatch(row, projection),
+      ),
+    );
+  } else if (group.rows.length === 0 && !group.collapsed) {
+    items.push(emptyProjectItem(group.project));
+  }
+  return items;
+}
+
+function visibleProjectRows(
+  group: DashboardProjectRowGroup,
+  projection: DashboardPersistentFilterProjection | undefined,
+  applied: boolean,
+): readonly DashboardRowItem[] {
+  if (group.collapsed) return [];
+  if (applied && projection !== undefined) {
+    return group.rows.filter((row) => projection.rows.get(row.id)?.matched === true);
+  }
+  return group.rows;
+}
+
+function projectGapItem(
+  projectId: ProjectId,
+): Extract<DashboardViewportItem, { type: "projectGap" }> {
+  return {
+    type: "projectGap",
+    id: `gap:${projectId}`,
+    projectId,
+  };
+}
+
+function projectHeaderItem(
+  group: DashboardProjectRowGroup,
+  projection?: DashboardPersistentFilterProjection,
+): Extract<DashboardViewportItem, { type: "projectHeader" }> {
+  const item: Extract<DashboardViewportItem, { type: "projectHeader" }> = {
+    type: "projectHeader",
+    id: `project:${group.project.id}`,
+    project: group.project,
+    collapsed: group.collapsed,
+  };
+  const match = projection?.projects.get(group.project.id);
+  if (match !== undefined) {
+    item.persistentFilterMatch = match;
+  }
+  return item;
+}
+
+function emptyProjectItem(
+  project: DashboardProjectView,
+): Extract<DashboardViewportItem, { type: "emptyProject" }> {
+  return {
+    type: "emptyProject",
+    id: `empty:${project.id}`,
+    project,
+  };
 }
 
 function displaySessionRowsFromItems(
@@ -188,90 +243,6 @@ function displaySessionRowsFromItems(
   );
 }
 
-type GroupDashboardRow =
-  | {
-      type: "session";
-      row: DashboardSessionRow;
-    }
-  | {
-      type: "createLocalRow";
-      row: DashboardCreateSessionLocalRow;
-    };
-
-function visibleCreateSessionLocalRows(
-  snapshot: StationSnapshot,
-  state: TuiViewState,
-): DashboardCreateSessionLocalRow[] {
-  const rowsById = new Map(snapshot.rows.map((row) => [row.id, row]));
-  const realRows = new Set(
-    snapshot.sessions.flatMap((session) => {
-      const row = rowsById.get(session.worktreeId);
-      return row === undefined ? [] : [`${session.projectId}\u0000${row.branch}`];
-    }),
-  );
-  return [
-    ...state.localRows.pendingCreate
-      .filter((row) => !realRows.has(`${row.projectId}\u0000${row.branch}`))
-      .map((row) => ({ ...row, status: "pending" as const })),
-    ...state.localRows.failedCreate.map((row) => ({
-      ...row,
-      status: "failed" as const,
-    })),
-  ];
-}
-
-function mergeRowsAndCreateSessionLocalRows(
-  rows: readonly DashboardSessionRow[],
-  localRows: readonly DashboardCreateSessionLocalRow[],
-  state: TuiViewState,
-): GroupDashboardRow[] {
-  return [
-    ...rows.map((row) => ({ type: "session" as const, row })),
-    ...localRows.map((row) => ({ type: "createLocalRow" as const, row })),
-  ].sort((left, right) => compareDashboardRows(left, right, state));
-}
-
-function compareDashboardRows(
-  left: GroupDashboardRow,
-  right: GroupDashboardRow,
-  state: TuiViewState,
-): number {
-  const titleOrder = rowTitle(left, state).localeCompare(rowTitle(right, state));
-  if (titleOrder !== 0) return titleOrder;
-  const branchOrder = rowBranch(left).localeCompare(rowBranch(right));
-  if (branchOrder !== 0) return branchOrder;
-  if (left.type !== right.type) {
-    return left.type === "session" ? -1 : 1;
-  }
-  return rowId(left).localeCompare(rowId(right));
-}
-
-function rowTitle(row: GroupDashboardRow, state: TuiViewState): string {
-  if (row.type === "createLocalRow") {
-    return row.row.title;
-  }
-  return sessionRowDisplayTitle(row.row, state.localRows);
-}
-
-function rowBranch(row: GroupDashboardRow): string {
-  return row.type === "session" ? row.row.worktree.branch : row.row.branch;
-}
-
-function rowId(row: GroupDashboardRow): string {
-  return row.type === "session" ? row.row.id : row.row.localId;
-}
-
-function localRowMatchesSearch(
-  row: DashboardCreateSessionLocalRow,
-  project: ProjectView,
-  searchQuery: string,
-): boolean {
-  const query = searchQuery.trim().toLocaleLowerCase();
-  if (query.length === 0) {
-    return true;
-  }
-  const harnessProvider = row.status === "pending" ? (row.harnessProvider ?? "") : "";
-  return [row.title, row.branch, project.label, harnessProvider].some((value) =>
-    value.toLocaleLowerCase().includes(query),
-  );
+function countSessionRows(items: readonly DashboardViewportItem[]): number {
+  return items.filter((item) => item.type === "session" || item.type === "createLocalRow").length;
 }

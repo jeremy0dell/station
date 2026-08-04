@@ -1,5 +1,5 @@
-import { constants as fsConstants } from "node:fs";
-import { access as nodeAccess } from "node:fs/promises";
+import { constants } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { resolveObserverPaths } from "@station/config";
@@ -20,7 +20,7 @@ import type {
   SetupLaunchersFact,
   SetupMode,
   SetupStationUiFact,
-} from "../model.js";
+} from "../adapters/inspectionTypes.js";
 import { checkBrewDependency } from "./brew.js";
 import { checkSetupBun } from "./bun.js";
 import {
@@ -29,10 +29,9 @@ import {
   type SetupFileSystemReader,
   setupConfigPath,
 } from "./config.js";
-import { checkSetupDiffnav } from "./diffnav.js";
+import { checkSetupDiffViewer } from "./diffViewer.js";
 import { setupEnv } from "./env.js";
 import { type CheckGitOptions, checkSetupGit } from "./git.js";
-import { checkSetupGitDelta } from "./gitDelta.js";
 import { type CheckHarnessesOptions, checkSetupHarnesses } from "./harnesses.js";
 import {
   type CheckSetupLaunchersOptions,
@@ -144,8 +143,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     worktrunk,
     tmux,
     bun,
-    diffnav,
-    gitDelta,
+    diffViewer,
     brew,
     xcode,
     harnesses,
@@ -161,8 +159,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     compiled
       ? Promise.resolve({ status: "ok" as const, command: "bun" })
       : checkSetupBun(dependencyOptions),
-    checkSetupDiffnav(dependencyOptions),
-    checkSetupGitDelta(dependencyOptions),
+    checkSetupDiffViewer(dependencyOptions),
     checkBrewDependency({
       ...commandOptions,
       ...(options.noBrew === undefined ? {} : { noBrew: options.noBrew }),
@@ -191,10 +188,11 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     checkSetupWorktrunkAutomation(worktrunkAutomationInput),
     checkSetupWorktrunkShellIntegration(worktrunkShellIntegrationInput),
   ]);
-  const launcherCommand =
-    options.tmuxPopupOwnerRoot === undefined
-      ? setupLauncherExecutable(launchers.tmuxPopup)
-      : join(options.tmuxPopupOwnerRoot, "stn-tmux-popup");
+  const tmuxLauncherInput: ResolveTmuxLauncherCommandInput = { compiled, launchers };
+  if (options.tmuxPopupOwnerRoot !== undefined) {
+    tmuxLauncherInput.ownerRoot = options.tmuxPopupOwnerRoot;
+  }
+  const launcherCommand = await resolveTmuxLauncherCommand(tmuxLauncherInput);
   let resolvedLaunchers: SetupLaunchersFact = launchers;
   if (options.tmuxPopupOwnerRoot !== undefined) {
     let tmuxPopup: SetupLauncherFact;
@@ -279,8 +277,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     tmux,
     bun,
     stationUi,
-    diffnav,
-    gitDelta,
+    diffViewer,
     brew,
     xcode,
     launchers: resolvedLaunchers,
@@ -303,6 +300,28 @@ export async function checkSetupSocketEvidence(
   };
 }
 
+type ResolveTmuxLauncherCommandInput = {
+  compiled: boolean;
+  launchers: SetupLaunchersFact;
+  ownerRoot?: string;
+};
+
+async function resolveTmuxLauncherCommand(input: ResolveTmuxLauncherCommandInput): Promise<string> {
+  if (input.ownerRoot !== undefined) return join(input.ownerRoot, "stn-tmux-popup");
+  const linkedCheckoutPopup =
+    !input.compiled &&
+    input.launchers.tmuxPopup.source === "path" &&
+    input.launchers.tmuxPopup.resolvedPath !== undefined &&
+    (await setupLauncherPathsMatch(
+      input.launchers.tmuxPopup.resolvedPath,
+      input.launchers.tmuxPopup.checkoutPath,
+    ));
+  // A source binding stays checkout-scoped when linking adds an equivalent PATH alias mid-apply.
+  return linkedCheckoutPopup
+    ? input.launchers.tmuxPopup.checkoutPath
+    : setupLauncherExecutable(input.launchers.tmuxPopup);
+}
+
 function usesManagedFastPopupDefaults(config: SetupConfigFact): boolean {
   if (config.status === "missing") return true;
   if (config.status !== "valid") return false;
@@ -311,7 +330,8 @@ function usesManagedFastPopupDefaults(config: SetupConfigFact): boolean {
     tmux.popupScope === "server" &&
     tmux.popupWidth === defaultTmuxWorkbenchConfig.popupWidth &&
     tmux.popupHeight === defaultTmuxWorkbenchConfig.popupHeight &&
-    tmux.popupPosition === defaultTmuxWorkbenchConfig.popupPosition
+    tmux.popupPosition === defaultTmuxWorkbenchConfig.popupPosition &&
+    tmux.popupStatusBar === defaultTmuxWorkbenchConfig.popupStatusBar
   );
 }
 
@@ -321,7 +341,7 @@ async function canExecute(
 ): Promise<boolean> {
   try {
     if (injectedAccess === undefined) {
-      await nodeAccess(path, fsConstants.X_OK);
+      await fsPromises.access(path, constants.X_OK);
     } else {
       await injectedAccess(path);
     }

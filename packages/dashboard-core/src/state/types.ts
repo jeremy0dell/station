@@ -1,6 +1,8 @@
 import type { TuiWidgetConfig } from "@station/config";
 import type {
+  AgentState,
   ProjectId,
+  ProviderId,
   SafeError,
   SessionId,
   StationSnapshot,
@@ -10,9 +12,19 @@ import type {
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
 import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
-import type { TuiToast } from "../services/types.js";
+import type { ClientNotice } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
+import type { ReadonlyDeep } from "./readonly.js";
 import type { TuiSelectionState } from "./selection/types.js";
+
+/** Stable control identities for the four project-header action segments. */
+export type ProjectHeaderControl = "primary" | "shell" | "quickSession" | "defaultAgent";
+
+/** Renderer-neutral focus over session rows, project headers, and empty-project actions. */
+export type DashboardFocus =
+  | { kind: "session"; sessionId: SessionId }
+  | { kind: "projectHeader"; projectId: ProjectId; control: ProjectHeaderControl }
+  | { kind: "emptyProjectAction"; projectId: ProjectId };
 
 export type TuiRuntimeState = {
   persistentPopup: boolean;
@@ -23,19 +35,76 @@ export type TuiRuntimeState = {
   focusOrigin?: TerminalFocusOrigin;
 };
 
+export type DashboardFilterConditionField = "status" | "project" | "agent";
+
+export type DashboardFilterStatusConditionValue = {
+  id: AgentState;
+  label: string;
+};
+
+export type DashboardFilterProjectConditionValue = {
+  id: ProjectId;
+  label: string;
+};
+
+export type DashboardFilterAgentConditionValue = {
+  id: ProviderId;
+  label: string;
+};
+
+/**
+ * Stable condition IDs pair with visible labels; values are ORed within a field while free text
+ * and separate Status, Project, and Agent fields are ANDed in canonical field order.
+ */
+export type DashboardFilterCondition =
+  | { field: "status"; values: readonly DashboardFilterStatusConditionValue[] }
+  | { field: "project"; values: readonly DashboardFilterProjectConditionValue[] }
+  | { field: "agent"; values: readonly DashboardFilterAgentConditionValue[] };
+
+export type DashboardFilterConditionOption = {
+  id: string;
+  label: string;
+};
+
+export type DashboardFilterConditionEditor =
+  | { stage: "field"; cursor: number }
+  | {
+      stage: "values";
+      field: DashboardFilterConditionField;
+      cursor: number;
+      /** Frozen for the panel lifetime so snapshots cannot reassign visible slot keys. */
+      options: readonly DashboardFilterConditionOption[];
+      selectedIds: readonly string[];
+    };
+
+/** Dashboard-local applied free text plus normalized structured conditions. */
+export type DashboardPersistentFilter = {
+  /** Blank remains valid when at least one structured condition is selected. */
+  query: string;
+  /** Omitted is the normalized empty selection for query-only compatibility. */
+  conditions?: readonly DashboardFilterCondition[];
+};
+
 export type TuiViewState = {
-  searchQuery: string;
+  /** Dashboard-local applied filter; absence means no persistent filter is applied. */
+  persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds: ReadonlySet<string>;
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
-  /** List cursor; native overlays synchronize it once per open and clear it on close. */
-  focusedRowId?: SessionId;
+  /** Dashboard cursor; native overlays synchronize session identity once per open. */
+  dashboardFocus?: DashboardFocus;
   /** Per-list cursor for screens migrated onto the shared selection engine. */
   selection: TuiSelectionState;
 };
 
-export type TuiState = TuiViewState & {
+/**
+ * Private reducer/store data model owned by the dashboard runtime.
+ *
+ * External mutation is available only through {@link DashboardActions}; action
+ * and lifecycle methods are never stored in dashboard snapshots.
+ */
+export type DashboardState = TuiViewState & {
   snapshot?: StationSnapshot;
   loading: boolean;
   screen: TuiScreen;
@@ -52,9 +121,25 @@ export type TuiState = TuiViewState & {
   widgetsPersisted: boolean;
 };
 
+/** Temporary private reducer/store alias retained while pure reducer naming is migrated. */
+// biome-ignore lint/plugin: retained compatibility boundary during the reducer naming migration
+export type TuiState = DashboardState;
+
+/** Recursively readonly public projection of the private dashboard store model. */
+export type DashboardStateView = ReadonlyDeep<DashboardState>;
+
+/** Readonly Observer snapshot exposed through {@link DashboardStateView}. */
+export type DashboardSnapshotView = NonNullable<DashboardStateView["snapshot"]>;
+
+/** Readonly active-screen projection exposed through {@link DashboardStateView}. */
+export type DashboardScreenView = DashboardStateView["screen"];
+
+/** Readonly dashboard presentation state shared by pure selectors. */
+export type DashboardViewState = ReadonlyDeep<TuiViewState>;
+
 export type TuiToastEntry = {
   id: string;
-  toast: TuiToast;
+  toast: ClientNotice;
   createdAt: number;
   updatedAt: number;
   expiresAt?: number;
@@ -68,7 +153,12 @@ export type TuiObserverConnectionStatus =
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
-  | { name: "search"; value: string }
+  | {
+      name: "persistentFilter";
+      draft: EditableTextInputState;
+      draftConditions: readonly DashboardFilterCondition[];
+      conditionEditor?: DashboardFilterConditionEditor;
+    }
   | { name: "projectCollapse" }
   | { name: "projectSettingsPicker" }
   | { name: "removeWorktree"; step: "chooseSlot" }
@@ -79,6 +169,7 @@ export type TuiScreen =
       rowId: SessionId;
       forceRequired: boolean;
       label: string;
+      actionFocus: "delete" | "keep";
     }
   | { name: "renameSession"; step: "chooseSlot" }
   | {
@@ -130,12 +221,12 @@ export type ProjectSettingsItemId = "agent" | "remove";
 
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;
-  searchQuery?: string;
+  persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds?: Iterable<string>;
   scrollOffset?: number;
   terminalRows?: number;
   localRows?: TuiLocalRows;
-  focusedRowId?: SessionId;
+  dashboardFocus?: DashboardFocus;
   widgets?: readonly TuiWidgetConfig[];
   widgetsPersisted?: boolean;
   runtime?: Partial<TuiRuntimeState>;

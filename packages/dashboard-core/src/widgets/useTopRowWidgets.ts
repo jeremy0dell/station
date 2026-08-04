@@ -1,4 +1,4 @@
-import type { TuiWeatherWidgetConfig, TuiWidgetConfig } from "@station/config";
+import type { DashboardStateView } from "../state/types.js";
 import { formatMoonWidget } from "./moon.js";
 import { formatTimeWidget, millisecondsUntilNextMinute } from "./time.js";
 import { formatTimezoneWidget } from "./timezone.js";
@@ -21,9 +21,12 @@ export type TopRowWidgetHookRuntime = {
   useState<T>(initialValue: T | (() => T)): [T, (action: SetStateAction<T>) => void];
 };
 
+type DashboardWidgetView = DashboardStateView["widgets"][number];
+type WeatherWidgetView = Extract<DashboardWidgetView, { type: "weather" }>;
+
 type WeatherWidgetEntry = {
   id: string;
-  config: TuiWeatherWidgetConfig;
+  config: WeatherWidgetView;
 };
 
 type WeatherCacheEntry = {
@@ -37,7 +40,7 @@ const DEFAULT_REFRESH_INTERVAL_MINUTES = 15;
 // (no react dependency); each consuming app wires in its own React.
 export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
   return function useTopRowWidgets(
-    widgets: readonly TuiWidgetConfig[],
+    widgets: DashboardStateView["widgets"],
     deps: TopRowWidgetRuntimeDeps = {},
   ): TopRowWidgetView[] {
     const now = deps.now ?? defaultNow;
@@ -215,11 +218,11 @@ export async function refreshWeatherWidget(
   }
 }
 
-function refreshIntervalMs(config: TuiWeatherWidgetConfig): number {
+function refreshIntervalMs(config: WeatherWidgetView): number {
   return (config.refreshIntervalMinutes ?? DEFAULT_REFRESH_INTERVAL_MINUTES) * 60_000;
 }
 
-function temperatureUnit(config: TuiWeatherWidgetConfig): WeatherTemperatureUnit {
+function temperatureUnit(config: WeatherWidgetView): WeatherTemperatureUnit {
   return config.temperatureUnit ?? "fahrenheit";
 }
 

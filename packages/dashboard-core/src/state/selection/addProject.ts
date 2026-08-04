@@ -1,6 +1,6 @@
 import { addProjectRows } from "../../flows/addProject/rows.js";
-import type { AddProjectFlowState } from "../../flows/addProject/types.js";
-import type { TuiState } from "../types.js";
+import type { AddProjectFlowState, AddProjectFlowStateView } from "../../flows/addProject/types.js";
+import type { DashboardStateView, TuiState } from "../types.js";
 import type { TuiSelectionState } from "./types.js";
 
 export const ADD_PROJECT_START_LIST_ID = "addProjectStart";
@@ -10,14 +10,14 @@ function startChoiceId(index: number): string {
   return String(index);
 }
 
-export function addProjectSelectedIndex(state: TuiState): number | undefined {
+export function addProjectSelectedIndex(state: DashboardStateView): number | undefined {
   return state.screen.name === "addProject"
     ? addProjectSelectedIndexForFlow(state.screen.flow, state.selection)
     : undefined;
 }
 
 export function addProjectSelectedIndexForFlow(
-  flow: AddProjectFlowState,
+  flow: AddProjectFlowStateView,
   selection: TuiSelectionState,
 ): number | undefined {
   if (flow.mode === "start") {
@@ -39,15 +39,7 @@ export function addProjectSelectedIndexForFlow(
   return undefined;
 }
 
-export function selectedAddProjectStartPath(state: TuiState): string | undefined {
-  if (state.screen.name !== "addProject" || state.screen.flow.mode !== "start") {
-    return undefined;
-  }
-  const index = addProjectSelectedIndex(state);
-  return index === undefined ? undefined : state.screen.flow.choices[index]?.path;
-}
-
-export function selectedAddProjectFolderRow(state: TuiState) {
+export function selectedAddProjectFolderRow(state: DashboardStateView) {
   if (state.screen.name !== "addProject" || state.screen.flow.mode !== "choose") {
     return undefined;
   }
@@ -55,7 +47,9 @@ export function selectedAddProjectFolderRow(state: TuiState) {
   return index === undefined ? undefined : addProjectRows(state.screen.flow)[index];
 }
 
-/** Reconcile the canonical list cursor whenever the wizard changes its visible rows. */
+/**
+ * Reconcile only start/folder list selection; review and terminal-state action focus is flow-owned.
+ */
 export function reconcileAddProjectSelection(
   state: TuiState,
   previousFlow: AddProjectFlowState | undefined,

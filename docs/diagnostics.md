@@ -57,14 +57,26 @@ correlate trace ids, command ids, diagnostic ids, root-cause codes, redacted
 command diagnostics, and suggested next commands without contacting the observer.
 When a command error envelope includes external-command diagnostics, trace output
 can show the command, cwd, exit code, duration, and bounded stdout/stderr
-snippets after redaction.
+snippets after redaction. `causeAssessment` distinguishes a correlated,
+diagnostic-index-declared root cause from an observed command/error failure or
+insufficient evidence. A generic error code is failure evidence, not proof of
+the mechanism beneath it.
+
+Trace and log results expose `evidenceRoles` so consumers do not confuse the
+record's logging component with failure ownership. `operationalBoundaryEvidence`
+groups only retained operation, command type, signal kind, record summary,
+error code, and error message facts. It does not infer a subsystem or handler.
 
 `stn debug logs` reads structured JSONL logs from the configured state
 directory without contacting the observer. By default it searches `observer`,
 `cli`, and `tui` logs, excludes noisy hook logs, returns recent `warn`/`error`
 records when no query is supplied, and searches all levels when a query is
 supplied. Use `--component hook` or `--all-components` only when hook delivery
-or provider-ingress noise is relevant.
+or provider-ingress noise is relevant. Each record marks `componentRole` as
+`logging_location`; queried records include bounded `matchEvidence` and scalar
+`context` for direct citation. An exactly matched warning or error record can
+establish the retained event as an observed proximate failure without
+establishing a deeper cause.
 
 `stn observer status` checks the configured observer process/socket state. It is
 non-mutating, but it is still a live status check rather than an existing-state

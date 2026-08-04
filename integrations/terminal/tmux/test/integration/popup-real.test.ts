@@ -1,8 +1,8 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
-import { promisify } from "node:util";
+import * as timers from "node:timers/promises";
+import { promisify, stripVTControlCharacters } from "node:util";
 import {
   type CommandId,
   type CommandRecord,
@@ -25,7 +25,11 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { tmuxPopupRunShellCommand } from "../../../../../apps/cli/src/commands/setup/checks/tmuxBinding.js";
 import { mockObserverSnapshot } from "../../../../../station/src/sources/fixtures/mockObserverSnapshot.js";
-import { buildManagedFastPopupRunShellCommand, openTmuxPopup } from "../../src/popup";
+import {
+  buildManagedFastPopupRunShellCommand,
+  ensurePersistentPopupSession,
+  openTmuxPopup,
+} from "../../src/popup";
 import { parsePopupActiveClaim } from "../../src/popup/fastProtocol";
 import { TmuxProvider } from "../../src/provider";
 import { shellQuote } from "../../src/shell";
@@ -46,7 +50,7 @@ const realDashboardFrameUrl = new URL(
 const outputTailBytes = 64 * 1024;
 const popupBorderColumns = 2;
 const popupBorderRows = 2;
-const nestedTmuxStatusRows = 1;
+const nestedTmuxStatusRows = 0;
 const outerTmuxStatusRows = 1;
 const ptyBridgeScript = `
 import fcntl
@@ -256,6 +260,23 @@ type TmuxClientTarget = {
   windowId: string;
 };
 
+describe("captured tmux background parsing", () => {
+  it("distinguishes explicit backgrounds from a later terminal-default reset", () => {
+    expect(
+      capturedBackgroundIntentAtText("\u001b[48;2;16;19;22mstation · overview", "station"),
+    ).toBe("explicit");
+    expect(
+      capturedBackgroundIntentAtText(
+        "\u001b[48;2;16;19;22mold\u001b[49mstation · overview",
+        "station",
+      ),
+    ).toBe("default");
+    expect(
+      capturedBackgroundIntentAtText("\u001b[38;2;49;19;22mstation · overview", "station"),
+    ).toBe("default");
+  });
+});
+
 describeRealTmux("real tmux dev popup routing", () => {
   let cleanup: (() => Promise<void>) | undefined;
   let tmux: string;
@@ -351,6 +372,67 @@ describeRealTmux("real tmux dev popup routing", () => {
     await expect(readFile(normalMarker, "utf8")).resolves.toBe("start\n");
   }, 60_000);
 
+  it("keeps popup status session-scoped and reapplies config on warm reuse", async () => {
+    const root = await makeCheckoutTempRoot();
+    const wrapperLogPath = join(root, "tmux-wrapper.log");
+    const wrapper = await writeTmuxWrapper({
+      root,
+      tmux,
+      label: `stn-popup-status-${process.pid}-${Date.now()}`,
+      attachLogPath: join(root, "attach.log"),
+      wrapperLogPath,
+    });
+    const fixture: MarkerFixture = { root, wrapper, wrapperLogPath };
+    cleanup = () => cleanupMarkerFixture(fixture);
+
+    const baseSession = "base";
+    const popupSession = "_station-ui-status-real";
+    const marker = join(root, "popup-started.txt");
+    const tuiCommand = persistentMarkerCommand(marker);
+    const sessionStatus = async (sessionName: string): Promise<string> =>
+      tmuxExec(wrapper, ["show-options", "-t", sessionName, "-qv", "status"]).then((value) =>
+        value.trim(),
+      );
+
+    await tmuxExec(wrapper, ["new-session", "-d", "-s", baseSession, "sleep 300"]);
+    await tmuxExec(wrapper, ["set-option", "-t", baseSession, "status", "on"]);
+
+    await expect(
+      ensurePersistentPopupSession({ command: wrapper, tuiCommand, uiSessionName: popupSession }),
+    ).resolves.toEqual({ created: true, sessionName: popupSession });
+    await waitForFileText(marker, "start\n");
+    const initialPid = await panePid(wrapper, popupSession);
+    await expect(
+      Promise.all([sessionStatus(baseSession), sessionStatus(popupSession)]),
+    ).resolves.toEqual(["on", "off"]);
+
+    await expect(
+      ensurePersistentPopupSession({
+        command: wrapper,
+        popupStatusBar: true,
+        tuiCommand,
+        uiSessionName: popupSession,
+      }),
+    ).resolves.toEqual({ created: false, sessionName: popupSession });
+    expect(await panePid(wrapper, popupSession)).toBe(initialPid);
+    await expect(
+      Promise.all([sessionStatus(baseSession), sessionStatus(popupSession)]),
+    ).resolves.toEqual(["on", "on"]);
+
+    await expect(
+      ensurePersistentPopupSession({
+        command: wrapper,
+        popupStatusBar: false,
+        tuiCommand,
+        uiSessionName: popupSession,
+      }),
+    ).resolves.toEqual({ created: false, sessionName: popupSession });
+    expect(await panePid(wrapper, popupSession)).toBe(initialPid);
+    await expect(
+      Promise.all([sessionStatus(baseSession), sessionStatus(popupSession)]),
+    ).resolves.toEqual(["on", "off"]);
+  }, 30_000);
+
   it("renders an exact real dashboard and routes outer keyboard and resize without replacing the renderer", async () => {
     const fixture = await createDashboardFixture(tmux, {
       height: "100%",
@@ -382,9 +464,10 @@ describeRealTmux("real tmux dev popup routing", () => {
         isAcceptanceDashboardContent(content) && content.includes("20 agents · 1 open PR"),
       "deterministic real dashboard did not render configured widgets",
     );
+    await expectHiddenTextUsesDefaultBackground(fixture, "station · overview");
     const firstRuntime = await waitForDashboardRuntimeEvidence(fixture, firstPopup, process.pid);
     const popupAttach = await waitForPopupAttachRecord(fixture);
-    expect(popupAttach).toMatchObject({ rows: 41, columns: 120 });
+    expect(popupAttach).toMatchObject({ rows: 40, columns: 120 });
     await expectConvergedDashboardDimensions(fixture, { rows: 40, columns: 120 });
     await resizeDashboardSurface(fixture, { rows: 25, columns: 99 });
 
@@ -403,6 +486,7 @@ describeRealTmux("real tmux dev popup routing", () => {
         !content.includes("no widgets yet"),
       "widget settings did not receive the configured standalone widget definitions",
     );
+    await expectHiddenTextUsesDefaultBackground(fixture, "saved to config.toml");
     await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForExactFrame(fixture, baseline);
 
@@ -413,6 +497,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       (content) => content.includes("station help"),
       "outer keyboard input did not open station help",
     );
+    await expectHiddenTextUsesDefaultBackground(fixture, "station help");
     await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForPaneContent(
       fixture,
@@ -420,6 +505,17 @@ describeRealTmux("real tmux dev popup routing", () => {
       (content) => isAcceptanceDashboardContent(content) && !content.includes("station help"),
       "Esc did not return from station help to the dashboard",
     );
+    await waitForExactFrame(fixture, baseline);
+
+    await fixture.ptyClient.write(Buffer.from("R", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      firstPopup,
+      (content) => content.includes("Rename:"),
+      "outer keyboard input did not open the Rename prompt",
+    );
+    await expectHiddenTextUsesDefaultBackground(fixture, "Rename:");
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
     await waitForExactFrame(fixture, baseline);
 
     for (const dimensions of [
@@ -516,7 +612,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       if (mouseAllFlag === "1") {
         // A terminal only reports motion when requested; SGR 34 reaches tmux's 3.7 menu branch.
         await fixture.ptyClient.write(sgrMouse(34, { column: 1, row: 1 }));
-        await delay(500);
+        await timers.setTimeout(500);
       }
       expectNoTmuxPopupMenu();
       expect(mouseFlags.trim(), "popup renderer did not request click-only SGR tracking").toBe(
@@ -527,7 +623,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       await fixture.ptyClient.write(sgrMouse(33, headerOuter));
       await fixture.ptyClient.write(sgrMouse(1, headerOuter, "m"));
       await fixture.ptyClient.write(sgrMouse(35, blankOuter));
-      await delay(500);
+      await timers.setTimeout(500);
       expect(
         await captureHiddenStyledLine(fixture, headerCell.row),
         "a button drag left the project-header hover style latched",
@@ -678,49 +774,49 @@ describeRealTmux("real tmux dev popup routing", () => {
         label: "cold issue geometry",
         outer: { columns: 169, rows: 47 },
         nested: { columns: 99, rows: 26 },
-        pane: { columns: 99, rows: 25 },
+        pane: { columns: 99, rows: 26 },
       },
       {
         label: "tiny fallback",
         outer: { columns: 70, rows: 25 },
         nested: { columns: 40, rows: 13 },
-        pane: { columns: 40, rows: 12 },
+        pane: { columns: 40, rows: 13 },
       },
       {
         label: "supported minimum",
         outer: { columns: 104, rows: 32 },
         nested: { columns: 60, rows: 17 },
-        pane: { columns: 60, rows: 16 },
+        pane: { columns: 60, rows: 17 },
       },
       {
         label: "standard terminal",
         outer: { columns: 137, rows: 45 },
         nested: { columns: 80, rows: 25 },
-        pane: { columns: 80, rows: 24 },
+        pane: { columns: 80, rows: 25 },
       },
       {
         label: "percentage round down",
         outer: { columns: 168, rows: 47 },
         nested: { columns: 98, rows: 26 },
-        pane: { columns: 98, rows: 25 },
+        pane: { columns: 98, rows: 26 },
       },
       {
         label: "above issue geometry",
         outer: { columns: 170, rows: 47 },
         nested: { columns: 100, rows: 26 },
-        pane: { columns: 100, rows: 25 },
+        pane: { columns: 100, rows: 26 },
       },
       {
         label: "large terminal",
         outer: { columns: 204, rows: 72 },
         nested: { columns: 120, rows: 41 },
-        pane: { columns: 120, rows: 40 },
+        pane: { columns: 120, rows: 41 },
       },
       {
         label: "return to issue geometry",
         outer: { columns: 169, rows: 47 },
         nested: { columns: 99, rows: 26 },
-        pane: { columns: 99, rows: 25 },
+        pane: { columns: 99, rows: 26 },
       },
     ];
 
@@ -753,7 +849,7 @@ describeRealTmux("real tmux dev popup routing", () => {
       ).toEqual(geometry.nested);
 
       const pane = await waitForPaneDimensions(fixture, geometry.pane);
-      expect(nestedClient.rows, `${geometry.label} hidden status row`).toBe(pane.rows + 1);
+      expect(nestedClient.rows, `${geometry.label} status-free popup geometry`).toBe(pane.rows);
       const content = await waitForPaneContent(
         fixture,
         popup,
@@ -807,6 +903,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     fixture.env.STATION_FOCUS_CLIENT_ID = "stale-startup-client";
 
     await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
+    await tmuxExec(fixture.wrapper, ["set-option", "-g", "mouse", "on"], fixture.env);
     fixture.ptyClient = await startTmuxPtyClient({
       tmux: fixture.wrapper,
       sessionName: "base",
@@ -849,6 +946,60 @@ describeRealTmux("real tmux dev popup routing", () => {
     expect(afterEscPane.pid).toBe(firstPane.pid);
     expect(afterEscProcesses.renderer.pid).toBe(firstProcesses.renderer.pid);
 
+    await fixture.ptyClient.write(Buffer.from("/", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("FILTER /"),
+      "persistent filter editor did not open in the tmux popup",
+    );
+    await fixture.ptyClient.write(Buffer.from("\t", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("FILTER CONDITIONS") && content.includes("P Project"),
+      "condition field chooser did not open in the tmux popup",
+    );
+    await fixture.ptyClient.write(Buffer.from("P", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("PROJECT CONDITION"),
+      "Project condition values did not open in the tmux popup",
+    );
+    await fixture.ptyClient.write(Buffer.from("1", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("[✓]"),
+      "Project condition value did not toggle in the tmux popup",
+    );
+    await fixture.ptyClient.write(Buffer.from("\r", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("Project="),
+      "Project condition was not retained in the tmux filter builder",
+    );
+    await fixture.ptyClient.write(Buffer.from([0x1b]));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) => content.includes("FILTER /") && !content.includes("FILTER CONDITIONS"),
+      "condition builder did not return to tmux filter text editing",
+    );
+    await fixture.ptyClient.write(Buffer.from("notify-cleanup", "utf8"));
+    await fixture.ptyClient.write(Buffer.from("\r", "utf8"));
+    await waitForPaneContent(
+      fixture,
+      qPopup,
+      (content) =>
+        content.includes("FILTER notify-cleanup") &&
+        content.includes("notify-cleanup") &&
+        !content.includes("station-design"),
+      "applied tmux filter did not hard-project the matching session",
+    );
+
     await fixture.ptyClient.write(Buffer.from("Q", "utf8"));
     await waitForNestedClientGone(fixture);
     await expectSuccessfulExit(qPopup, 10_000);
@@ -860,7 +1011,29 @@ describeRealTmux("real tmux dev popup routing", () => {
       isDashboardContent,
       "dashboard did not reopen after Q",
     );
+    const retainedFilter = await waitForPaneContent(
+      fixture,
+      failedFocusPopup,
+      (content) =>
+        content.includes("FILTER notify-cleanup") &&
+        content.includes("notify-cleanup") &&
+        !content.includes("station-design"),
+      "warm tmux reopen did not retain the hard applied filter",
+    );
     const otherNestedClient = await waitForNestedClient(fixture);
+    const outerDimensions = await readOuterClientDimensions(fixture, otherClient.clientName);
+    const clearOuter = centeredPopupOuterCell(
+      outerDimensions,
+      otherNestedClient,
+      paneCell(retainedFilter, "Esc clear"),
+    );
+    await writeSgrClick(otherClient, clearOuter);
+    await waitForPaneContent(
+      fixture,
+      failedFocusPopup,
+      (content) => content.includes("station-design") && !content.includes("FILTER notify-cleanup"),
+      "tmux pointer clear did not restore the unfiltered dashboard",
+    );
     const otherPane = await readPaneEvidence(fixture);
     const otherProcesses = await waitForDashboardProcessEvidence(fixture, otherPane);
     recordRuntimeEvidence(fixture, otherNestedClient, otherPane, otherProcesses);
@@ -1221,7 +1394,7 @@ describeRealTmux("real tmux dev popup routing", () => {
     await setGlobalOption(fixture.wrapper, "@station_popup_ui_route", "malformed");
     const outputBeforeFailure = crossClient.stdout.text();
     await triggerPopupBinding(crossClient);
-    await delay(1_000);
+    await timers.setTimeout(1_000);
 
     expect(await tmuxPaneInMode(fixture, crossSession)).toBe("0");
     const invokingPane = await captureTmuxPane(fixture, crossSession);
@@ -1592,7 +1765,7 @@ async function openAndCloseRegisteredPopup(input: {
     await tmuxExec(input.tmux, ["display-popup", "-c", input.clientName, "-C"]).catch(
       () => undefined,
     );
-    await delay(100);
+    await timers.setTimeout(100);
   }
   await withTimeout(popup, 10_000, "tmux popup did not close after display-popup -C");
 }
@@ -1702,7 +1875,7 @@ async function waitForTmuxClient(input: {
     if (client !== undefined) {
       return client;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(`tmux client did not attach${trackedOutput(input.tracked)}`);
 }
@@ -1797,7 +1970,7 @@ async function waitForPaneContent(
     if (predicate(content)) {
       return content;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `${failureMessage}${trackedOutput(popup)}\nLast hidden pane:\n${content.slice(-8_000)}${await fixtureDiagnostics(fixture)}`,
@@ -1820,7 +1993,7 @@ async function waitForHiddenPaneContent(
     if (predicate(content)) {
       return content;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `${failureMessage}\nLast hidden pane:\n${content.slice(-8_000)}${await fixtureDiagnostics(fixture)}`,
@@ -1838,6 +2011,94 @@ async function captureHiddenStyledLine(fixture: DashboardFixture, row: number): 
     throw new Error(`hidden pane does not contain row ${row}`);
   }
   return line;
+}
+
+type CapturedBackgroundIntent = "default" | "explicit";
+
+async function expectHiddenTextUsesDefaultBackground(
+  fixture: DashboardFixture,
+  needle: string,
+): Promise<void> {
+  const content = await tmuxExec(
+    fixture.wrapper,
+    ["capture-pane", "-e", "-p", "-N", "-t", persistentUiSessionName],
+    fixture.env,
+  );
+  const line = content
+    .split("\n")
+    .find((candidate) => stripVTControlCharacters(candidate).includes(needle));
+  if (line === undefined) {
+    throw new Error(`hidden pane does not contain styled text ${JSON.stringify(needle)}`);
+  }
+  expect(
+    capturedBackgroundIntentAtText(line, needle),
+    `expected terminal-default background for ${JSON.stringify(needle)} in ${JSON.stringify(line)}`,
+  ).toBe("default");
+}
+
+function capturedBackgroundIntentAtText(
+  styledLine: string,
+  needle: string,
+): CapturedBackgroundIntent {
+  const plainLine = stripVTControlCharacters(styledLine);
+  const targetOffset = plainLine.indexOf(needle);
+  if (targetOffset < 0) {
+    throw new Error(`styled line does not contain ${JSON.stringify(needle)}`);
+  }
+
+  let background: CapturedBackgroundIntent = "default";
+  let plainOffset = 0;
+  let sourceOffset = 0;
+  const sgrPattern = new RegExp(`${String.fromCharCode(27)}\\[([0-9;:]*)m`, "gu");
+  for (const match of styledLine.matchAll(sgrPattern)) {
+    const matchOffset = match.index;
+    const visibleText = stripVTControlCharacters(styledLine.slice(sourceOffset, matchOffset));
+    if (targetOffset < plainOffset + visibleText.length) {
+      return background;
+    }
+    plainOffset += visibleText.length;
+    background = applyCapturedBackgroundSgr(background, match[1] ?? "");
+    sourceOffset = matchOffset + match[0].length;
+  }
+  return background;
+}
+
+function applyCapturedBackgroundSgr(
+  current: CapturedBackgroundIntent,
+  parameters: string,
+): CapturedBackgroundIntent {
+  const values = (parameters.length === 0 ? "0" : parameters)
+    .replaceAll(":", ";")
+    .split(";")
+    .filter((value) => value.length > 0)
+    .map(Number);
+  let background = current;
+  for (let index = 0; index < values.length; index += 1) {
+    const code = values[index];
+    if (code === 0 || code === 49) {
+      background = "default";
+      continue;
+    }
+    if (code === 38 || code === 48) {
+      if (code === 48) {
+        background = "explicit";
+      }
+      const colorMode = values[index + 1];
+      if (colorMode === 5) {
+        index += 2;
+      } else if (colorMode === 2) {
+        index += 4;
+      }
+      continue;
+    }
+    if (
+      (code !== undefined && code >= 40 && code <= 47) ||
+      (code !== undefined && code >= 100 && code <= 107)
+    ) {
+      background = "explicit";
+    }
+  }
+  return background;
 }
 
 function paneCell(content: string, needle: string): { col: number; row: number } {
@@ -1969,7 +2230,7 @@ async function waitForPopupAttachRecord(
     if (record !== undefined) {
       return record;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error("popup wrapper did not record nested attach-session PTY geometry");
 }
@@ -2006,7 +2267,7 @@ async function waitForNestedClient(fixture: DashboardFixture): Promise<NestedCli
       fixture.nestedClientPids.add(client.pid);
       return client;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(`nested popup tmux client did not attach${await fixtureDiagnostics(fixture)}`);
 }
@@ -2022,7 +2283,7 @@ async function waitForNestedClientReplacement(
       fixture.nestedClientPids.add(client.pid);
       return client;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(`nested popup client ${previousPid} was not replaced`);
 }
@@ -2079,7 +2340,7 @@ async function waitForNestedClientGone(fixture: DashboardFixture): Promise<void>
     if (nonEmptyLines(output).length === 0) {
       return;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error("nested popup tmux client remained attached after closing the popup");
 }
@@ -2113,7 +2374,7 @@ async function waitForPaneDimensions(
     if (pane.columns === expected.columns && pane.rows === expected.rows) {
       return pane;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `hidden pane did not reach ${expected.columns}x${expected.rows}; last geometry was ${pane?.columns ?? "?"}x${pane?.rows ?? "?"}`,
@@ -2232,7 +2493,7 @@ async function waitForDashboardProcessEvidence(
         },
       };
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `dashboard CLI and renderer were not found beneath pane pid ${pane.pid}:\n${processTree
@@ -2344,14 +2605,14 @@ async function recordObserverPid(fixture: DashboardFixture): Promise<number> {
       fixture.observerPids.add(identity.pid);
       return identity.pid;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(`observer identity did not appear at ${identityPath}`);
 }
 
 async function triggerPopupBinding(client: TmuxPtyClient): Promise<void> {
   await client.write(Buffer.from([0x02]));
-  await delay(25);
+  await timers.setTimeout(25);
   await client.write(Buffer.from(" ", "utf8"));
 }
 
@@ -2381,7 +2642,7 @@ async function waitForGlobalOptionValue(
     if (actual === expected) {
       return;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `tmux option ${name} did not become ${JSON.stringify(expected)}; last value was ${JSON.stringify(actual)}${await fixtureDiagnostics(fixture)}`,
@@ -2408,7 +2669,7 @@ async function waitForCoherentActivePopup(
       (await tmuxGlobalOption(fixture, "@station_popup_client")) === claim.clientName &&
       (await tmuxGlobalOption(fixture, "@station_popup_focus_client")) === claim.clientName
     ) {
-      await delay(200);
+      await timers.setTimeout(200);
       const settledClaim = await tmuxGlobalOption(fixture, "@station_popup_active_claim");
       const settledClient = await readNestedClient(fixture);
       if (
@@ -2420,7 +2681,7 @@ async function waitForCoherentActivePopup(
         return { nestedClient, owner };
       }
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error("competing managed bindings did not settle on one coherent popup owner");
 }
@@ -2626,7 +2887,7 @@ async function expectConvergedDashboardDimensions(
     } catch (error) {
       last = errorMessage(error);
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `outer, nested-client, pane, and renderer dimensions did not converge to ${expected.columns}x${expected.rows}; last evidence: ${last}${await fixtureDiagnostics(fixture)}`,
@@ -2664,7 +2925,7 @@ async function captureStableFrame(fixture: DashboardFixture): Promise<CapturedFr
       return current;
     }
     previous = current;
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `dashboard did not produce two identical consecutive frames${await fixtureDiagnostics(fixture)}`,
@@ -2687,7 +2948,7 @@ async function waitForExactFrame(
       return current;
     }
     previous = current;
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `dashboard did not restore the exact baseline frame${await fixtureDiagnostics(fixture)}`,
@@ -2730,7 +2991,7 @@ async function waitForDashboardRuntimeEvidence(
       return await currentDashboardRuntimeEvidence(fixture, popup, observerPid);
     } catch (error) {
       lastError = error;
-      await delay(100);
+      await timers.setTimeout(100);
     }
   }
   throw new Error(`dashboard runtime evidence did not converge: ${errorMessage(lastError)}`);
@@ -2847,7 +3108,7 @@ async function waitForTmuxClientTarget(
         return { clientName, sessionName, windowId, paneId };
       }
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `outer client did not visibly switch to the private target; last clients:\n${last}`,
@@ -2911,7 +3172,7 @@ function deterministicDashboardSnapshot(projectRoot: string): StationSnapshot {
       id: worktreeId,
       projectId: "popup-real",
       projectLabel: "POPUP ACCEPTANCE",
-      title: `popup-${sequence}`,
+      title,
       branch: `popup-${sequence}`,
       path: join(projectRoot, `popup-${sequence}`),
       worktree,
@@ -3068,6 +3329,7 @@ function snapshotObserver(
       return { commandId, accepted: true, status: "accepted" };
     },
     getCommand: async (commandId) => records.get(commandId),
+    getSessionRecoveryReadiness: async () => unsupportedObserverCall("getSessionRecoveryReadiness"),
     reconcile: async (reason = "manual") => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       reason,
@@ -3129,6 +3391,7 @@ function popupFocusObserver(focusCommands: StationCommand[]): ObserverApi {
       return { commandId, accepted: true, status: "accepted" };
     },
     getCommand: async (commandId) => records.get(commandId),
+    getSessionRecoveryReadiness: async () => unsupportedObserverCall("getSessionRecoveryReadiness"),
     reconcile: async (reason = "manual") => ({
       schemaVersion: STATION_SCHEMA_VERSION,
       reason,
@@ -3230,7 +3493,7 @@ async function waitForPidExit(pid: number, timeoutMs: number): Promise<boolean> 
     if (!processExists(pid)) {
       return true;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   return !processExists(pid);
 }
@@ -3295,7 +3558,7 @@ async function waitForClientScopedPopupSessions(
   while (Date.now() < deadline) {
     sessions = await clientScopedPopupSessions(fixture);
     if (sessions.length === expected) return sessions;
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `found ${sessions.length} client-scoped popup sessions instead of ${expected}: ${sessions.join(", ")}`,
@@ -3317,7 +3580,7 @@ async function waitForTmuxSessionClientCount(
     );
     clients = nonEmptyLines(output);
     if (clients.length === expected) return;
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(
     `tmux session ${sessionName} had ${clients.length} clients instead of ${expected}; scoped sessions: ${(await clientScopedPopupSessions(fixture)).join(", ")}`,
@@ -3331,7 +3594,7 @@ async function waitForTmuxSession(tmux: string, sessionName: string): Promise<vo
       await tmuxExec(tmux, ["has-session", "-t", sessionName]);
       return;
     } catch {
-      await delay(100);
+      await timers.setTimeout(100);
     }
   }
   throw new Error(`tmux session ${sessionName} did not appear.`);
@@ -3344,7 +3607,7 @@ async function waitForFileText(path: string, expected: string): Promise<void> {
     if (text === expected) {
       return;
     }
-    await delay(100);
+    await timers.setTimeout(100);
   }
   throw new Error(`File ${path} did not contain expected text.`);
 }

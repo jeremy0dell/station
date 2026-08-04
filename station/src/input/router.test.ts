@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createTuiStore, selectDashboardSessionRows } from "@station/dashboard-core";
+import { createDashboardRuntime, selectDashboardSessionRows } from "@station/dashboard-core";
 import type { StationSnapshot } from "@station/contracts";
 import {
   attentionAndFailuresSnapshot,
@@ -340,14 +340,14 @@ describe("routePaste", () => {
 
 describe("the station-button layer (island ↵ jump)", () => {
   function keymapFor(snapshot: StationSnapshot) {
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       persistentPopup: true,
       onDismiss: async () => {},
     });
-    return createStationKeymap(stationViewStore);
+    return createStationKeymap(dashboardRuntime);
   }
 
   function flaggedSession(snapshot: StationSnapshot) {

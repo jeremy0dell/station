@@ -1,5 +1,5 @@
-import type { StationSnapshot } from "@station/contracts";
 import { selectFleetSummary } from "../selectors/fleetSummary.js";
+import type { DashboardSnapshotView } from "../state/types.js";
 import type { TopRowWidgetView } from "./types.js";
 
 /**
@@ -9,7 +9,7 @@ import type { TopRowWidgetView } from "./types.js";
  */
 export function resolveTopRowWidgets(
   widgets: readonly TopRowWidgetView[],
-  snapshot: StationSnapshot | undefined,
+  snapshot: DashboardSnapshotView | undefined,
 ): TopRowWidgetView[] {
   return widgets.flatMap((widget) => {
     if (widget.data === undefined) {

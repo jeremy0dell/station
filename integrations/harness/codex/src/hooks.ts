@@ -26,8 +26,8 @@ import {
   CODEX_HOOK_EVENT_NAMES,
   CODEX_OBSOLETE_HOOK_EVENT_NAMES,
   CODEX_STATION_PROFILE_NAME,
+  type CodexForwardedEventType,
   type CodexGeneratedHookEventName,
-  type CodexHookEventName,
   type CodexObsoleteHookEventName,
 } from "./hooks/hookConstants.js";
 import { CodexHookSetupError } from "./hooks/hookErrors.js";
@@ -37,7 +37,7 @@ import {
   resolveCodexHookScriptPath,
 } from "./hooks/hookPaths.js";
 
-export type { CodexHookEventName } from "./hooks/hookConstants.js";
+export type { CodexForwardedEventType } from "./hooks/hookConstants.js";
 export { expectedCodexHookCommands, expectedCodexHookScript };
 
 export type CodexHookPlanOptions = {
@@ -72,8 +72,8 @@ export type CodexHookPlan = {
   profileConfigPath: string;
   baseConfigPath: string;
   hookScriptPath: string;
-  commands: Record<CodexHookEventName, string>;
-  missing: CodexHookEventName[];
+  commands: Record<CodexForwardedEventType, string>;
+  missing: CodexForwardedEventType[];
   changed: boolean;
   configChanged: boolean;
   generatedGlobalChanged: boolean;
@@ -102,8 +102,8 @@ export type CodexHookDoctorResult = {
   hookScriptPath: string;
   status: "ok" | "warn";
   installed: boolean;
-  missing: CodexHookEventName[];
-  commands: Record<CodexHookEventName, string>;
+  missing: CodexForwardedEventType[];
+  commands: Record<CodexForwardedEventType, string>;
   generatedGlobalCleanup: CodexGeneratedGlobalHookCleanup;
   message: string;
   ownership?: ProviderHookArtifactOwnership;
@@ -342,7 +342,7 @@ export async function doctorCodexHooks(
 
 function expectedCodexHookCommands(input: {
   hookScriptPath: string;
-}): Record<CodexHookEventName, string> {
+}): Record<CodexForwardedEventType, string> {
   return hookCommandsForEvents(CODEX_HOOK_EVENT_NAMES, input.hookScriptPath);
 }
 
@@ -375,7 +375,7 @@ function installResultFromPlan(plan: CodexHookPlan, installed: boolean): CodexHo
 async function buildGeneratedGlobalHookCleanup(input: {
   baseConfigPath: string;
   profileConfigPath: string;
-  commands: Record<CodexHookEventName, string>;
+  commands: Record<CodexForwardedEventType, string>;
 }): Promise<CodexGeneratedGlobalHookCleanup> {
   if (input.baseConfigPath === input.profileConfigPath) {
     return {

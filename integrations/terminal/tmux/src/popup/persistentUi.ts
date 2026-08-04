@@ -2,6 +2,7 @@ import type { SafeError } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import type { TmuxCommandInput } from "../command.js";
 import { shellQuote } from "../shell.js";
+import { defaultTmuxWorkbenchConfig } from "../topology.js";
 import { buildPersistentPopupTuiCommand } from "./args.js";
 import {
   hasTmuxSession,
@@ -249,12 +250,28 @@ async function enablePersistentPopupSessionMouse(
   });
 }
 
+async function configurePersistentPopupSessionStatusBar(
+  input: TmuxCommandInput,
+  sessionName: string,
+  visible: boolean,
+): Promise<void> {
+  // This option is session-scoped so Station never changes the invoking tmux session's status bar.
+  await runTmuxPopupCommand(input, {
+    args: ["set-option", "-t", sessionName, "status", visible ? "on" : "off"],
+    operation: "provider.tmux.popup.configureStatusBar",
+    message: "tmux failed to configure the persistent station popup UI status bar.",
+    timeoutMessage: "tmux persistent popup UI status bar setup timed out.",
+  });
+}
+
 async function configurePersistentPopupSession(
   input: TmuxCommandInput,
   sessionName: string,
   focusClientId: string | undefined,
+  popupStatusBar: boolean,
 ): Promise<void> {
   await enablePersistentPopupSessionMouse(input, sessionName);
+  await configurePersistentPopupSessionStatusBar(input, sessionName, popupStatusBar);
   if (focusClientId !== undefined) {
     await setPersistentPopupSessionOwnerClient(input, {
       clientId: focusClientId,
@@ -280,6 +297,7 @@ export async function ensurePersistentPopupSession(
   const input = persistentSessionOptions(options, command);
   const sessionName = options.uiSessionName ?? defaultPersistentPopupSessionName;
   const tuiCommand = options.tuiCommand ?? defaultPersistentPopupTuiCommand;
+  const popupStatusBar = options.popupStatusBar ?? defaultTmuxWorkbenchConfig.popupStatusBar;
   const signature = persistentPopupSignature(
     tuiCommand,
     stationObserverBuildVersion(),
@@ -288,7 +306,12 @@ export async function ensurePersistentPopupSession(
   if (await hasTmuxSession(input, sessionName)) {
     const currentSignature = await resolvePersistentPopupSessionSignature(input, sessionName);
     if (currentSignature === signature) {
-      await configurePersistentPopupSession(input, sessionName, options.focusClientId);
+      await configurePersistentPopupSession(
+        input,
+        sessionName,
+        options.focusClientId,
+        popupStatusBar,
+      );
       return { sessionName, created: false };
     }
     if (currentSignature !== undefined) {
@@ -298,7 +321,12 @@ export async function ensurePersistentPopupSession(
         // only its exact signature is reusable.
         const contenderSignature = await resolvePersistentPopupSessionSignature(input, sessionName);
         if (contenderSignature === signature) {
-          await configurePersistentPopupSession(input, sessionName, options.focusClientId);
+          await configurePersistentPopupSession(
+            input,
+            sessionName,
+            options.focusClientId,
+            popupStatusBar,
+          );
           return { sessionName, created: false };
         }
         throw persistentPopupOwnershipError(
@@ -334,7 +362,7 @@ export async function ensurePersistentPopupSession(
     sessionName,
     signature,
   });
-  await configurePersistentPopupSession(input, sessionName, options.focusClientId);
+  await configurePersistentPopupSession(input, sessionName, options.focusClientId, popupStatusBar);
   return { sessionName, created: true };
 }
 

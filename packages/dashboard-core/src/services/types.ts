@@ -1,5 +1,5 @@
 export type {
-  ClientNotice as TuiToast,
-  ObserverService as TuiObserverService,
-  StationClientCommandCompletion as TuiCommandCompletion,
+  ClientNotice,
+  ObserverService,
+  StationClientCommandCompletion,
 } from "@station/client";

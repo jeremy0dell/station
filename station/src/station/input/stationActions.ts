@@ -1,39 +1,29 @@
-// Execution layer for the STATION view's input. Most keyboard input flows through
-// the shared transition machine (single behavioral source); this module is the
-// semantic entry point mouse targets use to reach the same machine, plus the
-// few Station mouse extensions that have no keyboard
-// path in apps/tui (direct project-header collapse, wheel paging). Every
-// mutation here lands via store.handleKey or a shared pure state function — no
-// bespoke screen logic, except where a Station-only action diverges from the
-// shared machine: a session-row slot key (resolveKeyRowAgentTarget) and the New
-// Session submit (resolveKeyNewSessionSubmit) are resolved here so keyboard and
-// mouse reach the same Station managed-launch path.
-import type { StoreApi } from "zustand/vanilla";
+// Execution layer for the STATION view's input. Native Station adds pane and
+// control effects around shared dashboard actions without owning dashboard state
+// transitions. New Session creation intercepts the resolved Create action after
+// shared validation so it can launch a managed pane instead of dispatching the
+// standalone observer operation.
 import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
-  addTuiToast,
   choiceValueByKey,
   deriveTuiInputMode,
-  newSessionIntentForInput,
-  focusProjectSettingsItem as focusProjectSettingsItemState,
-  openProjectDefaultAgentPicker,
-  openWidgetSettings as openWidgetSettingsState,
+  newSessionActionForInput,
+  newSessionIntentForAction,
   resolveQuickSessionIntent,
   safeErrorToToast,
-  selectAddProjectRow as selectAddProjectRowState,
   selectDashboardItems,
   selectDashboardSessionRow,
   selectDashboardViewport,
-  widgetSettingsAddFromPicker,
-  widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
-  type ProjectSettingsItemId,
+  type TuiSemanticAction,
 } from "@station/dashboard-core";
-import { clampDashboardStateScroll, scrollDashboard } from "@station/dashboard-core";
 import { validateForkSessionCreate, validateNewSessionCreate } from "@station/dashboard-core";
 import type { TuiKey } from "@station/dashboard-core";
-import type { TuiHandleKeyResult, TuiStore } from "@station/dashboard-core";
+import type {
+  DashboardActionResult,
+  DashboardActions,
+  DashboardStateSource,
+  TuiControlIntent,
+} from "@station/dashboard-core";
 import {
   agentWorktreePaneId,
   projectPaneId,
@@ -43,11 +33,27 @@ import {
 } from "../../state/types.js";
 import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
 
+type DashboardStateInput = {
+  state: DashboardStateSource;
+};
+
+type DashboardTransitionInput = DashboardStateInput & {
+  actions: Pick<DashboardActions, "dispatch" | "handleKey" | "pushToast">;
+};
+
+type DashboardToastDismissal = {
+  actions: Pick<DashboardActions, "dismissToasts">;
+};
+
 export type StationKeyOutcome =
   /** Dispatched into the machine; the overlay stays up. */
   | { kind: "handled" }
   /** The machine reported dismiss/exit intent; the router closes STATION mode. */
   | { kind: "close-overlay" }
+  /** A project-shell intent resolved to Station's native pane outcome. */
+  | { kind: "open-pane"; target: OpenPaneTarget }
+  /** A Quick Session intent resolved to Station's managed create outcome. */
+  | { kind: "launch-new-session"; target: Extract<QuickSessionSubmitTarget, { kind: "submit" }> }
   /** No dashboard vocabulary for this sequence; swallowed, never dispatched. */
   | { kind: "unmapped" };
 
@@ -57,23 +63,65 @@ export type StationKeyOutcome =
  * transition meta to an outcome. Modal by construction — every sequence is
  * consumed whether or not it meant anything.
  */
-export function handleStationSequence(store: StoreApi<TuiStore>, sequence: string): StationKeyOutcome {
+export function handleStationSequence(
+  store: DashboardTransitionInput,
+  sequence: string,
+): StationKeyOutcome {
   const key = sequenceToTuiKey(sequence);
   if (key === undefined) {
     return { kind: "unmapped" };
   }
-  return outcomeForResult(store.getState().handleKey(key));
+  return outcomeForResult(store, store.actions.handleKey(key));
 }
 
-export function dispatchStationKey(store: StoreApi<TuiStore>, key: TuiKey): StationKeyOutcome {
-  return outcomeForResult(store.getState().handleKey(key));
+export function dispatchStationKey(
+  store: DashboardTransitionInput,
+  key: TuiKey,
+): StationKeyOutcome {
+  return outcomeForResult(store, store.actions.handleKey(key));
 }
 
-function outcomeForResult(result: TuiHandleKeyResult): StationKeyOutcome {
+export function dispatchStationAction(
+  store: DashboardTransitionInput,
+  action: TuiSemanticAction,
+): StationKeyOutcome {
+  return outcomeForResult(store, store.actions.dispatch(action));
+}
+
+function outcomeForResult(
+  store: DashboardTransitionInput,
+  result: DashboardActionResult,
+): StationKeyOutcome {
   if (result.dismissPopup || result.exitCode !== undefined) {
     return { kind: "close-overlay" };
   }
-  return { kind: "handled" };
+  return result.controlIntent === undefined
+    ? { kind: "handled" }
+    : outcomeForControlIntent(store, result.controlIntent);
+}
+
+function outcomeForControlIntent(
+  store: DashboardTransitionInput,
+  intent: TuiControlIntent,
+): StationKeyOutcome {
+  switch (intent.type) {
+    case "projectShell.open": {
+      const target = resolveProjectPaneTarget(store, intent.projectId);
+      return target === undefined ? { kind: "handled" } : { kind: "open-pane", target };
+    }
+    case "quickSession.create": {
+      const target = resolveQuickSessionSubmit(store, intent.projectId);
+      return target.kind === "submit"
+        ? { kind: "launch-new-session", target }
+        : { kind: "handled" };
+    }
+    default:
+      return assertNeverControlIntent(intent);
+  }
+}
+
+function assertNeverControlIntent(intent: never): never {
+  throw new Error(`Unhandled Station control intent: ${JSON.stringify(intent)}`);
 }
 
 /**
@@ -82,8 +130,11 @@ function outcomeForResult(result: TuiHandleKeyResult): StationKeyOutcome {
  * (dashboard: open session; remove/rename choose-slot: choose this row).
  * Rows without a slot (pending-operation rows) are inert.
  */
-export function dispatchRowSlot(store: StoreApi<TuiStore>, rowId: string): StationKeyOutcome {
-  const state = store.getState();
+export function dispatchRowSlot(
+  store: DashboardTransitionInput,
+  rowId: string,
+): StationKeyOutcome {
+  const state = store.state.getState();
   if (state.snapshot === undefined) {
     return { kind: "handled" };
   }
@@ -129,8 +180,8 @@ export type RowAgentTarget =
  * Resolve a row to observer-prepared managed launch identity; absent/stale rows
  * produce an inert `none`.
  */
-export function resolveRowAgentTarget(store: StoreApi<TuiStore>, rowId: string): RowAgentTarget {
-  const snapshot = store.getState().snapshot;
+export function resolveRowAgentTarget(store: DashboardStateInput, rowId: string): RowAgentTarget {
+  const snapshot = store.state.getState().snapshot;
   if (snapshot === undefined) {
     return { kind: "none" };
   }
@@ -157,10 +208,10 @@ export function resolveRowAgentTarget(store: StoreApi<TuiStore>, rowId: string):
  * non-slot keys fall back to the shared machine.
  */
 export function resolveKeyRowAgentTarget(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateInput,
   sequence: string,
 ): RowAgentTarget {
-  const state = store.getState();
+  const state = store.state.getState();
   if (state.snapshot === undefined || deriveTuiInputMode(state) !== "dashboard") {
     return { kind: "none" };
   }
@@ -176,22 +227,22 @@ export function resolveKeyRowAgentTarget(
  * snapshot, or an operation is already pending on it.
  */
 export function resolveKeyFocusedRowAgentTarget(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateInput,
   sequence: string,
 ): RowAgentTarget {
   if (sequenceToTuiKey(sequence)?.return !== true) {
     return { kind: "none" };
   }
-  const state = store.getState();
+  const state = store.state.getState();
   if (state.snapshot === undefined || deriveTuiInputMode(state) !== "dashboard") {
     return { kind: "none" };
   }
-  const focusedRowId = state.focusedRowId;
-  if (focusedRowId === undefined) {
+  const focus = state.dashboardFocus;
+  if (focus?.kind !== "session") {
     return { kind: "none" };
   }
   const item = selectDashboardItems(state.snapshot, state).find(
-    (candidate) => candidate.type === "session" && candidate.row.id === focusedRowId,
+    (candidate) => candidate.type === "session" && candidate.row.id === focus.sessionId,
   );
   if (
     item === undefined ||
@@ -201,7 +252,7 @@ export function resolveKeyFocusedRowAgentTarget(
   ) {
     return { kind: "none" };
   }
-  return resolveRowAgentTarget(store, focusedRowId);
+  return resolveRowAgentTarget(store, focus.sessionId);
 }
 
 /**
@@ -215,25 +266,20 @@ export type NewSessionSubmitTarget =
   | { kind: "none" };
 
 /**
- * Resolve the New Session review screen to its create. `none` off the review
- * step or when validation fails — both fall through to the shared machine
- * (navigation keys act normally; an invalid create surfaces its error toast).
+ * Resolve native Create only after dashboard-core has resolved the semantic action.
+ * Validation stays shared; successful execution diverges here because native Station
+ * creates a worktree and managed pane instead of dispatching standalone session.create.
  */
-export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSubmitTarget {
-  const state = store.getState();
-  if (state.screen.name !== "newSession") {
+export function resolveNewSessionSubmit(
+  store: DashboardStateInput,
+  action: TuiSemanticAction,
+): NewSessionSubmitTarget {
+  const state = store.state.getState();
+  if (state.screen.name !== "newSession" || action.type !== "newSession.activate") {
     return { kind: "none" };
   }
-  // The machine owns what ↵ means (reviewFocusIntents): submit only when it
-  // would submit, so a focused field's ↵ reaches the machine and opens its step.
-  const intent = newSessionIntentForInput(state.screen.flow, {
-    input: "\r",
-    key: { return: true },
-    token: "",
-  });
-  if (intent.type !== "submit") {
-    return { kind: "none" };
-  }
+  const intent = newSessionIntentForAction(state.screen.flow, action.actionId);
+  if (intent.type !== "submit") return { kind: "none" };
   if (state.snapshot === undefined) {
     return { kind: "none" };
   }
@@ -251,19 +297,21 @@ export function resolveNewSessionSubmit(store: StoreApi<TuiStore>): NewSessionSu
 }
 
 /**
- * Submit only on Enter; every other key (wizard navigation, name editing) is the
- * shared machine's. Takes the raw sequence like resolveKeyRowAgentTarget (the
- * overlay catchAll hands strings, not TuiKeys) so the keyboard submit and a
- * create-hint click reach the same managed launch.
+ * Submit on focused Enter or direct C; field/editor keys remain the shared
+ * machine's. The raw sequence keeps native managed-launch resolution aligned
+ * with the overlay keyboard boundary.
  */
 export function resolveKeyNewSessionSubmit(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateInput,
   sequence: string,
 ): NewSessionSubmitTarget {
-  if (sequenceToTuiKey(sequence)?.return !== true) {
-    return { kind: "none" };
-  }
-  return resolveNewSessionSubmit(store);
+  const key = sequenceToTuiKey(sequence);
+  const state = store.state.getState();
+  if (key === undefined || state.screen.name !== "newSession") return { kind: "none" };
+  const actionId = newSessionActionForInput(state.screen.flow, { input: key.input, key });
+  return actionId === undefined
+    ? { kind: "none" }
+    : resolveNewSessionSubmit(store, { type: "newSession.activate", actionId });
 }
 
 export type ForkSessionSubmitTarget =
@@ -284,8 +332,8 @@ export type ForkSessionSubmitTarget =
  * intercepted here so the launch hosts the agent in Station rather than running
  * the machine's tmux-bound session.fork.
  */
-export function resolveForkSessionSubmit(store: StoreApi<TuiStore>): ForkSessionSubmitTarget {
-  const state = store.getState();
+export function resolveForkSessionSubmit(store: DashboardStateInput): ForkSessionSubmitTarget {
+  const state = store.state.getState();
   if (state.screen.name !== "fork" || state.screen.step !== "details") {
     return { kind: "none" };
   }
@@ -307,35 +355,44 @@ export function resolveForkSessionSubmit(store: StoreApi<TuiStore>): ForkSession
 }
 
 export function resolveKeyForkSessionSubmit(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateInput,
   sequence: string,
 ): ForkSessionSubmitTarget {
   if (sequenceToTuiKey(sequence)?.return !== true) {
+    return { kind: "none" };
+  }
+  const { screen } = store.state.getState();
+  if (screen.name !== "fork" || screen.step !== "details" || screen.focus === "copyDirty") {
     return { kind: "none" };
   }
   return resolveForkSessionSubmit(store);
 }
 
 /**
- * Resolve a project header's quick-session click to its create target. Uses
- * the project's default harness and a generated branch name — no wizard, no
- * review screen. Blocked projects preserve their provider error as a toast;
- * only a missing or stale project is an inert miss.
+ * Resolves native Quick Session availability to its managed create target. Uses
+ * the project's default harness and a generated branch name — no wizard or
+ * review screen. Blocked projects preserve their provider error and retain any
+ * inline action focus; accepted targets move focus to the header Quick Session.
  */
 export type QuickSessionSubmitTarget =
   | { kind: "submit"; projectId: string; title: string; branch: string; harness: ProviderId }
   | { kind: "none" };
 
 export function resolveQuickSessionSubmit(
-  store: StoreApi<TuiStore>,
+  store: DashboardTransitionInput,
   projectId: string,
 ): QuickSessionSubmitTarget {
-  const intent = resolveQuickSessionIntent(store.getState(), projectId);
+  const intent = resolveQuickSessionIntent(store.state.getState(), projectId);
   if (intent.kind === "missing") return { kind: "none" };
   if (intent.kind === "blocked") {
-    store.setState(addTuiToast(store.getState(), safeErrorToToast(intent.error)));
+    store.actions.pushToast(safeErrorToToast(intent.error));
     return { kind: "none" };
   }
+  store.actions.dispatch({
+    type: "dashboard.projectHeader.focus",
+    projectId: intent.projectId,
+    control: "quickSession",
+  });
   return {
     kind: "submit",
     projectId: intent.projectId,
@@ -346,62 +403,14 @@ export function resolveQuickSessionSubmit(
 }
 
 /**
- * Open the project default-agent picker. Pure store mutation — no router
- * outcome. Absent or unavailable projects are silently ignored.
- */
-export function openDefaultAgentPickerForProject(
-  store: StoreApi<TuiStore>,
-  projectId: string,
-): void {
-  store.setState(openProjectDefaultAgentPicker(store.getState(), projectId));
-}
-
-/**
- * Station mouse extension: clicking a left-list item selects it and drops into
- * its detail pane. No single keyboard key maps to this (the keyboard path is
- * arrow-move then enter), so it lives here like the header-collapse toggle.
- */
-export function focusProjectSettingsItem(
-  store: StoreApi<TuiStore>,
-  itemId: ProjectSettingsItemId,
-): void {
-  store.setState(focusProjectSettingsItemState(store.getState(), itemId));
-}
-
-/** Header `[+]` affordance: open the widget-settings panel from the dashboard. */
-export function openWidgetSettingsPanel(store: StoreApi<TuiStore>): void {
-  store.setState(openWidgetSettingsState(store.getState()));
-}
-
-export function toggleWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(widgetSettingsToggleAt(store.getState(), index));
-}
-
-export function selectAddProjectRow(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(selectAddProjectRowState(store.getState(), index));
-}
-
-export function removeWidgetSettingsRow(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(widgetSettingsRemoveAt(store.getState(), index));
-}
-
-export function openWidgetSettingsPicker(store: StoreApi<TuiStore>): void {
-  store.setState(widgetSettingsOpenPicker(store.getState()));
-}
-
-export function addWidgetSettingsPickerChoice(store: StoreApi<TuiStore>, index: number): void {
-  store.setState(widgetSettingsAddFromPicker(store.getState(), index));
-}
-
-/**
  * Resolve `[shell]` through canonical dashboard membership while allowing a
  * pending operation to hide the row from `rowChoices`.
  */
 export function resolveRowPaneTarget(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateInput,
   rowId: string,
 ): OpenPaneTarget | undefined {
-  const snapshot = store.getState().snapshot;
+  const snapshot = store.state.getState().snapshot;
   if (snapshot === undefined) {
     return undefined;
   }
@@ -418,10 +427,10 @@ export function resolveRowPaneTarget(
  * Projects come straight off the snapshot (headers are not row choices).
  */
 export function resolveProjectPaneTarget(
-  store: StoreApi<TuiStore>,
+  store: DashboardStateInput,
   projectId: string,
 ): OpenPaneTarget | undefined {
-  const snapshot = store.getState().snapshot;
+  const snapshot = store.state.getState().snapshot;
   if (snapshot === undefined) {
     return undefined;
   }
@@ -432,27 +441,6 @@ export function resolveProjectPaneTarget(
   return { paneId: projectPaneId(project.id), cwd: project.root, role: "shell" };
 }
 
-/**
- * Station mouse extension: direct project collapse toggle (apps/tui's
- * keyboard path goes through the C prompt; the visual notes specify
- * header-click toggle). Same state mutation the collapse screen performs.
- */
-export function toggleProjectCollapsed(store: StoreApi<TuiStore>, projectId: string): void {
-  const state = store.getState();
-  const collapsedProjectIds = new Set(state.collapsedProjectIds);
-  if (collapsedProjectIds.has(projectId)) {
-    collapsedProjectIds.delete(projectId);
-  } else {
-    collapsedProjectIds.add(projectId);
-  }
-  store.setState(clampDashboardStateScroll({ ...state, collapsedProjectIds }));
-}
-
-/** Wheel/indicator scrolling via the shared scroll math. */
-export function scrollStationView(store: StoreApi<TuiStore>, delta: number): void {
-  store.setState(scrollDashboard(store.getState(), delta));
-}
-
-export function dismissStationToasts(store: StoreApi<TuiStore>): void {
-  store.getState().dismissToasts();
+export function dismissStationToasts(store: DashboardToastDismissal): void {
+  store.actions.dismissToasts();
 }

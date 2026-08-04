@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
 import { persistentUiOwnerClientOption } from "@station/tmux";
-import type { SetupTmuxBindingFact } from "../model.js";
+import type { SetupTmuxBindingFact } from "../adapters/inspectionTypes.js";
 import type { SetupFileSystemReader } from "./config.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 
@@ -71,6 +71,18 @@ export async function checkSetupTmuxBinding(
   if (options.runner !== undefined) liveInput.runner = options.runner;
   if (options.tmuxCommand !== undefined) liveInput.tmuxCommand = options.tmuxCommand;
   const liveStatus = await checkLiveTmuxBinding(liveInput);
+  if (liveStatus === "occupied") {
+    return {
+      status: "conflict",
+      path,
+      marker: tmuxPopupBindingMarker,
+      launcherCommand,
+      runShellCommand,
+      insideTmux,
+      liveStatus: "unknown",
+      message: `tmux prefix + ${bindingKey} is already assigned by the current tmux server; setup will not replace it.`,
+    };
+  }
 
   if (
     persisted.status === "binding" &&
@@ -121,7 +133,7 @@ export function tmuxPopupBindingLine(
   options: TmuxPopupBindingBlockOptions = {},
 ): string {
   const bindingKey = options.bindingKey ?? defaultBindingKey;
-  if (!isSupportedBindingKey(bindingKey)) {
+  if (!supportedBindingKeyPattern.test(bindingKey)) {
     throw new Error(`Unsupported tmux popup binding key: ${bindingKey}`);
   }
   const runShellCommand = options.runShellCommand ?? tmuxPopupRunShellCommand(launcherCommand);
@@ -140,7 +152,10 @@ export function tmuxPopupRunShellCommand(
   }
   const command = ["env"];
   if (configPath !== undefined) {
-    command.push(`STATION_CONFIG_PATH=${quoteShellValue(escapeTmuxFormat(configPath))}`);
+    command.push(
+      `STATION_CONFIG_PATH=${quoteShellValue(escapeTmuxFormat(configPath))}`,
+      "STATION_DISABLE_FAST_POPUP=1",
+    );
   }
   command.push(
     "STATION_FOCUS_PROVIDER=tmux",
@@ -185,15 +200,13 @@ type ParsedOwnedBindingBlock =
   | { status: "conflict"; message: string };
 
 function parseOwnedBindingBlock(source: string | undefined): ParsedOwnedBindingBlock {
-  if (source === undefined) {
-    return { status: "absent", bindingKey: defaultBindingKey };
-  }
+  if (source === undefined) return { status: "absent", bindingKey: defaultBindingKey };
 
   const lines = source.split(/\r?\n/);
   const startLines = markerLineIndexes(lines, tmuxPopupBindingMarker);
   const endLines = markerLineIndexes(lines, tmuxPopupBindingEndMarker);
   if (startLines.length === 0 && endLines.length === 0) {
-    return { status: "absent", bindingKey: defaultBindingKey };
+    return absentManagedBinding({ lines });
   }
   if (
     startLines.length !== 1 ||
@@ -206,45 +219,258 @@ function parseOwnedBindingBlock(source: string | undefined): ParsedOwnedBindingB
       "tmux popup binding markers are duplicated or malformed; edit ~/.tmux.conf manually before rerunning stn setup.",
     );
   }
+  return parseMarkedBinding({
+    lines,
+    ownedRange: { start: startLines[0].index, end: endLines[0].index },
+  });
+}
 
-  const start = startLines[0].index;
-  const end = endLines[0].index;
-  const activeLines = lines
-    .slice(start + 1, end)
+function parseMarkedBinding(input: {
+  readonly lines: readonly string[];
+  readonly ownedRange: { readonly start: number; readonly end: number };
+}): ParsedOwnedBindingBlock {
+  const activeLines = input.lines
+    .slice(input.ownedRange.start + 1, input.ownedRange.end)
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
-  if (activeLines.length === 0) {
-    return { status: "absent", bindingKey: defaultBindingKey };
-  }
+  if (activeLines.length === 0) return absentManagedBinding(input);
   if (activeLines.length !== 1) {
     return bindingConflict(
       "tmux popup binding block contains multiple active lines; edit ~/.tmux.conf manually before rerunning stn setup.",
     );
   }
 
-  const activeLine = activeLines[0];
-  if (activeLine === undefined) {
-    return { status: "absent", bindingKey: defaultBindingKey };
-  }
-  const parsed = /^bind-key(?:\s+-T\s+(\S+))?\s+(\S+)\s+run-shell\s+-b\s+(.+)$/.exec(activeLine);
-  if (parsed === null) {
-    return bindingConflict(
-      "tmux popup binding block has an unsupported selector; edit ~/.tmux.conf manually before rerunning stn setup.",
-    );
-  }
+  const parsed = /^bind-key(?:\s+-T\s+(\S+))?\s+(\S+)\s+run-shell\s+-b\s+(.+)$/.exec(
+    activeLines[0] ?? "",
+  );
+  if (parsed === null) return unsupportedBindingConflict();
   const [, table, bindingKey, quotedRunShellCommand] = parsed;
   if (
     (table !== undefined && table !== "prefix") ||
     bindingKey === undefined ||
-    !isSupportedBindingKey(bindingKey) ||
+    !supportedBindingKeyPattern.test(bindingKey) ||
     quotedRunShellCommand === undefined ||
     !quotedShellValuePattern.test(quotedRunShellCommand)
   ) {
+    return unsupportedBindingConflict();
+  }
+  if (
+    hasConfiguredPrefixBinding({
+      lines: input.lines,
+      bindingKey,
+      ownedRange: input.ownedRange,
+    })
+  ) {
+    return bindingConflict(configuredKeyConflictMessage(bindingKey));
+  }
+  if (
+    !managedPrefixBindingRemainsEffective({
+      lines: input.lines,
+      ownedRange: input.ownedRange,
+      bindingKey,
+    })
+  ) {
     return bindingConflict(
-      "tmux popup binding block has an unsupported selector; edit ~/.tmux.conf manually before rerunning stn setup.",
+      `tmux prefix + ${bindingKey} is changed after Station’s managed block; setup will not move or replace user configuration.`,
     );
   }
   return { status: "binding", bindingKey, quotedRunShellCommand };
+}
+
+function absentManagedBinding(input: {
+  readonly lines: readonly string[];
+  readonly ownedRange?: { readonly start: number; readonly end: number };
+}): ParsedOwnedBindingBlock {
+  const configured =
+    input.ownedRange === undefined
+      ? hasConfiguredPrefixBinding({ lines: input.lines, bindingKey: defaultBindingKey })
+      : hasConfiguredPrefixBinding({
+          lines: input.lines,
+          bindingKey: defaultBindingKey,
+          ownedRange: input.ownedRange,
+        });
+  // A user-owned assignment wins over setup's fresh default key.
+  return configured
+    ? bindingConflict(configuredKeyConflictMessage(defaultBindingKey))
+    : { status: "absent", bindingKey: defaultBindingKey };
+}
+
+function unsupportedBindingConflict(): ParsedOwnedBindingBlock {
+  return bindingConflict(
+    "tmux popup binding block has an unsupported selector; edit ~/.tmux.conf manually before rerunning stn setup.",
+  );
+}
+
+function hasConfiguredPrefixBinding(input: {
+  readonly lines: readonly string[];
+  readonly bindingKey: string;
+  readonly ownedRange?: { readonly start: number; readonly end: number };
+}): boolean {
+  let assigned = false;
+  for (const [index, line] of input.lines.entries()) {
+    if (
+      input.ownedRange !== undefined &&
+      index >= input.ownedRange.start &&
+      index <= input.ownedRange.end
+    ) {
+      continue;
+    }
+    for (const action of directPrefixBindingActions({ line, bindingKey: input.bindingKey })) {
+      assigned = action === "bind";
+    }
+  }
+  return assigned;
+}
+
+function managedPrefixBindingRemainsEffective(input: {
+  readonly lines: readonly string[];
+  readonly ownedRange: { readonly start: number; readonly end: number };
+  readonly bindingKey: string;
+}): boolean {
+  let managed = false;
+  for (const [index, line] of input.lines.entries()) {
+    if (index === input.ownedRange.start) {
+      managed = true;
+      continue;
+    }
+    if (index > input.ownedRange.start && index <= input.ownedRange.end) continue;
+    for (const _action of directPrefixBindingActions({
+      line,
+      bindingKey: input.bindingKey,
+    })) {
+      managed = false;
+    }
+  }
+  return managed;
+}
+
+const bindingCommands = new Set(["bind", "bind-key", "unbind", "unbind-key"]);
+const bindCommands = new Set(["bind", "bind-key"]);
+
+type TmuxBindingSelector = {
+  readonly table: string;
+  readonly key?: string;
+  readonly unbindAll: boolean;
+};
+
+function directPrefixBindingActions(input: {
+  readonly line: string;
+  readonly bindingKey: string;
+}): Array<"bind" | "unbind"> {
+  const actions: Array<"bind" | "unbind"> = [];
+  for (const tokens of tmuxConfigCommands(input.line)) {
+    const command = tokens[0] ?? "";
+    if (!bindingCommands.has(command)) continue;
+
+    const selector = tmuxBindingSelector(tokens.slice(1));
+    if (selector.table !== "prefix") continue;
+    const action = bindCommands.has(command) ? "bind" : "unbind";
+    if (selector.key === input.bindingKey || (action === "unbind" && selector.unbindAll)) {
+      actions.push(action);
+    }
+  }
+  return actions;
+}
+
+function tmuxBindingSelector(tokens: readonly string[]): TmuxBindingSelector {
+  let table = "prefix";
+  let unbindAll = false;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] ?? "";
+    if (token === "-T") {
+      table = tokens[index + 1] ?? "";
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("-T") && token.length > 2) {
+      table = token.slice(2);
+      continue;
+    }
+    if (token === "-N") {
+      index += 1;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      if (token.includes("n")) table = "root";
+      if (token.includes("a")) unbindAll = true;
+      continue;
+    }
+    return { table, key: token, unbindAll };
+  }
+  return { table, unbindAll };
+}
+
+// Only unescaped top-level semicolons split commands; quoted and braced fragments remain intact.
+function tmuxConfigCommands(line: string): readonly (readonly string[])[] {
+  const commands: string[][] = [];
+  let tokens: string[] = [];
+  let token = "";
+  let tokenStarted = false;
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+  let braceDepth = 0;
+
+  const finishToken = () => {
+    if (!tokenStarted) return;
+    tokens.push(token);
+    token = "";
+    tokenStarted = false;
+  };
+  const finishCommand = () => {
+    finishToken();
+    if (tokens.length > 0) commands.push(tokens);
+    tokens = [];
+  };
+
+  for (const character of line) {
+    if (escaped) {
+      token += character;
+      tokenStarted = true;
+      escaped = false;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) {
+        quote = undefined;
+      } else if (character === "\\" && quote === '"') {
+        escaped = true;
+      } else {
+        token += character;
+      }
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "#" && !tokenStarted) break;
+    if (character === "{") braceDepth += 1;
+    if (character === "}") braceDepth = Math.max(0, braceDepth - 1);
+    if (character === ";" && braceDepth === 0) {
+      finishCommand();
+      continue;
+    }
+    if (/\s/u.test(character) && braceDepth === 0) {
+      finishToken();
+      continue;
+    }
+    token += character;
+    tokenStarted = true;
+  }
+  if (escaped) token += "\\";
+  finishCommand();
+  return commands;
+}
+
+function configuredKeyConflictMessage(bindingKey: string): string {
+  return `tmux prefix + ${bindingKey} is already assigned outside Station’s managed block; setup will not replace it.`;
 }
 
 function markerLineIndexes(
@@ -262,10 +488,6 @@ function markerLineIndexes(
 
 function bindingConflict(message: string): ParsedOwnedBindingBlock {
   return { status: "conflict", message };
-}
-
-function isSupportedBindingKey(value: string): boolean {
-  return supportedBindingKeyPattern.test(value);
 }
 
 async function readTmuxConfig(
@@ -287,7 +509,7 @@ async function checkLiveTmuxBinding(input: {
   runShellCommand: string;
   runner?: ExternalCommandRunner;
   tmuxCommand?: string;
-}): Promise<"loaded" | "missing" | "unknown"> {
+}): Promise<"loaded" | "missing" | "unknown" | "occupied"> {
   if (!input.insideTmux) {
     return "unknown";
   }
@@ -302,9 +524,14 @@ async function checkLiveTmuxBinding(input: {
       },
       input.runner,
     );
-    if (!hasLiveTmuxBinding(listed.stdout, input.bindingKey, input.runShellCommand)) {
-      return "missing";
-    }
+    const binding = classifyLiveTmuxBinding({
+      source: listed.stdout,
+      bindingKey: input.bindingKey,
+      runShellCommand: input.runShellCommand,
+    });
+    if (binding === "occupied") return "occupied";
+    // tmux ships prefix + Space as next-layout; setup may replace only that default action.
+    if (binding !== "station") return "missing";
     const startup = await runExternalCommand(
       {
         command: input.tmuxCommand ?? "tmux",
@@ -325,11 +552,18 @@ async function checkLiveTmuxBinding(input: {
   }
 }
 
-function hasLiveTmuxBinding(source: string, bindingKey: string, runShellCommand: string): boolean {
-  return source.split(/\r?\n/).some((line) => {
+function classifyLiveTmuxBinding(input: {
+  readonly source: string;
+  readonly bindingKey: string;
+  readonly runShellCommand: string;
+}): "station" | "default" | "occupied" | "missing" {
+  for (const line of input.source.split(/\r?\n/)) {
     const match = /^bind-key\s+-T\s+prefix\s+(\S+)\s+(.*)$/.exec(line.trim());
-    return match?.[1] === bindingKey && parseListedRunShellCommand(match[2]) === runShellCommand;
-  });
+    if (match?.[1] !== input.bindingKey) continue;
+    if (parseListedRunShellCommand(match[2]) === input.runShellCommand) return "station";
+    return match[2]?.trim() === "next-layout" ? "default" : "occupied";
+  }
+  return "missing";
 }
 
 function parseListedRunShellCommand(value: string | undefined): string | undefined {

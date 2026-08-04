@@ -1,11 +1,14 @@
-import type { TuiStore } from "@station/dashboard-core";
-import type { StoreApi } from "zustand/vanilla";
+import type { DashboardActions, TuiControlIntent } from "@station/dashboard-core";
 // Import the specific modules, not ../terminal/index.js — that barrel also
 // re-exports node-pty-backed PTY/VT/pane machinery the dashboard never uses,
 // which would pull node-pty into this multiplexer-free renderer.
 import { kittySequenceToLegacy } from "../terminal/input/kittyToLegacy.js";
 import { stripTerminalReplies } from "../terminal/input/terminalReplies.js";
 import { sequenceToTuiKey } from "../station/input/sequenceToTuiKey.js";
+
+type DashboardKeyInput = {
+  actions: Pick<DashboardActions, "handleKey">;
+};
 
 /**
  * A `prependInputHandlers` entry: normalize raw terminal bytes the same way the
@@ -15,7 +18,8 @@ import { sequenceToTuiKey } from "../station/input/sequenceToTuiKey.js";
  * swallowed so stray escapes never leak into text-input modes as garbage.
  */
 export function createDashboardSequenceHandler(
-  store: StoreApi<TuiStore>,
+  store: DashboardKeyInput,
+  consumeControlIntent: (intent: TuiControlIntent) => void,
 ): (sequence: string) => boolean {
   return (sequence: string) => {
     const stripped = stripTerminalReplies(sequence);
@@ -30,7 +34,11 @@ export function createDashboardSequenceHandler(
     if (key === undefined) {
       return true; // a sequence the dashboard has no vocabulary for
     }
-    store.getState().handleKey(key);
+    // State lands before a one-shot renderer effect is consumed, matching the mouse adapter.
+    const result = store.actions.handleKey(key);
+    if (result.controlIntent !== undefined) {
+      consumeControlIntent(result.controlIntent);
+    }
     return true;
   };
 }

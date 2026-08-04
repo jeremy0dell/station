@@ -4,62 +4,79 @@
 // dispatching the same semantic entry points keyboard uses. Hover is
 // deliberately absent: it is component-local presentation state and must
 // never touch the store.
-import type { StoreApi } from "zustand/vanilla";
 import type { ProviderId } from "@station/contracts";
 import {
   deriveTuiInputMode,
   isRemoveProjectArmed,
   LIST_REGISTRY,
-  tuiScreenBehavior,
+  type AddProjectActionId,
+  type DashboardFilterConditionField,
+  type ForkSessionActionId,
+  type NewSessionActionId,
+  type PersistentFilterActionId,
+  type ProjectHeaderControl,
   type ProjectSettingsItemId,
+  type RemoveWorktreeActionId,
+  type DashboardActions,
+  type DashboardStateSource,
   type TuiInputMode,
-  type TuiStore,
 } from "@station/dashboard-core";
 import type { PaneRole } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
-  addWidgetSettingsPickerChoice,
   dismissStationToasts,
   dispatchRowSlot,
+  dispatchStationAction,
   dispatchStationKey,
-  focusProjectSettingsItem,
-  openDefaultAgentPickerForProject,
-  openWidgetSettingsPanel,
-  openWidgetSettingsPicker,
-  removeWidgetSettingsRow,
-  toggleWidgetSettingsRow,
   resolveForkSessionSubmit,
-  resolveProjectPaneTarget,
-  resolveQuickSessionSubmit,
+  resolveNewSessionSubmit,
   resolveRowAgentTarget,
   resolveRowPaneTarget,
-  scrollStationView,
-  selectAddProjectRow,
-  toggleProjectCollapsed,
   type OpenPaneTarget,
   type RowAgentTarget,
   type StationKeyOutcome,
 } from "./stationActions.js";
 
+type StationMouseDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
+};
+
 export type StationMouseTarget =
   | { kind: "row"; rowId: string }
   | { kind: "projectHeader"; projectId: string }
   | { kind: "link"; url: string }
-  /** The `[+sh]` affordance on a session row: open a shell in its checkout. */
+  /** The trailing shell affordance on a session row. */
   | { kind: "openShellForRow"; rowId: string }
-  /** The `[+sh]` affordance on a project header: open a shell in its root. */
+  /** The trailing shell affordance on a project header. */
   | { kind: "openShellForProject"; projectId: string }
   /** The `[+]` quick-session affordance on a project header. */
   | { kind: "quickSessionForProject"; projectId: string }
+  /** The Add Session control rendered for a project with no visible sessions. */
+  | { kind: "emptyProjectAction"; projectId: string }
   /** The `[▾]` default-agent affordance on a project header. */
   | { kind: "showDefaultAgentPickerForProject"; projectId: string }
+  /** The zero-project dashboard CTA; guarded against stale non-empty snapshots. */
+  | { kind: "firstProjectAdd" }
+  /** Applied-filter footer controls, guarded so covered dashboard targets remain inert. */
+  | { kind: "persistentFilterAction"; actionId: PersistentFilterActionId }
+  | { kind: "persistentFilterConditionField"; field: DashboardFilterConditionField }
+  | {
+      kind: "persistentFilterConditionValue";
+      field: DashboardFilterConditionField;
+      valueId: string;
+    }
+  | {
+      kind: "persistentFilterConditionAction";
+      actionId: "back" | "close" | "done" | "applyFilter";
+    }
   | { kind: "body" }
   | { kind: "scrollIndicator"; direction: "up" | "down" }
   | { kind: "toast" }
   /** A picker line inside a sheet; the key is the line's slot accelerator. */
   | { kind: "sheetChoice"; choiceKey: string }
-  /** A compact sheet button that dispatches its visible shortcut key. */
-  | { kind: "sheetButton"; key: "y" | "n" }
+  /** An explicit Remove confirmation control represented by its semantic action. */
+  | { kind: "removeWorktreeAction"; actionId: RemoveWorktreeActionId }
   /** A left-list row in the Project Settings panel; selecting opens its detail. */
   | { kind: "projectSettingsItem"; itemId: ProjectSettingsItemId }
   /** The armed "Remove project (R)" action in the panel's detail pane. */
@@ -76,8 +93,14 @@ export type StationMouseTarget =
   | { kind: "widgetSettingsPickerChoice"; index: number }
   /** A folder/start row in the add-project browser; clicking moves the cursor there. */
   | { kind: "addProjectRow"; index: number }
-  /** A sheet's primary submit button (the fork details "Fork" action). */
-  | { kind: "sheetSubmit" }
+  /** An explicit Add Project control resolved against its current mode and enabled state. */
+  | { kind: "addProjectAction"; actionId: AddProjectActionId }
+  /** A Create Session field or editor control represented by its semantic action. */
+  | { kind: "newSessionAction"; actionId: NewSessionActionId }
+  /** The Rename Session button represented by its semantic submit action. */
+  | { kind: "renameSessionSubmit" }
+  /** A Fork details field or submit control represented by its semantic action. */
+  | { kind: "forkSessionAction"; actionId: ForkSessionActionId }
   /** The viewport outside a bounded screen; primary-down safely cancels that screen. */
   | { kind: "screenBackdrop" }
   /** Sheets/prompts sit above the dashboard; their backdrop absorbs input. */
@@ -94,7 +117,7 @@ export type StationMouseOutcome =
    * Consumed; the router should open-or-focus a pane rooted at `cwd`. Pane
    * lifecycle is the Station coordination store's job, not the view store's,
    * so this surfaces as a router outcome the same way close-overlay does. Used
-   * for the `[+sh]` shell affordances (command/args/worktreeId stay absent).
+   * for the session/project shell affordances (command/args/worktreeId stay absent).
    */
   | {
       kind: "open-pane";
@@ -123,8 +146,7 @@ export type StationMouseOutcome =
   | { kind: "open-url"; url: string }
   /**
    * Consumed; the router should create a new worktree and host its agent in a
-   * Station pane. The create-hint click counterpart of the keyboard Enter on the
-   * New Session review screen.
+   * Station pane. Pointer Create, direct C, and focused Enter all converge here.
    */
   | {
       kind: "launch-new-session";
@@ -135,8 +157,7 @@ export type StationMouseOutcome =
     }
   /**
    * Consumed; the router should seed a worktree off a source and host its agent
-   * in a Station pane. The fork-button click counterpart of the keyboard Enter on
-   * the Fork details screen.
+   * in a Station pane. The semantic Fork submit counterpart of focused keyboard Enter.
    */
   | {
       kind: "launch-fork";
@@ -165,13 +186,13 @@ const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
 export function routeStationMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: StoreApi<TuiStore>,
+  store: StationMouseDashboard,
 ): StationMouseOutcome {
   const eventKind = stationMouseEventKind(event);
   if (eventKind === undefined) {
     return { kind: "handled" };
   }
-  const mode = deriveTuiInputMode(store.getState());
+  const mode = deriveTuiInputMode(store.state.getState());
 
   if (eventKind !== "down") {
     return routeStationWheel(target, eventKind, store, mode);
@@ -196,37 +217,87 @@ export function routeStationMouse(
       }
       return { kind: "open-url", url: target.url };
     case "projectHeader":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      toggleProjectCollapsed(store, target.projectId);
-      return { kind: "handled" };
+      return routeProjectHeaderActivation(store, mode, target.projectId, "primary");
     case "openShellForRow":
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
       return fromPaneTarget(resolveRowPaneTarget(store, target.rowId));
     case "openShellForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      return fromPaneTarget(resolveProjectPaneTarget(store, target.projectId));
+      return routeProjectHeaderActivation(store, mode, target.projectId, "shell");
     case "quickSessionForProject":
-      if (mode !== "dashboard") {
-        return { kind: "handled" };
-      }
-      return fromQuickSessionSubmit(resolveQuickSessionSubmit(store, target.projectId));
+      return routeProjectHeaderActivation(store, mode, target.projectId, "quickSession");
+    case "emptyProjectAction":
+      return mode === "dashboard"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "dashboard.emptyProject.activate",
+              projectId: target.projectId,
+            }),
+          )
+        : { kind: "handled" };
     case "showDefaultAgentPickerForProject":
-      if (mode !== "dashboard") {
+      return routeProjectHeaderActivation(store, mode, target.projectId, "defaultAgent");
+    case "firstProjectAdd":
+      return mode === "dashboard"
+        ? fromKeyOutcome(dispatchStationAction(store, { type: "dashboard.addProject" }))
+        : { kind: "handled" };
+    case "persistentFilterAction":
+      return mode === "dashboard"
+        ? fromKeyOutcome(dispatchStationAction(store, { type: target.actionId }))
+        : { kind: "handled" };
+    case "persistentFilterConditionField":
+      return mode === "persistentFilterConditionField"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "persistentFilter.condition.selectField",
+              field: target.field,
+            }),
+          )
+        : { kind: "handled" };
+    case "persistentFilterConditionValue":
+      return mode === "persistentFilterConditionValues"
+        ? fromKeyOutcome(
+            dispatchStationAction(store, {
+              type: "persistentFilter.condition.toggleValue",
+              field: target.field,
+              valueId: target.valueId,
+            }),
+          )
+        : { kind: "handled" };
+    case "persistentFilterConditionAction":
+      if (target.actionId === "close") {
+        return mode === "persistentFilterConditionField" ||
+          mode === "persistentFilterConditionValues"
+          ? fromKeyOutcome(
+              dispatchStationAction(store, { type: "persistentFilter.condition.close" }),
+            )
+          : { kind: "handled" };
+      }
+      if (target.actionId === "applyFilter") {
+        return mode === "persistentFilterConditionField"
+          ? fromKeyOutcome(dispatchStationAction(store, { type: "persistentFilter.applyDraft" }))
+          : { kind: "handled" };
+      }
+      if (mode !== "persistentFilterConditionValues") {
         return { kind: "handled" };
       }
-      openDefaultAgentPickerForProject(store, target.projectId);
-      return { kind: "handled" };
+      return fromKeyOutcome(
+        dispatchStationAction(store, {
+          type:
+            target.actionId === "back"
+              ? "persistentFilter.condition.back"
+              : "persistentFilter.condition.done",
+        }),
+      );
     case "scrollIndicator":
       if (!ROW_INTERACTIVE_MODES.has(mode)) {
         return { kind: "handled" };
       }
-      scrollStationView(store, target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS);
+      store.actions.dispatch({
+        type: "dashboard.scroll",
+        delta: target.direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
+      });
       return { kind: "handled" };
     case "toast":
       dismissStationToasts(store);
@@ -236,53 +307,81 @@ export function routeStationMouse(
         return { kind: "handled" };
       }
       return fromKeyOutcome(dispatchStationKey(store, { input: target.choiceKey }));
-    case "sheetButton":
-      if (mode !== "removeConfirm") {
-        return { kind: "handled" };
-      }
-      return fromKeyOutcome(dispatchStationKey(store, { input: target.key }));
+    case "removeWorktreeAction":
+      return fromKeyOutcome(
+        dispatchStationAction(store, {
+          type: "removeWorktree.activate",
+          actionId: target.actionId,
+        }),
+      );
     case "projectSettingsItem":
       if (mode !== "projectSettings") {
         return { kind: "handled" };
       }
-      focusProjectSettingsItem(store, target.itemId);
+      store.actions.dispatch({
+        type: "projectSettings.focusItem",
+        itemId: target.itemId,
+      });
       return { kind: "handled" };
     case "widgetSettingsOpen":
       if (mode !== "dashboard") {
         return { kind: "handled" };
       }
-      openWidgetSettingsPanel(store);
+      store.actions.dispatch({ type: "widgetSettings.open" });
       return { kind: "handled" };
     case "widgetSettingsRow":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      toggleWidgetSettingsRow(store, target.index);
+      store.actions.dispatch({ type: "widgetSettings.toggle", index: target.index });
       return { kind: "handled" };
     case "widgetSettingsRemove":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      removeWidgetSettingsRow(store, target.index);
+      store.actions.dispatch({ type: "widgetSettings.remove", index: target.index });
       return { kind: "handled" };
     case "widgetSettingsAdd":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      openWidgetSettingsPicker(store);
+      store.actions.dispatch({ type: "widgetSettings.openPicker" });
       return { kind: "handled" };
     case "widgetSettingsPickerChoice":
       if (mode !== "widgetSettings") {
         return { kind: "handled" };
       }
-      addWidgetSettingsPickerChoice(store, target.index);
+      store.actions.dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
       return { kind: "handled" };
     case "addProjectRow":
       if (!ADD_PROJECT_ROW_MODES.has(mode)) {
         return { kind: "handled" };
       }
-      selectAddProjectRow(store, target.index);
+      store.actions.dispatch({ type: "addProject.selectRow", index: target.index });
       return { kind: "handled" };
+    case "addProjectAction":
+      return fromKeyOutcome(
+        dispatchStationAction(store, {
+          type: "addProject.activate",
+          actionId: target.actionId,
+        }),
+      );
+    case "newSessionAction": {
+      const action = { type: "newSession.activate", actionId: target.actionId } as const;
+      const submit = resolveNewSessionSubmit(store, action);
+      if (submit.kind === "submit") {
+        return {
+          kind: "launch-new-session",
+          projectId: submit.projectId,
+          title: submit.title,
+          branch: submit.branch,
+          harness: submit.harness,
+        };
+      }
+      return fromKeyOutcome(dispatchStationAction(store, action));
+    }
+    case "renameSessionSubmit":
+      return fromKeyOutcome(dispatchStationAction(store, { type: "renameSession.submit" }));
     case "projectSettingsConfirmRemove": {
       if (mode !== "projectSettings") {
         return { kind: "handled" };
@@ -290,23 +389,31 @@ export function routeStationMouse(
       // Only an armed button fires. Dispatching "r" while unarmed would be typed
       // into the confirm field (the machine treats "r" as editable text until the
       // phrase matches), so guard the click here rather than emit a stray key.
-      const { screen } = store.getState();
+      const { screen } = store.state.getState();
       if (screen.name === "projectSettings" && isRemoveProjectArmed(screen)) {
         return fromKeyOutcome(dispatchStationKey(store, { input: "r" }));
       }
       return { kind: "handled" };
     }
-    case "sheetSubmit": {
-      // A click on the Fork details "Fork" button hosts the agent in Station,
-      // matching the keyboard Enter path (resolveKeyForkSessionSubmit) rather than
-      // dispatching the machine's tmux-bound session.fork.
-      if (mode !== "forkDetails") {
-        return { kind: "handled" };
-      }
-      const submit = resolveForkSessionSubmit(store);
-      if (submit.kind === "none") {
-        return { kind: "handled" };
-      }
+    case "forkSessionAction":
+      return routeForkSessionAction(store, target.actionId);
+    case "screenBackdrop":
+      store.actions.dispatch({ type: "screen.clickAway" });
+      return { kind: "handled" };
+    case "body":
+    case "sheetBackdrop":
+      return { kind: "handled" };
+  }
+}
+
+function routeForkSessionAction(
+  store: StationMouseDashboard,
+  actionId: ForkSessionActionId,
+): StationMouseOutcome {
+  const action = { type: "forkSession.activate", actionId } as const;
+  if (actionId === "details.submit") {
+    const submit = resolveForkSessionSubmit(store);
+    if (submit.kind === "submit") {
       return {
         kind: "launch-fork",
         projectId: submit.projectId,
@@ -316,21 +423,32 @@ export function routeStationMouse(
         copyDirty: submit.copyDirty,
       };
     }
-    case "screenBackdrop": {
-      const state = store.getState();
-      const clickAway = tuiScreenBehavior(state.screen).clickAway;
-      if (clickAway !== undefined) {
-        store.setState(clickAway(state));
-      }
-      return { kind: "handled" };
-    }
-    case "body":
-    case "sheetBackdrop":
-      return { kind: "handled" };
   }
+  return fromKeyOutcome(dispatchStationAction(store, action));
 }
 
-function routeDashboardRow(store: StoreApi<TuiStore>, rowId: string): StationMouseOutcome {
+function routeProjectHeaderActivation(
+  store: StationMouseDashboard,
+  mode: TuiInputMode,
+  projectId: string,
+  actionId: ProjectHeaderControl,
+): StationMouseOutcome {
+  if (mode !== "dashboard") {
+    return { kind: "handled" };
+  }
+  return fromKeyOutcome(
+    dispatchStationAction(store, {
+      type: "dashboard.projectHeader.activate",
+      projectId,
+      actionId,
+    }),
+  );
+}
+
+function routeDashboardRow(
+  store: StationMouseDashboard,
+  rowId: string,
+): StationMouseOutcome {
   const target = resolveRowAgentTarget(store, rowId);
   return target.kind === "launch-managed"
     ? fromRowAgentTarget(target)
@@ -362,7 +480,7 @@ const SHEET_CHOICE_MODES: ReadonlySet<TuiInputMode> = new Set(
 function routeStationWheel(
   target: StationMouseTarget,
   eventKind: "scroll-up" | "scroll-down",
-  store: StoreApi<TuiStore>,
+  store: StationMouseDashboard,
   mode: TuiInputMode,
 ): StationMouseOutcome {
   // Sheets and prompts must not scroll the dashboard beneath them.
@@ -373,12 +491,31 @@ function routeStationWheel(
   ) {
     return { kind: "handled" };
   }
-  scrollStationView(store, eventKind === "scroll-up" ? -1 : 1);
+  store.actions.dispatch({
+    type: "dashboard.scroll",
+    delta: eventKind === "scroll-up" ? -1 : 1,
+  });
   return { kind: "handled" };
 }
 
 function fromKeyOutcome(outcome: StationKeyOutcome): StationMouseOutcome {
-  return outcome.kind === "close-overlay" ? { kind: "close-overlay" } : { kind: "handled" };
+  switch (outcome.kind) {
+    case "close-overlay":
+      return { kind: "close-overlay" };
+    case "open-pane":
+      return fromPaneTarget(outcome.target);
+    case "launch-new-session":
+      return {
+        kind: "launch-new-session",
+        projectId: outcome.target.projectId,
+        title: outcome.target.title,
+        branch: outcome.target.branch,
+        harness: outcome.target.harness,
+      };
+    case "handled":
+    case "unmapped":
+      return { kind: "handled" };
+  }
 }
 
 /** An unresolvable target (stale row, missing project) is an inert click. */
@@ -404,27 +541,6 @@ function fromPaneTarget(target: OpenPaneTarget | undefined): StationMouseOutcome
     outcome.worktreeId = target.worktreeId;
   }
   return outcome;
-}
-
-/**
- * Map a quick-session submit to an outcome: `submit` surfaces a
- * `launch-new-session` router outcome (the executor creates the worktree and
- * hosts the agent). Blocked projects have already emitted an error toast;
- * `none` means only a stale or missing target and remains inert.
- */
-function fromQuickSessionSubmit(
-  result: ReturnType<typeof resolveQuickSessionSubmit>,
-): StationMouseOutcome {
-  if (result.kind === "submit") {
-    return {
-      kind: "launch-new-session",
-      projectId: result.projectId,
-      title: result.title,
-      branch: result.branch,
-      harness: result.harness,
-    };
-  }
-  return { kind: "handled" };
 }
 
 /**

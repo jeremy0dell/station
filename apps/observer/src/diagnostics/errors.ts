@@ -1,16 +1,11 @@
 import type { ErrorEnvelope, SafeError } from "@station/contracts";
-import {
-  createErrorEnvelope as createObservabilityErrorEnvelope,
-  type ErrorEnvelopeInput,
-  type SafeErrorFallback,
-  toSafeError as toObservabilitySafeError,
-} from "@station/observability";
+import * as observability from "@station/observability";
 
-export type { ErrorEnvelopeInput };
+export type { ErrorEnvelopeInput } from "@station/observability";
 
 export function toSafeError(
   error: unknown,
-  fallback: SafeErrorFallback = {
+  fallback: observability.SafeErrorFallback = {
     tag: "ObserverError",
     code: "OBSERVER_UNKNOWN",
     message: "Observer operation failed.",
@@ -22,9 +17,9 @@ export function toSafeError(
     >
   > = {},
 ): SafeError {
-  return toObservabilitySafeError(error, fallback, context);
+  return observability.toSafeError(error, fallback, context);
 }
 
-export function createErrorEnvelope(input: ErrorEnvelopeInput): ErrorEnvelope {
-  return createObservabilityErrorEnvelope(input);
+export function createErrorEnvelope(input: observability.ErrorEnvelopeInput): ErrorEnvelope {
+  return observability.createErrorEnvelope(input);
 }

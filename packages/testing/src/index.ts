@@ -164,6 +164,7 @@ const defaultTerminalCapabilities: TerminalCapabilities = {
   canCaptureOutput: true,
   canSendInput: true,
   canPersistIdentityBinding: true,
+  canLaunchProcessPersistently: true,
   canDisplayPopup: true,
 };
 
@@ -729,3 +730,4 @@ export class FakeHarnessProvider implements HarnessProvider {
 }
 
 export * from "./setupProfiles.js";
+export * from "./testMachine.js";

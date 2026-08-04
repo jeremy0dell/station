@@ -8,7 +8,7 @@
 // then STOPS the devbox, so a live devbox here will be stopped.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,6 +45,16 @@ try {
     assert(existsSync(cli), "built CLI is missing; run pnpm build or omit --skip-build");
   }
 
+  // Starting from a deliberately non-private checkout directory exercises the
+  // wrapper-owned repair without weakening the Observer's generic fail-closed policy.
+  devbox(["stop"], "preflight stop");
+  mkdirSync(socketDir, { recursive: true });
+  chmodSync(socketDir, 0o755);
+  assert(
+    (statSync(socketDir).mode & 0o777) === 0o755,
+    `failed to seed non-private socket directory ${socketDir}`,
+  );
+
   // Start via the no-UI seam: the wrapper delegates to the isolated path, which
   // brings up the observer + installs codex/claude hooks, then exits (no TUI).
   const start = devbox(["start"], "start", { STATION_ISOLATED_NO_LAUNCH: "1" });
@@ -54,6 +64,10 @@ try {
   );
   assertNoGlobalLeak(start.stdout, "start");
   assert(existsSync(observerSock), `isolated observer socket not created at ${observerSock}`);
+  assert(
+    (statSync(socketDir).mode & 0o777) === 0o700,
+    `start did not repair ${socketDir} to mode 0700`,
+  );
   assert(
     /^hooks\s*=\s*true\s*$/m.test(readFileSync(codexProfileConfig, "utf8")),
     `isolated Codex profile does not enable hooks: ${codexProfileConfig}`,
@@ -71,7 +85,7 @@ try {
     label: "isolated observer status",
   });
   assertNoGlobalLeak(isoStatus.stdout, "isolated observer status");
-  const healthyStatus = JSON.parse(isoStatus.stdout);
+  const healthyStatus = parseJson(isoStatus.stdout, "isolated observer status");
   const originalPid = healthyStatus.health?.pid;
   assert(
     Number.isInteger(originalPid),
@@ -112,7 +126,8 @@ try {
     label: "recovered isolated observer status",
   });
   assert(
-    JSON.parse(recoveredStatus.stdout).health?.pid === originalPid,
+    parseJson(recoveredStatus.stdout, "recovered isolated observer status").health?.pid ===
+      originalPid,
     "restoring socket access did not reconnect to the original devbox Observer",
   );
 
@@ -121,7 +136,8 @@ try {
     label: "restarted isolated observer status",
   });
   assert(
-    JSON.parse(restartedStatus.stdout).health?.pid !== originalPid,
+    parseJson(restartedStatus.stdout, "restarted isolated observer status").health?.pid !==
+      originalPid,
     "devbox restart did not replace the isolated Observer",
   );
   assertHookDoctors("restart");
@@ -186,7 +202,7 @@ function assertHookDoctors(label) {
         STATION_CURSOR_HOME: join(ds, "cursor-home"),
       },
     });
-    const doctor = JSON.parse(result.stdout);
+    const doctor = parseJson(result.stdout, `${label} ${provider} hook doctor`);
     assert(
       doctor.status === "ok" && doctor.installed === true,
       `${label} left ${provider} hooks unhealthy\n${result.stdout}`,
@@ -237,7 +253,15 @@ function readJsonl(path) {
   return readFileSync(path, "utf8")
     .split("\n")
     .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line));
+    .map((line, index) => parseJson(line, `${path}:${index + 1}`));
+}
+
+function parseJson(source, label) {
+  try {
+    return JSON.parse(source);
+  } catch (error) {
+    throw new Error(`${label} was not valid JSON: ${String(error)}\n${source}`);
+  }
 }
 
 function spawnChecked(command, args, options) {

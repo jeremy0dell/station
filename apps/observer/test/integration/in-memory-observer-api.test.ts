@@ -79,6 +79,11 @@ describe("Observer API composition with in-memory persistence", () => {
       clock,
     });
 
+    await expect(api.getSessionRecoveryReadiness()).resolves.toEqual({
+      resumeEnabled: false,
+      harnesses: [{ provider: "fake-harness", canResume: true }],
+    });
+
     const initialEvents = api.subscribe({ type: "observer.reconciled" })[Symbol.asyncIterator]();
     const initialEvent = initialEvents.next();
     const initial = await api.reconcile("in-memory-integration");

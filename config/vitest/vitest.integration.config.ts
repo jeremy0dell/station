@@ -1,10 +1,10 @@
 import { defineConfig } from "vitest/config";
-import { commonResolveConfig, commonTestConfig } from "./vitest.config.shared";
+import { commonResolveConfig, machineIsolatedTestConfig } from "./vitest.config.shared";
 
 export default defineConfig({
   ...commonResolveConfig,
   test: {
-    ...commonTestConfig,
+    ...machineIsolatedTestConfig,
     testTimeout: 30_000,
     include: [
       "apps/*/src/**/*.integration.test.ts",
@@ -14,5 +14,6 @@ export default defineConfig({
       "packages/*/test/integration/**/*.test.ts",
       "integrations/*/*/test/integration/**/*.test.ts",
     ],
+    exclude: ["integrations/terminal/tmux/test/integration/popup-real.test.ts"],
   },
 });

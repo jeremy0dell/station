@@ -1,6 +1,8 @@
 import type { ScrollOnOutputMode } from "../../config/stationConfig.js";
 import type { PaneId } from "../../state/types.js";
+import type { StationTerminalTheme } from "../../theme/index.js";
 import { reportTerminalCorruption, writePaneEvidenceDump } from "../diagnostics.js";
+import { BracketedPasteMarker } from "../protocol/csi.js";
 import { createLocalPtyTerminal } from "../pty/localPtyTerminal.js";
 import {
   createPtyOutputCompatibility,
@@ -67,14 +69,21 @@ export type PtyRegistry = {
   /** Structural/status changes (spawn, exit, dispose) — NOT screen content. */
   subscribe(listener: () => void): () => void;
   /**
+   * Fan one terminal-semantic projection to existing screens and remember it
+   * for future lazy screens. This repaints emulator output only: it never
+   * mutates, resizes, writes to, signals, replaces, or respawns a PTY.
+   */
+  updateTerminalTheme(theme: StationTerminalTheme): void;
+  /**
    * Replace the pane-exit side effect. HMR can keep the registry and live PTYs
    * while recreating the app composition, so exits must report through the
    * current observer client instead of the callback captured at registry birth.
    */
   setPaneExitHandler(listener: ((paneId: PaneId) => void) | undefined): void;
   /**
-   * Refresh defaults used by future lazy spawns. Existing live panes keep their
-   * current terminal/screen semantics; HMR should not mutate a running shell.
+   * Refresh process and scroll defaults used by future lazy spawns. Existing
+   * live shells keep those semantics; live visual projection updates use
+   * `updateTerminalTheme` instead.
    */
   setRuntimeOptions(options: PtyRegistryRuntimeOptions): void;
   dispose(paneId: PaneId): void;
@@ -148,6 +157,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   let createTerminal = options.createTerminal ?? createLocalPtyTerminal;
   let scrollOnOutput = options.scrollOnOutput;
   let scrollbackLines = options.scrollbackLines;
+  let terminalTheme: StationTerminalTheme | undefined;
   const resizeDebounceMs = options.resizeDebounceMs ?? DEFAULT_RESIZE_DEBOUNCE_MS;
   const geometrySettleMs = options.geometrySettleMs ?? GEOMETRY_SETTLE_MS;
   const entries = new Map<PaneId, InternalEntry>();
@@ -205,6 +215,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       size,
       ...(scrollOnOutput === undefined ? {} : { scrollOnOutput }),
       ...(scrollbackLines === undefined ? {} : { scrollback: scrollbackLines }),
+      ...(terminalTheme === undefined ? {} : { theme: terminalTheme }),
       diagnosticsLabel: entry.paneId,
       onResponse: (data) => {
         // A replayed snapshot re-parses queries the child issued long ago;
@@ -509,7 +520,11 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         return false;
       }
       const bracketed = entry.screen?.isBracketedPasteEnabled() ?? false;
-      entry.terminal.write(bracketed ? `\x1b[200~${text}\x1b[201~` : text);
+      entry.terminal.write(
+        bracketed
+          ? `${BracketedPasteMarker.Start}${text}${BracketedPasteMarker.End}`
+          : text,
+      );
       return true;
     },
 
@@ -555,6 +570,20 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
 
     setPaneExitHandler: (listener) => {
       onPaneExit = listener;
+    },
+
+    updateTerminalTheme: (theme) => {
+      const updates = [...entries.values()].flatMap((entry) =>
+        entry.screen === null ? [] : [entry.screen.prepareTerminalThemeUpdate(theme)],
+      );
+      terminalTheme = theme;
+      // Publish every complete projection before any repaint listener can observe another screen.
+      for (const update of updates) {
+        update.publish();
+      }
+      for (const update of updates) {
+        update.invalidate();
+      }
     },
 
     setRuntimeOptions: (nextOptions) => {

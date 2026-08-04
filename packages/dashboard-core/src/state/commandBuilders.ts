@@ -139,23 +139,6 @@ export function cleanupForceRequired(row: WorktreeRow, action: CleanupActionKind
   return running;
 }
 
-export function buildCleanupCommand(
-  row: WorktreeRow,
-  action: CleanupActionKind,
-  force: boolean,
-): StationCommand {
-  if (action === "close-harness") {
-    return buildSessionCloseCommand(row, "harness", force);
-  }
-  if (action === "close-terminal") {
-    return buildTerminalCloseCommand(row, force);
-  }
-  if (action === "close-all") {
-    return buildSessionCloseCommand(row, "all", force);
-  }
-  return buildRemoveWorktreeCommand(row, force);
-}
-
 export function buildRemoveWorktreeCommand(row: WorktreeRow, force: boolean): StationCommand {
   if (row.registrationIdentity === undefined) {
     throw {
@@ -275,42 +258,4 @@ function commandLayout(layout: string): TerminalLayout {
     return layout;
   }
   return "default";
-}
-
-function buildSessionCloseCommand(
-  row: WorktreeRow,
-  mode: Extract<StationCommand, { type: "session.close" }>["payload"]["mode"],
-  force: boolean,
-): StationCommand {
-  const sessionId = row.agent?.sessionId;
-  if (sessionId === undefined) {
-    throw new Error("The target row has no session.");
-  }
-  const payload: Extract<StationCommand, { type: "session.close" }>["payload"] = {
-    sessionId,
-    mode,
-  };
-  if (force) {
-    payload.force = true;
-  }
-  return {
-    type: "session.close",
-    payload,
-  };
-}
-
-function buildTerminalCloseCommand(row: WorktreeRow, force: boolean): StationCommand {
-  const payload: Extract<StationCommand, { type: "terminal.close" }>["payload"] = {};
-  if (row.agent?.sessionId !== undefined) {
-    payload.sessionId = row.agent.sessionId;
-  } else {
-    payload.worktreeId = row.id;
-  }
-  if (force) {
-    payload.force = true;
-  }
-  return {
-    type: "terminal.close",
-    payload,
-  };
 }

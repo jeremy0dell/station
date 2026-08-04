@@ -2,6 +2,7 @@ import {
   createEditableTextInputState,
   transitionEditableTextInput,
 } from "../../components/EditableTextInput/editing.js";
+import { type AddProjectActionFocus, addProjectActions } from "./actions.js";
 import { normalizedFilter, searchQueryForFilter } from "./input.js";
 import {
   chooseStateForLoadedFolder,
@@ -114,8 +115,15 @@ export function transitionAddProjectFlow(
         ? { state: failedStateForError(state, state.selectedPath, action.error) }
         : { state };
     case "editIdStart":
-      return state.mode === "review"
-        ? { state: { ...state, editingId: createEditableTextInputState(state.id) } }
+      return state.mode === "review" && !state.submitting
+        ? {
+            state: {
+              ...state,
+              actionFocus: "editId",
+              editingId: createEditableTextInputState(state.id),
+              editIdActionFocus: "save",
+            },
+          }
         : { state };
     case "editIdInput":
       return state.mode === "review" && state.editingId !== undefined
@@ -134,6 +142,8 @@ export function transitionAddProjectFlow(
       return state.mode === "review" && state.editingId !== undefined
         ? { state: reviewWithoutEditingId(state) }
         : { state };
+    case "actionFocus":
+      return { state: moveActionFocus(state, action.dir) };
     case "backToChoose":
       return state.mode === "review" || state.mode === "failed"
         ? { state, effects: [{ type: "loadDirectory", path: state.selectedPath }] }
@@ -142,7 +152,12 @@ export function transitionAddProjectFlow(
 }
 
 function submitReview(state: AddProjectFlowState): AddProjectTransition {
-  if (state.mode !== "review" || state.editingId !== undefined || state.gitRoot === undefined) {
+  if (
+    state.mode !== "review" ||
+    state.editingId !== undefined ||
+    state.gitRoot === undefined ||
+    state.submitting
+  ) {
     return { state };
   }
   return {
@@ -161,6 +176,45 @@ function submitReview(state: AddProjectFlowState): AddProjectTransition {
       },
     ],
   };
+}
+
+function moveActionFocus(state: AddProjectFlowState, dir: -1 | 1): AddProjectFlowState {
+  if (state.mode === "review") {
+    if (state.submitting) {
+      return state;
+    }
+    if (state.editingId !== undefined) {
+      return {
+        ...state,
+        editIdActionFocus: nextEnabledActionFocus(state, state.editIdActionFocus ?? "save", dir),
+      };
+    }
+    return {
+      ...state,
+      actionFocus: nextEnabledActionFocus(state, state.actionFocus, dir),
+    };
+  }
+  if (state.mode === "failed") {
+    return {
+      ...state,
+      actionFocus: nextEnabledActionFocus(state, state.actionFocus, dir),
+    };
+  }
+  return state;
+}
+
+function nextEnabledActionFocus<TFocus extends AddProjectActionFocus>(
+  state: AddProjectFlowState,
+  current: TFocus,
+  dir: -1 | 1,
+): TFocus {
+  const actions = addProjectActions(state).flatMap((action) =>
+    action.enabled && action.focus !== undefined ? [action.focus as TFocus] : [],
+  );
+  const currentIndex = actions.indexOf(current);
+  const start = currentIndex < 0 ? (dir === 1 ? -1 : 0) : currentIndex;
+  const next = (start + dir + actions.length) % actions.length;
+  return actions[next] ?? current;
 }
 
 function updateFilter(state: AddProjectFlowState, filter: string): AddProjectTransition {

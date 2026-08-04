@@ -1,6 +1,6 @@
 import type { SqlDatabase } from "../sqlite/driver.js";
 import { type SqliteWorktreeDisplayTitleRow, worktreeDisplayTitleFromRow } from "./rows.js";
-import type { PersistedWorktreeDisplayTitle, ReconcileWorktreeDisplayTitleInput } from "./types.js";
+import type { PersistedWorktreeDisplayTitle } from "./types.js";
 
 export function listWorktreeDisplayTitles(database: SqlDatabase): PersistedWorktreeDisplayTitle[] {
   const rows = database
@@ -33,7 +33,7 @@ export function readWorktreeDisplayTitle(
 
 export function insertMissingWorktreeDisplayTitles(
   database: SqlDatabase,
-  titles: readonly ReconcileWorktreeDisplayTitleInput[],
+  titles: readonly PersistedWorktreeDisplayTitle[],
 ): void {
   const insert = database.prepare(
     `
@@ -50,7 +50,7 @@ export function insertMissingWorktreeDisplayTitles(
 
 export function upsertWorktreeDisplayTitle(
   database: SqlDatabase,
-  input: ReconcileWorktreeDisplayTitleInput,
+  input: PersistedWorktreeDisplayTitle,
 ): PersistedWorktreeDisplayTitle {
   database
     .prepare(

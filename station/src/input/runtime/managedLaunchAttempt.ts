@@ -1,8 +1,7 @@
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, SafeError } from "@station/contracts";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { StationHostProviderError } from "@station/host";
-import type { StoreApi } from "zustand/vanilla";
 import { selectPaneRecord } from "../../state/selectors.js";
 import type { StationStore } from "../../state/store.js";
 import type { AgentIdentity, PaneId } from "../../state/types.js";
@@ -18,6 +17,11 @@ import {
   readinessForWorktree,
   unreachableTerminalRow,
 } from "./stationRows.js";
+
+type ManagedLaunchDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "pushToast">;
+};
 
 /** What a managed primary-agent launch needs to ask the observer to prepare it. */
 export type ManagedLaunchTarget = {
@@ -45,7 +49,7 @@ export type ManagedLaunchTarget = {
 
 type ManagedLaunchAttemptDeps = {
   store: StationStore;
-  stationViewStore: StoreApi<TuiStore> | undefined;
+  dashboardRuntime: ManagedLaunchDashboard | undefined;
   observerService: ObserverService | undefined;
   registry: PtyRegistry | undefined;
   managedTerminalAttacher: ManagedTerminalAttacher | undefined;
@@ -85,11 +89,11 @@ function pushToast(
   message: string,
   kind: "info" | "error" = "error",
 ): void {
-  runtime.stationViewStore?.getState().pushToast({ kind, message });
+  runtime.dashboardRuntime?.actions.pushToast({ kind, message });
 }
 
 function pushSafeError(runtime: ManagedLaunchRuntime, error: SafeError): void {
-  runtime.stationViewStore?.getState().pushToast(safeErrorToNotice(error));
+  runtime.dashboardRuntime?.actions.pushToast(safeErrorToNotice(error));
 }
 
 function pushError(runtime: ManagedLaunchRuntime, error: unknown): void {
@@ -106,9 +110,9 @@ function createContext(
     target,
     landInPane: target.background !== true,
     turnReadiness:
-      runtime.stationViewStore === undefined
+      runtime.dashboardRuntime === undefined
         ? undefined
-        : readinessForWorktree(runtime.stationViewStore, target.worktreeId),
+        : readinessForWorktree(runtime.dashboardRuntime.state, target.worktreeId),
   };
 }
 
@@ -147,9 +151,9 @@ async function runPreflight(
   }
 
   const unreachable =
-    runtime.stationViewStore === undefined
+    runtime.dashboardRuntime === undefined
       ? undefined
-      : unreachableTerminalRow(runtime.stationViewStore, context.target.worktreeId);
+      : unreachableTerminalRow(runtime.dashboardRuntime.state, context.target.worktreeId);
   if (unreachable !== undefined) {
     pushToast(
       runtime,
@@ -214,9 +218,12 @@ function resolveExistingSession(
   target: ManagedLaunchTarget,
 ): ManagedLaunchAction {
   const nonFocusableStation =
-    runtime.stationViewStore === undefined
+    runtime.dashboardRuntime === undefined
       ? undefined
-      : nonFocusableStationTerminalForWorktree(runtime.stationViewStore, target.worktreeId);
+      : nonFocusableStationTerminalForWorktree(
+          runtime.dashboardRuntime.state,
+          target.worktreeId,
+        );
   if (nonFocusableStation !== undefined) {
     return {
       kind: "notice",
@@ -224,9 +231,12 @@ function resolveExistingSession(
     };
   }
   const externalProvider =
-    runtime.stationViewStore === undefined
+    runtime.dashboardRuntime === undefined
       ? undefined
-      : externalTerminalProviderForWorktree(runtime.stationViewStore, target.worktreeId);
+      : externalTerminalProviderForWorktree(
+          runtime.dashboardRuntime.state,
+          target.worktreeId,
+        );
   if (externalProvider !== undefined) {
     return {
       kind: "notice",

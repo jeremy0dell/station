@@ -1,10 +1,53 @@
 import { describe, expect, it } from "bun:test";
-import { getLinkId } from "@opentui/core";
+import { getLinkId, rgbToHex } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
 import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { semanticCopyContinuationMarker } from "./protocol/semanticCopy.js";
+import { act, useState, type Dispatch, type SetStateAction } from "react";
+import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
+import { spanAtFrameCell } from "./testing/frameProbe.js";
 import { createStationVtScreen, type StationVtScreen } from "./vt/screen.js";
 import "./TerminalScreenRenderable.js";
+
+const NATIVE_PAINT = {
+  defaultForeground: nativeStationTheme.terminal.defaultForeground.value,
+  selectionBackground: stationColorSnapshotValue(nativeStationTheme.pane.selection),
+};
+const INITIAL_TEST_PAINT = {
+  defaultForeground: nativeStationTheme.text.primary.value,
+  selectionBackground: nativeStationTheme.interaction.compactFocus.value,
+};
+const NEXT_TEST_PAINT = {
+  defaultForeground: nativeStationTheme.action.success.value,
+  selectionBackground: nativeStationTheme.interaction.hover.value,
+};
+
+type Paint = {
+  defaultForeground: `#${string}`;
+  selectionBackground: `#${string}`;
+};
+
+function MutablePaintScreen({
+  screen,
+  initialPaint,
+  onSetter,
+}: {
+  screen: StationVtScreen;
+  initialPaint: Paint;
+  onSetter(setter: Dispatch<SetStateAction<Paint>>): void;
+}) {
+  const [paint, setPaint] = useState(initialPaint);
+  onSetter(setPaint);
+  return (
+    <terminalScreen
+      screen={screen}
+      width="100%"
+      height="100%"
+      defaultForeground={paint.defaultForeground}
+      selectionBackground={paint.selectionBackground}
+    />
+  );
+}
 
 const HARD_BOUNDARY_MARKER = "\x1b]6973;station-copy;1;hard\x1b\\";
 
@@ -19,6 +62,8 @@ async function renderPane(feed: string, width = 20, height = 6) {
       screen={screen}
       width="100%"
       height="100%"
+      defaultForeground={NATIVE_PAINT.defaultForeground}
+      selectionBackground={NATIVE_PAINT.selectionBackground}
       now={() => 1000}
       onCopySelection={(text: string) => copied.push(text)}
       onForwardInput={(bytes: string) => forwarded.push(bytes)}
@@ -34,21 +79,113 @@ async function teardown(setup: { renderer: { destroy(): void } }, screen: Statio
   screen.dispose();
 }
 
+describe("TerminalScreenRenderable paint props", () => {
+  it("redraws default foreground and selection without rebuilding or replacing the screen", async () => {
+    const screen = createStationVtScreen({ size: { cols: 20, rows: 6 } });
+    screen.feed("paint props");
+    await screen.whenIdle();
+    let rowBuilds = 0;
+    const buildRows = screen.buildRows.bind(screen);
+    screen.buildRows = (options) => {
+      rowBuilds += 1;
+      return buildRows(options);
+    };
+    const initialPaint: Paint = INITIAL_TEST_PAINT;
+    let setPaint: Dispatch<SetStateAction<Paint>> | undefined;
+    const setup = await testRender(
+      <MutablePaintScreen
+        screen={screen}
+        initialPaint={initialPaint}
+        onSetter={(setter) => {
+          setPaint = setter;
+        }}
+      />,
+      { width: 20, height: 6 },
+    );
+    try {
+      await setup.flush();
+      await setup.mockMouse.drag(0, 0, 1, 0);
+      await setup.renderOnce();
+      const before = spanAtFrameCell(setup.captureSpans(), 0, 0);
+      expect(before?.fg === undefined ? undefined : rgbToHex(before.fg)).toBe(
+        INITIAL_TEST_PAINT.defaultForeground,
+      );
+      expect(before?.bg === undefined ? undefined : rgbToHex(before.bg)).toBe(
+        INITIAL_TEST_PAINT.selectionBackground,
+      );
+      const engine = screen.unsafeEngine;
+      const version = screen.getVersion();
+      const buildsBeforeUpdate = rowBuilds;
+
+      await act(async () => {
+        setPaint?.(NEXT_TEST_PAINT);
+        await Promise.resolve();
+      });
+      await setup.flush();
+
+      const after = spanAtFrameCell(setup.captureSpans(), 0, 0);
+      expect(after?.fg === undefined ? undefined : rgbToHex(after.fg)).toBe(
+        NEXT_TEST_PAINT.defaultForeground,
+      );
+      expect(after?.bg === undefined ? undefined : rgbToHex(after.bg)).toBe(
+        NEXT_TEST_PAINT.selectionBackground,
+      );
+      expect(rowBuilds).toBe(buildsBeforeUpdate);
+      expect(screen.getVersion()).toBe(version);
+      expect(screen.unsafeEngine).toBe(engine);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+});
+
 describe("TerminalScreenRenderable selection", () => {
   it("retains native hyperlink attributes while highlighting a selection", async () => {
     const uri = "https://example.com/selected";
-    const { setup, screen } = await renderPane(
-      `\x1b]8;;${uri}\x1b\\hello\x1b]8;;\x1b\\`,
-    );
+    const { setup, screen } = await renderPane(`\x1b]8;;${uri}\x1b\\hello\x1b]8;;\x1b\\`);
     try {
-      expect(getLinkId(setup.renderer.currentRenderBuffer.buffers.attributes[0] ?? 0)).toBeGreaterThan(
-        0,
-      );
+      expect(
+        getLinkId(setup.renderer.currentRenderBuffer.buffers.attributes[0] ?? 0),
+      ).toBeGreaterThan(0);
       await setup.mockMouse.drag(0, 0, 4, 0);
       await setup.renderOnce();
-      expect(getLinkId(setup.renderer.currentRenderBuffer.buffers.attributes[0] ?? 0)).toBeGreaterThan(
-        0,
+      expect(
+        getLinkId(setup.renderer.currentRenderBuffer.buffers.attributes[0] ?? 0),
+      ).toBeGreaterThan(0);
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("paints selection with the canonical pane role", async () => {
+    const { setup, screen } = await renderPane("hello world");
+    try {
+      await setup.mockMouse.drag(0, 0, 4, 0);
+      await setup.renderOnce();
+      const selected = spanAtFrameCell(setup.captureSpans(), 0, 0);
+      expect(selected?.bg === undefined ? undefined : rgbToHex(selected.bg)).toBe(
+        stationColorSnapshotValue(nativeStationTheme.pane.selection),
       );
+    } finally {
+      await teardown(setup, screen);
+    }
+  });
+
+  it("preserves selection across terminal projection updates", async () => {
+    const { setup, screen } = await renderPane("hello world");
+    try {
+      await setup.mockMouse.drag(0, 0, 4, 0);
+      await setup.renderOnce();
+      const versionBeforeUpdate = screen.getVersion();
+
+      screen.updateTerminalTheme(nativeStationTheme.terminal);
+      await setup.renderOnce();
+
+      const selected = spanAtFrameCell(setup.captureSpans(), 0, 0);
+      expect(selected?.bg === undefined ? undefined : rgbToHex(selected.bg)).toBe(
+        stationColorSnapshotValue(nativeStationTheme.pane.selection),
+      );
+      expect(screen.getVersion()).toBe(versionBeforeUpdate + 1);
     } finally {
       await teardown(setup, screen);
     }

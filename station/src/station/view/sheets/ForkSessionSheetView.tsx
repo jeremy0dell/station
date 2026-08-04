@@ -1,20 +1,25 @@
-// OpenTUI bottom sheet for Fork Session: chooseSlot (pick a source row, mirrors
-// RemoveSessionSheetView) and details (name field + copy-dirty toggle + submit,
-// mirrors NewSessionSheetView's EditName). The submit button is a click target so
-// the fork launches in Station (sheetSubmit → launch-fork), never the tmux path.
-import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core";
+// Fork details share semantic controls across pointer and keyboard activation;
+// native Station intercepts only submit so Copy-focused Enter remains a core toggle.
+import {
+  bottomSheetContentWidth,
+  type DashboardScreenView,
+} from "@station/dashboard-core";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
-  SheetButton,
+  responsiveSheetFooterText,
+  responsiveSheetText,
+  type ResponsiveSheetText,
+  SheetButtonRow,
+  SheetControlRow,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
   SheetMessageLine,
 } from "./parts.js";
 
-type ForkScreen = Extract<TuiScreen, { name: "fork" }>;
+type ForkScreen = Extract<DashboardScreenView, { name: "fork" }>;
 type ForkDetailsScreen = Extract<ForkScreen, { step: "details" }>;
 
 export type ForkSessionSheetViewProps = {
@@ -23,7 +28,33 @@ export type ForkSessionSheetViewProps = {
   rows: number;
 };
 
-const LABEL_WIDTH = 8;
+const SOURCE_LABEL_WIDTH = 8;
+const CONTROL_LABEL_WIDTH = 6;
+const CHOOSE_SLOT_CONTENT_ROWS = 5;
+const CHOOSE_SLOT_MIN_HEIGHT = 7;
+const DETAILS_BASE_CONTENT_ROWS = 7;
+const DETAILS_MIN_HEIGHT = 9;
+
+const FORK_ACTION_HELP = {
+  expanded: "↑↓ focus · Enter fork · Esc back",
+  compact: "↑↓ · Enter fork · Esc",
+} as const satisfies ResponsiveSheetText;
+
+const COPY_DIRTY_HELP = {
+  expanded: "Space/Enter toggle · ↑↓ focus · Esc back",
+  compact: "Space/↵ toggle · ↑↓ · Esc back",
+} as const satisfies ResponsiveSheetText;
+
+const DETAILS_HELP_BY_FOCUS = {
+  name: FORK_ACTION_HELP,
+  copyDirty: COPY_DIRTY_HELP,
+  submit: FORK_ACTION_HELP,
+} as const satisfies Record<ForkDetailsScreen["focus"], ResponsiveSheetText>;
+
+const SOURCE_RUNNING_MESSAGE = {
+  expanded: "Source keeps running — copy is read-only.",
+  compact: "Source running; copy is read-only.",
+} as const satisfies ResponsiveSheetText;
 
 export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheetViewProps) {
   const sheetWidth = compactSheetWidth(columns);
@@ -35,8 +66,8 @@ export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheet
         rows={rows}
         width={sheetWidth}
         title="Select session to fork"
-        contentRows={5}
-        minHeight={7}
+        contentRows={CHOOSE_SLOT_CONTENT_ROWS}
+        minHeight={CHOOSE_SLOT_MIN_HEIGHT}
       >
         <SheetLine width={contentWidth}> </SheetLine>
         <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
@@ -44,7 +75,15 @@ export function ForkSessionSheetView({ screen, columns, rows }: ForkSessionSheet
       </BottomSheetFrameView>
     );
   }
-  return <ForkDetails screen={screen} columns={columns} rows={rows} contentWidth={contentWidth} sheetWidth={sheetWidth} />;
+  return (
+    <ForkDetails
+      screen={screen}
+      columns={columns}
+      rows={rows}
+      contentWidth={contentWidth}
+      sheetWidth={sheetWidth}
+    />
+  );
 }
 
 function ForkDetails({
@@ -63,41 +102,50 @@ function ForkDetails({
   const focus = screen.focus;
   const titleValue =
     focus === "name" ? (
-      <EditableTextInputView {...screen.draftTitle} />
+      <EditableTextInputView {...screen.draftTitle} active />
     ) : (
       screen.draftTitle.value
     );
-  const extraRows = (screen.sourceAgentRunning ? 1 : 0) + (screen.validationError !== undefined ? 1 : 0);
+  const footerText = responsiveSheetFooterText(contentWidth, DETAILS_HELP_BY_FOCUS[focus]);
+  const extraRows = [
+    screen.sourceAgentRunning,
+    screen.validationError !== undefined,
+  ].filter(Boolean).length;
   return (
     <BottomSheetFrameView
       columns={columns}
       rows={rows}
       width={sheetWidth}
       title="Fork Session"
-      contentRows={7 + extraRows}
-      minHeight={9}
+      contentRows={DETAILS_BASE_CONTENT_ROWS + extraRows}
+      minHeight={DETAILS_MIN_HEIGHT}
     >
       <SheetLabelValue
         width={contentWidth}
         label="Source"
-        labelWidth={LABEL_WIDTH}
+        labelWidth={SOURCE_LABEL_WIDTH}
         value={`${screen.projectLabel} · ${screen.sourceBranch}`}
       />
-      <SheetLabelValue
+      <SheetControlRow
         width={contentWidth}
-        label={focusLabel("Name", focus === "name")}
-        labelWidth={LABEL_WIDTH}
+        label="Name"
+        labelWidth={CONTROL_LABEL_WIDTH}
         value={titleValue}
+        valueCells={screen.draftTitle.value.length + Number(focus === "name")}
+        focused={focus === "name"}
+        mouseTarget={{ kind: "forkSessionAction", actionId: "details.name" }}
       />
-      <SheetLabelValue
+      <SheetControlRow
         width={contentWidth}
-        label={focusLabel("Copy", focus === "copyDirty")}
-        labelWidth={LABEL_WIDTH}
+        label="Copy"
+        labelWidth={CONTROL_LABEL_WIDTH}
         value={`[${screen.copyDirty ? "x" : " "}] uncommitted changes`}
+        focused={focus === "copyDirty"}
+        mouseTarget={{ kind: "forkSessionAction", actionId: "details.copyDirty" }}
       />
       {screen.sourceAgentRunning ? (
         <SheetMessageLine width={contentWidth} tone="muted">
-          Source keeps running — copy is read-only.
+          {responsiveSheetText(contentWidth, SOURCE_RUNNING_MESSAGE)}
         </SheetMessageLine>
       ) : null}
       {screen.validationError !== undefined ? (
@@ -106,19 +154,24 @@ function ForkDetails({
         </SheetMessageLine>
       ) : null}
       <SheetLine width={contentWidth}> </SheetLine>
-      <SheetButton
-        label={focus === "submit" ? "> Fork" : "Fork"}
-        shortcut="enter"
-        tone="success"
-        fixedWidth={Math.min(contentWidth, 18)}
-        mouseTarget={{ kind: "sheetSubmit" }}
+      <SheetButtonRow
+        width={contentWidth}
+        buttons={[
+          {
+            id: "fork.submit",
+            label: "Fork",
+            shortcut: "enter",
+            tone: "success",
+            mouseTarget: {
+              kind: "forkSessionAction",
+              actionId: "details.submit",
+            },
+            focused: focus === "submit",
+            disabled: false,
+          },
+        ]}
       />
-      <SheetFooter width={contentWidth}>↑↓:field space:toggle enter:fork esc:back</SheetFooter>
+      <SheetFooter width={contentWidth}>{footerText}</SheetFooter>
     </BottomSheetFrameView>
   );
-}
-
-/** Prefix a field label with a focus caret so the active field reads clearly. */
-function focusLabel(label: string, focused: boolean): string {
-  return `${focused ? ">" : " "} ${label}`;
 }

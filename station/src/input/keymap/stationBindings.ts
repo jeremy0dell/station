@@ -1,15 +1,19 @@
-import type { StoreApi } from "zustand/vanilla";
 import { agentWorktreePaneId, STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
 import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
 import { rowNeedsUser } from "../../stationButton/status.js";
-import { selectDashboardSessionRows, type TuiStore } from "@station/dashboard-core";
+import {
+  selectDashboardSessionRows,
+  type DashboardActions,
+  type DashboardStateSource,
+} from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import {
   paneLaunchForkSessionOutcome,
   paneLaunchManagedOutcome,
   paneLaunchNewSessionOutcome,
+  paneOpenOutcome,
   type MouseBindings,
   type RouteOutcome,
   type StationCommandId,
@@ -20,8 +24,13 @@ import {
   wheelDirection,
   type StationMouseEvent,
 } from "../mouse.js";
-import { ControlByte } from "../../terminal/protocol/controlBytes.js";
+import { C0 } from "../../terminal/protocol/syntax.js";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
+
+type StationDashboardInput = {
+  state: DashboardStateSource;
+  actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
+};
 
 export const STATION_EXIT_LEGACY = "\x11"; // Ctrl-Q
 export const OVERLAY_TOGGLE_LEGACY = "\x0f"; // Ctrl-O
@@ -35,11 +44,7 @@ export const SPLIT_RIGHT_LEGACY = "\x1c"; // Ctrl-\
 export const SPLIT_BELOW_LEGACY = "\x1e"; // Ctrl-^
 export const FOCUS_NEXT_LEGACY = "\x1d"; // Ctrl-]
 export const CLOSE_PANE_LEGACY = "\x1f"; // Ctrl-_
-export const ESC_LEGACY = ControlByte.Esc;
-export const ENTER_LEGACY = "\r";
 export const SPACE_LEGACY = " ";
-export const ARROW_UP_LEGACY = ARROW_KEYS.up.normal;
-export const ARROW_DOWN_LEGACY = ARROW_KEYS.down.normal;
 
 function stationOverlayToggleOutcome(state: StationState): RouteOutcome {
   if (state.input.activeOverlay === STATION_OVERLAY_ID) {
@@ -98,7 +103,7 @@ const welcomeLayer: KeymapLayer<RouteOutcome> = {
     state.input.activeOverlay === null && state.input.focus.kind === "welcome",
   bindings: [
     {
-      keys: [ENTER_LEGACY, SPACE_LEGACY],
+      keys: [C0.CarriageReturn, SPACE_LEGACY],
       action: (state) =>
         state.workspace.panes.length > 0
           ? { kind: "welcome-dismiss" }
@@ -107,7 +112,7 @@ const welcomeLayer: KeymapLayer<RouteOutcome> = {
     {
       // Esc slips past the intro into the sessions underneath; with none there is
       // nothing to dismiss into, so swallow.
-      keys: [ESC_LEGACY],
+      keys: [C0.Escape],
       action: (state) =>
         state.workspace.panes.length > 0
           ? { kind: "welcome-dismiss" }
@@ -122,19 +127,19 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
   isActive: (state) => state.input.focus.kind === "contextMenu" && state.input.contextMenu !== null,
   bindings: [
     {
-      keys: [ESC_LEGACY, OVERLAY_TOGGLE_LEGACY],
+      keys: [C0.Escape, OVERLAY_TOGGLE_LEGACY],
       action: () => ({ kind: "context-menu-close" }),
     },
     {
-      keys: [ARROW_UP_LEGACY],
+      keys: [ARROW_KEYS.up.normal],
       action: () => ({ kind: "context-menu-move", delta: -1 }),
     },
     {
-      keys: [ARROW_DOWN_LEGACY],
+      keys: [ARROW_KEYS.down.normal],
       action: () => ({ kind: "context-menu-move", delta: 1 }),
     },
     {
-      keys: [ENTER_LEGACY, SPACE_LEGACY],
+      keys: [C0.CarriageReturn, SPACE_LEGACY],
       action: () => ({ kind: "context-menu-select" }),
     },
   ],
@@ -148,10 +153,10 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
  * Everywhere else Enter falls through to terminal passthrough untouched.
  */
 function createStationButtonLayer(
-  stationViewStore: StoreApi<TuiStore>,
+  dashboardState: DashboardStateSource,
 ): KeymapLayer<RouteOutcome> {
   const attentionRow = () => {
-    const snapshot = stationViewStore.getState().snapshot;
+    const snapshot = dashboardState.getState().snapshot;
     return snapshot === undefined
       ? undefined
       : selectDashboardSessionRows(snapshot).find((row) => rowNeedsUser(row.presentation));
@@ -164,7 +169,7 @@ function createStationButtonLayer(
       attentionRow() !== undefined,
     bindings: [
       {
-        keys: [ENTER_LEGACY],
+        keys: [C0.CarriageReturn],
         action: (state) => {
           const row = attentionRow();
           if (row === undefined) {
@@ -228,10 +233,10 @@ const workspaceLayer: KeymapLayer<RouteOutcome> = {
 
 /** The registration site: adding a Station chord is one binding here. */
 export function createStationKeymap(
-  stationViewStore?: StoreApi<TuiStore>,
+  dashboardRuntime?: StationDashboardInput,
 ): KeymapStack<RouteOutcome> {
   const overlayLayer =
-    stationViewStore === undefined ? placeholderOverlayLayer : createStationOverlayLayer(stationViewStore);
+    dashboardRuntime === undefined ? placeholderOverlayLayer : createStationOverlayLayer(dashboardRuntime);
   const layers: KeymapLayer<RouteOutcome>[] = [
     contextMenuLayer,
     overlayLayer,
@@ -239,8 +244,8 @@ export function createStationKeymap(
     workspaceLayer,
     welcomeLayer,
   ];
-  if (stationViewStore !== undefined) {
-    layers.push(createStationButtonLayer(stationViewStore));
+  if (dashboardRuntime !== undefined) {
+    layers.push(createStationButtonLayer(dashboardRuntime.state));
   }
   return createKeymapStack(layers);
 }
@@ -251,7 +256,9 @@ export function createStationKeymap(
  * is not guarded by the overlay itself. Pane clicks do not focus through an
  * active overlay.
  */
-export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>): MouseBindings {
+export function createStationMouseBindings(
+  dashboardRuntime?: StationDashboardInput,
+): MouseBindings {
   const anchorFrom = (event: StationMouseEvent) => ({ x: event.x, y: event.y });
   return {
     header: (_target, state, event) => {
@@ -312,13 +319,16 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
     // outcomes so the coordination store keeps owning overlay visibility. Hit-testing and wheel
     // direction are the renderable's job (carried in the target ref) — the router never reads event payloads.
     station: (target, state, event) => {
-      if (state.input.activeOverlay !== STATION_OVERLAY_ID || stationViewStore === undefined) {
+      if (state.input.activeOverlay !== STATION_OVERLAY_ID || dashboardRuntime === undefined) {
         return { kind: "swallowed" };
       }
       if (
         isRightMouseEvent(event) &&
         target.target.kind !== "screenBackdrop" &&
-        target.target.kind !== "sheetBackdrop"
+        target.target.kind !== "sheetBackdrop" &&
+        target.target.kind !== "persistentFilterConditionAction" &&
+        target.target.kind !== "persistentFilterConditionField" &&
+        target.target.kind !== "persistentFilterConditionValue"
       ) {
         return {
           kind: "context-menu-open",
@@ -326,29 +336,12 @@ export function createStationMouseBindings(stationViewStore?: StoreApi<TuiStore>
           anchor: anchorFrom(event),
         };
       }
-      const outcome = routeStationMouse(target.target, event, stationViewStore);
+      const outcome = routeStationMouse(target.target, event, dashboardRuntime);
       if (outcome.kind === "close-overlay") {
         return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
       }
       if (outcome.kind === "open-pane") {
-        // Explicit assignments keep command/args/worktreeId absent (not set to
-        // undefined) on the shell path — exactOptionalPropertyTypes.
-        const paneOpen: Extract<RouteOutcome, { kind: "pane-open" }> = {
-          kind: "pane-open",
-          paneId: outcome.paneId,
-          cwd: outcome.cwd,
-          role: outcome.role,
-        };
-        if (outcome.command !== undefined) {
-          paneOpen.command = outcome.command;
-        }
-        if (outcome.args !== undefined) {
-          paneOpen.args = outcome.args;
-        }
-        if (outcome.worktreeId !== undefined) {
-          paneOpen.worktreeId = outcome.worktreeId;
-        }
-        return paneOpen;
+        return paneOpenOutcome(outcome);
       }
       if (outcome.kind === "launch-managed") {
         return paneLaunchManagedOutcome(outcome);

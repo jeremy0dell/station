@@ -1,7 +1,18 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { getLinkId, rgbToHex, TextAttributes } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
+import { act } from "react";
 import { MAIN_PANE_ID } from "../state/types.js";
+import {
+  nativeStationTheme,
+  rgbColor,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+  toOpenTuiOpaqueColor,
+  useStationThemeSource,
+  type StationTheme,
+  type StationThemeSource,
+} from "../theme/index.js";
 import { PaneRegistryProvider } from "./registry/paneTerminalContext.js";
 import { createPtyRegistry, type PtyRegistry } from "./registry/ptyRegistry.js";
 import { TerminalPane } from "./TerminalPane.js";
@@ -10,18 +21,84 @@ import { createScriptedTerminal, type ScriptedTerminal } from "./testing/scripte
 import { waitFor } from "./testing/waitFor.js";
 import type { StationTerminalSize, StationTerminalSpawnOptions } from "./types.js";
 
-// Pane chrome: 1 border + 1 padding on each side. The origin-anchor test
-// below derives this empirically; everything else trusts the constant.
-const ORIGIN = { x: 2, y: 2 };
+// Pane chrome: 1 border on each side. The origin-anchor test below derives
+// this empirically; everything else trusts the constant.
+const ORIGIN = { x: 1, y: 1 };
 const SURFACE = { width: 40, height: 12 };
-const GRID = { cols: SURFACE.width - 4, rows: SURFACE.height - 4 };
+const GRID = { cols: SURFACE.width - 2, rows: SURFACE.height - 2 };
 
 type PaneSetup = {
   setup: Awaited<ReturnType<typeof testRender>>;
   scripted: ScriptedTerminal;
   spawnSizes: StationTerminalSize[];
   registry: PtyRegistry;
+  themeSource: MutableThemeSource;
 };
+
+class MutableThemeSource implements StationThemeSource {
+  private snapshot: StationTheme;
+  private readonly listeners = new Set<() => void>();
+
+  constructor(snapshot: StationTheme) {
+    this.snapshot = snapshot;
+  }
+
+  readonly getSnapshot = (): StationTheme => this.snapshot;
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  set(theme: StationTheme): void {
+    this.snapshot = theme;
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+}
+
+function ThemedTerminalPane({
+  source,
+  registry,
+}: {
+  source: StationThemeSource;
+  registry: PtyRegistry;
+}) {
+  const theme = useStationThemeSource(source);
+  return (
+    <StationThemeProvider theme={theme}>
+      <box
+        width="100%"
+        height="100%"
+        backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
+      >
+        <PaneRegistryProvider registry={registry}>
+          <TerminalPane paneId={MAIN_PANE_ID} />
+        </PaneRegistryProvider>
+      </box>
+    </StationThemeProvider>
+  );
+}
+
+function appearanceTheme(
+  defaultForeground: `#${string}`,
+  defaultBackground: `#${string}`,
+  ansiRed: `#${string}`,
+  selection: `#${string}`,
+  canvas: `#${string}`,
+): StationTheme {
+  const [ansiBlack, , ...ansiTail] = nativeStationTheme.terminal.ansi16;
+  return {
+    ...nativeStationTheme,
+    surfaces: { ...nativeStationTheme.surfaces, canvas: rgbColor(canvas) },
+    pane: { ...nativeStationTheme.pane, selection: rgbColor(selection) },
+    terminal: {
+      defaultForeground: rgbColor(defaultForeground),
+      defaultBackground: rgbColor(defaultBackground),
+      ansi16: [ansiBlack, rgbColor(ansiRed), ...ansiTail],
+    },
+  };
+}
 
 describe("TerminalPane frame rendering", () => {
   const teardowns: Array<() => void> = [];
@@ -31,7 +108,10 @@ describe("TerminalPane frame rendering", () => {
     }
   });
 
-  async function renderPane(spawnOptions?: StationTerminalSpawnOptions): Promise<PaneSetup> {
+  async function renderPane(
+    spawnOptions?: StationTerminalSpawnOptions,
+    theme: StationTheme = nativeStationTheme,
+  ): Promise<PaneSetup> {
     // The pane spawns its PTY on first layout and updates through the registry
     // (an external store), so updates land outside React's act() from the very
     // first render; tests poll rendered frames rather than relying on act.
@@ -47,15 +127,15 @@ describe("TerminalPane frame rendering", () => {
         return scripted.terminal;
       },
     });
+    registry.updateTerminalTheme(theme.terminal);
     // Pre-seed the entry so cwd is captured (the pane reports size but never
     // ensures); mirrors how an aux split is ensured with its inherited cwd.
     if (spawnOptions !== undefined) {
       registry.ensure(MAIN_PANE_ID, spawnOptions);
     }
+    const themeSource = new MutableThemeSource(theme);
     const setup = await testRender(
-      <PaneRegistryProvider registry={registry}>
-        <TerminalPane paneId={MAIN_PANE_ID} />
-      </PaneRegistryProvider>,
+      <ThemedTerminalPane source={themeSource} registry={registry} />,
       SURFACE,
     );
     teardowns.push(() => {
@@ -64,7 +144,7 @@ describe("TerminalPane frame rendering", () => {
     });
     await setup.flush();
     await waitFor(() => spawnSizes.length > 0);
-    return { setup, scripted, spawnSizes, registry };
+    return { setup, scripted, spawnSizes, registry, themeSource };
   }
 
   // The store flushes on a real timer, so frame-waiting must interleave
@@ -115,7 +195,9 @@ describe("TerminalPane frame rendering", () => {
     const frame = pane.setup.captureSpans();
     const span = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x);
     expect(span?.text).toContain("hello station");
-    expect(rgbToHex(span?.fg as Parameters<typeof rgbToHex>[0])).toBe("#d4d4d8");
+    expect(rgbToHex(span?.fg as Parameters<typeof rgbToHex>[0])).toBe(
+      stationColorSnapshotValue(nativeStationTheme.terminal.defaultForeground),
+    );
   });
 
   it("renders sgr colors and attributes as styled cells", async () => {
@@ -125,10 +207,81 @@ describe("TerminalPane frame rendering", () => {
     const frame = pane.setup.captureSpans();
     const errSpan = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x);
     expect(errSpan?.text).toContain("ERR");
-    expect(rgbToHex(errSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe("#cd3131");
+    expect(rgbToHex(errSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe(
+      stationColorSnapshotValue(nativeStationTheme.terminal.ansi16[1]),
+    );
     expect((errSpan?.attributes ?? 0) & TextAttributes.BOLD).toBe(TextAttributes.BOLD);
     const okSpan = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 4);
     expect(rgbToHex(okSpan?.fg as Parameters<typeof rgbToHex>[0])).toBe("#010203");
+  });
+
+  it("updates UI paint and indexed VT projection without replacing the pane runtime", async () => {
+    const initialTheme = appearanceTheme(
+      "#111213",
+      "#141516",
+      "#171819",
+      "#1a1b1c",
+      "#1d1e1f",
+    );
+    const nextTheme = appearanceTheme(
+      "#a1a2a3",
+      "#a4a5a6",
+      "#a7a8a9",
+      "#aaabac",
+      "#adaeaf",
+    );
+    const pane = await renderPane(undefined, initialTheme);
+    await feedAndFlush(
+      pane,
+      "D\x1b[31mI\x1b[38;5;196mF\x1b[38;2;1;2;3mT\x1b[0m",
+    );
+    await waitForPaneFrame(pane, (frame) => frame.includes("DIFT"));
+    const screen = pane.registry.get(MAIN_PANE_ID)?.screen;
+    const terminal = pane.registry.get(MAIN_PANE_ID)?.terminal;
+    const engine = screen?.unsafeEngine;
+    const version = screen?.getVersion();
+    const initialFrame = pane.setup.captureSpans();
+    const initialDefault = spanAtFrameCell(initialFrame, ORIGIN.y, ORIGIN.x);
+    const initialIndexed = spanAtFrameCell(initialFrame, ORIGIN.y, ORIGIN.x + 1);
+    expect(initialDefault?.fg === undefined ? undefined : rgbToHex(initialDefault.fg)).toBe(
+      "#111213",
+    );
+    expect(initialIndexed?.fg === undefined ? undefined : rgbToHex(initialIndexed.fg)).toBe(
+      "#171819",
+    );
+
+    await act(async () => {
+      pane.registry.updateTerminalTheme(nextTheme.terminal);
+      pane.themeSource.set(nextTheme);
+      await Promise.resolve();
+    });
+    await pane.setup.flush();
+
+    expect(pane.registry.get(MAIN_PANE_ID)?.screen).toBe(screen);
+    expect(pane.registry.get(MAIN_PANE_ID)?.terminal).toBe(terminal);
+    expect(screen?.unsafeEngine).toBe(engine);
+    expect(screen?.getVersion()).toBe((version ?? 0) + 1);
+    const frame = pane.setup.captureSpans();
+    const defaultCell = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x);
+    const indexedCell = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 1);
+    const fixedTailCell = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 2);
+    const truecolorCell = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 3);
+    const cursorCell = spanAtFrameCell(frame, ORIGIN.y, ORIGIN.x + 4);
+    expect(defaultCell?.fg === undefined ? undefined : rgbToHex(defaultCell.fg)).toBe("#a1a2a3");
+    expect(indexedCell?.fg === undefined ? undefined : rgbToHex(indexedCell.fg)).toBe("#a7a8a9");
+    expect(fixedTailCell?.fg === undefined ? undefined : rgbToHex(fixedTailCell.fg)).toBe(
+      "#ff0000",
+    );
+    expect(truecolorCell?.fg === undefined ? undefined : rgbToHex(truecolorCell.fg)).toBe(
+      "#010203",
+    );
+    expect((cursorCell?.attributes ?? 0) & TextAttributes.INVERSE).toBe(TextAttributes.INVERSE);
+    expect(defaultCell?.bg === undefined ? undefined : rgbToHex(defaultCell.bg)).toBe("#adaeaf");
+
+    await pane.setup.mockMouse.drag(ORIGIN.x, ORIGIN.y, ORIGIN.x + 1, ORIGIN.y);
+    await pane.setup.renderOnce();
+    const selected = spanAtFrameCell(pane.setup.captureSpans(), ORIGIN.y, ORIGIN.x);
+    expect(selected?.bg === undefined ? undefined : rgbToHex(selected.bg)).toBe("#aaabac");
   });
 
   it("projects an OSC 8 URI through the production registry, screen, and pane", async () => {
@@ -164,11 +317,11 @@ describe("TerminalPane frame rendering", () => {
     await feedAndFlush(pane, "before");
     pane.setup.resize(60, 20);
     await waitFor(() =>
-      pane.scripted.helpers.resizes.some((size) => size.cols === 56 && size.rows === 16),
+      pane.scripted.helpers.resizes.some((size) => size.cols === 58 && size.rows === 18),
     );
-    await feedAndFlush(pane, `\r\n${"=".repeat(56)}`);
-    const frame = await waitForPaneFrame(pane, (f) => f.includes("=".repeat(56)));
-    expect(frameChar(frame, ORIGIN.y + 1, ORIGIN.x + 55)).toBe("=");
+    await feedAndFlush(pane, `\r\n${"=".repeat(58)}`);
+    const frame = await waitForPaneFrame(pane, (f) => f.includes("=".repeat(58)));
+    expect(frameChar(frame, ORIGIN.y + 1, ORIGIN.x + 57)).toBe("=");
   });
 
   it("shrinking leaves no stale cells outside the new pane bounds", async () => {
@@ -178,7 +331,7 @@ describe("TerminalPane frame rendering", () => {
     await waitForPaneFrame(pane, (f) => f.includes("#"));
     pane.setup.resize(30, 10);
     await waitFor(() =>
-      pane.scripted.helpers.resizes.some((size) => size.cols === 26 && size.rows === 6),
+      pane.scripted.helpers.resizes.some((size) => size.cols === 28 && size.rows === 8),
     );
     await feedAndFlush(pane, "\x1b[2J\x1b[Hcompact");
     const frame = await waitForPaneFrame(pane, (f) => f.includes("compact"));
@@ -273,11 +426,11 @@ describe("TerminalPane frame rendering", () => {
     pane.setup.resize(60, 20);
     pane.setup.resize(50, 14);
     await waitFor(() =>
-      pane.scripted.helpers.resizes.some((size) => size.cols === 46 && size.rows === 10),
+      pane.scripted.helpers.resizes.some((size) => size.cols === 48 && size.rows === 12),
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
     const last = pane.scripted.helpers.resizes[pane.scripted.helpers.resizes.length - 1];
-    expect(last).toEqual({ cols: 46, rows: 10 });
+    expect(last).toEqual({ cols: 48, rows: 12 });
   });
 
   it("renders a consistent final frame after a burst", async () => {

@@ -28,20 +28,20 @@ On a cold boot, press `Enter` or `Space` to open project view.
 
 ## 3. Add a Project
 
-On an empty dashboard:
+On an empty dashboard, **Add your first project** is a real action. Click it, press `A`, or focus it and press `Enter`.
 
-1. Press `Enter` or `A` on **Add your first project**.
-2. Choose a folder inside an existing Git repository.
-3. Review the detected Git root and confirm it.
+In the folder flow, a single click selects a row. Use the visible **Open**, **Choose**, **Parent**, **Search**, and **Cancel** controls to continue with the pointer, or use their displayed keys. Review the detected Git root, then use **Add project**; if no Git root is detected, **Choose folder** remains the focused recovery action.
 
-Station resolves a nested folder to its repository root. It does not add an ordinary non-Git directory.
+Station resolves a nested folder to its repository root. It does not add an ordinary non-Git directory. Pointer-only, direct-command, and arrow-plus-`Enter` paths all use the same admission rules.
 
 ## 4. Create an Agent Session
 
 1. Press `N` to open **Create Session**.
-2. Review the project, generated session name, and agent harness.
-3. Change a field if needed.
-4. Press `Enter` on **Create session**.
+2. Review the interactive **Project (P)**, **Name (N)**, and **Agent (A)** rows.
+3. Click a row, use its direct command, or move focus with arrows and press `Enter`.
+4. Activate **Create session (C)** with the pointer, `C`, or focused `Enter`.
+
+The name editor exposes **Name**, **Save**, and **Back** controls. `Up`/`Down` moves focus, `Left`/`Right` edits the text cursor while Name is focused, and the visible pointer controls can save or return without a keyboard action key.
 
 Station creates an isolated worktree, launches the selected agent, and opens its terminal pane. The dashboard tracks the session as it works, becomes ready, or needs attention.
 
@@ -59,6 +59,23 @@ Station creates an isolated worktree, launches the selected agent, and opens its
 | Exit Station | `Ctrl-Q` |
 
 The on-screen footer and help overlay are the authoritative key reference for the active screen.
+
+### Persistent filter
+
+Press `/` on the dashboard to edit a soft preview: rows stay in place while visible-text matches
+highlight and nonmatches dim. Press `Tab`, then `S`, `P`, or `A` to edit a Status, Project, or Agent
+condition. Toggle values with their visible slot keys or with arrows plus `Space`; the preview updates
+before the filter is applied. Use header `[←]`/Left or bottom `Done (Enter)` to retain that field and return
+to `FILTER CONDITIONS`, then edit another field. Header `[×]`, `Esc`, or click-away closes the
+builder; from a value list it discards only that field's unretained toggles.
+
+Free text and separate fields are ANDed; values inside one field are ORed. After building the fields,
+use bottom `Apply filter (F)` to apply everything once. `Ctrl-U` clears the complete draft. `Enter`
+from text editing also applies a hard filter—even when free text is blank and conditions are
+selected. Matches inside collapsed projects still contribute to the count;
+the project disclosure remains clickable so you can show or hide those matching sessions. Use
+`/ edit` or `Esc clear` from the footer with either keyboard or
+pointer. `Q` closes while retaining the applied free text and conditions for the next warm reopen.
 
 ## 6. Leave and Return
 

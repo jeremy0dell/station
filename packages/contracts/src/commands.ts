@@ -8,6 +8,7 @@ import {
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
+import { SessionRecoveryHandleSchema } from "./recovery.js";
 import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 
 export const CommandSourceSchema = z
@@ -122,6 +123,16 @@ export const ResumeAgentPayloadSchema = z
   })
   .strict();
 
+export const ImportRecoveryHandlePayloadSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    worktreeId: WorktreeIdSchema,
+    expectedPath: nonEmptyStringSchema,
+    expectedRegistrationIdentity: nonEmptyStringSchema.optional(),
+    handle: SessionRecoveryHandleSchema,
+  })
+  .strict();
+
 export const ForkSessionPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -227,6 +238,7 @@ export const StationCommandTypeSchema = z.enum([
   "session.create",
   "session.startAgent",
   "session.resumeAgent",
+  "session.importRecoveryHandle",
   "session.fork",
   "terminal.focus",
   "terminal.close",
@@ -261,6 +273,13 @@ export const StartAgentCommandSchema = z
 
 export const ResumeAgentCommandSchema = z
   .object({ type: z.literal("session.resumeAgent"), payload: ResumeAgentPayloadSchema })
+  .strict();
+
+export const ImportRecoveryHandleCommandSchema = z
+  .object({
+    type: z.literal("session.importRecoveryHandle"),
+    payload: ImportRecoveryHandlePayloadSchema,
+  })
   .strict();
 
 export const ForkSessionCommandSchema = z
@@ -313,6 +332,7 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
   CreateSessionCommandSchema,
   StartAgentCommandSchema,
   ResumeAgentCommandSchema,
+  ImportRecoveryHandleCommandSchema,
   ForkSessionCommandSchema,
   TerminalFocusCommandSchema,
   TerminalCloseCommandSchema,

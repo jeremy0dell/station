@@ -109,6 +109,14 @@ function isWorktrunkEnabled(config: StationConfig | undefined): boolean {
 }
 
 export function runClaudeHooksCommand(
+  args: ["install", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<ClaudeHookInstallResult>;
+export function runClaudeHooksCommand(
+  args: string[],
+  options?: ProviderHooksCommandOptions,
+): Promise<ClaudeHooksCommandResult>;
+export function runClaudeHooksCommand(
   args: string[],
   options: ProviderHooksCommandOptions = {},
 ): Promise<ClaudeHooksCommandResult> {
@@ -139,6 +147,14 @@ export function runClaudeHooksCommand(
   return runner(args, options) as Promise<ClaudeHooksCommandResult>;
 }
 
+export function runCodexHooksCommand(
+  args: ["install", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<CodexHookInstallResult>;
+export function runCodexHooksCommand(
+  args: string[],
+  options?: ProviderHooksCommandOptions,
+): Promise<CodexHooksCommandResult>;
 export function runCodexHooksCommand(
   args: string[],
   options: ProviderHooksCommandOptions = {},
@@ -171,6 +187,14 @@ export function runCodexHooksCommand(
 }
 
 export function runCursorHooksCommand(
+  args: ["install", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<CursorHookInstallResult>;
+export function runCursorHooksCommand(
+  args: string[],
+  options?: ProviderHooksCommandOptions,
+): Promise<CursorHooksCommandResult>;
+export function runCursorHooksCommand(
   args: string[],
   options: ProviderHooksCommandOptions = {},
 ): Promise<CursorHooksCommandResult> {
@@ -201,6 +225,14 @@ export function runCursorHooksCommand(
   return runner(args, options) as Promise<CursorHooksCommandResult>;
 }
 
+export function runOpenCodeHooksCommand(
+  args: ["install", ...string[]],
+  options?: ProviderHooksCommandOptions,
+): Promise<OpenCodePluginInstallResult>;
+export function runOpenCodeHooksCommand(
+  args: string[],
+  options?: ProviderHooksCommandOptions,
+): Promise<OpenCodeHooksCommandResult>;
 export function runOpenCodeHooksCommand(
   args: string[],
   options: ProviderHooksCommandOptions = {},
@@ -234,6 +266,14 @@ export function runOpenCodeHooksCommand(
   return runner(args, options) as Promise<OpenCodeHooksCommandResult>;
 }
 
+export function runWorktrunkHooksCommand(
+  args: ["install", ...string[]],
+  options: WorktrunkHooksCommandOptions,
+): Promise<WorktrunkHookInstallResult>;
+export function runWorktrunkHooksCommand(
+  args: string[],
+  options: WorktrunkHooksCommandOptions,
+): Promise<WorktrunkHooksCommandResult>;
 export function runWorktrunkHooksCommand(
   args: string[],
   options: WorktrunkHooksCommandOptions,

@@ -10,9 +10,9 @@ import type {
 import { ProviderHookReceiptSchema, STATION_SCHEMA_VERSION } from "@station/contracts";
 import { safeErrorFromUnknown, stationObserverBuildVersion, systemClock } from "@station/runtime";
 import { classifyObserverHealth, observerHandoffRefusedError } from "../observerProcess/health.js";
+import type { ExecutableArgv } from "../selfExec.js";
 import {
   getProviderHookObserverStatus,
-  type ProviderHookObserverCommand,
   type ProviderHookObserverStartupDeps,
   startProviderHookObserver,
   waitForProviderHookObserverHealth,
@@ -52,7 +52,7 @@ export async function deliverProviderHookWithSpooling(input: {
   startupTimeoutMs: number;
   rateLimitMs: number;
   configPath?: string;
-  observerCommand?: ProviderHookObserverCommand;
+  observerCommand?: ExecutableArgv;
   deps: ProviderHookObserverStartupDeps;
   /** Sends only through a client pinned to the selector proven by readiness. */
   deliver: (expectedBuildVersion: string) => Promise<ProviderDeliveryAttempt>;
@@ -126,7 +126,7 @@ async function prepareObserverForDelivery(
     startupTimeoutMs: number;
     rateLimitMs: number;
     configPath?: string;
-    observerCommand?: ProviderHookObserverCommand;
+    observerCommand?: ExecutableArgv;
     deps: ProviderHookObserverStartupDeps;
   },
   startupDeadlineMs: number,
@@ -219,7 +219,7 @@ async function recordReceipt(
 async function maybeStartObserver(input: {
   paths: ObserverPaths;
   configPath?: string;
-  observerCommand?: ProviderHookObserverCommand;
+  observerCommand?: ExecutableArgv;
   startupDeadlineMs: number;
   rateLimitMs: number;
   deps: ProviderHookObserverStartupDeps;

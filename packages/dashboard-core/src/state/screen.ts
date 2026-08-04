@@ -1,4 +1,5 @@
 import type { StationSnapshot } from "@station/contracts";
+import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
 import type { CreateInitialTuiStateOptions, TuiRuntimeState, TuiState } from "./types.js";
 
@@ -9,7 +10,6 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     screen: { name: "dashboard" },
     toasts: [],
     observerConnectionStatus: { state: "connected" },
-    searchQuery: options.searchQuery ?? "",
     collapsedProjectIds: new Set(options.collapsedProjectIds ?? []),
     scrollOffset: options.scrollOffset ?? 0,
     terminalRows: options.terminalRows ?? 24,
@@ -22,19 +22,23 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
   if (options.initialSnapshot !== undefined) {
     state.snapshot = options.initialSnapshot;
   }
-  if (options.focusedRowId !== undefined) {
-    state.focusedRowId = options.focusedRowId;
+  if (options.persistentFilter !== undefined) {
+    state.persistentFilter = options.persistentFilter;
   }
-  return state;
+  if (options.dashboardFocus !== undefined) {
+    state.dashboardFocus = options.dashboardFocus;
+  }
+  return state.snapshot === undefined ? state : reconcileDashboardFocus(state, state);
 }
 
 export function replaceSnapshot(state: TuiState, snapshot: StationSnapshot): TuiState {
-  return {
+  const next: TuiState = {
     ...state,
     snapshot,
     loading: false,
     localRows: pruneLocalRowsForSnapshot(state.localRows, snapshot),
   };
+  return reconcileDashboardFocus(state, next);
 }
 
 function createRuntimeState(runtime: Partial<TuiRuntimeState> | undefined): TuiRuntimeState {

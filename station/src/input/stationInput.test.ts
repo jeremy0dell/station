@@ -1,11 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
-  createTuiStore,
+  createDashboardRuntime,
   FAILED_CREATE_ROW_TTL_MS,
   selectDashboardViewport,
-  type TuiStore,
+  type DashboardRuntime,
 } from "@station/dashboard-core";
-import type { StoreApi } from "zustand/vanilla";
 import { selectActivePaneId, selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore } from "../state/store.js";
 import {
@@ -76,7 +75,7 @@ const wheel = (direction: "up" | "down"): StationMouseEvent => ({
 describe("createStationInputRuntime", () => {
   function harness(options?: {
     pasteToTerminal?: (paneId: PaneId, text: string) => boolean;
-    stationViewStore?: StoreApi<TuiStore>;
+    dashboardRuntime?: DashboardRuntime;
     automations?: readonly Automation[];
   }) {
     const scripted = createScriptedTerminal();
@@ -92,7 +91,7 @@ describe("createStationInputRuntime", () => {
       },
       registry,
       pasteToTerminal: options?.pasteToTerminal,
-      ...(options?.stationViewStore === undefined ? {} : { stationViewStore: options.stationViewStore }),
+      ...(options?.dashboardRuntime === undefined ? {} : { dashboardRuntime: options.dashboardRuntime }),
       automations: options?.automations,
     });
     return { runtime, scripted, store, registry, shutdowns: () => shutdowns };
@@ -162,14 +161,14 @@ describe("createStationInputRuntime", () => {
           },
         })),
       };
-      const stationViewStore = createTuiStore({
+      const dashboardRuntime = createDashboardRuntime({
         source: new FakeStationSource(snapshot),
         service: new FakeTuiObserverService(snapshot),
         initialSnapshot: snapshot,
         persistentPopup: true,
         onDismiss: async () => {},
       });
-      const { runtime, scripted, store, registry } = harness({ stationViewStore });
+      const { runtime, scripted, store, registry } = harness({ dashboardRuntime });
       const paneId = agentWorktreePaneId("wt_station_idle");
       store.actions.createPane(paneId, { role: "primary-agent" });
       store.actions.setPrimaryAgent(paneId, {
@@ -306,14 +305,14 @@ describe("createStationInputRuntime", () => {
 
   it("context-menu Rename from a primary-agent pane opens directly and Esc closes to the dashboard", () => {
     const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       persistentPopup: true,
       onDismiss: async () => {},
     });
-    const { runtime, store } = harness({ stationViewStore });
+    const { runtime, store } = harness({ dashboardRuntime });
     const paneId = agentWorktreePaneId("wt_station_idle");
     store.actions.createPane(paneId, { role: "primary-agent" });
     store.actions.setPrimaryAgent(paneId, {
@@ -326,7 +325,7 @@ describe("createStationInputRuntime", () => {
 
     expect(store.getState().input.contextMenu).toBeNull();
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
-    expect(stationViewStore.getState().screen).toMatchObject({
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
       name: "renameSession",
       step: "editName",
       rowId: "ses_wt_station_idle",
@@ -334,7 +333,7 @@ describe("createStationInputRuntime", () => {
     });
 
     expect(runtime.handleSequence("\x1b")).toBe(true);
-    expect(stationViewStore.getState().screen).toEqual({ name: "dashboard" });
+    expect(dashboardRuntime.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("runs an automation: splits a shell pane and executes its command with a trailing Enter", async () => {
@@ -343,7 +342,7 @@ describe("createStationInputRuntime", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     const { runtime, scripted, store, registry } = harness({ automations: [automation] });
@@ -362,12 +361,12 @@ describe("createStationInputRuntime", () => {
     );
     expect(selectActivePaneId(store.getState())).toBe("pane-split-0");
     // The command is held until the pane's PTY spawns on first layout/resize.
-    expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
+    expect(scripted.helpers.writes).not.toContain("echo automation\r");
 
     registry.resize("pane-split-0", { cols: 36, rows: 8 });
-    await waitFor(() => scripted.helpers.writes.includes("git diff | diffnav\r"));
+    await waitFor(() => scripted.helpers.writes.includes("echo automation\r"));
     // Executed with a trailing CR — Station's Enter byte, not a bare LF.
-    expect(scripted.helpers.writes).toContain("git diff | diffnav\r");
+    expect(scripted.helpers.writes).toContain("echo automation\r");
   });
 
   it("writes (without Enter) a step whose run mode is write, leaving it for the user to submit", async () => {
@@ -424,7 +423,7 @@ describe("createStationInputRuntime", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     const { runtime, scripted, registry } = harness({ automations: [automation] });
@@ -437,7 +436,7 @@ describe("createStationInputRuntime", () => {
     // entry gone, stops listening, and never writes the command into a dead pane.
     registry.dispose("pane-split-0");
 
-    expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
+    expect(scripted.helpers.writes).not.toContain("echo automation\r");
   });
 
   it("drops a queued automation command when its pane never lays out before the timeout", () => {
@@ -446,7 +445,7 @@ describe("createStationInputRuntime", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     // Fire the 10s send-timeout (the registry-subscription leak guard) deterministically
@@ -477,7 +476,7 @@ describe("createStationInputRuntime", () => {
 
       // A layout arriving after the timeout finds no subscriber: the command is dropped.
       registry.resize("pane-split-0", { cols: 36, rows: 8 });
-      expect(scripted.helpers.writes).not.toContain("git diff | diffnav\r");
+      expect(scripted.helpers.writes).not.toContain("echo automation\r");
     } finally {
       globalThis.setTimeout = realSetTimeout;
     }
@@ -495,7 +494,7 @@ describe("createStationInputRuntime", () => {
 
   it("ignores an overlay paste that sanitizes to nothing", () => {
     const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -503,9 +502,9 @@ describe("createStationInputRuntime", () => {
       onDismiss: async () => {},
       initialState: { terminalRows: 12 },
     });
-    const { runtime, store } = harness({ stationViewStore });
+    const { runtime, store } = harness({ dashboardRuntime });
     store.actions.openOverlay(STATION_OVERLAY_ID);
-    const before = stationViewStore.getState().screen;
+    const before = dashboardRuntime.state.getState().screen;
 
     let prevented = false;
     runtime.handlePaste({
@@ -518,7 +517,7 @@ describe("createStationInputRuntime", () => {
     // The overlay claims the paste (preventDefault) but a control-only chunk
     // sanitizes to empty, so nothing reaches the dashboard machine.
     expect(prevented).toBe(true);
-    expect(stationViewStore.getState().screen).toEqual(before);
+    expect(dashboardRuntime.state.getState().screen).toEqual(before);
   });
 
   it("highlights a context menu item on hover via mouse dispatch", () => {
@@ -673,7 +672,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
     storeOptions?: Parameters<typeof createStationStore>[0];
   }) {
     const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -707,7 +706,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
     const runtime = createStationInputRuntime({
       store,
       shutdown: () => {},
-      stationViewStore,
+      dashboardRuntime,
       registry,
       autoCloseOverlayOnPaneOpen: options?.autoCloseOverlayOnPaneOpen ?? false,
     });
@@ -853,7 +852,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
 
   it("passes STATION link clicks to the external URL opener", () => {
     const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -866,7 +865,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
     const runtime = createStationInputRuntime({
       store,
       shutdown: () => {},
-      stationViewStore,
+      dashboardRuntime,
       openExternalUrl: (url) => {
         opened.push(url);
       },
@@ -889,7 +888,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
   // captured cwd — closing the gap the plan flagged as manual-smoke-only.
   it("threads the worktree cwd to the spawned shell through the real reconciler", () => {
     const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -927,7 +926,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
     };
     store.subscribe(reconcile);
     reconcile();
-    const runtime = createStationInputRuntime({ store, shutdown: () => {}, stationViewStore, registry });
+    const runtime = createStationInputRuntime({ store, shutdown: () => {}, dashboardRuntime, registry });
     const expectedCwd = snapshot.rows.find((row) => row.id === WORKTREE_ID)?.path;
 
     store.actions.openOverlay(STATION_OVERLAY_ID);
@@ -946,7 +945,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
 
 describe("createStationInputRuntime STATION context-menu actions", () => {
   function contextMenuHarness(snapshot: StationSnapshot = manyProjectsSnapshot()) {
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -958,22 +957,22 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const runtime = createStationInputRuntime({
       store,
       shutdown: () => {},
-      stationViewStore,
+      dashboardRuntime,
     });
     store.actions.openOverlay(STATION_OVERLAY_ID);
     const rightClickRow = (rowId = "ses_wt_station_idle"): boolean =>
       runtime.dispatchMouse({ kind: "station", target: { kind: "row", rowId } }, RIGHT_DOWN);
-    return { runtime, store, stationViewStore, rightClickRow };
+    return { runtime, store, dashboardRuntime, rightClickRow };
   }
 
   it("opens the shared rename edit sheet from a row context menu", () => {
-    const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
+    const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     expect(rightClickRow()).toBe(true);
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().input.contextMenu).toBeNull();
-    expect(stationViewStore.getState().screen).toMatchObject({
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
       name: "renameSession",
       step: "editName",
       rowId: "ses_wt_station_idle",
@@ -983,7 +982,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
   });
 
   it("opens the fork details sheet from a row context menu", () => {
-    const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
+    const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
     // Menu order: Rename, Fork, Delete Session — one down reaches the fork.
@@ -991,7 +990,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().input.contextMenu).toBeNull();
-    expect(stationViewStore.getState().screen).toMatchObject({
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
       name: "fork",
       step: "details",
       sourceWorktreeId: "wt_station_idle",
@@ -1000,7 +999,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
   });
 
   it("opens the shared remove-session confirmation from a row context menu", () => {
-    const { runtime, store, stationViewStore, rightClickRow } = contextMenuHarness();
+    const { runtime, store, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
     // Menu order: Rename, Fork, Delete Session — two downs reach the delete.
@@ -1009,17 +1008,18 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().input.contextMenu).toBeNull();
-    expect(stationViewStore.getState().screen).toEqual({
+    expect(dashboardRuntime.state.getState().screen).toEqual({
       name: "removeWorktree",
       step: "confirm",
       rowId: "ses_wt_station_idle",
       forceRequired: true,
       label: "pty-buffer",
+      actionFocus: "keep",
     });
   });
 
   it("opens removal information for an external unstoppable agent", () => {
-    const { runtime, stationViewStore, rightClickRow } = contextMenuHarness(
+    const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness(
       externalAgentSnapshot(),
     );
 
@@ -1028,24 +1028,24 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
 
-    expect(stationViewStore.getState().screen).toEqual({
+    expect(dashboardRuntime.state.getState().screen).toEqual({
       name: "removeWorktree",
       step: "unavailable",
     });
-    stationViewStore.getState().handleKey({ input: "y" });
-    expect(stationViewStore.getState().localRows.pendingRemove).toEqual([]);
+    dashboardRuntime.actions.handleKey({ input: "y" });
+    expect(dashboardRuntime.state.getState().localRows.pendingRemove).toEqual([]);
   });
 
   it("confirms right-click remove through the optimistic remove-worktree path", () => {
-    const { runtime, stationViewStore, rightClickRow } = contextMenuHarness();
+    const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
-    stationViewStore.getState().handleKey({ input: "y" });
+    dashboardRuntime.actions.handleKey({ input: "y" });
 
-    expect(stationViewStore.getState().localRows.pendingRemove).toMatchObject([
+    expect(dashboardRuntime.state.getState().localRows.pendingRemove).toMatchObject([
       {
         localId: "remove:wt_station_idle",
         worktreeId: "wt_station_idle",
@@ -1055,30 +1055,33 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
   });
 
   it("cancels right-click remove back to dashboard rather than slot select", () => {
-    const { runtime, stationViewStore, rightClickRow } = contextMenuHarness();
+    const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
 
     rightClickRow();
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\x1b[B");
     runtime.handleSequence("\r");
-    stationViewStore.getState().handleKey({ input: "", escape: true });
+    dashboardRuntime.actions.handleKey({ input: "", escape: true });
 
-    expect(stationViewStore.getState().screen).toEqual({ name: "dashboard" });
+    expect(dashboardRuntime.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
-  it("does not clobber active STATION search flow from an inert row context menu", () => {
-    const { runtime, stationViewStore, rightClickRow } = contextMenuHarness();
-    stationViewStore.getState().handleKey({ input: "/" });
-    stationViewStore.getState().handleKey({ input: "pty" });
+  it("does not clobber active STATION filter flow from an inert row context menu", () => {
+    const { runtime, dashboardRuntime, rightClickRow } = contextMenuHarness();
+    dashboardRuntime.actions.handleKey({ input: "/" });
+    dashboardRuntime.actions.handleKey({ input: "pty" });
 
     rightClickRow();
     expect(runtime.handleSequence("\r")).toBe(true);
 
-    expect(stationViewStore.getState().screen).toEqual({ name: "search", value: "pty" });
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "pty", cursor: 3 },
+    });
   });
 
   it("opens the default-agent picker from a project-header context menu", () => {
-    const { runtime, store, stationViewStore } = contextMenuHarness();
+    const { runtime, store, dashboardRuntime } = contextMenuHarness();
 
     // Right-click a project header opens the project menu: [Set Default Agent, Project Settings…].
     runtime.dispatchMouse(
@@ -1088,14 +1091,14 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().input.contextMenu).toBeNull();
-    expect(stationViewStore.getState().screen).toMatchObject({
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
       name: "projectDefaultAgent",
       projectId: "station",
     });
   });
 
   it("opens project settings from a project-header context menu", () => {
-    const { runtime, store, stationViewStore } = contextMenuHarness();
+    const { runtime, store, dashboardRuntime } = contextMenuHarness();
 
     runtime.dispatchMouse(
       { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
@@ -1106,7 +1109,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     expect(runtime.handleSequence("\r")).toBe(true);
 
     expect(store.getState().input.contextMenu).toBeNull();
-    expect(stationViewStore.getState().screen).toMatchObject({
+    expect(dashboardRuntime.state.getState().screen).toMatchObject({
       name: "projectSettings",
       projectId: "station",
     });
@@ -1149,7 +1152,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   ) {
     const observerService = new FakeTuiObserverService(snapshot);
     observerService.nextPreparedLaunch = prepared;
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: observerService,
       initialSnapshot: snapshot,
@@ -1191,7 +1194,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     const runtime = createStationInputRuntime({
       store,
       shutdown: () => {},
-      stationViewStore,
+      dashboardRuntime,
       registry,
       observerService,
       ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),
@@ -1211,7 +1214,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       pressKey,
       settle,
       observerService,
-      stationViewStore,
+      dashboardRuntime,
     };
   }
 
@@ -1286,8 +1289,8 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
 
   // The slot key the dashboard assigns to ROW_ID — pressing it is the keyboard
   // "open" gesture, the twin of clicking the row.
-  function slotKeyFor(stationViewStore: ReturnType<typeof agentHarness>["stationViewStore"]): string {
-    const state = stationViewStore.getState();
+  function slotKeyFor(dashboardRuntime: ReturnType<typeof agentHarness>["dashboardRuntime"]): string {
+    const state = dashboardRuntime.state.getState();
     const snapshot = state.snapshot;
     if (snapshot === undefined) {
       throw new Error("fixture snapshot is missing");
@@ -1333,10 +1336,10 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     // the SAME observer prepare and the SAME ensure→createPane→setPrimaryAgent
     // ordering a click does — never the machine's start-or-focus against the
     // default terminal Station does not spawn into.
-    const { store, calls, pressKey, settle, observerService, stationViewStore } = agentHarness();
+    const { store, calls, pressKey, settle, observerService, dashboardRuntime } = agentHarness();
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    expect(pressKey(slotKeyFor(stationViewStore))).toBe(true);
+    expect(pressKey(slotKeyFor(dashboardRuntime))).toBe(true);
     await settle();
 
     expect(observerService.preparedLaunches).toEqual([
@@ -1413,7 +1416,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     // external terminal (the fixture rows are tmux) Station can't render. Focusing
     // it would have no visible effect — which reads as "clicking did nothing" — so
     // Station explains that instead of dispatching the focus.
-    const { store, calls, dispatch, settle, observerService, stationViewStore } = agentHarness({
+    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness({
       kind: "existing-session",
       sessionId: "ses_elsewhere",
       harnessProvider: "codex",
@@ -1427,7 +1430,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
     expect(observerService.dispatched).toEqual([]);
     expect(observerService.waitedForCommandIds).toEqual([]);
-    const notice = stationViewStore.getState().toasts.at(-1)?.toast;
+    const notice = dashboardRuntime.state.getState().toasts.at(-1)?.toast;
     expect(notice?.kind).toBe("info");
     expect(notice?.message).toContain("tmux");
     // The overlay STAYS open so the user actually reads the notice.
@@ -1441,7 +1444,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     } as const;
     const resolutions: unknown[] = [];
     const scripted = createScriptedTerminal();
-    const { store, pressKey, settle, observerService, stationViewStore } = agentHarness(
+    const { store, pressKey, settle, observerService, dashboardRuntime } = agentHarness(
       {
         kind: "existing-session",
         sessionId: "ses_wt_station_idle",
@@ -1458,7 +1461,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     );
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    expect(pressKey(slotKeyFor(stationViewStore))).toBe(true);
+    expect(pressKey(slotKeyFor(dashboardRuntime))).toBe(true);
     await settle();
 
     expect(resolutions).toEqual([attachment]);
@@ -1473,7 +1476,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   });
 
   it("toasts for an existing Station-hosted worktree with no attachable host PTY", async () => {
-    const { store, calls, dispatch, settle, observerService, stationViewStore } = agentHarness(
+    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
       { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
       stationHostedSnapshot({ focusable: false }),
     );
@@ -1485,7 +1488,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(calls).toEqual([]);
     expect(observerService.dispatched).toEqual([]);
     expect(observerService.waitedForCommandIds).toEqual([]);
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "info",
       message: "pty-buffer: Station has no attachable host PTY for this existing agent.",
     });
@@ -1511,7 +1514,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
           : session,
       ),
     };
-    const { store, calls, dispatch, settle, observerService, stationViewStore } = agentHarness(
+    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
       preparedPlan(),
       snapshot,
     );
@@ -1523,7 +1526,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     // No prepare, no spawn: Station does not try to launch or focus it.
     expect(observerService.preparedLaunches).toEqual([]);
     expect(calls).toEqual([]);
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "info",
       message: "pty-buffer: agent is detached under 'tmux'; Station can't focus it here.",
     });
@@ -1629,7 +1632,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     if (base.kind !== "prepared") {
       throw new Error("preparedPlan must be a prepared launch");
     }
-    const { store, calls, dispatch, settle, stationViewStore } = agentHarness(
+    const { store, calls, dispatch, settle, dashboardRuntime } = agentHarness(
       { ...base, attachment },
       manyProjectsSnapshot(),
       {
@@ -1650,7 +1653,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
 
     expect(calls).toEqual([]);
     expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "The managed terminal is no longer available.",
     });
@@ -1696,7 +1699,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   });
 
   it("toasts the observer's error when prepareExternalLaunch rejects", async () => {
-    const { store, calls, dispatch, settle, observerService, stationViewStore } = agentHarness();
+    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness();
     observerService.prepareExternalLaunch = async () => {
       throw {
         tag: "CommandValidationError",
@@ -1713,7 +1716,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(calls).toEqual([]);
     // Routed through safeErrorToNotice now, so message and hint stay distinct
     // fields rather than being concatenated into one string.
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "Claude hooks are not installed.",
       hint: "Run 'stn hooks install claude'.",
@@ -1752,7 +1755,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
 
   it("toasts when launched with no observer service (no spawn)", async () => {
     const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -1762,13 +1765,13 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     });
     const store = createStationStore();
     // No observerService threaded in → the launch can't prepare anything.
-    const runtime = createStationInputRuntime({ store, shutdown: () => {}, stationViewStore });
+    const runtime = createStationInputRuntime({ store, shutdown: () => {}, dashboardRuntime });
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
     runtime.dispatchMouse({ kind: "station", target: { kind: "row", rowId: ROW_ID } }, LEFT_DOWN);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const toast = stationViewStore.getState().toasts.at(-1)?.toast;
+    const toast = dashboardRuntime.state.getState().toasts.at(-1)?.toast;
     expect(toast?.kind).toBe("error");
     expect(toast?.message).toContain("No observer connection");
     expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
@@ -1791,7 +1794,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   });
 
   it("toasts and keeps the overlay open when focusing an existing session is rejected", async () => {
-    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
       { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
       liveAgentWithoutTerminalSnapshot(),
     );
@@ -1813,7 +1816,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     expect(observerService.dispatched).toEqual([
       { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
     ]);
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "Focus was rejected.",
     });
@@ -1821,7 +1824,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   });
 
   it("toasts and keeps the overlay open when the focus command completion fails", async () => {
-    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
       { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
       liveAgentWithoutTerminalSnapshot(),
     );
@@ -1840,7 +1843,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     await settle();
 
     expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1"]);
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "Focus never completed.",
     });
@@ -1848,7 +1851,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   });
 
   it("toasts and keeps the overlay open when the focus dispatch throws", async () => {
-    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
       { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
       liveAgentWithoutTerminalSnapshot(),
     );
@@ -1864,7 +1867,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     dispatch({ kind: "row", rowId: ROW_ID });
     await settle();
 
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "Observer is gone.",
     });
@@ -1872,7 +1875,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   });
 
   it("still opens the pane when acknowledging the ready turn fails", async () => {
-    const { store, dispatch, settle, observerService, stationViewStore } = agentHarness(
+    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
       preparedPlan(),
       withTurnReadiness(manyProjectsSnapshot()),
     );
@@ -1895,7 +1898,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       "primary-agent",
     );
     // ...and the swallowed ack error produced no error toast.
-    expect(stationViewStore.getState().toasts.some((entry) => entry.toast.kind === "error")).toBe(
+    expect(dashboardRuntime.state.getState().toasts.some((entry) => entry.toast.kind === "error")).toBe(
       false,
     );
   });
@@ -1927,7 +1930,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     const snapshot = manyProjectsSnapshot();
     const observerService = new FakeTuiObserverService(snapshot);
     const source = new FakeStationSource(snapshot);
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source,
       service: observerService,
       initialSnapshot: snapshot,
@@ -1937,20 +1940,20 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     });
     // Attach the source so source.setSnapshot later propagates to the store —
     // the seam waitForWorktreeByBranch subscribes against.
-    stationViewStore.getState().start();
+    dashboardRuntime.start();
     const scripted = createScriptedTerminal();
     const registry = createPtyRegistry({ createTerminal: () => scripted.terminal });
     const store = createStationStore();
     const runtime = createStationInputRuntime({
       store,
       shutdown: () => {},
-      stationViewStore,
+      dashboardRuntime,
       registry,
       observerService,
     });
     const pressKey = (sequence: string): boolean => runtime.handleSequence(sequence);
     const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-    return { store, runtime, observerService, source, stationViewStore, pressKey, settle, snapshot };
+    return { store, runtime, observerService, source, dashboardRuntime, pressKey, settle, snapshot };
   }
 
   // Open the wizard and read the submit the overlay drives on Enter. A custom
@@ -1966,7 +1969,10 @@ describe("createStationInputRuntime New Session hosted launch", () => {
       harness.pressKey(title);
       harness.pressKey("\r");
     }
-    const submit = resolveNewSessionSubmit(harness.stationViewStore);
+    const submit = resolveNewSessionSubmit(harness.dashboardRuntime, {
+      type: "newSession.activate",
+      actionId: "review.create",
+    });
     if (submit.kind !== "submit") {
       throw new Error("expected the New Session wizard to be on the review screen");
     }
@@ -2008,12 +2014,12 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     // Optimistic create row appears synchronously on submit, before the real
     // worktree reaches the snapshot (which would prune it).
     expect(
-      harness.stationViewStore
+      harness.dashboardRuntime.state
         .getState()
         .localRows.pendingCreate.map((row) => row.localId),
     ).toContain(localId);
     expect(
-      harness.stationViewStore.getState().localRows.pendingCreate.find(
+      harness.dashboardRuntime.state.getState().localRows.pendingCreate.find(
         (row) => row.localId === localId,
       ),
     ).toMatchObject({ title: "Hexagonal PT 12", branch });
@@ -2122,9 +2128,9 @@ describe("createStationInputRuntime New Session hosted launch", () => {
       globalThis.setTimeout = realSetTimeout;
     }
 
-    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
-    const failedRow = harness.stationViewStore.getState().localRows.failedCreate[0];
-    expect(harness.stationViewStore.getState().localRows.failedCreate).toHaveLength(1);
+    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
+    const failedRow = harness.dashboardRuntime.state.getState().localRows.failedCreate[0];
+    expect(harness.dashboardRuntime.state.getState().localRows.failedCreate).toHaveLength(1);
     expect(failedRow).toMatchObject({ localId, title: "Failed New Session", branch });
     expect(failedRow?.error).toMatchObject({
       code: "HARNESS_HOOKS_NOT_INSTALLED",
@@ -2135,7 +2141,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
         .getState()
         .workspace.panes.some((pane) => pane.id === agentWorktreePaneId(worktreeId)),
     ).toBe(false);
-    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "Claude hooks are not installed.",
       hint: "Run 'stn hooks install claude'.",
@@ -2143,7 +2149,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
 
     expect(expireFailedRow).toBeDefined();
     expireFailedRow?.();
-    expect(harness.stationViewStore.getState().localRows.failedCreate).toEqual([]);
+    expect(harness.dashboardRuntime.state.getState().localRows.failedCreate).toEqual([]);
   });
 
   it("removes the optimistic row and toasts when the worktree create is rejected", async () => {
@@ -2163,8 +2169,8 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     expect(harness.pressKey("\r")).toBe(true);
     await harness.settle();
 
-    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
-    const toast = harness.stationViewStore.getState().toasts.at(-1)?.toast;
+    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
+    const toast = harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast;
     expect(toast?.kind).toBe("error");
     expect(toast?.message).toContain("That branch already exists.");
     // No agent was launched: the create failed before any prepare.
@@ -2188,8 +2194,8 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     expect(harness.pressKey("\r")).toBe(true);
     await harness.settle();
 
-    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
-    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
+    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "Create failed mid-flight.",
     });
@@ -2200,7 +2206,7 @@ describe("createStationInputRuntime New Session hosted launch", () => {
 
   it("toasts and clears the optimistic row when there is no observer connection", async () => {
     const snapshot = manyProjectsSnapshot();
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -2210,14 +2216,14 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     });
     const store = createStationStore();
     // No observerService threaded in → the New Session create cannot dispatch.
-    const runtime = createStationInputRuntime({ store, shutdown: () => {}, stationViewStore });
+    const runtime = createStationInputRuntime({ store, shutdown: () => {}, dashboardRuntime });
     store.actions.openOverlay(STATION_OVERLAY_ID);
     runtime.handleSequence("N");
     expect(runtime.handleSequence("\r")).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(stationViewStore.getState().localRows.pendingCreate).toEqual([]);
-    expect(stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
+    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "No observer connection; cannot create the session.",
     });
@@ -2257,9 +2263,9 @@ describe("createStationInputRuntime New Session hosted launch", () => {
     }
 
     expect(
-      harness.stationViewStore.getState().localRows.pendingCreate.map((row) => row.localId),
+      harness.dashboardRuntime.state.getState().localRows.pendingCreate.map((row) => row.localId),
     ).not.toContain(localId);
-    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "info",
       message:
         "Created the worktree, but it didn't appear in time to launch the agent — open it from the dashboard.",
@@ -2270,9 +2276,8 @@ describe("createStationInputRuntime New Session hosted launch", () => {
 });
 
 describe("createStationInputRuntime Fork hosted launch", () => {
-  // Driven end to end through the public runtime: open the overlay, "F" + a slot
-  // open the fork details, Enter submits as a Station-hosted launch (worktree.fork
-  // + a background managed launch) instead of the machine's tmux session.fork.
+  // Driven end to end through the public runtime: Name/Submit Enter hosts the
+  // fork in Station, while Copy-focused Enter remains a shared toggle.
   function forkPlan(worktreeId: string): AgentPrepareExternalLaunchResult {
     return {
       kind: "prepared",
@@ -2293,7 +2298,7 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     const snapshot = manyProjectsSnapshot();
     const observerService = new FakeTuiObserverService(snapshot);
     const source = new FakeStationSource(snapshot);
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source,
       service: observerService,
       initialSnapshot: snapshot,
@@ -2301,20 +2306,20 @@ describe("createStationInputRuntime Fork hosted launch", () => {
       onDismiss: async () => {},
       initialState: { terminalRows: 12 },
     });
-    stationViewStore.getState().start();
+    dashboardRuntime.start();
     const scripted = createScriptedTerminal();
     const registry = createPtyRegistry({ createTerminal: () => scripted.terminal });
     const store = createStationStore();
     const runtime = createStationInputRuntime({
       store,
       shutdown: () => {},
-      stationViewStore,
+      dashboardRuntime,
       registry,
       observerService,
     });
     const pressKey = (sequence: string): boolean => runtime.handleSequence(sequence);
     const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-    return { store, runtime, observerService, source, stationViewStore, pressKey, settle, snapshot };
+    return { store, runtime, observerService, source, dashboardRuntime, pressKey, settle, snapshot };
   }
 
   // Open fork details for the first row and read the submit the overlay drives on
@@ -2330,7 +2335,7 @@ describe("createStationInputRuntime Fork hosted launch", () => {
       harness.pressKey("\u0015");
       harness.pressKey(title);
     }
-    const submit = resolveForkSessionSubmit(harness.stationViewStore);
+    const submit = resolveForkSessionSubmit(harness.dashboardRuntime);
     if (submit.kind !== "submit") {
       throw new Error("expected the fork flow to be on the details screen");
     }
@@ -2367,6 +2372,31 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     return { ...base, rows: [...base.rows, fresh] };
   }
 
+  it("toggles Copy-focused Enter without dispatching a fork", () => {
+    const harness = forkHarness();
+    harness.store.actions.openOverlay(STATION_OVERLAY_ID);
+    harness.pressKey("F");
+    harness.pressKey("1");
+    harness.pressKey("\u001b[B");
+
+    expect(harness.dashboardRuntime.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: true,
+    });
+    expect(harness.pressKey("\r")).toBe(true);
+    expect(harness.dashboardRuntime.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: false,
+    });
+    expect(
+      harness.observerService.dispatched.some((command) => command.type === "worktree.fork"),
+    ).toBe(false);
+  });
+
   it("forks the worktree, shows an optimistic row, and launches the inherited agent in the background", async () => {
     const harness = forkHarness();
     const worktreeId = "wt_forked";
@@ -2379,7 +2409,7 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     // Optimistic row appears synchronously on submit, carrying the inherited harness,
     // before the real worktree reaches the snapshot (which would prune it).
     expect(
-      harness.stationViewStore
+      harness.dashboardRuntime.state
         .getState()
         .localRows.pendingCreate.find((row) => row.localId === localId),
     ).toMatchObject({
@@ -2443,8 +2473,8 @@ describe("createStationInputRuntime Fork hosted launch", () => {
 
     expect(harness.observerService.dispatched).toEqual([]);
     expect(harness.observerService.preparedLaunches).toEqual([]);
-    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
-    expect(harness.stationViewStore.getState().toasts.at(-1)?.toast).toMatchObject({
+    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
+    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
       kind: "error",
       message: "Station could not resolve a harness for the fork.",
       hint: "Configure a project default harness and retry.",
@@ -2473,13 +2503,13 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     await harness.settle();
 
     expect(
-      harness.stationViewStore.getState().snapshot?.rows.some(
+      harness.dashboardRuntime.state.getState().snapshot?.rows.some(
         (row) => row.id === worktreeId && row.branch === submit.branch,
       ),
     ).toBe(true);
-    expect(harness.stationViewStore.getState().localRows.pendingCreate).toEqual([]);
-    const failedRow = harness.stationViewStore.getState().localRows.failedCreate[0];
-    expect(harness.stationViewStore.getState().localRows.failedCreate).toHaveLength(1);
+    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
+    const failedRow = harness.dashboardRuntime.state.getState().localRows.failedCreate[0];
+    expect(harness.dashboardRuntime.state.getState().localRows.failedCreate).toHaveLength(1);
     expect(failedRow).toMatchObject({ localId, title: "Failed Fork", branch: submit.branch });
     expect(failedRow?.error).toMatchObject({ code: "HARNESS_UNAVAILABLE" });
     expect(
@@ -2508,11 +2538,11 @@ describe("createStationInputRuntime Fork hosted launch", () => {
     await harness.settle();
 
     expect(
-      harness.stationViewStore
+      harness.dashboardRuntime.state
         .getState()
         .localRows.pendingCreate.some((row) => row.localId === localId),
     ).toBe(false);
-    const toast = harness.stationViewStore.getState().toasts.at(-1)?.toast;
+    const toast = harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast;
     expect(toast?.kind).toBe("error");
     expect(toast?.message).toContain("Could not seed the fork.");
     expect(harness.observerService.preparedLaunches).toEqual([]);
@@ -2521,7 +2551,7 @@ describe("createStationInputRuntime Fork hosted launch", () => {
 
 describe("createStationInputRuntime pane split/focus/close", () => {
   function harness(
-    options: { stationViewStore?: StoreApi<TuiStore>; automations?: readonly Automation[] } = {},
+    options: { dashboardRuntime?: DashboardRuntime; automations?: readonly Automation[] } = {},
   ) {
     const spawnOptions: StationTerminalSpawnOptions[] = [];
     const registry = createPtyRegistry({
@@ -2538,8 +2568,8 @@ describe("createStationInputRuntime pane split/focus/close", () => {
       shutdown: () => {},
       registry,
     };
-    if (options.stationViewStore !== undefined) {
-      runtimeOptions.stationViewStore = options.stationViewStore;
+    if (options.dashboardRuntime !== undefined) {
+      runtimeOptions.dashboardRuntime = options.dashboardRuntime;
     }
     if (options.automations !== undefined) {
       runtimeOptions.automations = options.automations;
@@ -2557,7 +2587,7 @@ describe("createStationInputRuntime pane split/focus/close", () => {
     if (row === undefined) {
       throw new Error(`fixture row ${worktreeId} is missing`);
     }
-    const stationViewStore = createTuiStore({
+    const dashboardRuntime = createDashboardRuntime({
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
@@ -2565,7 +2595,7 @@ describe("createStationInputRuntime pane split/focus/close", () => {
       onDismiss: async () => {},
     });
     const result = harness(
-      automations === undefined ? { stationViewStore } : { stationViewStore, automations },
+      automations === undefined ? { dashboardRuntime } : { dashboardRuntime, automations },
     );
     const agentPaneId = agentWorktreePaneId(row.id);
     result.store.actions.createPane(agentPaneId, { role: "primary-agent" });
@@ -2625,7 +2655,7 @@ describe("createStationInputRuntime pane split/focus/close", () => {
       label: "See diff (split right)",
       enabled: true,
       steps: [
-        { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+        { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
       ],
     };
     const { runtime, registry, spawnOptions, row, agentPaneId } = worktreeSplitHarness(

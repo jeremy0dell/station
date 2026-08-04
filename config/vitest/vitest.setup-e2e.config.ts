@@ -9,6 +9,8 @@ export default defineConfig({
       "tests/e2e/observer-sqlite-smoke.test.ts",
       "tests/e2e/setup-core-flow.test.ts",
       "tests/e2e/setup-guided-feedback.test.ts",
+      "tests/e2e/setup-guided-sandbox.test.ts",
+      "tests/e2e/setup-guided-tty.test.ts",
     ],
     fileParallelism: false,
     testTimeout: 60_000,

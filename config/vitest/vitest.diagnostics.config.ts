@@ -1,10 +1,10 @@
 import { defineConfig } from "vitest/config";
-import { commonResolveConfig, commonTestConfig } from "./vitest.config.shared";
+import { commonResolveConfig, machineIsolatedTestConfig } from "./vitest.config.shared";
 
 export default defineConfig({
   ...commonResolveConfig,
   test: {
-    ...commonTestConfig,
+    ...machineIsolatedTestConfig,
     include: ["tests/diagnostics/**/*.test.ts"],
   },
 });

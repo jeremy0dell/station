@@ -1,11 +1,14 @@
-import { type ObserverProcessEntry, parseObserverProcessList } from "@station/observer/internal";
+import {
+  type ObserverProcessEntry,
+  parseObserverProcessList,
+  selectObserverReapPlan,
+} from "@station/observer/internal";
 import { describe, expect, it } from "vitest";
 import { observerCommandSummary } from "../../src/commands/observer.js";
 import {
   createLocalObserverReap,
   type ObserverReapDeps,
-  runObserverReap as runObserverReapAdapter,
-  selectReapPlan,
+  runObserverReap,
 } from "../../src/observerReap.js";
 
 const SOCK = "/Users/u/.local/state/station/observer.sock";
@@ -14,12 +17,12 @@ const BUILD = `1.2.3+station.${"a".repeat(64)}`;
 const TOKEN = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
 const SOCKET_IDENTITY = { ino: 1n, birthtimeNs: 2n };
 
-function runObserverReap(
+function runTestObserverReap(
   socketPath: string,
   options: { force: boolean; graceMs?: number },
   deps: ObserverReapDeps,
 ) {
-  return runObserverReapAdapter(
+  return runObserverReap(
     socketPath,
     options,
     createLocalObserverReap({
@@ -99,9 +102,9 @@ describe("parseObserverProcessList", () => {
   });
 });
 
-describe("selectReapPlan", () => {
+describe("selectObserverReapPlan", () => {
   it("targets same-socket duplicates and never the keeper or other sockets", () => {
-    const plan = selectReapPlan({
+    const plan = selectObserverReapPlan({
       socketPath: SOCK,
       processes: [proc(100, SOCK), proc(200, SOCK), proc(300, OTHER), proc(400, undefined)],
       holders: [100],
@@ -112,13 +115,17 @@ describe("selectReapPlan", () => {
   });
 
   it("refuses the whole reap when no live owner holds the socket", () => {
-    const plan = selectReapPlan({ socketPath: SOCK, processes: [proc(200, SOCK)], holders: [] });
+    const plan = selectObserverReapPlan({
+      socketPath: SOCK,
+      processes: [proc(200, SOCK)],
+      holders: [],
+    });
     expect(plan.keeper).toBeUndefined();
     expect(plan.targets).toEqual([]);
   });
 
   it("disambiguates multiple holders via health pid and refuses the rest", () => {
-    const plan = selectReapPlan({
+    const plan = selectObserverReapPlan({
       socketPath: SOCK,
       processes: [proc(100, SOCK), proc(101, SOCK), proc(200, SOCK)],
       holders: [100, 101],
@@ -130,7 +137,7 @@ describe("selectReapPlan", () => {
   });
 
   it("refuses everything when >1 holder and health does not name one of them", () => {
-    const plan = selectReapPlan({
+    const plan = selectObserverReapPlan({
       socketPath: SOCK,
       processes: [proc(100, SOCK), proc(101, SOCK), proc(200, SOCK)],
       holders: [100, 101],
@@ -142,7 +149,7 @@ describe("selectReapPlan", () => {
   });
 
   it("refuses a candidate with no start-time token instead of killing blind", () => {
-    const plan = selectReapPlan({
+    const plan = selectObserverReapPlan({
       socketPath: SOCK,
       processes: [proc(100, SOCK), { ...proc(200, SOCK), startToken: "" }],
       holders: [100],
@@ -157,7 +164,7 @@ describe("runObserverReap", () => {
 
   it("dry-run lists without signaling", async () => {
     const signals: unknown[] = [];
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: false },
       {
@@ -190,7 +197,7 @@ describe("runObserverReap", () => {
   it("force terminates duplicates and never the keeper", async () => {
     const dead = new Set<number>();
     const sent: Array<[number, string | number]> = [];
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: true, graceMs: 0 },
       {
@@ -225,7 +232,7 @@ describe("runObserverReap", () => {
 
   it("does not signal a PID whose start token changed (PID reuse)", async () => {
     const sent: Array<[number, string | number]> = [];
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: true, graceMs: 0 },
       {
@@ -255,7 +262,7 @@ describe("runObserverReap", () => {
 
   it("aborts when the socket owner changes mid-reap", async () => {
     let calls = 0;
-    const out = await runObserverReap(
+    const out = await runTestObserverReap(
       SOCK,
       { force: true, graceMs: 0 },
       {

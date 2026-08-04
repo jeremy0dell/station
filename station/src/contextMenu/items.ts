@@ -4,7 +4,7 @@ import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../s
 import {
   selectDashboardViewport,
   isExternalAgentRemovalUnavailable,
-  type TuiState,
+  type DashboardStateView,
 } from "@station/dashboard-core";
 import type {
   ContextMenuItem,
@@ -15,7 +15,7 @@ import type {
 export function buildContextMenuItems(
   target: ContextMenuTarget,
   state: StationState,
-  stationState?: TuiState,
+  stationState?: DashboardStateView,
   automations: readonly Automation[] = [],
 ): readonly ContextMenuItem[] {
   switch (target.kind) {
@@ -94,7 +94,7 @@ function buildPaneItems(
 
 function buildStationItems(
   target: Extract<ContextMenuTarget, { kind: "station" }>["target"],
-  state: TuiState | undefined,
+  state: DashboardStateView | undefined,
 ): readonly ContextMenuItem[] {
   if (state?.screen.name !== "dashboard" || state.snapshot === undefined) {
     return [noActionsItem()];
@@ -159,7 +159,10 @@ function projectIdFromStationTarget(
   }
 }
 
-function buildProjectItems(projectId: string, state: TuiState): readonly ContextMenuItem[] {
+function buildProjectItems(
+  projectId: string,
+  state: DashboardStateView,
+): readonly ContextMenuItem[] {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === projectId);
   if (project === undefined) {
     return [noActionsItem()];

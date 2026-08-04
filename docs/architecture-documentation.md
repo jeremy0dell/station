@@ -246,6 +246,8 @@ Dependencies between controlled declarations follow this table:
 | `ADAPTER` | `ADAPTER`, `DRIVING PORT`, `DRIVEN PORT`, `POLICY` |
 | `COMPOSITION ROOT` | all six controlled roles |
 
+A use-case function declaration may name a same-module driving port as its return type when the function is the implementation offered through that port. This declared-return relationship documents conformance rather than an inward call from application behavior; parameters, local references, imports, and cross-module returns remain subject to the table.
+
 The table applies to every controlled production declaration that participates in
 an Observer seam, including declarations in CLI composition, contracts, protocol,
 and integrations; it is not limited to declarations under `apps/observer/src`.

@@ -1,5 +1,5 @@
 import type { IBufferCell } from "@xterm/headless";
-import { ControlByte } from "../terminal/protocol/controlBytes.js";
+import { setGraphicsRendition } from "../terminal/protocol/csi.js";
 
 type XtermStyleAttributes = Pick<
   IBufferCell,
@@ -83,15 +83,17 @@ export function xtermBackgroundSgr(attributes: IBufferCell): string {
     const red = (background >>> 16) & 0xff;
     const green = (background >>> 8) & 0xff;
     const blue = background & 0xff;
-    return `${ControlByte.Csi}48;2;${red};${green};${blue}m`;
+    return setGraphicsRendition([48, 2, red, green, blue]);
   }
   if (background >= 16) {
-    return `${ControlByte.Csi}48;5;${background}m`;
+    return setGraphicsRendition([48, 5, background]);
   }
   if (!attributes.isBgPalette()) {
-    return `${ControlByte.Csi}49m`;
+    return setGraphicsRendition([49]);
   }
-  return `${ControlByte.Csi}${background & 8 ? 100 + (background & 7) : 40 + (background & 7)}m`;
+  return setGraphicsRendition([
+    background & 8 ? 100 + (background & 7) : 40 + (background & 7),
+  ]);
 }
 
 /** Emits only the basic SGR subset accepted by the snapshot preflight above. */
@@ -126,5 +128,5 @@ export function xtermAttributeSgr(attributes: XtermStyleAttributes): string {
   if (attributes.isItalic()) params.push(3);
   if (attributes.isDim()) params.push(2);
   if (attributes.isStrikethrough()) params.push(9);
-  return params.length === 0 ? "" : `${ControlByte.Csi}${params.join(";")}m`;
+  return params.length === 0 ? "" : setGraphicsRendition(params);
 }

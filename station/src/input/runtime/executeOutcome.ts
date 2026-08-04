@@ -1,12 +1,5 @@
 import { buildContextMenuItems, resolveContextMenuAction } from "../../contextMenu/items.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";
-import {
-  openForkDetailsForRow,
-  openProjectDefaultAgentPicker,
-  openProjectSettings,
-  openRemoveWorktreeConfirmForRow,
-  openRenameEditForRow,
-} from "@station/dashboard-core";
 import type { RouteOutcome } from "../router.js";
 import type { OpenPaneSpawn, StationInputEffects } from "../stationInput.js";
 
@@ -124,7 +117,7 @@ function moveContextMenuSelection(delta: -1 | 1, effects: StationInputEffects): 
   const items = buildContextMenuItems(
     menu.target,
     state,
-    effects.stationViewStore?.getState(),
+    effects.dashboardRuntime?.state.getState(),
     effects.automations,
   );
   if (items.length === 0) {
@@ -141,11 +134,11 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
   if (menu === null) {
     return;
   }
-  const stationViewStore = effects.stationViewStore;
+  const dashboardRuntime = effects.dashboardRuntime;
   const items = buildContextMenuItems(
     menu.target,
     state,
-    stationViewStore?.getState(),
+    dashboardRuntime?.state.getState(),
     effects.automations,
   );
   const item = items[itemIndex ?? menu.activeIndex];
@@ -167,43 +160,37 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
       effects.closePane(action.paneId);
       return;
     case "renameSession":
-      if (stationViewStore !== undefined) {
-        stationViewStore.setState(
-          openRenameEditForRow(stationViewStore.getState(), action.rowId, {
-            returnTo: "dashboard",
-          }),
-        );
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({
+          type: "renameSession.openEdit",
+          rowId: action.rowId,
+          returnTo: "dashboard",
+        });
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
     case "removeWorktree":
-      if (stationViewStore !== undefined) {
-        stationViewStore.setState(
-          openRemoveWorktreeConfirmForRow(stationViewStore.getState(), action.rowId),
-        );
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({ type: "removeWorktree.openConfirm", rowId: action.rowId });
       }
       return;
     case "setProjectDefaultAgent":
-      if (stationViewStore !== undefined) {
-        stationViewStore.setState(
-          openProjectDefaultAgentPicker(stationViewStore.getState(), action.projectId),
-        );
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({ type: "projectDefaultAgent.open", projectId: action.projectId });
       }
       return;
     case "openProjectSettings":
-      if (stationViewStore !== undefined) {
-        stationViewStore.setState(
-          openProjectSettings(stationViewStore.getState(), action.projectId),
-        );
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({ type: "projectSettings.open", projectId: action.projectId });
       }
       return;
     case "forkSession":
-      if (stationViewStore !== undefined) {
-        stationViewStore.setState(
-          openForkDetailsForRow(stationViewStore.getState(), action.rowId, {
-            returnTo: "dashboard",
-          }),
-        );
+      if (dashboardRuntime !== undefined) {
+        dashboardRuntime.actions.dispatch({
+          type: "forkSession.openDetails",
+          rowId: action.rowId,
+          returnTo: "dashboard",
+        });
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;

@@ -1,5 +1,6 @@
 import {
   type HarnessProviderError,
+  type HarnessProviderErrorClass,
   harnessProviderErrorClass,
   harnessProviderErrorFromUnknown,
 } from "@station/harness-shared";
@@ -12,10 +13,11 @@ export type PiHarnessErrorCode =
   | "HARNESS_PI_EVENT_INVALID"
   | "HARNESS_PI_EVENT_INGEST_FAILED";
 
-export const PiHarnessProviderError = harnessProviderErrorClass<PiHarnessErrorCode>({
-  name: "PiHarnessProviderError",
-  provider: "pi",
-});
+export const PiHarnessProviderError: HarnessProviderErrorClass<PiHarnessErrorCode> =
+  harnessProviderErrorClass<PiHarnessErrorCode>({
+    name: "PiHarnessProviderError",
+    provider: "pi",
+  });
 
 export function piHarnessError(code: PiHarnessErrorCode, message: string, cause?: unknown) {
   return new PiHarnessProviderError(code, message, { cause });

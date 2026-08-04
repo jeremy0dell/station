@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../../packages/config/src/index.js";
+import { CliSetupPlanSchema } from "../../packages/contracts/src/index.js";
 import { createObserverClient } from "../../packages/protocol/src/index.js";
 import { environmentWithoutGitLocals } from "../../packages/runtime/src/index.js";
 import { waitForSocketClosed } from "../support/sockets";
@@ -95,8 +96,7 @@ describe("setup core flow e2e", () => {
         "codex",
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
       );
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      await writeShim(bin, "hunk", "exit 0\n");
       const env = {
         ...process.env,
         ...codexOnlyHarnessEnv(bin, home),
@@ -215,9 +215,8 @@ describe("setup core flow e2e", () => {
         'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 0\n',
       );
       await writeShim(bin, "npm", "echo 0.1.0\n");
-      // diffnav + delta are required; the checks only need the binaries on PATH.
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      // Hunk is required; the check only needs its binary on PATH.
+      await writeShim(bin, "hunk", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
       const env: NodeJS.ProcessEnv = {
         ...process.env,
@@ -245,7 +244,7 @@ describe("setup core flow e2e", () => {
         allowFailure: true,
       });
       expect(firstCheck.status).toBe(1);
-      const firstPlan = JSON.parse(firstCheck.stdout);
+      const firstPlan = CliSetupPlanSchema.parse(JSON.parse(firstCheck.stdout));
       expect(firstPlan.checks).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: "worktrunk", status: "ok" }),
@@ -259,7 +258,7 @@ describe("setup core flow e2e", () => {
         cwd: setupCwd,
         env,
       });
-      const parsedPlan = JSON.parse(plan.stdout);
+      const parsedPlan = CliSetupPlanSchema.parse(JSON.parse(plan.stdout));
       expect(parsedPlan.actions).toEqual(
         expect.arrayContaining([expect.objectContaining({ id: "write-config" })]),
       );
@@ -304,7 +303,7 @@ describe("setup core flow e2e", () => {
         ["--config", configPath, "setup", "apply", "--yes", "--no-brew"],
         { cwd: setupCwd, env },
       );
-      expect(finishSetup.stdout).toContain("Station tracking artifacts are prepared for Codex.");
+      expect(finishSetup.stdout).toContain("Core setup complete. Tracking is prepared for Codex.");
       const afterHealth = await observer.health();
       const afterSnapshot = await observer.getSnapshot();
       expect(afterHealth.pid).toBeTypeOf("number");
@@ -316,7 +315,7 @@ describe("setup core flow e2e", () => {
         cwd: setupCwd,
         env,
       });
-      const finalPlan = JSON.parse(finalCheck.stdout);
+      const finalPlan = CliSetupPlanSchema.parse(JSON.parse(finalCheck.stdout));
       expect(finalPlan.summary.requiredOk).toBe(true);
       await expect(loadConfig({ configPath, homeDir: home })).resolves.toMatchObject({
         config: {
@@ -373,9 +372,8 @@ describe("setup core flow e2e", () => {
         'if [ "$1" = "--version" ]; then echo "codex 0.1.0"; exit 0; fi\nexit 0\n',
       );
       await writeShim(bin, "npm", "echo 0.1.0\n");
-      // diffnav + delta are required; without them config write is blocked.
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      // Hunk is required; without it config write is blocked.
+      await writeShim(bin, "hunk", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
       run("git", ["init", "-b", "main"], {
         cwd: repo,
@@ -456,7 +454,7 @@ describe("setup core flow e2e", () => {
         },
         allowFailure: true,
       });
-      const output = JSON.parse(result.stdout);
+      const output = CliSetupPlanSchema.parse(JSON.parse(result.stdout));
 
       expect(result.status).toBe(1);
       expect(output.summary.requiredOk).toBe(false);
@@ -515,9 +513,8 @@ describe("setup core flow e2e", () => {
         "pnpm",
         'if [ "$1" = "--version" ]; then echo "11.0.0"; exit 0; fi\nexit 2\n',
       );
-      // diffnav + delta are required for `setup system` readiness.
-      await writeShim(bin, "diffnav", "exit 0\n");
-      await writeShim(bin, "delta", "exit 0\n");
+      // Hunk is required for `setup system` readiness.
+      await writeShim(bin, "hunk", "exit 0\n");
       await writeShim(bin, "bun", "exit 0\n");
 
       const result = run("scripts/setup/setup-system-dependencies.sh", [], {

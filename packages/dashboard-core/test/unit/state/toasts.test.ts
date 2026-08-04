@@ -1,4 +1,4 @@
-import type { TuiToast } from "@station/dashboard-core";
+import type { ClientNotice } from "@station/dashboard-core";
 import {
   activeTuiToast,
   addTuiToast,
@@ -38,7 +38,7 @@ describe("TUI toast lifecycle state", () => {
   });
 
   it("refreshes exact active duplicates instead of appending", () => {
-    const toast: TuiToast = {
+    const toast: ClientNotice = {
       kind: "error",
       message: "Worktree remove failed.",
       diagnosticId: "diag_1",

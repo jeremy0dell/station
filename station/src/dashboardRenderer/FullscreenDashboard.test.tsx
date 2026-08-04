@@ -4,18 +4,68 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
 import { act } from "react";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
-import { STATION_COLORS } from "../station/view/theme.js";
-import { spanAtFrameCell } from "../terminal/testing/frameProbe.js";
-import type { DashboardMouseEffects } from "./dashboardMouse.js";
-import { FullscreenDashboard } from "./FullscreenDashboard.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
+import {
+  stationColorSnapshotValue,
+  type StationColor,
+  type StationTheme,
+  type StationThemeSource,
+} from "../theme/index.js";
+import { STATION_TEXT_CONTRAST_RATIO } from "../theme/terminalPalette/contrast.js";
+import { parseStationTerminalPaletteObservation } from "../theme/terminalPalette/observation.js";
+import { createTerminalPaletteTheme } from "../theme/terminalPalette/theme.js";
+import {
+  darkTerminalColors,
+  lightTerminalColors,
+} from "../theme/terminalPalette/test/fixtures.js";
+import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
+import type { DashboardRendererEffects } from "./dashboardEffects.js";
+import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 
 const SURFACE = { width: 80, height: 24 };
 const WIDGET_SURFACE = { width: 99, height: 25 };
-const TEST_EFFECTS: DashboardMouseEffects = {
+const TEST_EFFECTS: DashboardRendererEffects = {
   openShell: () => {},
   openUrl: () => {},
 };
+
+function fixtureTheme(value: unknown): StationTheme {
+  const observation = parseStationTerminalPaletteObservation(value);
+  if (observation === null) {
+    throw new Error("Expected complete terminal palette fixture.");
+  }
+  return createTerminalPaletteTheme(observation);
+}
+
+const DARK_THEME = fixtureTheme(darkTerminalColors);
+const LIGHT_THEME = fixtureTheme(lightTerminalColors);
+const DARK_THEME_SOURCE: StationThemeSource = {
+  getSnapshot: () => DARK_THEME,
+  subscribe: () => () => {},
+};
+
+class MutableThemeSource implements StationThemeSource {
+  private snapshot: StationTheme;
+  private readonly listeners = new Set<() => void>();
+
+  constructor(snapshot: StationTheme) {
+    this.snapshot = snapshot;
+  }
+
+  readonly getSnapshot = (): StationTheme => this.snapshot;
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  setSnapshot(snapshot: StationTheme): void {
+    this.snapshot = snapshot;
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+}
+
 const teardowns: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
@@ -24,10 +74,233 @@ afterEach(async () => {
   }
 });
 
+describe("FullscreenDashboard surface ownership", () => {
+  it("uses terminal-default background intent for its canvas and title chrome", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
+
+    expectTerminalDefaultBackground(setup, "station · overview");
+    const bottomRight = spanAtFrameCell(
+      setup.captureSpans(),
+      SURFACE.height - 1,
+      SURFACE.width - 1,
+    );
+    expect(bottomRight?.bg.intent).toBe("default");
+  });
+
+  it("renders a coherent light terminal canvas", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, lightSource);
+
+    expectTerminalDefaultBackground(setup, "station · overview", LIGHT_THEME);
+    expect(
+      themeContrast(LIGHT_THEME.text.primary, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+    expect(
+      themeContrast(LIGHT_THEME.text.muted, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+    expect(
+      themeContrast(LIGHT_THEME.status.danger, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+
+    await actOn(async () => {
+      fixture.runtime.actions.handleKey({ input: "H" });
+      await setup.flush();
+    });
+    const help = cellFor(setup.captureCharFrame(), "station help");
+    const helpSpan = spanAtFrameCell(setup.captureSpans(), help.row, help.col);
+    expect(helpSpan?.bg.intent).toBe("default");
+    expect(helpSpan?.bg.toInts()[3]).toBe(255);
+  });
+
+  it("keeps the focused light Add Session control readable", async () => {
+    const size = { width: 120, height: 40 };
+    const fixture = makeStationTestRuntime({
+      terminalRows: size.height,
+      initialState: {
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+      },
+    });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.runtime, size, TEST_EFFECTS, lightSource);
+    const addSession = cellFor(setup.captureCharFrame(), "[ + add session ]");
+    const span = spanAtFrameCell(setup.captureSpans(), addSession.row, addSession.col);
+
+    expect(spanHex(span)).toBe(stationColorSnapshotValue(LIGHT_THEME.action.primary));
+    expect(spanBgHex(span)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.interaction.compactFocus),
+    );
+    expect(
+      themeContrast(LIGHT_THEME.action.primary, LIGHT_THEME.interaction.compactFocus),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+  });
+
+  it("keeps focused light controls visually distinct from the canvas", async () => {
+    const size = { width: 120, height: 40 };
+    const fixture = makeStationTestRuntime({
+      terminalRows: size.height,
+      initialState: {
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+      },
+    });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.runtime, size, TEST_EFFECTS, lightSource);
+    const frame = setup.captureCharFrame();
+    const addSession = cellFor(frame, "[ + add session ]");
+    const title = cellFor(frame, "station · overview");
+    const controlSpan = spanAtFrameCell(setup.captureSpans(), addSession.row, addSession.col);
+    const canvasSpan = spanAtFrameCell(setup.captureSpans(), title.row, title.col);
+
+    expect(spanBgHex(controlSpan)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.interaction.compactFocus),
+    );
+    expect(spanBgHex(canvasSpan)).toBe(stationColorSnapshotValue(LIGHT_THEME.surfaces.canvas));
+    expect(
+      themeContrast(LIGHT_THEME.interaction.compactFocus, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThan(1.1);
+  });
+
+  it("keeps focused light sheet-button roles readable", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, lightSource);
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+
+    await actOn(async () => {
+      fixture.runtime.actions.handleKey({ input: "X" });
+      await setup.flush();
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      fixture.runtime.actions.handleKey({ input: "", leftArrow: true });
+      await setup.flush();
+    });
+
+    const frame = setup.captureCharFrame();
+    const deleteButton = cellFor(frame, "Delete (Y)");
+    const shortcut = cellFor(frame, "(Y)");
+    const deleteSpan = spanAtFrameCell(
+      setup.captureSpans(),
+      deleteButton.row,
+      deleteButton.col,
+    );
+    const shortcutSpan = spanAtFrameCell(setup.captureSpans(), shortcut.row, shortcut.col);
+
+    expect(spanHex(deleteSpan)).toBe(stationColorSnapshotValue(LIGHT_THEME.action.danger));
+    expect(spanHex(shortcutSpan)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.action.warning),
+    );
+    expect(spanBgHex(deleteSpan)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.interaction.keyboardFocus),
+    );
+    expect(
+      themeContrast(LIGHT_THEME.action.danger, LIGHT_THEME.interaction.keyboardFocus),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+    expect(
+      themeContrast(LIGHT_THEME.action.warning, LIGHT_THEME.interaction.keyboardFocus),
+    ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
+  });
+
+  it("repaints in place when the external theme source changes", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const source = new MutableThemeSource(DARK_THEME);
+    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, source);
+    const title = cellFor(setup.captureCharFrame(), "station · overview");
+    const darkBackground = spanBgHex(
+      spanAtFrameCell(setup.captureSpans(), title.row, title.col),
+    );
+
+    await actOn(async () => {
+      source.setSnapshot(LIGHT_THEME);
+      await Promise.resolve();
+    });
+    await setup.flush();
+
+    const lightBackground = spanBgHex(
+      spanAtFrameCell(setup.captureSpans(), title.row, title.col),
+    );
+    expect(darkBackground).toBe(darkTerminalColors.defaultBackground);
+    expect(lightBackground).toBe(lightTerminalColors.defaultBackground);
+    expect(setup.captureCharFrame()).toContain("station · overview");
+  });
+
+  for (const testCase of [
+    { name: "prompt", keys: ["R"], needle: "Rename:" },
+    { name: "bottom sheet", keys: ["C"], needle: "Collapse Project" },
+    { name: "Help overlay", keys: ["H"], needle: "station help" },
+    { name: "widget settings", keys: ["W"], needle: "saved to config.toml" },
+    { name: "project settings", keys: ["P", "1"], needle: "Project settings" },
+  ] as const) {
+    it(`uses terminal-default background intent for the ${testCase.name}`, async () => {
+      const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+      const setup = await render(fixture.runtime);
+
+      await actOn(async () => {
+        for (const input of testCase.keys) {
+          fixture.runtime.actions.handleKey({ input });
+        }
+        await setup.flush();
+      });
+
+      expectTerminalDefaultBackground(setup, testCase.needle);
+    });
+  }
+
+  it("uses terminal-default background intent for dashboard toasts", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
+
+    await actOn(async () => {
+      fixture.runtime.actions.pushToast({
+        kind: "error",
+        message: "Surface ownership notice",
+      });
+      await setup.flush();
+    });
+
+    expectTerminalDefaultBackground(setup, "Surface ownership notice");
+  });
+
+  it("obscures dashboard cells with an opaque default background and restores them", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
+    const before = setup.captureCharFrame();
+
+    await actOn(async () => {
+      fixture.runtime.actions.handleKey({ input: "H" });
+      await setup.flush();
+    });
+
+    const after = setup.captureCharFrame();
+    const obscured = findObscuredHelpCell(before, after);
+    const span = spanAtFrameCell(setup.captureSpans(), obscured.row, obscured.col);
+    expect(frameChar(after, obscured.row, obscured.col)).toBe(" ");
+    expect(span?.bg.intent).toBe("default");
+
+    await actOn(async () => {
+      fixture.runtime.actions.handleKey({ input: "Q" });
+      await setup.flush();
+    });
+
+    expect(frameChar(setup.captureCharFrame(), obscured.row, obscured.col)).toBe(obscured.original);
+  });
+});
+
 describe("FullscreenDashboard mouse composition", () => {
   it("routes a row click into the observer-backed dashboard command flow", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(async () => {
@@ -45,23 +318,23 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("collapses a project once for a complete primary down/up click", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const header = cellFor(setup.captureCharFrame(), "▼ station");
 
     await actOn(() => setup.mockMouse.click(header.col, header.row, MouseButtons.LEFT));
 
-    expect([...fixture.store.getState().collapsedProjectIds]).toEqual(["station"]);
+    expect([...fixture.runtime.state.getState().collapsedProjectIds]).toEqual(["station"]);
   });
 
   it("does not activate a dashboard row when the same click dismisses a bounded screen", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const frame = setup.captureCharFrame();
     const row = cellFor(frame, "docs-cleanup");
     const titleAction = cellFor(frame, "[+]");
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
     await actOn(async () => {
@@ -71,7 +344,7 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).not.toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(DARK_THEME.interaction.hover),
     );
 
     await actOn(async () => {
@@ -81,55 +354,53 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanHex(spanAtFrameCell(setup.captureSpans(), titleAction.row, titleAction.col))).toBe(
-      STATION_COLORS.gray,
+      stationColorSnapshotValue(DARK_THEME.text.muted),
     );
 
     await actOn(async () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
     });
 
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
-    expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().localRows.pendingStart).toEqual([]);
   });
 
   it("dismisses a bounded screen from the obscured title row", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     const titleAction = cellFor(setup.captureCharFrame(), "[+]");
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
 
-    await actOn(() =>
-      setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT),
-    );
+    await actOn(() => setup.mockMouse.click(titleAction.col, titleAction.row, MouseButtons.LEFT));
 
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
-    expect(fixture.store.getState().localRows.pendingStart).toEqual([]);
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().localRows.pendingStart).toEqual([]);
   });
 
   it("dismisses outside a bounded screen while its inner surface still consumes clicks", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "H" });
+      fixture.runtime.actions.handleKey({ input: "H" });
       await setup.flush();
     });
     const help = cellFor(setup.captureCharFrame(), "station help");
 
     await actOn(() => setup.mockMouse.click(help.col, help.row, MouseButtons.LEFT));
-    expect(fixture.store.getState().screen).toEqual({ name: "help" });
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "help" });
 
     await actOn(() => setup.mockMouse.click(0, 0, MouseButtons.LEFT));
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("keeps controls inside a bounded screen interactive", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "W" });
+      fixture.runtime.actions.handleKey({ input: "W" });
       await setup.flush();
     });
     const addWidget = cellFor(setup.captureCharFrame(), "[ + add widget ]");
@@ -141,22 +412,22 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), addWidget.row, addWidget.col))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(DARK_THEME.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(addWidget.col, addWidget.row, MouseButtons.LEFT));
 
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "widgetSettings",
       focus: "picker",
     });
   });
 
   it("omits click-away interception while choose-row screens select dashboard rows", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
-    const setup = await render(fixture.store);
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
     await actOn(async () => {
-      fixture.store.getState().handleKey({ input: "X" });
+      fixture.runtime.actions.handleKey({ input: "X" });
       await setup.flush();
     });
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
@@ -168,33 +439,81 @@ describe("FullscreenDashboard mouse composition", () => {
     await setup.flush();
 
     expect(spanBgHex(spanAtFrameCell(setup.captureSpans(), row.row, SURFACE.width - 2))).toBe(
-      STATION_COLORS.hoverBackground,
+      stationColorSnapshotValue(DARK_THEME.interaction.hover),
     );
 
     await actOn(() => setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT));
 
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "removeWorktree",
       step: "confirm",
       rowId: "ses_wt_station_none",
     });
   });
 
+  it("routes rendered Remove actions without leaking to the dashboard", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+    await actOn(async () => {
+      fixture.runtime.actions.handleKey({ input: "X" });
+      await setup.flush();
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+    const keep = cellFor(setup.captureCharFrame(), "Keep session");
+
+    await actOn(() => setup.mockMouse.click(keep.col, keep.row, MouseButtons.LEFT));
+
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().localRows.pendingRemove).toEqual([]);
+  });
+
+  it("routes rendered Fork field clicks without submitting", async () => {
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
+    const setup = await render(fixture.runtime);
+    const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
+    await actOn(async () => {
+      fixture.runtime.actions.handleKey({ input: "F" });
+      await setup.flush();
+      await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
+      await setup.flush();
+    });
+    const copy = cellFor(setup.captureCharFrame(), "Copy");
+
+    await actOn(() => setup.mockMouse.click(copy.col, copy.row, MouseButtons.LEFT));
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "copyDirty",
+      copyDirty: false,
+    });
+    const name = cellFor(setup.captureCharFrame(), "Name");
+
+    await actOn(() => setup.mockMouse.click(name.col, name.row, MouseButtons.LEFT));
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
+      name: "fork",
+      step: "details",
+      focus: "name",
+      copyDirty: false,
+    });
+  });
+
   it("scrolls when the wheel is used over a child row", async () => {
-    const fixture = makeStationTestStore({ terminalRows: 12 });
-    const setup = await render(fixture.store, { width: 80, height: 12 });
+    const fixture = makeStationTestRuntime({ terminalRows: 12 });
+    const setup = await render(fixture.runtime, { width: 80, height: 12 });
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(() => setup.mockMouse.scroll(row.col, row.row, "down"));
 
-    expect(fixture.store.getState().scrollOffset).toBe(1);
+    expect(fixture.runtime.state.getState().scrollOffset).toBe(1);
   });
 
   it("renders and routes the same project actions as native Station", async () => {
     const size = { width: 120, height: 40 };
-    const fixture = makeStationTestStore({ terminalRows: size.height });
+    const fixture = makeStationTestRuntime({ terminalRows: size.height });
     const openedShells: string[] = [];
-    const setup = await render(fixture.store, size, {
+    const setup = await render(fixture.runtime, size, {
       openShell: ({ cwd }) => openedShells.push(cwd),
       openUrl: () => {},
     });
@@ -220,7 +539,7 @@ describe("FullscreenDashboard mouse composition", () => {
     });
 
     expect(openedShells).toEqual(["/Users/example/Developer/station"]);
-    expect(fixture.store.getState().screen).toMatchObject({
+    expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "projectDefaultAgent",
       projectId: "station",
     });
@@ -228,9 +547,9 @@ describe("FullscreenDashboard mouse composition", () => {
 
   it("routes the empty-project add-session button and pull-request links", async () => {
     const size = { width: 120, height: 40 };
-    const fixture = makeStationTestStore({ terminalRows: size.height });
+    const fixture = makeStationTestRuntime({ terminalRows: size.height });
     const openedUrls: string[] = [];
-    const setup = await render(fixture.store, size, {
+    const setup = await render(fixture.runtime, size, {
       openShell: () => {},
       openUrl: (url) => openedUrls.push(url),
     });
@@ -250,7 +569,7 @@ describe("FullscreenDashboard mouse composition", () => {
   });
 
   it("keeps the dashboard open with its existing toast when a clicked command is rejected", async () => {
-    const fixture = makeStationTestStore({ terminalRows: SURFACE.height });
+    const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     fixture.service.nextReceipt = {
       commandId: "cmd_tui_rejected",
       accepted: false,
@@ -261,13 +580,13 @@ describe("FullscreenDashboard mouse composition", () => {
         message: "The test observer rejected this command.",
       },
     };
-    const setup = await render(fixture.store);
+    const setup = await render(fixture.runtime);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(async () => {
       await setup.mockMouse.click(row.col, row.row, MouseButtons.LEFT);
       await waitFor(() =>
-        fixture.store
+        fixture.runtime.state
           .getState()
           .toasts.some(
             (entry) => entry.toast.message === "The test observer rejected this command.",
@@ -276,17 +595,19 @@ describe("FullscreenDashboard mouse composition", () => {
     });
     await setup.flush();
 
-    expect(fixture.store.getState().screen).toEqual({ name: "dashboard" });
+    expect(fixture.runtime.state.getState().screen).toEqual({ name: "dashboard" });
     expect(setup.captureCharFrame()).toContain("The test observer rejected this command.");
   });
 });
 
 describe("FullscreenDashboard configured widgets", () => {
   async function renderWidgets(widgets: readonly TuiWidgetConfig[]) {
-    const fixture = makeStationTestStore({ terminalRows: WIDGET_SURFACE.height });
-    fixture.store.setState({ widgets });
-    const setup = await render(fixture.store, WIDGET_SURFACE);
-    return { setup, store: fixture.store };
+    const fixture = makeStationTestRuntime({
+      terminalRows: WIDGET_SURFACE.height,
+      initialState: { widgets },
+    });
+    const setup = await render(fixture.runtime, WIDGET_SURFACE);
+    return { setup, store: fixture.runtime };
   }
 
   it("renders resolved configured widgets in the standalone title row at 99x25", async () => {
@@ -302,7 +623,7 @@ describe("FullscreenDashboard configured widgets", () => {
     const { setup, store } = await renderWidgets([{ type: "fleet" }, { type: "prs" }]);
 
     await actOn(async () => {
-      store.getState().handleKey({ input: "W" });
+      store.actions.handleKey({ input: "W" });
       await setup.flush();
     });
 
@@ -322,7 +643,7 @@ describe("FullscreenDashboard configured widgets", () => {
     expect(titleRow).not.toContain("open PR");
 
     await actOn(async () => {
-      store.getState().handleKey({ input: "W" });
+      store.actions.handleKey({ input: "W" });
       await setup.flush();
     });
     expect(setup.captureCharFrame()).toContain("no widgets yet");
@@ -330,12 +651,18 @@ describe("FullscreenDashboard configured widgets", () => {
 });
 
 async function render(
-  store: ReturnType<typeof makeStationTestStore>["store"],
+  store: ReturnType<typeof makeStationTestRuntime>["runtime"],
   size: { width: number; height: number } = SURFACE,
-  effects: DashboardMouseEffects = TEST_EFFECTS,
+  effects: DashboardRendererEffects = TEST_EFFECTS,
+  themeSource: StationThemeSource = DARK_THEME_SOURCE,
 ) {
   const setup = await testRender(
-    <FullscreenDashboard store={store} effects={effects} onCopyNotice={() => {}} />,
+    <StandaloneDashboardApp
+      runtime={store}
+      effects={effects}
+      onCopyNotice={() => {}}
+      themeSource={themeSource}
+    />,
     size,
   );
   await setup.flush();
@@ -364,12 +691,65 @@ function cellFor(frame: string, needle: string): { col: number; row: number } {
   return { col, row };
 }
 
+function findObscuredHelpCell(
+  before: string,
+  after: string,
+): { row: number; col: number; original: string } {
+  const lines = after.split("\n");
+  const top = lines.findIndex((line) => line.includes("╭") && line.includes("╮"));
+  const topCells = [...(lines[top] ?? "")];
+  const left = topCells.indexOf("╭");
+  const right = topCells.lastIndexOf("╮");
+  const bottom = lines.findIndex((line, row) => row > top && frameChar(line, 0, left) === "╰");
+  if (top < 0 || left < 0 || right <= left || bottom <= top) {
+    throw new Error(`Could not locate Help bounds in frame:\n${after}`);
+  }
+
+  for (let row = top + 1; row < bottom; row += 1) {
+    for (let col = left + 1; col < right; col += 1) {
+      const original = frameChar(before, row, col);
+      if (/^[A-Za-z0-9]$/u.test(original) && frameChar(after, row, col) === " ") {
+        return { row, col, original };
+      }
+    }
+  }
+  throw new Error(`Help did not obscure a stable dashboard character:\n${after}`);
+}
+
 function spanHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.fg === undefined ? undefined : rgbToHex(span.fg);
 }
 
+function themeContrast(first: StationColor, second: StationColor): number {
+  const luminance = (color: StationColor): number => {
+    const value = stationColorSnapshotValue(color);
+    const channels = [value.slice(1, 3), value.slice(3, 5), value.slice(5, 7)].map((part) => {
+      const channel = Number.parseInt(part, 16) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * (channels[0] ?? 0) + 0.7152 * (channels[1] ?? 0) + 0.0722 * (channels[2] ?? 0);
+  };
+  const firstLuminance = luminance(first);
+  const secondLuminance = luminance(second);
+  return (
+    (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05)
+  );
+}
+
 function spanBgHex(span: ReturnType<typeof spanAtFrameCell>): string | undefined {
   return span?.bg === undefined ? undefined : rgbToHex(span.bg);
+}
+
+function expectTerminalDefaultBackground(
+  setup: Awaited<ReturnType<typeof testRender>>,
+  needle: string,
+  theme: StationTheme = DARK_THEME,
+): void {
+  const cell = cellFor(setup.captureCharFrame(), needle);
+  const span = spanAtFrameCell(setup.captureSpans(), cell.row, cell.col);
+  expect(span?.bg.intent).toBe("default");
+  expect(spanBgHex(span)).toBe(stationColorSnapshotValue(theme.text.inverse));
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

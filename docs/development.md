@@ -9,6 +9,29 @@ Status: current living doc for development, test, and documentation workflow.
 - Use `pnpm station:link` only when you intentionally want all three launchers globally bound to the current checkout.
 - External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, Claude Code, Codex, Cursor, Pi, or OpenCode for real harness workflows, and `lsof` for fail-closed socket recovery or Observer handoff.
 
+## TypeScript Compiler And Editor
+
+Root and renderer build/typecheck commands use the native TypeScript 7 compiler. The conventional
+`typescript` dependency also resolves to TypeScript 7 so repository-aware tools and LSP clients can
+discover the native compiler. Tools that import the compiler API use the explicit TypeScript 6
+compatibility package until TypeScript 7 provides a stable replacement API. Verify the split with:
+
+```bash
+pnpm exec tsc --version
+node -p 'require("typescript/package.json").version'
+node -p 'require("@typescript/typescript6").version'
+cd station && bun run tsc --version
+```
+
+VS Code does not select the native language server from this dependency split automatically. To opt
+in, install the official [TypeScript 7 extension](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview),
+then run **TypeScript: Enable TypeScript 7** or set `"js/ts.experimental.useTsgo": true` in a user or
+profile setting. Do not point `js/ts.tsdk.path` at `node_modules/typescript`; that package provides the
+native compiler and LSP rather than the legacy `tsserver` plugin layout. Disable the setting or
+extension to return to VS Code's standard TypeScript service. Editors that accept a custom LSP
+command can start `pnpm exec tsc --lsp --stdio` with the repository root as the working directory;
+integrations that require `tsserver` should use the editor's bundled TypeScript service.
+
 ## Local TUI Workflow
 
 | Need | Command | Boundary |
@@ -18,7 +41,13 @@ Status: current living doc for development, test, and documentation workflow.
 | CLI/package-output watcher | `pnpm dev` / `pnpm station:tui-dev` | Isolated by default, not Bun HMR |
 | Isolated Station sandbox | `pnpm station:devbox` | Isolated observer, host, state, and supported hooks |
 | Isolated Station sandbox with UI HMR | `pnpm station:devbox dev` | Same devbox isolation, Bun renderer hot reload |
-| Isolated real tmux popup with UI HMR | `pnpm station:devbox tmux dev` | Private tmux server, Observer, config/state, and production popup CLI |
+| Isolated tmux popup with UI HMR | `pnpm station:devbox tmux dev` | Private tmux server, Observer, config/state, and production popup CLI |
+
+Real-state source development is intentionally native-only: use
+`pnpm station:ui-dev` for checkout UI code against the selected live Observer.
+Station does not support routing checkout popup code through the normal tmux
+server against that live runtime; use the private tmux lane for popup transport,
+geometry, HMR, and lifecycle validation instead.
 
 Do not use `station:dev` as a catch-all name until it truthfully owns the UI,
 CLI/package, observer, provider, protocol, and host restart boundaries.
@@ -34,10 +63,10 @@ provider homes are checkout-local. See the copy-paste recipe in
 - Source popup registrations are scoped to the canonical checkout root that
   created them. Compiled registrations are scoped to the canonical installed
   binary directory instead; neither path may register filesystem root `/`.
-- With default popup geometry, the optional binding installed by a compiled
-  `stn setup` uses the generated direct tmux fast path. Custom geometry uses the
-  config-aware exact sibling `stn-tmux-popup` alias instead, as does setup run
-  with an explicit `--config` path. The fast path's
+- With default popup settings, the optional binding installed by a compiled
+  `stn setup` uses the generated direct tmux fast path. Custom geometry, client
+  scope, or an enabled popup status bar uses the config-aware exact sibling
+  `stn-tmux-popup` alias instead, as does setup run with an explicit `--config` path. The fast path's
   first use can enter that alias, while a valid warm use attaches, toggles, or
   transfers the existing `_station-ui` session without Bun, config loading, or
   Observer startup. Build the binary with
@@ -45,25 +74,25 @@ provider homes are checkout-local. See the copy-paste recipe in
   `pnpm build` does not create the installed artifact ownership used by the
   binding.
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
-- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` when you intentionally want a specific observer/config. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
+- `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` only to select a controlled development config. This selector retains ordinary CLI Observer startup and handoff behavior; it is not a safe real-state popup lane and should not target a live runtime that must remain undisturbed. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
+- Before Observer startup, `station:devbox` creates or repairs only its checkout-keyed socket directory to mode `0700`. It refuses symlinks, non-directories, and directories owned by another user; it never repairs or replaces socket and claim files.
 - If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
-- `pnpm station:devbox tmux dev` starts a checkout-keyed private tmux server and isolated live Observer, then keeps the foreground command as the signal-cleanup owner. Attach with `pnpm station:devbox tmux attach`; inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`.
+- `pnpm station:devbox tmux dev` builds the checkout, starts or safely reuses a checkout-keyed private tmux server and isolated live Observer, claims cleanup ownership, and attaches the invoking terminal. Inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`; `Ctrl-b d` detaches and cleans up the owned lane. Use `tmux start` plus `tmux attach` when automation needs a persistent lane that is stopped explicitly.
 - `pnpm station:reset` clears station tmux popup registrations for the current checkout and opens station normally from built code. Inside tmux that means a fresh popup; outside tmux that means the fullscreen TUI.
 - `pnpm station:reset:tmux-tui` is the heavier tmux TUI refresh for this checkout. It requires clean `main`, pulls `origin/main`, clears only station TUI/popup tmux state, rebuilds, restarts the observer, then opens station from the rebuilt checkout. It does not kill worktree sessions or harness agents.
 
 ### Private tmux popup devbox
 
-Install the root and Station dependencies, then build once before starting:
+Install the root and Station dependencies, then start the interactive lane:
 
 ```bash
 pnpm install
-pnpm build
 cd station && bun install && cd ..
 
 pnpm station:devbox tmux dev
-# another terminal:
-pnpm station:devbox tmux attach
+# Ctrl-b Space opens Station
+# Ctrl-b d exits and cleans up
 ```
 
 The lane creates `/tmp/stn-dbx-<checkout-hash>` at mode `0700`, one private
@@ -73,19 +102,30 @@ strict minimal config. It never seeds real auth, Git, SSH, hooks, config, or
 default tmux state. `status` inspects only the recorded private manifest,
 server, sockets, and matching processes.
 
+Attach preserves the caller's `TERM` only when ncurses `tput` can resolve it
+inside the isolated environment with tmux's required `clear` and `cup`
+capabilities. Caller-specific `TERMINFO`, `TERMINFO_DIRS`, and external XDG data
+paths are intentionally not imported. An absent, unavailable, or unsuitable
+terminal falls back to `xterm-256color`; a rejected value is named in the
+fallback diagnostic, so the documented attach command never needs a manual
+`TERM` prefix.
+
 Use `Ctrl-b Space` in the attached base session. The binding enters the built
 CLI's production `popup` command; `_station-ui` owns the long-lived CLI parent,
 which retains the renderer-control IPC channel while the Bun renderer reloads
-in place. `dev` remains in the foreground so Ctrl-C, SIGHUP, or SIGTERM performs
-the same scoped cleanup as `stop`. Use `start` instead when automation needs the
-lane to return immediately.
+in place. `dev` remains in the foreground, owns its attached client, and performs
+the same scoped cleanup after `Ctrl-b d`, Ctrl-C, SIGHUP, SIGTERM, or a coordinated
+external `stop`. Use `start` instead when automation needs the lane to return
+immediately; a standalone `attach` never takes cleanup ownership. Detach any
+split-command clients before switching to `dev`, which refuses before rebuilding
+an attached persistent lane.
 
 | Changed surface | Required action |
 | --- | --- |
 | Dashboard-imported `station/src/**` | Bun HMR only |
-| Linked `packages/*` output, CLI, Observer, providers, protocol, or tmux integration | `tmux stop` → `pnpm build` → `tmux dev` |
-| Station Host or PTY runtime | Full `tmux stop` / `tmux dev` |
-| Dependencies or Station package links | Stop, install/relink, then start |
+| Linked `packages/*` output, CLI, Observer, providers, protocol, or tmux integration | Detach/stop → `tmux dev` (builds before startup) |
+| Station Host or PTY runtime | Full detach/stop → `tmux dev` |
+| Dependencies or Station package links | Detach/stop, install/relink, then `tmux dev` |
 | Generated root/config/wrapper ownership | `tmux reset --yes` → `tmux dev` |
 
 There is intentionally no `tmux restart`: a rebuild boundary must replace the
@@ -118,7 +158,126 @@ Full-frame captures use the private wrapper and preserve trailing cells;
 assertions wait for two identical captures rather than accepting an
 intermediate repaint.
 
+## Guided setup development
+
+Guided `stn setup` uses `@clack/prompts` through the sole production import in
+`apps/cli/src/commands/setup/presenters/clack.ts`. Keep direct Clack imports out of the guided
+driver, setup core, providers, config, and tests; presenter unit tests inject the exported plain function
+object instead of mocking the package globally. Bare guided setup requires TTY stdin and stdout,
+while check, plan, explicit apply, system, help, and JSON surfaces remain noninteractive.
+
+For manual UX exploration, run the real guided flow in a disposable sandbox:
+
+```bash
+pnpm setup:guided:sandbox
+pnpm setup:guided:sandbox -- --profile multi --keep
+pnpm setup:guided:sandbox -- --profile everything-missing --keep
+```
+
+The sandbox builds the checkout, creates a committed disposable repository, then launches the real
+CLI with inherited terminal I/O. An `env -i` boundary relocates `HOME`, every XDG directory, config,
+Observer state and sockets, and all provider homes beneath one private temporary root. Fake
+Homebrew, curl, npm, pnpm, Worktrunk, tmux, and agent commands prevent network access and global
+installation while allowing accepted installer operations to re-probe their sandbox executables. The real Observer runs
+only against the sandbox paths and is stopped when setup exits.
+
+The default `first-run` profile has required tools but no agent CLI. `multi` starts with Codex and
+OpenCode, `missing-tools` starts with those agents but no required tools, and `everything-missing`
+exercises both installer stages. During UX review, the guided opening should contain only its trust
+copy, compact inspection progress, and selected prerequisite proposal; the
+Core/Recommended/Actions/Next matrix belongs to `stn setup check`. Verify selected Homebrew tools
+show compact clickable Formulae labels rather than raw URLs, prompt details are visually secondary
+to the first-line decision, and no resolved sandbox shim path leaks into consent copy. The tmux
+consent must explain that prefix + Space opens Station, and setup must reject a user-configured
+assignment while permitting tmux's built-in `next-layout` default. Use `--keep` to retain the printed root, edit any shim under its
+`bin/` directory from another terminal, inspect `external-commands.log`, and rerun its `run-setup`
+launcher. `--prepare-only` creates that environment without starting setup. Without `--keep`, the
+root is removed after completion or cancellation; no profile reads credentials, provider config,
+shell startup files, normal tmux state, or global Station state.
+
+The automated real-terminal lane requires Python 3 and uses the standard-library `pty` module:
+
+```bash
+pnpm exec vitest run --config config/vitest/vitest.unit.config.ts \
+  apps/cli/test/unit/setup-clack-presenter.test.ts
+pnpm test:e2e:setup:guided
+pnpm test:e2e:setup:guided:all-shells
+```
+
+The PTY support normalizes terminal controls and redraws. When intentional copy or layout changes
+alter `apps/cli/test/fixtures/setup-guided-transcript.txt`, regenerate from the fixed 100×24 happy
+scenario with the command below, review the normalized transcript manually, and verify it contains
+no environment paths, JSON envelopes, provider values, or raw operation structures:
+
+```bash
+STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm exec vitest run \
+  --config config/vitest/vitest.setup-e2e.config.ts \
+  tests/e2e/setup-guided-feedback.test.ts -t "writes multiple selected agent CLIs"
+```
+
+Python must never reach the user's
+Station homes, config, state, sockets, provider homes, or tmux server.
+
+After changing Clack or another shipped dependency, run the normal build and static gates, then
+validate the compiled runtime:
+
+```bash
+pnpm build:binary -- --version 0.0.0-local
+pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+At minimum, exercise the compiled binary's non-TTY guided preflight to prove the packaged dependency
+loads before release validation.
+
 ## Deterministic Gates
+
+### Deterministic test isolation
+
+Each test lane declares one of four boundaries: automatic per-file machine isolation, lane-owned
+fixtures, an explicitly controlled process runner, or intentional machine interaction. The boundary
+is an environment and default-path guarantee, not an OS security boundary.
+
+| Lane | Config or runner | Classification | State and environment ownership |
+| --- | --- | --- | --- |
+| Unit | `vitest.unit.config.ts` | Automatic machine isolation | One private machine root and restored environment per test file. |
+| Integration | `vitest.integration.config.ts` | Automatic machine isolation | One private machine root and restored environment per test file. |
+| Contracts | `vitest.contracts.config.ts` | Automatic machine isolation | Schema tests stay pure while new files fail closed onto private defaults. |
+| Diagnostics | `vitest.diagnostics.config.ts` | Automatic machine isolation | Diagnostics and their child processes start from private machine defaults unless a test supplies an explicit environment. |
+| Scripted agent | `vitest.agent-scripted.config.ts` | Automatic machine isolation | Scripted harness state, provider homes, Git defaults, and child processes inherit the private file root. |
+| Setup E2E | `vitest.setup-e2e.config.ts` | Lane-owned fixtures | Each fixture constructs its complete home, PATH, provider shims, runtime directory, and hostile inputs; a parent sandbox would mask missing fixture inputs. |
+| Observer and general E2E | `vitest.e2e.config.ts` | Lane-owned fixtures | Tests own config, state, sockets, repositories, and Observer process cleanup, including deliberate default-path scenarios. |
+| Installer smoke | `scripts/test-runners/run-install-smoke.mjs` | Controlled process runner | The runner supplies a private root and sanitized install, config, state, and tool environment. |
+| SQLite and Observer-claim cross-runtime | `scripts/test-runners/run-sqlite-cross-runtime.mjs` and `scripts/test-runners/run-observer-claim-cross-runtime.mjs` | Lane-owned process paths | Runners own temporary databases, sockets, claims, and cleanup while inheriting only the ambient toolchain needed to launch Node and Bun. |
+| Station renderer and PTY | `pnpm test:ci:station` | Intentional non-Vitest exception | Bun tests own focused temporary fixtures; there is no suite-wide machine sandbox, so tests must not use default Station paths for mutation. |
+| Binary smoke and handoff stress | `scripts/test-runners/run-binary-smoke.mjs` | Controlled process runner | The runner owns private build, worktree, config, state, evidence, and child-process paths while preserving required build-tool discovery. |
+| Build, typecheck, and lint | Root package scripts | Checkout tooling | These commands intentionally read the checkout and write declared build outputs; they are not test-machine sandboxes. |
+| Real provider, Worktrunk, E2E, and tmux popup | Real Vitest configs below | Intentional machine interaction | These opt-in lanes exercise installed providers, real worktrees, or a real tmux server and retain their deliberate machine contract. |
+
+The automatic group is exactly `vitest.unit.config.ts`, `vitest.integration.config.ts`,
+`vitest.contracts.config.ts`, `vitest.diagnostics.config.ts`, and
+`vitest.agent-scripted.config.ts`. Each creates a private machine root for every test file. The
+shared setup redirects home, temporary, XDG, harness, Git, GitHub CLI, and shell-history paths;
+clears Station runtime/correlation overrides plus inherited Git, SSH, and GitHub credentials; and
+passes the sandbox paths to child processes. The root is removed after the file, including ordinary
+test failures.
+
+Use `vi.stubEnv` for test-local environment changes and let the shared setup restore the complete
+per-file baseline. Environment-mutating tests must not use `it.concurrent` or otherwise overlap in
+the same file because `process.env` is process-global. Set `STATION_TEST_MACHINE_KEEP_ROOT=1` for a
+focused automatic-lane run to retain the root and print its location, inspect it, and remove it
+manually afterward.
+
+The intentional real-machine configs are `vitest.real-e2e.config.ts`,
+`vitest.claude-real.config.ts`, `vitest.codex-real.config.ts`,
+`vitest.cursor-real.config.ts`, `vitest.opencode-real.config.ts`,
+`vitest.pi-real.config.ts`, `vitest.tmux-popup-real.config.ts`, and
+`vitest.worktrunk-real.config.ts`. They do not compose the automatic setup. Setup E2E and Observer
+E2E also omit it because their owned environment construction is part of what those lanes test.
+
+Automatic isolation prevents accidental inheritance and environment leakage. It does not contain
+explicit absolute paths, signals, file descriptors, network access, custom child environments,
+installed tools, or subprocesses that deliberately escape the redirected environment. The
+OS-level containment decision belongs to #401.
 
 Git-backed fixtures and child processes must clear Git's repository-local environment variables;
 `cwd` and `git -C` do not isolate a command when variables such as `GIT_DIR` or `GIT_WORK_TREE`
@@ -194,6 +353,9 @@ smoke runs when production, binary, dependency, or CI infrastructure changes. Ob
 changes use the exhaustive claim-race counts, while setup- and Worktrunk-sensitive changes retain
 both bash and zsh process-level setup coverage. One aggregate job named `standard-ci` preserves the
 repository ruleset contract and fails if a mandatory or path-selected lane is unexpectedly skipped.
+A failed binary-smoke step best-effort uploads one redacted, allowlisted evidence directory capped at
+1 MiB with three-day retention; a successful step creates and uploads no evidence directory, and
+artifact upload failure cannot mask the smoke failure.
 
 Release tags select every lane, use the exhaustive claim-race counts and both setup shell paths, and
 call that parallel gate before adding the four native build and draft-install targets. Both `standard-ci` and
@@ -224,6 +386,31 @@ pnpm test:agent:scripted
 pnpm smoke:release
 pnpm smoke:install
 ```
+
+Native Station per-TTY ownership has a focused Bun suite and a private real-PTY
+acceptance lane:
+
+```bash
+cd station
+bun test src/singleInstance.test.ts
+bun run typecheck
+cd ..
+
+STATION_REAL_E2E=1 pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-tui-singleton.test.ts
+
+pnpm build:binary -- --version 0.0.0-local
+STATION_REAL_E2E=1 \
+STATION_COMPILED_BIN="$PWD/station/dist/bin/stn" \
+pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-tui-singleton.test.ts
+pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+The real lane requires macOS or Linux, Bun, and Python 3. It owns its PTY and
+fixture processes and does not use the user's Station configuration.
 
 Dead-code audits are repository-owned and cover both the pnpm monorepo and the separate
 `station/` Bun workspace:
@@ -267,7 +454,8 @@ check Node/Bun inaccessible and stale classification plus displaced-listener aba
 claim gate makes no fairness claim.
 
 `pnpm test:e2e:observer` drives the built production Observer through cold and
-real stale-socket races, XDG/state divergence, explicit paths with spaces,
+real stale-socket races, read-only snapshot refusal, XDG/state divergence,
+explicit paths with spaces,
 claim-held no-side-effect behavior, pidfile publication, compatible-build reuse,
 same-version build-identity handoff and refusal, cross-version graceful handoff,
 inaccessible-socket preservation, displaced shutdown, clean restart while the
@@ -342,6 +530,48 @@ runs the lower identity as incumbent, replaces it with the higher identity, and
 verifies that a later mutating command from the loser is refused without
 changing the Observer, Station Host, or live PTY. It requires a committed clean
 checkout so the detached-worktree artifact has one controlled source delta.
+
+For a local failure bundle, name an absolute path that does not exist and is
+outside the smoke root:
+
+```bash
+STATION_BINARY_SMOKE_EVIDENCE_DIR=/absolute/new/path \
+  pnpm smoke:binary -- --expected-version 0.0.0-local
+```
+
+The runner creates that private directory only for failure or cancellation,
+captures evidence before teardown, records cleanup afterward, and preserves the
+original failure. Inspect `manifest.json` first. In hosted CI, use:
+
+```bash
+gh run download <run-id> \
+  --name binary-smoke-evidence-<run-id>-<attempt> \
+  --dir /tmp/station-binary-smoke-evidence-<run-id>
+```
+
+The focused handoff stress reuses immutable current and alternate binaries for
+fresh isolated rounds and stops at the first failure without rebuilding or
+retrying a handoff:
+
+```bash
+STATION_BINARY_SMOKE_EVIDENCE_DIR=/absolute/new/path \
+  pnpm stress:binary-handoff -- \
+  --expected-version 0.0.0-local \
+  --rounds 50 \
+  --round-timeout-ms 30000
+```
+
+Each round proves the logical lower-to-higher replacement, exact PID/build and
+socket/pidfile ownership, one healthy Observer, live Host PTY continuity, and
+then the reverse physical call's deterministic reuse or refusal without winner
+mutation. With one fixed artifact pair, that reverse call is not a second valid
+replacement direction. The `Binary handoff stress` workflow exposes the same
+lane through manual dispatch on Ubuntu 24.04 with at most 100 rounds; it is not a
+required PR or nightly lane. If rounds were independent at the previously
+observed 13.8% failure rate, 50 rounds would have about a 99.94% chance of a
+failure and zero failures would imply only an approximate one-sided 95% upper
+bound of 5.8% (about 3% for 100 and 1% for 300). Hosted timing can be correlated,
+so these runs increase confidence but do not prove absence.
 
 To inspect the UX manually after the smoke:
 
@@ -519,7 +749,7 @@ codex --version
 ```
 
 Take a `dev-ready-before-station` snapshot before authenticating. Do not
-preinstall Station, Worktrunk, tmux, diffnav, or git-delta; this lane must prove
+preinstall Station, Worktrunk, tmux, or Hunk; this lane must prove
 that guided setup identifies and installs the missing Station dependencies.
 Authenticate GitHub and confirm private-repository access:
 
@@ -642,7 +872,7 @@ For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
 and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
-guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
+guided setup to install Worktrunk, tmux, and Hunk, select one or
 more authenticated agents, consent to required Station tracking artifacts, and
 optionally install the tmux binding. Confirm the first selection becomes the
 default only for a new config, every explicit selection receives its own harness
@@ -660,11 +890,16 @@ stn doctor
 stn tui
 ```
 
-On the welcome screen, press `Enter` or `Space`. On the empty dashboard, press
-`Enter` or `A` on **Add your first project** and select the disposable Git
-repository. Then press `N`, create a session with the authenticated agent, and
-ask it to edit the disposable README. Confirm the transcript and diff appear,
-then quit and reopen `stn tui` and confirm the session remains.
+On the welcome screen, press `Enter` or `Space`. On the empty dashboard, run
+first-project onboarding from **Add your first project** three independent ways:
+pointer-only through the visible CTA and folder/action controls, direct commands
+beginning with `A`, and arrows plus `Enter`. Each pass must select the disposable
+Git repository and must refuse an ordinary non-Git folder. Then press `N` and run
+Create Session pointer-only, with `P/N/A/C`, and with arrows plus `Enter`; verify
+focus remains visible, agent health remains readable without color, and Save/Back
+work in the name editor. Ask the authenticated agent to edit
+the disposable README, confirm the transcript and diff appear, then quit and
+reopen `stn tui` and confirm the session remains.
 
 If the compiled tmux binding was enabled, use `tmux prefix + Space` for the cold
 open, close the popup with the same chord, and use it again for a warm reopen.
@@ -854,8 +1089,32 @@ Use `pnpm setup:system:check` before real lanes. Real lanes may require `STATION
 
 TUI work has additional OpenTUI/React and terminal-layout expectations. The terminal UI is the OpenTUI renderer in `station/` (package `@station/workspace`, built on `@opentui/core` + `@opentui/react` + `react`). Use [TUI development](tui.md) before changing `station/` components, hooks, sources, keymaps, selectors, popup behavior, or renderer tests.
 
+### Primary-workflow interaction acceptance
+
+For dashboard interaction changes, manually verify native Station and the tmux
+popup with three independent passes:
+
+1. Pointer: complete first-project onboarding and create a named session using
+   only visible controls (typing text is allowed).
+2. Direct commands: use `A`, the displayed Add Project commands, then `N` and
+   `P/N/A/C` for Create Session.
+3. Focus: use arrows plus `Enter` for folder lists, review actions, and name
+   editor actions at both wide and minimum supported widths.
+
+Also open Remove Session and Fork Session from a disposable row. Verify Delete/Keep with pointer,
+Y/N, and Left/Right plus Enter; then verify Fork Name/Copy/Fork with pointer and keyboard focus,
+including Copy-focused Enter toggling without submitting.
+
+Git-invalid Add Project submit must stay disabled, native Create Session must
+open a Station-managed pane, and the popup must continue through its configured
+terminal adapter.
+
 ## TypeScript And Data Rules
 
+- Use canonical symbol names. The Biome `no-one-to-one-aliases` plugin rejects
+  direct named type aliases and renamed named imports or exports. Namespace
+  imports and constructed types remain valid; a compatibility boundary must use
+  a local `biome-ignore lint/plugin` suppression with a concrete reason.
 - `exactOptionalPropertyTypes` is intentional. Preserve the difference between an absent optional field and a field set to `undefined`.
 - For complex mappers, persistence row conversion, diagnostics construction, error shaping, and provider payload parsing, prefer typed local builders with explicit `if` assignments.
 - Small conditional spreads are acceptable when local and obvious.

@@ -1,15 +1,24 @@
-import type { ProjectView, SessionId } from "@station/contracts";
 import stringWidth from "string-width";
+import type { DashboardPersistentFilterRowMatch } from "../../selectors/dashboardPersistentFilter.js";
 import type {
   DashboardSessionOverflow,
   DashboardViewportItem,
 } from "../../selectors/dashboardViewport.js";
-
-export { dashboardFooterLabel } from "../../state/keymap.js";
-
-import type { TuiObserverConnectionStatus, TuiScreen } from "../../state/types.js";
+import type {
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardStateView,
+} from "../../state/types.js";
 import type { RowGridRowInput } from "../WorktreeRow/layout.js";
-import { worktreeRowGridInput, worktreeStyleRowGridInput } from "../WorktreeRow/rowInput.js";
+import {
+  type WorktreeRowTextHighlights,
+  worktreeRowGridInput,
+  worktreeStyleRowGridInput,
+} from "../WorktreeRow/rowInput.js";
+
+type DashboardProjectView = DashboardSnapshotView["projects"][number];
+type DashboardFocusView = DashboardStateView["dashboardFocus"];
+type DashboardObserverConnectionStatusView = DashboardStateView["observerConnectionStatus"];
 
 export type DashboardHeaderStatus = {
   full: string;
@@ -93,7 +102,7 @@ export function fleetCountsLabel(
 }
 
 export function projectHeaderLabelParts(
-  project: ProjectView,
+  project: DashboardProjectView,
   collapsed: boolean,
 ): { title: string; counts: string } {
   const caret = collapsed ? "▶" : "▼";
@@ -113,7 +122,7 @@ function plural(count: number, noun: string): string {
   return count === 1 ? noun : `${noun}s`;
 }
 
-export const FIRST_RUN_BODY_LABEL = "Add your first project.";
+export const FIRST_RUN_BODY_LABEL = "Add your first project";
 
 export function scrollIndicatorLabel(
   direction: "above" | "below",
@@ -128,69 +137,116 @@ export function scrollIndicatorLabel(
 export function rowGridInputForViewportItem(
   item: DashboardViewportItem,
   keyByRow: ReadonlyMap<string, string>,
-  focusedRowId?: SessionId,
+  dashboardFocus?: DashboardFocusView,
 ): RowGridRowInput | undefined {
+  if (item.type !== "session" && item.type !== "createLocalRow") {
+    return undefined;
+  }
+  const decorations = rowDecorationsForViewportItem(item, dashboardFocus);
   if (item.type === "session") {
-    const focused = focusedRowId !== undefined && item.row.id === focusedRowId;
     if (item.pendingRemove !== undefined) {
       return worktreeStyleRowGridInput({
         id: item.id,
         slot: undefined,
         marker: { kind: "throbber", variant: "braille" },
-        title: item.displayTitle,
-        activity: "removing session...",
+        title: item.presentation.title,
+        activity: item.presentation.activity ?? "",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
-        ...(focused ? { focused: true } : {}),
+        ...decorations,
       });
     }
     if (item.pendingStart !== undefined) {
-      const activity =
-        item.pendingStart.operation === "resumeAgent" ? "resuming..." : "starting...";
       return worktreeStyleRowGridInput({
         id: item.id,
         slot: keyByRow.get(item.row.id),
         marker: { kind: "throbber", variant: "braille" },
-        title: item.displayTitle,
-        activity,
+        title: item.presentation.title,
+        activity: item.presentation.activity ?? "",
         activityImportance: "meaningful",
         activityOverflow: "rowSlack",
-        ...(focused ? { focused: true } : {}),
+        ...decorations,
       });
     }
     return worktreeRowGridInput({
       id: item.id,
       row: item.row.presentation,
       slot: keyByRow.get(item.row.id),
-      title: item.displayTitle,
-      focused,
+      presentation: {
+        title: item.presentation.title,
+        agent: item.presentation.agent ?? "",
+        activity: item.presentation.activity ?? "",
+      },
+      ...decorations,
     });
-  }
-  if (item.type !== "createLocalRow") {
-    return undefined;
   }
   if (item.row.status === "failed") {
     return worktreeStyleRowGridInput({
       id: item.id,
       slot: undefined,
       marker: { kind: "text", text: "!" },
-      title: item.row.title,
-      activity: item.row.error.message,
+      title: item.presentation.title,
+      activity: item.presentation.activity ?? "",
       activityImportance: "meaningful",
       activityOverflow: "rowSlack",
       color: "red",
+      ...decorations,
     });
   }
   return worktreeStyleRowGridInput({
     id: item.id,
     slot: undefined,
     marker: { kind: "throbber", variant: "braille" },
-    title: item.row.title,
-    agent: item.row.harnessProvider ?? "",
-    activity: "starting session...",
+    title: item.presentation.title,
+    agent: item.presentation.agent ?? "",
+    activity: item.presentation.activity ?? "",
     activityImportance: "meaningful",
     activityOverflow: "rowSlack",
+    ...decorations,
   });
+}
+
+type DashboardRowViewportItem = Extract<
+  DashboardViewportItem,
+  { type: "session" | "createLocalRow" }
+>;
+
+type DashboardRowDecorations = {
+  focused?: true;
+  textHighlights?: WorktreeRowTextHighlights;
+  dimmed?: true;
+};
+
+function rowDecorationsForViewportItem(
+  item: DashboardRowViewportItem,
+  dashboardFocus: DashboardFocusView,
+): DashboardRowDecorations {
+  const decorations: DashboardRowDecorations = {};
+  if (
+    item.type === "session" &&
+    dashboardFocus?.kind === "session" &&
+    item.row.id === dashboardFocus.sessionId
+  ) {
+    decorations.focused = true;
+  }
+  const match = item.persistentFilterMatch;
+  if (match !== undefined) {
+    decorations.textHighlights = persistentFilterRowHighlights(match);
+    if (match.dimmed) {
+      decorations.dimmed = true;
+    }
+  }
+  return decorations;
+}
+
+function persistentFilterRowHighlights(
+  match: DashboardPersistentFilterRowMatch,
+): WorktreeRowTextHighlights {
+  return {
+    title: match.ranges.title,
+    agent: match.ranges.agent,
+    activity: match.ranges.activity,
+  };
 }
 
 export type SnapshotLoadingLine = {
@@ -201,7 +257,7 @@ export type SnapshotLoadingLine = {
 
 export function snapshotLoadingLines(
   loading: boolean,
-  observerConnectionStatus: TuiObserverConnectionStatus,
+  observerConnectionStatus: DashboardObserverConnectionStatusView,
 ): SnapshotLoadingLine[] {
   if (observerConnectionStatus.state === "reconnecting") {
     return [
@@ -233,7 +289,7 @@ export function snapshotLoadingLines(
 }
 
 export function observerHeaderStatusForConnection(
-  status: TuiObserverConnectionStatus,
+  status: DashboardObserverConnectionStatusView,
   hasSnapshot: boolean,
 ): DashboardHeaderStatus | undefined {
   if (hasSnapshot && status.state === "displayOnly") {
@@ -249,32 +305,19 @@ export type CommandPromptLine = { text: string; color: "yellow" | "red" };
 
 /**
  * The prompt line per screen (the special-cased rename-slot and
- * remove-confirm lines plus textPromptForScreen below), flattened to
- * text+color so render adapters only render. Lives beside
- * commandPromptRows, which guards the same screens.
+ * remove-confirm lines), flattened to text+color so render adapters only
+ * render. Lives beside commandPromptRows, which guards the same screens.
  */
-export function commandPromptLineForScreen(screen: TuiScreen): CommandPromptLine | undefined {
+export function commandPromptLineForScreen(
+  screen: DashboardScreenView,
+): CommandPromptLine | undefined {
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
     return { text: "Rename: ↑↓ move · ↵ choose · 1-9/a-z or click", color: "yellow" };
-  }
-  const prompt = textPromptForScreen(screen);
-  if (prompt === undefined) {
-    return undefined;
-  }
-  return { text: `${prompt.label}: ${prompt.value}`, color: "yellow" };
-}
-
-function textPromptForScreen(screen: TuiScreen): { label: string; value: string } | undefined {
-  if (screen.name === "search") {
-    return { label: "search", value: screen.value };
   }
   return undefined;
 }
 
-export function commandPromptRows(screen: TuiScreen): number {
-  if (screen.name === "search") {
-    return 2;
-  }
+export function commandPromptRows(screen: DashboardScreenView): number {
   if (screen.name === "renameSession" && screen.step === "chooseSlot") {
     return 2;
   }

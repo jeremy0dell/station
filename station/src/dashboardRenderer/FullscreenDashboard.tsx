@@ -1,19 +1,35 @@
 import type { MouseEvent } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { useCallback } from "react";
 import { useStore } from "zustand/react";
-import type { StoreApi } from "zustand/vanilla";
 import { normalizeStationMouseEvent } from "../input/mouse.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import { DashboardFrameTitle } from "../station/view/DashboardFrameTitle.js";
 import { DashboardRoot } from "../station/view/DashboardRoot.js";
+import { toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import {
   StationHoverProvider,
   StationMouseProvider,
   type StationMouseDispatch,
 } from "../station/view/stationMouseContext.js";
-import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMouse.js";
+import type { DashboardRendererEffects } from "./dashboardEffects.js";
+import { routeDashboardMouse } from "./dashboardMouse.js";
+
+type FullscreenDashboardInput = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    | "createQuickSession"
+    | "dismissToasts"
+    | "dispatch"
+    | "expireToasts"
+    | "handleKey"
+    | "pushToast"
+    | "refreshActiveToastExpiry"
+    | "setTerminalRows"
+  >;
+};
 
 /**
  * The standalone dashboard, rendered to fill the terminal. This is the
@@ -25,38 +41,47 @@ import { type DashboardMouseEffects, routeDashboardMouse } from "./dashboardMous
  * Mouse targets route through the standalone dashboard adapter, which reuses
  * shared dashboard actions and delegates terminal effects to its environment.
  */
+export type FullscreenDashboardProps = {
+  runtime: FullscreenDashboardInput;
+  effects: DashboardRendererEffects;
+  onCopyNotice: (text: string) => void;
+  hoverEnabled?: boolean;
+};
+
 export function FullscreenDashboard({
-  store,
+  runtime,
   effects,
   onCopyNotice,
   hoverEnabled = true,
-}: {
-  store: StoreApi<TuiStore>;
-  effects: DashboardMouseEffects;
-  onCopyNotice: (text: string) => void;
-  hoverEnabled?: boolean;
-}) {
+}: FullscreenDashboardProps) {
+  const theme = useStationTheme();
   const { width, height } = useTerminalDimensions();
-  const widgets = useStore(store, (state) => state.widgets);
+  const widgets = useStore(runtime.state, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets);
   const dispatch = useCallback<StationMouseDispatch>(
     (target, event: MouseEvent) => {
-      routeDashboardMouse(target, normalizeStationMouseEvent(event), store, effects);
+      routeDashboardMouse(target, normalizeStationMouseEvent(event), runtime, effects);
     },
-    [effects, store],
+    [effects, runtime],
   );
   return (
     <StationHoverProvider value={hoverEnabled}>
       <StationMouseProvider value={dispatch}>
-        <box width={width} height={height} flexDirection="column">
+        <box
+          width={width}
+          height={height}
+          flexDirection="column"
+          backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
+        >
           <DashboardRoot
-            store={store}
+            state={runtime.state}
+            actions={runtime.actions}
             columns={width}
             rows={height}
             onCopyNotice={onCopyNotice}
           />
           <DashboardFrameTitle
-            store={store}
+            state={runtime.state}
             frame={{ left: 0, top: 0, width }}
             topRowWidgets={topRowWidgets}
             zIndex={1}

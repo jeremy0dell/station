@@ -1,9 +1,12 @@
-import type { TuiWidgetConfig } from "@station/config";
 import {
   ADDABLE_WIDGET_TYPES,
   widgetSettingsRowLabel,
 } from "../../state/screens/widgetSettings.js";
-import type { TuiState, WidgetSettingsFocus } from "../../state/types.js";
+import type {
+  DashboardScreenView,
+  DashboardStateView,
+  WidgetSettingsFocus,
+} from "../../state/types.js";
 
 export type WidgetSettingsLine =
   | { kind: "widget"; index: number; label: string; enabled: boolean; active: boolean }
@@ -21,8 +24,8 @@ export type WidgetSettingsPanelModel = {
 };
 
 export function widgetSettingsPanelModel(
-  screen: Extract<TuiState["screen"], { name: "widgetSettings" }>,
-  widgets: readonly TuiWidgetConfig[],
+  screen: Extract<DashboardScreenView, { name: "widgetSettings" }>,
+  widgets: DashboardStateView["widgets"],
   widgetsPersisted = true,
 ): WidgetSettingsPanelModel {
   if (screen.focus === "picker") {

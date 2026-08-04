@@ -63,6 +63,7 @@ integration's documentation of record; prose goes stale, fixtures fail loudly.
   verifiable, and remember doctor verifies *installation*, not build identity —
   check that `stn` and `stn-ingress` on PATH resolve to the same checkout.
 - Add the harness to setup checks if it needs system dependencies.
+- Setup tracking preparation must call the same typed provider installer in-process through the setup adapter. Return only installed/changed and backup-path commit evidence; provider plans, commands, before/after source, and other native result fields must not cross the setup port or print in guided output.
 
 ## 6. Support launch preflight
 

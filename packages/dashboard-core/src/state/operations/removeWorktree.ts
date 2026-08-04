@@ -1,14 +1,14 @@
 import type { CommandId, SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
-import type { TuiObserverService } from "../../services/types.js";
+import type { ObserverService } from "../../services/types.js";
 import { bindPendingRemoveWorktreeRow } from "../localRows.js";
-import type { TuiStore } from "../store.js";
+import type { DashboardState } from "../types.js";
 import type { RemoveWorktreeOperation } from "./types.js";
 
 export async function runRemoveWorktreeOperation(
-  store: StoreApi<TuiStore>,
-  service: TuiObserverService,
+  store: StoreApi<DashboardState>,
+  service: ObserverService,
   operation: RemoveWorktreeOperation,
   clientLabel: string,
   markRemoveWorktreeRowFailed: (localId: string) => void,

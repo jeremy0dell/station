@@ -1,11 +1,11 @@
-import type { SessionId, WorktreeId, WorktreeRow } from "@station/contracts";
+import type { SessionId, WorktreeId } from "@station/contracts";
 import {
   isReadyToRead,
   selectDashboardSessionRows,
   selectFleetSummary,
   sessionRowDisplayTitle,
   type DashboardSessionRow,
-  type TuiState,
+  type DashboardStateView,
 } from "@station/dashboard-core";
 
 /** Worst agent status across a project's sessions, calmest last. */
@@ -45,14 +45,14 @@ const EMPTY_STATUS: StationButtonStatus = {
 };
 
 /** The row is asking for the user (needs-attention or stuck) — the island's alert predicate. */
-export function rowNeedsUser(row: WorktreeRow): boolean {
+export function rowNeedsUser(row: DashboardSessionRow["presentation"]): boolean {
   return row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck";
 }
 
 // Counts come from the client-side fleet breakdown, not snapshot.counts: the
 // contract folds ready into idle and its attention count excludes stuck.
 export function selectStationButtonStatus(
-  state: TuiState,
+  state: DashboardStateView,
   options?: { projectRollup?: boolean },
 ): StationButtonStatus {
   const snapshot = state.snapshot;

@@ -1,15 +1,20 @@
-import { bottomSheetContentWidth, type TuiScreen } from "@station/dashboard-core";
+import {
+  bottomSheetContentWidth,
+  type DashboardScreenView,
+} from "@station/dashboard-core";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
   compactSheetWidth,
-  SheetConfirmButtons,
+  responsiveSheetFooterText,
+  type ResponsiveSheetText,
+  SheetButtonRow,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
   SheetMessageLine,
 } from "./parts.js";
 
-type RemoveScreen = Extract<TuiScreen, { name: "removeWorktree" }>;
+type RemoveScreen = Extract<DashboardScreenView, { name: "removeWorktree" }>;
 
 export type RemoveSessionSheetViewProps = {
   screen: RemoveScreen;
@@ -17,11 +22,21 @@ export type RemoveSessionSheetViewProps = {
   rows: number;
 };
 
+const MIN_SHEET_WIDTH = 1;
+const UNAVAILABLE_MAX_SHEET_WIDTH = 68;
+const CHOOSE_SLOT_CONTENT_ROWS = 5;
+const CHOOSE_SLOT_MIN_HEIGHT = 7;
+const DETAIL_CONTENT_ROWS = 7;
+const DETAIL_MIN_HEIGHT = 9;
+const SESSION_LABEL_WIDTH = 8;
+
+const CONFIRM_HELP = {
+  expanded: "←→ choose · Enter activate · Esc cancel",
+  compact: "←→ · Enter activate · Esc cancel",
+} as const satisfies ResponsiveSheetText;
+
 export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionSheetViewProps) {
-  const sheetWidth =
-    screen.step === "unavailable"
-      ? Math.min(Math.max(1, Math.floor(columns)), 68)
-      : compactSheetWidth(columns);
+  const sheetWidth = removeSheetWidth(screen.step, columns);
   const contentWidth = bottomSheetContentWidth(sheetWidth);
   if (screen.step === "chooseSlot") {
     return (
@@ -30,8 +45,8 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         rows={rows}
         width={sheetWidth}
         title="Select session to delete"
-        contentRows={5}
-        minHeight={7}
+        contentRows={CHOOSE_SLOT_CONTENT_ROWS}
+        minHeight={CHOOSE_SLOT_MIN_HEIGHT}
       >
         <SheetLine width={contentWidth}> </SheetLine>
         <SheetMessageLine width={contentWidth}>↑↓ move · ↵ choose · slot or click</SheetMessageLine>
@@ -47,8 +62,8 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         rows={rows}
         width={sheetWidth}
         title="Cannot delete worktree"
-        contentRows={7}
-        minHeight={9}
+        contentRows={DETAIL_CONTENT_ROWS}
+        minHeight={DETAIL_MIN_HEIGHT}
       >
         <SheetMessageLine width={contentWidth}>
           This agent was started outside Station.
@@ -72,16 +87,62 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
       rows={rows}
       width={sheetWidth}
       title="Delete session?"
-      contentRows={7}
-      minHeight={9}
+      contentRows={DETAIL_CONTENT_ROWS}
+      minHeight={DETAIL_MIN_HEIGHT}
     >
-      <SheetLabelValue width={contentWidth} label="Session" labelWidth={8} value={screen.label} />
+      <SheetLabelValue
+        width={contentWidth}
+        label="Session"
+        labelWidth={SESSION_LABEL_WIDTH}
+        value={screen.label}
+      />
       <SheetMessageLine width={contentWidth} tone="danger">
         Removes agent, worktree, and panes.
       </SheetMessageLine>
       <SheetLine width={contentWidth}> </SheetLine>
-      <SheetConfirmButtons width={contentWidth} />
-      <SheetFooter width={contentWidth}>Esc/Enter:cancel</SheetFooter>
+      <SheetButtonRow
+        width={contentWidth}
+        buttons={[
+          {
+            id: "confirm.delete",
+            label: "Delete",
+            shortcut: "Y",
+            tone: "danger",
+            mouseTarget: {
+              kind: "removeWorktreeAction",
+              actionId: "confirm.delete",
+            },
+            focused: screen.actionFocus === "delete",
+            disabled: false,
+          },
+          {
+            id: "confirm.keep",
+            label: "Keep session",
+            compactLabel: "Keep",
+            shortcut: "N",
+            tone: "neutral",
+            mouseTarget: {
+              kind: "removeWorktreeAction",
+              actionId: "confirm.keep",
+            },
+            focused: screen.actionFocus === "keep",
+            disabled: false,
+          },
+        ]}
+      />
+      <SheetFooter width={contentWidth}>
+        {responsiveSheetFooterText(contentWidth, CONFIRM_HELP)}
+      </SheetFooter>
     </BottomSheetFrameView>
+  );
+}
+
+function removeSheetWidth(step: RemoveScreen["step"], columns: number): number {
+  if (step !== "unavailable") {
+    return compactSheetWidth(columns);
+  }
+  return Math.min(
+    Math.max(MIN_SHEET_WIDTH, Math.floor(columns)),
+    UNAVAILABLE_MAX_SHEET_WIDTH,
   );
 }

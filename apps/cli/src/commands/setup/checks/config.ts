@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG_PATH, loadConfigFromToml, resolveObserverPaths } from "@station/config";
 import { pathIsSame, resolveLocalPath } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupConfigDiagnosticFact, SetupConfigFact } from "../model.js";
+import type { SetupConfigDiagnosticFact, SetupConfigFact } from "../adapters/inspectionTypes.js";
 
 export type SetupFileSystemReader = {
   readFile(path: string): Promise<string>;

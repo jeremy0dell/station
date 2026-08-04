@@ -8,9 +8,9 @@ export const GENERATED_HOOK_SCRIPT_NAME = "station-codex-hook.sh";
 
 export const CODEX_HOOK_EVENT_NAMES = codexForwardedEventTypes;
 
-export type CodexHookEventName = CodexForwardedEventType;
+export type { CodexForwardedEventType };
 
 export const CODEX_OBSOLETE_HOOK_EVENT_NAMES = ["SubagentStop"] as const;
 
 export type CodexObsoleteHookEventName = (typeof CODEX_OBSOLETE_HOOK_EVENT_NAMES)[number];
-export type CodexGeneratedHookEventName = CodexHookEventName | CodexObsoleteHookEventName;
+export type CodexGeneratedHookEventName = CodexForwardedEventType | CodexObsoleteHookEventName;

@@ -9,9 +9,15 @@ import type {
   TuiFolderReview,
   TuiFolderSearchResult,
 } from "../../services/folderService.js";
+import type { ReadonlyDeep } from "../../state/readonly.js";
 import type { StepWizardState } from "../stepWizard.js";
 
 export type AddProjectStep = "start" | "choose" | "review" | "success" | "failed";
+
+export type AddProjectReviewActionFocus = "submit" | "editId" | "chooseFolder" | "cancel";
+export type AddProjectEditIdActionFocus = "save" | "back";
+export type AddProjectSuccessActionFocus = "dashboard";
+export type AddProjectFailedActionFocus = "retry" | "chooseFolder" | "cancel";
 
 type AddProjectBaseState = StepWizardState<AddProjectStep> & {
   firstProject: boolean;
@@ -49,19 +55,23 @@ export type AddProjectReviewState = AddProjectBaseState & {
   id: string;
   label: string;
   submitting: boolean;
+  actionFocus: AddProjectReviewActionFocus;
   editingId?: EditableTextInputState;
+  editIdActionFocus?: AddProjectEditIdActionFocus;
 };
 
 export type AddProjectSuccessState = AddProjectBaseState & {
   mode: "success";
   label: string;
   root: string;
+  actionFocus: AddProjectSuccessActionFocus;
 };
 
 export type AddProjectFailedState = AddProjectBaseState & {
   mode: "failed";
   selectedPath: string;
   error: SafeError;
+  actionFocus: AddProjectFailedActionFocus;
 };
 
 export type AddProjectFlowState =
@@ -70,6 +80,10 @@ export type AddProjectFlowState =
   | AddProjectReviewState
   | AddProjectSuccessState
   | AddProjectFailedState;
+
+/** Deep-readonly Add Project flow consumed by presentation and selection readers. */
+export type AddProjectFlowStateView = ReadonlyDeep<AddProjectFlowState>;
+export type AddProjectChooseStateView = ReadonlyDeep<AddProjectChooseState>;
 
 export type CreateAddProjectFlowInput = {
   cwd: string;
@@ -99,6 +113,7 @@ export type AddProjectFlowAction =
   | { type: "editIdInput"; action: EditableTextEditAction }
   | { type: "editIdCommit" }
   | { type: "editIdCancel" }
+  | { type: "actionFocus"; dir: -1 | 1 }
   | { type: "backToChoose" };
 
 export type AddProjectFlowEffect =

@@ -1,13 +1,25 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CliSetupPlanSchema } from "../../packages/contracts/src/index.js";
 import { createObserverClient } from "../../packages/protocol/src/index.js";
 import {
   expectedProviderHookScript,
   providerHookOwnerMarker,
 } from "../../packages/runtime/src/index.js";
+import {
+  type GuidedPtyInput,
+  normalizeGuidedTranscript,
+  runGuidedPty,
+} from "../support/setup-guided";
+
+const reviewedTranscriptPath = join(
+  process.cwd(),
+  "apps/cli/test/fixtures/setup-guided-transcript.txt",
+);
+
 import { waitForSocketClosed } from "../support/sockets";
 
 const shellIntegrationMarker = "# Worktrunk shell integration";
@@ -20,7 +32,7 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["n", "n", "n", "n", "n", "n"],
+        answers: ["enter"],
       });
 
       expect(result.timedOut).toBe(false);
@@ -46,21 +58,44 @@ describe("setup guided feedback e2e", () => {
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       expect(result.stdout).toContain("Link STATION launchers globally?");
+      expect(result.stdout).toContain("Makes stn, stn-ingress, and stn-tmux-popup available");
+      expect(result.stdout).toContain("Runs this checkout’s station:link package script.");
+      expect(result.stdout).toContain("Does not edit shell startup files.");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
-      expect(result.stdout).toContain("Install Codex tracking?");
-      expect(result.stdout).toContain(`Applying: Write STATION config (${fixture.configPath})`);
-      expect(result.stdout).toContain("Completed: Write STATION config");
       expect(result.stdout).toContain(
-        `Running: ${join(fixture.bin, "wt")} -y config shell install zsh`,
+        "Prepares Station-managed lifecycle hook entries for ~/.config/station/config.toml.",
+      );
+      expect(result.stdout).toContain("Install Codex tracking?");
+      expect(result.stdout).toContain("Does not sign in, bypass provider trust");
+      expect(result.stdout).toContain("unrelated hooks.");
+      expect(result.stdout).toContain("Writes selected settings to ~/.config/station/config.toml");
+      expect(result.stdout).toContain("add the current repository as a project.");
+      expect(result.stdout).toContain("Adds Worktrunk shell helpers to ~/.zshrc.");
+      expect(result.stdout).toContain("Runs: wt -y config shell install zsh");
+      expect(result.stdout).toContain("Does not create ~/.zshrc if it is missing.");
+      expect(result.stdout).toContain("Assigns tmux prefix + Space to open Station.");
+      expect(result.stdout).toContain("Saves Station’s managed binding in ~/.tmux.conf");
+      expect(result.stdout).toContain("user-configured prefix + Space binding is never replaced.");
+      expect(result.stdout).not.toContain("Applying: Write STATION config");
+      expect(result.stdout).not.toContain(`Applying: Write STATION config (${fixture.configPath})`);
+      expect(result.stdout).toContain("Selected changes");
+      expect(result.stdout).toContain("Write STATION config");
+      expect(result.stdout).toContain(
+        "Starting: Install Worktrunk shell integration. Native output follows.",
       );
       expect(result.stdout).toContain("fake shell integration installed");
-      expect(result.stdout).toContain("Completed: Install Worktrunk shell integration");
+      expect(result.stdout).toContain("Finished: Install Worktrunk shell integration.");
       expect(result.stdout).toContain("Core setup complete.");
+      expect(result.stdout).not.toContain(
+        "Run stn doctor after setup to validate the Observer runtime.",
+      );
+      expect(result.stdout).not.toMatch(/"(?:provider|commands|before|after|rawResult|data)"\s*:/);
+      expect(result.stdout).not.toMatch(/command\s+\[[^\]]*\]/);
       expect(result.stdout).toContain("Remaining");
       expect(result.stdout).toContain(
         "These bare launchers do not resolve to this checkout on PATH: stn, stn-ingress, stn-tmux-popup",
       );
-      expect(result.stdout).toContain(`command pnpm --dir ${process.cwd()} station:link`);
+      expect(result.stdout).toContain(`Run: pnpm --dir ${process.cwd()} station:link`);
       expect(result.stdout).toContain(`'${join(process.cwd(), "bin", "stn")}' doctor`);
       expect(result.stdout).toContain("Use stn instead of the absolute path (optional):");
       expect(result.stdout).toContain(
@@ -113,9 +148,7 @@ describe("setup guided feedback e2e", () => {
         env: fixture.env,
         answers: [],
       });
-      const checkPlan = JSON.parse(check.stdout) as {
-        checks: Array<{ id: string; details?: Record<string, string> }>;
-      };
+      const checkPlan = CliSetupPlanSchema.parse(JSON.parse(check.stdout));
       expect(
         checkPlan.checks.find((candidate) => candidate.id === "harness-tracking:codex")?.details,
       ).toEqual(
@@ -162,9 +195,7 @@ describe("setup guided feedback e2e", () => {
         ["--config", fixture.configPath, "setup", "check", "--json"],
         { cwd: fixture.repo, env: fixture.env, answers: [] },
       );
-      const repairedPlan = JSON.parse(repairedCheck.stdout) as {
-        checks: Array<{ id: string; status: string; details?: Record<string, string> }>;
-      };
+      const repairedPlan = CliSetupPlanSchema.parse(JSON.parse(repairedCheck.stdout));
       expect(
         repairedPlan.checks.find((candidate) => candidate.id === "harness-tracking:codex"),
       ).toMatchObject({
@@ -185,18 +216,31 @@ describe("setup guided feedback e2e", () => {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["1,2", "n", "n", "y", "y", "y", "n", "n"],
+        answers: ["1,2", "select:1", "n", "n", "y", "y", "y", "n", "n"],
       });
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
-      expect(result.stdout).toContain(
-        "Select agent CLIs to prepare (comma-separated; the first is the default only for a new config).",
-      );
+      expect(result.stdout).toContain("Select agent CLIs to prepare.");
+      expect(result.stdout).toContain("2 agent choices are available.");
+      expect(result.stdout).toContain("Choose the default agent for the new config.");
       expect(result.stdout).toContain("Install Codex tracking?");
       expect(result.stdout).toContain("Install OpenCode tracking?");
-      expect(result.stdout).toContain("Completed: Install Codex tracking");
-      expect(result.stdout).toContain("Completed: Install OpenCode tracking");
+      expect(result.stdout).toContain("Install Codex tracking");
+      expect(result.stdout).toContain("Install OpenCode tracking");
+      expect(result.stdout).not.toMatch(
+        /"(?:provider|commands|before|after|rawResult|serializedResult)"\s*:/,
+      );
+      expect(
+        result.stdout
+          .split("\n")
+          .some((line) => line.trimStart().startsWith("{") || line.trimStart().startsWith("[")),
+      ).toBe(false);
+      await expectReviewedSetupTranscript({
+        output: result.stdout,
+        fixtureRoot: fixture.root,
+        runtimeDir: fixture.runtimeDir,
+      });
       const config = await readFile(fixture.configPath, "utf8");
       expect(config).toContain('harness = "codex"');
       expect(config).toContain("[harness.codex]");
@@ -221,13 +265,35 @@ describe("setup guided feedback e2e", () => {
     }
   });
 
+  it("reprompts after an empty agent selection without choosing the first item", async () => {
+    const fixture = await createFixture({ harness: "codex-opencode" });
+    try {
+      const result = await runStation(["--config", fixture.configPath, "setup"], {
+        cwd: fixture.repo,
+        env: fixture.env,
+        answers: ["enter", "2", "n", "n", "y", "y", "n", "n"],
+      });
+
+      expect(result.timedOut).toBe(false);
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(result.stdout.match(/Select agent CLIs to prepare\./g)).toHaveLength(4);
+      expect(result.stdout).toContain("Select at least one available agent CLI.");
+      const config = await readFile(fixture.configPath, "utf8");
+      expect(config).toContain('harness = "opencode"');
+      expect(config).toContain("[harness.opencode]");
+      expect(config).not.toContain("[harness.codex]");
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it("keeps a clean Codex and Pi setup idempotent and visible in the Observer snapshot", async () => {
     const fixture = await createFixture({ harness: "codex-pi" });
     try {
       const first = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        answers: ["1,2", "n", "n", "y", "y", "n", "n"],
+        answers: ["1,2", "select:1", "n", "n", "y", "y", "n", "n"],
       });
       expect(first.exitCode, `${first.stdout}\n${first.stderr}`).toBe(0);
       const firstConfig = await readFile(fixture.configPath, "utf8");
@@ -317,7 +383,7 @@ describe("setup guided feedback e2e", () => {
         expect(result.stdout).toContain(
           `Run: touch ${rcPath} && ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
         );
-        expect(result.stdout).not.toContain("Failed: Install Worktrunk shell integration");
+        expect(result.stdout).toContain("Failed: Install Worktrunk shell integration.");
         expect(result.stdout).not.toContain("fake shell integration installed");
         expect(result.stdout).toContain("Core setup complete.");
         await expect(readFile(rcPath, "utf8")).rejects.toThrow();
@@ -347,11 +413,12 @@ describe("setup guided feedback e2e", () => {
         expect(first.exitCode).toBe(0);
         expect(second.exitCode).toBe(0);
         expect(first.stdout).toContain(
-          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
+          "Starting: Install Worktrunk shell integration. Native output follows.",
         );
+        expect(first.stdout).toContain("fake shell integration installed");
         expect(second.stdout).not.toContain("Install Worktrunk shell integration?");
         expect(second.stdout).not.toContain(
-          `Running: ${join(fixture.bin, "wt")} -y config shell install ${shell}`,
+          "Starting: Install Worktrunk shell integration. Native output follows.",
         );
         const check = await runStation(
           ["--config", fixture.configPath, "setup", "check", "--json"],
@@ -362,7 +429,7 @@ describe("setup guided feedback e2e", () => {
           },
         );
         expect(check.exitCode).toBe(0);
-        expect(JSON.parse(check.stdout).checks).toEqual(
+        expect(CliSetupPlanSchema.parse(JSON.parse(check.stdout)).checks).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ id: "worktrunk-shell-integration", status: "ok" }),
           ]),
@@ -402,37 +469,32 @@ describe("setup guided feedback e2e", () => {
   it("shows agent installer feedback, re-checks, and continues without hanging", async () => {
     const fixture = await createFixture({ harness: "installable-codex" });
     try {
+      const installerInputs: GuidedPtyInput[] = [
+        ...(process.platform === "darwin" ? (["n"] as const) : []),
+        "2",
+        "n",
+        "n",
+        "y",
+        "y",
+        "n",
+        "n",
+      ];
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
         env: fixture.env,
-        // macOS first offers Homebrew; both platforms then install Codex and decline
-        // the other agents, linking, hooks, shell integration, and popup binding.
-        answers: [
-          ...(process.platform === "darwin" ? ["n"] : []),
-          "y",
-          "n",
-          "n",
-          "n",
-          "n",
-          "n",
-          "n",
-          "y",
-          "y",
-          "n",
-          "n",
-        ],
+        answers: installerInputs,
       });
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("No supported agent CLI is available.");
-      expect(result.stdout).toContain("Installing Codex...");
-      expect(result.stdout).toContain("Live installer output is shown below");
+      expect(result.stdout).toContain("Starting: Install Codex. Native output follows.");
       expect(result.stdout).toContain("fake codex installer ran");
-      expect(result.stdout).toContain("Codex install completed.");
+      expect(result.stdout).toContain("Finished: Install Codex.");
       expect(result.stdout).toContain("Install Worktrunk lifecycle hooks?");
       expect(result.stdout).toContain("Install Codex tracking?");
-      expect(result.stdout).toContain("Applying: Write STATION config");
+      expect(result.stdout).not.toContain("Applying: Write STATION config");
+      expect(result.stdout).toContain("Write STATION config");
       expect(result.stdout).toContain("Core setup complete.");
       await expect(readFile(fixture.configPath, "utf8")).resolves.toContain("[harness.codex]");
     } finally {
@@ -442,6 +504,9 @@ describe("setup guided feedback e2e", () => {
 
   it("runs the persisted absolute popup launcher in a fresh minimal-PATH tmux context", async () => {
     const fixture = await createFixture({ harness: "codex", launchers: "complex" });
+    const tmuxConfigPath = join(fixture.home, ".tmux.conf");
+    const originalTmuxConfig = "# user tmux config\n";
+    await writeFile(tmuxConfigPath, originalTmuxConfig, "utf8");
     try {
       const result = await runStation(["--config", fixture.configPath, "setup"], {
         cwd: fixture.repo,
@@ -451,7 +516,7 @@ describe("setup guided feedback e2e", () => {
         answers: ["n", "n", "y", "y", "y"],
       });
 
-      expect(result.timedOut).toBe(false);
+      expect(result.timedOut, `${result.stdout}\n${result.stderr}`).toBe(false);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
         "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",
@@ -460,9 +525,16 @@ describe("setup guided feedback e2e", () => {
         `Direct fallback: ${join(process.cwd(), "bin", "stn")} popup`,
       );
 
-      const tmuxConfigPath = join(fixture.home, ".tmux.conf");
       const tmuxConfig = await readFile(tmuxConfigPath, "utf8");
+      expect(tmuxConfig).toContain(originalTmuxConfig.trim());
       expect(tmuxConfig).toContain("bind-key Space run-shell -b");
+      const tmuxBackups = (await readdir(fixture.home)).filter(
+        (name) => name.startsWith(".tmux.conf.") && name.endsWith(".bak"),
+      );
+      expect(tmuxBackups).toHaveLength(1);
+      await expect(readFile(join(fixture.home, tmuxBackups[0] ?? ""), "utf8")).resolves.toBe(
+        originalTmuxConfig,
+      );
       expect(tmuxConfig).not.toContain("STATION_FOCUS_CLIENT_ID=#{q:client_name} stn-tmux-popup");
 
       const freshTmux = spawnSync(
@@ -510,6 +582,7 @@ type HarnessMode = "codex" | "codex-opencode" | "codex-pi" | "installable-codex"
 
 type Fixture = {
   root: string;
+  runtimeDir: string;
   home: string;
   repo: string;
   bin: string;
@@ -603,9 +676,8 @@ async function createFixture(input: {
       ? "exit 2\n"
       : 'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 2\n',
   );
-  // diffnav + delta are required; the checks only need the binaries on PATH.
-  await writeShim(bin, "diffnav", "exit 0\n");
-  await writeShim(bin, "delta", "exit 0\n");
+  // Hunk is required; the check only needs its binary on PATH.
+  await writeShim(bin, "hunk", "exit 0\n");
   await writeShim(bin, "bun", "exit 0\n");
   await writeShim(bin, "npm", "echo 0.1.0\n");
   if (
@@ -698,6 +770,7 @@ async function createFixture(input: {
 
   return {
     root,
+    runtimeDir,
     home,
     repo,
     bin,
@@ -720,11 +793,28 @@ async function createFixture(input: {
   };
 }
 
-function shellRcPath(home: string, shell: SupportedShell): string {
+async function expectReviewedSetupTranscript(input: {
+  output: string;
+  fixtureRoot: string;
+  runtimeDir: string;
+}): Promise<void> {
+  const transcript = normalizeGuidedTranscript(input.output)
+    .replaceAll(input.fixtureRoot, "<FIXTURE_ROOT>")
+    .replaceAll(input.runtimeDir, "<RUNTIME_DIR>")
+    .replaceAll(process.cwd(), "<CHECKOUT>");
+  if (process.env.STATION_UPDATE_SETUP_TRANSCRIPT === "1") {
+    await writeFile(reviewedTranscriptPath, transcript, "utf8");
+  }
+  expect(transcript).toBe(await readFile(reviewedTranscriptPath, "utf8"));
+}
+
+function shellRcPath(...pathArguments: [home: string, shell: SupportedShell]): string {
+  const [home, shell] = pathArguments;
   return join(home, shell === "zsh" ? ".zshrc" : ".bashrc");
 }
 
-function otherShellRcPath(home: string, shell: SupportedShell): string {
+function otherShellRcPath(...pathArguments: [home: string, shell: SupportedShell]): string {
+  const [home, shell] = pathArguments;
   return shellRcPath(home, shell === "zsh" ? "bash" : "zsh");
 }
 
@@ -748,7 +838,10 @@ async function writeCodexShim(bin: string): Promise<void> {
   );
 }
 
-async function writeShim(bin: string, name: string, body: string): Promise<void> {
+async function writeShim(
+  ...shimArguments: [bin: string, name: string, body: string]
+): Promise<void> {
+  const [bin, name, body] = shimArguments;
   const path = join(bin, name);
   await writeFile(path, `#!/bin/sh\n${body}`, "utf8");
   await chmod(path, 0o700);
@@ -761,56 +854,32 @@ type StationProcessResult = {
   timedOut: boolean;
 };
 
-function runStation(
-  args: readonly string[],
-  options: {
-    cwd: string;
-    env: NodeJS.ProcessEnv;
-    answers: readonly string[];
-    timeoutMs?: number;
-  },
+async function runStation(
+  ...stationArguments: [
+    args: readonly string[],
+    options: {
+      cwd: string;
+      env: NodeJS.ProcessEnv;
+      answers: readonly GuidedPtyInput[];
+      timeoutMs?: number;
+    },
+  ]
 ): Promise<StationProcessResult> {
-  const timeoutMs = options.timeoutMs ?? 15_000;
-  return new Promise((resolve) => {
-    const child = spawn(join(process.cwd(), "bin", "stn"), [...args], {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let answerIndex = 0;
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout.push(chunk);
-      const promptCount = countPrompts(Buffer.concat(stdout).toString("utf8"));
-      while (answerIndex < promptCount && answerIndex < options.answers.length) {
-        child.stdin.write(`${options.answers[answerIndex]}\n`);
-        answerIndex += 1;
-      }
-    });
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("close", (exitCode: number | null) => {
-      clearTimeout(timer);
-      resolve({
-        exitCode,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-        timedOut,
-      });
-    });
+  const [args, options] = stationArguments;
+  const result = await runGuidedPty({
+    command: join(process.cwd(), "bin", "stn"),
+    args,
+    cwd: options.cwd,
+    env: options.env,
+    inputs: options.answers,
+    timeoutMs: options.timeoutMs ?? 20_000,
   });
-}
-
-function countPrompts(output: string): number {
-  const confirms = output.match(/\[y\/N\] /g)?.length ?? 0;
-  const selects = output.match(/\n> /g)?.length ?? 0;
-  return confirms + selects;
+  return {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    timedOut: result.timedOut,
+  };
 }
 
 function shellQuote(value: string): string {

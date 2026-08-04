@@ -22,7 +22,7 @@ independently landable and CI-green.
 ## Goal and non-goals
 
 Goal: download one verified file, run `stn`, get the native TUI connected
-to a live observer. Everything else (worktrunk, tmux, diffnav, git-delta,
+to a live observer. Everything else (worktrunk, tmux, Hunk,
 agent CLIs) gates *features*, never launch — captured precisely by the
 `launchReady` vs `workflowReady` split below.
 
@@ -67,9 +67,8 @@ Pinned so the release job, install script, and acceptance suite agree.
   popup geometry; custom geometry and explicit `--config` setup use this exact
   config-aware sibling alias. First use or invalid fast state also invokes the
   alias. The source POSIX launcher remains unchanged for development installs.
-- `LICENSE` — required. FSL-1.1 (LICENSE:67) obliges every redistributed
-  copy to include the Terms or a link and keep copyright notices. The
-  archive must carry it.
+- `LICENSE` — required. The archive must carry the Apache License 2.0 terms
+  distributed with Station.
 - **Extracted-at-runtime integration assets** (see A4 extraction policy):
   the Pi extension file (`integrations/harness/pi/src/piExtension.ts` is
   resolved as an on-disk `../dist/piExtension.js` via
@@ -183,7 +182,7 @@ what "required" means), split the setup summary into two truths:
   extracted executable assets can run there. Nothing else. Bare `stn` gates
   on this.
 - `workflowReady` — core worktree workflow prerequisites: Git, worktrunk,
-  tmux, diffnav, git-delta, the effective default/selected agent CLI, valid core
+  tmux, Hunk, the effective default/selected agent CLI, valid core
   config, and current Station-owned tracking artifacts for required Claude,
   Codex, Cursor, or OpenCode harnesses. Artifact preparation does not prove
   provider trust or runtime event delivery. It is independent of the current

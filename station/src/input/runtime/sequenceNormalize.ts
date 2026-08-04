@@ -1,9 +1,10 @@
 import { kittySequenceToLegacy } from "../../terminal/index.js";
 import { stripTerminalReplies } from "../../terminal/input/terminalReplies.js";
-import { cursorKeyBytes } from "../../terminal/protocol/cursorKeys.js";
+import { CURSOR_KEY_BYTES } from "../../terminal/protocol/cursorKeys.js";
 import type { PtyRegistryView } from "../../terminal/registry/ptyRegistry.js";
 import type { PaneId } from "../../state/types.js";
-import type { ProviderId, StationSnapshot } from "@station/contracts";
+import type { DashboardSnapshotView } from "@station/dashboard-core";
+import type { ProviderId } from "@station/contracts";
 
 export type NormalizedSequence = { consumed: true } | { consumed: false; legacy: string };
 
@@ -27,8 +28,6 @@ export function normalizeSequence(
   return { consumed: false, legacy };
 }
 
-const CURSOR_KEY_BYTES = cursorKeyBytes();
-
 /** Rewrite arrow-key bytes to the pane's application/normal cursor-key mode. */
 export function paneInputBytes(
   bytes: string,
@@ -45,7 +44,7 @@ export function paneInputBytes(
 }
 
 export function providerSupportsModifiedEnterSoftNewline(
-  snapshot: StationSnapshot | undefined,
+  snapshot: DashboardSnapshotView | undefined,
   providerId: ProviderId,
 ): boolean {
   return (

@@ -12,11 +12,15 @@ routes use in-memory first-run defaults, ensure the observer, and show the
 existing empty-state UI. They do not create a config file; `stn setup` remains
 the writer. Setup writes `projects = []` and never infers a project from its
 working directory; use the empty dashboard's **Add your first project** flow to
-choose an existing Git repository explicitly. After every successful guided or
-non-interactive setup config write, setup starts or restarts the observer and
-waits for it to become healthy with the updated configuration. Only after
-activation succeeds does setup install remaining tracking artifacts and perform
-a final read-only re-probe. If activation fails, setup retains the config, exits
+choose an existing Git repository explicitly. Setup validates generated or
+source-preserving edited TOML before writing, revalidates the planned source bytes
+at the serialized commit boundary, refuses concurrent creates, writes a timestamped
+backup for updates, and atomically replaces the target through a private mode-`0600`
+temporary file. After every successful guided or non-interactive setup config
+write, setup starts or restarts the observer and waits for it to become healthy
+with the updated configuration. Only after activation succeeds does setup
+install remaining tracking artifacts in-process and perform a final read-only
+re-probe. If activation fails, setup retains the config, exits
 nonzero, and prints both `stn observer restart` and the setup command that must
 follow it. This exception applies only to the implicit default
 path: a missing explicit `--config`, an unreadable file, malformed TOML, or
@@ -135,6 +139,7 @@ Worktrunk, and recreate it under the managed root.
 | `window_naming` | `project-branch` | Single-value enum. |
 | `primary_agent_pane` | bool | |
 | `popup_width` / `popup_height` / `popup_position` | string | Free-form, e.g. `"50%"`, `"C"`. |
+| `popup_status_bar` | bool | Show the persistent popup's nested tmux status bar. Defaults to `false`; this never changes the invoking tmux session's status bar. Rerun `stn setup` after changing it so an installed popup binding uses the config-aware launch path when needed. |
 | `popup_scope` | `server` \| `client` | Popup ownership scope. Defaults to `server`, preserving one popup and warm renderer per tmux server and transferring it between clients. `client` creates an independent popup and warm renderer for each tmux client. Close existing popups before changing this value, then rerun `stn setup` to refresh an installed popup binding; an open renderer retains the scope it started with until dismissed. |
 
 ### `[harness.<id>]` — agent harnesses (optional)
@@ -314,6 +319,16 @@ Each `Automation` is `{ id, label, enabled?, steps[] }`; each step under
 | (automation) `enabled` | bool | `true` | `false` hides it from the menu. |
 | (automation) `steps` | `AutomationStep[]` | **required** | One or more steps. |
 
+The built-in **See diff** automation runs Hunk against the `origin/main` merge
+base, watches working-tree changes, and includes untracked files. Explicit
+`automations` are user-owned, including `automations = []`; Station does not
+rewrite a custom legacy `diffnav` command. To migrate one, replace its command
+with:
+
+```toml
+command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
+```
+
 ### `[tui]` — runtime TUI widgets (optional, best-effort)
 
 > **Decorative widgets only** — not the same as `[workspace]`. `[tui]` is the
@@ -393,8 +408,8 @@ Strict boolean record. Unknown flag names are rejected.
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. |
-| `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. |
+| `session_resume_agent` | bool | `false` | Enable resuming lost provider-native agent sessions. Session migration requires this to already be enabled in the running target Observer; migration never edits the config. |
+| `station_persistent_agents` | bool | `false` | Host Station agents in the standalone `station-station-host` daemon so they survive UI close and can reattach. Session migration requires the running target to report persistent native launch capability. |
 
 ---
 
@@ -536,13 +551,16 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_SESSION_ID`, `STATION_HARNESS_PROVIDER`, `STATION_TERMINAL_PROVIDER`,
 `STATION_TERMINAL_TARGET_ID`, `STATION_OBSERVER_STATE_DIR`, `STATION_STATE_DIR`,
 `STATION_HOOK_SPOOL_DIR`, `STATION_CLIENT_BUILD_VERSION`,
-`STATION_OBSERVER_BUILD_VERSION`, `STATION_PANE`, `STATION_SEMANTIC_COPY`,
-`STATION_OUTER_TMUX`, `STATION_OUTER_TMUX_PANE`, `STATION_TUI_POPUP`,
+`STATION_OBSERVER_BUILD_VERSION`, `STATION_UI_RUN_ID`, `STATION_PANE`,
+`STATION_SEMANTIC_COPY`, `STATION_OUTER_TMUX`,
+`STATION_OUTER_TMUX_PANE`, `STATION_TUI_POPUP`,
 `STATION_TUI_PERSISTENT`,
 `STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
 build variables as a pair: the first identifies the renderer artifact and the
-second pins it to the exact Observer selector the CLI accepted. A directly
-launched source renderer falls back to its own verified built selector. The
+second pins it to the exact Observer selector the CLI accepted. The launcher
+also mints `STATION_UI_RUN_ID` as content-free correlation for one renderer
+child; a direct source renderer mints and preserves its own ID across Bun HMR.
+A directly launched source renderer falls back to its own verified built selector. The
 renderer fixes that selector when it creates its Observer client; each later
 operation checks the socket owner on the same connection without running Git or
 hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the

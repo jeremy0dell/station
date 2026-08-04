@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { StoreApi } from "zustand/vanilla";
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardStateSource } from "@station/dashboard-core";
 import type { IslandCelebration } from "./layout.js";
 
 export const CELEBRATION_MS = 4_000;
@@ -14,7 +13,7 @@ type SeenPr = { number: number; state: string };
  * stays quiet.
  */
 export function useMergeCelebration(
-  stationViewStore: StoreApi<TuiStore>,
+  dashboardState: DashboardStateSource,
   ttlMs: number = CELEBRATION_MS,
 ): IslandCelebration | undefined {
   const [celebration, setCelebration] = useState<IslandCelebration | undefined>(undefined);
@@ -23,7 +22,7 @@ export function useMergeCelebration(
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const check = (): void => {
-      const rows = stationViewStore.getState().snapshot?.rows;
+      const rows = dashboardState.getState().snapshot?.rows;
       if (rows === undefined) {
         return;
       }
@@ -56,12 +55,12 @@ export function useMergeCelebration(
       timer = setTimeout(() => setCelebration(undefined), ttlMs);
     };
     check();
-    const unsubscribe = stationViewStore.subscribe(check);
+    const unsubscribe = dashboardState.subscribe(check);
     return () => {
       unsubscribe();
       clearTimeout(timer);
     };
-  }, [stationViewStore, ttlMs]);
+  }, [dashboardState, ttlMs]);
 
   return celebration;
 }

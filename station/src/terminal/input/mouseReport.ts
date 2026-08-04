@@ -5,7 +5,6 @@
 import {
   encodeMouseButtonByte,
   legacyMouseReport,
-  MOUSE_BUTTON_BY_NAME,
   MouseButton,
   MouseEncoding,
   sgrMouseReport,
@@ -13,12 +12,10 @@ import {
   type MouseEncodingValue,
 } from "../protocol/mouse.js";
 
-export type MouseReportButton = MouseButtonName;
-
 export type MouseReportEvent = {
   /** press = button down, release = button up, motion = buttonless hover move. */
   action: "press" | "release" | "motion";
-  button: MouseReportButton;
+  button: MouseButtonName;
   /** 1-based PTY grid cell. */
   col: number;
   row: number;
@@ -32,8 +29,8 @@ export function buildMouseReportSequence(event: MouseReportEvent): string {
   // legacy can't, so it collapses every release to the "no button" code.
   const base =
     event.encoding === MouseEncoding.Legacy && event.action === "release"
-      ? MouseButton.None
-      : MOUSE_BUTTON_BY_NAME[event.button];
+      ? MouseButton.none
+      : MouseButton[event.button];
   const cb = encodeMouseButtonByte({
     base,
     motion: event.action === "motion",

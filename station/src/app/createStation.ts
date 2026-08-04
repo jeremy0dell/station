@@ -1,5 +1,4 @@
-import type { TuiStore } from "@station/dashboard-core";
-import type { StoreApi } from "zustand/vanilla";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import type { Automation } from "../config/stationConfig.js";
 import {
   startWidgetConfigWrites,
@@ -28,11 +27,11 @@ import type { StationClient } from "../sources/types.js";
 import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { createStationHostManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import { createStationViewStore } from "../station/store/stationViewStore.js";
+import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
 /**
- * Wire Station's runtime — registry, source→store reconcilers, layout
+ * Wire Station's runtime — dashboard, registry, source reconcilers, layout
  * persistence, lifecycle, and input — and hand back the view props plus a
  * start/dispose surface. The renderer (main.tsx / tests) mounts <StationApp />.
  *
@@ -42,10 +41,10 @@ export function createStation(options: CreateStationOptions): Station {
   const { store, stationClient } = options;
   const automations = options.automations ?? [];
 
-  // The view store and live-PTY registry everything else wires around. The
-  // config widget set seeds the store's live session copy; widget-settings
+  // The dashboard runtime and live-PTY registry everything else wires around. The
+  // config widget set seeds the runtime's live session copy; widget-settings
   // edits are written back to config.toml when a config path exists.
-  const stationViewStore = createStationViewStore(stationClient, {
+  const dashboardRuntime = createStationDashboardRuntime(stationClient, {
     ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
     widgetsPersisted: options.tuiConfigPath !== undefined,
   });
@@ -59,7 +58,7 @@ export function createStation(options: CreateStationOptions): Station {
   const lifecycle = createLifecycle({
     store,
     stationClient,
-    stationViewStore,
+    dashboardRuntime,
     registry,
     reconcilers,
     layoutWriter,
@@ -70,7 +69,7 @@ export function createStation(options: CreateStationOptions): Station {
   // Input runtime; its shutdown tears down this composition, then exits the app.
   const stationInput = createInputRuntime(options, {
     store,
-    stationViewStore,
+    dashboardRuntime,
     registry,
     observerService: stationClient.service,
     automations,
@@ -86,7 +85,7 @@ export function createStation(options: CreateStationOptions): Station {
   const viewProps = buildViewProps(options, {
     store,
     registry,
-    stationViewStore,
+    dashboardRuntime,
     dispatchMouse: stationInput.dispatchMouse,
     onCopySelection: createCopySelectionHandler(store, options.clipboardEffects),
     automations,
@@ -96,7 +95,7 @@ export function createStation(options: CreateStationOptions): Station {
     viewProps,
     store,
     registry,
-    stationViewStore,
+    dashboard: dashboardRuntime,
     stationInput,
     start: lifecycle.start,
     dispose: () => {
@@ -206,7 +205,7 @@ function createLayoutPersistence(
 function createLifecycle(deps: {
   store: StationStore;
   stationClient: StationClient;
-  stationViewStore: StoreApi<TuiStore>;
+  dashboardRuntime: DashboardRuntime;
   registry: PtyRegistry;
   reconcilers: Reconcilers;
   layoutWriter: LayoutWriter | undefined;
@@ -215,13 +214,12 @@ function createLifecycle(deps: {
   const {
     store,
     stationClient,
-    stationViewStore,
+    dashboardRuntime,
     registry,
     reconcilers,
     layoutWriter,
     tuiConfigPath,
   } = deps;
-  let detachStationSource: (() => void) | undefined;
   let detachOverlayRowFocus: (() => void) | undefined;
   let detachReconcile: (() => void) | undefined;
   let detachSessionReconcile: (() => void) | undefined;
@@ -235,10 +233,11 @@ function createLifecycle(deps: {
       return pendingWidgetWrites ?? Promise.resolve();
     }
     disposed = true;
+    // The reconciler must detach before the dashboard source so teardown cannot
+    // synchronize transient overlay focus into a disposing runtime.
     detachOverlayRowFocus?.();
     detachOverlayRowFocus = undefined;
-    detachStationSource?.();
-    detachStationSource = undefined;
+    dashboardRuntime.dispose();
     detachReconcile?.();
     detachReconcile = undefined;
     detachSessionReconcile?.();
@@ -285,12 +284,16 @@ function createLifecycle(deps: {
         detachLayoutWriter = store.subscribe(() => layoutWriter.schedule());
       }
       if (tuiConfigPath !== undefined) {
-        widgetConfigWrites = startWidgetConfigWrites(stationViewStore, tuiConfigPath);
+        widgetConfigWrites = startWidgetConfigWrites(
+          dashboardRuntime.state,
+          dashboardRuntime.actions.pushToast,
+          tuiConfigPath,
+        );
       }
-      detachStationSource = stationViewStore.getState().start();
+      dashboardRuntime.start();
       // The overlay bridge may synchronize immediately, so its dashboard source
       // subscription must already be active before the bridge starts.
-      detachOverlayRowFocus = createOverlayRowFocusReconciler(store, stationViewStore);
+      detachOverlayRowFocus = createOverlayRowFocusReconciler(store, dashboardRuntime);
       stationClient.start();
     },
     disposeForShutdown: (): Promise<void> => disposeInternal(true),
@@ -305,7 +308,7 @@ function createInputRuntime(
   options: CreateStationOptions,
   deps: {
     store: StationStore;
-    stationViewStore: StoreApi<TuiStore>;
+    dashboardRuntime: DashboardRuntime;
     registry: PtyRegistry;
     observerService: StationClient["service"];
     automations: readonly Automation[];
@@ -326,7 +329,7 @@ function createInputRuntime(
   const inputOptions: Parameters<typeof createStationInputRuntime>[0] = {
     store: deps.store,
     shutdown: deps.onShutdown,
-    stationViewStore: deps.stationViewStore,
+    dashboardRuntime: deps.dashboardRuntime,
     registry: deps.registry,
     observerService: deps.observerService,
     autoCloseOverlayOnPaneOpen: options.shellAutoCloseOverlay ?? false,
@@ -350,7 +353,7 @@ function buildViewProps(
   deps: {
     store: StationStore;
     registry: PtyRegistry;
-    stationViewStore: StoreApi<TuiStore>;
+    dashboardRuntime: DashboardRuntime;
     dispatchMouse: StationInputRuntime["dispatchMouse"];
     onCopySelection: (text: string) => void;
     automations: readonly Automation[];
@@ -359,7 +362,8 @@ function buildViewProps(
   const viewProps: StationAppProps = {
     store: deps.store,
     registry: deps.registry,
-    stationViewStore: deps.stationViewStore,
+    dashboardState: deps.dashboardRuntime.state,
+    dashboardActions: deps.dashboardRuntime.actions,
     dispatchMouse: deps.dispatchMouse,
     onCopySelection: deps.onCopySelection,
     automations: deps.automations,

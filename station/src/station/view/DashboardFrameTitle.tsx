@@ -1,17 +1,16 @@
 import { TextAttributes } from "@opentui/core";
 import { useStore } from "zustand/react";
-import type { StoreApi } from "zustand/vanilla";
 import stringWidth from "string-width";
 import {
   headerStrip,
   observerHeaderStatusForConnection,
   selectFleetSummary,
   tuiScreenBehavior,
-  type TuiStore,
+  type DashboardStateSource,
 } from "@station/dashboard-core";
 import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
-import { STATION_COLORS } from "./theme.js";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import {
   stationMouseProps,
   useStationHoverState,
@@ -25,7 +24,7 @@ const WIDGET_SETTINGS_AFFORDANCE = "[+]";
 const EDGE = 2;
 
 export type DashboardFrameTitleProps = {
-  store: StoreApi<TuiStore>;
+  state: DashboardStateSource;
   /** The popup box the title row overlays; texts paint over its top border. */
   frame: { left: number; top: number; width: number };
   topRowWidgets?: readonly TopRowWidgetView[];
@@ -38,24 +37,29 @@ export type DashboardFrameTitleProps = {
  * need the user, the subtitle swaps to a red `! N need you` flag.
  */
 export function DashboardFrameTitle({
-  store,
+  state,
   frame,
   topRowWidgets = [],
   zIndex,
 }: DashboardFrameTitleProps) {
+  const theme = useStationTheme();
+  const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.panel);
   const dispatch = useStationMouse();
   const [hovered, setHover] = useStationHoverState();
-  const snapshot = useStore(store, (state) => state.snapshot);
-  const observerConnectionStatus = useStore(store, (state) => state.observerConnectionStatus);
-  const screen = useStore(store, (state) => state.screen);
+  const snapshot = useStore(state, (current) => current.snapshot);
+  const observerConnectionStatus = useStore(
+    state,
+    (current) => current.observerConnectionStatus,
+  );
+  const screen = useStore(state, (current) => current.screen);
   const behavior = tuiScreenBehavior(screen);
-  const hover = hovered && behavior.clickAway === undefined;
+  const hover = hovered && behavior.dashboardHoverEnabled;
 
   const needsYou = snapshot === undefined ? 0 : selectFleetSummary(snapshot).needsYou;
   const subtitle =
     needsYou > 0
-      ? { text: `! ${needsYou} need you`, color: STATION_COLORS.red }
-      : { text: OVERVIEW_SUBTITLE, color: STATION_COLORS.gray };
+      ? { text: `! ${needsYou} need you`, color: toOpenTuiColor(theme.status.danger) }
+      : { text: OVERVIEW_SUBTITLE, color: toOpenTuiColor(theme.text.muted) };
   const title = ` ${PRODUCT_LABEL} ${subtitle.text} `;
 
   const status = observerHeaderStatusForConnection(observerConnectionStatus, snapshot !== undefined);
@@ -77,9 +81,9 @@ export function DashboardFrameTitle({
         left={frame.left + EDGE}
         top={frame.top}
         zIndex={zIndex}
-        bg={STATION_COLORS.background}
+        bg={surfaceBackground}
       >
-        <span fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>
+        <span fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.BOLD}>
           {` ${PRODUCT_LABEL} `}
         </span>
         <span fg={subtitle.color}>{`${subtitle.text} `}</span>
@@ -92,11 +96,11 @@ export function DashboardFrameTitle({
         flexDirection="row"
       >
         {strip.length > 0 ? (
-          <text fg={STATION_COLORS.gray} bg={STATION_COLORS.background}>{` ${strip}`}</text>
+          <text fg={toOpenTuiColor(theme.text.muted)} bg={surfaceBackground}>{` ${strip}`}</text>
         ) : null}
         <text
-          fg={hover ? STATION_COLORS.cyan : STATION_COLORS.gray}
-          bg={STATION_COLORS.background}
+          fg={toOpenTuiColor(hover ? theme.action.primary : theme.text.muted)}
+          bg={surfaceBackground}
           {...stationMouseProps(dispatch, { kind: "widgetSettingsOpen" })}
           onMouseOver={() => setHover(true)}
           onMouseOut={() => setHover(false)}

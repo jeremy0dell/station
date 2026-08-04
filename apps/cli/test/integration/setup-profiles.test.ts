@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { runCli } from "@station/cli";
+import { CliSetupPlanSchema } from "@station/contracts";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
 import { type MachineProfile, machineProfiles } from "@station/testing";
 import { afterEach, describe, expect, it } from "vitest";
@@ -33,10 +34,7 @@ describe("setup machine profiles", () => {
       });
 
       expect(result.code).toBe(profile.expect.exitCode);
-      const plan = result.output as {
-        summary: { requiredOk: boolean };
-        checks: { id: string; status: string }[];
-      };
+      const plan = CliSetupPlanSchema.parse(result.output);
       expect(plan.summary.requiredOk).toBe(profile.expect.requiredOk);
       const statusById = new Map(plan.checks.map((check) => [check.id, check.status]));
       for (const [id, status] of Object.entries(profile.expect.checks)) {
@@ -86,8 +84,7 @@ function profileExecutablePaths(state: ProfileState): Set<string> {
     [state.worktrunk, "wt"],
     [state.tmux, "tmux"],
     [state.bun, "bun"],
-    [state.diffnav, "diffnav"],
-    [state.gitDelta, "delta"],
+    [state.diffViewer, "hunk"],
   ] as const;
   return new Set(
     tools.flatMap(([presence, binary]) => (presence === "present" ? [`/fake/bin/${binary}`] : [])),

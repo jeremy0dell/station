@@ -84,6 +84,7 @@ describe("runtime hookSetup", () => {
     it("leaves safe tokens unquoted and quotes the rest", () => {
       expect(shellQuote("stn-ingress")).toBe("stn-ingress");
       expect(shellQuote("/tmp/station/config.toml")).toBe("/tmp/station/config.toml");
+      expect(shellQuote("/tmp/station/config.toml", true)).toBe("'/tmp/station/config.toml'");
       expect(shellQuote("has space")).toBe("'has space'");
       expect(shellQuote("it's")).toBe("'it'\\''s'");
       expect(commandLine(["stn-ingress", "--config", "a b", "claude"])).toBe(

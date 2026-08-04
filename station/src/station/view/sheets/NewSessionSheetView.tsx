@@ -1,38 +1,35 @@
-// OpenTUI port of apps/tui's NewSessionBottomSheet (review / editName /
-// pickProject / pickAgent). Picker lines are click targets dispatching their
-// slot key through the station mouse router.
-import type { ProjectView, ProviderId, StationSnapshot } from "@station/contracts";
-import {
-  type NewSessionFlowState,
-  selectedProject,
-  type TuiSelectionState,
-} from "@station/dashboard-core";
+import type { ProviderId } from "@station/contracts";
 import {
   bottomSheetContentWidth,
   newSessionContentRowCount,
-} from "@station/dashboard-core";
-import {
+  newSessionEditNameContent,
+  newSessionReviewContent,
+  selectedProject,
   selectNewSessionHarnessChoices,
-  selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
+  type DashboardSnapshotView,
+  type DashboardStateView,
+  type NewSessionFlowStateView,
 } from "@station/dashboard-core";
+import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
-import { providerHealthStatusColor, STATION_COLORS } from "../theme.js";
-import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
+import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {
-  fit,
+  SheetButtonRow,
   SheetChoiceLine,
+  SheetControlRow,
   SheetFooter,
   SheetLabelValue,
   SheetLine,
-  spaces,
 } from "./parts.js";
 
+type NewSessionProjectView = DashboardSnapshotView["projects"][number];
+
 export type NewSessionSheetViewProps = {
-  snapshot: StationSnapshot;
-  state: NewSessionFlowState;
-  selection: TuiSelectionState;
+  snapshot: DashboardSnapshotView;
+  state: NewSessionFlowStateView;
+  selection: DashboardStateView["selection"];
   columns: number;
   rows: number;
 };
@@ -61,10 +58,10 @@ export function NewSessionSheetView({
 }
 
 function renderMode(
-  snapshot: StationSnapshot,
-  state: NewSessionFlowState,
-  project: ProjectView | undefined,
-  selection: TuiSelectionState,
+  snapshot: DashboardSnapshotView,
+  state: NewSessionFlowStateView,
+  project: NewSessionProjectView | undefined,
+  selection: DashboardStateView["selection"],
   contentWidth: number,
 ) {
   if (state.mode === "pickProject") {
@@ -72,11 +69,14 @@ function renderMode(
       <ProjectPicker
         snapshot={snapshot}
         width={contentWidth}
-        selectedId={selection.get("newSessionPickProject") as ProjectView["id"] | undefined}
+        selectedId={selection.get("newSessionPickProject") as NewSessionProjectView["id"] | undefined}
       />
     );
   }
-  if (state.mode === "pickAgent" && project !== undefined) {
+  if (state.mode === "pickAgent") {
+    if (project === undefined) {
+      return <SheetFooter width={contentWidth}>No project is available · Esc back</SheetFooter>;
+    }
     return (
       <AgentPicker
         snapshot={snapshot}
@@ -89,10 +89,10 @@ function renderMode(
   if (state.mode === "editName") {
     return <EditName state={state} project={project} width={contentWidth} />;
   }
-  return <Review snapshot={snapshot} state={state} project={project} width={contentWidth} />;
+  return <Review snapshot={snapshot} state={state} width={contentWidth} />;
 }
 
-function titleForState(state: NewSessionFlowState): string {
+function titleForState(state: NewSessionFlowStateView): string {
   switch (state.mode) {
     case "review":
       return "Create Session";
@@ -108,48 +108,56 @@ function titleForState(state: NewSessionFlowState): string {
 function Review({
   snapshot,
   state,
-  project,
   width,
 }: {
-  snapshot: StationSnapshot;
-  state: NewSessionFlowState;
-  project: ProjectView | undefined;
+  snapshot: DashboardSnapshotView;
+  state: Extract<NewSessionFlowStateView, { mode: "review" }>;
   width: number;
 }) {
-  const harness =
-    project === undefined ? undefined : selectedHarnessOption(snapshot, project, state);
-  const focus = state.mode === "review" ? state.reviewFocus : "create";
+  const theme = useStationTheme();
+  const content = newSessionReviewContent(snapshot, state);
   return (
     <>
-      <SheetLine width={width}> </SheetLine>
-      <SheetLabelValue
+      {content.fields.map((field) => {
+        const status = field.status;
+        return (
+          <SheetControlRow
+            key={field.id}
+            width={width}
+            label={field.label}
+            shortcut={field.accelerator}
+            value={field.value}
+            focused={state.reviewFocus === field.focusId}
+            disabled={!field.enabled}
+            mouseTarget={{ kind: "newSessionAction", actionId: field.actionId }}
+            {...(status === undefined
+              ? {}
+              : {
+                  status: {
+                    glyph: status.glyph,
+                    text: status.text,
+                    color: providerHealthColor(theme, status.tone),
+                  },
+                })}
+          />
+        );
+      })}
+      <SheetButtonRow
         width={width}
-        label="Project"
-        labelWidth={10}
-        value={project?.label ?? "-"}
-        focused={focus === "project"}
+        buttons={[
+          {
+            id: content.create.actionId,
+            label: content.create.label,
+            compactLabel: "Create",
+            shortcut: content.create.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.reviewFocus === content.create.focusId,
+            disabled: !content.create.enabled,
+            mouseTarget: { kind: "newSessionAction", actionId: content.create.actionId },
+          },
+        ]}
       />
-      <SheetLabelValue
-        width={width}
-        label="Name"
-        labelWidth={10}
-        value={state.title}
-        focused={focus === "name"}
-        {...(state.titleSource === "generated" ? { valueColor: STATION_COLORS.gray } : {})}
-      />
-      <SheetLabelValue
-        width={width}
-        label="Agent"
-        labelWidth={10}
-        value={harness === undefined ? state.selectedHarness : `${harness.label} ${harness.status}`}
-        focused={focus === "agent"}
-        {...colorProp(providerHealthStatusColor(harness?.status))}
-      />
-      <SheetLine width={width}> </SheetLine>
-      <text fg={focus === "create" ? STATION_COLORS.cyan : STATION_COLORS.foreground}>
-        {fit(`${focus === "create" ? "▸" : " "} Create session`, width)}
-      </text>
-      <SheetFooter width={width}>{"↑↓ field  ↵ choose  N/P/A  Esc:cancel"}</SheetFooter>
+      <SheetFooter width={width}>{`↑↓ focus · ${content.helper} · Esc cancel`}</SheetFooter>
     </>
   );
 }
@@ -159,31 +167,66 @@ function EditName({
   project,
   width,
 }: {
-  state: Extract<NewSessionFlowState, { mode: "editName" }>;
-  project: ProjectView | undefined;
+  state: Extract<NewSessionFlowStateView, { mode: "editName" }>;
+  project: NewSessionProjectView | undefined;
   width: number;
 }) {
-  const labelText = ` ${"Name".padEnd(10)} `;
-  const inputLength =
-    (state.draftName.value.length === 0 ? state.title.length : state.draftName.value.length) + 1;
-  const padding = spaces(Math.max(0, width - labelText.length - inputLength));
+  const nameValue = state.draftName.value.length === 0 ? state.title : state.draftName.value;
+  const content = newSessionEditNameContent(state);
   return (
     <>
-      <SheetLine width={width}> </SheetLine>
-      <SheetLabelValue width={width} label="Project" labelWidth={10} value={project?.label ?? "-"} />
       <SheetLabelValue
         width={width}
-        label="Name"
-        labelWidth={10}
-        value={
-          <span>
-            <EditableTextInputView {...state.draftName} placeholder={state.title} />
-            {padding}
-          </span>
-        }
+        label="Project"
+        labelWidth={12}
+        value={project?.label ?? "-"}
       />
-      <SheetLine width={width}> </SheetLine>
-      <SheetFooter width={width}>{"Enter:save   Esc:back"}</SheetFooter>
+      <SheetControlRow
+        width={width}
+        label={content.controls.name.label}
+        value={
+          <EditableTextInputView
+            value={state.draftName.value}
+            cursor={state.draftName.cursor}
+            placeholder={state.title}
+            active={state.editNameFocus === "name"}
+          />
+        }
+        valueCells={nameValue.length + Number(state.editNameFocus === "name")}
+        focused={state.editNameFocus === content.controls.name.focusId}
+        disabled={!content.controls.name.enabled}
+        mouseTarget={{ kind: "newSessionAction", actionId: content.controls.name.actionId }}
+      />
+      <SheetButtonRow
+        width={width}
+        buttons={[
+          {
+            id: content.controls.save.actionId,
+            label: content.controls.save.label,
+            shortcut: content.controls.save.accelerator ?? "Enter",
+            tone: "primary",
+            focused: state.editNameFocus === content.controls.save.focusId,
+            disabled: !content.controls.save.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.save.actionId,
+            },
+          },
+          {
+            id: content.controls.back.actionId,
+            label: content.controls.back.label,
+            shortcut: content.controls.back.accelerator ?? "Esc",
+            tone: "neutral",
+            focused: state.editNameFocus === content.controls.back.focusId,
+            disabled: !content.controls.back.enabled,
+            mouseTarget: {
+              kind: "newSessionAction",
+              actionId: content.controls.back.actionId,
+            },
+          },
+        ]}
+      />
+      <SheetFooter width={width}>{content.helper}</SheetFooter>
     </>
   );
 }
@@ -193,10 +236,11 @@ function ProjectPicker({
   width,
   selectedId,
 }: {
-  snapshot: StationSnapshot;
+  snapshot: DashboardSnapshotView;
   width: number;
-  selectedId?: ProjectView["id"];
+  selectedId?: NewSessionProjectView["id"];
 }) {
+  const theme = useStationTheme();
   const projects = selectNewSessionProjectChoices(snapshot);
   return (
     <>
@@ -207,7 +251,7 @@ function ProjectPicker({
           choiceKey={choice.key}
           label={choice.value.label}
           detail={choice.value.health.status}
-          color={providerHealthStatusColor(choice.value.health.status)}
+          color={providerHealthColor(theme, choice.value.health.status)}
           width={width}
           selected={choice.value.id === selectedId}
         />
@@ -224,8 +268,8 @@ function AgentPicker({
   width,
   selectedId,
 }: {
-  snapshot: StationSnapshot;
-  project: ProjectView;
+  snapshot: DashboardSnapshotView;
+  project: NewSessionProjectView;
   width: number;
   selectedId?: ProviderId;
 }) {
@@ -240,20 +284,10 @@ function AgentPicker({
   );
 }
 
-function selectedHarnessOption(
-  snapshot: StationSnapshot,
-  project: ProjectView,
-  state: NewSessionFlowState,
-) {
-  return selectNewSessionHarnessOptions(snapshot, project).find(
-    (option) => option.id === state.selectedHarness,
-  );
-}
-
 function optionCountForState(
-  snapshot: StationSnapshot,
-  state: NewSessionFlowState,
-  project: ProjectView | undefined,
+  snapshot: DashboardSnapshotView,
+  state: NewSessionFlowStateView,
+  project: NewSessionProjectView | undefined,
 ): number {
   if (state.mode === "pickProject") {
     return selectNewSessionProjectChoices(snapshot).length;
@@ -262,8 +296,4 @@ function optionCountForState(
     return selectNewSessionHarnessChoices(snapshot, project).length;
   }
   return 0;
-}
-
-function colorProp(color: string | undefined): { valueColor?: string } {
-  return color === undefined ? {} : { valueColor: color };
 }

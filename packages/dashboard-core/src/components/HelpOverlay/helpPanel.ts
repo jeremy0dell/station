@@ -7,7 +7,7 @@ export type HelpPanelLayout = {
   height: number;
 };
 
-export type HelpContentLine = TuiHelpContentLine;
+export type { TuiHelpContentLine };
 
 const MAX_PANEL_WIDTH = 64;
 const MIN_PANEL_WIDTH = 30;
@@ -16,7 +16,7 @@ const PANEL_HORIZONTAL_PADDING = 2;
 export function helpPanelLayout(
   columns: number,
   rows: number,
-  content: readonly HelpContentLine[],
+  content: readonly TuiHelpContentLine[],
 ): HelpPanelLayout {
   const availableColumns = Math.max(1, columns);
   const availableRows = Math.max(1, rows);
@@ -36,7 +36,7 @@ export function helpPanelLayout(
 export function helpPanelLines(
   width: number,
   height: number,
-  content: readonly HelpContentLine[],
+  content: readonly TuiHelpContentLine[],
 ): string[] {
   const panelWidth = Math.max(1, width);
   const panelHeight = Math.max(1, height);
@@ -73,7 +73,7 @@ function bottomBorder(width: number): string {
   return `╰${"─".repeat(width - 2)}╯`;
 }
 
-function contentLine(width: number, content: HelpContentLine | undefined): string {
+function contentLine(width: number, content: TuiHelpContentLine | undefined): string {
   if (width === 1) {
     return "│";
   }
@@ -84,7 +84,7 @@ function contentLine(width: number, content: HelpContentLine | undefined): strin
   return `│${" ".repeat(padding)}${body}${" ".repeat(padding)}│`;
 }
 
-function formatContent(content: HelpContentLine | undefined, width: number): string {
+function formatContent(content: TuiHelpContentLine | undefined, width: number): string {
   if (content === undefined) {
     return " ".repeat(width);
   }

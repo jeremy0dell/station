@@ -5,7 +5,10 @@
 // sequences to the bytes a legacy terminal would have sent.
 
 import { ARROW_KEYS } from "../protocol/cursorKeys.js";
+import { CsiCommand } from "../protocol/identifiers.js";
+import { LegacyKeySequence } from "../protocol/keySequences.js";
 import { KittyEvent, KittyKey, KittyModifierBit } from "../protocol/kitty.js";
+import { C0, VtPrefix } from "../protocol/syntax.js";
 
 const CSI_U_PATTERN = /^\x1b\[([0-9:]+)(?:;([0-9:]+))?u$/;
 const XTERM_MODIFY_OTHER_KEYS_PATTERN = /^\x1b\[27;([0-9]+);([0-9]+)~$/;
@@ -62,7 +65,7 @@ export function kittySequenceToLegacy(
     // a child that will render them as garbage input.
     return "";
   }
-  return alt ? `\x1b${base}` : base;
+  return alt ? `${C0.Escape}${base}` : base;
 }
 
 function parseModifiedKeySequence(sequence: string): ModifiedKeySequence | undefined {
@@ -98,7 +101,7 @@ function parseModifiedKeySequence(sequence: string): ModifiedKeySequence | undef
 
 function modifiedEnterSequence(sequence: string, parsed: ModifiedKeySequence): string {
   return XTERM_MODIFY_OTHER_KEYS_PATTERN.test(sequence)
-    ? `\x1b[${parsed.codePoint};${parsed.modifierValue}u`
+    ? `${VtPrefix.Csi}${parsed.codePoint};${parsed.modifierValue}${CsiCommand.KittyKeyEvent.final}`
     : sequence;
 }
 
@@ -109,15 +112,15 @@ function legacyBaseBytes(
 ): string | undefined {
   switch (codePoint) {
     case KittyKey.Escape:
-      return "\x1b";
+      return C0.Escape;
     case KittyKey.Enter:
-      return "\r";
+      return C0.CarriageReturn;
     case KittyKey.Tab:
-      return state.shift ? "\x1b[Z" : "\t";
+      return state.shift ? LegacyKeySequence.ShiftTab : C0.HorizontalTab;
     case KittyKey.Backspace:
-      return state.ctrl ? "\x08" : "\x7f";
+      return state.ctrl ? C0.Backspace : LegacyKeySequence.Backspace;
     case KittyKey.Space:
-      return state.ctrl ? "\x00" : " ";
+      return state.ctrl ? C0.Null : " ";
     default:
       break;
   }
@@ -214,18 +217,18 @@ const KEYPAD_LEGACY = new Map<number, string>([
   [57411, "*"],
   [57412, "-"],
   [57413, "+"],
-  [57414, "\r"], // keypad Enter
+  [57414, C0.CarriageReturn], // keypad Enter
   [57415, "="],
   [57417, ARROW_KEYS.left.normal], // keypad left
   [57418, ARROW_KEYS.right.normal], // keypad right
   [57419, ARROW_KEYS.up.normal], // keypad up
   [57420, ARROW_KEYS.down.normal], // keypad down
-  [57421, "\x1b[5~"], // keypad page up
-  [57422, "\x1b[6~"], // keypad page down
-  [57423, "\x1b[H"], // keypad home
-  [57424, "\x1b[F"], // keypad end
-  [57425, "\x1b[2~"], // keypad insert
-  [57426, "\x1b[3~"], // keypad delete
+  [57421, LegacyKeySequence.PageUp], // keypad page up
+  [57422, LegacyKeySequence.PageDown], // keypad page down
+  [57423, LegacyKeySequence.Home], // keypad home
+  [57424, LegacyKeySequence.End], // keypad end
+  [57425, LegacyKeySequence.Insert], // keypad insert
+  [57426, LegacyKeySequence.Delete], // keypad delete
 ]);
 
 function controlByteFor(codePoint: number): string | undefined {
@@ -248,9 +251,9 @@ function controlByteFor(codePoint: number): string | undefined {
     case 0x3f: // Ctrl+?
       return "\x7f";
     case 0x32: // Ctrl+2
-      return "\x00";
+      return C0.Null;
     case 0x33: // Ctrl+3
-      return "\x1b";
+      return C0.Escape;
     case 0x34: // Ctrl+4
       return "\x1c";
     case 0x35: // Ctrl+5

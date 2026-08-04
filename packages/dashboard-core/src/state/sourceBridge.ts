@@ -1,10 +1,7 @@
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import type { StoreApi } from "zustand/vanilla";
 import { safeErrorEquals } from "../services/errors/errors.js";
-import { clampDashboardStateScroll } from "./dashboardScroll.js";
 import { replaceSnapshot } from "./screen.js";
-import type { TuiStore } from "./store.js";
 import { OBSERVER_RECOVERY_TOAST_THRESHOLD_MS } from "./timing.js";
 import { addTuiToast } from "./toasts.js";
 import type { TuiObserverConnectionStatus, TuiState } from "./types.js";
@@ -19,17 +16,6 @@ export interface TuiSnapshotSource {
   subscribe(listener: () => void): () => void;
 }
 
-export function attachTuiSnapshotSource(
-  store: StoreApi<TuiStore>,
-  source: TuiSnapshotSource,
-): () => void {
-  const apply = (): void => {
-    store.setState(applySnapshotSourceState(store.getState(), source.getState(), Date.now()));
-  };
-  apply();
-  return source.subscribe(apply);
-}
-
 /**
  * Mirrors the runtime-hook path for callers that already own a subscribable
  * snapshot source: fresh snapshots replace and clamp state, while recovery
@@ -42,7 +28,7 @@ export function applySnapshotSourceState(
 ): TuiState {
   let next = state;
   if (sourceState.snapshot !== undefined && sourceState.snapshot !== state.snapshot) {
-    next = clampDashboardStateScroll(replaceSnapshot(next, sourceState.snapshot));
+    next = replaceSnapshot(next, sourceState.snapshot);
   }
   return applyConnectionState(next, sourceState.connection, nowMs);
 }

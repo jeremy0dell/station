@@ -1,10 +1,11 @@
-import type { ProjectId, StationSnapshot } from "@station/contracts";
+import type { ProjectId } from "@station/contracts";
 import {
   bottomSheetContentWidth,
   selectProjectChooserChoices,
-  type TuiSelectionState,
+  type DashboardSnapshotView,
+  type DashboardStateView,
 } from "@station/dashboard-core";
-import { providerHealthStatusColor } from "../theme.js";
+import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetChoiceLine, SheetFooter, SheetLine } from "./parts.js";
 
@@ -16,9 +17,9 @@ const TITLE: Record<ProjectChooserMode, string> = {
 };
 
 export type ProjectChoiceSheetViewProps = {
-  snapshot: StationSnapshot;
+  snapshot: DashboardSnapshotView;
   mode: ProjectChooserMode;
-  selection: TuiSelectionState;
+  selection: DashboardStateView["selection"];
   columns: number;
   rows: number;
 };
@@ -30,6 +31,7 @@ export function ProjectChoiceSheetView({
   columns,
   rows,
 }: ProjectChoiceSheetViewProps) {
+  const theme = useStationTheme();
   const choices = selectProjectChooserChoices(snapshot);
   const width = bottomSheetContentWidth(columns);
   const selectedId = selection.get(mode) as ProjectId | undefined;
@@ -43,7 +45,12 @@ export function ProjectChoiceSheetView({
   const start = Math.max(0, Math.min(selectedIndex, choices.length - listHeight));
   const visible = choices.slice(start, start + listHeight);
   return (
-    <BottomSheetFrameView columns={columns} rows={rows} title={TITLE[mode]} contentRows={visible.length + 4}>
+    <BottomSheetFrameView
+      columns={columns}
+      rows={rows}
+      title={TITLE[mode]}
+      contentRows={visible.length + 4}
+    >
       <SheetLine width={width}> </SheetLine>
       {visible.map((choice) => (
         <SheetChoiceLine
@@ -51,7 +58,7 @@ export function ProjectChoiceSheetView({
           choiceKey={choice.key}
           label={choice.value.label}
           detail={choice.value.health.status}
-          color={providerHealthStatusColor(choice.value.health.status)}
+          color={providerHealthColor(theme, choice.value.health.status)}
           width={width}
           selected={choice.value.id === selectedId}
         />

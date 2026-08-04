@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import * as timers from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -151,7 +151,7 @@ function isRealE2eProcess(command) {
 
 async function killProcess(pid) {
   signalProcess(pid, "SIGTERM");
-  await sleep(100);
+  await timers.setTimeout(100);
   if (processExists(pid)) {
     signalProcess(pid, "SIGKILL");
   }

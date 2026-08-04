@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
+import * as timers from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const runnerPath = fileURLToPath(import.meta.url);
@@ -559,7 +559,7 @@ async function waitFor(description, predicate) {
   const deadline = Date.now() + processTimeoutMs;
   while (Date.now() < deadline) {
     if (predicate()) return;
-    await delay(5);
+    await timers.setTimeout(5);
   }
   throw new Error(`Timed out waiting for ${description}.`);
 }

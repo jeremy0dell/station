@@ -14,7 +14,7 @@ import { StationToast } from "../StationToast.js";
 import { PaneGrid, PaneRegistryProvider } from "../terminal/index.js";
 import { WelcomeScreen } from "../welcome/WelcomeScreen.js";
 import { StationOverlay } from "../station/StationOverlay.js";
-import { STATION_COLORS } from "../station/view/theme.js";
+import { toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
 import { useTopRowWidgets } from "../station/widgets/useTopRowWidgets.js";
 import type { StationAppProps } from "./types.js";
 
@@ -29,7 +29,8 @@ function useStoreValue<T>(store: StationStore, selector: (state: StationState) =
 export function StationApp({
   store,
   registry,
-  stationViewStore,
+  dashboardState,
+  dashboardActions,
   dispatchMouse,
   onCopySelection,
   automations,
@@ -38,16 +39,22 @@ export function StationApp({
   overlayWidthPercent,
   overlayHeightPercent,
 }: StationAppProps) {
+  const theme = useStationTheme();
   const overlayVisible = useStoreValue(store, selectStationOverlayVisible);
   const hasPanes = useStoreValue(store, selectPaneCount) > 0;
   const welcomeVisible = useStoreValue(store, selectWelcomeVisible);
   const welcomeCanContinue = useStoreValue(store, selectWelcomeCanContinue);
   // The live session widget set: seeded from config, edited by the panel.
-  const widgets = useStore(stationViewStore, (state) => state.widgets);
+  const widgets = useStore(dashboardState, (state) => state.widgets);
   const topRowWidgets = useTopRowWidgets(widgets, topRowWidgetDeps);
 
   return (
-    <box width="100%" height="100%" flexDirection="column" backgroundColor={STATION_COLORS.background}>
+    <box
+      width="100%"
+      height="100%"
+      flexDirection="column"
+      backgroundColor={toOpenTuiOpaqueColor(theme.surfaces.canvas)}
+    >
       <box width="100%" flexGrow={1} flexDirection="column">
         {/* Welcome replaces the grid during the boot intro / empty workspace; the
             panes' PTYs live in the registry, so they re-attach when it dismisses. */}
@@ -57,7 +64,7 @@ export function StationApp({
           <PaneRegistryProvider registry={registry}>
             <PaneGrid
               store={store}
-              stationViewStore={stationViewStore}
+              dashboardState={dashboardState}
               dispatchMouse={dispatchMouse}
               onCopySelection={onCopySelection}
             />
@@ -68,7 +75,8 @@ export function StationApp({
           centered popup; pane clicks are guarded while any overlay is active. */}
       {overlayVisible ? (
         <StationOverlay
-          store={stationViewStore}
+          state={dashboardState}
+          actions={dashboardActions}
           topRowWidgets={topRowWidgets}
           dispatchMouse={dispatchMouse}
           onCopyNotice={onCopySelection}
@@ -78,7 +86,7 @@ export function StationApp({
       ) : null}
       <ContextMenuRoot
         store={store}
-        stationViewStore={stationViewStore}
+        dashboardState={dashboardState}
         dispatchMouse={dispatchMouse}
         automations={automations}
       />
@@ -87,7 +95,7 @@ export function StationApp({
           mouse events, so clicks elsewhere reach the panes underneath. */}
       <StationButton
         store={store}
-        stationViewStore={stationViewStore}
+        dashboardState={dashboardState}
         dispatchMouse={dispatchMouse}
         island={island}
       />

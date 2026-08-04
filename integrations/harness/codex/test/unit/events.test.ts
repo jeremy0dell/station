@@ -13,11 +13,7 @@ import {
   parseCodexHookEvent,
 } from "../../src/events";
 import { codexHookAdapter } from "../../src/hookAdapter";
-import {
-  codexForwardedEventTypes,
-  codexIngressRuleForEventType,
-  codexIngressRules,
-} from "../../src/ingressRules";
+import { codexForwardedEventTypes, codexIngressRules } from "../../src/ingressRules";
 
 const now = "2026-05-21T12:00:00.000Z";
 
@@ -95,7 +91,7 @@ describe("Codex hook event parsing", () => {
     ]);
     expect(new Set(codexForwardedEventTypes).size).toBe(codexIngressRules.length);
     expect(codexForwardedEventTypes).not.toContain("SubagentStop");
-    expect(codexIngressRuleForEventType("SubagentStop")).toBeUndefined();
+    expect(codexIngressRules.find((rule) => rule.eventType === "SubagentStop")).toBeUndefined();
     expect(new Set(codexForwardedEventTypes)).toEqual(new Set(Object.keys(CODEX_HOOK_FIXTURES)));
     expect(CodexHookEventSchema.safeParse(subagentStop).success).toBe(false);
     expect(
@@ -1065,7 +1061,7 @@ function expectStatusAllowedByCodexIngressRule(
   eventType: string,
   status: ObservedStatus | undefined,
 ): void {
-  const rule = codexIngressRuleForEventType(eventType);
+  const rule = codexIngressRules.find((r) => r.eventType === eventType);
   expect(rule).toBeDefined();
   expect(rule?.statusIntents).toContain(status?.value);
   expect(rule?.confidences).toContain(status?.confidence);

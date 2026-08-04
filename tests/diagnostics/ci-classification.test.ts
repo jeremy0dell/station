@@ -67,6 +67,17 @@ describe("standard CI path classification", () => {
       },
     },
     {
+      name: "guided PTY coverage",
+      paths: ["tests/e2e/setup-guided-tty.test.ts", "tests/support/setup-guided.ts"],
+      expected: {
+        docs_only: false,
+        installer: false,
+        binary: false,
+        claim_stress: false,
+        shell_matrix: true,
+      },
+    },
+    {
       name: "installer only",
       paths: ["scripts/install.sh", "scripts/test-runners/run-install-smoke.mjs"],
       expected: {

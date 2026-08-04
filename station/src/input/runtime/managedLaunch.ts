@@ -1,23 +1,33 @@
 import type { ManagedTerminalAttacher } from "../../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
-import type { StoreApi } from "zustand/vanilla";
 import type { StationStore } from "../../state/store.js";
 import { agentWorktreePaneId, type PaneId } from "../../state/types.js";
 import { dispatchStationKey } from "../../station/input/stationActions.js";
 import { safeErrorToNotice, toSafeError, type ObserverService } from "@station/client";
 import type { ProviderId, SafeError, StationCommand } from "@station/contracts";
 import {
-  addPendingCreateSessionRow,
-  failPendingCreateSessionRow,
   FAILED_CREATE_ROW_TTL_MS,
-  removeCreateSessionLocalRow,
-  type TuiStore,
+  type DashboardActions,
+  type DashboardStateSource,
 } from "@station/dashboard-core";
 import { inheritedForkHarness, waitForWorktreeByBranch } from "./stationRows.js";
 import {
   createManagedLaunchAttempt,
   type ManagedLaunchTarget,
 } from "./managedLaunchAttempt.js";
+
+type ManagedLaunchDashboard = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    | "addPendingCreateSession"
+    | "dispatch"
+    | "failPendingCreateSession"
+    | "handleKey"
+    | "pushToast"
+    | "removePendingCreateSession"
+  >;
+};
 
 export type { ManagedLaunchTarget } from "./managedLaunchAttempt.js";
 
@@ -52,64 +62,55 @@ export type ManagedLaunch = {
 
 type ManagedLaunchDeps = {
   store: StationStore;
-  stationViewStore: StoreApi<TuiStore> | undefined;
+  dashboardRuntime: ManagedLaunchDashboard | undefined;
   observerService: ObserverService | undefined;
   registry: PtyRegistry | undefined;
   managedTerminalAttacher: ManagedTerminalAttacher | undefined;
 };
 
 export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
-  const { stationViewStore, observerService } = deps;
+  const { dashboardRuntime, observerService } = deps;
   const runManagedLaunchAttempt = createManagedLaunchAttempt(deps);
 
   function pushLaunchToast(message: string, kind: "info" | "error" = "error"): void {
-    stationViewStore?.getState().pushToast({ kind, message });
+    dashboardRuntime?.actions.pushToast({ kind, message });
   }
 
   function pushLaunchError(error: unknown): void {
-    stationViewStore?.getState().pushToast(safeErrorToNotice(toSafeError(error, { clientLabel: "Station" })));
+    dashboardRuntime?.actions.pushToast(safeErrorToNotice(toSafeError(error, { clientLabel: "Station" })));
   }
 
   function clearPendingCreateRow(localId: string): void {
-    if (stationViewStore !== undefined) {
-      stationViewStore.setState(removeCreateSessionLocalRow(stationViewStore.getState(), localId));
-    }
+    dashboardRuntime?.actions.removePendingCreateSession(localId);
   }
 
   function failPendingCreateRow(localId: string, error: SafeError): void {
-    if (stationViewStore === undefined) {
+    if (dashboardRuntime === undefined) {
       return;
     }
-    stationViewStore.setState(
-      failPendingCreateSessionRow(
-        stationViewStore.getState(),
-        localId,
-        error,
-        Date.now() + FAILED_CREATE_ROW_TTL_MS,
-      ),
-    );
+    dashboardRuntime.actions.failPendingCreateSession(localId, error, Date.now() + FAILED_CREATE_ROW_TTL_MS);
     setTimeout(() => clearPendingCreateRow(localId), FAILED_CREATE_ROW_TTL_MS);
   }
 
   /**
-   * Return the STATION view store to the dashboard from the New Session wizard via
+   * Return the dashboard runtime to its root screen from the New Session wizard via
    * the shared reducer. Station hosts the create itself, so the wizard's own tmux
    * submit must not also run.
    */
   function closeNewSessionWizard(): void {
-    if (stationViewStore !== undefined && stationViewStore.getState().screen.name === "newSession") {
-      dispatchStationKey(stationViewStore, { input: "", escape: true });
+    if (dashboardRuntime !== undefined && dashboardRuntime.state.getState().screen.name === "newSession") {
+      dispatchStationKey(dashboardRuntime, { input: "", escape: true });
     }
   }
 
   function closeForkSheet(): void {
-    if (stationViewStore === undefined) {
+    if (dashboardRuntime === undefined) {
       return;
     }
     // Submit is intercepted before submitFork runs, so unwind to the dashboard here.
     // Esc steps details → chooseSlot → dashboard; the hop cap can't spin.
-    for (let hop = 0; hop < 2 && stationViewStore.getState().screen.name === "fork"; hop += 1) {
-      dispatchStationKey(stationViewStore, { input: "", escape: true });
+    for (let hop = 0; hop < 2 && dashboardRuntime.state.getState().screen.name === "fork"; hop += 1) {
+      dispatchStationKey(dashboardRuntime, { input: "", escape: true });
     }
   }
 
@@ -126,17 +127,15 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
   };
 
   function startHostedWorktreeLaunch(spec: HostedWorktreeLaunch): void {
-    if (stationViewStore !== undefined) {
-      stationViewStore.setState(
-        addPendingCreateSessionRow(stationViewStore.getState(), {
-          localId: spec.localId,
-          projectId: spec.projectId,
-          title: spec.title,
-          branch: spec.branch,
-          createdAt: new Date().toISOString(),
-          harnessProvider: spec.harness,
-        }),
-      );
+    if (dashboardRuntime !== undefined) {
+      dashboardRuntime.actions.addPendingCreateSession({
+        localId: spec.localId,
+        projectId: spec.projectId,
+        title: spec.title,
+        branch: spec.branch,
+        createdAt: new Date().toISOString(),
+        harnessProvider: spec.harness,
+      });
     }
     void runHostedWorktreeLaunch(spec).catch((error) => {
       clearPendingCreateRow(spec.localId);
@@ -155,7 +154,7 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       pushLaunchToast(`No observer connection; cannot ${spec.verb} the session.`);
       return;
     }
-    if (stationViewStore === undefined) {
+    if (dashboardRuntime === undefined) {
       pushLaunchToast(`The dashboard is not available; cannot ${spec.verb} the session.`);
       return;
     }
@@ -178,7 +177,11 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       return;
     }
     // A bare worktree does not prune the optimistic row; only the matching canonical session does.
-    const row = await waitForWorktreeByBranch(stationViewStore, spec.projectId, spec.branch);
+    const row = await waitForWorktreeByBranch(
+      dashboardRuntime.state,
+      spec.projectId,
+      spec.branch,
+    );
     if (row === undefined) {
       clearPendingCreateRow(spec.localId);
       pushLaunchToast(missingWorktreeMessage(spec.verb), "info");
@@ -230,9 +233,13 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       // Fork inherits the source's harness (the seeded worktree has none yet).
       closeForkSheet();
       const harness =
-        stationViewStore === undefined
+        dashboardRuntime === undefined
           ? undefined
-          : inheritedForkHarness(stationViewStore, target.projectId, target.sourceWorktreeId);
+          : inheritedForkHarness(
+              dashboardRuntime.state,
+              target.projectId,
+              target.sourceWorktreeId,
+            );
       if (harness === undefined) {
         pushLaunchError({
           tag: "CommandValidationError",

@@ -8,9 +8,13 @@ import {
   scenarioState,
 } from "../fixtures/scenarios.js";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
-import { makeStationTestStore } from "../test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardFrameTitle } from "./DashboardFrameTitle.js";
-import { STATION_COLORS } from "./theme.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../../theme/index.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
@@ -34,19 +38,21 @@ describe("DashboardFrameTitle", () => {
     connection?: ReturnType<typeof scenarioState>["connection"];
     widgets?: readonly TopRowWidgetView[];
   }) {
-    const { store } = makeStationTestStore({
+    const { runtime: store } = makeStationTestRuntime({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
     });
-    store.getState().start();
+    store.start();
     const setup = await testRender(
-      <DashboardFrameTitle
-        store={store}
-        frame={FRAME}
-        topRowWidgets={input.widgets ?? []}
-        zIndex={1}
-      />,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <DashboardFrameTitle
+          state={store.state}
+          frame={FRAME}
+          topRowWidgets={input.widgets ?? []}
+          zIndex={1}
+        />
+      </StationThemeProvider>,
       SIZE,
     );
     teardowns.push(() => {
@@ -72,9 +78,13 @@ describe("DashboardFrameTitle", () => {
     const lines = frame.split("\n");
     const spans = setup.captureSpans();
     const subtitleCol = lines[0]?.indexOf("· overview") ?? -1;
-    expect(spanHex(spanAtFrameCell(spans, 0, subtitleCol))).toBe(STATION_COLORS.gray);
+    expect(spanHex(spanAtFrameCell(spans, 0, subtitleCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
     const stripCol = lines[0]?.indexOf("10:42 AM") ?? -1;
-    expect(spanHex(spanAtFrameCell(spans, 0, stripCol))).toBe(STATION_COLORS.gray);
+    expect(spanHex(spanAtFrameCell(spans, 0, stripCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.text.muted),
+    );
   });
 
   it("swaps the subtitle to a red needs-you flag when sessions ask", async () => {
@@ -86,7 +96,9 @@ describe("DashboardFrameTitle", () => {
     const lines = frame.split("\n");
     const spans = setup.captureSpans();
     const flagCol = lines[0]?.indexOf("! 3 need you") ?? -1;
-    expect(spanHex(spanAtFrameCell(spans, 0, flagCol))).toBe(STATION_COLORS.red);
+    expect(spanHex(spanAtFrameCell(spans, 0, flagCol))).toBe(
+      stationColorSnapshotValue(nativeStationTheme.status.danger),
+    );
   });
 
   it("carries the display-only reconnect status in the strip", async () => {

@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
-import { constants as fsConstants } from "node:fs";
-import { access as defaultAccess, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
@@ -201,9 +201,9 @@ async function nodeExternalCommandRunnerWithStdin(
   if (stdin === undefined) {
     throw new Error("External command stdin runner requires stdin input.");
   }
-  const tempDir = await mkdtemp(join(tmpdir(), "station-command-stdin-"));
+  const tempDir = await fsPromises.mkdtemp(join(tmpdir(), "station-command-stdin-"));
   const stdinPath = join(tempDir, "stdin");
-  await writeFile(stdinPath, stdin, "utf8");
+  await fsPromises.writeFile(stdinPath, stdin, "utf8");
   try {
     const result = await execFileAsync(
       "sh",
@@ -230,7 +230,7 @@ async function nodeExternalCommandRunnerWithStdin(
       exitCode: 0,
     };
   } finally {
-    await rm(tempDir, { recursive: true, force: true });
+    await fsPromises.rm(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -249,7 +249,7 @@ export async function resolveExecutablePath(
   // must not resolve as a usable tool — the function name promises an *executable*
   // path. Tests inject `access` and are unaffected.
   const access =
-    options.access ?? ((candidate: string) => defaultAccess(candidate, fsConstants.X_OK));
+    options.access ?? ((candidate: string) => fsPromises.access(candidate, constants.X_OK));
   if (isPathLikeCommand(command)) {
     return (await canAccess(command, access)) ? command : undefined;
   }
@@ -325,7 +325,7 @@ async function missingWorkingDirectory(error: unknown, cwd: string | undefined):
     return false;
   }
   try {
-    await defaultAccess(cwd);
+    await fsPromises.access(cwd);
     return false;
   } catch (cause) {
     return normalizeProcessError(cause).code === "ENOENT";

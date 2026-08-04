@@ -3,8 +3,8 @@ import { z } from "zod";
 import {
   CODEX_HOOK_EVENT_NAMES,
   CODEX_OBSOLETE_HOOK_EVENT_NAMES,
+  type CodexForwardedEventType,
   type CodexGeneratedHookEventName,
-  type CodexHookEventName,
   GENERATED_HOOK_SCRIPT_NAME,
   GENERATED_HOOK_STATUS_MESSAGE,
 } from "./hookConstants.js";
@@ -45,7 +45,7 @@ export function enableCodexHooksFeature(
 
 export function installCodexHookCommands(
   document: Record<string, unknown>,
-  commands: Record<CodexHookEventName, string>,
+  commands: Record<CodexForwardedEventType, string>,
 ): Record<string, unknown> {
   const next = cloneRecord(document);
   const hooksRecord = recordValue(next.hooks);
@@ -67,7 +67,7 @@ export function installCodexHookCommands(
 
 export function removeGeneratedCodexHookCommands(
   document: Record<string, unknown>,
-  commands: Record<CodexHookEventName, string>,
+  commands: Record<CodexForwardedEventType, string>,
 ): Record<string, unknown> {
   const next = cloneRecord(document);
   const hooksRecord = recordValue(next.hooks);
@@ -101,8 +101,8 @@ export function removeGeneratedCodexHookCommands(
 
 export function missingCodexHookEvents(
   document: Record<string, unknown>,
-  commands: Record<CodexHookEventName, string>,
-): CodexHookEventName[] {
+  commands: Record<CodexForwardedEventType, string>,
+): CodexForwardedEventType[] {
   return CODEX_HOOK_EVENT_NAMES.filter(
     (eventName) => !hookContainsCommand(document, eventName, commands[eventName]),
   );
@@ -123,7 +123,7 @@ export function documentContainsCommand(
 
 export function generatedStationHookEvents(
   document: Record<string, unknown>,
-  commands: Record<CodexHookEventName, string>,
+  commands: Record<CodexForwardedEventType, string>,
 ): CodexGeneratedHookEventName[] {
   const hooks = recordValue(document.hooks);
   if (hooks === undefined) {
@@ -148,7 +148,7 @@ export function generatedStationHookEvents(
 
 function withGeneratedHookEntry(
   value: unknown,
-  eventName: CodexHookEventName,
+  eventName: CodexForwardedEventType,
   command: string,
 ): unknown {
   const cleanedValue = withoutGeneratedHookEntry(value, command);
@@ -173,7 +173,7 @@ function withoutGeneratedHookEntry(value: unknown, command: string): unknown {
 }
 
 function generatedHookEntry(
-  eventName: CodexHookEventName,
+  eventName: CodexForwardedEventType,
   command: string,
 ): Record<string, unknown> {
   const entry: Record<string, unknown> = {
@@ -193,7 +193,7 @@ function generatedHookEntry(
   return entry;
 }
 
-function matcherForEvent(eventName: CodexHookEventName): string | undefined {
+function matcherForEvent(eventName: CodexForwardedEventType): string | undefined {
   if (eventName === "SessionStart") return "startup|resume|clear|compact";
   if (eventName === "PreToolUse") return ".*";
   if (eventName === "PermissionRequest") return ".*";
@@ -206,7 +206,7 @@ function matcherForEvent(eventName: CodexHookEventName): string | undefined {
 
 function hookContainsCommand(
   document: Record<string, unknown>,
-  eventName: CodexHookEventName,
+  eventName: CodexForwardedEventType,
   command: string,
 ): boolean {
   const hooks = recordValue(document.hooks);

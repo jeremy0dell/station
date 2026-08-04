@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import type { StationSnapshot } from "@station/contracts";
 import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets/types";
 import type { StationMouseEvent } from "../input/mouse.js";
@@ -61,33 +62,37 @@ describe("Station app composition", () => {
     expect(station.scripted.helpers.writes.join("")).not.toContain("blocked");
 
     await station.setup.mockInput.typeText("C1");
-    await waitFor(() => station.composition.stationViewStore.getState().collapsedProjectIds.has("station"));
+    await waitFor(() =>
+      station.composition.dashboard.state.getState().collapsedProjectIds.has("station"),
+    );
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => !overlayVisible(station));
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    expect(station.composition.stationViewStore.getState().collapsedProjectIds.has("station")).toBe(true);
+    expect(station.composition.dashboard.state.getState().collapsedProjectIds.has("station")).toBe(
+      true,
+    );
 
     station.source.setSnapshot(noProjectsSnapshot());
-    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
-      "Add your first project.",
-    );
+    expect(
+      await waitForFrame(station, (frame) => frame.includes("Add your first project")),
+    ).toContain("Add your first project");
 
     station.setup.mockInput.pressKey("c", { ctrl: true });
     await waitFor(() => !overlayVisible(station));
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
-      "Add your first project.",
-    );
+    expect(
+      await waitForFrame(station, (frame) => frame.includes("Add your first project")),
+    ).toContain("Add your first project");
 
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
     await waitFor(() => !overlayVisible(station));
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
     await waitFor(() => overlayVisible(station));
-    expect(await waitForFrame(station, (frame) => frame.includes("Add your first project."))).toContain(
-      "Add your first project.",
-    );
+    expect(
+      await waitForFrame(station, (frame) => frame.includes("Add your first project")),
+    ).toContain("Add your first project");
 
     station.composition.stationInput.dispatchMouse({ kind: "header" }, LEFT_DOWN);
     await waitFor(() => !overlayVisible(station));
@@ -120,20 +125,20 @@ describe("Station app composition", () => {
 
     station.store.actions.focusPane(firstPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
-    await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_working",
-    );
+    await waitFor(() => {
+      const focus = station.composition.dashboard.state.getState().dashboardFocus;
+      return focus?.kind === "session" && focus.sessionId === "ses_wt_station_working";
+    });
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
-    await waitFor(
-      () => !("focusedRowId" in station.composition.stationViewStore.getState()),
-    );
+    await waitFor(() => !("dashboardFocus" in station.composition.dashboard.state.getState()));
 
     station.store.actions.focusPane(secondPaneId);
     station.setup.mockInput.pressKey("o", { ctrl: true });
-    await waitFor(
-      () => station.composition.stationViewStore.getState().focusedRowId === "ses_wt_station_idle",
-    );
+    await waitFor(() => {
+      const focus = station.composition.dashboard.state.getState().dashboardFocus;
+      return focus?.kind === "session" && focus.sessionId === "ses_wt_station_idle";
+    });
   });
 
   it("opens the attention dashboard instead of focusing another session in the same worktree", async () => {
@@ -267,9 +272,7 @@ describe("Station app composition", () => {
 
     const initialFrame = await waitForFrame(
       station,
-      (frame) =>
-        frame.includes("Welcome to") &&
-        frame.includes("Open project view"),
+      (frame) => frame.includes("Welcome to") && frame.includes("Open project view"),
     );
     expect(hasStandaloneStationLine(initialFrame)).toBe(false);
     expect(initialFrame).not.toContain("terminal pid");
@@ -516,7 +519,11 @@ describe("Station app composition", () => {
       },
       shutdown: () => {},
       createTerminal: () => scripted.terminal,
-      layout: { path: "/unused-in-test", write: (snapshot) => writes.push(snapshot), debounceMs: 5 },
+      layout: {
+        path: "/unused-in-test",
+        write: (snapshot) => writes.push(snapshot),
+        debounceMs: 5,
+      },
     });
     teardowns.push(() => composition.dispose());
 
@@ -588,11 +595,14 @@ root = "${projectRoot}"
     teardowns.push(() => composition.dispose());
 
     composition.start();
-    composition.stationViewStore.setState({ widgets: [{ type: "moon" }] });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.open" });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.remove", index: 0 });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.openPicker" });
+    composition.dashboard.actions.dispatch({ type: "widgetSettings.addFromPicker", index: 3 });
 
     await waitFor(() => readFileSync(configPath, "utf8").includes('type = "moon"'));
     const sourceText = readFileSync(configPath, "utf8");
-    expect(sourceText).toContain("[[tui.widgets]]\ntype = \"moon\"");
+    expect(sourceText).toContain('[[tui.widgets]]\ntype = "moon"');
     expect(sourceText).not.toContain('type = "time"');
   });
 });
@@ -638,12 +648,14 @@ async function waitForFrame(
   }
 }
 
-async function renderComposedStation(options: {
-  tuiConfig?: TuiConfig;
-  topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
-  boot?: "empty";
-  snapshot?: StationSnapshot;
-} = {}) {
+async function renderComposedStation(
+  options: {
+    tuiConfig?: TuiConfig;
+    topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
+    boot?: "empty";
+    snapshot?: StationSnapshot;
+  } = {},
+) {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   const store =
     options?.boot === "empty" ? createStationStore({ boot: "empty" }) : createStationStore();
@@ -675,11 +687,16 @@ async function renderComposedStation(options: {
       : { topRowWidgetDeps: options.topRowWidgetDeps }),
   });
 
-  const setup = await testRender(<StationApp {...composition.viewProps} />, {
-    ...SURFACE,
-    prependInputHandlers: [composition.stationInput.handleSequence],
-    kittyKeyboard: false,
-  });
+  const setup = await testRender(
+    <StationThemeProvider theme={nativeStationTheme}>
+      <StationApp {...composition.viewProps} />
+    </StationThemeProvider>,
+    {
+      ...SURFACE,
+      prependInputHandlers: [composition.stationInput.handleSequence],
+      kittyKeyboard: false,
+    },
+  );
   setup.renderer.keyInput.on("paste", (event) => {
     composition.stationInput.handlePaste(event);
   });

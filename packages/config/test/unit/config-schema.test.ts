@@ -191,17 +191,26 @@ describe("config schemas", () => {
     ).toBe(false);
   });
 
-  it("accepts tmux popup scopes and rejects unsupported ownership modes", async () => {
+  it("accepts tmux popup display settings and rejects unsupported values", async () => {
     const config = StationConfigSchema.parse({
       ...(await loadJson("valid-config.json")),
-      terminal: { tmux: { popupScope: "client" } },
+      terminal: { tmux: { popupScope: "client", popupStatusBar: true } },
     });
 
-    expect(config.terminal?.tmux?.popupScope).toBe("client");
+    expect(config.terminal?.tmux).toMatchObject({
+      popupScope: "client",
+      popupStatusBar: true,
+    });
     expect(
       StationConfigSchema.safeParse({
         ...config,
         terminal: { tmux: { popupScope: "window" } },
+      }).success,
+    ).toBe(false);
+    expect(
+      StationConfigSchema.safeParse({
+        ...config,
+        terminal: { tmux: { popupStatusBar: "yes" } },
       }).success,
     ).toBe(false);
   });
@@ -272,13 +281,8 @@ describe("config schemas", () => {
 describe("workspace config", () => {
   it("fills an empty [workspace] with defaults (10k scrollback, 60% overlay, freeze, welcome on, see-diff)", () => {
     const workspace = WorkspaceConfigSchema.parse({});
-    const expectedWatchCommand =
-      'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; { git diff --no-color "$base" -- . || true; git ls-files --others --exclude-standard -- . | while IFS= read -r file; do [ -e "$file" ] || continue; printf "\\n"; git diff --no-color --no-index -- /dev/null "$file" || true; done; }';
-    const expectedCommand = [
-      "diffnav --unified --watch",
-      `--watch-cmd '${expectedWatchCommand}'`,
-      "--watch-interval 2s",
-    ].join(" ");
+    const expectedCommand =
+      'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked';
 
     expect(workspace.scroll_on_output).toBe("freeze");
     expect(workspace.scrollback_lines).toBe(DEFAULT_SCROLLBACK_LINES);

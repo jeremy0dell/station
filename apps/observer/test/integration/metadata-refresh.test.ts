@@ -27,7 +27,7 @@ import {
   createCommandQueue,
   createObserverApi,
   createObserverEventBus,
-  createWorktreeMetadataRefreshService as createProductionWorktreeMetadataRefreshService,
+  createWorktreeMetadataRefreshService,
   ProviderRegistry,
   providerProjectsFromConfig,
 } from "../../src/internal";
@@ -126,7 +126,7 @@ describe("observer worktree metadata refresh use case", () => {
       "merge-base main HEAD": mergeBaseSha,
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "4\t2\tsrc/a.ts\n-\t-\tassets/logo.png\n",
     });
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
@@ -176,7 +176,7 @@ describe("observer worktree metadata refresh use case", () => {
       },
       calls,
     );
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
@@ -243,7 +243,7 @@ describe("observer worktree metadata refresh use case", () => {
       "merge-base main HEAD": mergeBaseSha,
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "bad\t1\tsrc/a.ts\n",
     });
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
@@ -298,7 +298,7 @@ describe("observer worktree metadata refresh use case", () => {
       },
       calls,
     );
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
@@ -352,7 +352,7 @@ describe("observer worktree metadata refresh use case", () => {
     });
     const worktreeChangeSource = new FakeWorktreeChangeSource();
     worktreeChangeSource.result = { status: "unavailable" };
-    const service = createProductionWorktreeMetadataRefreshService({
+    const service = createWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => void reasons.push(reason),
@@ -393,7 +393,7 @@ describe("observer worktree metadata refresh use case", () => {
     });
     const worktreeChangeSource = new FakeWorktreeChangeSource();
     worktreeChangeSource.result = { status: "superseded" };
-    const service = createProductionWorktreeMetadataRefreshService({
+    const service = createWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => void reasons.push(reason),
@@ -443,7 +443,7 @@ describe("observer worktree metadata refresh use case", () => {
       },
     };
     const invalidationSource = new FakeWorktreeMetadataInvalidationSource();
-    const service = createProductionWorktreeMetadataRefreshService({
+    const service = createWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => void reasons.push(reason),
@@ -479,7 +479,7 @@ describe("observer worktree metadata refresh use case", () => {
     invalidationSource.onReplace = async () => {
       order.push("replace");
     };
-    const service = createProductionWorktreeMetadataRefreshService({
+    const service = createWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
@@ -525,7 +525,7 @@ describe("observer worktree metadata refresh use case", () => {
       new Promise((resolve) => {
         resolveRead = resolve;
       });
-    const service = createProductionWorktreeMetadataRefreshService({
+    const service = createWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => void reasons.push(reason),
@@ -634,7 +634,7 @@ describe("observer worktree metadata refresh use case", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
       "remote get-url origin": "git@github.com:example/web.git\n",
     });
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: (reason) => reasons.push(reason),
@@ -701,7 +701,7 @@ describe("observer worktree metadata refresh use case", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
       "remote get-url origin": "git@forge.example:example/web.git\n",
     });
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
@@ -756,7 +756,7 @@ describe("observer worktree metadata refresh use case", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
       "remote get-url origin": "git@forge.example:example/web.git\n",
     });
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
@@ -806,7 +806,7 @@ describe("observer worktree metadata refresh use case", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
       "remote get-url origin": "git@github.com:example/web.git\n",
     });
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
@@ -860,7 +860,7 @@ describe("observer worktree metadata refresh use case", () => {
       [`diff --numstat ${mergeBaseSha}..HEAD`]: "1\t0\tsrc/a.ts\n",
       "remote get-url origin": "git@github.com:example/web.git\n",
     });
-    const service = createWorktreeMetadataRefreshService({
+    const service = createTestWorktreeMetadataRefreshService({
       projects: providerProjectsFromConfig(config),
       persistence: fixture.persistence,
       requestReconcile: () => undefined,
@@ -881,13 +881,13 @@ describe("observer worktree metadata refresh use case", () => {
 });
 
 type TestMetadataRefreshOptions = Omit<
-  Parameters<typeof createProductionWorktreeMetadataRefreshService>[0],
+  Parameters<typeof createWorktreeMetadataRefreshService>[0],
   "worktreeChangeSource" | "worktreeMetadataInvalidationSource"
 > & {
   runner?: ExternalCommandRunner;
 };
 
-function createWorktreeMetadataRefreshService(options: TestMetadataRefreshOptions) {
+function createTestWorktreeMetadataRefreshService(options: TestMetadataRefreshOptions) {
   const worktreeChangeSource = createLocalGitWorktreeChangeSource({
     resolveWorktree: (target) => ({
       status: "resolved",
@@ -900,7 +900,7 @@ function createWorktreeMetadataRefreshService(options: TestMetadataRefreshOption
     ...(options.runner === undefined ? {} : { runner: options.runner }),
   });
   const { runner: _runner, ...serviceOptions } = options;
-  return createProductionWorktreeMetadataRefreshService({
+  return createWorktreeMetadataRefreshService({
     ...serviceOptions,
     worktreeChangeSource,
     worktreeMetadataInvalidationSource: new FakeWorktreeMetadataInvalidationSource(),

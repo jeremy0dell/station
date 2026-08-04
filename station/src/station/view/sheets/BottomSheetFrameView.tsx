@@ -3,12 +3,10 @@
 // ({ kind: "sheetBackdrop" }) so clicks don't fall through to the dashboard.
 import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
-import {
-  bottomSheetContentWidth,
-  bottomSheetFrameLayout,
-} from "@station/dashboard-core";
-import { STATION_COLORS } from "../theme.js";
+import { bottomSheetContentWidth, bottomSheetFrameLayout } from "@station/dashboard-core";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
+import { SheetText } from "./parts.js";
 
 export type BottomSheetFrameViewProps = {
   columns: number;
@@ -29,6 +27,8 @@ export function BottomSheetFrameView({
   width,
   children,
 }: BottomSheetFrameViewProps) {
+  const theme = useStationTheme();
+  const surfaceBackground = toOpenTuiOpaqueColor(theme.surfaces.sheet);
   const dispatch = useStationMouse();
   const layout = bottomSheetFrameLayout({
     columns,
@@ -46,12 +46,15 @@ export function BottomSheetFrameView({
       height={layout.height}
       zIndex={10}
       border
-      borderColor={STATION_COLORS.hairline}
-      backgroundColor={STATION_COLORS.background}
+      borderColor={toOpenTuiColor(theme.interaction.hairline)}
+      backgroundColor={surfaceBackground}
       flexDirection="column"
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
-      <text fg={STATION_COLORS.foreground} attributes={TextAttributes.BOLD}>{` ${title}`}</text>
+      <SheetText
+        fg={toOpenTuiColor(theme.text.primary)}
+        attributes={TextAttributes.BOLD}
+      >{` ${title}`}</SheetText>
       <box
         flexDirection="column"
         width={bottomSheetContentWidth(layout.width)}

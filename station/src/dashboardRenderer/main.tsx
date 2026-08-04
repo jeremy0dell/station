@@ -5,7 +5,7 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { createTuiStore } from "@station/dashboard-core";
+import { createDashboardRuntime } from "@station/dashboard-core";
 import {
   loadStationTuiConfig,
   startWidgetConfigWrites,
@@ -15,12 +15,22 @@ import { copyToClipboard, DEFAULT_COPY_SINKS } from "../copy/clipboard.js";
 import { createOpenTuiSelectionCopyHandler } from "../copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "../copy/runtimeClipboard.js";
 import { STATION_KEYBOARD_PROTOCOL } from "../input/keyboardProtocol.js";
+import { DecMode } from "../terminal/protocol/decset.js";
+import { CsiCommand } from "../terminal/protocol/identifiers.js";
+import { VtPrefix } from "../terminal/protocol/syntax.js";
 import { openExternalUrl } from "../openUrl.js";
 import { createStationClient } from "../sources/createStationClient.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
-import type { DashboardMouseEffects } from "./dashboardMouse.js";
-import { FullscreenDashboard } from "./FullscreenDashboard.js";
+import {
+  createStationThemeController,
+  type StationThemeController,
+} from "../theme/index.js";
+import {
+  executeDashboardControlIntent,
+  type DashboardRendererEffects,
+} from "./dashboardEffects.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
+import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 import {
   createPopupRuntime,
   createProcessRendererControlChannel,
@@ -84,7 +94,7 @@ export async function runDashboardMain(): Promise<void> {
   );
 
   const client = createStationClient(env);
-  const store = createTuiStore({
+  const dashboardRuntime = createDashboardRuntime({
     source: client.state,
     service: client.service,
     clientLabel: "station",
@@ -93,23 +103,23 @@ export async function runDashboardMain(): Promise<void> {
       widgets: tuiConfig.config?.widgets ?? [],
       widgetsPersisted: tuiConfig.configPath !== undefined,
     },
-    ...popupRuntime.storeOptions,
+    ...popupRuntime.runtimeOptions,
   });
   const copyNoticeText = (text: string): void => {
     copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
   };
-  const mouseEffects: DashboardMouseEffects = {
+  const rendererEffects: DashboardRendererEffects = {
     openShell: ({ cwd }) => {
       const openShell = popupRuntime.openShell;
       if (openShell === undefined) {
-        store.getState().pushToast({
+        dashboardRuntime.actions.pushToast({
           kind: "error",
           message: "Opening a shell is unavailable outside native Station or a tmux popup.",
         });
         return;
       }
       void openShell(cwd).catch(() => {
-        store.getState().pushToast({
+        dashboardRuntime.actions.pushToast({
           kind: "error",
           message: "The tmux popup could not open the requested shell.",
         });
@@ -118,18 +128,23 @@ export async function runDashboardMain(): Promise<void> {
     openUrl: openExternalUrl,
   };
   if (tuiConfig.configPath !== undefined) {
-    widgetConfigWrites = startWidgetConfigWrites(store, tuiConfig.configPath);
+    widgetConfigWrites = startWidgetConfigWrites(
+      dashboardRuntime.state,
+      dashboardRuntime.actions.pushToast,
+      tuiConfig.configPath,
+    );
   }
 
   // Attach the snapshot source first, then start the client runtime feeding it
   // (the order Station's lifecycle uses), so the first frame already sees the
   // connection state instead of a stale "disconnected".
-  const detachSource = store.getState().start();
+  dashboardRuntime.start();
   client.start();
 
   let disposed = false;
   let renderer: DashboardHotRenderer | undefined;
   let root: DashboardHotRoot | undefined;
+  let themeController: StationThemeController | undefined;
   const onProcessExit = (): void => disposeResources();
   disposeResources = (): void => {
     if (disposed) {
@@ -137,9 +152,10 @@ export async function runDashboardMain(): Promise<void> {
     }
     disposed = true;
     root?.unmount();
+    themeController?.dispose();
     popupRuntime.dispose();
     void widgetConfigWrites?.dispose();
-    detachSource();
+    dashboardRuntime.dispose();
     void client.stop();
     renderer?.destroy();
     process.off("exit", onProcessExit);
@@ -162,13 +178,25 @@ export async function runDashboardMain(): Promise<void> {
     const nextRenderer = await createCliRenderer({
       enableMouseMovement,
       exitOnCtrlC: false,
-      prependInputHandlers: [copySelectedText, createDashboardSequenceHandler(store)],
+      prependInputHandlers: [
+        copySelectedText,
+        createDashboardSequenceHandler(dashboardRuntime, (intent) => {
+          executeDashboardControlIntent(intent, dashboardRuntime, rendererEffects);
+        }),
+      ],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
     renderer = nextRenderer;
+    const nextThemeController = createStationThemeController(nextRenderer);
+    themeController = nextThemeController;
+    // The controller begins on the complete fallback; palette I/O must not block the first frame.
+    void nextThemeController.start();
     if (popupRenderer) {
       // OpenTUI keeps 1002 drag tracking on when 1003 movement is off; popups need click-only 1000 + 1006.
-      process.stdout.write("\u001b[?1002l\u001b[?1000h");
+      process.stdout.write(
+        `${VtPrefix.Csi}${CsiCommand.ResetDecPrivateMode.prefix}${DecMode.MouseButtonEvent}${CsiCommand.ResetDecPrivateMode.final}` +
+          `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.MouseVt200}${CsiCommand.SetDecPrivateMode.final}`,
+      );
     }
     hotSlots.__stationDashboardHotRenderer = nextRenderer;
     hotSlots.__stationDashboardHotDispose = disposeResources;
@@ -177,17 +205,18 @@ export async function runDashboardMain(): Promise<void> {
     nextRenderer.keyInput.on("paste", (event) => {
       const text = sanitizePastedText(new TextDecoder().decode(event.bytes));
       if (text.length > 0) {
-        store.getState().handleKey({ input: text });
+        dashboardRuntime.actions.handleKey({ input: text });
       }
     });
     const nextRoot = createRoot(nextRenderer);
     root = nextRoot;
     nextRoot.render(
-      <FullscreenDashboard
-        store={store}
-        effects={mouseEffects}
+      <StandaloneDashboardApp
+        runtime={dashboardRuntime}
+        effects={rendererEffects}
         onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}
+        themeSource={nextThemeController}
       />,
     );
     process.on("exit", onProcessExit);

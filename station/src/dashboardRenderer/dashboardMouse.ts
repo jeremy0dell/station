@@ -1,30 +1,27 @@
-import type { TuiStore } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
-  clampDashboardStateScroll,
   deriveTuiInputMode,
-  focusProjectSettingsItem,
   isRemoveProjectArmed,
   LIST_REGISTRY,
-  openProjectDefaultAgentPicker,
-  openWidgetSettings,
-  scrollDashboard,
-  selectAddProjectRow,
-  selectDashboardSessionRow,
   selectDashboardViewport,
-  tuiScreenBehavior,
-  widgetSettingsAddFromPicker,
-  widgetSettingsOpenPicker,
-  widgetSettingsRemoveAt,
-  widgetSettingsToggleAt,
+  type ProjectHeaderControl,
   type TuiInputMode,
 } from "@station/dashboard-core";
-import type { StoreApi } from "zustand/vanilla";
 import { isPrimaryMouseEvent, wheelDirection, type StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
+import {
+  executeDashboardControlIntent,
+  openDashboardRowShell,
+  showStaleDashboardTargetNotice,
+  type DashboardRendererEffects,
+} from "./dashboardEffects.js";
 
-export type DashboardMouseEffects = {
-  openShell(target: { cwd: string }): void;
-  openUrl(url: string): void;
+type DashboardMouseInput = {
+  state: DashboardStateSource;
+  actions: Pick<
+    DashboardActions,
+    "createQuickSession" | "dismissToasts" | "dispatch" | "handleKey" | "pushToast"
+  >;
 };
 
 const ROW_INTERACTIVE_MODES: ReadonlySet<TuiInputMode> = new Set([
@@ -40,16 +37,15 @@ const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
   "addProjectFilter",
 ]);
 const SCROLL_PAGE_ROWS = 5;
-const STALE_TARGET_MESSAGE = "That dashboard item is no longer available.";
 
 /** Translates standalone semantic targets into shared dashboard actions and renderer effects. */
 export function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: StoreApi<TuiStore>,
-  effects: DashboardMouseEffects,
+  store: DashboardMouseInput,
+  effects: DashboardRendererEffects,
 ): void {
-  const mode = deriveTuiInputMode(store.getState());
+  const mode = deriveTuiInputMode(store.state.getState());
   const scrollDirection = wheelDirection(event);
   if (scrollDirection !== null) {
     if (
@@ -57,7 +53,10 @@ export function routeDashboardMouse(
       target.kind !== "sheetBackdrop" &&
       ROW_INTERACTIVE_MODES.has(mode)
     ) {
-      store.getState().handleKey({ input: "", mouseScroll: scrollDirection });
+      store.actions.dispatch({
+        type: "dashboard.scroll",
+        delta: scrollDirection === "up" ? -1 : 1,
+      });
     }
     return;
   }
@@ -76,16 +75,16 @@ export function routeDashboardMouse(
 
 function routeSurfaceClick(
   target: StationMouseTarget,
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
-  effects: DashboardMouseEffects,
+  effects: DashboardRendererEffects,
 ): boolean {
   switch (target.kind) {
     case "row":
       activateRowInMode(store, target.rowId, mode);
       return true;
     case "projectHeader":
-      toggleProjectInMode(store, target.projectId, mode);
+      activateProjectHeaderInMode(store, target.projectId, "primary", mode, effects);
       return true;
     case "link":
       openLinkInMode(target.url, mode, effects);
@@ -94,23 +93,32 @@ function routeSurfaceClick(
       openRowShellInMode(store, target.rowId, mode, effects);
       return true;
     case "openShellForProject":
-      openProjectShellInMode(store, target.projectId, mode, effects);
+      activateProjectHeaderInMode(store, target.projectId, "shell", mode, effects);
       return true;
     case "quickSessionForProject":
-      if (mode === "dashboard") {
-        store.getState().createQuickSession(target.projectId);
-      }
+      activateProjectHeaderInMode(store, target.projectId, "quickSession", mode, effects);
+      return true;
+    case "emptyProjectAction":
+      activateEmptyProjectInMode(store, target.projectId, mode, effects);
       return true;
     case "showDefaultAgentPickerForProject":
+      activateProjectHeaderInMode(store, target.projectId, "defaultAgent", mode, effects);
+      return true;
+    case "firstProjectAdd":
       if (mode === "dashboard") {
-        store.setState(openProjectDefaultAgentPicker(store.getState(), target.projectId));
+        store.actions.dispatch({ type: "dashboard.addProject" });
+      }
+      return true;
+    case "persistentFilterAction":
+      if (mode === "dashboard") {
+        store.actions.dispatch({ type: target.actionId });
       }
       return true;
     case "scrollIndicator":
       pageInMode(store, target.direction, mode);
       return true;
     case "toast":
-      store.getState().dismissToasts();
+      store.actions.dismissToasts();
       return true;
     case "body":
       return true;
@@ -119,101 +127,157 @@ function routeSurfaceClick(
   }
 }
 
-function activateRowInMode(store: StoreApi<TuiStore>, rowId: string, mode: TuiInputMode): void {
+function activateRowInMode(
+  store: DashboardMouseInput,
+  rowId: string,
+  mode: TuiInputMode,
+): void {
   if (ROW_INTERACTIVE_MODES.has(mode)) {
     activateCurrentRow(store, rowId);
   }
 }
 
-function toggleProjectInMode(
-  store: StoreApi<TuiStore>,
+function activateProjectHeaderInMode(
+  store: DashboardMouseInput,
   projectId: string,
+  actionId: ProjectHeaderControl,
   mode: TuiInputMode,
+  effects: DashboardRendererEffects,
 ): void {
-  if (mode === "dashboard") {
-    toggleCurrentProject(store, projectId);
+  if (mode !== "dashboard") {
+    return;
+  }
+  const result = store.actions.dispatch({
+    type: "dashboard.projectHeader.activate",
+    projectId,
+    actionId,
+  });
+  if (result.controlIntent !== undefined) {
+    executeDashboardControlIntent(result.controlIntent, store, effects);
   }
 }
 
-function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardMouseEffects): void {
+function activateEmptyProjectInMode(
+  store: DashboardMouseInput,
+  projectId: string,
+  mode: TuiInputMode,
+  effects: DashboardRendererEffects,
+): void {
+  if (mode !== "dashboard") {
+    return;
+  }
+  const result = store.actions.dispatch({
+    type: "dashboard.emptyProject.activate",
+    projectId,
+  });
+  if (result.controlIntent !== undefined) {
+    executeDashboardControlIntent(result.controlIntent, store, effects);
+  }
+}
+
+function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardRendererEffects): void {
   if (mode === "dashboard") {
     effects.openUrl(url);
   }
 }
 
 function openRowShellInMode(
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   rowId: string,
   mode: TuiInputMode,
-  effects: DashboardMouseEffects,
+  effects: DashboardRendererEffects,
 ): void {
-  if (mode !== "dashboard") return;
-  const snapshot = store.getState().snapshot;
-  if (snapshot === undefined) return;
-  const sessionRow = selectDashboardSessionRow(snapshot, rowId);
-  if (sessionRow === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
-    return;
+  if (mode === "dashboard") {
+    openDashboardRowShell(store, rowId, effects);
   }
-  effects.openShell({ cwd: sessionRow.worktree.path });
 }
 
-function openProjectShellInMode(
-  store: StoreApi<TuiStore>,
-  projectId: string,
+function pageInMode(
+  store: DashboardMouseInput,
+  direction: "up" | "down",
   mode: TuiInputMode,
-  effects: DashboardMouseEffects,
 ): void {
-  if (mode !== "dashboard") return;
-  const project = store
-    .getState()
-    .snapshot?.projects.find((candidate) => candidate.id === projectId);
-  if (project === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
-    return;
-  }
-  effects.openShell({ cwd: project.root });
-}
-
-function pageInMode(store: StoreApi<TuiStore>, direction: "up" | "down", mode: TuiInputMode): void {
   if (!ROW_INTERACTIVE_MODES.has(mode)) {
     return;
   }
-  store.setState(
-    scrollDashboard(store.getState(), direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS),
-  );
+  store.actions.dispatch({
+    type: "dashboard.scroll",
+    delta: direction === "up" ? -SCROLL_PAGE_ROWS : SCROLL_PAGE_ROWS,
+  });
 }
 
 function routeModalClick(
   target: StationMouseTarget,
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
 ): boolean {
   if (target.kind === "sheetBackdrop") {
     return true;
   }
   if (target.kind === "screenBackdrop") {
-    const state = store.getState();
-    const clickAway = tuiScreenBehavior(state.screen).clickAway;
-    if (clickAway !== undefined) {
-      store.setState(clickAway(state));
-    }
+    store.actions.dispatch({ type: "screen.clickAway" });
     return true;
   }
   switch (target.kind) {
-    case "sheetChoice":
-      if (SHEET_CHOICE_MODES.has(mode)) {
-        store.getState().handleKey({ input: target.choiceKey });
+    case "persistentFilterConditionField":
+      if (mode === "persistentFilterConditionField") {
+        store.actions.dispatch({
+          type: "persistentFilter.condition.selectField",
+          field: target.field,
+        });
       }
       return true;
-    case "sheetButton":
-      if (mode === "removeConfirm") {
-        store.getState().handleKey({ input: target.key });
+    case "persistentFilterConditionValue":
+      if (mode === "persistentFilterConditionValues") {
+        store.actions.dispatch({
+          type: "persistentFilter.condition.toggleValue",
+          field: target.field,
+          valueId: target.valueId,
+        });
       }
+      return true;
+    case "persistentFilterConditionAction":
+      if (target.actionId === "close") {
+        if (
+          mode === "persistentFilterConditionField" ||
+          mode === "persistentFilterConditionValues"
+        ) {
+          store.actions.dispatch({ type: "persistentFilter.condition.close" });
+        }
+        return true;
+      }
+      if (target.actionId === "applyFilter") {
+        if (mode === "persistentFilterConditionField") {
+          store.actions.dispatch({ type: "persistentFilter.applyDraft" });
+        }
+        return true;
+      }
+      if (mode === "persistentFilterConditionValues") {
+        store.actions.dispatch({
+          type:
+            target.actionId === "back"
+              ? "persistentFilter.condition.back"
+              : "persistentFilter.condition.done",
+        });
+      }
+      return true;
+    case "sheetChoice":
+      if (SHEET_CHOICE_MODES.has(mode)) {
+        store.actions.handleKey({ input: target.choiceKey });
+      }
+      return true;
+    case "removeWorktreeAction":
+      store.actions.dispatch({
+        type: "removeWorktree.activate",
+        actionId: target.actionId,
+      });
       return true;
     case "projectSettingsItem":
       if (mode === "projectSettings") {
-        store.setState(focusProjectSettingsItem(store.getState(), target.itemId));
+        store.actions.dispatch({
+          type: "projectSettings.focusItem",
+          itemId: target.itemId,
+        });
       }
       return true;
     case "projectSettingsConfirmRemove":
@@ -221,59 +285,72 @@ function routeModalClick(
       return true;
     case "addProjectRow":
       if (ADD_PROJECT_ROW_MODES.has(mode)) {
-        store.setState(selectAddProjectRow(store.getState(), target.index));
+        store.actions.dispatch({ type: "addProject.selectRow", index: target.index });
       }
       return true;
-    case "sheetSubmit":
-      if (mode === "forkDetails") {
-        store.getState().handleKey({ input: "\r", return: true });
-      }
+    case "addProjectAction":
+      store.actions.dispatch({
+        type: "addProject.activate",
+        actionId: target.actionId,
+      });
+      return true;
+    case "newSessionAction":
+      store.actions.dispatch({
+        type: "newSession.activate",
+        actionId: target.actionId,
+      });
+      return true;
+    case "forkSessionAction":
+      store.actions.dispatch({
+        type: "forkSession.activate",
+        actionId: target.actionId,
+      });
       return true;
     default:
       return false;
   }
 }
 
-function confirmProjectRemoval(store: StoreApi<TuiStore>, mode: TuiInputMode): void {
-  const screen = store.getState().screen;
+function confirmProjectRemoval(store: DashboardMouseInput, mode: TuiInputMode): void {
+  const screen = store.state.getState().screen;
   if (
     mode === "projectSettings" &&
     screen.name === "projectSettings" &&
     isRemoveProjectArmed(screen)
   ) {
-    store.getState().handleKey({ input: "r" });
+    store.actions.handleKey({ input: "r" });
   }
 }
 
 function routeWidgetClick(
   target: StationMouseTarget,
-  store: StoreApi<TuiStore>,
+  store: DashboardMouseInput,
   mode: TuiInputMode,
 ): boolean {
   switch (target.kind) {
     case "widgetSettingsOpen":
       if (mode === "dashboard") {
-        store.setState(openWidgetSettings(store.getState()));
+        store.actions.dispatch({ type: "widgetSettings.open" });
       }
       return true;
     case "widgetSettingsRow":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsToggleAt(store.getState(), target.index));
+        store.actions.dispatch({ type: "widgetSettings.toggle", index: target.index });
       }
       return true;
     case "widgetSettingsRemove":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsRemoveAt(store.getState(), target.index));
+        store.actions.dispatch({ type: "widgetSettings.remove", index: target.index });
       }
       return true;
     case "widgetSettingsAdd":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsOpenPicker(store.getState()));
+        store.actions.dispatch({ type: "widgetSettings.openPicker" });
       }
       return true;
     case "widgetSettingsPickerChoice":
       if (mode === "widgetSettings") {
-        store.setState(widgetSettingsAddFromPicker(store.getState(), target.index));
+        store.actions.dispatch({ type: "widgetSettings.addFromPicker", index: target.index });
       }
       return true;
     default:
@@ -281,10 +358,10 @@ function routeWidgetClick(
   }
 }
 
-function activateCurrentRow(store: StoreApi<TuiStore>, rowId: string): void {
-  const state = store.getState();
+function activateCurrentRow(store: DashboardMouseInput, rowId: string): void {
+  const state = store.state.getState();
   if (state.snapshot === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
+    showStaleDashboardTargetNotice(store);
     return;
   }
   const viewport = selectDashboardViewport(state.snapshot, state);
@@ -299,27 +376,8 @@ function activateCurrentRow(store: StoreApi<TuiStore>, rowId: string): void {
   }
   const choice = viewport.rowChoices.find((candidate) => candidate.value.id === rowId);
   if (choice === undefined) {
-    showNotice(store, STALE_TARGET_MESSAGE);
+    showStaleDashboardTargetNotice(store);
     return;
   }
-  store.getState().handleKey({ input: choice.key });
-}
-
-function toggleCurrentProject(store: StoreApi<TuiStore>, projectId: string): void {
-  const state = store.getState();
-  if (state.snapshot?.projects.some((project) => project.id === projectId) !== true) {
-    showNotice(store, STALE_TARGET_MESSAGE);
-    return;
-  }
-  // Validate the exact id before mutating, then reuse shared clamping after the item count changes.
-  const collapsedProjectIds = new Set(state.collapsedProjectIds);
-  const wasCollapsed = collapsedProjectIds.delete(projectId);
-  if (!wasCollapsed) {
-    collapsedProjectIds.add(projectId);
-  }
-  store.setState(clampDashboardStateScroll({ ...state, collapsedProjectIds }));
-}
-
-function showNotice(store: StoreApi<TuiStore>, message: string): void {
-  store.getState().pushToast({ kind: "info", message });
+  store.actions.handleKey({ input: choice.key });
 }

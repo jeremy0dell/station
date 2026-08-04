@@ -1,7 +1,6 @@
-import { constants } from "node:fs";
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { replaceTextFile } from "@station/runtime";
 import { ConfigError } from "../load/errors.js";
 import { loadConfigFromToml } from "../load/index.js";
 import { DEFAULT_CONFIG_PATH, normalizeConfigPath } from "../load/paths.js";
@@ -30,13 +29,13 @@ export async function loadConfigSource(options: {
 }
 
 export async function atomicWriteConfig(configPath: string, source: string): Promise<void> {
-  const configDir = dirname(configPath);
-  const tempPath = join(configDir, `.${basename(configPath)}.${process.pid}.${Date.now()}.tmp`);
   try {
-    await mkdir(configDir, { recursive: true, mode: 0o700 });
-    await access(configDir, constants.W_OK);
-    await writeFile(tempPath, source, { encoding: "utf8", mode: 0o600 });
-    await rename(tempPath, configPath);
+    await replaceTextFile({
+      path: configPath,
+      contents: source,
+      mode: 0o600,
+      directoryMode: 0o700,
+    });
   } catch (cause) {
     throw projectConfigSafeError({
       code: "CONFIG_WRITE_FAILED",

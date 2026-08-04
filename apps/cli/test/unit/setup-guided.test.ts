@@ -2,33 +2,52 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import { buildManagedFastPopupRunShellCommand } from "@station/tmux";
 import { afterEach, describe, expect, it } from "vitest";
 import { setupPackageRoot } from "../../src/commands/setup/checks/launchers.js";
 import {
   tmuxPopupBindingBlock,
   tmuxPopupRunShellCommand,
 } from "../../src/commands/setup/checks/tmuxBinding.js";
-import {
-  runSetupCommand as runSetupCommandBase,
-  type SetupPromptAdapter,
-} from "../../src/commands/setup/index.js";
+import * as setupCommand from "../../src/commands/setup/index.js";
 import {
   configBackedHarnessHooksProbe,
+  type GuidedPromptFixture,
+  successfulProviderTrackingPort,
+  toSetupPromptAdapter,
   withRequiredTrackingConsent,
 } from "../fixtures/setupTrackingSupport.js";
 
-async function runSetupCommand(...args: Parameters<typeof runSetupCommandBase>) {
+type GuidedSetupCommandDeps = Omit<setupCommand.SetupCommandDeps, "prompt"> & {
+  readonly prompt?: GuidedPromptFixture;
+};
+
+type GuidedSetupCommandArguments = [
+  argv: Parameters<typeof setupCommand.runSetupCommand>[0],
+  options: Parameters<typeof setupCommand.runSetupCommand>[1],
+  deps?: GuidedSetupCommandDeps,
+];
+
+async function runSetupCommand(...args: GuidedSetupCommandArguments) {
   const deps = args[2] ?? {};
-  const prompt = deps.prompt;
-  return runSetupCommandBase(args[0], args[1], {
-    ...deps,
-    ...(prompt === undefined ? {} : { prompt: withRequiredTrackingConsent(prompt) }),
+  const { prompt: promptFixture, ...baseDeps } = deps;
+  return setupCommand.runSetupCommand(args[0], args[1], {
+    ...baseDeps,
+    ...(promptFixture === undefined
+      ? {}
+      : {
+          prompt: withRequiredTrackingConsent({
+            prompt: promptFixture,
+            report: (message) => {
+              void baseDeps.writeStdout?.(`${message}\n`);
+            },
+          }),
+        }),
     probeHarnessHooksStatus:
       deps.probeHarnessHooksStatus ??
       configBackedHarnessHooksProbe(
         async (configPath) => (await deps.fs?.readFile(configPath)) ?? "",
       ),
+    providerTrackingPort: deps.providerTrackingPort ?? successfulProviderTrackingPort,
   });
 }
 
@@ -66,13 +85,7 @@ describe("guided setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: async (input) => {
           expect(fs.files[input.configPath]).toContain("projects = []");
@@ -90,10 +103,70 @@ describe("guided setup command", () => {
     const configPath = join(root, "home/.config/station/config.toml");
     expect(fs.files[configPath]).toContain("projects = []");
     expect(activations).toEqual([{ configPath, homeDir: join(root, "home") }]);
-    expect(chunks.join("")).toContain(`Applying: Write STATION config (${configPath})`);
-    expect(chunks.join("")).toContain("Completed: Write STATION config");
+    expect(chunks.join("")).not.toContain("Applying: Write STATION config");
+    expect(chunks.join("")).not.toContain(`Applying: Write STATION config (${configPath})`);
+    expect(chunks.join("")).toContain("Selected changes");
+    expect(chunks.join("")).toContain("Write STATION config");
+    expect(chunks.join("")).toContain("Activate Observer configuration");
     expect(chunks.join("")).toContain("Observer configuration active.");
     expect(chunks.join("")).toContain("Core setup complete.");
+  });
+
+  it("shows an unusable Git blocker before harness prompts without mutation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+    let promptCount = 0;
+    let activationCount = 0;
+    const baseRunner = fakeRunner(calls, {
+      "wt --version": "worktrunk 1.2.3\n",
+      "tmux -V": "tmux 3.5a\n",
+      "codex --version": "codex 0.1.0\n",
+    });
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: async (input) => {
+          if (input.command === "git" && input.args?.[0] === "--version") {
+            throw Object.assign(new Error("Git execution denied"), { code: "EACCES" });
+          }
+          return baseRunner(input);
+        },
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
+        fs,
+        activateObserverConfig: async () => {
+          activationCount += 1;
+        },
+        prompt: {
+          async confirm() {
+            promptCount += 1;
+            return true;
+          },
+          async selectMany() {
+            promptCount += 1;
+            return ["codex"];
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(chunks.join("")).toContain("Git is installed but unusable.");
+    expect(promptCount).toBe(0);
+    expect(activationCount).toBe(0);
+    expect(fs.files).toEqual({});
+    expect(calls.some((call) => call.stdio === "inherit")).toBe(false);
   });
 
   it("continues with checkout launchers and prints a usable popup fallback when linking fails", async () => {
@@ -125,8 +198,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           join(packageRoot, "bin/stn"),
           join(packageRoot, "bin/stn-ingress"),
           join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
@@ -137,7 +209,7 @@ describe("guided setup command", () => {
           async confirm(message: string) {
             return (
               message.includes("Link STATION launchers") ||
-              message.includes("Write core STATION config") ||
+              message.includes("Write and activate core Station config") ||
               message.includes("Install or load tmux popup binding")
             );
           },
@@ -193,8 +265,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           join(packageRoot, "bin/stn"),
           join(packageRoot, "bin/stn-ingress"),
           join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
@@ -205,7 +276,7 @@ describe("guided setup command", () => {
           async confirm(message) {
             return (
               message.includes("Link STATION launchers") ||
-              message.includes("Write core STATION config")
+              message.includes("Write and activate core Station config")
             );
           },
           async selectMany() {
@@ -222,6 +293,64 @@ describe("guided setup command", () => {
       stdio: "inherit",
     });
     expect(fs.files[configPath].match(/^\[harness\.(codex|opencode)\]$/gm)).toHaveLength(2);
+  });
+
+  it("reprompts invalid harness selection before any mutation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const configPath = join(homeDir, ".config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const fs = fakeFs({});
+    const activations: string[] = [];
+    const chunks: string[] = [];
+    let selectionPrompts = 0;
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+          "opencode --version": "opencode 1.0.0\n",
+        }),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
+        fs,
+        activateObserverConfig: async ({ configPath: activatedPath }) => {
+          activations.push(activatedPath);
+        },
+        prompt: {
+          async confirm(message) {
+            return message.includes("Write and activate core Station config");
+          },
+          async selectMany() {
+            selectionPrompts += 1;
+            expect(fs.files[configPath]).toBeUndefined();
+            expect(activations).toEqual([]);
+            expect(calls.some((call) => call.stdio === "inherit")).toBe(false);
+            return selectionPrompts === 1 ? ["opencode", "unknown"] : ["opencode"];
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(selectionPrompts).toBe(2);
+    expect(chunks.join("")).toContain("Choose only values shown in this list.");
+    expect(fs.files[configPath]).toContain('harness = "opencode"');
+    expect(fs.files[configPath]).not.toContain("[harness.codex]");
+    expect(activations).toEqual([configPath]);
   });
 
   it("does not silently drop a selected harness after linking checkout launchers", async () => {
@@ -264,8 +393,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           join(packageRoot, "bin/stn"),
           join(packageRoot, "bin/stn-ingress"),
           join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
@@ -312,18 +440,12 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "pi --version": "pi 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: {
           async confirm(message) {
-            return message.includes("Write core STATION config");
+            return message.includes("Write and activate core Station config");
           },
           async selectMany() {
             return ["pi"];
@@ -362,13 +484,7 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "wt -y config shell install zsh": "",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
@@ -391,8 +507,10 @@ describe("guided setup command", () => {
       stdio: "inherit",
     });
     expect(fs.files[zshrc]).toBe("# existing zsh config\n");
-    expect(chunks.join("")).toContain("Running: /fake/bin/wt -y config shell install zsh");
-    expect(chunks.join("")).toContain("Completed: Install Worktrunk shell integration");
+    expect(chunks.join("")).toContain(
+      "Starting: Install Worktrunk shell integration. Native output follows.",
+    );
+    expect(chunks.join("")).toContain("Finished: Install Worktrunk shell integration.");
   });
 
   it("keeps an unreadable shell rc probe inside the optional integration step", async () => {
@@ -424,13 +542,7 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
@@ -456,7 +568,7 @@ describe("guided setup command", () => {
       "Optional Worktrunk shell integration was not installed; core setup is complete.",
     );
     expect(chunks.join("")).toContain("Run: /fake/bin/wt -y config shell install zsh");
-    expect(chunks.join("")).not.toContain("Failed: Install Worktrunk shell integration");
+    expect(chunks.join("")).toContain("Failed: Install Worktrunk shell integration.");
   });
 
   it("declines required tracking before config or provider mutation", async () => {
@@ -468,7 +580,7 @@ describe("guided setup command", () => {
     const fs = fakeFs({});
     const chunks: string[] = [];
 
-    const result = await runSetupCommandBase(
+    const result = await setupCommand.runSetupCommand(
       [],
       {},
       {
@@ -482,22 +594,21 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
-        prompt: {
-          async confirm() {
-            return false;
+        prompt: toSetupPromptAdapter({
+          prompt: {
+            async confirm() {
+              return false;
+            },
+            async selectMany() {
+              return ["codex"];
+            },
           },
-          async selectMany() {
-            return ["codex"];
+          report: (message) => {
+            chunks.push(`${message}\n`);
           },
-        },
+        }),
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -509,6 +620,35 @@ describe("guided setup command", () => {
     expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
     expect(chunks.join("")).toContain("Required agent tracking was declined");
     expect(chunks.join("")).not.toContain("Core setup complete");
+  });
+
+  it("dispatches typed cancellation and starts no later mutation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const configPath = join(root, "home/.config/station/config.toml");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const cancellations: string[] = [];
+
+    const result = await setupCommand.runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        ...readySetupDeps(repo),
+        fs,
+        prompt: cancellingSetupPrompt(cancellations),
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(1);
+    expect(cancellations).toEqual([
+      "Setup cancelled. Changes already completed were kept. Run stn setup again to inspect the current state and continue.",
+    ]);
+    expect(fs.files[configPath]).toBeUndefined();
   });
 
   it("declining config write produces no writes", async () => {
@@ -532,13 +672,7 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: async () => {
           activations += 1;
@@ -624,8 +758,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -637,7 +770,8 @@ describe("guided setup command", () => {
         prompt: {
           async confirm(message) {
             return (
-              message.includes("Codex agent hooks") || message.includes("Write core STATION config")
+              message.includes("Codex agent hooks") ||
+              message.includes("Write and activate core Station config")
             );
           },
           async selectMany() {
@@ -653,21 +787,7 @@ describe("guided setup command", () => {
     expect(fs.files[configPath]).toContain(
       '[harness.codex]\ninstall_hooks = true\nenabled = true\ncommand = "codex"',
     );
-    expect(calls).toContainEqual(
-      expect.objectContaining({
-        command: "/fake/bin/stn",
-        args: [
-          "--config",
-          configPath,
-          "hooks",
-          "install",
-          "codex",
-          "--yes",
-          "--hook-bin",
-          "/fake/bin/stn-ingress",
-        ],
-      }),
-    );
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
   it("prepares explicit selections and the preserved configured default", async () => {
@@ -679,6 +799,7 @@ describe("guided setup command", () => {
     const fs = fakeFs({ [configPath]: configuredProjectToml(repo) });
     const calls: ExternalCommandInput[] = [];
     const prompts: string[] = [];
+    const preparedProviders: string[] = [];
 
     const result = await runSetupCommand(
       [],
@@ -696,12 +817,17 @@ describe("guided setup command", () => {
           "opencode --version": "opencode 1.0.0\n",
           [`stn --config ${configPath} hooks install opencode --yes`]: "",
         }),
+        providerTrackingPort: async (operation) => {
+          preparedProviders.push(
+            operation.kind === "prepare-worktrunk-tracking" ? "worktrunk" : operation.harnessId,
+          );
+          return successfulProviderTrackingPort(operation);
+        },
         access: fakeAccess([
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -713,7 +839,7 @@ describe("guided setup command", () => {
             prompts.push(message);
             return (
               message.includes("OpenCode agent hooks") ||
-              message.includes("Write core STATION config")
+              message.includes("Write and activate core Station config")
             );
           },
           async selectMany() {
@@ -727,11 +853,8 @@ describe("guided setup command", () => {
     expect(result.code).toBe(0);
     expect(prompts).not.toContain("Install OpenCode agent hooks?");
     expect(prompts).not.toContain("Install Codex agent hooks?");
-    expect(
-      calls
-        .filter((call) => call.command === "/fake/bin/stn" && call.args?.[2] === "hooks")
-        .map((call) => call.args?.[4]),
-    ).toEqual(["opencode", "codex"]);
+    expect(preparedProviders).toEqual(["opencode", "codex"]);
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
     expect(fs.files[configPath].match(/^harness = "codex"$/gm)).toHaveLength(1);
     expect(fs.files[configPath].match(/^\[harness\.codex\]$/gm)).toHaveLength(1);
     expect(fs.files[configPath].match(/^\[harness\.opencode\]$/gm)).toHaveLength(1);
@@ -825,7 +948,7 @@ describe("guided setup command", () => {
     expect(output).not.toContain("Core setup complete.");
   });
 
-  it("writes every selected harness and keeps the first as the new-config default", async () => {
+  it("writes every selected harness and uses the explicit new-config default", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
@@ -846,25 +969,20 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "opencode --version": "opencode 1.0.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({
           confirms: [false, false, true, false, false],
           multiSelects: [["opencode", "codex"]],
+          singleSelects: ["codex"],
         }),
         writeStdout: () => undefined,
       },
     );
 
     const config = fs.files[join(root, "home/.config/station/config.toml")];
-    expect(config).toContain('harness = "opencode"');
+    expect(config).toContain('harness = "codex"');
     expect(config).toContain("[harness.opencode]");
     expect(config).toContain("[harness.codex]");
   });
@@ -879,7 +997,7 @@ describe("guided setup command", () => {
 
     const result = await runSetupCommand(
       [],
-      {},
+      { configPath },
       {
         cwd: repo,
         homeDir: join(root, "home"),
@@ -897,8 +1015,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -912,16 +1029,11 @@ describe("guided setup command", () => {
       },
     );
 
-    expect(result.code).toBe(0);
+    expect(result.code, chunks.join("")).toBe(0);
     const tmuxConfig = fs.files[join(root, "home/.tmux.conf")];
     expect(tmuxConfig).toContain(
       tmuxPopupBindingBlock("/fake/bin/stn-tmux-popup", {
-        runShellCommand: buildManagedFastPopupRunShellCommand({
-          installedRoot: "/fake/bin",
-          fallbackAlias: "/fake/bin/stn-tmux-popup",
-          tmuxCommand: "/fake/bin/tmux",
-          configPath,
-        }),
+        runShellCommand: tmuxPopupRunShellCommand("/fake/bin/stn-tmux-popup", configPath),
       }),
     );
     expect(chunks.join("")).toContain(
@@ -930,16 +1042,69 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain("Direct fallback: stn popup");
   }, 15_000);
 
+  it("does not offer or replace a user-configured tmux prefix key", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const tmuxConfigPath = join(homeDir, ".tmux.conf");
+    const originalTmuxConfig = "bind-key Space display-message 'custom action'\n";
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [tmuxConfigPath]: originalTmuxConfig });
+    const prompts: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/hunk",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            prompts.push(message);
+            return message.startsWith("Write and activate core Station config?");
+          },
+          async selectMany() {
+            return ["codex"];
+          },
+        },
+        writeStdout: () => undefined,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(fs.files[tmuxConfigPath]).toBe(originalTmuxConfig);
+    expect(prompts.some((message) => message.startsWith("Install or load tmux"))).toBe(false);
+  });
+
   it("preserves a customized tmux key while replacing Station's command", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const homeDir = join(root, "home");
-    await mkdir(repo, { recursive: true });
-    const fs = fakeFs({
-      [join(homeDir, ".tmux.conf")]: tmuxPopupBindingBlock("/old/stn-tmux-popup", {
-        bindingKey: "C-s",
-      }),
+    const tmuxConfigPath = join(homeDir, ".tmux.conf");
+    const originalTmuxConfig = tmuxPopupBindingBlock("/old/stn-tmux-popup", {
+      bindingKey: "C-s",
     });
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [tmuxConfigPath]: originalTmuxConfig });
     const chunks: string[] = [];
 
     const result = await runSetupCommand(
@@ -960,8 +1125,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -969,18 +1133,106 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: popupInstallPrompt,
+        now: () => new Date("2026-06-08T12:00:00.000Z"),
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
       },
     );
 
-    const tmuxConfig = fs.files[join(homeDir, ".tmux.conf")];
+    const tmuxConfig = fs.files[tmuxConfigPath];
     expect(result.code).toBe(0);
+    expect(fs.files[`${tmuxConfigPath}.2026-06-08T12-00-00-000Z.bak`]).toBe(originalTmuxConfig);
     expect(tmuxConfig).toContain("bind-key C-s run-shell -b");
     expect(tmuxConfig).toContain("'/fake/bin/stn-tmux-popup'");
     expect(tmuxConfig).not.toContain("/old/stn-tmux-popup");
     expect(chunks.join("")).toContain("Tmux popup binding: tmux prefix + C-s is persisted");
+  });
+
+  it.each([
+    ["the existing file is unreadable", "read"],
+    ["the backup cannot be created", "backup"],
+  ] as const)("does not replace tmux config when %s", async (_description, failure) => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    const homeDir = join(root, "home");
+    const tmuxConfigPath = join(homeDir, ".tmux.conf");
+    const originalTmuxConfig = "set -g mouse on\n";
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({ [tmuxConfigPath]: originalTmuxConfig });
+    const readFile = fs.readFile.bind(fs);
+    const writeFile = fs.writeFile.bind(fs);
+    let rejectTmuxPersistence = false;
+    fs.readFile = async (path) => {
+      if (rejectTmuxPersistence && failure === "read" && path === tmuxConfigPath) {
+        throw Object.assign(new Error("tmux config denied"), { code: "EACCES" });
+      }
+      return readFile(path);
+    };
+    fs.writeFile = async (path, content) => {
+      if (
+        rejectTmuxPersistence &&
+        failure === "backup" &&
+        path.startsWith(`${tmuxConfigPath}.`) &&
+        path.endsWith(".bak")
+      ) {
+        throw Object.assign(new Error("tmux backup denied"), { code: "EACCES" });
+      }
+      return writeFile(path, content);
+    };
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/hunk",
+          "/fake/bin/stn",
+          "/fake/bin/stn-ingress",
+          "/fake/bin/stn-tmux-popup",
+        ]),
+        fs,
+        activateObserverConfig: noopActivateObserverConfig,
+        prompt: {
+          async confirm(message) {
+            if (message.startsWith("Install or load tmux popup binding?")) {
+              rejectTmuxPersistence = true;
+              return true;
+            }
+            return message.startsWith("Write and activate core Station config?");
+          },
+          async selectMany() {
+            return ["codex"];
+          },
+        },
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    expect(result.code).toBe(0);
+    expect(fs.files[tmuxConfigPath]).toBe(originalTmuxConfig);
+    expect(
+      Object.keys(fs.files).some(
+        (path) => path.startsWith(`${tmuxConfigPath}.`) && path.endsWith(".bak"),
+      ),
+    ).toBe(false);
+    expect(chunks.join("")).toContain("SETUP_TMUX_WRITE_FAILED");
   });
 
   it("does not report a rebound tmux launcher as loaded when startup still fails", async () => {
@@ -1035,8 +1287,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           launcherCommand,
@@ -1056,9 +1307,10 @@ describe("guided setup command", () => {
       "Tmux popup binding: tmux prefix + Space is persisted for future tmux servers; no current server was live-loaded.",
     );
     expect(output).not.toContain("persisted and loaded in the current tmux server");
+    // Intent-bound replanning plus the mutation-boundary recheck probe launcher startup.
     expect(
       calls.filter((call) => basename(call.command) === "tmux" && call.args?.[0] === "run-shell"),
-    ).toHaveLength(5);
+    ).toHaveLength(8);
   });
 
   it("delegates Worktrunk launcher composition while resolving the agent ingress launcher", async () => {
@@ -1099,8 +1351,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1108,6 +1359,14 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: async () => {
           order.push("activate");
+        },
+        providerTrackingPort: async (operation) => {
+          order.push(
+            `hook:${
+              operation.kind === "prepare-worktrunk-tracking" ? "worktrunk" : operation.harnessId
+            }`,
+          );
+          return successfulProviderTrackingPort(operation);
         },
         prompt: prompt({
           confirms: [true, true, true, true, false, false],
@@ -1121,37 +1380,10 @@ describe("guided setup command", () => {
     expect(order).toEqual(["activate", "hook:worktrunk", "hook:codex", "hook:opencode"]);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
-    expect(calls).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          command: "/fake/bin/stn",
-          args: ["--config", configPath, "hooks", "install", "worktrunk", "--yes"],
-          stdio: "inherit",
-        }),
-        expect.objectContaining({
-          command: "/fake/bin/stn",
-          args: [
-            "--config",
-            configPath,
-            "hooks",
-            "install",
-            "codex",
-            "--yes",
-            "--hook-bin",
-            "/fake/bin/stn-ingress",
-          ],
-          stdio: "inherit",
-        }),
-        expect.objectContaining({
-          command: "/fake/bin/stn",
-          args: ["--config", configPath, "hooks", "install", "opencode", "--yes"],
-          stdio: "inherit",
-        }),
-      ]),
-    );
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
-  it("keeps the activated config when a later hook install fails", async () => {
+  it("uses fresh tracking evidence after a later hook installer reports failure", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     const configPath = join(root, "home/.config/station/config.toml");
@@ -1183,8 +1415,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1193,6 +1424,15 @@ describe("guided setup command", () => {
         activateObserverConfig: async () => {
           activations += 1;
         },
+        providerTrackingPort: async (operation) => ({
+          status: "failed",
+          operationId: operation.id,
+          error: {
+            tag: "SyntheticTrackingError",
+            code: "SYNTHETIC_TRACKING_FAILED",
+            message: "synthetic hook install failure",
+          },
+        }),
         prompt: prompt({ confirms: [true, true] }),
         writeStdout: (chunk) => {
           chunks.push(chunk);
@@ -1201,12 +1441,12 @@ describe("guided setup command", () => {
     );
 
     const output = chunks.join("");
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(0);
     expect(activations).toBe(1);
     expect(fs.files[configPath]).toContain("use_lifecycle_hooks = true");
     expect(output).toContain("Hook install failed.");
     expect(output).toContain("Observer configuration active.");
-    expect(output).not.toContain("Core setup complete.");
+    expect(output).toContain("Core setup complete.");
   });
 
   it("continues after one agent hook fails and retries enabled hooks on the next run", async () => {
@@ -1228,54 +1468,53 @@ describe("guided setup command", () => {
       [`stn --config ${configPath} hooks install codex --yes --hook-bin /fake/bin/stn-ingress`]: "",
       [`stn --config ${configPath} hooks install opencode --yes`]: "",
     });
-    const runner = async (input: ExternalCommandInput): Promise<ExternalCommandResult> => {
-      if (input.command === "/fake/bin/stn" && input.args?.[4] === "codex") {
-        calls.push(input);
-        codexHookAttempts += 1;
-        if (codexHookAttempts === 1) {
-          throw new Error("synthetic Codex hook failure");
-        }
-        return commandResult(input, "");
-      }
-      return baseRunner(input);
-    };
-    const promptAdapter: SetupPromptAdapter = {
+    let openCodeHookAttempts = 0;
+    const promptAdapter: GuidedPromptFixture = {
       async confirm(message) {
         return (
-          message.includes("Codex agent hooks") ||
-          message.includes("OpenCode agent hooks") ||
-          message.includes("Write core STATION config")
+          message.includes("Codex tracking") ||
+          message.includes("OpenCode tracking") ||
+          message.includes("Write and activate core Station config")
         );
       },
       async selectMany() {
         return ["codex", "opencode"];
       },
     };
-    const deps = {
+    const deps: GuidedSetupCommandDeps = {
       cwd: repo,
       homeDir,
       env: { PATH: "/fake/bin" },
-      runner,
+      runner: baseRunner,
       access: fakeAccess([
         "/fake/bin/wt",
         "/fake/bin/tmux",
         "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
+        "/fake/bin/hunk",
         "/fake/bin/stn",
         "/fake/bin/stn-ingress",
         "/fake/bin/stn-tmux-popup",
       ]),
       fs,
       activateObserverConfig: noopActivateObserverConfig,
+      providerTrackingPort: async (operation) => {
+        if (operation.kind === "prepare-worktrunk-tracking") {
+          return successfulProviderTrackingPort(operation);
+        }
+        if (operation.harnessId === "codex") {
+          codexHookAttempts += 1;
+          if (codexHookAttempts === 1) {
+            throw new Error("synthetic Codex hook failure");
+          }
+        }
+        if (operation.harnessId === "opencode") openCodeHookAttempts += 1;
+        return successfulProviderTrackingPort(operation);
+      },
       probeHarnessHooksStatus: async (
         harnessId: "codex" | "opencode" | "pi" | "cursor" | "claude",
       ) => {
         if (harnessId === "pi") return undefined;
-        const attempts = calls.filter(
-          (call) => call.command === "/fake/bin/stn" && call.args?.[4] === harnessId,
-        ).length;
-        const installed = harnessId === "codex" ? codexHookAttempts > 1 : attempts > 0;
+        const installed = harnessId === "codex" ? codexHookAttempts > 1 : openCodeHookAttempts > 0;
         return {
           provider: harnessId,
           requested: fs.files[configPath]?.includes("install_hooks = true") === true,
@@ -1296,12 +1535,9 @@ describe("guided setup command", () => {
     expect(first.code).toBe(1);
     expect(second.code).toBe(0);
     expect(fs.files[configPath].match(/install_hooks = true/g)).toHaveLength(2);
-    expect(
-      calls.filter((call) => call.command === "/fake/bin/stn" && call.args?.[4] === "codex"),
-    ).toHaveLength(2);
-    expect(
-      calls.filter((call) => call.command === "/fake/bin/stn" && call.args?.[4] === "opencode"),
-    ).toHaveLength(1);
+    expect(codexHookAttempts).toBe(2);
+    expect(openCodeHookAttempts).toBe(1);
+    expect(calls.some((call) => (call.args ?? []).includes("hooks"))).toBe(false);
   });
 
   it("installs a selected agent CLI when no harness is available, then continues", async () => {
@@ -1343,13 +1579,7 @@ describe("guided setup command", () => {
             "tmux -V": "tmux 3.5a\n",
           })(input);
         },
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         // Accept the Codex install and the config write; decline the rest. Match on
@@ -1360,7 +1590,7 @@ describe("guided setup command", () => {
             return (
               message.includes("Install Homebrew") ||
               message.includes("Install Codex?") ||
-              message.includes("Write core STATION config")
+              message.includes("Write and activate core Station config")
             );
           },
           async selectMany() {
@@ -1386,9 +1616,8 @@ describe("guided setup command", () => {
     });
     expect(fs.files[join(root, "home/.config/station/config.toml")]).toContain("[harness.codex]");
     expect(chunks.join("")).toContain("No supported agent CLI is available.");
-    expect(chunks.join("")).toContain("Installing Codex...");
-    expect(chunks.join("")).toContain("Live installer output is shown below");
-    expect(chunks.join("")).toContain("Codex install completed.");
+    expect(chunks.join("")).toContain("Starting: Install Codex. Native output follows.");
+    expect(chunks.join("")).toContain("Finished: Install Codex.");
     expect(chunks.join("")).toContain(
       "Homebrew install failed.\nContinuing with non-Homebrew agent installers where supported.",
     );
@@ -1441,13 +1670,7 @@ describe("guided setup command", () => {
             "tmux -V": "tmux 3.5a\n",
           })(input);
         },
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: {
@@ -1455,17 +1678,11 @@ describe("guided setup command", () => {
             return (
               message.includes("Install Codex?") ||
               message.includes("Install Pi?") ||
-              message.includes("Write core STATION config")
+              message.includes("Write and activate core Station config")
             );
           },
           async selectMany() {
-            return ["pi"];
-          },
-          pause() {
-            promptEvents.push("pause");
-          },
-          resume() {
-            promptEvents.push("resume");
+            return ["codex", "pi"];
           },
         },
         writeStdout: (chunk) => {
@@ -1486,14 +1703,10 @@ describe("guided setup command", () => {
     expect(codexCallIndex).toBeGreaterThanOrEqual(0);
     expect(piCallIndex).toBeGreaterThan(codexCallIndex);
     expect(fs.files[configPath]).toContain("[harness.pi]");
-    expect(chunks.join("")).toContain(
-      "Codex install failed. Continuing to the next selected agent.",
-    );
-    expect(chunks.join("")).toContain("Pi install completed.");
-    expect(chunks.join("")).toContain(
-      "These selected agent CLIs are still unavailable:\n  - Codex",
-    );
-    expect(promptEvents).toEqual(["pause", "resume", "pause", "resume"]);
+    expect(chunks.join("")).toContain("Failed: Install Codex.");
+    expect(chunks.join("")).toContain("Finished: Install Pi.");
+    expect(chunks.join("")).toContain("These selected agent CLIs are still unavailable:\n- Codex");
+    expect(promptEvents).toEqual([]);
   });
 
   it("closes prompts and writes nothing when harness install choices are declined", async () => {
@@ -1502,8 +1715,6 @@ describe("guided setup command", () => {
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
     const chunks: string[] = [];
-    let closed = false;
-
     const result = await runSetupCommand(
       [],
       {},
@@ -1517,20 +1728,12 @@ describe("guided setup command", () => {
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
-        prompt: {
-          ...prompt({ confirms: [false, false, false, false] }),
-          close() {
-            closed = true;
-          },
-        },
+        prompt: prompt({
+          confirms: [false, false, false, false],
+          multiSelects: [[]],
+        }),
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -1538,7 +1741,6 @@ describe("guided setup command", () => {
     );
 
     expect(result.code).toBe(1);
-    expect(closed).toBe(true);
     expect(Object.keys(fs.files)).toEqual([]);
     expect(chunks.join("")).toContain("No agent CLI was installed.");
   });
@@ -1586,6 +1788,47 @@ describe("guided setup command", () => {
       "Command Line Tools installation started in a separate window.",
     );
     expect(Object.keys(fs.files)).toEqual([]);
+  });
+
+  it("does not claim the Command Line Tools installer started when launch fails", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "darwin",
+        runner: async (input) => {
+          const key = `${input.command} ${(input.args ?? []).join(" ")}`;
+          if (key === "xcode-select -p") {
+            throw Object.assign(new Error("no developer tools"), { code: "ENOENT" });
+          }
+          if (key === "xcode-select --install") {
+            throw new Error("installer launch denied");
+          }
+          return commandResult(input, "");
+        },
+        access: fakeAccess([]),
+        fs: fakeFs({}),
+        prompt: prompt({ confirms: [true] }),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(output).toContain("Install Command Line Tools");
+    expect(output).toContain("EXTERNAL_COMMAND_FAILED");
+    expect(output).toContain("Command Line Tools installation did not start.");
+    expect(output).not.toContain("installation started in a separate window");
   });
 
   it("prints Command Line Tools guidance on macOS when declined", async () => {
@@ -1643,7 +1886,7 @@ describe("guided setup command", () => {
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
         platform: "darwin",
-        // CLT present (default probe) but Homebrew and diffnav are missing, so the
+        // CLT present (default probe) but Homebrew and Hunk are missing, so the
         // brew prompt fires; declining must surface the manual callout.
         runner: fakeRunner(calls, {
           "git rev-parse --show-toplevel": repo,
@@ -1667,12 +1910,63 @@ describe("guided setup command", () => {
     expect(calls.some((call) => call.command === "/bin/bash")).toBe(false);
   });
 
+  it("shows a compact required-tool proposal instead of the diagnostic matrix", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        platform: "linux",
+        runner: fakeRunner(calls, {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+          "brew --version": "Homebrew 4.0.0\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/delta"]),
+        fs: fakeFs({}),
+        prompt: prompt({ confirms: [false] }),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    );
+
+    const output = chunks.join("");
+    expect(result.code).toBe(1);
+    expect(output).toContain("Set up Station on this machine.");
+    expect(output).toContain("It will ask before installing tools or updating configuration.");
+    expect(output).toContain("Checking local tools and Station configuration...");
+    expect(output).toContain("Required tools");
+    expect(output).toContain("Homebrew will install:\n- Install Hunk");
+    expect(output).toContain("Official formula ↗ (https://formulae.brew.sh/formula/hunk)");
+    expect(output).not.toContain("Agent selection: unresolved");
+    expect(output).not.toContain("STATION state directory");
+    expect(output).not.toContain("MISSING");
+    expect(output).not.toMatch(/(?:^|\n)Core(?:\n|$)/);
+    expect(output).not.toMatch(/(?:^|\n)Recommended(?:\n|$)/);
+    expect(calls.some((call) => call.command === "brew" && call.args?.[0] === "install")).toBe(
+      false,
+    );
+  });
+
   it("installs core tools after a fresh Apple-Silicon Homebrew install, then writes config", async () => {
     const root = await tempRoot(tempRoots);
     const repo = join(root, "repo");
     await mkdir(repo, { recursive: true });
     const fs = fakeFs({});
     const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
     const configPath = join(root, "home/.config/station/config.toml");
 
     // Fresh arm64 Mac: CLT present, but brew and every core tool are missing. brew
@@ -1684,8 +1978,7 @@ describe("guided setup command", () => {
       worktrunk: "wt",
       tmux: "tmux",
       bun: "bun",
-      diffnav: "diffnav",
-      "git-delta": "delta",
+      hunk: "hunk",
     };
     const hasBrewPrefix = (input: ExternalCommandInput) =>
       input.env?.PATH?.includes("/opt/homebrew/bin") === true;
@@ -1750,7 +2043,7 @@ describe("guided setup command", () => {
           }
           throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
         },
-        // bun/diffnav/delta (and wt/tmux path resolution) live in the brew prefix and
+        // bun/Hunk (and wt/tmux path resolution) live in the brew prefix and
         // resolve only once their formula has been installed.
         access: async (path) => {
           const present =
@@ -1758,8 +2051,7 @@ describe("guided setup command", () => {
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
             (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
-            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
-            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+            (installed.has("hunk") && path === "/opt/homebrew/bin/hunk");
           if (!present) {
             throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
           }
@@ -1772,26 +2064,37 @@ describe("guided setup command", () => {
           async confirm(message: string) {
             return (
               message.includes("Install Homebrew") ||
-              message.includes("Install missing required tools") ||
-              message.includes("Write core STATION config")
+              message.includes("Install these required tools") ||
+              message.includes("Write and activate core Station config")
             );
           },
           async selectMany() {
             return ["codex"];
           },
         },
-        writeStdout: () => undefined,
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
       },
     );
 
     expect(result.code).toBe(0);
+    const output = chunks.join("");
+    const completedReview = output.slice(
+      output.indexOf("Already completed prerequisites"),
+      output.indexOf("Will apply"),
+    );
+    for (const label of ["Worktrunk / wt", "tmux", "Bun", "Hunk"]) {
+      expect(completedReview).toContain(`Install ${label}`);
+    }
+    expect(completedReview).not.toContain("Apply setup change");
     // The brew-install actions actually ran (not silent no-ops) — the discriminator:
     // before the fix the re-probe never sees brew, so these are never executed.
     expect(
       calls
         .filter((call) => call.command === "brew" && call.args?.[0] === "install")
         .map((call) => call.args?.[1]),
-    ).toEqual(expect.arrayContaining(["worktrunk", "tmux", "bun", "diffnav", "git-delta"]));
+    ).toEqual(expect.arrayContaining(["worktrunk", "tmux", "bun", "hunk"]));
     expect(fs.files[configPath]).toContain("projects = []");
   });
 
@@ -1814,8 +2117,7 @@ describe("guided setup command", () => {
       worktrunk: "wt",
       tmux: "tmux",
       bun: "bun",
-      diffnav: "diffnav",
-      "git-delta": "delta",
+      hunk: "hunk",
     };
     const hasBrewPrefix = (input: ExternalCommandInput) =>
       input.env?.PATH?.includes("/opt/homebrew/bin") === true;
@@ -1886,8 +2188,7 @@ describe("guided setup command", () => {
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
             (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
-            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
-            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+            (installed.has("hunk") && path === "/opt/homebrew/bin/hunk");
           if (!present) {
             throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
           }
@@ -1898,9 +2199,9 @@ describe("guided setup command", () => {
           async confirm(message: string) {
             return (
               message.includes("Install Homebrew") ||
-              message.includes("Install missing required tools") ||
+              message.includes("Install these required tools") ||
               message.includes("Install Codex") ||
-              message.includes("Write core STATION config")
+              message.includes("Write and activate core Station config")
             );
           },
           async selectMany() {
@@ -1930,9 +2231,14 @@ async function tempRoot(tempRoots: string[]): Promise<string> {
   return root;
 }
 
-function prompt(input: { confirms: boolean[]; multiSelects?: string[][] }): SetupPromptAdapter {
+function prompt(input: {
+  confirms: boolean[];
+  multiSelects?: string[][];
+  singleSelects?: string[];
+}): GuidedPromptFixture {
   const confirms = [...input.confirms];
   const multiSelects = [...(input.multiSelects ?? [])];
+  const singleSelects = [...(input.singleSelects ?? [])];
   return {
     async confirm() {
       return confirms.shift() ?? false;
@@ -1940,13 +2246,17 @@ function prompt(input: { confirms: boolean[]; multiSelects?: string[][] }): Setu
     async selectMany() {
       return multiSelects.shift() ?? ["codex"];
     },
+    async selectOne(request) {
+      return singleSelects.shift() ?? request.choices[0]?.value ?? "";
+    },
   };
 }
 
-const popupInstallPrompt: SetupPromptAdapter = {
+const popupInstallPrompt: GuidedPromptFixture = {
   async confirm(message) {
     return (
-      message === "Write core STATION config?" || message === "Install or load tmux popup binding?"
+      message.startsWith("Write and activate core Station config?") ||
+      message.startsWith("Install or load tmux popup binding?")
     );
   },
   async selectMany() {
@@ -1964,13 +2274,7 @@ function readySetupDeps(repo: string) {
       "brew --version": "Homebrew 4.0.0\n",
       "codex --version": "codex 0.1.0\n",
     }),
-    access: fakeAccess([
-      "/fake/bin/wt",
-      "/fake/bin/tmux",
-      "/fake/bin/bun",
-      "/fake/bin/diffnav",
-      "/fake/bin/delta",
-    ]),
+    access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
   };
 }
 
@@ -1998,6 +2302,31 @@ function configuredProjectToml(repo: string): string {
 
 function noopActivateObserverConfig(): Promise<void> {
   return Promise.resolve();
+}
+
+function cancellingSetupPrompt(cancellations: string[]): setupCommand.SetupPromptAdapter {
+  const noop = () => undefined;
+  return {
+    isInteractiveTerminal: () => true,
+    intro: noop,
+    outro: noop,
+    cancel: (message) => cancellations.push(message),
+    async confirm() {
+      return { kind: "cancelled" };
+    },
+    async selectOne() {
+      return { kind: "cancelled" };
+    },
+    async selectMany() {
+      return { kind: "cancelled" };
+    },
+    note: noop,
+    logStep: noop,
+    logSuccess: noop,
+    logWarn: noop,
+    logError: noop,
+    logInfo: noop,
+  };
 }
 
 function fakeRunner(

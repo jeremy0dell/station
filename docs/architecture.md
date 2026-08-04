@@ -2,6 +2,9 @@
 
 Status: current living repository-wide system and boundary map.
 
+Use [Philosophy](philosophy.md) for the product principles that guide Station.
+This document remains authoritative for implementation boundaries and ownership.
+
 Use [Naming](naming.md) for provider hook, provider hook ingress, harness event report, STATION event, and observer event hook terminology.
 
 Use [Observer Architecture](observer-architecture.md) for the Observer's application model,
@@ -34,10 +37,12 @@ The repo is organized around these boundaries:
 - `packages/contracts` owns shared application schemas and types, including `ObserverApi`, external-launch values, commands, events, snapshots, observations, provider ports, hooks, diagnostics, and safe errors.
 - `packages/protocol` owns the observer NDJSON transport: envelopes, method mapping, validation execution, client/server mechanics, and fail-closed Unix-socket probing and stale-owner evidence.
 - `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, typed error conversion, and atomic text replacement.
+- `packages/setup-core` owns runtime-independent setup decisions and operation ports over normalized evidence and intent, including semantic issues, operations, plans, typed outcomes, and readiness results. Its only package dependency is the shared `SafeError` type from contracts.
+- `packages/setup-messages` owns UI-independent setup message IDs, typed arguments, message references, and presentation copy variants. Setup core remains copy-independent; CLI presentation combines semantic setup state with this catalog.
 - `packages/client` owns the framework-neutral rich-client observer runtime: snapshot loading, the event subscription/reconnect loop, event-to-snapshot reduction, and command dispatch/completion-wait wrappers consumed by the Station UI.
 - `apps/cli/src/ingress` owns the tiny `stn-ingress` sender: raw provider hook delivery to the observer socket and offline spool writes. Events sent through this raw path normalize and compact observer-side via provider hook adapters; integrations that submit typed harness reports normalize in their own adapter.
 - `packages/station-host` owns the standalone `station-station-host` daemon contract and client: a process that owns PTYs and their bounded raw/semantic replay state beyond the Station UI lifetime, exposing attach/list/close over its own local socket so panes can warm-reattach. Station consumes it directly; Observer application code can reach host-backed terminal behavior only through an adapter supplied by CLI composition.
-- `packages/config`, `packages/observability`, and `packages/testing` are shared support packages.
+- `packages/config` owns runtime-config parsing plus setup config generation, source-preserving mutation planning, validation, preconditions, backups, and atomic persistence. `packages/observability` and `packages/testing` are shared support packages.
 - `integrations/...` adapt external tools: Worktrunk, tmux, Claude Code, Codex, Cursor, Pi, OpenCode, scripted harnesses, and GitHub repository metadata.
 
 ## Source Of Truth
@@ -47,7 +52,8 @@ No single layer owns all truth.
 - Config is authoritative for the projects station manages, project defaults, provider choices, and safe local policy.
 - Worktree providers are authoritative for external worktree existence and worktree metadata they can prove.
 - Terminal providers are authoritative for terminal topology and provider-owned target identity.
-- Harness providers are authoritative for agent launch, discovery, event ingestion, and status signals they can prove.
+- Harness providers are authoritative for agent launch, discovery, event ingestion, status signals, and provider-native recovery artifacts they can prove.
+- A sealed session-rescue archive becomes temporary cutover authority only after the exact source sessions have stopped and every recovery-critical asset has been captured and hashed; a live-source archive remains evidence, not launch authority.
 - Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
 - Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.
 - Observer snapshots are the normalized current graph exposed to clients. `rows` is configured
@@ -60,20 +66,31 @@ When these disagree, reconcile from config, providers, and current observer stat
 
 ## Boundary Rules
 
-- Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces.
+- Provider-specific behavior stays in `integrations/...` or provider-injected capabilities. Observer/core code aggregates through contracts, registries, and provider interfaces; session migration locates Codex, Claude, and OpenCode recovery artifacts through provider-owned adapters rather than scraping their layouts in Observer code.
 - Station-managed terminal lifecycle is supplied as an explicit application role. Observer application code may forward opaque managed-terminal attachments returned by that role, but must not select its adapter by provider ID, reconstruct provider-owned target IDs, or expose Station Host PTY and socket mechanics.
 - Station resolves managed-terminal attachments through its own host attacher. An absent attachment permits the existing local launch; an advertised attachment that cannot resolve fails visibly and must never fall through to a local spawn.
 - The Station UI is a client. It renders snapshots/events and dispatches typed commands; it must not import providers, read SQLite, run `wt`, run `tmux`, run `git`/`gh`, or parse raw provider payloads for core behavior.
 - The outer terminal environment is authoritative only for Station's OpenTUI
-  renderer. Every Station-owned child PTY receives Station's terminal identity
-  and supported capabilities, including the versioned semantic-copy capability,
-  at the final native spawn boundary; local bridge, Bun, and Station Host paths
-  must not expose outer-emulator identity as child capability evidence. A
-  persistent Station Host process is never renderer
+  renderer. Its strictly observed palette is appearance authority only for the
+  embedded standalone/tmux dashboard; Station resolves that evidence into one
+  complete provider-neutral theme, and terminal providers do not participate in
+  appearance selection. Native `auto` remains Station-owned; Station does not
+  request or consume outer-palette evidence for native appearance selection.
+  Native composition supplies one resolved `StationTerminalTheme` projection
+  to the PTY registry, which remembers it for future emulator screens and fans
+  updates out to existing Station-owned screens without becoming appearance
+  authority. This visual operation changes no PTY identity, environment,
+  lifecycle, provider behavior, or Observer/Station Host contract.
+  Every Station-owned child PTY receives Station's terminal
+  identity and supported capabilities, including the versioned semantic-copy
+  capability, at the final native spawn boundary; local
+  bridge, Bun, and Station Host paths must not expose outer-emulator identity as
+  child capability evidence. A persistent Station Host process is never renderer
   provenance, so Host PTYs fail closed on inherited and launch-plan tmux
   context and on daemon-inherited color controls; only color controls carried
   by the explicit launch request are authoritative.
 - The CLI is the command/debug entrypoint, but long-lived runtime correlation belongs in the observer.
+- Setup orchestration remains in the CLI. Its inspection adapter validates external facts, probes provider-owned tracking status, and normalizes only semantic evidence for the in-memory `@station/setup-core` session. `setup check`, `setup plan`, and non-interactive apply drive that session through inspect, install/preflight, re-inspect, config commit, Observer activation, re-inspect, tracking, and final verification; its typed operation checkpoints prevent completed operations from replaying only within that process and make no restart-recovery claim. Config, TOML, provider payloads, and provider-native identities remain in CLI adapters; provider tracking runs in-process and only sanitized commit evidence returns to setup-core. The session view resolves no copy. Human presenters alone resolve `@station/setup-messages` references, while `presenters/json.ts` independently owns the stable JSON projection and calculates legacy warning rows from semantic evidence rather than core result counts. Guided `stn setup` now drives the same invocation-local session application through the Clack terminal adapter, including typed cancellation, staged prerequisite preparation, and the complete apply sequence; its operation checkpoints remain process-local and make no persistence or restart-recovery claim. Clack is selected only at CLI composition, owns interactive controls and compact progress, and requires TTY input and output before inspection starts. Guided presentation progressively discloses the current decision, selected prerequisite changes, and focused blockers; the complete Core/Recommended/Actions/Next diagnostic matrix remains exclusive to check and plan surfaces. Mutation consent copy keeps the decision primary and supporting effects visually secondary; trusted web sources use allowlisted OSC 8 labels, stable command names replace resolved temporary shim paths, and home-relative targets avoid exposing raw operation payloads. Tmux configuration revalidates the selected key against the exact admitted config bytes and current server immediately before mutation. Operation progress is a non-authoritative outward port: presenter failures surface only after operation evidence is incorporated and cannot rewrite outcomes or checkpoints. Check and plan JSON project the frozen CLI schema directly from semantic state and inspection evidence; machine actions are presentation records and never execution authority. `setup system` is a bootstrap boundary that executes ordered typed tool operations through the same CLI operation adapter, stops after the first required install failure, and then collects fresh bootstrap facts. The text presenter remains available for semantic setup results, recovery blocks, non-Clack terminal layout, styling, shell quoting, and output writing. Routine successful progress is intentionally outcome-only, without repeating path or command details already present in the plan; failures retain sanitized evidence and recovery commands. Future graphical variants live beside terminal copy rather than in setup state or flow control.
 - `packages/contracts` defines shared language with strict schemas for untrusted input and shared payloads.
 - The protocol validates transport messages and keeps consumer APIs simple. It should not become a provider boundary.
 - Client processes may spawn after an absent or proven-stale socket, but only the process binding the replacement may unlink it. Inaccessible ownership is preserved; pidfiles never establish liveness or authorize reclaim.
@@ -92,7 +109,7 @@ See [Observer Architecture](observer-architecture.md).
 
 ## Station Subsystem
 
-The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime:
+The Station UI in `station/` is a `@station/client` consumer plus a terminal-hosting runtime. Its Station-owned VT vocabulary lives under `station/src/terminal/protocol/`: typed command identities, domain values, complete sequence constants, and state reducers support explicit byte templates without widening `packages/protocol` or `packages/contracts`.
 
 - The `station-station-host` daemon (`packages/station-host`) owns PTYs that outlive the UI. Its socket defaults beside the observer socket at `<state_dir>/run/station-host.sock` (override `STATION_HOST_SOCKET_PATH`).
 - Host output compatibility is an optional generic spawn policy selected by integrations and applied before both scrollback retention and attached-client broadcast, so live and warm-reattached views consume one byte stream.

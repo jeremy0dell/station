@@ -1,9 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
-import { scrollDashboard, type TuiStore } from "@station/dashboard-core";
-import type { StoreApi } from "zustand/vanilla";
+import type { DashboardRuntime, DashboardRuntimeOptions } from "@station/dashboard-core";
 import { manyProjectsSnapshot } from "../../station/fixtures/scenarios.js";
-import { makeStationTestStore } from "../../station/test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../store.js";
 import {
   agentWorktreePaneId,
@@ -24,12 +23,15 @@ describe("createOverlayRowFocusReconciler", () => {
       const stationStore = createStationStore({ boot: "empty" });
       addManagedTree(stationStore, "pane-agent", FIRST_SESSION_ID, "pane-shell");
       stationStore.actions.focusPane(returnPane === "primary" ? "pane-agent" : "pane-shell");
-      const stationViewStore = loadedViewStore();
-      const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
+      const dashboardRuntime = loadedViewStore();
+      const dispose = createOverlayRowFocusReconciler(stationStore, dashboardRuntime);
 
       stationStore.actions.openOverlay(STATION_OVERLAY_ID);
 
-      expect(stationViewStore.getState().focusedRowId).toBe(FIRST_SESSION_ID);
+      expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+        kind: "session",
+        sessionId: FIRST_SESSION_ID,
+      });
       dispose();
     }
   });
@@ -71,14 +73,17 @@ describe("createOverlayRowFocusReconciler", () => {
     it(`does not infer a dashboard row from a ${label}`, () => {
       const stationStore = createStationStore({ boot: "empty" });
       arrangePane(stationStore);
-      const stationViewStore = loadedViewStore();
-      stationViewStore.setState({ focusedRowId: SECOND_SESSION_ID, scrollOffset: 2 });
-      const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
+      const dashboardRuntime = loadedViewStore({
+        dashboardFocus: { kind: "session", sessionId: SECOND_SESSION_ID },
+        scrollOffset: 2,
+      });
+      const initialOffset = dashboardRuntime.state.getState().scrollOffset;
+      const dispose = createOverlayRowFocusReconciler(stationStore, dashboardRuntime);
 
       stationStore.actions.openOverlay(STATION_OVERLAY_ID);
 
-      expect("focusedRowId" in stationViewStore.getState()).toBe(false);
-      expect(stationViewStore.getState().scrollOffset).toBe(2);
+      expect("dashboardFocus" in dashboardRuntime.state.getState()).toBe(false);
+      expect(dashboardRuntime.state.getState().scrollOffset).toBe(initialOffset);
       dispose();
     });
   }
@@ -88,89 +93,113 @@ describe("createOverlayRowFocusReconciler", () => {
     addManagedTree(stationStore, "pane-first", FIRST_SESSION_ID);
     addManagedTree(stationStore, "pane-second", SECOND_SESSION_ID);
     stationStore.actions.focusPane("pane-first");
-    const stationViewStore = loadedViewStore();
-    const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
+    const dashboardRuntime = loadedViewStore();
+    const dispose = createOverlayRowFocusReconciler(stationStore, dashboardRuntime);
 
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
-    expect(stationViewStore.getState().focusedRowId).toBe(FIRST_SESSION_ID);
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+      kind: "session",
+      sessionId: FIRST_SESSION_ID,
+    });
 
     stationStore.actions.closeOverlay();
-    expect("focusedRowId" in stationViewStore.getState()).toBe(false);
+    expect("dashboardFocus" in dashboardRuntime.state.getState()).toBe(false);
 
     stationStore.actions.focusPane("pane-second");
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
-    expect(stationViewStore.getState().focusedRowId).toBe(SECOND_SESSION_ID);
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+      kind: "session",
+      sessionId: SECOND_SESSION_ID,
+    });
     dispose();
   });
 
   it("synchronizes a delayed first snapshot once without snapping navigation back", () => {
     const stationStore = managedStore(FIRST_SESSION_ID);
-    const stationViewStore = unloadedViewStore();
-    const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
+    const fixture = unloadedViewRuntime();
+    const dashboardRuntime = fixture.runtime;
+    dashboardRuntime.start();
+    const dispose = createOverlayRowFocusReconciler(stationStore, dashboardRuntime);
 
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
-    expect("focusedRowId" in stationViewStore.getState()).toBe(false);
+    expect("dashboardFocus" in dashboardRuntime.state.getState()).toBe(false);
 
     const firstSnapshot = manyProjectsSnapshot();
-    stationViewStore.setState({ snapshot: firstSnapshot, loading: false });
-    expect(stationViewStore.getState().focusedRowId).toBe(FIRST_SESSION_ID);
+    fixture.source.setSnapshot(firstSnapshot);
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+      kind: "session",
+      sessionId: FIRST_SESSION_ID,
+    });
 
-    stationViewStore.getState().handleKey({ input: "", downArrow: true });
-    const navigatedRowId = stationViewStore.getState().focusedRowId;
-    expect(navigatedRowId).not.toBe(FIRST_SESSION_ID);
+    dashboardRuntime.actions.handleKey({ input: "", downArrow: true });
+    const navigatedFocus = dashboardRuntime.state.getState().dashboardFocus;
+    expect(navigatedFocus).not.toEqual({ kind: "session", sessionId: FIRST_SESSION_ID });
 
-    stationViewStore.setState(scrollDashboard(stationViewStore.getState(), 1));
-    const scrolledOffset = stationViewStore.getState().scrollOffset;
+    dashboardRuntime.actions.dispatch({ type: "dashboard.scroll", delta: 1 });
+    const scrolledOffset = dashboardRuntime.state.getState().scrollOffset;
     expect(scrolledOffset).toBeGreaterThan(0);
 
     const laterSnapshot: StationSnapshot = {
       ...firstSnapshot,
       generatedAt: "2026-06-12T12:01:00.000Z",
     };
-    stationViewStore.setState({ snapshot: laterSnapshot });
+    fixture.source.setSnapshot(laterSnapshot);
 
-    expect(stationViewStore.getState().focusedRowId).toBe(navigatedRowId);
-    expect(stationViewStore.getState().scrollOffset).toBe(scrolledOffset);
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual(navigatedFocus);
+    expect(dashboardRuntime.state.getState().scrollOffset).toBe(scrolledOffset);
     dispose();
   });
 
   it("cancels a pending first-snapshot synchronization when the overlay closes", () => {
     const stationStore = managedStore(FIRST_SESSION_ID);
-    const stationViewStore = unloadedViewStore();
-    const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
+    const fixture = unloadedViewRuntime();
+    const dashboardRuntime = fixture.runtime;
+    dashboardRuntime.start();
+    const dispose = createOverlayRowFocusReconciler(stationStore, dashboardRuntime);
 
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
     stationStore.actions.closeOverlay();
-    stationViewStore.setState({ snapshot: manyProjectsSnapshot(), loading: false });
+    fixture.source.setSnapshot(manyProjectsSnapshot());
 
-    expect("focusedRowId" in stationViewStore.getState()).toBe(false);
+    expect("dashboardFocus" in dashboardRuntime.state.getState()).toBe(false);
     dispose();
   });
 
   it("disposes both the Station and dashboard subscriptions", () => {
     const stationStore = managedStore(FIRST_SESSION_ID);
-    const stationViewStore = unloadedViewStore();
-    const dispose = createOverlayRowFocusReconciler(stationStore, stationViewStore);
+    const fixture = unloadedViewRuntime();
+    const dashboardRuntime = fixture.runtime;
+    dashboardRuntime.start();
+    const dispose = createOverlayRowFocusReconciler(stationStore, dashboardRuntime);
 
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
     dispose();
     dispose();
 
-    stationViewStore.setState({ snapshot: manyProjectsSnapshot(), loading: false });
-    expect("focusedRowId" in stationViewStore.getState()).toBe(false);
+    fixture.source.setSnapshot(manyProjectsSnapshot());
+    expect("dashboardFocus" in dashboardRuntime.state.getState()).toBe(false);
 
-    stationViewStore.setState({ focusedRowId: SECOND_SESSION_ID });
+    dashboardRuntime.actions.focusDashboardSession(SECOND_SESSION_ID);
     stationStore.actions.closeOverlay();
-    expect(stationViewStore.getState().focusedRowId).toBe(SECOND_SESSION_ID);
+    expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
+      kind: "session",
+      sessionId: SECOND_SESSION_ID,
+    });
   });
 });
 
-function loadedViewStore(): StoreApi<TuiStore> {
-  return makeStationTestStore({ snapshot: manyProjectsSnapshot(), terminalRows: 12 }).store;
+function loadedViewStore(
+  initialState?: DashboardRuntimeOptions["initialState"],
+): DashboardRuntime {
+  return makeStationTestRuntime({
+    snapshot: manyProjectsSnapshot(),
+    terminalRows: 12,
+    ...(initialState === undefined ? {} : { initialState }),
+  }).runtime;
 }
 
-function unloadedViewStore(): StoreApi<TuiStore> {
-  return makeStationTestStore({ snapshot: null, terminalRows: 12 }).store;
+function unloadedViewRuntime(): ReturnType<typeof makeStationTestRuntime> {
+  return makeStationTestRuntime({ snapshot: null, terminalRows: 12 });
 }
 
 function managedStore(sessionId: string): StationStore {

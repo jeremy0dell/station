@@ -1,15 +1,21 @@
 import { isCompiledBinary } from "@station/runtime";
-import { applySetupPlan } from "./apply.js";
+import type { SetupToolInstallOperation } from "@station/setup-core";
+import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
+import type { CliEnv } from "../../env.js";
+import { createSetupOperationAdapter } from "./adapters/operations.js";
 import { checkBrewDependency } from "./checks/brew.js";
 import { checkSetupBun } from "./checks/bun.js";
-import { checkSetupDiffnav } from "./checks/diffnav.js";
-import { checkSetupGitDelta } from "./checks/gitDelta.js";
+import { checkSetupDiffViewer } from "./checks/diffViewer.js";
+import type { SetupDependencyCheckOptions } from "./checks/system.js";
 import { checkSetupTmux } from "./checks/tmux.js";
 import { checkSetupToolchain, type ToolchainFact } from "./checks/toolchain.js";
 import { checkSetupWorktrunk } from "./checks/worktrunk.js";
-import { applyOptions, dependencyOptionsForCommand } from "./flowUtils.js";
-import { write } from "./io.js";
-import type { SetupAction, SetupPlan } from "./model.js";
+import { setupPresenter } from "./io.js";
+import type {
+  TextSetupSystemHint,
+  TextSetupSystemRow,
+  TextSetupSystemView,
+} from "./presenters/text.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "./types.js";
 
 export async function runSetupSystemCommand(
@@ -18,27 +24,38 @@ export async function runSetupSystemCommand(
   deps: SetupCommandDeps,
 ): Promise<SetupCommandResult> {
   const initial = await collectSystemFacts(args, options, deps);
-  await write(deps, renderSystemStatus("stn setup system", initial));
+  const presenter = setupPresenter(deps);
+  await presenter.write(
+    presenter.renderSystemStatus(projectSystemView(setupMessageRef("system.title"), initial)),
+  );
 
+  let operationFailed = false;
   if (args.yes && initial.brew.status === "ok") {
-    const actions: SetupAction[] = [];
+    const operations: SetupToolInstallOperation[] = [];
     if (initial.worktrunk.status === "missing")
-      actions.push(systemInstallAction("worktrunk", "worktrunk"));
-    if (initial.tmux.status === "missing") actions.push(systemInstallAction("tmux", "tmux"));
+      operations.push(systemInstallOperation("worktrunk"));
+    if (initial.tmux.status === "missing") operations.push(systemInstallOperation("tmux"));
     if (!initial.compiled && initial.bun.status === "missing") {
-      actions.push(systemInstallAction("bun", "bun"));
+      operations.push(systemInstallOperation("bun"));
     }
-    if (initial.diffnav.status === "missing")
-      actions.push(systemInstallAction("diffnav", "diffnav"));
-    if (initial.gitDelta.status === "missing")
-      actions.push(systemInstallAction("git-delta", "git-delta"));
-    const result = await applySetupPlan(
-      systemPlan(actions),
-      applyOptions(deps, { announceActions: true, showCommandOutput: true }),
-    );
-    if (result.failedAction !== undefined) {
-      await write(deps, "Install failed. Run: stn setup system --check\n");
-      return { code: 1 };
+    if (initial.diffViewer.status === "missing") {
+      operations.push(systemInstallOperation("diff-viewer"));
+    }
+    const executeOperation = createSetupOperationAdapter({ deps });
+    // System prerequisites are ordered and fail-fast, so later installs never run after a required package failure.
+    for (const operation of operations) {
+      const progress = {
+        label: systemToolInstallLabel({ operation, text: presenter.text }),
+      };
+      await presenter.write(`${presenter.renderProgressStart(progress)}\n`);
+      const outcome = await executeOperation(operation);
+      if (outcome.status === "failed") {
+        operationFailed = true;
+        await presenter.write(`${presenter.renderProgressFailure(progress, outcome.error)}\n`);
+        await presenter.writeMessage(setupMessageRef("system.install-failed"));
+        break;
+      }
+      await presenter.write(`${presenter.renderProgressComplete(progress)}\n`);
     }
   }
 
@@ -47,8 +64,12 @@ export async function runSetupSystemCommand(
   }
 
   const refreshed = await collectSystemFacts(args, options, deps);
-  await write(deps, renderSystemStatus("stn setup system final", refreshed));
-  return { code: systemReady(refreshed) ? 0 : 1 };
+  await presenter.write(
+    presenter.renderSystemStatus(
+      projectSystemView(setupMessageRef("system.final-title"), refreshed),
+    ),
+  );
+  return { code: !operationFailed && systemReady(refreshed) ? 0 : 1 };
 }
 
 type SystemFacts = {
@@ -56,8 +77,7 @@ type SystemFacts = {
   worktrunk: Awaited<ReturnType<typeof checkSetupWorktrunk>>;
   tmux: Awaited<ReturnType<typeof checkSetupTmux>>;
   bun: Awaited<ReturnType<typeof checkSetupBun>>;
-  diffnav: Awaited<ReturnType<typeof checkSetupDiffnav>>;
-  gitDelta: Awaited<ReturnType<typeof checkSetupGitDelta>>;
+  diffViewer: Awaited<ReturnType<typeof checkSetupDiffViewer>>;
   brew: Awaited<ReturnType<typeof checkBrewDependency>>;
   toolchain: Awaited<ReturnType<typeof checkSetupToolchain>>;
 };
@@ -70,14 +90,13 @@ async function collectSystemFacts(
   const env = deps.env ?? options.env;
   const compiled = deps.compiled ?? isCompiledBinary();
   const dependencyOptions = dependencyOptionsForCommand(deps, env);
-  const [worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain] = await Promise.all([
+  const [worktrunk, tmux, bun, diffViewer, brew, toolchain] = await Promise.all([
     checkSetupWorktrunk(dependencyOptions),
     checkSetupTmux(dependencyOptions),
     compiled
       ? Promise.resolve({ status: "ok" as const, command: "bun" })
       : checkSetupBun(dependencyOptions),
-    checkSetupDiffnav(dependencyOptions),
-    checkSetupGitDelta(dependencyOptions),
+    checkSetupDiffViewer(dependencyOptions),
     checkBrewDependency({
       ...(deps.runner === undefined ? {} : { runner: deps.runner }),
       ...(env === undefined ? {} : { env }),
@@ -88,30 +107,49 @@ async function collectSystemFacts(
       ...(deps.runner === undefined ? {} : { runner: deps.runner }),
       ...(env === undefined ? {} : { env }),
       ...(deps.cwd === undefined ? {} : { cwd: deps.cwd }),
+      ...(deps.nodeVersion === undefined ? {} : { nodeVersion: deps.nodeVersion }),
     }),
   ]);
-  return { compiled, worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain };
+  return { compiled, worktrunk, tmux, bun, diffViewer, brew, toolchain };
 }
 
-function renderSystemStatus(title: string, facts: SystemFacts): string {
-  const lines = [
-    title,
-    "",
-    `  ${facts.worktrunk.status === "ok" ? "ok" : "missing"} Worktrunk / wt`,
-    `  ${facts.tmux.status === "ok" ? "ok" : "missing"} tmux`,
-    ...(facts.compiled ? [] : [`  ${facts.bun.status === "ok" ? "ok" : "missing"} Bun`]),
-    `  ${facts.diffnav.status === "ok" ? "ok" : "missing"} diffnav`,
-    `  ${facts.gitDelta.status === "ok" ? "ok" : "missing"} git-delta`,
-    `  ${facts.brew.status === "ok" ? "ok" : facts.brew.status} Homebrew`,
-    `  ${toolchainStatusLabel(facts.toolchain.node)} Node.js ${toolchainVersionLabel(facts.toolchain.node)}`,
-    `  ${toolchainStatusLabel(facts.toolchain.pnpm)} pnpm ${toolchainVersionLabel(facts.toolchain.pnpm)}`,
-    "",
+function projectSystemView(
+  title: TextSetupSystemView["title"],
+  facts: SystemFacts,
+): TextSetupSystemView {
+  const rows: TextSetupSystemRow[] = [
+    dependencySystemRow(facts.worktrunk.status, setupMessageRef("label.worktrunk")),
+    dependencySystemRow(facts.tmux.status, setupMessageRef("label.tmux")),
+    ...(facts.compiled
+      ? []
+      : [dependencySystemRow(facts.bun.status, setupMessageRef("label.bun"))]),
+    dependencySystemRow(facts.diffViewer.status, setupMessageRef("label.diff-viewer")),
+    {
+      status: facts.brew.status === "ok" ? "ok" : facts.brew.status,
+      label: setupMessageRef("label.homebrew"),
+    },
+    toolchainSystemRow(facts.toolchain.node, setupMessageRef("label.node")),
+    toolchainSystemRow(facts.toolchain.pnpm, setupMessageRef("label.pnpm")),
   ];
-  const toolchainHints = runtimeToolchainHints(facts.toolchain);
-  if (toolchainHints.length > 0) {
-    lines.push("Development runtime:", ...toolchainHints, "");
-  }
-  return lines.join("\n");
+  return { title, rows, hints: runtimeToolchainHints(facts.toolchain) };
+}
+
+function dependencySystemRow(
+  status: "ok" | "missing",
+  label: TextSetupSystemRow["label"],
+): TextSetupSystemRow {
+  return { status, label };
+}
+
+function toolchainSystemRow(
+  fact: ToolchainFact,
+  label: TextSetupSystemRow["label"],
+): TextSetupSystemRow {
+  return {
+    status: fact.status === "ok" ? "ok" : "warning",
+    label,
+    detail: `${toolchainStatusLabel(fact)} ${toolchainVersionLabel(fact)}`,
+  };
 }
 
 function systemReady(facts: SystemFacts): boolean {
@@ -119,44 +157,53 @@ function systemReady(facts: SystemFacts): boolean {
     facts.worktrunk.status === "ok" &&
     facts.tmux.status === "ok" &&
     (facts.compiled || facts.bun.status === "ok") &&
-    facts.diffnav.status === "ok" &&
-    facts.gitDelta.status === "ok" &&
+    facts.diffViewer.status === "ok" &&
     facts.toolchain.node.status === "ok" &&
     facts.toolchain.pnpm.status === "ok"
   );
 }
 
-function systemInstallAction(label: string, formula: string): SetupAction {
+function systemInstallOperation(
+  tool: SetupToolInstallOperation["tool"],
+): SetupToolInstallOperation {
   return {
-    id: `install-${label}`,
-    kind: "brew-install",
+    id: `install:${tool}`,
+    kind: "install-tool",
     tier: "required",
     selected: true,
-    label: `Install ${label}`,
-    message: `Install ${label} with Homebrew.`,
-    command: ["brew", "install", formula],
-    data: { formula },
+    tool,
   };
 }
 
-function systemPlan(actions: SetupAction[]): SetupPlan {
-  return {
-    generatedAt: new Date().toISOString(),
-    mode: "apply",
-    checks: [],
-    actions,
-    summary: {
-      launchReady: true,
-      workflowReady: true,
-      requiredOk: true,
-      requiredMissing: 0,
-      warnings: 0,
-      selectedActions: actions.length,
-      selectionSource: "unresolved",
-      configPath: "",
-    },
-    nextSteps: [],
-  };
+function systemToolInstallLabel(input: {
+  readonly operation: SetupToolInstallOperation;
+  readonly text: (reference: ReturnType<typeof setupMessageRef>) => string;
+}): string {
+  const { operation, text } = input;
+  const label =
+    operation.tool === "worktrunk"
+      ? setupMessageRef("label.worktrunk")
+      : operation.tool === "tmux"
+        ? setupMessageRef("label.tmux")
+        : operation.tool === "bun"
+          ? setupMessageRef("label.bun")
+          : setupMessageRef("label.diff-viewer");
+  return text(
+    setupMessageRef("action.install-label", {
+      label: resolveSetupMessage(label),
+    }),
+  );
+}
+
+function dependencyOptionsForCommand(
+  deps: SetupCommandDeps,
+  env: CliEnv | undefined,
+): SetupDependencyCheckOptions {
+  const dependencyOptions: SetupDependencyCheckOptions = {};
+  if (env !== undefined) dependencyOptions.env = env;
+  if (deps.runner !== undefined) dependencyOptions.runner = deps.runner;
+  if (deps.access !== undefined) dependencyOptions.access = deps.access;
+  return dependencyOptions;
 }
 
 function toolchainStatusLabel(fact: ToolchainFact): string {
@@ -168,24 +215,37 @@ function toolchainVersionLabel(fact: ToolchainFact): string {
   return `${actual} (expected ${fact.expected})`;
 }
 
-function runtimeToolchainHints(toolchain: { node: ToolchainFact; pnpm: ToolchainFact }): string[] {
-  const hints: string[] = [];
+function runtimeToolchainHints(toolchain: {
+  node: ToolchainFact;
+  pnpm: ToolchainFact;
+}): TextSetupSystemHint[] {
+  const hints: TextSetupSystemHint[] = [];
   if (toolchain.node.status !== "ok") {
-    hints.push(
-      "  Use your Node version manager to install and select Node.js 24.2+ (and below 25), for example:",
-      "    fnm install 24 && fnm use 24",
-      "    nvm install 24 && nvm use 24",
-    );
+    hints.push({
+      message: setupMessageRef("system.node-hint"),
+      commandSequences: [
+        [
+          ["fnm", "install", "24"],
+          ["fnm", "use", "24"],
+        ],
+        [
+          ["nvm", "install", "24"],
+          ["nvm", "use", "24"],
+        ],
+      ],
+    });
   }
   if (toolchain.pnpm.status !== "ok") {
-    hints.push(
-      "  After Node.js 24.2+ (and below 25) is active, enable the repo-pinned package manager with:",
-      "    corepack enable",
-      "    corepack prepare pnpm@11.0.0 --activate",
-    );
+    hints.push({
+      message: setupMessageRef("system.pnpm-hint"),
+      commands: [
+        ["corepack", "enable"],
+        ["corepack", "prepare", "pnpm@11.0.0", "--activate"],
+      ],
+    });
   }
   if (hints.length > 0) {
-    hints.push("  STATION setup does not change Node or pnpm automatically.");
+    hints.push({ message: setupMessageRef("system.unchanged-hint") });
   }
   return hints;
 }

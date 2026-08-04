@@ -8,19 +8,18 @@ import {
 } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
-import type { TuiObserverService } from "../../services/types.js";
-import { clampDashboardStateScroll } from "../dashboardScroll.js";
+import type { ObserverService } from "../../services/types.js";
 import { bindPendingStartAgentRow } from "../localRows.js";
 import { replaceSnapshot } from "../screen.js";
-import type { TuiStore } from "../store.js";
+import type { DashboardState } from "../types.js";
 import { type CommandRuntimeOptions, prepareCommandForRuntime } from "./runtimeCommands.js";
 import type { ResumeAgentOperation, StartAgentOperation } from "./types.js";
 
 export type FocusStartedAgentRow = (snapshot: StationSnapshot, row: WorktreeRow) => Promise<void>;
 
 export async function runStartAgentOperation(
-  store: StoreApi<TuiStore>,
-  service: TuiObserverService,
+  store: StoreApi<DashboardState>,
+  service: ObserverService,
   runtime: CommandRuntimeOptions,
   operation: StartAgentOperation | ResumeAgentOperation,
   markStartAgentRowFailed: (localId: string) => void,
@@ -82,8 +81,8 @@ export async function runStartAgentOperation(
 }
 
 async function focusStartedAgentAfterSnapshotCatchup(
-  store: StoreApi<TuiStore>,
-  service: TuiObserverService,
+  store: StoreApi<DashboardState>,
+  service: ObserverService,
   operation: StartAgentOperation | ResumeAgentOperation,
   clearPendingStartAgentRow: (localId: string) => void,
   focusStartedAgentRow: FocusStartedAgentRow,
@@ -96,7 +95,7 @@ async function focusStartedAgentAfterSnapshotCatchup(
   }
 
   const loaded = await service.loadSnapshot();
-  store.setState(clampDashboardStateScroll(replaceSnapshot(store.getState(), loaded)));
+  store.setState(replaceSnapshot(store.getState(), loaded));
 
   const refreshed = startedRowForSnapshot(store.getState().snapshot, operation.worktreeId);
   if (refreshed === undefined) {

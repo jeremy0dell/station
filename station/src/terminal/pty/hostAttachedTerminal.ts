@@ -9,7 +9,7 @@ import {
 import { type SafeErrorFallback, toSafeError } from "@station/observability";
 import { stationBuildInfo } from "@station/runtime";
 import { reportTerminalCorruption } from "../diagnostics.js";
-import { ControlByte } from "../protocol/controlBytes.js";
+import { CsiSequence } from "../protocol/csi.js";
 import type {
   StationTerminalDisposable,
   StationTerminalExit,
@@ -48,7 +48,10 @@ const PTY_UNAVAILABLE_CODES = new Set([
 // the fresh ring snapshot on reconnect (which holds output produced while we were
 // detached) without stacking it on top of the history the VT already shows.
 // Exported so the reconnect test can pin that it precedes the replayed snapshot.
-export const RECONNECT_REPAINT = `${ControlByte.Csi}H${ControlByte.Csi}2J${ControlByte.Csi}3J`;
+export const RECONNECT_REPAINT =
+  CsiSequence.CursorHome +
+  CsiSequence.EraseEntireDisplay +
+  CsiSequence.EraseScrollback;
 const reconnectDelayMs = (attempt: number): number =>
   Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,6 +1,6 @@
 import { compactPayloadByFieldNames, type PayloadCompactionResult } from "@station/harness-shared";
 
-export type CodexPayloadCompactionResult = PayloadCompactionResult;
+export type { PayloadCompactionResult };
 
 const commonFieldNames = [
   "session_id",
@@ -20,7 +20,7 @@ const commonFieldNames = [
 
 const turnFieldNames = ["turn_id", "agent_id", "agent_type"] as const;
 
-export function compactCodexHookPayload(payload: unknown): CodexPayloadCompactionResult {
+export function compactCodexHookPayload(payload: unknown): PayloadCompactionResult {
   return compactPayloadByFieldNames(payload, {
     retainedFieldNames: (record) =>
       fieldNamesForEvent(typeof record.hook_event_name === "string" ? record.hook_event_name : ""),

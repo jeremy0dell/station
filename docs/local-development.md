@@ -146,6 +146,7 @@ bun run station:isolated:stop     # tear down the observer + host for this workt
 ```
 
 `station:isolated` does everything needed for a self-contained sandbox:
+
 - generates a worktree-local config (`.dev-state/config.toml`: state relocated
   under `.dev-state`, socket relocated under a short checkout-keyed temp path,
   `terminal = "noop-terminal"`, persistence flag on, supported
@@ -174,6 +175,11 @@ Use `pnpm station:devbox dev` for the same isolated stack with `bun --hot` UI
 reload. It keeps the observer, state, hooks, and host under `.dev-state`, but UI
 edits under `station/src/**` reload in place.
 
+Before Observer startup, the wrapper creates or repairs only this checkout's
+keyed socket directory to mode `0700`. It refuses a symlink, non-directory, or
+directory owned by another user rather than changing another path; it never
+repairs, replaces, or removes an existing socket or boot-claim file.
+
 An inaccessible devbox socket is a preservation boundary, not an automatic
 reset. Startup prints `OBSERVER_SOCKET_INACCESSIBLE`, preserves the existing
 Observer, host, agents, socket, and `.dev-state`, and exits nonzero. Restore
@@ -198,6 +204,7 @@ reattaches.
 > `~/.claude/settings.json` is never modified.
 
 Test the persistence loop:
+
 1. Open a worktree row → launches a fresh host-backed agent.
 2. Quit Station (`q`) — the agent keeps running in the detached host.
 3. Re-run `bun run station:isolated` → the **same** agent reattaches with its scrollback.
@@ -231,22 +238,42 @@ the native Station workspace:
 
 ```bash
 # prerequisites for this checkout
-pnpm build
+pnpm install
 cd station && bun install && cd ..
 
-# terminal A: start/reuse and remain the cleanup owner
 pnpm station:devbox tmux dev
-
-# terminal B: attach an ordinary client to the private base session
-pnpm station:devbox tmux attach
-# inside it: Ctrl-b Space opens/toggles the production Station popup
+# Ctrl-b Space opens/toggles the production Station popup
+# Ctrl-b d detaches and cleans up the private runtime
 ```
 
-`tmux dev` prints the checkout identity, disposable root, exact tmux binary,
-private label/socket/wrapper, `/dev/null` config, Station config/state/socket
-paths, base and `_station-ui` sessions, discovered CLI/renderer/Observer/Host
-owners, and the exact attach/log/stop commands. `tmux start` creates the same
-HMR-enabled lane but returns immediately.
+`tmux dev` builds the checkout through the Turbo-cached root build, safely starts
+or reuses the isolated runtime, claims foreground ownership, and attaches the
+invoking terminal. It prints the checkout identity, disposable root, exact tmux
+binary, private label/socket/wrapper, `/dev/null` config, Station
+config/state/socket paths, base and `_station-ui` sessions, and discovered
+CLI/renderer/Observer/Host owners. Detaching with `Ctrl-b d` ends this temporary
+interactive lane and removes its private runtime.
+
+For persistent or headless control, use the split commands instead:
+
+```bash
+pnpm station:devbox tmux start
+pnpm station:devbox tmux attach
+# detach leaves this lane running
+pnpm station:devbox tmux stop
+```
+
+`start` creates or reuses the same HMR-enabled lane and returns immediately;
+standalone `attach` never takes cleanup ownership. Detach every split-command
+client before switching to `dev`; it refuses before rebuilding rather than
+adopting or mutating an attached persistent lane. `status`, `logs`, `stop`, and
+`reset` remain the diagnostic and recovery surface.
+
+Both interactive `dev` and the ordinary `attach` command preserve a caller `TERM` whose terminfo provides
+`clear` and `cup` inside the private environment. It does not import external
+`TERMINFO`, `TERMINFO_DIRS`, or XDG data paths; if the caller value is absent or
+cannot satisfy tmux there, attach names any rejected value and uses
+`xterm-256color`. Do not add a manual `TERM` prefix to the command.
 
 The disposable root is `/tmp/stn-dbx-<checkout-hash>` and contains:
 
@@ -271,11 +298,11 @@ channel, Observer, visible nested client, and optional Host remain stable.
 React/OpenTUI renderer resources, the dashboard store, Station client/source,
 and popup listeners are disposed and recreated inside that Bun process.
 
-Changes outside that source-only boundary need a coherent restart:
+Changes outside that source-only boundary need a coherent restart. Detach the
+interactive lane (or stop a split lane), then rerun `dev`; it rebuilds before
+startup:
 
 ```bash
-pnpm station:devbox tmux stop
-pnpm build
 pnpm station:devbox tmux dev
 ```
 
@@ -293,11 +320,14 @@ pnpm station:devbox tmux stop
 pnpm station:devbox tmux reset --yes
 ```
 
-`status` is private/read-only. `stop`, Ctrl-C, SIGHUP, and SIGTERM kill only the
-recorded private server, then validate Observer/Host socket, pidfile, `lsof`,
-process command, and start-time evidence before escalating. If ownership cannot
-be proven gone, cleanup retains the root and wrapper as evidence instead of
-using `pkill` or broad/default-server operations.
+`status` is private/read-only. `Ctrl-b d` cleans up an interactive `dev`; an
+external `stop` signals a verified live foreground owner and waits for that
+owner to perform cleanup rather than racing it. Without a live owner, `stop`
+cleans directly. These paths, Ctrl-C, SIGHUP, and SIGTERM kill only the recorded
+private server, then validate Observer/Host socket, pidfile, `lsof`, process
+command, and start-time evidence before escalating. If ownership cannot be
+proven gone, cleanup retains the root and wrapper as evidence instead of using
+`pkill` or broad/default-server operations.
 
 Manual popup acceptance and HMR check:
 
@@ -320,13 +350,25 @@ Manual popup acceptance and HMR check:
    Observer, nested client, and optional Host PIDs remain stable; then revert it.
 6. Press Esc, reopen with `Ctrl-b Space`, and confirm the hidden CLI/renderer
    and Observer are reused.
-7. Detach and stop the lane; `status` should report stopped, the private root and
-   sockets should be absent, and the failing bare-tmux audit log should not exist.
+7. Press `Ctrl-b d`; the owner command should return after cleanup, `status`
+   should report stopped, the private root and sockets should be absent, and the
+   failing bare-tmux audit log should not exist.
 
 The opt-in automated version is `pnpm station:devbox:tmux:smoke`. It temporarily
 edits that component in place, restores its exact bytes in `finally`, audits
-every wrapper call, and verifies startup rollback plus SIGINT/SIGHUP/SIGTERM
-cleanup.
+every wrapper call, and verifies non-interactive refusal, split-command control,
+attach rollback, detach cleanup, coordinated external stop, and
+SIGINT/SIGHUP/SIGTERM cleanup through a real PTY.
+
+The root command is backend-shaped for future multiplexer lanes:
+
+```text
+station:devbox <backend> dev
+station:devbox <backend> start|attach|status|logs|stop|reset
+```
+
+Tmux process, socket, terminfo, popup, and cleanup authority remains in the tmux
+backend script. Zellij is a future backend and is not implemented here.
 
 ---
 
@@ -337,18 +379,23 @@ driver against your **real** observer (the one tracking your actual agents),
 point it at the global observer instead of an isolated one.
 
 One-time setup:
+
 1. Enable persistence in your real config (`~/.config/station/config.toml`):
+
    ```toml
    [feature_flags]
    station_persistent_agents = true
    ```
+
    Keep `terminal = "tmux"` — Station launches always go through the host-backed
    `native` provider regardless, so the default only affects tmux-launched agents.
 2. Build the checkout your observer runs from, then restart it so it picks up the
    flag + persistence code:
+
    ```bash
    pnpm build && pnpm stn observer restart
    ```
+
    No `STATION_HOST_ENTRY` is needed: the observer resolves the Bun host
    entry from its own checkout (`resolveStationHostEntry` in
    `apps/cli/src/observerProviders.ts`); the env var only overrides it for a
@@ -357,6 +404,7 @@ One-time setup:
 Then run Station against the real observer (with `XDG_RUNTIME_DIR` unset it
 defaults to the global socket; otherwise set `STATION_OBSERVER_SOCKET_PATH` to the
 observer's configured `socket_path`):
+
 ```bash
 cd station && bun run station
 ```
@@ -373,9 +421,11 @@ cd station && bun run station
 To see UI changes live, run the **`dev`** script (`bun --hot`) instead of
 `station`, **from the worktree you're editing** — it hot-reloads your edits and
 still connects to your real observer by default:
+
 ```bash
 pnpm station:ui-dev
 ```
+
 There is no "push it to main to see it" step. The Station UI is a Bun process
 that talks to the observer over a socket, so a worktree's UI runs directly
 against the same observer your global build started — edit a component / layout /
@@ -389,13 +439,19 @@ input file and it reloads in place. The split:
   the worktree UI must also be on a compatible commit.) The host runs the
   observer's checkout too, so host changes need that rebuild — not just the UI reload.
 
+Real-state source development stops at this native lane. There is intentionally
+no supported workflow that registers checkout popup code in the normal tmux
+server against the live runtime. Use `pnpm station:devbox tmux dev` when the
+behavior under test is popup transport, geometry, HMR, or lifecycle; its private
+state avoids Observer handoff and popup-registration risk.
+
 ---
 
 ## 3. Launching via the CLI (`stn tui`)
 
 ```bash
 pnpm dev                                  # rebuild @station/cli on change, isolated by default
-pnpm dev --config /abs/other-config.toml  # ...against a specific observer/config
+pnpm dev --config /abs/other-config.toml  # ...against a controlled development config
 node apps/cli/dist/main.js --config /abs/iso-config.toml tui   # one-shot, no watcher
 ```
 
@@ -409,9 +465,10 @@ opens the **read-only dashboard** in a tmux popup (tmux owns the panes there). I
 passes explicit `--config` choices straight through, and `stn tui` auto-starts
 the observer for the configured socket. The generated default config uses
 `terminal = "noop-terminal"`, so it avoids machine-global tmux pane discovery.
-If you pass an explicit config with `terminal = "tmux"` for tmux-integration
-testing, the popup dashboard can still show your real tmux agents (see the tmux
-gotcha in §1).
+Treat explicit `--config` as a selector for a controlled development fixture,
+not as a safe way to point checkout popup code at the normal live runtime. The
+CLI retains ordinary Observer startup and handoff behavior, so it does not
+provide the no-replacement contract required around a live Observer and Host.
 
 > `pnpm dev` rebuilds the **Node CLI**, not the Bun renderer. To hot-reload the
 > Station UI itself as you edit `station/src/**`, use `pnpm station:ui-dev` from §2b.
@@ -470,7 +527,7 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   reported "unavailable" and PTYs fall back to non-persistent with no error. Set
   `STATION_HOST_ENTRY` only to override the resolved path (non-standard
   layout / pinned host build).
-- **"<harness> status hooks are not installed" on launch** → the shared launch
+- **`<harness> status hooks are not installed` on launch** → the shared launch
   preflight refreshes only the selected harness health and then refuses to spawn
   an agent whose required status hooks aren't installed *for this observer*.
   New, Fork, classic create/start/resume, and the final terminal-open boundary
@@ -504,4 +561,3 @@ snapshots (`*.golden.test.tsx.snap`); `bun test` does not typecheck, so run
   same `--config` for `stop`/`status` or you target the wrong observer.
 - **No `STATION_STATE_DIR` env var exists** → isolation is config-only
   (`[observer] state_dir` + `socket_path`).
-```

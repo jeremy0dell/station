@@ -80,9 +80,17 @@ export const debugCliCommand: CliCommandNode = {
           name: "--latest-failure",
           description: "Find the most recent failure when no query is provided.",
         },
-        { name: "--json", description: "Keep JSON output for agent-readable inspection." },
+        {
+          name: "--json",
+          description: "Include cause assessment and evidence-role metadata.",
+        },
       ],
       examples: ["pnpm stn debug trace --latest-failure"],
+      notes: [
+        "A matched record does not by itself establish an underlying root cause.",
+        "causeAssessment separates explicit diagnostic-index roots from observed failure codes.",
+        "Evidence roles distinguish operational failure evidence from logging provenance.",
+      ],
     },
     {
       name: "logs",
@@ -105,11 +113,21 @@ export const debugCliCommand: CliCommandNode = {
           description: "Only include records at or after a timestamp.",
         },
         { name: "--limit <count>", description: "Limit returned records." },
-        { name: "--json", description: "Keep JSON output for agent-readable inspection." },
+        {
+          name: "--json",
+          description: "Include match, cause, and operational-boundary evidence.",
+        },
       ],
       examples: [
         "pnpm stn debug logs protocol",
         "pnpm stn debug logs --all-components --min-level warn",
+      ],
+      notes: [
+        "Queried records include bounded match evidence showing why they matched.",
+        "The result separates observed failures from insufficient causal evidence.",
+        "Operational boundary evidence groups retained facts without inferring ownership.",
+        "Evidence roles direct ownership citations away from logging provenance.",
+        "componentRole marks each record component as a logging location, not failure ownership.",
       ],
     },
   ],

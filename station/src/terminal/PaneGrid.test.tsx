@@ -6,7 +6,11 @@ import type { MouseTargetRef } from "../input/router.js";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import { PaneGrid } from "./PaneGrid.js";
-import { PANE_BORDER_ACTIVE, PANE_BORDER_INACTIVE } from "./TerminalPane.js";
+import {
+  nativeStationTheme,
+  stationColorSnapshotValue,
+  StationThemeProvider,
+} from "../theme/index.js";
 import { PaneRegistryProvider } from "./registry/paneTerminalContext.js";
 import { createPtyRegistry } from "./registry/ptyRegistry.js";
 import { spanAtFrameCell } from "./testing/frameProbe.js";
@@ -14,11 +18,13 @@ import { createScriptedTerminal, type ScriptedTerminal } from "./testing/scripte
 import { waitFor } from "./testing/waitFor.js";
 import type { StationTerminalSize } from "./types.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
-import { makeStationTestStore } from "../station/test/support/makeStationTestStore.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 
 const SURFACE = { width: 40, height: 12 };
-// One pane filling the surface: TerminalPane border + padding eat 2 cells each side.
-const FULL_INTERIOR = { cols: SURFACE.width - 4, rows: SURFACE.height - 4 };
+const PRIMARY_BORDER_ACTIVE = stationColorSnapshotValue(nativeStationTheme.pane.primary.active);
+const PRIMARY_BORDER_INACTIVE = stationColorSnapshotValue(nativeStationTheme.pane.primary.inactive);
+// One pane filling the surface: TerminalPane's border eats 1 cell each side.
+const FULL_INTERIOR = { cols: SURFACE.width - 2, rows: SURFACE.height - 2 };
 
 describe("PaneGrid", () => {
   const teardowns: Array<() => void> = [];
@@ -42,19 +48,21 @@ describe("PaneGrid", () => {
       },
     });
     const store = createStationStore();
-    const stationViewStore =
+    const dashboardState =
       options?.withStationSnapshot === true
-        ? makeStationTestStore({ snapshot: manyProjectsSnapshot() }).store
+        ? makeStationTestRuntime({ snapshot: manyProjectsSnapshot() }).runtime.state
         : undefined;
     const dispatchMouse = (_target: MouseTargetRef, _event: StationMouseEvent): boolean => true;
     const setup = await testRender(
-      <PaneRegistryProvider registry={registry}>
-        <PaneGrid
-          store={store}
-          {...(stationViewStore === undefined ? {} : { stationViewStore })}
-          dispatchMouse={dispatchMouse}
-        />
-      </PaneRegistryProvider>,
+      <StationThemeProvider theme={nativeStationTheme}>
+        <PaneRegistryProvider registry={registry}>
+          <PaneGrid
+            store={store}
+            {...(dashboardState === undefined ? {} : { dashboardState })}
+            dispatchMouse={dispatchMouse}
+          />
+        </PaneRegistryProvider>
+      </StationThemeProvider>,
       SURFACE,
     );
     teardowns.push(() => {
@@ -63,7 +71,7 @@ describe("PaneGrid", () => {
     });
     await setup.flush();
     await waitFor(() => spawnSizes.length > 0);
-    return { setup, registry, store, spawnSizes, terminals, stationViewStore };
+    return { setup, registry, store, spawnSizes, terminals, dashboardState };
   }
 
   // A store change re-renders PaneGrid; the new layout pass (which fires the
@@ -127,7 +135,10 @@ describe("PaneGrid", () => {
     });
     await pumpUntil(setup, () => registry.get("pane-split-0")?.terminal != null);
     store.actions.closePane("pane-split-0");
-    await pumpUntil(setup, () => !store.getState().workspace.panes.some((p) => p.id === "pane-split-0"));
+    await pumpUntil(
+      setup,
+      () => !store.getState().workspace.panes.some((p) => p.id === "pane-split-0"),
+    );
 
     // The reshape remounted main's TerminalPane, but the registry — not the
     // component — owns the PTY, so it is never disposed.
@@ -171,19 +182,19 @@ describe("PaneGrid", () => {
   it("highlights the active pane border and dims inactive panes", async () => {
     const { setup, store } = await renderGrid();
     // Single pane: main is active, so its border uses the active accent.
-    expect(allForegroundHexes(setup).has(PANE_BORDER_ACTIVE)).toBe(true);
+    expect(allForegroundHexes(setup).has(PRIMARY_BORDER_ACTIVE)).toBe(true);
 
     store.actions.createPane("pane-split-0", {
       split: { anchorPaneId: MAIN_PANE_ID, direction: "right" },
     });
     await pumpUntil(setup, () => store.getState().workspace.activePaneId === "pane-split-0");
     // Let the reshaped layout settle into a frame.
-    await pumpUntil(setup, () => allForegroundHexes(setup).has(PANE_BORDER_INACTIVE));
+    await pumpUntil(setup, () => allForegroundHexes(setup).has(PRIMARY_BORDER_INACTIVE));
 
     const hexes = allForegroundHexes(setup);
-    expect(hexes.has(PANE_BORDER_ACTIVE)).toBe(false); // the active split shell is not blue
-    expect(hexes.has(PANE_BORDER_INACTIVE)).toBe(true); // the dimmed original
-    expect([...hexes].some((hex) => hex !== PANE_BORDER_INACTIVE)).toBe(true);
+    expect(hexes.has(PRIMARY_BORDER_ACTIVE)).toBe(false); // the active split shell is not blue
+    expect(hexes.has(PRIMARY_BORDER_INACTIVE)).toBe(true); // the dimmed original
+    expect([...hexes].some((hex) => hex !== PRIMARY_BORDER_INACTIVE)).toBe(true);
   });
 
   it("titles a primary-agent pane from the STATION session and harness", async () => {
@@ -233,10 +244,10 @@ describe("PaneGrid", () => {
     expect(screen!.mouseProtocol()).not.toBeNull();
 
     const before = terminals[0]!.helpers.writes.length;
-    // TerminalPane's border+padding put the screen interior origin at (2,2), so
-    // an absolute click at (5,5) lands on local cell (3,3) -> 1-based col 4, row 4.
+    // TerminalPane's border puts the screen interior origin at (1,1), so an
+    // absolute click at (5,5) lands on local cell (4,4) -> 1-based col 5, row 5.
     await setup.mockMouse.click(5, 5);
-    expect(terminals[0]!.helpers.writes.slice(before)).toEqual(["\x1b[<0;4;4M", "\x1b[<0;4;4m"]);
+    expect(terminals[0]!.helpers.writes.slice(before)).toEqual(["\x1b[<0;5;5M", "\x1b[<0;5;5m"]);
   });
 
   it("suppresses click forwarding while the STATION overlay owns input", async () => {
@@ -265,7 +276,7 @@ describe("PaneGrid", () => {
     // session contributes no (dimmed) border to the frame.
     await pumpUntil(setup, () => {
       const hexes = allForegroundHexes(setup);
-      return hexes.has(PANE_BORDER_ACTIVE) && !hexes.has(PANE_BORDER_INACTIVE);
+      return hexes.has(PRIMARY_BORDER_ACTIVE) && !hexes.has(PRIMARY_BORDER_INACTIVE);
     });
 
     expect(spawnSizes.length).toBe(2); // no third spawn — the PTY was reused

@@ -1,4 +1,4 @@
-import type { AddProjectChooseState } from "./types.js";
+import type { AddProjectChooseStateView } from "./types.js";
 
 export type AddProjectFolderRow =
   | {
@@ -19,7 +19,7 @@ export type AddProjectFolderRow =
       displayPath?: string;
     };
 
-export function addProjectRows(state: AddProjectChooseState): AddProjectFolderRow[] {
+export function addProjectRows(state: AddProjectChooseStateView): AddProjectFolderRow[] {
   const rows: AddProjectFolderRow[] = [
     {
       kind: "current",

@@ -967,6 +967,12 @@
           "bindings": ["createSessionForkHandler"]
         },
         {
+          "specifier": "./session/importRecoveryHandle.js",
+          "resolvedPath": "apps/observer/src/commands/session/importRecoveryHandle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createSessionImportRecoveryHandleHandler"]
+        },
+        {
           "specifier": "./session/rename.js",
           "resolvedPath": "apps/observer/src/commands/session/rename.ts",
           "edgeKind": "runtime",
@@ -1474,231 +1480,104 @@
       ]
     },
     {
-      "path": "apps/observer/src/commands/session/index.ts",
+      "path": "apps/observer/src/commands/session/importRecoveryHandle.ts",
       "exports": [
         {
-          "name": "assertNoCurrentAgent",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "buildEnsureAgentWorkspaceIntent",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "commandValidationError",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionAcknowledgeTurnHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionAcknowledgeTurnHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCloseHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionCloseHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCreateHandler",
+          "name": "createSessionImportRecoveryHandleHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
+          "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership."
         },
         {
-          "name": "CreateSessionCreateHandlerOptions",
+          "name": "CreateSessionImportRecoveryHandleHandlerOptions",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionResumeAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
-        },
-        {
-          "name": "CreateSessionResumeAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionStartAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
-        },
-        {
-          "name": "CreateSessionStartAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "defaultSessionCommandIdFactory",
-          "kind": "const",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "discardSessionSeedBestEffort",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "findProjectOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "launchHarnessInTerminal",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "lookupWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "publishSessionCreated",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "rememberedHarnessProviderForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "removeWorktreeBestEffort",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "resolveHarnessProviderOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "resolveTerminalProviderOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "runProviderMutation",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "seedSession",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandIdFactory",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandLookupRuntime",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandRuntime",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "throwIfAborted",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "validateSnapshotRow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "worktreeObservationFromRow",
-          "kind": "function",
           "role": null,
           "purpose": null
         }
       ],
       "imports": [
         {
-          "specifier": "./acknowledgeTurn.js",
-          "resolvedPath": "apps/observer/src/commands/session/acknowledgeTurn.ts",
+          "specifier": "../assertCommand.js",
+          "resolvedPath": "apps/observer/src/commands/assertCommand.ts",
           "edgeKind": "runtime",
-          "bindings": ["*"]
+          "bindings": ["assertCommandType"]
         },
         {
-          "specifier": "./close.js",
-          "resolvedPath": "apps/observer/src/commands/session/close.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
+          "specifier": "../queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandler"]
         },
         {
-          "specifier": "./create.js",
-          "resolvedPath": "apps/observer/src/commands/session/create.ts",
+          "specifier": "../reconcile.js",
+          "resolvedPath": "apps/observer/src/commands/reconcile.ts",
           "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./resumeAgent.js",
-          "resolvedPath": "apps/observer/src/commands/session/resumeAgent.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
+          "bindings": ["reconcileAndPublish"]
         },
         {
           "specifier": "./shared.js",
           "resolvedPath": "apps/observer/src/commands/session/shared.ts",
           "edgeKind": "runtime",
-          "bindings": ["*"]
+          "bindings": [
+            "commandValidationError",
+            "findProjectOrThrow",
+            "resolveHarnessProviderOrThrow",
+            "throwIfAborted"
+          ]
         },
         {
-          "specifier": "./startAgent.js",
-          "resolvedPath": "apps/observer/src/commands/session/startAgent.ts",
+          "specifier": "../../features/evaluator.js",
+          "resolvedPath": "apps/observer/src/features/evaluator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["FeatureFlagEvaluator"]
+        },
+        {
+          "specifier": "../../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["EventJournal", "SessionStore"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../../runtime/eventBus.js",
+          "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["*"]
+          "bindings": ["worktreeHasLiveAgent"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderProjectConfig", "SafeError", "SessionRecoveryHandle", "WorktreeRow"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["pathIsSameOrInside"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
         }
       ]
     },
@@ -2782,31 +2661,6 @@
       ]
     },
     {
-      "path": "apps/observer/src/commands/worktree/index.ts",
-      "exports": [
-        {
-          "name": "createWorktreeRemoveHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
-        },
-        {
-          "name": "CreateWorktreeRemoveHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        }
-      ],
-      "imports": [
-        {
-          "specifier": "./remove.js",
-          "resolvedPath": "apps/observer/src/commands/worktree/remove.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        }
-      ]
-    },
-    {
       "path": "apps/observer/src/commands/worktree/remove.ts",
       "exports": [
         {
@@ -3112,16 +2966,13 @@
           "specifier": "@station/observability",
           "resolvedPath": "packages/observability/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "createErrorEnvelope as createObservabilityErrorEnvelope",
-            "toSafeError as toObservabilitySafeError"
-          ]
+          "bindings": ["* as observability"]
         },
         {
           "specifier": "@station/observability",
           "resolvedPath": "packages/observability/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["ErrorEnvelopeInput", "SafeErrorFallback"]
+          "bindings": ["ErrorEnvelopeInput"]
         }
       ]
     },
@@ -4011,20 +3862,8 @@
           "purpose": "Excludes cross-runtime startup and duplicate-cleanup mutation through a SQLite transaction whose ownership comes from the OS lock, never the persistent claim file."
         },
         {
-          "name": "agentStateChangedEventsFromReconcile",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "AppliedObserverSqliteMigration",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "assertNoCurrentAgent",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4042,12 +3881,6 @@
         },
         {
           "name": "assertWorktreeRemovalAllowed",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "buildEnsureAgentWorkspaceIntent",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -4121,12 +3954,6 @@
         {
           "name": "CommandQueue",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "commandValidationError",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4224,7 +4051,7 @@
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -4353,66 +4180,6 @@
           "purpose": null
         },
         {
-          "name": "createSessionAcknowledgeTurnHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionAcknowledgeTurnHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCloseHandler",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "CreateSessionCloseHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionCreateHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Preflights the selected harness, creates a session worktree on its generated branch, durably seeds its independent title, and launches its primary agent; cleanup retires title authority only after verified rollback."
-        },
-        {
-          "name": "CreateSessionCreateHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionResumeAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
-        },
-        {
-          "name": "CreateSessionResumeAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "createSessionStartAgentHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection."
-        },
-        {
-          "name": "CreateSessionStartAgentHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "createSqliteObserverPersistence",
           "kind": "function",
           "role": "ADAPTER",
@@ -4467,26 +4234,8 @@
           "purpose": null
         },
         {
-          "name": "createWorktreeRemoveHandler",
-          "kind": "function",
-          "role": "USE CASE",
-          "purpose": "Revalidates selected checkout and Git registration identity before coordinating removal. Provider-confirmed removal atomically ends sessions and retires canonical title authority."
-        },
-        {
-          "name": "CreateWorktreeRemoveHandlerOptions",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "CurrentProviderObservationKind",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "defaultSessionCommandIdFactory",
-          "kind": "const",
           "role": null,
           "purpose": null
         },
@@ -4517,12 +4266,6 @@
         {
           "name": "DiagnosticRecentLogEvidence",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "discardSessionSeedBestEffort",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4565,12 +4308,6 @@
         {
           "name": "EventRecordOptions",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "findProjectOrThrow",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -4647,20 +4384,8 @@
           "purpose": null
         },
         {
-          "name": "launchHarnessInTerminal",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "ListSessionRecoveryHandlesOptions",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "lookupWorktree",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -5259,12 +4984,6 @@
           "purpose": null
         },
         {
-          "name": "publishSessionCreated",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "publishSessionRemoved",
           "kind": "function",
           "role": null,
@@ -5293,6 +5012,12 @@
           "kind": "type",
           "role": null,
           "purpose": null
+        },
+        {
+          "name": "readSessionRecoveryHandlesFromBackup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Reads typed recovery identities from an offline Observer backup while keeping SQLite rows and queries inside the persistence adapter boundary."
         },
         {
           "name": "reconcileAndPublish",
@@ -5331,12 +5056,6 @@
           "purpose": null
         },
         {
-          "name": "ReconcileWorktreeDisplayTitleInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "RecordProviderObservationInput",
           "kind": "type",
           "role": null,
@@ -5351,18 +5070,6 @@
         {
           "name": "RegisterObserverCommandHandlersOptions",
           "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "rememberedHarnessProviderForWorktree",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "removeWorktreeBestEffort",
-          "kind": "function",
           "role": null,
           "purpose": null
         },
@@ -5391,12 +5098,6 @@
           "purpose": null
         },
         {
-          "name": "resolveHarnessProviderOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "resolveRowForSession",
           "kind": "function",
           "role": null,
@@ -5404,12 +5105,6 @@
         },
         {
           "name": "resolveSessionOrThrow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "resolveTerminalProviderOrThrow",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5451,12 +5146,6 @@
           "purpose": null
         },
         {
-          "name": "runProviderMutation",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "runSqliteTransactionEffect",
           "kind": "function",
           "role": null,
@@ -5464,12 +5153,6 @@
         },
         {
           "name": "safeErrorToProviderHealth",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "seedSession",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5483,24 +5166,6 @@
         {
           "name": "selectObserverReapPlan",
           "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandIdFactory",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandLookupRuntime",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SessionCommandRuntime",
-          "kind": "type",
           "role": null,
           "purpose": null
         },
@@ -5524,30 +5189,6 @@
         },
         {
           "name": "SessionTurnReadinessMutation",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlDatabase",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlParam",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlRunResult",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "SqlStatement",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -5601,19 +5242,7 @@
           "purpose": null
         },
         {
-          "name": "throwIfAborted",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "toSafeError",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
-          "name": "validateSnapshotRow",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -5661,12 +5290,6 @@
           "purpose": "Maintains the current worktree metadata cache independently of repository adapters."
         },
         {
-          "name": "worktreeObservationFromRow",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "WorktreeRemovalTargetResolution",
           "kind": "type",
           "role": null,
@@ -5705,12 +5328,6 @@
           "bindings": ["*"]
         },
         {
-          "specifier": "./commands/session/index.js",
-          "resolvedPath": "apps/observer/src/commands/session/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
           "specifier": "./commands/terminal.js",
           "resolvedPath": "apps/observer/src/commands/terminal.ts",
           "edgeKind": "runtime",
@@ -5719,12 +5336,6 @@
         {
           "specifier": "./commands/terminalIntentRunner.js",
           "resolvedPath": "apps/observer/src/commands/terminalIntentRunner.ts",
-          "edgeKind": "runtime",
-          "bindings": ["*"]
-        },
-        {
-          "specifier": "./commands/worktree/index.js",
-          "resolvedPath": "apps/observer/src/commands/worktree/index.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -5815,6 +5426,12 @@
         {
           "specifier": "./persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["*"]
+        },
+        {
+          "specifier": "./persistence/recoveryArchiveReader.js",
+          "resolvedPath": "apps/observer/src/persistence/recoveryArchiveReader.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
         },
@@ -5913,12 +5530,6 @@
           "resolvedPath": "apps/observer/src/sqlite.ts",
           "edgeKind": "runtime",
           "bindings": ["*"]
-        },
-        {
-          "specifier": "./sqlite/driver.js",
-          "resolvedPath": "apps/observer/src/sqlite/driver.ts",
-          "edgeKind": "type-only",
-          "bindings": ["SqlDatabase", "SqlParam", "SqlRunResult", "SqlStatement"]
         }
       ]
     },
@@ -7186,8 +6797,7 @@
             "ObserverIdFactory",
             "PersistReconcileResultInput",
             "PersistedSession",
-            "PersistedWorktreeDisplayTitle",
-            "ReconcileWorktreeDisplayTitleInput"
+            "PersistedWorktreeDisplayTitle"
           ]
         },
         {
@@ -7556,12 +7166,6 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
-        },
-        {
-          "name": "ReconcileWorktreeDisplayTitleInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
         },
         {
           "name": "RecordProviderObservationInput",
@@ -7944,6 +7548,37 @@
             "StationCommand",
             "StationEvent"
           ]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/persistence/recoveryArchiveReader.ts",
+      "exports": [
+        {
+          "name": "readSessionRecoveryHandlesFromBackup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "purpose": "Reads typed recovery identities from an offline Observer backup while keeping SQLite rows and queries inside the persistence adapter boundary."
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./sessionRecoveryHandles.js",
+          "resolvedPath": "apps/observer/src/persistence/sessionRecoveryHandles.ts",
+          "edgeKind": "runtime",
+          "bindings": ["listSessionRecoveryHandles"]
+        },
+        {
+          "specifier": "../sqlite/driver.js",
+          "resolvedPath": "apps/observer/src/sqlite/driver.ts",
+          "edgeKind": "runtime",
+          "bindings": ["openSqlDatabase"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionRecoveryHandle"]
         }
       ]
     },
@@ -8628,12 +8263,6 @@
           "purpose": null
         },
         {
-          "name": "ReconcileWorktreeDisplayTitleInput",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "RecordProviderObservationInput",
           "kind": "type",
           "role": null,
@@ -8756,7 +8385,7 @@
           "specifier": "./types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
-          "bindings": ["PersistedWorktreeDisplayTitle", "ReconcileWorktreeDisplayTitleInput"]
+          "bindings": ["PersistedWorktreeDisplayTitle"]
         },
         {
           "specifier": "../sqlite/driver.js",
@@ -9334,8 +8963,8 @@
             "PersistedProviderObservation",
             "PersistedSessionHarnessExecution",
             "PersistedSessionTurnReadiness",
+            "PersistedWorktreeDisplayTitle",
             "ReconcileStore",
-            "ReconcileWorktreeDisplayTitleInput",
             "SessionHarnessDerivedStateRepair",
             "SessionStore",
             "WorktreeMetadataStore"
@@ -9540,16 +9169,10 @@
       "path": "apps/observer/src/runtime/api.ts",
       "exports": [
         {
-          "name": "agentStateChangedEventsFromReconcile",
-          "kind": "function",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "createObserverApi",
           "kind": "function",
           "role": "COMPOSITION ROOT",
-          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API."
+          "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness queries, read-only singleton diagnostics, and adapter shutdown behind the application API."
         },
         {
           "name": "CreateObserverApiOptions",
@@ -9680,12 +9303,6 @@
           "bindings": ["ObserverCore"]
         },
         {
-          "specifier": "./agentEvents.js",
-          "resolvedPath": "apps/observer/src/runtime/agentEvents.ts",
-          "edgeKind": "runtime",
-          "bindings": ["agentStateChangedEventsFromReconcile"]
-        },
-        {
           "specifier": "./eventBus.js",
           "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
           "edgeKind": "type-only",
@@ -9808,6 +9425,7 @@
             "ProviderHookEvent",
             "ProviderHookReceipt",
             "ReconcileReceipt",
+            "SessionRecoveryReadiness",
             "StationCommand",
             "StationEvent"
           ]
@@ -11735,11 +11353,261 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/setup/adapters/config.ts",
+      "declaration": "createSetupConfigAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates semantic setup configuration intent through one shared preview mapper and serializes validated config-owned persistence.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupConfigMutationPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/adapters/harnessTracking.ts",
+      "declaration": "createHarnessTrackingAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates harness tracking preparation into an in-process provider installer and sanitized commit evidence.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupHarnessTrackingPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
+      "declaration": "createSetupInspectionAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Collects CLI and provider evidence, resolves normalized harness intent, and plans read-only config mutations while retaining boundary representations locally.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
+          "declaration": "resolveHarnessSelection",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupInspection",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/adapters/observerActivation.ts",
+      "declaration": "createObserverActivationAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "restartObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupObserverActivationPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/adapters/operations.ts",
+      "declaration": "createSetupOperationAdapter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Assigns package/bootstrap, config, provider, process, filesystem, and Observer operations to their final outward implementations. Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/setup/adapters/config.ts",
+          "declaration": "createSetupConfigAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/adapters/harnessTracking.ts",
+          "declaration": "createHarnessTrackingAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/adapters/observerActivation.ts",
+          "declaration": "createObserverActivationAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationExecutor",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupPackageInstallationPort",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/composition.ts",
+      "declaration": "createSetupComposition",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
+          "declaration": "createSetupInspectionAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/adapters/operations.ts",
+          "declaration": "createSetupOperationAdapter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/presenters/clack.ts",
+          "declaration": "createClackSetupPresenter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/commands/setup/presenters/json.ts",
+          "declaration": "createJsonSetupPresenter",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationExecutor",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/session/application.ts",
+          "declaration": "createSetupSessionApplication",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/setup/presenters/clack.ts",
+      "declaration": "createClackSetupPresenter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates guided setup interaction and progress into Clack controls while normalizing terminal cancellation before it reaches session orchestration.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/commands/setup/presenters/json.ts",
+      "declaration": "createJsonSetupPresenter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Directly projects semantic plans and adapter evidence into the strict frozen CLI schema without resolving human presentation copy.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/commands/setup/presenters/text.ts",
+      "declaration": "createTextSetupPresenter",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves typed setup views and message references into terminal prompts and output.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/commands/setup/session/runGuidedSetupSession.ts",
+      "declaration": "runGuidedSetupSession",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Drives Clack-guided setup through one injected composition while normalizing typed cancellation and preserving application-owned mutation ordering.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/assessSetupPlan.ts",
+          "declaration": "assessSetupPlan",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationProgress",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/snapshot.ts",
+      "declaration": "runSnapshotCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates snapshot CLI options into a pinned Observer query, optionally refusing to spawn a missing runtime for read-only maintenance planning.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "getObserverStatus",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/tui.ts",
       "declaration": "runTuiCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns Observer startup, resolved-config propagation, renderer process selection, and persistent popup control wiring.",
+      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup, resolved-config propagation, exact child outcome evidence, renderer selection, and persistent popup control wiring.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/tuiRendererControl.ts",
@@ -12391,6 +12259,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/session/importRecoveryHandle.ts",
+          "declaration": "createSessionImportRecoveryHandleHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/session/rename.ts",
           "declaration": "createSessionRenameHandler",
           "kind": "function",
@@ -12448,6 +12323,14 @@
       "kind": "function",
       "role": "USE CASE",
       "purpose": "Resolves and preflights the selected harness, forks an existing worktree onto an internal branch, durably seeds its independent title, and launches a fresh agent; cleanup retires title authority only after verified rollback.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/session/importRecoveryHandle.ts",
+      "declaration": "createSessionImportRecoveryHandleHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership.",
       "dependencies": []
     },
     {
@@ -12831,6 +12714,14 @@
       "dependencies": []
     },
     {
+      "path": "apps/observer/src/persistence/recoveryArchiveReader.ts",
+      "declaration": "readSessionRecoveryHandlesFromBackup",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Reads typed recovery identities from an offline Observer backup while keeping SQLite rows and queries inside the persistence adapter boundary.",
+      "dependencies": []
+    },
+    {
       "path": "apps/observer/src/persistence/sqliteAdapter.ts",
       "declaration": "createSqliteObserverPersistence",
       "kind": "function",
@@ -12992,7 +12883,7 @@
       "declaration": "createObserverApi",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, read-only singleton diagnostics, and adapter shutdown behind the application API.",
+      "purpose": "Wires Observer use cases with supplied durable, local-metadata, and diagnostic- evidence roles, ingress workers, provider-health publication, scheduling, exact build publication, recovery-readiness queries, read-only singleton diagnostics, and adapter shutdown behind the application API.",
       "dependencies": [
         {
           "path": "apps/observer/src/diagnostics/collector.ts",
@@ -13614,6 +13505,22 @@
       ]
     },
     {
+      "path": "integrations/harness/claude/src/recoveryArtifacts.ts",
+      "declaration": "createClaudeRecoveryArtifactLocator",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves exact Claude transcript files from the configured Claude projects root without leaking that layout into migration orchestration.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/sessionRecovery.ts",
+          "declaration": "SessionRecoveryArtifactLocator",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "integrations/harness/codex/src/hookAdapter.ts",
       "declaration": "codexHookAdapter",
       "kind": "const",
@@ -13639,6 +13546,22 @@
         {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/harness/codex/src/recoveryArtifacts.ts",
+      "declaration": "createCodexRecoveryArtifactLocator",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves exact Codex rollout and shell-snapshot files for one native thread while keeping Codex home layout private to the integration.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/sessionRecovery.ts",
+          "declaration": "SessionRecoveryArtifactLocator",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -13695,6 +13618,22 @@
         {
           "path": "packages/contracts/src/providers.ts",
           "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/harness/opencode/src/recoveryArtifacts.ts",
+      "declaration": "createOpenCodeRecoveryArtifactLocator",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves OpenCode recovery to its provider-owned database, whose linked session rows must be transferred as one indivisible artifact.",
+      "dependencies": [
+        {
+          "path": "packages/contracts/src/sessionRecovery.ts",
+          "declaration": "SessionRecoveryArtifactLocator",
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
@@ -13794,7 +13733,7 @@
       "declaration": "TmuxProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Translates Station terminal operations into tmux-owned topology and commands.",
+      "purpose": "Translates Station terminal operations into tmux-owned topology, durable process launch, and commands.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -13865,7 +13804,7 @@
       "declaration": "ObserverApi",
       "kind": "type",
       "role": "DRIVING PORT",
-      "purpose": "Exposes Observer queries, handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
+      "purpose": "Exposes Observer state and recovery-readiness queries, handshakes, ingress reports, maintenance, and lifecycle operations to external actors.",
       "dependencies": []
     },
     {
@@ -13881,7 +13820,7 @@
       "declaration": "ManagedTerminalLifecycle",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Owns the single managed terminal target used for an external Station launch. Attachments expose only adapter-owned target identity. A local fallback may instead carry a provider-neutral output policy for the caller-owned process, and at most one target may exist per worktree.",
+      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -13914,6 +13853,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Supplies worktree lifecycle evidence and mutations without exposing provider mechanics. Removal adapters must revalidate opaque registration identity, path, and branch immediately before mutation.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/contracts/src/sessionRecovery.ts",
+      "declaration": "SessionRecoveryArtifactLocator",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Locates provider-owned files required to recover one exact native execution without exposing provider storage conventions to migration orchestration.",
       "dependencies": []
     },
     {
@@ -14009,6 +13956,201 @@
       "kind": "function",
       "role": "POLICY",
       "purpose": "Uses the canonical launcher path as the durable owner key so upgrades at one installed location remain automatic. Only a valid marker establishes ownership; unmarked or malformed artifacts require explicit takeover.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/assessHarnessTracking.ts",
+      "declaration": "assessHarnessTracking",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Classifies normalized tracking evidence without provider or presentation concerns.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/assessSetupPlan.ts",
+      "declaration": "assessSetupPlan",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Classifies whether a semantic setup plan can prepare prerequisites, continue collecting intent, or begin mutation.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/deriveSetupResult.ts",
+      "declaration": "deriveSetupResult",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives readiness from current semantic evidence without trusting attempted mutations.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/policy/planSetup.ts",
+      "declaration": "planSetup",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Derives semantic setup issues and operations from normalized evidence and intent without rendering or performing effects.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/policy/deriveSetupResult.ts",
+          "declaration": "deriveSetupResult",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
+          "declaration": "resolveHarnessSelection",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "packages/setup-core/src/policy/resolveHarnessSelection.ts",
+      "declaration": "resolveHarnessSelection",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Resolves configured, explicit, or discovered harness intent without choosing an ambiguous candidate.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupConfigMutationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Commits the desired Station setup configuration without exposing its representation to setup policy.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupHarnessTrackingPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Prepares one selected harness's Station-owned tracking artifacts.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupInspection",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Reads intent-bound setup evidence so every plan reflects the current desired harnesses and integrations while boundary representations remain outside core.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupLauncherLinkPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Links the Station launchers required for bare terminal commands.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupObserverActivationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Activates a committed setup configuration and confirms Observer health.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupOperationExecutor",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Executes one semantic setup operation through its assigned outward capability.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupOperationProgress",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Reports semantic operation starts and recorded outcomes without participating in mutation truth.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupPackageInstallationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Runs the installer selected for a setup package target.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupTmuxConfigurationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Persists or live-loads the selected tmux popup configuration.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/ports.ts",
+      "declaration": "SetupWorktrunkIntegrationPort",
+      "kind": "type",
+      "role": "DRIVEN PORT",
+      "purpose": "Applies Worktrunk tracking or shell integration requested by setup.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/session/application.ts",
+      "declaration": "createSetupSessionApplication",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Coordinates one setup session's intent-bound inspections, staged prerequisite effects, and complete apply sequence without transport or restart recovery.",
+      "dependencies": [
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupInspection",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationExecutor",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/ports.ts",
+          "declaration": "SetupOperationProgress",
+          "kind": "type",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/session/application.ts",
+          "declaration": "SetupSessionApplication",
+          "kind": "type",
+          "role": "DRIVING PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/setup-core/src/session/transition.ts",
+          "declaration": "transitionSetupSession",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "packages/setup-core/src/session/application.ts",
+      "declaration": "SetupSessionApplication",
+      "kind": "type",
+      "role": "DRIVING PORT",
+      "purpose": "Accepts serialized setup intent editing, staged preparation, review, apply, and cancellation commands for one invocation-local session.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/setup-core/src/session/transition.ts",
+      "declaration": "transitionSetupSession",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Advances intent editing, staged preparation, complete apply, and cancellation from normalized evidence and typed outcomes without I/O.",
       "dependencies": []
     }
   ]

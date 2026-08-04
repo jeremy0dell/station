@@ -1,10 +1,14 @@
 import type { TuiWidgetConfig } from "@station/config";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
+import type { ReadonlyDeep } from "../readonly.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
 
-export const widgetSettingsScreenBehavior = { clickAway: backFromWidgetSettings };
+export const widgetSettingsScreenBehavior = {
+  dashboardHoverEnabled: false,
+  clickAway: backFromWidgetSettings,
+};
 
 /**
  * Widget types addable from the picker: the parameterless ones only. weather
@@ -14,7 +18,7 @@ export const widgetSettingsScreenBehavior = { clickAway: backFromWidgetSettings 
 export const ADDABLE_WIDGET_TYPES = ["time", "fleet", "prs", "moon"] as const;
 
 /** One human label per widget entry, shown in the settings list. */
-export function widgetSettingsRowLabel(config: TuiWidgetConfig): string {
+export function widgetSettingsRowLabel(config: ReadonlyDeep<TuiWidgetConfig>): string {
   switch (config.type) {
     case "time":
       return "time";

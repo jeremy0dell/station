@@ -316,6 +316,63 @@ describe("hosted CI policy", () => {
     }
   });
 
+  it("uploads only bounded binary-smoke failure evidence without masking the lane", () => {
+    const standardCi = read(".github/workflows/standard-ci.yml");
+    const binary = workflowJob(standardCi, "binary_smoke");
+    const aggregate = workflowJob(standardCi, "standard-ci");
+
+    expect(binary).toContain("id: binary_smoke_run");
+    expect(binary).toContain(
+      `STATION_BINARY_SMOKE_EVIDENCE_DIR: ${actionsExpression("runner.temp")}/station-binary-smoke-evidence`,
+    );
+    expect(binary).toContain(
+      `if: ${actionsExpression("failure() && steps.binary_smoke_run.outcome == 'failure'")}`,
+    );
+    expect(binary).toContain(
+      "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+    );
+    expect(binary).toContain(
+      `name: binary-smoke-evidence-${actionsExpression("github.run_id")}-${actionsExpression("github.run_attempt")}`,
+    );
+    expect(binary).toContain(
+      `path: ${actionsExpression("runner.temp")}/station-binary-smoke-evidence`,
+    );
+    expect(binary).toContain("if-no-files-found: warn");
+    expect(binary).toContain("retention-days: 3");
+    expect(binary).toContain("continue-on-error: true");
+    expect(binary.indexOf("id: binary_smoke_run")).toBeLessThan(
+      binary.indexOf("uses: actions/upload-artifact@"),
+    );
+    expect(aggregate).toContain(`BINARY_SMOKE: ${actionsExpression("needs.binary_smoke.result")}`);
+  });
+
+  it("keeps binary handoff stress manual, capped, and failure-artifact-only", () => {
+    const stress = read(".github/workflows/binary-handoff-stress.yml");
+    const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+
+    expect(stress).toContain("workflow_dispatch:");
+    expect(stress).not.toContain("schedule:");
+    expect(stress).not.toContain("pull_request:");
+    expect(stress).toContain("timeout-minutes: 20");
+    expect(stress).toContain('if [ "$ROUNDS" -lt 1 ] || [ "$ROUNDS" -gt 100 ]');
+    expect(stress).toContain("pnpm build:binary -- --version 0.0.0-local");
+    expect(stress).toContain("--round-timeout-ms 30000");
+    expect(stress).toContain(
+      `STATION_BINARY_SMOKE_EVIDENCE_DIR: ${actionsExpression("runner.temp")}/station-binary-smoke-evidence`,
+    );
+    expect(stress).toContain(
+      `if: ${actionsExpression("failure() && steps.binary_handoff_stress_run.outcome == 'failure'")}`,
+    );
+    expect(stress).toContain(
+      "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+    );
+    expect(stress).toContain("retention-days: 3");
+    expect(stress).toContain("continue-on-error: true");
+    expect(packageJson.scripts["stress:binary-handoff"]).toBe(
+      "node scripts/test-runners/run-binary-smoke.mjs --mode handoff-stress",
+    );
+  });
+
   it("keeps exhaustive claim stress scheduled without extending every pull request", () => {
     const nightly = read(".github/workflows/nightly-observer-claim.yml");
     const development = read("docs/development.md");

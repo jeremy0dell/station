@@ -1,9 +1,9 @@
 import {
   createInitialTuiState,
-  dashboardFooterLabel,
+  dashboardBindingHelp,
+  deriveTuiInputMode,
   handleTuiKey,
   isSlotKey,
-  QUIT_HINT_DISMISS_ERROR,
 } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import { matchDashboardBinding } from "../../../src/state/keymap.js";
@@ -15,9 +15,21 @@ describe("dashboard key bindings", () => {
   it("matches dashboard navigation and actions", () => {
     expect(matchDashboardBinding({ input: "", upArrow: true })?.action).toBe("tui.focus.up");
     expect(matchDashboardBinding({ input: "", downArrow: true })?.action).toBe("tui.focus.down");
+    expect(matchDashboardBinding({ input: "", leftArrow: true })?.action).toBe("tui.focus.left");
+    expect(matchDashboardBinding({ input: "", rightArrow: true })?.action).toBe("tui.focus.right");
     expect(matchDashboardBinding({ input: "\r", return: true })?.action).toBe("tui.focus.activate");
     expect(matchDashboardBinding({ input: "N" })?.action).toBe("tui.newSession.open");
     expect(matchDashboardBinding({ input: "?" })?.action).toBe("tui.help.open");
+  });
+
+  it("derives the dedicated persistent-filter input mode", () => {
+    const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
+    expect(
+      deriveTuiInputMode({
+        ...base,
+        screen: { name: "persistentFilter", draft: { value: "", cursor: 0 } },
+      }),
+    ).toBe("persistentFilter");
   });
 
   it("gives the global Ctrl-C exit precedence over slot matching", () => {
@@ -77,34 +89,19 @@ describe("dashboard popup lifecycle keys", () => {
   });
 });
 
-describe("dashboard footer", () => {
-  it("keeps the first-project action at wide and compact widths", () => {
-    for (const columns of [120, 40]) {
-      const label = dashboardFooterLabel({
-        columns,
-        quitHint: "Q/esc:close",
-        firstRun: true,
-      });
-      expect(label).toContain("add first project");
-      expect(label).not.toContain("open");
-      expect(label).not.toContain("N new");
-      expect(label).not.toContain("delete");
-    }
-  });
-
-  it("keeps error dismissal and close copy visible at compact widths", () => {
-    expect(dashboardFooterLabel({ columns: 120, quitHint: QUIT_HINT_DISMISS_ERROR })).toContain(
-      QUIT_HINT_DISMISS_ERROR,
-    );
-    expect(dashboardFooterLabel({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR })).toBe(
-      QUIT_HINT_DISMISS_ERROR,
-    );
-    expect(
-      dashboardFooterLabel({
-        columns: 40,
-        quitHint: QUIT_HINT_DISMISS_ERROR,
-        firstRun: true,
-      }),
-    ).toBe(QUIT_HINT_DISMISS_ERROR);
+describe("dashboard footer binding metadata", () => {
+  it("exposes stable keys and labels without contextual layout policy", () => {
+    expect(dashboardBindingHelp("tui.dashboard.filter")).toEqual({
+      keys: "/",
+      label: "filter",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.dismissEsc")).toEqual({
+      keys: "Esc",
+      label: "clear persistent filter",
+    });
+    expect(dashboardBindingHelp("tui.dashboard.quit")).toEqual({
+      keys: "Q",
+      label: "quit",
+    });
   });
 });

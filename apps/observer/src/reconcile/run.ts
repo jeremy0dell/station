@@ -36,8 +36,8 @@ import type {
   PersistedProviderObservation,
   PersistedSessionHarnessExecution,
   PersistedSessionTurnReadiness,
+  PersistedWorktreeDisplayTitle,
   ReconcileStore,
-  ReconcileWorktreeDisplayTitleInput,
   SessionHarnessDerivedStateRepair,
   SessionStore,
   WorktreeMetadataStore,
@@ -238,7 +238,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     harnessRuns,
     terminalTargets,
   });
-  const worktreeDisplayTitles: ReconcileWorktreeDisplayTitleInput[] = worktreesForSnapshot
+  const worktreeDisplayTitles: PersistedWorktreeDisplayTitle[] = worktreesForSnapshot
     .filter(
       (worktree) => worktree.state === "exists" && configuredProjectIds.has(worktree.projectId),
     )
@@ -983,7 +983,7 @@ async function persistReconcileResult(input: {
   worktrees: WorktreeObservation[];
   terminalTargets: TerminalTargetObservation[];
   harnessRuns: HarnessRunObservation[];
-  worktreeDisplayTitles: ReconcileWorktreeDisplayTitleInput[];
+  worktreeDisplayTitles: PersistedWorktreeDisplayTitle[];
   providerHealth: Record<string, ProviderHealth>;
   observedAt: string;
   providerObservationRetentionDays: number;

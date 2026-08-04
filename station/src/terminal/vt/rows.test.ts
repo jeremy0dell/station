@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { TextAttributes } from "@opentui/core";
+import { nativeStationTheme, stationColorSnapshotValue } from "../../theme/index.js";
 import { buildVisibleRows } from "./rows.js";
 import { createStationVtScreen, type StationVtScreen } from "./screen.js";
 
@@ -30,7 +31,7 @@ describe("buildVisibleRows", () => {
     expect(rows[0]?.spans[0]).toEqual({
       text: "abc",
       width: 3,
-      fg: "#cd3131",
+      fg: stationColorSnapshotValue(nativeStationTheme.terminal.ansi16[1]),
       attributes: 0,
     });
     expect(rows[0]?.spans[1]).toEqual({ text: "def", width: 3, attributes: 0 });
@@ -97,8 +98,7 @@ describe("buildVisibleRows", () => {
     const first = "https://example.com/first";
     const second = "mailto:second@example.com";
     const screen = await screenWith(
-      `\x1b]8;;${first}\x1b\\A\x1b]8;;\x1b\\` +
-        `\x1b]8;;${second}\x1b\\B\x1b]8;;\x1b\\`,
+      `\x1b]8;;${first}\x1b\\A\x1b]8;;\x1b\\` + `\x1b]8;;${second}\x1b\\B\x1b]8;;\x1b\\`,
     );
     const spans = buildVisibleRows(screen.unsafeEngine, { cursorVisible: false })[0]?.spans ?? [];
     expect(spans.map(({ text, link }) => ({ text, link }))).toEqual([
@@ -134,7 +134,7 @@ describe("buildVisibleRows", () => {
     expect(spans[0]).toEqual({
       text: "  ",
       width: 2,
-      bg: "#2472c8",
+      bg: stationColorSnapshotValue(nativeStationTheme.terminal.ansi16[4]),
       attributes: 0,
     });
   });

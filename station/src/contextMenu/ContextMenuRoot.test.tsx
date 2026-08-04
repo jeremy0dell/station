@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { StoreApi } from "zustand/vanilla";
-import { createInitialTuiState, type TuiStore } from "@station/dashboard-core";
+import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
+import {
+  createInitialTuiState,
+  type DashboardStateSource,
+} from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { createStationStore } from "../state/store.js";
@@ -62,37 +65,25 @@ async function renderRoot(
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean = () => true,
 ) {
   const setup = await testRender(
-    <ContextMenuRoot
-      store={store}
-      stationViewStore={emptyStationStore()}
-      dispatchMouse={dispatchMouse}
-      automations={[]}
-    />,
+    <StationThemeProvider theme={nativeStationTheme}>
+      <ContextMenuRoot
+        store={store}
+        dashboardState={emptyDashboardState()}
+        dispatchMouse={dispatchMouse}
+        automations={[]}
+      />
+    </StationThemeProvider>,
     { width: 40, height: 10 },
   );
   await setup.flush();
   return setup;
 }
 
-function emptyStationStore(): StoreApi<TuiStore> {
-  const state = {
-    ...createInitialTuiState(),
-    start: () => () => {},
-    handleKey: () => ({ dismissPopup: false }),
-    createQuickSession: () => {},
-    setTerminalRows: () => {},
-    focusDashboardSession: () => {},
-    clearDashboardFocus: () => {},
-    pushToast: () => {},
-    dismissToasts: () => {},
-    expireToasts: () => {},
-    refreshActiveToastExpiry: () => {},
-  } satisfies TuiStore;
+function emptyDashboardState(): DashboardStateSource {
+  const state = createInitialTuiState();
   return {
     getState: () => state,
     getInitialState: () => state,
     subscribe: () => () => {},
-    setState: () => {},
-    destroy: () => {},
-  } as StoreApi<TuiStore>;
+  };
 }

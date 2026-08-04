@@ -26,6 +26,6 @@
     " [h] ○ 17 Scroll fixture session                 codex     idle                                    ",
     "▼ 3 below · showing 17 of 20                                                                       ",
     "────────────────────────────────────────────────────────────────────────────────────────────────── ",
-    "↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                     "
+    "↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                 "
   ]
 }

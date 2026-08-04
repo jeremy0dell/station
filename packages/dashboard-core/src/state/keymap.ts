@@ -1,11 +1,13 @@
 import { SELECTION_KEYS, type SelectionKey } from "../selectors/selectors.js";
 import type { TuiKey } from "./keys.js";
-import type { TuiState } from "./types.js";
+import type { DashboardStateView } from "./types.js";
 
 export type TuiInputMode =
   | "dashboard"
   | "help"
-  | "search"
+  | "persistentFilter"
+  | "persistentFilterConditionField"
+  | "persistentFilterConditionValues"
   | "projectCollapse"
   | "projectSettingsPicker"
   | "removeChooseSlot"
@@ -30,15 +32,17 @@ export type TuiInputMode =
   | "addProjectFailed"
   | "widgetSettings";
 
-export function deriveTuiInputMode(state: TuiState): TuiInputMode {
+export function deriveTuiInputMode(state: DashboardStateView): TuiInputMode {
   const screen = state.screen;
   switch (screen.name) {
     case "dashboard":
       return "dashboard";
     case "help":
       return "help";
-    case "search":
-      return "search";
+    case "persistentFilter":
+      if (screen.conditionEditor?.stage === "field") return "persistentFilterConditionField";
+      if (screen.conditionEditor?.stage === "values") return "persistentFilterConditionValues";
+      return "persistentFilter";
     case "projectCollapse":
       return "projectCollapse";
     case "projectSettingsPicker":
@@ -75,15 +79,20 @@ export function deriveTuiInputMode(state: TuiState): TuiInputMode {
 
 type DashboardKeyPattern =
   | { kind: "char"; char: string; ctrl?: true }
-  | { kind: "named"; named: "return" | "escape" | "up" | "down" }
+  | { kind: "named"; named: "return" | "escape" | "up" | "down" | "left" | "right" }
   | { kind: "slot" };
+
+type DashboardNamedKey = Extract<DashboardKeyPattern, { kind: "named" }>["named"];
 
 type DashboardBindingSpec = {
   id: string;
   pattern: DashboardKeyPattern;
   action: string;
   outcome: "handled" | "exit" | "dismiss-popup";
-  help?: { keys: string; label: string };
+  help?: {
+    keys: string;
+    label: string;
+  };
 };
 
 const slotHelp = { keys: "1-9 a-z", label: "open visible session" };
@@ -104,11 +113,26 @@ export const TUI_DASHBOARD_BINDINGS = [
     outcome: "handled",
   },
   {
+    id: "tui.dashboard.focusLeft",
+    pattern: { kind: "named", named: "left" },
+    action: "tui.focus.left",
+    outcome: "handled",
+  },
+  {
+    id: "tui.dashboard.focusRight",
+    pattern: { kind: "named", named: "right" },
+    action: "tui.focus.right",
+    outcome: "handled",
+  },
+  {
     id: "tui.dashboard.focusActivate",
     pattern: { kind: "named", named: "return" },
     action: "tui.focus.activate",
     outcome: "handled",
-    help: { keys: "↵", label: "open focused session" },
+    help: {
+      keys: "↵",
+      label: "activate focus",
+    },
   },
   {
     // Tab reaches the dashboard as legacy \t, which the byte path folds to
@@ -117,7 +141,10 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "char", char: "i", ctrl: true },
     action: "tui.focus.nextNeedsMe",
     outcome: "handled",
-    help: { keys: "⇥", label: "next session needing you" },
+    help: {
+      keys: "⇥",
+      label: "next session needing you",
+    },
   },
   {
     id: "tui.dashboard.help",
@@ -131,6 +158,10 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "char", char: "?" },
     action: "tui.help.open",
     outcome: "handled",
+    help: {
+      keys: "?",
+      label: "help",
+    },
   },
   {
     id: "tui.dashboard.quit",
@@ -144,13 +175,20 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "named", named: "escape" },
     action: "tui.popup.dismiss",
     outcome: "dismiss-popup",
+    help: {
+      keys: "Esc",
+      label: "clear persistent filter",
+    },
   },
   {
-    id: "tui.dashboard.search",
+    id: "tui.dashboard.filter",
     pattern: { kind: "char", char: "/" },
-    action: "tui.search.open",
+    action: "tui.filter.open",
     outcome: "handled",
-    help: { keys: "/", label: "search" },
+    help: {
+      keys: "/",
+      label: "filter",
+    },
   },
   {
     id: "tui.dashboard.rename",
@@ -178,21 +216,30 @@ export const TUI_DASHBOARD_BINDINGS = [
     pattern: { kind: "char", char: "X" },
     action: "tui.remove.open",
     outcome: "handled",
-    help: { keys: "X", label: "delete session" },
+    help: {
+      keys: "X",
+      label: "delete session",
+    },
   },
   {
     id: "tui.dashboard.newSession",
     pattern: { kind: "char", char: "N" },
     action: "tui.newSession.open",
     outcome: "handled",
-    help: { keys: "N", label: "new" },
+    help: {
+      keys: "N",
+      label: "new",
+    },
   },
   {
     id: "tui.dashboard.addProject",
     pattern: { kind: "char", char: "A" },
     action: "tui.addProject.open",
     outcome: "handled",
-    help: { keys: "A", label: "add" },
+    help: {
+      keys: "A",
+      label: "add",
+    },
   },
   {
     id: "tui.dashboard.widgetSettings",
@@ -237,39 +284,25 @@ export type TuiDashboardBinding =
   | (typeof TUI_GLOBAL_BINDINGS)[number]
   | (typeof TUI_DASHBOARD_BINDINGS)[number];
 
+/** Typed dashboard action vocabulary decoded by the keyboard binding table. */
+export type TuiDashboardAction = TuiDashboardBinding["action"];
+
 export type TuiHelpContentLine =
   | { text: string; align?: "center" }
   | { key: string; description: string };
 
 export const QUIT_HINT_CLOSE = "Q/esc:close";
+export const QUIT_HINT_FILTER_CLOSE = "Q:close";
 export const QUIT_HINT_DISMISS_ERROR = "Esc:dismiss  Q:close";
 
-export function dashboardFooterLabel({
-  columns,
-  quitHint,
-  firstRun = false,
-}: {
-  columns: number;
-  quitHint: string;
-  firstRun?: boolean;
-}): string {
-  const full = firstRun
-    ? `↵ add first project  A add project  ${quitHint}`
-    : `↵ open  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  ${quitHint}`;
-  const compactFirstRun = `↵ add first project  ${quitHint}`;
-  const compact = `↵ open  N new  ⇥ next  / search  X delete  ? help  ${quitHint}`;
-  if (firstRun && full.length > columns) {
-    return quitHint === QUIT_HINT_DISMISS_ERROR && compactFirstRun.length > columns
-      ? quitHint
-      : compactFirstRun;
-  }
-  if (full.length <= columns) {
-    return full;
-  }
-  if (quitHint === QUIT_HINT_CLOSE) {
-    return compact;
-  }
-  return compact.length <= columns ? compact : quitHint;
+export type TuiDashboardBindingId = (typeof TUI_DASHBOARD_BINDINGS)[number]["id"];
+
+/** Returns stable keyboard language without selecting a contextual footer layout. */
+export function dashboardBindingHelp(
+  id: TuiDashboardBindingId,
+): { keys: string; label: string } | undefined {
+  const binding = TUI_DASHBOARD_BINDINGS.find((candidate) => candidate.id === id);
+  return binding !== undefined && "help" in binding ? binding.help : undefined;
 }
 
 export function isSlotKey(key: TuiKey): boolean {
@@ -293,19 +326,39 @@ function matchesPattern(pattern: DashboardKeyPattern, key: TuiKey): boolean {
         key.escape !== true
       );
     case "named":
-      if (pattern.named === "return") {
-        return key.return === true || key.input === "\r" || key.input === "\n";
-      }
-      if (pattern.named === "escape") {
-        return key.escape === true;
-      }
-      if (pattern.named === "up") {
-        return key.upArrow === true;
-      }
-      return key.downArrow === true;
+      return matchesNamedKey(pattern.named, key);
     case "slot":
       return isSlotKey(key);
+    default:
+      return assertNeverDashboardPattern(pattern);
   }
+}
+
+function matchesNamedKey(named: DashboardNamedKey, key: TuiKey): boolean {
+  switch (named) {
+    case "return":
+      return key.return === true || key.input === "\r" || key.input === "\n";
+    case "escape":
+      return key.escape === true;
+    case "up":
+      return key.upArrow === true;
+    case "down":
+      return key.downArrow === true;
+    case "left":
+      return key.leftArrow === true;
+    case "right":
+      return key.rightArrow === true;
+    default:
+      return assertNeverNamedKey(named);
+  }
+}
+
+function assertNeverDashboardPattern(pattern: never): never {
+  throw new Error(`Unhandled dashboard key pattern: ${JSON.stringify(pattern)}`);
+}
+
+function assertNeverNamedKey(named: never): never {
+  throw new Error(`Unhandled dashboard named key: ${named}`);
 }
 
 export function matchDashboardBinding(key: TuiKey): TuiDashboardBinding | undefined {

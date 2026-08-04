@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { StoreApi } from "zustand/vanilla";
-import type { TuiStore } from "@station/dashboard-core";
+import { manyProjectsSnapshot } from "../../station/fixtures/scenarios.js";
+import { makeStationTestRuntime } from "../../station/test/support/makeStationTestRuntime.js";
 import { createStationStore } from "../../state/store.js";
 import { agentWorktreePaneId, type PaneId } from "../../state/types.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
@@ -32,8 +32,18 @@ describe("split cwd resolution along the anchor chain", () => {
   // A row-count-bounded guard wrongly returned undefined for a restored chain deeper than the
   // snapshot's row count, spawning splits in the default cwd instead of the worktree root.
   it("resolves the worktree root for a restored split chain deeper than the row count", () => {
-    const worktreeId = "wt_deep";
+    const worktreeId = "wt_station_working";
     const worktreeRoot = "/wt/deep/root";
+    const baseSnapshot = manyProjectsSnapshot();
+    const worktree = baseSnapshot.rows.find((row) => row.id === worktreeId);
+    if (worktree === undefined) {
+      throw new Error(`Fixture row ${worktreeId} must exist.`);
+    }
+    const snapshot = {
+      ...baseSnapshot,
+      rows: [{ ...worktree, path: worktreeRoot }],
+    };
+    const dashboardState = makeStationTestRuntime({ snapshot }).runtime.state;
     const store = createStationStore({ boot: "empty" });
     const agentPaneId = agentWorktreePaneId(worktreeId);
     store.actions.createPane(agentPaneId, { role: "primary-agent" });
@@ -49,10 +59,6 @@ describe("split cwd resolution along the anchor chain", () => {
       split: { anchorPaneId: "pane-split-1" as PaneId, direction: "right" },
     });
 
-    const stationViewStore = {
-      getState: () => ({ snapshot: { rows: [{ id: worktreeId, path: worktreeRoot }] } }),
-    } as unknown as StoreApi<TuiStore>;
-
     const ensured: Array<{ id: PaneId; options: { cwd?: string } | undefined }> = [];
     const registry = {
       get: () => undefined,
@@ -63,7 +69,7 @@ describe("split cwd resolution along the anchor chain", () => {
 
     const effects = createPaneEffects({
       store,
-      stationViewStore,
+      dashboardState,
       registry,
       resolveAuxShellPlacement: undefined,
       autoCloseOverlay: false,

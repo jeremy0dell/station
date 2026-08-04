@@ -1,9 +1,15 @@
 // OpenTUI port of apps/tui's HelpOverlay: centered box-drawn panel above the
 // dashboard (absolute + zIndex; the dashboard must never reflow for it).
 // Lines come from the shared panel generator over Station's visible help copy.
-import { helpPanelLayout, helpPanelLines } from "@station/dashboard-core";
-import { STATION_COLORS } from "./theme.js";
+import {
+  DASHBOARD_FILTER_CONDITION_KEYS,
+  helpPanelLayout,
+  helpPanelLines,
+} from "@station/dashboard-core";
+import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
+
+const FILTER_CONDITION_KEY_HINT = DASHBOARD_FILTER_CONDITION_KEYS.join("/");
 
 const STATION_HELP_CONTENT = [
   { text: "station help", align: "center" as const },
@@ -18,20 +24,24 @@ const STATION_HELP_CONTENT = [
   { key: "Esc/↑↓", description: "context menu close/move" },
   { key: "Enter/Sp", description: "context menu select" },
   { text: "station project view", align: "center" as const },
-  { key: "↑/↓", description: "move cursor" },
+  { key: "↑/↓", description: "move cursor · wheel scroll" },
   { key: "↵", description: "open focused session" },
   { key: "tab", description: "next session needing you" },
-  { key: "wheel", description: "scroll project list" },
-  { key: "1-9/a-z", description: "open visible session" },
+  { key: "/ ↵ Esc Q", description: "edit/apply/cancel-clear/retain-close filter" },
+  {
+    key: `Tab ${FILTER_CONDITION_KEY_HINT}`,
+    description: "build filter conditions · F applies builder",
+  },
+  { key: "1-9/a-z", description: "open visible session or toggle condition" },
   { key: "N/A/R/C/F/P", description: "new/add/rename/fold/fork/settings" },
   { key: "W", description: "widgets" },
   { key: "X", description: "delete session" },
-  { key: "/, Z", description: "search / refresh snapshot" },
-  { key: "H/?", description: "help" },
-  { key: "Q/Esc", description: "close/back/cancel" },
+  { key: "H/?", description: "help · Z refresh" },
 ] as const;
 
 export function HelpOverlayView({ columns, rows }: { columns: number; rows: number }) {
+  const theme = useStationTheme();
+  const helpBackground = toOpenTuiOpaqueColor(theme.surfaces.help);
   const dispatch = useStationMouse();
   const layout = helpPanelLayout(columns, rows, STATION_HELP_CONTENT);
   const panelLines = helpPanelLines(layout.width, layout.height, STATION_HELP_CONTENT);
@@ -45,11 +55,15 @@ export function HelpOverlayView({ columns, rows }: { columns: number; rows: numb
       height={layout.height}
       zIndex={10}
       flexDirection="column"
-      backgroundColor={STATION_COLORS.overlayBackdrop}
+      backgroundColor={helpBackground}
       {...stationMouseProps(dispatch, { kind: "sheetBackdrop" })}
     >
       {panelLines.map((line, index) => (
-        <text key={`${index}:${line}`} fg={STATION_COLORS.foreground} bg={STATION_COLORS.overlayBackdrop}>
+        <text
+          key={`${index}:${line}`}
+          fg={toOpenTuiColor(theme.text.primary)}
+          bg={helpBackground}
+        >
           {line}
         </text>
       ))}

@@ -10,6 +10,62 @@ The setup engine is dependency-injected end to end (`runner`, `access`, `fs`,
 in-process. The few states that need a real OS (real `brew install`, a truly
 CLT-absent Mac) run in a VM.
 
+The guided and non-interactive surfaces drive one process-local semantic session per invocation.
+Check and plan JSON are projected directly from that semantic state and CLI inspection evidence,
+while `setup system` executes ordered typed bootstrap operations through the CLI operation adapter
+and re-inspects system facts after execution. Its unit suite covers intent-bound inspection, staged prerequisite preparation, revision filtering,
+cancellation during in-flight effects, inspection and operation failures, completed-operation
+checkpoints, non-authoritative progress failures, and the serialized inspection/effect loop. CLI tests also require dry runs to leave
+every operation port unused, preserve actionable boundary errors, and re-inspect package and
+harness installs with refreshed executable paths. Checkpoints prevent an operation completed
+during one invocation from being replayed during that invocation; they retain operation identity
+only, are not a session store, and do not recover a restart. The guided Clack adapter is
+separately covered through injected plain functions for prompt mapping and typed cancellation.
+Real-PTY coverage proves immediate Y/N, empty-selection reprompting, narrow-terminal navigation,
+explicit default selection, terminal restoration, and normalized human-only output. The guided
+opening must present a compact inspection step and only selected prerequisite changes; it must not
+render the Core/Recommended/Actions/Next diagnostic matrix owned by the read-only
+`stn setup check` and `stn setup plan` surfaces. Selected Homebrew tools use compact OSC 8 labels
+that link only to their allowlisted official Formulae pages. The first line remains the primary
+prompt while later consent details are visually subdued; stable command names replace resolved
+temporary shim paths. Tmux checks allow its built-in `next-layout` action to be replaced but reject
+user-configured assignments of the selected prefix key in `~/.tmux.conf` or the current server.
+The tmux operation adapter repeats that check against the exact admitted config bytes and current
+server immediately before mutation, then refuses if either precondition changed.
+Guided transcripts continue to reject raw operation payloads and machine-specific home paths.
+Non-TTY coverage proves guided setup exits
+before inspection or mutation.
+
+Manual interaction uses the same isolation goals without scripted input:
+
+```bash
+pnpm setup:guided:sandbox
+pnpm setup:guided:sandbox -- --profile everything-missing --keep
+```
+
+The command runs the built CLI on the current terminal but supplies a private temporary home,
+config, XDG roots, provider homes, Observer/socket paths, committed Git repository, and fake
+installer/tool commands. It never runs a real package manager or network downloader. Retained
+sandboxes expose their generated `run-setup` launcher, editable `bin/` shims, and
+`external-commands.log` for cancellation, failure, resize, narrow-terminal, and rerun exploration.
+
+The focused automated guided lane requires Python 3 for its standard-library `pty` bridge:
+
+```bash
+pnpm test:e2e:setup:guided
+pnpm test:e2e:setup:guided:all-shells
+```
+
+The bridge isolates the child terminal and normalizes ANSI, OSC, cursor movement, and carriage
+redraws before assertions. Review changes to
+`apps/cli/test/fixtures/setup-guided-transcript.txt` as user-facing copy: regenerate it only from
+the fixed-size PTY scenario, inspect every changed line, and keep environment paths and control
+sequences out. Guided tests reject Station JSON envelopes, operation IDs, provider data, raw argv,
+and object coercion while permitting explicitly bracketed native installer output. External-output
+coverage also verifies that no Clack prompt or spinner owns the terminal while the child owns
+inherited stdin, stdout, and stderr. Cancellation after a committed prerequisite must preserve that
+checkpoint and start no later operation.
+
 ## The profile contract
 
 A **machine profile** is one declarative record of machine state + expected
@@ -21,7 +77,7 @@ comparisons are structural diffs, not log scraping.
 
 ```text
 profile { name, state: { platform, xcodeClt, git, insideRepo, brew, worktrunk,
-                         tmux, bun, diffnav, gitDelta, harnesses[],
+                         tmux, bun, diffViewer, harnesses[],
                          harnessTracking?, configToml? },
           expect: { exitCode, requiredOk, checks: { <id>: <status> } } }
 ```
@@ -92,7 +148,7 @@ pnpm test:env:docker                                         # same, via script
 ```
 
 Requires Docker. Covers: `happy-linux`, `no-git`, `no-tmux`, `no-worktrunk`,
-`no-bun`, `no-diffnav`, `no-harness`.
+`no-bun`, `no-diff-viewer`, `no-harness`.
 
 The minimal Linux images intentionally omit `/usr/bin/lsof`. `happy-linux`
 therefore proves that setup reports `observer-socket-evidence` as a recommended
@@ -107,7 +163,7 @@ keg-only PATH behaviour, and a truly CLT-absent host. We use **Tart**
 copy-on-write `tart clone` (near-instant fresh state), OCI image distribution.
 
 - `tests/env/macos/station-happy.pkr.hcl` — a Packer template that builds the
-  "STATION happy-path" image (brew + node@24 + bun + wt + tmux + diffnav + delta)
+  "STATION happy-path" image (brew + node@24 + bun + wt + tmux + Hunk)
   from a base image. Use `cirruslabs/macos-image-templates` `*-vanilla` (no brew,
   no Xcode) for the `no-brew` / `no-xcode-clt` profiles.
 - `tests/env/macos/run-setup-macos.mjs` — clones the right base per profile, runs
@@ -138,7 +194,9 @@ nothing for tier 1, `docker build --target` for tier 2, `tart clone` for tier 3;
 (2) runs the read-only, machine-readable surfaces (`stn setup check --json`,
 `stn setup plan --json`, `stn setup apply --dry-run`); verifies that several
 runnable CLIs leave selection unresolved and that no read-only mode mutates
-config, provider homes, durable Observer state, sockets, or tmux. The state-
+config, provider homes, durable Observer state, sockets, or tmux. Stable JSON warning rows
+are projected directly at the CLI presenter from semantic evidence, so profile assertions continue to treat
+the published JSON shape—not a core warning-row count—as the machine contract. The state-
 directory readiness check is the narrow exception: it creates and removes a temporary probe file and can
 leave a newly created empty state directory; (3) captures stdout + exit code; (4)
 structurally diffs the JSON plan + exit code against the profile's `expect`; (5)

@@ -63,6 +63,16 @@ were ignored before Observer delivery because Station ownership was missing or
 cwd did not match configured roots. Unsupported provider events intentionally
 produce no per-occurrence log.
 
+Each returned log record marks its `componentRole` as `logging_location`. The
+component says where Station retained the record, not which subsystem owns the
+failure. For a query or a single selected record, `operationalBoundaryEvidence`
+groups only retained operation, command type, signal, record summary, error
+code, and error message facts. `evidenceRoles` identifies that projection as
+failure-and-ownership evidence while keeping the component as logging
+provenance. Queried records also include bounded `matchEvidence` and scalar
+`context` so a caller can cite why the record matched without treating those
+facts as proof of an unrecorded mechanism.
+
 Current-truth tools interact with the live observer. `doctor`, `snapshot`,
 `observe`, `command get`, `reconcile`, and `debug bundle` all contact the
 observer or start it when needed. `debug bundle` also writes a
@@ -83,8 +93,13 @@ stn command get <commandId>
 `stn debug trace` searches existing bundles and structured logs. When a command
 error envelope includes diagnostics, the trace summary can include redacted
 external-command details: command, cwd, exit code, duration, and bounded
-stdout/stderr snippets. It also derives `rootCauseCodes` from command records,
-error envelopes, diagnostic indexes, and matching log errors.
+stdout/stderr snippets. The compatibility `rootCauseCodes` field retains command, envelope, index, and
+matching-log codes. Use `causeAssessment` for causal interpretation: only a
+correlated diagnostic-index root-cause declaration produces
+`explicit_root_cause`; an error code, retained signal, or exactly matched
+warning/error record produces `observed_failure` and does not establish the
+deeper mechanism. Trace output uses the same `evidenceRoles` and
+`operationalBoundaryEvidence` semantics as `debug logs`.
 
 `stn command get <commandId>` asks the live observer for the command lifecycle
 record. Failed provider commands may include the same redacted diagnostics when
@@ -152,6 +167,7 @@ logs/observer.jsonl
 logs/hooks.jsonl
 logs/cli.jsonl
 logs/tui.jsonl
+logs/station-host.jsonl
 diagnostics/*/diagnostic-index.json
 diagnostics/*/commands.jsonl
 diagnostics/*/errors.jsonl
@@ -202,13 +218,96 @@ version (`0.7.0` in this example).
 
 `OBSERVER_HANDOFF_REFUSED` means automatic build or cross-version replacement
 could not proceed safely. Read the running/requested display versions and build
-IDs in the error. A same-version legacy or losing identified build with stable
-PID/start-time health can be stopped explicitly; missing process identity
-refuses rather than risking a successor. It must not attach to different code.
-Inspect `logs/observer-boot.log`, compare `lsof -t <socket>` with the
-strict pidfile and `ps -ww -p <pid> -o lstart=,command=`, then retry only after
-resolving missing or conflicting evidence. Automatic handoff never uses
-SIGKILL.
+IDs in the error. When a replacement child exits, the error also reports its
+exit code, signal, redacted spawn error, or unknown status; the health rejection
+code or unchanged one-second convergence expiry; and that child's bounded,
+redacted boot-log tail or an explicit unavailable marker. Use the included
+trace ID against the same state directory. A same-version legacy or losing
+identified build with stable PID/start-time health can be stopped explicitly;
+missing process identity refuses rather than risking a successor. It must not
+attach to different code. Compare `lsof -t <socket>` with the strict pidfile and
+`ps -ww -p <pid> -o lstart=,command=`, then retry only after resolving missing
+or conflicting evidence. Automatic handoff never uses SIGKILL.
+
+## Preserve Sessions Before Runtime Surgery
+
+When an Observer or Host handoff is blocked and live agent work must survive,
+make a private preservation archive before stopping, unlinking, resuming, or
+replacing anything:
+
+```bash
+pnpm station:sessions:save -- --devbox
+pnpm station:sessions:save -- --config ~/.config/station/config.toml
+pnpm station:sessions:verify -- ~/.local/state/station-session-rescues/<timestamp>
+```
+
+The save command is read-only with respect to Station, provider sessions, and
+worktrees. It captures pinned Observer health and snapshot evidence, an online
+SQLite backup, recovery handles, current-build Host inventory and replay,
+provider-native recovery data, and dirty or unpublished Git worktree state. It
+never stops, closes, resumes, writes to, resizes, or unlinks a live runtime.
+Archives contain terminal output, provider state, configuration, and untracked
+files, so they are created with owner-only permissions and must be handled as
+sensitive data.
+
+A `partial` result is preservation evidence, not permission to proceed. In
+particular, a build mismatch means the script deliberately skipped the
+incompatible Observer snapshot or Host replay. Reopen the checkout/build named
+by the health or handoff evidence and run the same command there; do not spoof
+the build selector. Only consider runtime surgery after `verify` returns
+`"ok": true` and every active session has provider-native recovery data.
+
+A complete archive can drive a fail-closed migration into a separate Station
+runtime. Plan first; planning verifies the archive, requires one exact recovery
+handle per active session, matches the same project/worktree identities in the
+target, and refuses any target worktree that already owns a session:
+
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station
+```
+
+The plan is read-only: it uses `snapshot --require-running`, checks the exact
+source Observer and Host census, verifies target worktree and Host identities,
+refuses live target sessions on providers being migrated, checks provider-file
+conflicts, and prints a SHA-256 digest. It never starts an Observer or
+edits configuration. Apply must bind confirmation to that evidence:
+
+```bash
+pnpm station:sessions:migrate -- \
+  --archive ~/.local/state/station-session-rescues/<timestamp> \
+  --target-config ~/.config/station/config.toml \
+  --source-devbox-root ~/Developer/station \
+  --yes --expect-plan <digest-from-plan>
+```
+
+Apply intentionally has downtime. It closes only the planned source sessions
+without force, proves the source Host owns no live PTY, captures stable final
+provider state into a hash-inventoried private directory, and stops the pinned source
+Observer before importing handles through the recorded
+`session.importRecoveryHandle` command. It then resumes each target and verifies
+its exact Host PTY and provider-native identity. Source and target agents never
+run concurrently, target TOML is never edited, target SQLite is never opened by
+the maintenance script, and an entire devbox is never stopped as a side effect.
+
+Only one apply process may own a digest at a time; a stale owner-private lock is
+reclaimed only after its recorded process is gone. `SIGINT`, `SIGTERM`, and
+`SIGHUP` stop the active child and write the last durable phase to `journal.jsonl`
+plus `report.json`. Before source quiescence, the source
+remains authoritative. An interruption during quiescence may leave only a subset
+of source sessions running; rerun with the same digest so the journal closes the
+remaining sessions. After `source-sealed`, source agents remain stopped and the
+sealed directory is authoritative; the same retry accepts already-resumed exact
+target sessions and continues from sealed evidence instead of rerunning live
+source planning checks.
+
+Codex and OpenCode migration accept each provider's shared source database, an
+absent target database, or a byte-identical target database. They refuse instead
+of merging different nonempty provider databases. Override provider locations with
+`--target-codex-home`, `--target-opencode-db`, and
+`--target-claude-projects` when the target uses isolated homes.
 
 After startup reconcile, the Observer performs one report-only duplicate
 inspection. `stn doctor` reports this as `observer-singleton`: an eligible
@@ -239,6 +338,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 ## Reading Evidence
 
 - `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.
+- A failed hosted binary smoke can upload `binary-smoke-evidence-<run-id>-<attempt>` for three days. Download it with `gh run download <run-id> --name binary-smoke-evidence-<run-id>-<attempt> --dir /tmp/station-binary-smoke-evidence-<run-id>`, then read `manifest.json` before the round's `failure.json`, bounded logs, and runtime summary. The bundle is redacted, allowlisted, and capped at 1 MiB, but collaborators with Actions access can download it. Do not run `stn debug trace` against unrelated live state and treat it as evidence for the downloaded CI run.
 - `observer.claim.sqlite` is boot-exclusion evidence only. Inspect it with
   read-only SQLite tooling after confirming no startup is in progress; never
   infer ownership from the file or sidecars being present.
@@ -246,7 +346,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.
 - `logs/observer.jsonl` and `logs/hooks.jsonl` explain runtime events around reconcile, command execution, hook delivery, projection, spool fallback, and provider health.
-- `logs/tui.jsonl` carries pane corruption telemetry from the native workspace: `Terminal corruption signal.` lines with `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
+- `logs/tui.jsonl` carries the strict native UI lifecycle (`ui.started`, ready/surface changes, shutdown intent/completion, and fatal errors) plus pane corruption telemetry. Lifecycle records contain IDs, typed surfaces/reasons, process outcomes, and source ordering only; they never contain terminal output, prompts, keys, foreground applications, process lists, environment variables, cwd, or repository paths. `Terminal corruption signal.` lines retain `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
 - `diagnostics/panes/` holds pane evidence dumps written when a detector trips: the visible grid plus the raw byte tail that produced it. Feed `rawTail` back through `createStationVtScreen` to replay the corruption offline.
 - SQLite is observer-owned runtime history; inspect through existing debug/diagnostic surfaces unless a task explicitly needs database-level investigation.
 - Logs and bundles are diagnostic evidence only. Reconcile from config/providers/current observer state before treating old evidence as current truth.
@@ -256,9 +356,23 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 
 Station (the OpenTUI terminal workspace under `station/`) adds a second runtime process beside the observer: the `station-station-host` daemon, which owns PTYs that outlive the UI so panes can warm-reattach across a UI restart.
 
-When Station "does nothing" or panes read "exited", check the process topology before the code:
+When Station "does nothing" or panes read "exited", inspect the `cli` and `tui`
+lifecycle logs plus existing Host operational logs, then check the process topology before the code:
 
-- Exactly one Station UI should be running. Two `bun --hot src/main.tsx` instances on one TTY fight over the screen and mouse. `pgrep -f src/main.tsx` should return a single process.
+- Native Station coordinates one UI per input TTY with an active SQLite write
+  transaction and a cooperative Unix-socket endpoint under
+  `/tmp/station-tui-<uid>/<tty-hash>.{sqlite,sock}`. Database-file presence is
+  never evidence of ownership: process exit releases the transaction, and the
+  file should not be deleted as a stale lock. A second current UI asks the
+  incumbent to close and enters raw mode only after acquiring the transaction;
+  Station sends no process signal.
+- `TUI_TTY_LEGACY_OWNER_POSSIBLE` means same-TTY evidence may describe a
+  pre-protocol Station. `TUI_TTY_TAKEOVER_REFUSED` and
+  `TUI_TTY_TAKEOVER_TIMEOUT` mean a current endpoint did not cooperate or did
+  not release ownership within two seconds. Use `Ctrl-Q` in the incumbent. If
+  that is impossible, inspect candidates independently with
+  `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
+  `kill -TERM <independently-verified-station-pid>` yourself.
 - The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy or speaks another protocol. Both are deliberate preservation failures, not stale-socket evidence.
 - The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect live PTYs with `bun run host:list` in `station/`.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
@@ -277,6 +391,12 @@ run/station-host.sock
 logs/station-host.jsonl
 station/layout.json
 ```
+
+The per-TTY claim and endpoint live in the separate cross-config rendezvous
+directory `/tmp/station-tui-<uid>/`; they are intentionally not state-directory
+files. Inspect their owner, type, and mode when diagnosing
+`TUI_TTY_OWNERSHIP_UNAVAILABLE`, but do not infer a live owner from the SQLite
+file or remove it.
 
 ## Harness Event Census
 

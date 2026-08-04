@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import * as timers from "node:timers/promises";
 import { runCli } from "@station/cli";
 import { observerRuntimeFreshnessCheck, rendererRuntimeCheck } from "@station/cli/internal";
 import type {
@@ -208,7 +208,7 @@ describe("CLI diagnostic commands", () => {
             version: observerBuildVersion,
           }),
           collectDiagnostics: async () => {
-            await sleep(1100);
+            await timers.setTimeout(1100);
             return diagnosticSnapshot();
           },
         }) as never,
@@ -392,6 +392,21 @@ describe("CLI diagnostic commands", () => {
           ],
         },
         rootCauseCodes: expect.arrayContaining(["WORKTRUNK_UNSUPPORTED_FLAG"]),
+        causeAssessment: {
+          status: "explicit_root_cause",
+          explicitRootCauseCodes: ["COMMAND_FAILED"],
+          observedFailureCodes: ["WORKTRUNK_UNSUPPORTED_FLAG"],
+          limitations: [],
+        },
+        evidenceRoles: {
+          operationalBoundaryEvidence: "failure_and_ownership_evidence",
+          component: "logging_location_only",
+        },
+        operationalBoundaryEvidence: {
+          commandType: "session.create",
+          errorCode: "WORKTRUNK_UNSUPPORTED_FLAG",
+          errorMessage: "Worktrunk rejected an automation flag used by STATION.",
+        },
       },
     });
   });
@@ -455,6 +470,21 @@ describe("CLI diagnostic commands", () => {
         error: {
           code: "WORKTRUNK_BRANCH_EXISTS",
         },
+        causeAssessment: {
+          status: "observed_failure",
+          explicitRootCauseCodes: [],
+          observedFailureCodes: ["WORKTRUNK_BRANCH_EXISTS"],
+        },
+        evidenceRoles: {
+          operationalBoundaryEvidence: "failure_and_ownership_evidence",
+          component: "logging_location_only",
+        },
+        operationalBoundaryEvidence: {
+          commandType: "session.sendPrompt",
+          recordSummary: "Command failed.",
+          errorCode: "WORKTRUNK_BRANCH_EXISTS",
+          errorMessage: "Branch exists.",
+        },
       },
     });
   });
@@ -501,6 +531,22 @@ describe("CLI diagnostic commands", () => {
         spanId: "spn_lifecycle",
         error: {
           code: "OBSERVER_START_FAILED",
+        },
+        causeAssessment: {
+          status: "observed_failure",
+          explicitRootCauseCodes: [],
+          observedFailureCodes: ["OBSERVER_START_FAILED"],
+          limitations: ["no_explicit_root_cause", "reporting_boundary_only"],
+        },
+        evidenceRoles: {
+          operationalBoundaryEvidence: "failure_and_ownership_evidence",
+          component: "logging_location_only",
+        },
+        operationalBoundaryEvidence: {
+          operation: "cli.observer.start",
+          recordSummary: "Observer lifecycle failed.",
+          errorCode: "OBSERVER_START_FAILED",
+          errorMessage: "Observer did not become healthy before the startup timeout.",
         },
         suggestedCommands: expect.arrayContaining(["stn debug bundle --trace trc_lifecycle"]),
       },
@@ -559,11 +605,28 @@ describe("CLI diagnostic commands", () => {
         query: "protocol",
         components: ["observer", "cli", "tui"],
         matched: 1,
+        causeAssessment: {
+          status: "observed_failure",
+          observedFailureCodes: ["PROTOCOL_VALIDATION_FAILED"],
+        },
+        evidenceRoles: {
+          operationalBoundaryEvidence: "failure_and_ownership_evidence",
+          component: "logging_location_only",
+        },
         records: [
           {
             component: "observer",
+            componentRole: "logging_location",
             level: "error",
             message: "Observer protocol payload failed validation.",
+            operationalBoundaryEvidence: {
+              recordSummary: "Observer protocol payload failed validation.",
+              errorCode: "PROTOCOL_VALIDATION_FAILED",
+              errorMessage: "Observer protocol payload failed validation.",
+            },
+            matchEvidence: expect.arrayContaining([
+              expect.objectContaining({ excerpt: expect.stringContaining("protocol") }),
+            ]),
             error: {
               code: "PROTOCOL_VALIDATION_FAILED",
             },

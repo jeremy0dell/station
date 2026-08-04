@@ -1,5 +1,5 @@
 import { checkTmuxDependency } from "@station/tmux";
-import type { SetupDependencyFact } from "../model.js";
+import type { SetupDependencyFact } from "../adapters/inspectionTypes.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";

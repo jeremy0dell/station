@@ -3,8 +3,7 @@
 // via client runtime (keeping store and runtime reducer synchronized).
 import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
-import type { StoreApi } from "zustand/vanilla";
-import { selectDashboardViewport, type TuiStore } from "@station/dashboard-core";
+import { selectDashboardViewport, type DashboardRuntime } from "@station/dashboard-core";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -12,7 +11,7 @@ import type { StationMouseEvent } from "../../input/mouse.js";
 import { externalAgentSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { routeStationMouse } from "../input/stationMouse.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
-import { createStationViewStore } from "./stationViewStore.js";
+import { createStationDashboardRuntime } from "./dashboardRuntime.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -37,15 +36,15 @@ describe("station command dispatch through the shared client", () => {
   async function makeLiveStore(snapshot = manyProjectsSnapshot()): Promise<Harness> {
     const fake = new FakeTuiObserverService(snapshot);
     const client = createObserverStationClient({ service: fake });
-    const store = createStationViewStore(client);
-    const detach = store.getState().start();
+    const store = createStationDashboardRuntime(client);
+    store.start();
     client.start();
-    const harness: Harness = { fake, client, store, detach };
+    const harness: Harness = { fake, client, store, detach: () => store.dispose() };
     harnesses.push(harness);
     await waitFor(
       () =>
         client.state.getState().connection.state === "connected" &&
-        store.getState().snapshot !== undefined,
+        store.state.getState().snapshot !== undefined,
     );
     return harness;
   }
@@ -54,7 +53,7 @@ describe("station command dispatch through the shared client", () => {
     const { fake, store } = await makeLiveStore();
     const slot = slotForRow(store, "ses_wt_station_idle");
 
-    store.getState().handleKey({ input: slot });
+    store.actions.handleKey({ input: slot });
 
     await waitFor(() => fake.waitedForCommandIds.length === 1);
     expect(fake.dispatched).toEqual([
@@ -129,12 +128,12 @@ describe("station command dispatch through the shared client", () => {
     };
     fake.setSnapshot(reconciled);
 
-    store.getState().handleKey({ input: "Z" });
+    store.actions.handleKey({ input: "Z" });
 
     await waitFor(() => toastMessages(store).includes("observer.reconcile refreshed"));
     expect(fake.reconcileReasons).toEqual(["tui-refresh"]);
     expect(client.state.getState().snapshot).toBe(reconciled);
-    expect(store.getState().snapshot?.generatedAt).toBe(RECONCILED_AT);
+    expect(store.state.getState().snapshot?.generatedAt).toBe(RECONCILED_AT);
   });
 
   it("keeps reconciled state when a later incremental event arrives", async () => {
@@ -144,26 +143,26 @@ describe("station command dispatch through the shared client", () => {
       generatedAt: RECONCILED_AT,
     };
     fake.setSnapshot(reconciled);
-    store.getState().handleKey({ input: "Z" });
-    await waitFor(() => store.getState().snapshot?.generatedAt === RECONCILED_AT);
+    store.actions.handleKey({ input: "Z" });
+    await waitFor(() => store.state.getState().snapshot?.generatedAt === RECONCILED_AT);
 
     fake.emit(rowUpdateEvent("wt_station_idle"));
 
     // Pre-fix, the runtime reduced this event against its stale pre-reconcile
     // base and the mirror reverted the reconciled snapshot in the store.
     await waitFor(() => rowStatusLabel(store, "wt_station_idle") === "working");
-    expect(store.getState().snapshot?.generatedAt).toBe(RECONCILED_AT);
+    expect(store.state.getState().snapshot?.generatedAt).toBe(RECONCILED_AT);
   });
 
   it("shows the reconcile failure toast and clears loading", async () => {
     const { fake, store } = await makeLiveStore();
     fake.nextReconcileError = new Error("reconcile exploded");
 
-    store.getState().handleKey({ input: "Z" });
+    store.actions.handleKey({ input: "Z" });
 
-    await waitFor(() => store.getState().toasts.length > 0);
-    expect(store.getState().toasts[0]?.toast.kind).toBe("error");
-    expect(store.getState().loading).toBe(false);
+    await waitFor(() => store.state.getState().toasts.length > 0);
+    expect(store.state.getState().toasts[0]?.toast.kind).toBe("error");
+    expect(store.state.getState().loading).toBe(false);
     expect(toastMessages(store)).not.toContain("observer.reconcile refreshed");
   });
 
@@ -175,24 +174,18 @@ describe("station command dispatch through the shared client", () => {
     // the resync and produces the connected transition.
     fake.pauseLoadSnapshot();
     fake.failSubscriptions(wrappedConnectError());
-    await waitFor(() => store.getState().observerConnectionStatus.state === "displayOnly");
+    await waitFor(() => store.state.getState().observerConnectionStatus.state === "displayOnly");
     await waitFor(() => fake.subscribeCount >= 2);
 
-    const current = store.getState().observerConnectionStatus;
-    if (current.state !== "displayOnly") {
-      throw new Error("expected a displayOnly connection status");
-    }
-    // Backdate the outage past the recovery-toast threshold.
-    store.setState({
-      observerConnectionStatus: { ...current, since: Date.now() - 3_000 },
-    });
+    // Let the outage cross the recovery-toast threshold without mutating the
+    // runtime's read-only state boundary.
+    await new Promise((resolve) => setTimeout(resolve, 1_501));
+    store.actions.handleKey({ input: "Z" });
 
-    store.getState().handleKey({ input: "Z" });
-
-    await waitFor(() => store.getState().observerConnectionStatus.state === "connected");
+    await waitFor(() => store.state.getState().observerConnectionStatus.state === "connected");
     await waitFor(() => toastMessages(store).includes("Observer reconnected."));
     expect(toastMessages(store)).toContain("observer.reconcile refreshed");
-    expect(store.getState().snapshot !== undefined).toBe(true);
+    expect(store.state.getState().snapshot !== undefined).toBe(true);
   });
 });
 
@@ -201,12 +194,12 @@ const RECONCILED_AT = "2026-06-12T12:30:00.000Z";
 type Harness = {
   fake: FakeTuiObserverService;
   client: StationClient;
-  store: StoreApi<TuiStore>;
+  store: DashboardRuntime;
   detach(): void;
 };
 
-function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
-  const state = store.getState();
+function slotForRow(store: DashboardRuntime, rowId: string): string {
+  const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
@@ -219,19 +212,19 @@ function slotForRow(store: StoreApi<TuiStore>, rowId: string): string {
   return choice.key;
 }
 
-function toastMessages(store: StoreApi<TuiStore>): string[] {
-  return store.getState().toasts.map((entry) => entry.toast.message);
+function toastMessages(store: DashboardRuntime): string[] {
+  return store.state.getState().toasts.map((entry) => entry.toast.message);
 }
 
-function errorToastMessages(store: StoreApi<TuiStore>): string[] {
+function errorToastMessages(store: DashboardRuntime): string[] {
   return store
-    .getState()
+    .state.getState()
     .toasts.filter((entry) => entry.toast.kind === "error")
     .map((entry) => entry.toast.message);
 }
 
-function rowStatusLabel(store: StoreApi<TuiStore>, rowId: string): string | undefined {
-  return store.getState().snapshot?.rows.find((row) => row.id === rowId)?.display.statusLabel;
+function rowStatusLabel(store: DashboardRuntime, rowId: string): string | undefined {
+  return store.state.getState().snapshot?.rows.find((row) => row.id === rowId)?.display.statusLabel;
 }
 
 function rowUpdateEvent(worktreeId: string): StationEvent {

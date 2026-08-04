@@ -2,8 +2,10 @@
 // (AddProjectBottomSheet/parts.tsx + the per-sheet helpers): width-fitted
 // single-line rows. Ink's dimColor becomes the DIM attribute; named colors
 // come from the theme.
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type ColorInput } from "@opentui/core";
+import type { TextProps } from "@opentui/react";
 import { isValidElement, type ReactNode } from "react";
+import stringWidth from "string-width";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import {
   useStationHoverState,
@@ -11,7 +13,12 @@ import {
   stationMouseProps,
 } from "../stationMouseContext.js";
 import { Throbber } from "../Throbber.js";
-import { STATION_COLORS } from "../theme.js";
+import {
+  toOpenTuiColor,
+  useStationTheme,
+  type StationColor,
+  type StationTheme,
+} from "../../../theme/index.js";
 
 export function fit(value: string, width: number): string {
   return value.padEnd(width).slice(0, width);
@@ -19,6 +26,33 @@ export function fit(value: string, width: number): string {
 
 export function spaces(width: number): string {
   return " ".repeat(Math.max(0, width));
+}
+
+export type ResponsiveSheetText = Readonly<{
+  expanded: string;
+  compact: string;
+}>;
+
+const SHEET_FOOTER_PREFIX = " ";
+
+/** Selects the expanded copy only when every cell fits the available width. */
+export function responsiveSheetText(width: number, variants: ResponsiveSheetText): string {
+  return stringWidth(variants.expanded) <= width ? variants.expanded : variants.compact;
+}
+
+/** Accounts for the footer's leading inset when selecting responsive copy. */
+export function responsiveSheetFooterText(width: number, variants: ResponsiveSheetText): string {
+  const textWidth = Math.max(0, width - stringWidth(SHEET_FOOTER_PREFIX));
+  return responsiveSheetText(textWidth, variants);
+}
+
+/** Text inside a sheet is never eligible for terminal drag selection. */
+export function SheetText({ children, ...props }: Omit<TextProps, "selectable">) {
+  return (
+    <text {...props} selectable={false}>
+      {children}
+    </text>
+  );
 }
 
 export function SheetLabelValue({
@@ -33,39 +67,43 @@ export function SheetLabelValue({
   label: string;
   labelWidth?: number;
   value: string | ReactNode;
-  valueColor?: string;
+  valueColor?: StationColor;
   /** Marks the row under a focus ring — a ▸ marker + cyan label instead of dim. */
   focused?: boolean;
 }) {
+  const theme = useStationTheme();
   const labelText = `${focused ? "▸" : " "}${label.padEnd(labelWidth)} `;
   const labelSpan = focused ? (
-    <span fg={STATION_COLORS.cyan}>{labelText}</span>
+    <span fg={toOpenTuiColor(theme.action.primary)}>{labelText}</span>
   ) : (
     <span attributes={TextAttributes.DIM}>{labelText}</span>
   );
   if (isValidElement(value)) {
     return (
-      <text fg={STATION_COLORS.foreground}>
+      <SheetText fg={toOpenTuiColor(theme.text.primary)}>
         {labelSpan}
         {value}
-      </text>
+      </SheetText>
     );
   }
   return (
-    <text fg={STATION_COLORS.foreground}>
+    <SheetText fg={toOpenTuiColor(theme.text.primary)}>
       {labelSpan}
-      <span {...(valueColor === undefined ? {} : { fg: valueColor })}>
+      <span {...(valueColor === undefined ? {} : { fg: toOpenTuiColor(valueColor) })}>
         {fit(String(value), Math.max(1, width - labelText.length))}
       </span>
-    </text>
+    </SheetText>
   );
 }
 
 export function SheetLine({ width, children }: { width: number; children: string | ReactNode }) {
+  const theme = useStationTheme();
   if (isValidElement(children)) {
-    return <text fg={STATION_COLORS.foreground}>{children}</text>;
+    return <SheetText fg={toOpenTuiColor(theme.text.primary)}>{children}</SheetText>;
   }
-  return <text fg={STATION_COLORS.foreground}>{fit(String(children), width)}</text>;
+  return (
+    <SheetText fg={toOpenTuiColor(theme.text.primary)}>{fit(String(children), width)}</SheetText>
+  );
 }
 
 export function SheetFill({ count, width }: { count: number; width: number }) {
@@ -81,10 +119,11 @@ export function SheetFill({ count, width }: { count: number; width: number }) {
 }
 
 export function SheetFooter({ width, children }: { width: number; children: string }) {
+  const theme = useStationTheme();
   return (
-    <text fg={STATION_COLORS.foreground} attributes={TextAttributes.DIM}>
-      {fit(` ${children}`, width)}
-    </text>
+    <SheetText fg={toOpenTuiColor(theme.text.primary)} attributes={TextAttributes.DIM}>
+      {fit(`${SHEET_FOOTER_PREFIX}${children}`, width)}
+    </SheetText>
   );
 }
 
@@ -101,7 +140,7 @@ export function SheetChoiceLine({
   choiceKey: string;
   label: string;
   detail: string;
-  color?: string | undefined;
+  color?: StationColor | undefined;
   width: number;
   /** Marks the row as the currently-selected option (e.g. a project's default). */
   current?: boolean;
@@ -110,6 +149,7 @@ export function SheetChoiceLine({
   /** Right-aligned dim status (e.g. "updating…") shown in the row's free space. */
   note?: string | undefined;
 }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const focused = hover || selected;
@@ -126,84 +166,308 @@ export function SheetChoiceLine({
   const visibleNote = (note ?? "").slice(0, free);
   const gap = spaces(free - visibleNote.length);
   return (
-    <text
-      fg={focused ? STATION_COLORS.green : STATION_COLORS.foreground}
-      {...(focused ? { bg: STATION_COLORS.hoverBackground } : {})}
+    <SheetText
+      fg={toOpenTuiColor(focused ? theme.status.success : theme.text.primary)}
+      {...(focused ? { bg: toOpenTuiColor(theme.interaction.hover) } : {})}
       {...stationMouseProps(dispatch, { kind: "sheetChoice", choiceKey })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
-      <span {...(current ? { fg: STATION_COLORS.cyan } : {})}>{marker}</span>
+      <span {...(current ? { fg: toOpenTuiColor(theme.action.primary) } : {})}>{marker}</span>
       {keyPrefix}
       {detailPrefix}
-      <span {...(color === undefined ? {} : { fg: color })}>{visibleDetail}</span>
+      <span {...(color === undefined ? {} : { fg: toOpenTuiColor(color) })}>{visibleDetail}</span>
       {gap}
       <span attributes={TextAttributes.DIM}>{visibleNote}</span>
-    </text>
+    </SheetText>
   );
 }
 
 export function SheetProgressFooter({ width, children }: { width: number; children: string }) {
+  const theme = useStationTheme();
   const throbberWidth = 3;
   const labelText = ` ${children}`.slice(0, Math.max(0, width - throbberWidth));
   const fillWidth = Math.max(0, width - labelText.length - throbberWidth);
   return (
-    <text fg={STATION_COLORS.foreground}>
+    <SheetText fg={toOpenTuiColor(theme.text.primary)}>
       <span attributes={TextAttributes.DIM}>{labelText}</span>
       <Throbber variant="dots" />
       {fillWidth > 0 ? <span attributes={TextAttributes.DIM}>{spaces(fillWidth)}</span> : null}
-    </text>
+    </SheetText>
   );
 }
 
-export type SheetButtonTone = "success" | "danger";
+export type SheetButtonTone = "neutral" | "primary" | "success" | "danger";
 
-const BUTTON_TONE_COLORS: Record<SheetButtonTone, string> = {
-  success: STATION_COLORS.green,
-  danger: STATION_COLORS.red,
-};
+function sheetButtonToneColor(theme: StationTheme, tone: SheetButtonTone): ColorInput {
+  switch (tone) {
+    case "neutral":
+      return toOpenTuiColor(theme.text.primary);
+    case "primary":
+      return toOpenTuiColor(theme.action.primary);
+    case "success":
+      return toOpenTuiColor(theme.action.success);
+    case "danger":
+      return toOpenTuiColor(theme.action.danger);
+  }
+}
 
-export function SheetButton({
+function SheetButton({
   label,
   shortcut,
   tone,
   fixedWidth,
   mouseTarget,
+  focused = false,
+  disabled = false,
 }: {
   label: string;
   shortcut: string;
   tone: SheetButtonTone;
   fixedWidth: number;
   mouseTarget: StationMouseTarget;
+  focused?: boolean;
+  disabled?: boolean;
 }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
-  const color = BUTTON_TONE_COLORS[tone];
+  const color = disabled ? toOpenTuiColor(theme.text.muted) : sheetButtonToneColor(theme, tone);
+  const active = !disabled && hover;
+  const attributes = interactiveAttributes({
+    active,
+    disabled,
+    emphasized: focused,
+  });
+  const background = interactiveBackground(
+    active,
+    focused,
+    color,
+    toOpenTuiColor(theme.interaction.keyboardFocus),
+  );
+  const marker = focused ? "▸ " : "  ";
+  const shortcutText = `(${shortcut})`;
+  const available = Math.max(0, fixedWidth - marker.length);
+  const showShortcut = available > shortcutText.length + 1;
+  const labelWidth = Math.max(0, available - (showShortcut ? shortcutText.length + 1 : 0));
+  const visibleLabel = label.slice(0, labelWidth);
+  const renderedShortcut = showShortcut ? ` ${shortcutText}` : "";
+  const trailing = spaces(
+    fixedWidth - marker.length - visibleLabel.length - renderedShortcut.length,
+  );
+  const shortcutColor = active
+    ? toOpenTuiColor(theme.text.inverse)
+    : disabled
+      ? toOpenTuiColor(theme.text.muted)
+      : toOpenTuiColor(theme.action.warning);
   return (
-    <text
+    <SheetText
       width={fixedWidth}
-      fg={hover ? STATION_COLORS.background : color}
-      attributes={hover ? TextAttributes.BOLD : TextAttributes.NONE}
-      {...(hover ? { bg: color } : {})}
-      {...stationMouseProps(dispatch, mouseTarget)}
-      onMouseOver={() => setHover(true)}
+      fg={active ? toOpenTuiColor(theme.text.inverse) : color}
+      attributes={attributes}
+      {...background}
+      {...(disabled ? {} : stationMouseProps(dispatch, mouseTarget))}
+      onMouseOver={() => {
+        if (!disabled) setHover(true);
+      }}
       onMouseOut={() => setHover(false)}
     >
-      {fit(` ${label} (${shortcut})`, fixedWidth)}
-    </text>
+      {marker}
+      {visibleLabel}
+      {showShortcut ? (
+        <>
+          {" "}
+          <span fg={shortcutColor} attributes={disabled ? TextAttributes.DIM : TextAttributes.BOLD}>
+            {shortcutText}
+          </span>
+        </>
+      ) : null}
+      {trailing}
+    </SheetText>
   );
+}
+
+export type SheetButtonSpec = {
+  id: string;
+  label: string;
+  compactLabel?: string;
+  shortcut: string;
+  tone: SheetButtonTone;
+  mouseTarget: StationMouseTarget;
+  focused: boolean;
+  disabled: boolean;
+};
+
+function naturalSheetButtonWidth(button: SheetButtonSpec): number {
+  return button.label.length + button.shortcut.length + 5;
+}
+
+/** Natural-width action group that uses compact equal-width controls only when content cannot fit. */
+export function SheetButtonRow({
+  width,
+  buttons,
+}: {
+  width: number;
+  buttons: readonly SheetButtonSpec[];
+}) {
+  if (buttons.length === 0) return null;
+  const naturalWidths = buttons.map(naturalSheetButtonWidth);
+  const roomyGap = 2;
+  const naturalTotal =
+    naturalWidths.reduce((total, buttonWidth) => total + buttonWidth, 0) +
+    roomyGap * (buttons.length - 1);
+  const naturalLayout = naturalTotal <= width;
+  const gap = naturalLayout ? roomyGap : width >= buttons.length * 8 ? 1 : 0;
+  const fallbackWidth = Math.max(
+    1,
+    Math.floor((width - gap * (buttons.length - 1)) / buttons.length),
+  );
+
+  return (
+    <box flexDirection="row" width={width} height={1}>
+      {buttons.map((button, index) => (
+        <box key={button.id} flexDirection="row" height={1}>
+          {index === 0 || gap === 0 ? null : <SheetText>{spaces(gap)}</SheetText>}
+          <SheetButton
+            label={naturalLayout ? button.label : (button.compactLabel ?? button.label)}
+            shortcut={button.shortcut}
+            tone={button.tone}
+            fixedWidth={naturalLayout ? (naturalWidths[index] ?? fallbackWidth) : fallbackWidth}
+            mouseTarget={button.mouseTarget}
+            focused={button.focused}
+            disabled={button.disabled}
+          />
+        </box>
+      ))}
+    </box>
+  );
+}
+
+/** Interactive field whose label, accelerator, value, and status remain visually associated. */
+export function SheetControlRow({
+  width,
+  label,
+  labelWidth = 11,
+  shortcut,
+  value,
+  valueCells,
+  status,
+  focused = false,
+  disabled = false,
+  mouseTarget,
+}: {
+  width: number;
+  label: string;
+  labelWidth?: number;
+  shortcut?: string;
+  value: string | ReactNode;
+  valueCells?: number;
+  status?: { glyph: string; text: string; color?: StationColor };
+  focused?: boolean;
+  disabled?: boolean;
+  mouseTarget: StationMouseTarget;
+}) {
+  const theme = useStationTheme();
+  const dispatch = useStationMouse();
+  const [hover, setHover] = useStationHoverState();
+  const marker = focused ? "▸ " : "  ";
+  const shortcutText = shortcut === undefined ? "" : ` (${shortcut})`;
+  const labelPadding = spaces(Math.max(0, labelWidth - label.length - shortcutText.length));
+  const statusText = status === undefined ? "" : ` ${status.glyph} ${status.text}`;
+  const prefixCells = marker.length + label.length + shortcutText.length + labelPadding.length + 1;
+  const valueBudget = Math.max(0, width - prefixCells - statusText.length);
+  const valueElement = isValidElement(value) ? value : undefined;
+  const visibleValue = typeof value === "string" ? value.slice(0, valueBudget) : "";
+  const renderedValueCells =
+    valueElement === undefined ? visibleValue.length : Math.min(valueBudget, valueCells ?? 0);
+  const rowWidth = Math.max(
+    1,
+    Math.min(width, prefixCells + renderedValueCells + statusText.length),
+  );
+  const foreground = toOpenTuiColor(disabled ? theme.text.muted : theme.text.primary);
+
+  return (
+    <SheetText
+      width={rowWidth}
+      wrapMode="none"
+      fg={foreground}
+      attributes={disabled ? TextAttributes.DIM : TextAttributes.NONE}
+      {...(hover && !disabled ? { bg: toOpenTuiColor(theme.interaction.hover) } : {})}
+      {...(disabled ? {} : stationMouseProps(dispatch, mouseTarget))}
+      onMouseOver={() => {
+        if (!disabled) setHover(true);
+      }}
+      onMouseOut={() => setHover(false)}
+    >
+      <span fg={focused ? toOpenTuiColor(theme.action.primary) : foreground}>{marker}</span>
+      <span
+        fg={focused ? toOpenTuiColor(theme.action.primary) : foreground}
+        attributes={focused ? TextAttributes.BOLD : TextAttributes.DIM}
+      >
+        {label}
+      </span>
+      {shortcut === undefined ? null : (
+        <span
+          fg={toOpenTuiColor(disabled ? theme.text.muted : theme.action.warning)}
+          attributes={disabled ? TextAttributes.DIM : TextAttributes.BOLD}
+        >
+          {shortcutText}
+        </span>
+      )}
+      {labelPadding} {valueElement ?? visibleValue}
+      {status === undefined ? null : (
+        <span fg={status.color === undefined ? foreground : toOpenTuiColor(status.color)}>
+          {statusText}
+        </span>
+      )}
+    </SheetText>
+  );
+}
+
+function interactiveAttributes({
+  active,
+  disabled,
+  emphasized,
+}: {
+  active: boolean;
+  disabled: boolean;
+  emphasized: boolean;
+}) {
+  if (disabled) return TextAttributes.DIM;
+  return active || emphasized ? TextAttributes.BOLD : TextAttributes.NONE;
+}
+
+function interactiveBackground(
+  active: boolean,
+  focused: boolean,
+  activeColor: ColorInput,
+  focusedColor: ColorInput,
+): { bg?: ColorInput } {
+  if (active) return { bg: activeColor };
+  if (focused) return { bg: focusedColor };
+  return {};
 }
 
 export type SheetMessageTone = "normal" | "muted" | "accent" | "success" | "danger" | "warning";
 
-const TONE_COLORS: Record<SheetMessageTone, string | undefined> = {
-  normal: undefined,
-  muted: undefined, // rendered DIM instead
-  accent: STATION_COLORS.cyan,
-  success: STATION_COLORS.green,
-  danger: STATION_COLORS.red,
-  warning: STATION_COLORS.yellow,
-};
+function sheetMessageToneColor(
+  theme: StationTheme,
+  tone: SheetMessageTone,
+): ColorInput | undefined {
+  switch (tone) {
+    case "normal":
+    case "muted":
+      return undefined;
+    case "accent":
+      return toOpenTuiColor(theme.action.primary);
+    case "success":
+      return toOpenTuiColor(theme.status.success);
+    case "danger":
+      return toOpenTuiColor(theme.status.danger);
+    case "warning":
+      return toOpenTuiColor(theme.status.warning);
+  }
+}
 
 export function SheetMessageLine({
   width,
@@ -214,15 +478,16 @@ export function SheetMessageLine({
   tone?: SheetMessageTone;
   children: string;
 }) {
+  const theme = useStationTheme();
   const text = fit(` ${children}`, width);
-  const color = TONE_COLORS[tone];
+  const color = sheetMessageToneColor(theme, tone);
   return (
-    <text
-      fg={color ?? STATION_COLORS.foreground}
+    <SheetText
+      fg={color ?? toOpenTuiColor(theme.text.primary)}
       attributes={tone === "muted" ? TextAttributes.DIM : TextAttributes.NONE}
     >
       {text}
-    </text>
+    </SheetText>
   );
 }
 
@@ -235,12 +500,13 @@ export function SheetMetaLine({
   label: string;
   value: string;
 }) {
+  const theme = useStationTheme();
   const labelText = ` ${label.padEnd(7)} `;
   return (
-    <text fg={STATION_COLORS.foreground}>
+    <SheetText fg={toOpenTuiColor(theme.text.primary)}>
       <span attributes={TextAttributes.DIM}>{labelText}</span>
       {fit(value, Math.max(1, width - labelText.length))}
-    </text>
+    </SheetText>
   );
 }
 
@@ -249,31 +515,6 @@ export function SheetSectionLine({ width, children }: { width: number; children:
     <SheetMessageLine width={width} tone="accent">
       {children}
     </SheetMessageLine>
-  );
-}
-
-/** The Yes/No confirm row shared by the bottom-sheet confirm dialogs. */
-export function SheetConfirmButtons({ width }: { width: number }) {
-  const gap = width >= 22 ? 2 : 0;
-  const buttonWidth = Math.max(1, Math.min(10, Math.floor((width - gap) / 2)));
-  return (
-    <box flexDirection="row" width={width}>
-      <SheetButton
-        label="Yes"
-        shortcut="y"
-        tone="success"
-        fixedWidth={buttonWidth}
-        mouseTarget={{ kind: "sheetButton", key: "y" }}
-      />
-      {gap > 0 ? <text>{spaces(gap)}</text> : null}
-      <SheetButton
-        label="No"
-        shortcut="n"
-        tone="danger"
-        fixedWidth={buttonWidth}
-        mouseTarget={{ kind: "sheetButton", key: "n" }}
-      />
-    </box>
   );
 }
 
@@ -297,6 +538,7 @@ export function SheetPickerLine({
   /** When set, clicking the row moves the flow cursor to it. */
   mouseTarget?: StationMouseTarget;
 }) {
+  const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
   const prefix = selected ? " > " : "   ";
@@ -304,10 +546,10 @@ export function SheetPickerLine({
   const maxDetailWidth = Math.max(0, width - prefix.length - 10);
   const visibleDetail = fit(detailText, Math.min(detailText.length, maxDetailWidth));
   const labelWidth = Math.max(1, width - prefix.length - visibleDetail.length);
-  const color = selected || hover ? STATION_COLORS.cyan : STATION_COLORS.foreground;
+  const color = toOpenTuiColor(selected || hover ? theme.action.primary : theme.text.primary);
   return (
-    <text
-      fg={STATION_COLORS.foreground}
+    <SheetText
+      fg={toOpenTuiColor(theme.text.primary)}
       {...(mouseTarget === undefined
         ? {}
         : {
@@ -321,6 +563,6 @@ export function SheetPickerLine({
       {visibleDetail.length > 0 ? (
         <span attributes={TextAttributes.DIM}>{visibleDetail}</span>
       ) : null}
-    </text>
+    </SheetText>
   );
 }
