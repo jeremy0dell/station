@@ -47,7 +47,7 @@ describe("buildContextMenuItems", () => {
         label: "See diff (split right)",
         enabled: true,
         steps: [
-          { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+          { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
         ],
       },
       {

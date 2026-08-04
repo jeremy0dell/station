@@ -2,6 +2,7 @@ import type { SetupConfigMutationPlan } from "@station/config";
 import type { SetupOperation, SetupToolInstallOperation } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
+import { defaultDiffViewer } from "../defaultDiffViewer.js";
 import type { SetupPresentationHarnessSelection, SetupViewAction } from "./setupViewTypes.js";
 
 export function projectSetupActions(input: {
@@ -224,10 +225,8 @@ function toolPresentation(tool: SetupToolInstallOperation["tool"]): {
       return { label: "tmux", formula: "tmux" };
     case "bun":
       return { label: "Bun", formula: "bun" };
-    case "diffnav":
-      return { label: "diffnav", formula: "diffnav" };
-    case "git-delta":
-      return { label: "git-delta", formula: "git-delta" };
+    case "diff-viewer":
+      return { label: defaultDiffViewer.displayName, formula: defaultDiffViewer.formula };
     default:
       return assertNeverTool(tool);
   }

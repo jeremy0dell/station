@@ -37,7 +37,7 @@ export const profiles = {
     setup: "check",
     exitCode: 1,
     requiredOk: false,
-    checks: { worktrunk: "missing", tmux: "missing", bun: "missing", diffnav: "missing" },
+    checks: { worktrunk: "missing", tmux: "missing", bun: "missing", "diff-viewer": "missing" },
   },
   "no-xcode-clt": {
     image: "ghcr.io/cirruslabs/macos-sequoia-vanilla:latest",

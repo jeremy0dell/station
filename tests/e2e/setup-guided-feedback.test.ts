@@ -676,9 +676,8 @@ async function createFixture(input: {
       ? "exit 2\n"
       : 'if [ "$1" = "--version" ]; then echo "Homebrew 4.0.0"; exit 0; fi\nexit 2\n',
   );
-  // diffnav + delta are required; the checks only need the binaries on PATH.
-  await writeShim(bin, "diffnav", "exit 0\n");
-  await writeShim(bin, "delta", "exit 0\n");
+  // Hunk is required; the check only needs its binary on PATH.
+  await writeShim(bin, "hunk", "exit 0\n");
   await writeShim(bin, "bun", "exit 0\n");
   await writeShim(bin, "npm", "echo 0.1.0\n");
   if (
