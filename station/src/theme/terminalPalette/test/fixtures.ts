@@ -74,6 +74,34 @@ export const veryLightTerminalColors = {
   defaultBackground: "#ffffff",
 } as const;
 
+export const nearWhiteTerminalColors = {
+  ...lightTerminalColors,
+  defaultForeground: "#111827",
+  defaultBackground: "#fefefe",
+} as const;
+
+export const weakAnsiLightTerminalColors = {
+  ...lightTerminalColors,
+  palette: [
+    "#f1f2f3",
+    "#f2efee",
+    "#eef2ee",
+    "#f2f1e9",
+    "#eef1f4",
+    "#f1eef3",
+    "#edf2f2",
+    "#f3f3f3",
+    "#e9eaec",
+    "#f0c4c4",
+    "#c9e8c9",
+    "#ebe6b4",
+    "#c4d9f2",
+    "#e0c8ee",
+    "#bae4ea",
+    "#ebebeb",
+  ],
+} as const;
+
 export const weakAnsiTerminalColors = {
   ...darkTerminalColors,
   palette: [

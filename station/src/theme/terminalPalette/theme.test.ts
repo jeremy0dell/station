@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { convert, hexToRGB, OKLCH, sRGB } from "@texel/color";
 import { nativeStationTheme } from "../builtInTheme.js";
 import { stationColorSnapshot, type StationColor, type StationTheme } from "../types.js";
 import { contrastRatio, STATION_TEXT_CONTRAST_RATIO } from "./contrast.js";
@@ -7,8 +8,10 @@ import {
   darkTerminalColors,
   lightTerminalColors,
   lowContrastTerminalColors,
+  nearWhiteTerminalColors,
   veryDarkTerminalColors,
   veryLightTerminalColors,
+  weakAnsiLightTerminalColors,
   weakAnsiTerminalColors,
 } from "./test/fixtures.js";
 import {
@@ -31,6 +34,16 @@ function terminalTheme(value: unknown): StationTheme {
 
 function contrast(first: StationColor, second: StationColor): number {
   return contrastRatio(stationColorSnapshot(first), stationColorSnapshot(second));
+}
+
+function oklchOf(color: StationColor): [number, number, number] {
+  const value = convert(hexToRGB(stationColorSnapshot(color).value), sRGB, OKLCH);
+  return [value[0], value[1], value[2]];
+}
+
+function hueDistance(first: number, second: number): number {
+  const difference = Math.abs(first - second) % 360;
+  return Math.min(difference, 360 - difference);
 }
 
 describe("terminal palette theme construction", () => {
@@ -89,7 +102,12 @@ describe("terminal palette theme construction", () => {
   });
 
   it("keeps ordinary foreground roles readable on every interaction surface", () => {
-    for (const fixture of [darkTerminalColors, lightTerminalColors]) {
+    for (const fixture of [
+      darkTerminalColors,
+      lightTerminalColors,
+      nearWhiteTerminalColors,
+      weakAnsiLightTerminalColors,
+    ]) {
       const theme = terminalTheme(fixture);
       const foregrounds = [
         theme.text.primary,
@@ -147,6 +165,75 @@ describe("terminal palette theme construction", () => {
       expect(contrast(color, theme.surfaces.canvas)).toBeGreaterThanOrEqual(
         STATION_TEXT_CONTRAST_RATIO,
       );
+    }
+  });
+
+  it("keeps layered light surfaces distinct from the canvas and each other", () => {
+    for (const fixture of [lightTerminalColors, nearWhiteTerminalColors]) {
+      const theme = terminalTheme(fixture);
+      const layered = [
+        theme.surfaces.canvas,
+        theme.interaction.hover,
+        theme.interaction.keyboardFocus,
+        theme.interaction.compactFocus,
+        theme.contextMenu.selected,
+      ];
+
+      for (let first = 0; first < layered.length; first += 1) {
+        for (let second = first + 1; second < layered.length; second += 1) {
+          expect(contrast(layered[first], layered[second])).toBeGreaterThan(1.1);
+        }
+      }
+    }
+  });
+
+  it("preserves hue and chroma when repairing weak light ANSI accents", () => {
+    const observed = observation(weakAnsiLightTerminalColors);
+    const theme = terminalTheme(weakAnsiLightTerminalColors);
+    const roles = [
+      ["danger", 9],
+      ["success", 10],
+      ["warning", 11],
+      ["working", 12],
+      ["accent", 13],
+      ["info", 14],
+    ] as const;
+
+    for (const [role, index] of roles) {
+      const color = theme.status[role];
+      const source = oklchOf(observed.ansi16[index]);
+      const corrected = oklchOf(color);
+
+      expect(color.kind).toBe("rgb");
+      expect(contrast(color, theme.surfaces.canvas)).toBeGreaterThanOrEqual(
+        STATION_TEXT_CONTRAST_RATIO,
+      );
+      expect(hueDistance(corrected[2], source[2])).toBeLessThan(6);
+      expect(corrected[1]).toBeGreaterThanOrEqual(0.6 * source[1]);
+    }
+  });
+
+  it("keeps chromatic status roles recognizably distinct", () => {
+    for (const fixture of [
+      darkTerminalColors,
+      lightTerminalColors,
+      nearWhiteTerminalColors,
+      weakAnsiLightTerminalColors,
+    ]) {
+      const theme = terminalTheme(fixture);
+      const hues = ["danger", "warning", "success", "working", "info", "accent"] as const;
+      const roleHues = hues.map((role) => oklchOf(theme.status[role])[2]);
+      let minimumDistance = 360;
+      for (let first = 0; first < roleHues.length; first += 1) {
+        for (let second = first + 1; second < roleHues.length; second += 1) {
+          minimumDistance = Math.min(
+            minimumDistance,
+            hueDistance(roleHues[first], roleHues[second]),
+          );
+        }
+      }
+
+      expect(minimumDistance).toBeGreaterThanOrEqual(30);
     }
   });
 
