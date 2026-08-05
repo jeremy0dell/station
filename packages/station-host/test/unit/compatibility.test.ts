@@ -6,6 +6,16 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("classifyHostCompatibility", () => {
+  it("treats the version 5 request shape as incompatible with version 6", () => {
+    expect(HOST_PROTOCOL_VERSION).toBe(6);
+    expect(
+      classifyHostCompatibility(
+        { ok: true, protocolVersion: 5, buildVersion: "build-current" },
+        "build-current",
+      ),
+    ).toEqual({ action: "refuse", reason: "protocol-mismatch" });
+  });
+
   it("reuses only an exact protocol and opaque build match", () => {
     expect(
       classifyHostCompatibility(

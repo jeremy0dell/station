@@ -38,8 +38,19 @@ export type PtyTableOptions = {
   maxScrollbackBytes?: number;
   /** Test seam for deterministic capture barriers and serializer failures. */
   createSemanticTerminal?: (cols: number, rows: number) => SemanticTerminalModel;
-  /** Lifecycle observability — safe identifiers, classifications, and counts; never PTY data/env. */
+  /** Operational observability — safe identifiers, classifications, and counts; never PTY data/env. */
   onEvent?: (event: string, attributes: Record<string, unknown>) => void;
+  /** Typed PTY exit boundary, separate from the legacy operational event stream. */
+  onPtyExit?: (event: PtyExitEvent) => void;
+};
+
+export type PtySpawnOutcome = HostSpawnResult & { created: boolean };
+
+export type PtyExitEvent = {
+  ptyId: string;
+  ptyKind: HostPtyIdentity["kind"];
+  exitCode: number | null;
+  signal?: number | null;
 };
 
 /** Raw-ring diagnostic used by Host tests; wire replay is chosen asynchronously by attach. */
@@ -53,7 +64,7 @@ export type PtySnapshot = {
 };
 
 export type PtyTable = {
-  spawn(params: HostSpawnParams): HostSpawnResult;
+  spawn(params: HostSpawnParams): PtySpawnOutcome;
   write(ptyId: string, data: string): void;
   resize(ptyId: string, cols: number, rows: number): void;
   list(): HostListEntry[];
@@ -95,6 +106,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
   const createSemanticTerminal =
     options.createSemanticTerminal ?? createSemanticTerminalSnapshot;
   const emit = options.onEvent ?? (() => undefined);
+  const emitPtyExit = options.onPtyExit ?? (() => undefined);
   const entries = new Map<string, PtyEntry>();
   let sequence = 0;
 
@@ -158,7 +170,21 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     entry.terminal.dispose();
     entry.semantic.dispose();
     entries.delete(entry.ptyId);
-    emit("agent.exit", { ptyId: entry.ptyId, exitCode: exitFrame.exitCode, reason });
+    const exitEvent: PtyExitEvent = {
+      ptyId: entry.ptyId,
+      ptyKind: entry.identity.kind,
+      exitCode: exitFrame.exitCode,
+    };
+    if (exitFrame.signal !== undefined) {
+      exitEvent.signal = exitFrame.signal;
+    }
+    emitPtyExit(exitEvent);
+    emit("agent.exit", {
+      ptyId: entry.ptyId,
+      exitCode: exitFrame.exitCode,
+      reason,
+      ...(exitFrame.signal === undefined ? {} : { signal: exitFrame.signal }),
+    });
   }
 
   function requireEntry(ptyId: string): PtyEntry {
@@ -171,11 +197,18 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
   return {
     spawn(params) {
-      // Idempotent per worktree: a live PTY for the same target is reused so a
-      // racing second prepare/launch never forks two agents for one worktree.
+      // Idempotency is session-qualified: deterministic target ids are reused
+      // across generations, but a newer session must never attach to the old PTY.
       for (const existing of entries.values()) {
         if (!existing.exited && existing.identity.terminalTargetId === params.terminalTargetId) {
-          return { ptyId: existing.ptyId, pid: existing.terminal.pid };
+          if (existing.identity.sessionId === params.sessionId) {
+            return { ptyId: existing.ptyId, pid: existing.terminal.pid, created: false };
+          }
+          throw new StationHostProviderError(
+            "HOST_TARGET_SESSION_CONFLICT",
+            "A live host PTY already owns this terminal target for another session.",
+            { worktreeId: params.worktreeId, sessionId: params.sessionId },
+          );
         }
       }
 
@@ -269,7 +302,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       );
 
       // pid stabilizes to PTY's child once bridge reports ready; host.list is authoritative.
-      return { ptyId: entry.ptyId, pid: terminal.pid };
+      return { ptyId: entry.ptyId, pid: terminal.pid, created: true };
     },
 
     write(ptyId, data) {

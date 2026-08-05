@@ -6,16 +6,17 @@ import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import {
   addProjectSelectedIndex,
-  persistentFilterExperience,
   removeProjectConfirmPhrase,
   selectDashboardViewport,
-  type DashboardRuntime,
   type DashboardRuntimeOptions,
 } from "@station/dashboard-core";
 import { agentWorktreePaneId } from "../../state/types.js";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
-import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
+import {
+  makeStationTestRuntime,
+  type StationTestDashboardRuntime,
+} from "../test/support/makeStationTestRuntime.js";
 import { resolveKeyRowAgentTarget, resolveRowAgentTarget } from "./stationActions.js";
 import { routeStationMouse } from "./stationMouse.js";
 
@@ -64,7 +65,7 @@ const SCROLL_UP: StationMouseEvent = {
 function makeStore(
   snapshot?: StationSnapshot,
   initialState?: DashboardRuntimeOptions["initialState"],
-): DashboardRuntime {
+): StationTestDashboardRuntime {
   // Enough rows to keep the same visible window as before the pinned fleet bar +
   // column header, so the station-project rows stay slot-addressable.
   return makeStationTestRuntime({
@@ -388,13 +389,12 @@ describe("routeStationMouse", () => {
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().screen).toEqual(before.screen);
-    expect(store.state.getState().searchQuery).toBe(before.searchQuery);
+    expect(store.state.getState().screen).toMatchObject({ name: "persistentFilter" });
   });
 
   it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
     const store = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
       initialState: { persistentFilter: { query: "working" } },
     }).runtime;
 
@@ -434,11 +434,9 @@ describe("routeStationMouse", () => {
   it("routes condition building and final apply clicks through the same transitions as keys", () => {
     const clicked = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     const keyed = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     for (const store of [clicked, keyed]) {
       store.actions.handleKey({ input: "/" });
@@ -494,7 +492,6 @@ describe("routeStationMouse", () => {
   it("routes the top back and close controls independently", () => {
     const store = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "i", ctrl: true });
@@ -525,7 +522,6 @@ describe("routeStationMouse", () => {
   it("click-away discards only the active field's unretained changes", () => {
     const store = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "draft" });
@@ -663,7 +659,10 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "", escape: true });
     store.actions.handleKey({ input: "/" });
     routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
-    expect(store.state.getState().screen).toMatchObject({ name: "search", value: "" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "", cursor: 0 },
+    });
   });
 
   it("treats right-click as inert at the STATION router layer", () => {
@@ -727,6 +726,29 @@ describe("routeStationMouse", () => {
     });
   });
 
+  it("resolves native shell targets from client truth when dashboard projection is stale", () => {
+    const fixture = makeStationTestRuntime({ terminalRows: 14 });
+    const canonical = manyProjectsSnapshot();
+    const canonicalPath = "/canonical/station/pty-buffer";
+    fixture.source.setSnapshot({
+      ...canonical,
+      rows: canonical.rows.map((row) =>
+        row.id === "wt_station_idle" ? { ...row, path: canonicalPath } : row,
+      ),
+    });
+
+    const outcome = routeStationMouse(
+      { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      fixture.runtime,
+    );
+
+    expect(fixture.runtime.state.getState().snapshot?.rows.find(
+      (row) => row.id === "wt_station_idle",
+    )?.path).not.toBe(canonicalPath);
+    expect(outcome).toMatchObject({ kind: "open-pane", cwd: canonicalPath });
+  });
+
   it("opens a shell pane for a project header click at the project root", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
@@ -769,7 +791,7 @@ describe("routeStationMouse", () => {
 
   it("gates the open-shell affordance to dashboard mode", () => {
     const store = makeStore();
-    store.actions.handleKey({ input: "/" }); // enter search (non-dashboard) mode
+    store.actions.handleKey({ input: "/" }); // enter filter (non-dashboard) mode
 
     expect(
       routeStationMouse(
@@ -900,7 +922,7 @@ describe("routeStationMouse", () => {
 
   it("gates quick-session and default-agent picker to dashboard mode", () => {
     const store = makeStore();
-    store.actions.handleKey({ input: "/" }); // enter search mode
+    store.actions.handleKey({ input: "/" }); // enter filter mode
 
     expect(
       routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
@@ -1060,7 +1082,7 @@ describe("resolveKeyRowAgentTarget", () => {
   });
 });
 
-function pendingStartIds(store: DashboardRuntime): string[] {
+function pendingStartIds(store: StationTestDashboardRuntime): string[] {
   return store.state.getState().localRows.pendingStart.map((row) => row.localId);
 }
 
@@ -1083,13 +1105,13 @@ function projectRoot(projectId: string): string {
   return root;
 }
 
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
   // Mirrors the viewport selector the actions module uses; resolved through
-  // the store so the slot reflects current scroll/search state.
+  // the store so the slot reflects current scroll/filter state.
   const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
     (candidate) => candidate.value.id === rowId,
   );
@@ -1109,7 +1131,7 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe("routeStationMouse widget settings", () => {
-  function panelStore(): DashboardRuntime {
+  function panelStore(): StationTestDashboardRuntime {
     const store = makeStore(undefined, { widgets: [{ type: "time" }, { type: "moon" }] });
     store.actions.handleKey({ input: "W" });
     return store;

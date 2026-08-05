@@ -36,8 +36,7 @@ export const setupMessageCatalog = {
   "label.tmux-popup": { terminal: "tmux popup binding" },
   "label.worktrunk-hooks": { terminal: "Worktrunk hooks" },
   "label.harness-tracking": { terminal: "{harness} tracking" },
-  "label.diffnav": { terminal: "diffnav" },
-  "label.git-delta": { terminal: "git-delta" },
+  "label.diff-viewer": { terminal: "Hunk" },
   "label.doctor": { terminal: "stn doctor" },
   "label.config-diagnostics": { terminal: "Station config diagnostics" },
   "label.command-line-tools": { terminal: "Command Line Tools" },
@@ -130,19 +129,6 @@ export const setupMessageCatalog = {
   },
   "check.tracking-prepared": {
     terminal: "{harness} Station tracking artifacts are prepared on disk.",
-  },
-  "check.diffnav-ready": {
-    terminal: "diffnav is available for Station’s ‘See diff (split right)’ automation.",
-  },
-  "check.diffnav-missing": {
-    terminal: "diffnav is required for Station’s ‘See diff (split right)’ automation.",
-  },
-  "check.git-delta-ready": {
-    terminal: "git-delta is available; diffnav uses it to render Station’s ‘See diff’ automation.",
-  },
-  "check.git-delta-missing": {
-    terminal:
-      "git-delta is required because diffnav uses it to render Station’s ‘See diff’ automation.",
   },
   "check.git-outside-repository": {
     terminal: "Git is available; choose projects explicitly in Station.",
@@ -239,8 +225,8 @@ export const setupMessageCatalog = {
   "next.install-worktrunk": { terminal: "Install Worktrunk." },
   "next.install-tmux": { terminal: "Install tmux." },
   "next.install-bun": { terminal: "Install Bun (brew install bun)." },
-  "next.install-diff-tools": {
-    terminal: "Install diffnav and git-delta (brew install diffnav git-delta).",
+  "next.install-diff-viewer": {
+    terminal: "Install Hunk (brew install hunk).",
   },
   "next.resolve-required": { terminal: "Resolve the missing required setup items." },
   "progress.start": { terminal: "Applying: {label}" },
@@ -301,8 +287,7 @@ export const setupMessageCatalog = {
   "recovery.tmux": { terminal: "tmux is still missing." },
   "recovery.bun": { terminal: "Bun is still missing; bare stn needs it to render the TUI." },
   "recovery.tracking": { terminal: "Prepare the selected agent’s tracking." },
-  "recovery.diffnav": { terminal: "diffnav is still missing." },
-  "recovery.git-delta": { terminal: "git-delta is still missing; diffnav renders through it." },
+  "recovery.diff-viewer": { terminal: "Hunk is still missing." },
   "recovery.core-incomplete": { terminal: "Core setup is incomplete." },
   "recovery.then-run": { terminal: "Then run:" },
   "recovery.run-command": { terminal: "Run: {command}" },

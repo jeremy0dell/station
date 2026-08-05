@@ -7,7 +7,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+// TypeScript 7 has no stable compiler API, so AST linting uses its official TS6 compatibility package.
+import ts from "@typescript/typescript6";
 
 const root = process.cwd();
 const ignoredDirs = new Set(["node_modules", "dist", ".turbo", "coverage"]);

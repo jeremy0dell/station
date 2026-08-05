@@ -11,6 +11,7 @@ import {
 } from "@station/cli/internal";
 import { loadConfig, setTuiWidgetsInConfig, type TuiConfig } from "@station/config";
 import { TUI_RENDERER_CONTROL_PROTOCOL_VERSION } from "@station/contracts";
+import { readJsonlLog } from "@station/observability";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 import { resolveStationWorkspaceDir } from "../../src/stationWorkspace.js";
@@ -856,7 +857,7 @@ describe("CLI tui command", () => {
     const fixture = await createTempState();
     const stationUiInstalled = vi.fn(async () => false);
     const spawnProcess = vi.fn(() => {
-      const child = new EventEmitter();
+      const child = Object.assign(new EventEmitter(), { pid: 4321 });
       queueMicrotask(() => child.emit("exit", 0));
       return child as never;
     });
@@ -898,7 +899,7 @@ describe("CLI tui command", () => {
     const fixture = await createTempState();
     const stationUiInstalled = vi.fn(async () => true);
     const spawnProcess = vi.fn(() => {
-      const child = new EventEmitter();
+      const child = Object.assign(new EventEmitter(), { pid: 4321 });
       queueMicrotask(() => child.emit("exit", 0));
       return child as never;
     });
@@ -960,13 +961,18 @@ describe("CLI tui command", () => {
     }
 
     expect(spawnProcess).not.toHaveBeenCalled();
+    const records = await readJsonlLog(join(fixture.stateDir, "logs", "cli.jsonl"));
+    expect(records[0]?.lifecycle).toMatchObject({
+      kind: "renderer.spawn_failed",
+      error: { code: "TUI_RENDERER_NOT_INSTALLED" },
+    });
   });
 
   it("preserves the explicit dashboard command shell override", async () => {
     const fixture = await createTempState();
     const stationUiInstalled = vi.fn(async () => false);
     const spawnProcess = vi.fn(() => {
-      const child = new EventEmitter();
+      const child = Object.assign(new EventEmitter(), { pid: 4321 });
       queueMicrotask(() => child.emit("exit", 0));
       return child as never;
     });
@@ -1616,6 +1622,80 @@ describe("CLI tui command", () => {
     ]);
   });
 
+  it("retains exact renderer signals and never maps a null exit code to success", async () => {
+    const fixture = await createTempState();
+    const child = Object.assign(new EventEmitter(), { pid: 4321 });
+    let childEnv: NodeJS.ProcessEnv | undefined;
+    const spawnProcess = vi.fn((_command, _args, options) => {
+      childEnv = options?.env;
+      return child as never;
+    });
+
+    const resultPromise = runTuiCommand(
+      [],
+      { config: fixture.config },
+      {
+        observer: runningObserverDeps(),
+        selfExecRuntime: { compiled: true, execPath: "/opt/station/stn" },
+        spawnProcess: spawnProcess as never,
+      },
+    );
+    await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce());
+    child.emit("exit", null, "SIGTERM");
+
+    await expect(resultPromise).resolves.toEqual({
+      status: "exited",
+      code: 143,
+      exitCode: null,
+      signal: "SIGTERM",
+    });
+    expect(childEnv?.STATION_UI_RUN_ID).toMatch(/^ui_/);
+    expect(childEnv?.STATION_UI_CLIENT_KIND).toBeUndefined();
+    const records = await readJsonlLog(join(fixture.stateDir, "logs", "cli.jsonl"));
+    expect(records.map((record) => record.lifecycle?.kind)).toEqual([
+      "renderer.spawned",
+      "renderer.exited",
+    ]);
+    expect(records.at(-1)?.lifecycle).toMatchObject({
+      uiRunId: childEnv?.STATION_UI_RUN_ID,
+      exitCode: null,
+      signal: "SIGTERM",
+      rendererPid: 4321,
+    });
+  });
+
+  it.each([
+    "error-first",
+    "exit-first",
+  ] as const)("records only spawn failure when an unspawned child emits $case", async (eventOrder) => {
+    const fixture = await createTempState();
+    const child = new EventEmitter();
+    const spawnProcess = vi.fn(() => child as never);
+    const resultPromise = runTuiCommand(
+      [],
+      { config: fixture.config },
+      {
+        observer: runningObserverDeps(),
+        selfExecRuntime: { compiled: true, execPath: "/opt/station/stn" },
+        spawnProcess: spawnProcess as never,
+      },
+    );
+    await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce());
+
+    const error = Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" });
+    if (eventOrder === "error-first") {
+      child.emit("error", error);
+      child.emit("exit", null, null);
+    } else {
+      child.emit("exit", null, null);
+      child.emit("error", error);
+    }
+
+    await expect(resultPromise).resolves.toEqual({ status: "exited", code: 1 });
+    const records = await readJsonlLog(join(fixture.stateDir, "logs", "cli.jsonl"));
+    expect(records.map((record) => record.lifecycle?.kind)).toEqual(["renderer.spawn_failed"]);
+  });
+
   it("rejects invalid fake dashboard count flags before observer startup", async () => {
     const fixture = await createTempState();
 
@@ -1714,6 +1794,7 @@ async function withIsolatedHome<T>(home: string, run: () => Promise<T>): Promise
 
 class FakeRendererChild extends EventEmitter {
   connected = true;
+  readonly pid = 4321;
   readonly sent: unknown[] = [];
 
   constructor(private readonly sendError: Error | null = null) {

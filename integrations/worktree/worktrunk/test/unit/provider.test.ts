@@ -80,8 +80,9 @@ describe("WorktrunkProvider", () => {
         result(
           input,
           JSON.stringify([
-            { path: "/tmp/station/web", branch: "main" },
+            { path: "/tmp/station/web", branch: "main", is_main: true },
             { path: "/tmp/station/web/.worktrees/feature", branch: "feature" },
+            { path: "/tmp/station/web/.worktrees/merged", branch: "main", is_main: false },
             { path: "/tmp/station/web.sibling", branch: "sibling" },
             { path: "/tmp/codex/worktrees/abcd/web", commit: { short_sha: "9dd15ba" } },
           ]),
@@ -93,6 +94,11 @@ describe("WorktrunkProvider", () => {
         id: expect.stringMatching(/^wt_web_feature_[a-f0-9]{10}$/),
         branch: "feature",
         path: "/tmp/station/web/.worktrees/feature",
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/^wt_web_merged_[a-f0-9]{10}$/),
+        branch: "main",
+        path: "/tmp/station/web/.worktrees/merged",
       }),
     ]);
   });

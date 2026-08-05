@@ -3,7 +3,7 @@
 // via client runtime (keeping store and runtime reducer synchronized).
 import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
-import { selectDashboardViewport, type DashboardRuntime } from "@station/dashboard-core";
+import { selectDashboardViewport } from "@station/dashboard-core";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -11,7 +11,10 @@ import type { StationMouseEvent } from "../../input/mouse.js";
 import { externalAgentSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { routeStationMouse } from "../input/stationMouse.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
-import { createStationDashboardRuntime } from "./dashboardRuntime.js";
+import {
+  createStationDashboardRuntime,
+  type StationDashboardRuntime,
+} from "./dashboardRuntime.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -194,11 +197,11 @@ const RECONCILED_AT = "2026-06-12T12:30:00.000Z";
 type Harness = {
   fake: FakeTuiObserverService;
   client: StationClient;
-  store: DashboardRuntime;
+  store: StationDashboardRuntime;
   detach(): void;
 };
 
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
@@ -212,18 +215,21 @@ function slotForRow(store: DashboardRuntime, rowId: string): string {
   return choice.key;
 }
 
-function toastMessages(store: DashboardRuntime): string[] {
+function toastMessages(store: StationDashboardRuntime): string[] {
   return store.state.getState().toasts.map((entry) => entry.toast.message);
 }
 
-function errorToastMessages(store: DashboardRuntime): string[] {
+function errorToastMessages(store: StationDashboardRuntime): string[] {
   return store
     .state.getState()
     .toasts.filter((entry) => entry.toast.kind === "error")
     .map((entry) => entry.toast.message);
 }
 
-function rowStatusLabel(store: DashboardRuntime, rowId: string): string | undefined {
+function rowStatusLabel(
+  store: StationDashboardRuntime,
+  rowId: string,
+): string | undefined {
   return store.state.getState().snapshot?.rows.find((row) => row.id === rowId)?.display.statusLabel;
 }
 

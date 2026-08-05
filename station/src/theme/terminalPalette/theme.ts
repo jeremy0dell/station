@@ -9,12 +9,10 @@ import {
   type StationTheme,
 } from "../types.js";
 import {
-  blendUntilContrast,
-  blendUntilContrasts,
+  adjustLightnessForContrast,
   contrastRatio,
-  mixRgb,
+  mixOklch,
   relativeLuminance,
-  SRGB_CHANNEL_MAX,
   STATION_BOUNDARY_CONTRAST_RATIO,
   STATION_TEXT_CONTRAST_RATIO,
 } from "./contrast.js";
@@ -31,6 +29,10 @@ const ANSI_INDEX = {
 
 const INACTIVE_ACCENT_BLEND = 0.55;
 const WELCOME_SHIMMER_BLEND = 0.5;
+/** Fixed blend step so surface hierarchy resolution is byte-for-byte deterministic. */
+const BLEND_STEP = 1 / 255;
+/** Minimum WCAG contrast between adjacent layered surfaces so they stay distinguishable. */
+const SURFACE_SEPARATION_RATIO = 1.12;
 
 type TerminalPalettePolarity = "dark" | "light";
 type TerminalThemeRecipe = Readonly<{
@@ -60,10 +62,10 @@ const TERMINAL_THEME_RECIPES = {
     textDisabled: 0.46,
     border: 0.44,
     hairline: 0.38,
-    hover: 0.06,
-    keyboardFocus: 0.1,
-    compactFocus: 0.14,
-    selected: 0.16,
+    hover: 0.08,
+    keyboardFocus: 0.13,
+    compactFocus: 0.17,
+    selected: 0.19,
   },
 } as const satisfies Record<TerminalPalettePolarity, TerminalThemeRecipe>;
 
@@ -83,32 +85,34 @@ export function terminalPalettePolarity(
 export function resolveEmbeddedStationTheme(
   observation: StationTerminalTheme | null | undefined,
 ): StationTheme {
-  if (
-    observation === undefined ||
-    observation === null ||
-    contrastRatio(observation.defaultForeground, observation.defaultBackground) <
-      STATION_TEXT_CONTRAST_RATIO
-  ) {
-    // Whole-theme fallback prevents terminal surfaces from mixing with unrelated Station roles.
+  if (observation === undefined || observation === null) {
     return nativeStationTheme;
   }
   return createTerminalPaletteTheme(observation);
 }
 
-/** Creates one complete embedded theme from a validated, readable terminal palette. */
+/** Creates one complete embedded theme from a readable terminal palette observation. */
 export function createTerminalPaletteTheme(
   observation: StationTerminalTheme,
 ): StationTheme {
+  if (
+    contrastRatio(observation.defaultForeground, observation.defaultBackground) <
+    STATION_TEXT_CONTRAST_RATIO
+  ) {
+    // Whole-theme fallback prevents terminal surfaces from mixing with unrelated Station roles.
+    return nativeStationTheme;
+  }
   const foreground = observation.defaultForeground;
   const background = observation.defaultBackground;
   const defaultForeground = terminalDefaultColor("foreground", foreground);
   const defaultBackground = terminalDefaultColor("background", background);
   const recipe = TERMINAL_THEME_RECIPES[terminalPalettePolarity(observation)];
 
-  const hover = readableSurfaceBlend(background, foreground, recipe.hover);
-  const keyboardFocus = readableSurfaceBlend(background, foreground, recipe.keyboardFocus);
-  const compactFocus = readableSurfaceBlend(background, foreground, recipe.compactFocus);
-  const selected = readableSurfaceBlend(background, foreground, recipe.selected);
+  const [hover, keyboardFocus, compactFocus, selected] = deriveInteractionSurfaces(
+    background,
+    foreground,
+    recipe,
+  );
   const interactionSurfaces = [background, hover, keyboardFocus, compactFocus] as const;
 
   const textMuted = foregroundBlend(
@@ -266,6 +270,65 @@ export function createTerminalPaletteTheme(
   };
 }
 
+function deriveInteractionSurfaces(
+  background: StationRgbColor,
+  foreground: StationRgbColor,
+  recipe: TerminalThemeRecipe,
+): readonly [StationRgbColor, StationRgbColor, StationRgbColor, StationRgbColor] {
+  const prior = [background];
+  const surfaces = [recipe.hover, recipe.keyboardFocus, recipe.compactFocus, recipe.selected].map(
+    (preferredAmount) => {
+      const surface = surfaceWithHierarchy(background, foreground, preferredAmount, prior);
+      prior.push(surface);
+      return surface;
+    },
+  );
+  return [surfaces[0], surfaces[1], surfaces[2], surfaces[3]];
+}
+
+/**
+ * Picks the strongest blend toward the foreground that keeps text readable, then widens it
+ * until the surface separates from every previously derived layered surface.
+ */
+function surfaceWithHierarchy(
+  background: StationRgbColor,
+  foreground: StationRgbColor,
+  preferredAmount: number,
+  priorSurfaces: readonly StationRgbColor[],
+): StationRgbColor {
+  const blendAt = (amount: number): StationRgbColor => mixOklch(background, foreground, amount);
+  const textSafe = (amount: number): boolean =>
+    contrastRatio(blendAt(amount), foreground) >= STATION_TEXT_CONTRAST_RATIO;
+  const separated = (surface: StationRgbColor): boolean =>
+    priorSurfaces.every((prior) => contrastRatio(surface, prior) >= SURFACE_SEPARATION_RATIO);
+
+  const preferred = blendAt(preferredAmount);
+  if (textSafe(preferredAmount) && separated(preferred)) {
+    return preferred;
+  }
+  if (!textSafe(preferredAmount)) {
+    // Preferred amount oversteps the text floor; walk down to the largest readable amount.
+    let amount = preferredAmount;
+    while (amount > 0 && !textSafe(amount)) {
+      amount -= BLEND_STEP;
+    }
+    return blendAt(Math.max(0, amount));
+  }
+  // Text-safe but not separated yet; walk up toward the foreground, which always separates.
+  let amount = preferredAmount;
+  while (amount < 1) {
+    amount += BLEND_STEP;
+    const candidate = blendAt(amount);
+    if (separated(candidate)) {
+      return candidate;
+    }
+    if (!textSafe(amount)) {
+      break;
+    }
+  }
+  return preferred;
+}
+
 function ansiColorWithContrast(
   observation: StationTerminalTheme,
   index: number,
@@ -280,7 +343,7 @@ function ansiColorWithContrast(
   if (backgrounds.every((background) => contrastRatio(snapshot, background) >= target)) {
     return indexedColor(index, snapshot);
   }
-  return blendUntilContrasts(snapshot, foreground, backgrounds, target);
+  return adjustLightnessForContrast(snapshot, foreground, backgrounds, target);
 }
 
 function inactiveAccent(
@@ -288,10 +351,10 @@ function inactiveAccent(
   active: StationSemanticColor,
 ): StationRgbColor {
   const activeSnapshot = stationColorSnapshot(active);
-  return blendUntilContrast(
-    mixRgb(background, activeSnapshot, INACTIVE_ACCENT_BLEND),
+  return adjustLightnessForContrast(
+    mixOklch(background, activeSnapshot, INACTIVE_ACCENT_BLEND),
     activeSnapshot,
-    background,
+    [background],
     STATION_BOUNDARY_CONTRAST_RATIO,
   );
 }
@@ -306,28 +369,10 @@ function foregroundBlend(
   if (background === undefined) {
     throw new RangeError("Foreground blends require at least one background.");
   }
-  return blendUntilContrasts(
-    mixRgb(background, foreground, amount),
+  return adjustLightnessForContrast(
+    mixOklch(background, foreground, amount),
     foreground,
     backgrounds,
     target,
   );
-}
-
-function readableSurfaceBlend(
-  background: StationRgbColor,
-  foreground: StationRgbColor,
-  preferredAmount: number,
-): StationRgbColor {
-  for (
-    let step = Math.round(preferredAmount * SRGB_CHANNEL_MAX);
-    step >= 0;
-    step -= 1
-  ) {
-    const candidate = mixRgb(background, foreground, step / SRGB_CHANNEL_MAX);
-    if (contrastRatio(candidate, foreground) >= STATION_TEXT_CONTRAST_RATIO) {
-      return candidate;
-    }
-  }
-  return background;
 }

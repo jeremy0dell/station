@@ -1,4 +1,5 @@
-import type { StationSnapshot, TuiKey, TuiState } from "@station/dashboard-core";
+import type { StationSnapshot } from "@station/contracts";
+import type { TuiKey, TuiState } from "@station/dashboard-core";
 import {
   createInitialTuiState,
   focusProjectSettingsItem,

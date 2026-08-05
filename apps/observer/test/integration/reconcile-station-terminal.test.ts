@@ -90,7 +90,12 @@ describe("observer reconcile with a station-hosted target", () => {
     expect(stationRow?.terminal?.closeable).toBeUndefined();
 
     // Reporting exit drops only the station target; the tmux session survives.
-    await expect(station.releaseTarget(stationTargetId("wt_web_station"))).resolves.toBe(true);
+    await expect(
+      station.releaseTarget({
+        targetId: stationTargetId("wt_web_station"),
+        expectedSessionId: "ses_station",
+      }),
+    ).resolves.toBe(true);
     const afterExit = await core.reconcile("station-exit");
     expect(afterExit.sessions.map((session) => session.id)).toEqual(["ses_tmux"]);
     expect(afterExit.rows.find((row) => row.id === "wt_web_station")?.agent).toBeUndefined();

@@ -43,8 +43,9 @@ export type ExternalLaunchOutcome<T> = {
  *
  * Returns existing live identity without a gate; otherwise freshly preflights the selected harness
  * before seeding the canonical title or registering a target. Failed launch cleanup independently
- * releases its target and discards only the fresh session projection. Local fallbacks retain the
- * managed terminal's provider-neutral output policy; attachments consume compatibility remotely.
+ * releases its exact session target and discards only a seed whose target release is confirmed.
+ * Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume
+ * compatibility remotely.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -225,9 +226,14 @@ export async function prepareExternalLaunch(
     };
   } catch (error) {
     // Cleanup attempts stay independent so one failure cannot suppress the other or replace the launch error.
+    let targetReleaseConfirmed = openedTargetId === undefined;
     if (openedTargetId !== undefined) {
       try {
-        await managedTerminal.releaseTarget(openedTargetId);
+        await managedTerminal.releaseTarget({
+          targetId: openedTargetId,
+          expectedSessionId: sessionId,
+        });
+        targetReleaseConfirmed = true;
       } catch (cleanupError) {
         await deps.logger
           ?.warn("External launch cleanup could not release its managed target.", {
@@ -238,7 +244,7 @@ export async function prepareExternalLaunch(
           .catch(() => undefined);
       }
     }
-    if (sessionSeeded) {
+    if (sessionSeeded && targetReleaseConfirmed) {
       try {
         await deps.persistence.discardSessionSeed({ sessionId });
       } catch (cleanupError) {
@@ -257,16 +263,25 @@ export async function prepareExternalLaunch(
 /**
  * USE CASE
  *
- * Drop an externally-hosted target when the Station UI reports its PTY exited, so
- * the next reconcile removes the session from both dashboards. Idempotent: an
- * unknown target id is acknowledged without a reconcile.
+ * Forgets only the exact managed target/session binding reported by Station. A
+ * missing expected session or superseded target fails closed without reconcile;
+ * reconciliation may retain the durable Station session as `No Agent`.
  */
 export async function reportExternalExit(
   deps: ExternalLaunchDeps,
   params: AgentReportExternalExitParams,
 ): Promise<ExternalLaunchOutcome<AgentReportExternalExitResult>> {
+  if (params.expectedSessionId === undefined) {
+    return {
+      outcome: { acknowledged: false, terminalTargetId: params.terminalTargetId },
+      reconcile: false,
+    };
+  }
   const acknowledged =
-    (await deps.providers.managedTerminal?.releaseTarget(params.terminalTargetId)) ?? false;
+    (await deps.providers.managedTerminal?.releaseTarget({
+      targetId: params.terminalTargetId,
+      expectedSessionId: params.expectedSessionId,
+    })) ?? false;
   return {
     outcome: { acknowledged, terminalTargetId: params.terminalTargetId },
     reconcile: acknowledged,

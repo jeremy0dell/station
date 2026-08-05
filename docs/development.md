@@ -9,6 +9,29 @@ Status: current living doc for development, test, and documentation workflow.
 - Use `pnpm station:link` only when you intentionally want all three launchers globally bound to the current checkout.
 - External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, Claude Code, Codex, Cursor, Pi, or OpenCode for real harness workflows, and `lsof` for fail-closed socket recovery or Observer handoff.
 
+## TypeScript Compiler And Editor
+
+Root and renderer build/typecheck commands use the native TypeScript 7 compiler. The conventional
+`typescript` dependency also resolves to TypeScript 7 so repository-aware tools and LSP clients can
+discover the native compiler. Tools that import the compiler API use the explicit TypeScript 6
+compatibility package until TypeScript 7 provides a stable replacement API. Verify the split with:
+
+```bash
+pnpm exec tsc --version
+node -p 'require("typescript/package.json").version'
+node -p 'require("@typescript/typescript6").version'
+cd station && bun run tsc --version
+```
+
+VS Code does not select the native language server from this dependency split automatically. To opt
+in, install the official [TypeScript 7 extension](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview),
+then run **TypeScript: Enable TypeScript 7** or set `"js/ts.experimental.useTsgo": true` in a user or
+profile setting. Do not point `js/ts.tsdk.path` at `node_modules/typescript`; that package provides the
+native compiler and LSP rather than the legacy `tsserver` plugin layout. Disable the setting or
+extension to return to VS Code's standard TypeScript service. Editors that accept a custom LSP
+command can start `pnpm exec tsc --lsp --stdio` with the repository root as the working directory;
+integrations that require `tsserver` should use the editor's bundled TypeScript service.
+
 ## Local TUI Workflow
 
 | Need | Command | Boundary |
@@ -732,7 +755,7 @@ codex --version
 ```
 
 Take a `dev-ready-before-station` snapshot before authenticating. Do not
-preinstall Station, Worktrunk, tmux, diffnav, or git-delta; this lane must prove
+preinstall Station, Worktrunk, tmux, or Hunk; this lane must prove
 that guided setup identifies and installs the missing Station dependencies.
 Authenticate GitHub and confirm private-repository access:
 
@@ -855,7 +878,7 @@ For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
 and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
-guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
+guided setup to install Worktrunk, tmux, and Hunk, select one or
 more authenticated agents, consent to required Station tracking artifacts, and
 optionally install the tmux binding. Confirm the first selection becomes the
 default only for a new config, every explicit selection receives its own harness

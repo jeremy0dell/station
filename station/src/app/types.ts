@@ -1,7 +1,7 @@
+import type { StationClientStateSource } from "@station/client";
 import type {
   DashboardActions,
   DashboardRuntime,
-  DashboardSearchExperience,
   DashboardStateSource,
 } from "@station/dashboard-core";
 import type {
@@ -15,6 +15,7 @@ import type { StationInputRuntime } from "../input/stationInput.js";
 import type { StationLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import type { StationStore } from "../state/store.js";
 import type { StationClient } from "../sources/types.js";
+import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type {
@@ -22,11 +23,12 @@ import type {
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
 
-/** Props for the pure `<StationApp />` view; `createStation` supplies read-only dashboard state and named effects. */
+/** Props for the pure `<StationApp />` view with canonical client truth separated from dashboard projection. */
 export type StationAppProps = {
   store: StationStore;
   registry: PtyRegistry;
   dashboardState: DashboardStateSource;
+  clientState: StationClientStateSource;
   dashboardActions: Pick<
     DashboardActions,
     "expireToasts" | "refreshActiveToastExpiry" | "setTerminalRows"
@@ -66,18 +68,12 @@ export type CreateStationOptions = {
   openExternalUrl?: (url: string) => void;
   tuiConfig?: TuiConfig;
   tuiConfigPath?: string;
-  /** Resolved dashboard search behavior; direct and test callers default to legacy. */
-  dashboardSearchExperience?: DashboardSearchExperience;
   topRowWidgetDeps?: TopRowWidgetRuntimeDeps;
   /** Existing registry to reuse across Bun HMR without killing live PTYs. */
   registry?: PtyRegistry;
-  /**
-   * Station-host socket path. When set, aux shells spawn into the host (warm
-   * reattach across UI restarts) when it is up, falling back to a local shell
-   * otherwise. Absent in tests/mock mode ⇒ aux shells are always local.
-   */
-  hostSocketPath?: string;
-  /** Test seam for resolving observer-advertised managed-terminal attachments. */
+  /** Composition-supplied host placement; absent means aux shells remain local. */
+  resolveAuxShellPlacement?: AuxShellPlacement;
+  /** Composition-supplied resolver for observer-advertised managed terminals. */
   managedTerminalAttacher?: ManagedTerminalAttacher;
   /**
    * Persist the aux-pane layout to disk so a cold restart restores it. Absent in

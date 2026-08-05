@@ -30,6 +30,7 @@ export function StationApp({
   store,
   registry,
   dashboardState,
+  clientState,
   dashboardActions,
   dispatchMouse,
   onCopySelection,
@@ -64,7 +65,7 @@ export function StationApp({
           <PaneRegistryProvider registry={registry}>
             <PaneGrid
               store={store}
-              dashboardState={dashboardState}
+              clientState={clientState}
               dispatchMouse={dispatchMouse}
               onCopySelection={onCopySelection}
             />
@@ -96,6 +97,7 @@ export function StationApp({
       <StationButton
         store={store}
         dashboardState={dashboardState}
+        clientState={clientState}
         dispatchMouse={dispatchMouse}
         island={island}
       />

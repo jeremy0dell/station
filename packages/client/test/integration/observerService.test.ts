@@ -114,7 +114,7 @@ describe("observer client service", () => {
     });
 
     try {
-      await expect(runtime.refresh()).rejects.toMatchObject({
+      await expect(runtime.service.loadSnapshot()).rejects.toMatchObject({
         code: "OBSERVER_BUILD_MISMATCH",
       });
       expect(snapshotCalls).toBe(0);
@@ -127,7 +127,7 @@ describe("observer client service", () => {
   it("prepares external launches and reports external exits through the protocol", async () => {
     const { socketPath } = await createTempSocketPath();
     const prepared: Array<{ projectId: string; worktreeId: string; title?: string }> = [];
-    const exited: string[] = [];
+    const exited: Array<{ terminalTargetId: string; expectedSessionId?: string }> = [];
     const server = await startProtocolServer({
       socketPath,
       api: fakeApi({
@@ -152,7 +152,7 @@ describe("observer client service", () => {
           };
         },
         reportExternalExit: async (params) => {
-          exited.push(params.terminalTargetId);
+          exited.push(params);
           return { acknowledged: true, terminalTargetId: params.terminalTargetId };
         },
       }),
@@ -176,13 +176,21 @@ describe("observer client service", () => {
       },
     });
     await expect(
-      service.reportExternalExit({ terminalTargetId: "native:wt_web_feature" }),
+      service.reportExternalExit({
+        terminalTargetId: "native:wt_web_feature",
+        expectedSessionId: "ses_external_1",
+      }),
     ).resolves.toEqual({ acknowledged: true, terminalTargetId: "native:wt_web_feature" });
 
     expect(prepared).toEqual([
       { projectId: "web", worktreeId: "wt_web_feature", title: "Hexagonal PT 12" },
     ]);
-    expect(exited).toEqual(["native:wt_web_feature"]);
+    expect(exited).toEqual([
+      {
+        terminalTargetId: "native:wt_web_feature",
+        expectedSessionId: "ses_external_1",
+      },
+    ]);
 
     await server.close();
   });
@@ -474,6 +482,9 @@ function fakeApi(
         projected: false,
         scheduledReconcile: true,
       })),
+    getSessionRecoveryReadiness:
+      overrides.getSessionRecoveryReadiness ??
+      (async () => ({ resumeEnabled: true, harnesses: [] })),
     prepareExternalLaunch:
       overrides.prepareExternalLaunch ??
       (async (params) => ({
@@ -600,6 +611,7 @@ function fakeClient(overrides: Partial<ObserverClient>): ObserverClient {
       projected: false,
       scheduledReconcile: true,
     }),
+    getSessionRecoveryReadiness: async () => ({ resumeEnabled: true, harnesses: [] }),
     prepareExternalLaunch: async (params) => ({
       kind: "existing-session",
       sessionId: `ses_${params.worktreeId}`,

@@ -185,10 +185,28 @@ describe("StationTerminalProvider", () => {
     await provider.openWorkspace(openRequest());
     const targetId = stationTargetId(worktree.id);
 
-    await expect(provider.releaseTarget(targetId)).resolves.toBe(true);
+    await expect(
+      provider.releaseTarget({ targetId, expectedSessionId: "ses_web_feature" }),
+    ).resolves.toBe(true);
     await expect(provider.listTargets()).resolves.toEqual([]);
     // Idempotent: a second exit report for the same target is a no-op.
-    await expect(provider.releaseTarget(targetId)).resolves.toBe(false);
+    await expect(
+      provider.releaseTarget({ targetId, expectedSessionId: "ses_web_feature" }),
+    ).resolves.toBe(false);
+  });
+
+  it("does not release a deterministic target rebound to another session", async () => {
+    const provider = new StationTerminalProvider({ clock });
+    const targetId = stationTargetId(worktree.id);
+    await provider.openWorkspace(openRequest({ sessionId: "ses_old" }));
+    await provider.openWorkspace(openRequest({ sessionId: "ses_replacement" }));
+
+    await expect(provider.releaseTarget({ targetId, expectedSessionId: "ses_old" })).resolves.toBe(
+      false,
+    );
+    await expect(provider.listTargets()).resolves.toMatchObject([
+      { id: targetId, sessionId: "ses_replacement" },
+    ]);
   });
 
   it("rejects focusTarget with a typed station-hosted error (never a crash)", async () => {
@@ -272,6 +290,16 @@ function hostBackedProvider(client: StationHostClient) {
     { clientFactory: () => client, spawnHost: () => ({ pid: 1, unref: () => undefined }) },
   );
   return new StationTerminalProvider({ clock, host: controller });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
 }
 
 function providerWithEnsureError(
@@ -450,6 +478,75 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toEqual([]);
   });
 
+  it("does not let a delayed old-session spawn failure release its replacement", async () => {
+    const spawn = deferred<{ ptyId: string; pid: number }>();
+    const spawnStarted = deferred<void>();
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        spawn: async () => {
+          spawnStarted.resolve();
+          return await spawn.promise;
+        },
+      }),
+    );
+    const old = await provider.openWorkspace(openRequest({ sessionId: "ses_old" }));
+    const oldLaunch = provider.launchProcess({
+      project,
+      worktree,
+      terminalTarget: old.target,
+      agentEndpointId: old.agentEndpointId,
+      launchPlan,
+    });
+    const oldLaunchResult = oldLaunch.then(
+      () => ({ kind: "resolved" as const }),
+      (error: unknown) => ({ kind: "rejected" as const, error }),
+    );
+    await spawnStarted.promise;
+    await provider.openWorkspace(openRequest({ sessionId: "ses_replacement" }));
+
+    const spawnError = new StationHostProviderError("HOST_SPAWN_FAILED", "old spawn failed");
+    spawn.reject(spawnError);
+
+    await expect(oldLaunchResult).resolves.toEqual({ kind: "rejected", error: spawnError });
+    await expect(provider.listTargets()).resolves.toMatchObject([{ sessionId: "ses_replacement" }]);
+  });
+
+  it("does not inherit host-backed pruning when a target is rebound", async () => {
+    const provider = hostBackedProvider(fakeHostClient({ list: async () => [] }));
+    const old = await provider.openWorkspace(openRequest({ sessionId: "ses_old" }));
+    await provider.launchProcess({
+      project,
+      worktree,
+      terminalTarget: old.target,
+      agentEndpointId: old.agentEndpointId,
+      launchPlan,
+    });
+    await provider.openWorkspace(openRequest({ sessionId: "ses_replacement" }));
+
+    await expect(provider.listTargets()).resolves.toMatchObject([{ sessionId: "ses_replacement" }]);
+  });
+
+  it("does not let a delayed host list overwrite a replacement binding", async () => {
+    const listed = deferred<HostListEntry[]>();
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        list: async () => await listed.promise,
+      }),
+    );
+    const pendingList = provider.listTargets();
+    await provider.openWorkspace(openRequest({ sessionId: "ses_replacement" }));
+
+    listed.resolve([liveEntry({ sessionId: "ses_old" })]);
+
+    await expect(pendingList).resolves.toMatchObject([{ sessionId: "ses_replacement" }]);
+    await expect(
+      provider.releaseTarget({
+        targetId: stationTargetId(worktree.id),
+        expectedSessionId: "ses_old",
+      }),
+    ).resolves.toBe(false);
+  });
+
   it("releaseTarget forgets host-backed bookkeeping without closing the process", async () => {
     const close = vi.fn(async () => ({ closed: true }));
     const provider = hostBackedProvider(fakeHostClient({ close }));
@@ -462,7 +559,12 @@ describe("StationTerminalProvider (host-backed)", () => {
       launchPlan,
     });
 
-    await expect(provider.releaseTarget(opened.target.targetId)).resolves.toBe(true);
+    await expect(
+      provider.releaseTarget({
+        targetId: opened.target.targetId,
+        expectedSessionId: "ses_web_feature",
+      }),
+    ).resolves.toBe(true);
     expect(close).not.toHaveBeenCalled();
     await expect(provider.listTargets()).resolves.toEqual([]);
 

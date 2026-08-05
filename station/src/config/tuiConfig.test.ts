@@ -2,16 +2,15 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
-import {
-  createDashboardRuntime,
-  legacySearchExperience,
-  persistentFilterExperience,
-} from "@station/dashboard-core";
+import type { DashboardRuntime } from "@station/dashboard-core";
 import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
-import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
+import {
+  createStationTestDashboardRuntime,
+  makeStationTestRuntime,
+} from "../station/test/support/makeStationTestRuntime.js";
 import { createStation } from "../app/createStation.js";
 import { NO_OP_CLIPBOARD_EFFECTS } from "../copy/testing.js";
 import { createStationStore } from "../state/store.js";
@@ -25,10 +24,10 @@ describe("loadStationTuiConfig", () => {
     }
   });
 
-  it("uses the legacy search experience when the STATION config is absent", async () => {
-    await expect(loadStationTuiConfig({ path: "/definitely/not/here/config.toml" })).resolves.toEqual({
-      composition: { dashboardSearchExperience: legacySearchExperience },
-    });
+  it("returns no config when the STATION config is absent", async () => {
+    await expect(loadStationTuiConfig({ path: "/definitely/not/here/config.toml" })).resolves.toEqual(
+      {},
+    );
   });
 
   it("loads [tui.widgets] from the normal STATION config", async () => {
@@ -75,18 +74,7 @@ enabled = true
         widgets: [{ type: "fleet" }, { type: "prs" }],
       },
       configPath,
-      composition: { dashboardSearchExperience: legacySearchExperience },
     });
-  });
-
-  it("resolves the persistent search experience when enabled in TOML", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "station-tui-config-"));
-    dirs.push(dir);
-    const configPath = await writeWidgetTestConfig(dir, "dashboard_persistent_filter = true");
-
-    const result = await loadStationTuiConfig({ path: configPath });
-
-    expect(result.composition.dashboardSearchExperience).toBe(persistentFilterExperience);
   });
 
   it("surfaces a warning when [tui] is invalid and widgets fall back", async () => {
@@ -121,7 +109,6 @@ root = "${projectRoot}"
     const result = await loadStationTuiConfig({ path: configPath });
 
     expect(result.config).toBeUndefined();
-    expect(result.composition.dashboardSearchExperience).toBe(legacySearchExperience);
     expect(result.warning).toContain("[tui]");
   });
 
@@ -134,7 +121,6 @@ root = "${projectRoot}"
     const result = await loadStationTuiConfig({ path: configPath });
 
     expect(result.config).toBeUndefined();
-    expect(result.composition.dashboardSearchExperience).toBe(legacySearchExperience);
     expect(result.warning).toContain("widgets disabled");
   });
 
@@ -175,7 +161,7 @@ root = "${projectRoot}"
     let writes: ReturnType<typeof startWidgetConfigWrites> | undefined;
     let durableExit: Promise<void> | undefined;
     let exitCode: number | undefined;
-    const store = createDashboardRuntime({
+    const store = createStationTestDashboardRuntime({
       source,
       service,
       initialState: { widgets: [{ type: "time" }], widgetsPersisted: true },
@@ -255,7 +241,7 @@ root = "${projectRoot}"
       { widgets: initialWidgets, widgetsPersisted: true },
     );
     const popupSource = new FakeStationSource(manyProjectsSnapshot());
-    const popupStore = createDashboardRuntime({
+    const popupStore = createStationTestDashboardRuntime({
       source: popupSource,
       service: new FakeTuiObserverService(manyProjectsSnapshot()),
       initialState: { widgets: initialWidgets, widgetsPersisted: true },
@@ -298,7 +284,7 @@ root = "${projectRoot}"
     const source = new FakeStationSource(manyProjectsSnapshot());
     let dismisses = 0;
     let exits = 0;
-    const store = createDashboardRuntime({
+    const store = createStationTestDashboardRuntime({
       source,
       service: new FakeTuiObserverService(manyProjectsSnapshot()),
       persistentPopup: true,
@@ -319,14 +305,14 @@ root = "${projectRoot}"
 });
 
 function startTestWidgetConfigWrites(
-  runtime: ReturnType<typeof createDashboardRuntime>,
+  runtime: DashboardRuntime,
   configPath: string,
 ): ReturnType<typeof startWidgetConfigWrites> {
   return startWidgetConfigWrites(runtime.state, runtime.actions.pushToast, configPath);
 }
 
 function addWidgetThroughSettings(
-  store: ReturnType<typeof createDashboardRuntime>,
+  store: DashboardRuntime,
   pickerIndex: number,
 ): void {
   store.actions.handleKey({ input: "W" });
@@ -337,10 +323,7 @@ function addWidgetThroughSettings(
   store.actions.handleKey({ input: "\r", return: true });
 }
 
-async function writeWidgetTestConfig(
-  dir: string,
-  featureFlag?: string,
-): Promise<string> {
+async function writeWidgetTestConfig(dir: string): Promise<string> {
   const projectRoot = join(dir, "project");
   await mkdir(projectRoot);
   const configPath = join(dir, "config.toml");
@@ -355,7 +338,6 @@ terminal = "tmux"
 harness = "codex"
 layout = "agent-build-shell"
 
-${featureFlag === undefined ? "" : `[feature_flags]\n${featureFlag}\n`}
 [[tui.widgets]]
 type = "time"
 

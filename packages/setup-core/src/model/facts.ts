@@ -66,7 +66,7 @@ export type SetupReadiness = {
   readonly requiredMissing: number;
 };
 
-export type SetupToolId = "worktrunk" | "tmux" | "bun" | "diffnav" | "git-delta";
+export type SetupToolId = "worktrunk" | "tmux" | "bun" | "diff-viewer";
 
 export type SetupPlanningFacts = {
   readonly generatedAt: string;

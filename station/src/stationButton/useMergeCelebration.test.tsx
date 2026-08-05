@@ -1,10 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
-import { createDashboardRuntime, type DashboardRuntime } from "@station/dashboard-core";
+import type { StationClientStateSource } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
-import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
-import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
+import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { useMergeCelebration } from "./useMergeCelebration.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
@@ -12,13 +11,13 @@ import { useMergeCelebration } from "./useMergeCelebration.js";
 const SURFACE = { width: 30, height: 4 };
 
 function CelebrationProbe({
-  store,
+  source,
   ttlMs,
 }: {
-  store: DashboardRuntime;
+  source: StationClientStateSource;
   ttlMs: number;
 }) {
-  const celebration = useMergeCelebration(store.state, ttlMs);
+  const celebration = useMergeCelebration(source, ttlMs);
   return (
     <text>
       {celebration === undefined
@@ -44,17 +43,11 @@ function withMergedPr(snapshot: StationSnapshot, worktreeId: string): StationSna
 describe("useMergeCelebration", () => {
   it("celebrates a PR flipping to merged, then quiets after the TTL", async () => {
     const snapshot = manyProjectsSnapshot();
-    const source = new FakeStationSource(snapshot);
-    const store = createDashboardRuntime({
-      source,
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-    });
-    // Snapshots flow from the source only once the store is started.
-    store.start();
-    const setup = await testRender(<CelebrationProbe store={store} ttlMs={60} />, SURFACE);
+    const fixture = makeStationTestRuntime({ snapshot });
+    const setup = await testRender(
+      <CelebrationProbe source={fixture.source} ttlMs={60} />,
+      SURFACE,
+    );
     try {
       await setup.flush();
       // Let the hook's effect mount and seed its baseline from the initial
@@ -64,17 +57,22 @@ describe("useMergeCelebration", () => {
       // first sight never celebrates.
       expect(setup.captureCharFrame()).toContain("quiet");
 
-      source.setSnapshot(withMergedPr(snapshot, "wt_station_working"));
+      fixture.source.setSnapshot(withMergedPr(snapshot, "wt_station_working"));
       // The state update commits on the next macrotask beat.
       await new Promise((resolve) => setTimeout(resolve, 20));
       await setup.flush();
+      expect(
+        fixture.runtime.state.getState().snapshot?.rows.find(
+          (row) => row.id === "wt_station_working",
+        )?.worktree.pr?.state,
+      ).not.toBe("merged");
       expect(setup.captureCharFrame()).toContain("pr:76:ship it");
 
       await new Promise((resolve) => setTimeout(resolve, 120));
       await setup.flush();
       expect(setup.captureCharFrame()).toContain("quiet");
     } finally {
-      store.dispose();
+      fixture.runtime.dispose();
       setup.renderer.destroy();
     }
   });

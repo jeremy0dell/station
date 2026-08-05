@@ -1,8 +1,7 @@
 // Mock-mode observer: dispatched commands show genuine pending visuals, then reject
 // with mock-mode SafeError (so production code paths run, not bespoke demo state).
+import type { ObserverService, StationClientStateSource } from "@station/client";
 import type { CommandId, SafeError, StationEvent } from "@station/contracts";
-import type { StationStateSource } from "../../sources/types.js";
-import type { ObserverService } from "@station/dashboard-core";
 
 export const STUB_DISPATCH_DELAY_MS = 900;
 
@@ -12,7 +11,7 @@ export type StationStubObserverServiceOptions = {
 };
 
 export function createStationStubObserverService(
-  source: StationStateSource,
+  source: StationClientStateSource,
   options: StationStubObserverServiceOptions = {},
 ): ObserverService {
   const dispatchDelayMs = options.dispatchDelayMs ?? STUB_DISPATCH_DELAY_MS;

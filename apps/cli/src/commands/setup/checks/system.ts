@@ -29,10 +29,9 @@ import {
   type SetupFileSystemReader,
   setupConfigPath,
 } from "./config.js";
-import { checkSetupDiffnav } from "./diffnav.js";
+import { checkSetupDiffViewer } from "./diffViewer.js";
 import { setupEnv } from "./env.js";
 import { type CheckGitOptions, checkSetupGit } from "./git.js";
-import { checkSetupGitDelta } from "./gitDelta.js";
 import { type CheckHarnessesOptions, checkSetupHarnesses } from "./harnesses.js";
 import {
   type CheckSetupLaunchersOptions,
@@ -144,8 +143,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     worktrunk,
     tmux,
     bun,
-    diffnav,
-    gitDelta,
+    diffViewer,
     brew,
     xcode,
     harnesses,
@@ -161,8 +159,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     compiled
       ? Promise.resolve({ status: "ok" as const, command: "bun" })
       : checkSetupBun(dependencyOptions),
-    checkSetupDiffnav(dependencyOptions),
-    checkSetupGitDelta(dependencyOptions),
+    checkSetupDiffViewer(dependencyOptions),
     checkBrewDependency({
       ...commandOptions,
       ...(options.noBrew === undefined ? {} : { noBrew: options.noBrew }),
@@ -280,8 +277,7 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     tmux,
     bun,
     stationUi,
-    diffnav,
-    gitDelta,
+    diffViewer,
     brew,
     xcode,
     launchers: resolvedLaunchers,

@@ -9,6 +9,7 @@ import type {
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
+  ReleaseManagedTerminalTargetRequest,
   SafeError,
   StationSnapshot,
   TerminalAttachment,
@@ -48,7 +49,7 @@ type FakeManagedTerminalOptions = {
 /** Deliberately differs from the Station adapter in both provider id and target format. */
 class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
   readonly id: ProviderId = "managed-test";
-  readonly released: TerminalTargetId[] = [];
+  readonly released: ReleaseManagedTerminalTargetRequest[] = [];
 
   readonly #targets: TerminalTargetObservation[] = [];
   readonly #terminal: FakeTerminalProvider;
@@ -156,12 +157,14 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
     return this.#targets.some((target) => target.id === targetId) ? this.#attachment : undefined;
   }
 
-  async releaseTarget(targetId: TerminalTargetId): Promise<boolean> {
-    this.released.push(targetId);
+  async releaseTarget(request: ReleaseManagedTerminalTargetRequest): Promise<boolean> {
+    this.released.push(request);
     if (this.#releaseFailure !== undefined) {
       throw this.#releaseFailure;
     }
-    const index = this.#targets.findIndex((target) => target.id === targetId);
+    const index = this.#targets.findIndex(
+      (target) => target.id === request.targetId && target.sessionId === request.expectedSessionId,
+    );
     if (index < 0) {
       return false;
     }
@@ -726,7 +729,12 @@ describe("prepareExternalLaunch", () => {
     ).rejects.toMatchObject({ code: "HARNESS_BUILD_LAUNCH_FAILED" });
     // openWorkspace registered a target; the failure rolled it back so a retry is clean.
     expect(await station.listTargets()).toEqual([]);
-    expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
+    expect(station.released).toEqual([
+      {
+        targetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: expect.stringMatching(/^ses_/),
+      },
+    ]);
   });
 
   it("releases the opened target and discards only the failed session projection", async () => {
@@ -742,7 +750,12 @@ describe("prepareExternalLaunch", () => {
     await expect(prepareExternalLaunch(launchDeps, prepareParams)).rejects.toMatchObject({
       code: "MANAGED_LAUNCH_FAILED",
     });
-    expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
+    expect(station.released).toEqual([
+      {
+        targetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: expect.stringMatching(/^ses_/),
+      },
+    ]);
     expect(await station.listTargets()).toEqual([]);
     await expect(launchDeps.persistence.listSessions()).resolves.toEqual([]);
     await expect(launchDeps.persistence.listWorktreeDisplayTitles()).resolves.toEqual([
@@ -753,7 +766,7 @@ describe("prepareExternalLaunch", () => {
     ]);
   });
 
-  it("preserves the launch failure while independently discarding its session seed", async () => {
+  it("preserves the launch failure and seed when target release is uncertain", async () => {
     const station = new FakeManagedTerminalLifecycle({
       launchFailure: {
         tag: "TerminalProviderError",
@@ -774,8 +787,13 @@ describe("prepareExternalLaunch", () => {
         title: "Hexagonal PT 12",
       }),
     ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
-    expect(station.released).toEqual([managedTargetId("wt_web_feature")]);
-    expect(persistence.discarded).toEqual([{ sessionId: persistence.seeded[0]?.sessionId }]);
+    expect(station.released).toEqual([
+      {
+        targetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: persistence.seeded[0]?.sessionId,
+      },
+    ]);
+    expect(persistence.discarded).toEqual([]);
     expect(await station.listTargets()).toHaveLength(1);
   });
 });
@@ -783,15 +801,19 @@ describe("prepareExternalLaunch", () => {
 describe("reportExternalExit", () => {
   it("drops the registered target and asks for a reconcile", async () => {
     const station = new FakeManagedTerminalLifecycle();
-    await prepareExternalLaunch(deps([row()], station), prepareParams);
+    const prepared = await prepareExternalLaunch(deps([row()], station), prepareParams);
+    if (prepared.outcome.kind !== "prepared") throw new Error("expected prepared launch");
     const targetId = managedTargetId("wt_web_feature");
 
-    const exit = await reportExternalExit(deps([row()], station), { terminalTargetId: targetId });
+    const exit = await reportExternalExit(deps([row()], station), {
+      terminalTargetId: targetId,
+      expectedSessionId: prepared.outcome.sessionId,
+    });
     expect(exit).toEqual({
       outcome: { acknowledged: true, terminalTargetId: targetId },
       reconcile: true,
     });
-    expect(station.released).toEqual([targetId]);
+    expect(station.released).toEqual([{ targetId, expectedSessionId: prepared.outcome.sessionId }]);
     expect(await station.listTargets()).toEqual([]);
 
     await expect(
@@ -806,9 +828,88 @@ describe("reportExternalExit", () => {
     const station = new FakeManagedTerminalLifecycle();
     const exit = await reportExternalExit(deps([row()], station), {
       terminalTargetId: "managed://nope",
+      expectedSessionId: "ses_missing",
     });
     expect(exit).toEqual({
       outcome: { acknowledged: false, terminalTargetId: "managed://nope" },
+      reconcile: false,
+    });
+  });
+
+  it("fails closed when the report omits its expected session", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_current" });
+
+    const exit = await reportExternalExit(deps([row()], station), {
+      terminalTargetId: managedTargetId("wt_web_feature"),
+    });
+
+    expect(exit.reconcile).toBe(false);
+    expect(exit.outcome.acknowledged).toBe(false);
+    expect(station.released).toEqual([]);
+    expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_current" }]);
+  });
+
+  it("does not let a delayed old-session exit release its replacement", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_old" });
+    await station.openWorkspace({
+      project,
+      worktree: {
+        id: "wt_web_feature",
+        provider: "fake-worktree",
+        projectId: "web",
+        branch: "feature/login",
+        path: "/tmp/station/web/feature",
+        state: "exists",
+        source: "worktrunk",
+        observedAt: now,
+      },
+      harness: "fake-harness",
+      layout: "agent-shell",
+      sessionId: "ses_replacement",
+    });
+
+    const staleExit = await reportExternalExit(deps([row()], station), {
+      terminalTargetId: managedTargetId("wt_web_feature"),
+      expectedSessionId: "ses_old",
+    });
+
+    expect(staleExit).toEqual({
+      outcome: {
+        acknowledged: false,
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
+      reconcile: false,
+    });
+    expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_replacement" }]);
+  });
+
+  it("fails closed when no managed lifecycle is registered", async () => {
+    const registry = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
+      terminal: new FakeTerminalProvider({ now: () => new Date(now) }),
+      harnesses: [new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) })],
+    });
+
+    const exit = await reportExternalExit(
+      {
+        core: fakeCore([row()]),
+        providers: registry,
+        persistence: fakePersistence,
+        clock: { now: () => new Date(now) },
+      },
+      {
+        terminalTargetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: "ses_current",
+      },
+    );
+
+    expect(exit).toEqual({
+      outcome: {
+        acknowledged: false,
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
       reconcile: false,
     });
   });

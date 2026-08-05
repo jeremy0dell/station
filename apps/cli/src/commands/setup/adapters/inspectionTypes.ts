@@ -243,8 +243,7 @@ export type SetupFacts = {
   tmux: SetupDependencyFact;
   bun: SetupDependencyFact;
   stationUi: SetupStationUiFact;
-  diffnav: SetupDependencyFact;
-  gitDelta: SetupDependencyFact;
+  diffViewer: SetupDependencyFact;
   brew: SetupBrewFact;
   xcode: SetupXcodeFact;
   launchers: SetupLaunchersFact;

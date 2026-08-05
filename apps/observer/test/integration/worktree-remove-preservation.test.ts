@@ -24,7 +24,7 @@ const execFileAsync = promisify(execFile);
 const now = "2026-07-14T20:00:00.000Z";
 
 describe("worktree removal preservation", () => {
-  it("protects a same-path replacement and preserves it when Worktrunk later filters it", async () => {
+  it("protects a same-path replacement when its branch changes", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-remove-preservation-"));
     const repo = join(root, "repo");
     const linked = join(root, "feature");
@@ -183,8 +183,8 @@ describe("worktree removal preservation", () => {
           commandId: receipt.commandId,
           worktreeId: replacement.id,
           canonicalPath: linked,
-          observedBranch: "feature",
-          refusalReason: "missing_target",
+          observedBranch: "main",
+          refusalReason: "branch_changed",
         }),
       );
 

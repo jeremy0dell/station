@@ -358,8 +358,13 @@ describe("contract schemas", () => {
 
     expectParses(
       AgentReportExternalExitParamsSchema,
+      { terminalTargetId: "native:wt_api", expectedSessionId: "ses_api" },
+      "session-qualified external exit params",
+    );
+    expectParses(
+      AgentReportExternalExitParamsSchema,
       { terminalTargetId: "native:wt_api" },
-      "external exit params",
+      "legacy external exit params without release authority",
     );
     expectParses(
       AgentReportExternalExitResultSchema,
@@ -538,11 +543,9 @@ describe("contract schemas", () => {
     expect(FeatureFlagConfigSchema.parse({})).toEqual({});
     expect(
       FeatureFlagConfigSchema.parse({
-        dashboardPersistentFilter: true,
         sessionResumeAgent: true,
       }),
     ).toEqual({
-      dashboardPersistentFilter: true,
       sessionResumeAgent: true,
     });
     expect(FeatureFlagConfigSchema.safeParse({ "test.fake": true }).success).toBe(false);
@@ -550,7 +553,7 @@ describe("contract schemas", () => {
       ClientFeatureFlagsSchema.safeParse({
         revision: "test",
         flags: {
-          dashboardPersistentFilter: true,
+          stationPersistentAgents: true,
           sessionResumeAgent: true,
         },
       }).success,

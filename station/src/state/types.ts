@@ -70,8 +70,8 @@ export type PaneSplitDirection = "right" | "below";
 export type PaneRole = "primary-agent" | "shell";
 
 /**
- * Observer-minted identity for a managed primary agent; exit reports use the
- * terminal target id to close the observer session.
+ * Observer-minted identity for a managed primary agent; target and session form
+ * the compare-and-release identity used by process-exit reports.
  */
 export type AgentIdentity = {
   sessionId: string;
@@ -137,8 +137,15 @@ export type StationToast = {
   kind: "info" | "error";
 };
 
+/**
+ * Attention episodes the user has quieted on the island: attention key
+ * (`sessionId ?? worktreeId`) → dismissed-at epoch ms. The alert frame stays
+ * down for the rest of the Station session (reset on relaunch); the timestamp
+ * is the expiry hook for a future timeout dismissal mode.
+ */
 export type FeedbackSlice = {
   toast: StationToast | null;
+  dismissedAttention: Readonly<Record<string, number>>;
 };
 
 export type StationState = {

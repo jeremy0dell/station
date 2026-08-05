@@ -3,6 +3,7 @@
 // transitions. New Session creation intercepts the resolved Create action after
 // shared validation so it can launch a managed pane instead of dispatching the
 // standalone observer operation.
+import type { StationClientStateSource } from "@station/client";
 import { worktreeHasLiveAgent, type ProviderId } from "@station/contracts";
 import {
   choiceValueByKey,
@@ -35,6 +36,7 @@ import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
 
 type DashboardStateInput = {
   state: DashboardStateSource;
+  clientState: StationClientStateSource;
 };
 
 type DashboardTransitionInput = DashboardStateInput & {
@@ -181,7 +183,7 @@ export type RowAgentTarget =
  * produce an inert `none`.
  */
 export function resolveRowAgentTarget(store: DashboardStateInput, rowId: string): RowAgentTarget {
-  const snapshot = store.state.getState().snapshot;
+  const snapshot = store.clientState.getState().snapshot;
   if (snapshot === undefined) {
     return { kind: "none" };
   }
@@ -410,7 +412,7 @@ export function resolveRowPaneTarget(
   store: DashboardStateInput,
   rowId: string,
 ): OpenPaneTarget | undefined {
-  const snapshot = store.state.getState().snapshot;
+  const snapshot = store.clientState.getState().snapshot;
   if (snapshot === undefined) {
     return undefined;
   }
@@ -430,7 +432,7 @@ export function resolveProjectPaneTarget(
   store: DashboardStateInput,
   projectId: string,
 ): OpenPaneTarget | undefined {
-  const snapshot = store.state.getState().snapshot;
+  const snapshot = store.clientState.getState().snapshot;
   if (snapshot === undefined) {
     return undefined;
   }
