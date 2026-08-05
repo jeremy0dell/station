@@ -3,10 +3,16 @@ import {
   createObserverActivationCapabilities,
   createObserverManagedSessionCapabilities,
   dashboardExecution,
-  type DashboardCapabilities,
-  type DashboardExecutionResult,
-  type OpenDashboardShellRequest,
 } from "@station/dashboard-core";
+import type {
+  DashboardCapabilities,
+  DashboardExecutionResult,
+  OpenDashboardShellRequest,
+} from "@station/dashboard-core";
+import {
+  resolveDashboardShellTarget,
+  STALE_DASHBOARD_TARGET_NOTICE,
+} from "../dashboardCapabilities/shellTarget.js";
 import type { PopupRuntime } from "./popupRuntime.js";
 
 /** Standalone composition inputs for semantic dashboard execution. */
@@ -16,8 +22,6 @@ export type CreateStandaloneDashboardCapabilitiesOptions = {
   popupRuntime: PopupRuntime;
   exitRenderer(exitCode: number): void;
 };
-
-const STALE_TARGET_NOTICE = "That dashboard item is no longer available.";
 
 /**
  * Compose standalone dashboard capabilities from Observer execution, canonical
@@ -90,17 +94,11 @@ async function openShell(
   options: CreateStandaloneDashboardCapabilitiesOptions,
   request: OpenDashboardShellRequest,
 ): Promise<DashboardExecutionResult> {
-  const snapshot = options.clientState.getState().snapshot;
-  let cwd: string | undefined;
-  if (request.kind === "project") {
-    cwd = snapshot?.projects.find((candidate) => candidate.id === request.projectId)?.root;
-  } else {
-    const session = snapshot?.sessions.find((candidate) => candidate.id === request.sessionId);
-    cwd = snapshot?.rows.find((candidate) => candidate.id === session?.worktreeId)?.path;
+  const target = resolveDashboardShellTarget(options.clientState, request);
+  if (target === undefined) {
+    return { kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE };
   }
-  if (cwd === undefined) {
-    return { kind: "notice", notice: { kind: "info", message: STALE_TARGET_NOTICE } };
-  }
+  const cwd = target.kind === "project" ? target.project.root : target.worktree.path;
   const open = options.popupRuntime.openShell;
   if (open === undefined) {
     return {

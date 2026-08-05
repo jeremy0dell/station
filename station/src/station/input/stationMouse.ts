@@ -22,12 +22,10 @@ import {
   dispatchStationKey,
 } from "./stationActions.js";
 
-type StationMouseDashboard = {
+/** Read/action surface required by the pointer router shared by both Station renderers. */
+export type DashboardMouseRuntime = {
   state: DashboardStateSource;
-  actions: Pick<
-    DashboardActions,
-    "dismissToasts" | "dispatch" | "handleKey" | "pushToast"
-  >;
+  actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey">;
 };
 
 export type StationMouseTarget =
@@ -90,11 +88,11 @@ const SHEET_CHOICE_MODES: ReadonlySet<TuiInputMode> = new Set(
   Object.keys(LIST_REGISTRY) as TuiInputMode[],
 );
 
-/** Dispatch native pointer targets through the same semantic actions as keyboard input. */
+/** Dispatch dashboard pointer targets through the same semantic actions as keyboard input. */
 export function routeStationMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  runtime: StationMouseDashboard,
+  runtime: DashboardMouseRuntime,
 ): StationMouseOutcome {
   const eventKind = stationMouseEventKind(event);
   if (eventKind === undefined) {
@@ -259,7 +257,7 @@ export function stationMouseEventKind(event: StationMouseEvent): StationMouseEve
 }
 
 function activateProjectHeader(
-  runtime: StationMouseDashboard,
+  runtime: DashboardMouseRuntime,
   mode: TuiInputMode,
   projectId: string,
   actionId: ProjectHeaderControl,
@@ -270,7 +268,7 @@ function activateProjectHeader(
 }
 
 function routePersistentFilterConditionAction(
-  runtime: StationMouseDashboard,
+  runtime: DashboardMouseRuntime,
   mode: TuiInputMode,
   actionId: "back" | "close" | "done" | "applyFilter",
 ): void {
@@ -296,7 +294,7 @@ function routePersistentFilterConditionAction(
   }
 }
 
-function confirmProjectRemoval(runtime: StationMouseDashboard, mode: TuiInputMode): void {
+function confirmProjectRemoval(runtime: DashboardMouseRuntime, mode: TuiInputMode): void {
   const screen = runtime.state.getState().screen;
   if (
     mode === "projectSettings" &&
@@ -310,7 +308,7 @@ function confirmProjectRemoval(runtime: StationMouseDashboard, mode: TuiInputMod
 function routeStationWheel(
   target: StationMouseTarget,
   eventKind: "scroll-up" | "scroll-down",
-  runtime: StationMouseDashboard,
+  runtime: DashboardMouseRuntime,
   mode: TuiInputMode,
 ): void {
   if (

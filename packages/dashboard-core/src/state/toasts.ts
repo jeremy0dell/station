@@ -2,6 +2,12 @@ import type { ClientNotice } from "../services/types.js";
 import { toastExpiryMs } from "./timing.js";
 import type { DashboardScreenView, DashboardStateView, TuiState, TuiToastEntry } from "./types.js";
 
+/** Standard feedback for a semantic dashboard identity absent from canonical state. */
+export const STALE_DASHBOARD_TARGET_NOTICE = {
+  kind: "info",
+  message: "That dashboard item is no longer available.",
+} as const satisfies ClientNotice;
+
 export function addTuiToast(state: TuiState, toast: ClientNotice, nowMs = Date.now()): TuiState {
   const current = expireTuiToasts(state, nowMs);
   const active = activeTuiToast(current);

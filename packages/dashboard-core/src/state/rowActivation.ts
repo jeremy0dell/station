@@ -4,11 +4,9 @@ import {
   selectDashboardSessionRow,
 } from "../selectors/dashboardSessionRows.js";
 import { safeErrorToToast } from "../services/errors/errors.js";
-import { addTuiToast } from "./toasts.js";
+import { addTuiToast, STALE_DASHBOARD_TARGET_NOTICE } from "./toasts.js";
 import type { TuiTransition } from "./transition.js";
 import type { TuiState } from "./types.js";
-
-const STALE_TARGET_NOTICE = "That dashboard item is no longer available.";
 
 /** Resolve a stable dashboard row identity before producing one activation operation. */
 export function activateDashboardRowById(state: TuiState, rowId: string): TuiTransition {
@@ -16,7 +14,7 @@ export function activateDashboardRowById(state: TuiState, rowId: string): TuiTra
     state.snapshot === undefined ? undefined : selectDashboardSessionRow(state.snapshot, rowId);
   if (sessionRow === undefined) {
     return {
-      state: addTuiToast(state, { kind: "info", message: STALE_TARGET_NOTICE }),
+      state: addTuiToast(state, STALE_DASHBOARD_TARGET_NOTICE),
     };
   }
   if (
@@ -34,7 +32,7 @@ export function openDashboardRowShell(state: TuiState, rowId: string): TuiTransi
     state.snapshot === undefined ? undefined : selectDashboardSessionRow(state.snapshot, rowId);
   if (sessionRow === undefined) {
     return {
-      state: addTuiToast(state, { kind: "info", message: STALE_TARGET_NOTICE }),
+      state: addTuiToast(state, STALE_DASHBOARD_TARGET_NOTICE),
     };
   }
   return {

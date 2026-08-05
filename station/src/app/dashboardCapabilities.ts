@@ -7,6 +7,10 @@ import {
   type DashboardExecutionHandle,
   type DashboardExecutionResult,
 } from "@station/dashboard-core";
+import {
+  resolveDashboardShellTarget,
+  STALE_DASHBOARD_TARGET_NOTICE,
+} from "../dashboardCapabilities/shellTarget.js";
 import type { StationStore } from "../state/store.js";
 import { agentWorktreePaneId, projectPaneId, worktreePaneId } from "../state/types.js";
 import type { ManagedLaunch, ManagedLaunchResult } from "../input/runtime/managedLaunch.js";
@@ -20,8 +24,6 @@ export type CreateNativeDashboardCapabilitiesOptions = {
   paneEffects: PaneEffects;
   managedLaunch: ManagedLaunch;
 };
-
-const STALE_TARGET_NOTICE = "That dashboard item is no longer available.";
 
 /**
  * Compose native dashboard capabilities from canonical client state, workspace
@@ -39,6 +41,19 @@ export function createDashboardCapabilities(
       options.store.actions.closeOverlay();
     },
   });
+  const createManagedSession: DashboardCapabilities["managedSessions"]["create"] = (request) =>
+    managedSessionExecution(
+      options.managedLaunch.create({
+        projectId: request.project.id,
+        title: request.title,
+        branch: request.hiddenBranch,
+        harness: request.harness,
+      }),
+    );
+  const closeDashboard: DashboardCapabilities["dismissal"]["dismissDashboard"] = () => {
+    options.store.actions.closeOverlay();
+    return dashboardExecution({ kind: "success" });
+  };
 
   return {
     activation: {
@@ -80,24 +95,8 @@ export function createDashboardCapabilities(
       },
     },
     managedSessions: {
-      create: (request) =>
-        managedSessionExecution(
-          options.managedLaunch.create({
-            projectId: request.project.id,
-            title: request.title,
-            branch: request.hiddenBranch,
-            harness: request.harness,
-          }),
-        ),
-      quickCreate: (request) =>
-        managedSessionExecution(
-          options.managedLaunch.create({
-            projectId: request.project.id,
-            title: request.title,
-            branch: request.hiddenBranch,
-            harness: request.harness,
-          }),
-        ),
+      create: createManagedSession,
+      quickCreate: createManagedSession,
       fork: (request) => {
         if (request.inheritedHarness === undefined) {
           return managedSessionFailure({
@@ -121,42 +120,28 @@ export function createDashboardCapabilities(
     },
     shell: {
       open: (request) => {
-        const snapshot = options.clientState.getState().snapshot;
-        if (request.kind === "project") {
-          const project = snapshot?.projects.find((candidate) => candidate.id === request.projectId);
-          if (project === undefined) {
-            return dashboardExecution(staleTargetResult());
-          }
-          options.paneEffects.openPane(projectPaneId(project.id), {
-            cwd: project.root,
-            role: "shell",
-          });
-          return dashboardExecution({ kind: "success" });
-        }
-        const session = snapshot?.sessions.find((candidate) => candidate.id === request.sessionId);
-        const row = snapshot?.rows.find(
-          (candidate) => candidate.id === session?.worktreeId,
-        );
-        if (session === undefined || row === undefined) {
+        const target = resolveDashboardShellTarget(options.clientState, request);
+        if (target === undefined) {
           return dashboardExecution(staleTargetResult());
         }
-        options.paneEffects.openPane(worktreePaneId(row.id), {
-          cwd: row.path,
-          role: "shell",
-          worktreeId: row.id,
-        });
+        if (target.kind === "project") {
+          options.paneEffects.openPane(projectPaneId(target.project.id), {
+            cwd: target.project.root,
+            role: "shell",
+          });
+        } else {
+          options.paneEffects.openPane(worktreePaneId(target.worktree.id), {
+            cwd: target.worktree.path,
+            role: "shell",
+            worktreeId: target.worktree.id,
+          });
+        }
         return dashboardExecution({ kind: "success" });
       },
     },
     dismissal: {
-      dismissDashboard: () => {
-        options.store.actions.closeOverlay();
-        return dashboardExecution({ kind: "success" });
-      },
-      exitRenderer: () => {
-        options.store.actions.closeOverlay();
-        return dashboardExecution({ kind: "success" });
-      },
+      dismissDashboard: closeDashboard,
+      exitRenderer: closeDashboard,
     },
   };
 }
@@ -206,5 +191,5 @@ function managedSessionFailure(error: SafeError): DashboardExecutionHandle {
 }
 
 function staleTargetResult(): DashboardExecutionResult {
-  return { kind: "notice", notice: { kind: "info", message: STALE_TARGET_NOTICE } };
+  return { kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE };
 }

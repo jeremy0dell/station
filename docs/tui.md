@@ -451,8 +451,9 @@ OpenTUI `mockMouse` tests cover renderer composition, semantic hit targets, hove
 interception, and equivalence with keyboard transitions. They do not prove terminal mouse-mode
 negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
-The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
-Workflow controls dispatch renderer-neutral actions through `DashboardActions.dispatch(...)`; direct hotkeys
+Native Station and the fullscreen/tmux dashboard route normalized pointer targets through the same
+semantic router; the standalone adapter only consumes its URL-presentation outcome. Workflow controls
+dispatch renderer-neutral actions through `DashboardActions.dispatch(...)`; direct hotkeys
 and focused Enter decode to the same pure intents before transitions or capability execution. Dashboard-core
 owns action availability and resolution, while native Station and standalone/tmux inject their
 terminal-specific capabilities at composition. Session rows are resolved by their exact current row
@@ -510,8 +511,9 @@ Blocked activation keeps Add Session focused while showing the existing error; s
 inert. Accepted activation retains the bounded Add Session focus until an optimistic create row
 replaces the empty row. The agent-picker uses the shared project-default screen transition. Link
 cells use the same validated platform opener. The project-header shell control delegates through
-the injected shell capability: native Station opens or focuses a Station pane, while a tmux popup
-sends a strict renderer-control request to its CLI parent. The tmux adapter
+the injected shell capability. Both adapters resolve its stable identity through one canonical-client
+selector; native Station opens or focuses a Station pane, while a tmux popup sends a strict
+renderer-control request to its CLI parent. The tmux adapter
 opens or focuses one cwd-bound shell window in the exact invoking client session,
 then dismisses that popup claim. Its separate propagation-stopping cell prevents
 it from also collapsing the project.

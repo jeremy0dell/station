@@ -9,6 +9,7 @@ import {
 import { toSafeError } from "../../services/errors/errors.js";
 import type { ObserverService } from "../../services/types.js";
 import { buildResumeAgentCommand, buildStartAgentCommand } from "../commandBuilders.js";
+import { STALE_DASHBOARD_TARGET_NOTICE } from "../toasts.js";
 import {
   type DashboardExecutionHandle,
   type DashboardExecutionResult,
@@ -45,8 +46,6 @@ export type ObserverActivationCapabilitiesOptions = {
   waitForFocusCompletion?: boolean;
   onFocusSuccess?: () => Promise<void>;
 };
-
-const STALE_TARGET_NOTICE = "That dashboard item is no longer available.";
 
 /**
  * Create Observer-backed session activation without receiving dashboard state.
@@ -112,7 +111,7 @@ function resolveCanonicalTarget(
     row === undefined ||
     project === undefined
   ) {
-    return { kind: "notice", notice: { kind: "info", message: STALE_TARGET_NOTICE } };
+    return { kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE };
   }
   if (worktreeHasLiveAgent(row) && session.terminal?.focusable !== true) {
     return {
@@ -174,7 +173,7 @@ async function runFocus(
     .getState()
     .snapshot?.sessions.find((candidate) => candidate.id === sessionId);
   if (session === undefined) {
-    return { kind: "notice", notice: { kind: "info", message: STALE_TARGET_NOTICE } };
+    return { kind: "notice", notice: STALE_DASHBOARD_TARGET_NOTICE };
   }
   if (session.terminal?.focusable !== true) {
     return {

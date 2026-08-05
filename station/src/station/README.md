@@ -5,8 +5,8 @@ Architecture: render-framework-free dashboard behavior comes
 from `@station/dashboard-core`; the OpenTUI render layer under `view/` and the
 Station input/mouse plumbing stay local. Input registers into Station's router:
 the overlay keymap slot delegates to the shared transition machine
-(`input/stationOverlayLayer.ts`), and mouse targets resolve through one pure
-`routeStationMouse` (`input/stationMouse.ts`).
+(`input/stationOverlayLayer.ts`), and both native and standalone mouse targets
+resolve through one pure `routeStationMouse` (`input/stationMouse.ts`).
 
 ## Running it
 

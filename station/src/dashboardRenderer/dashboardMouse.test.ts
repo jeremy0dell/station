@@ -324,6 +324,19 @@ describe("routeDashboardMouse", () => {
     await waitFor(() => store.state.getState().screen.name === "dashboard");
   });
 
+  it("routes standalone Rename submit through the shared pointer router", () => {
+    const store = makeStore();
+    const rowId = "ses_wt_station_idle";
+    store.actions.handleKey({ input: "R" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: "Mouse title" });
+
+    routeDashboardMouse({ kind: "renameSessionSubmit" }, LEFT_DOWN, store);
+
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().localRows.pendingRenameTitles?.[rowId]?.title).toBe("Mouse title");
+  });
+
   it("maps project settings, add-project, toast, scroll-indicator, and widget targets", async () => {
     const fixture = makeStationTestRuntime({
       terminalRows: 14,
