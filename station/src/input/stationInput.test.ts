@@ -1210,8 +1210,9 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
   ) {
     const observerService = new FakeTuiObserverService(snapshot);
     observerService.nextPreparedLaunch = prepared;
+    const source = new FakeStationSource(snapshot);
     const dashboardRuntime = createStationTestDashboardRuntime({
-      source: new FakeStationSource(snapshot),
+      source,
       service: observerService,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -1281,6 +1282,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       settle,
       observerService,
       dashboardRuntime,
+      source,
       registry,
       baseRegistry: base,
       scripted,
@@ -1508,7 +1510,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
       dispatch,
       settle,
       observerService,
-      dashboardRuntime,
+      source,
       baseRegistry,
       scripted,
     } = agentHarness();
@@ -1517,7 +1519,7 @@ describe("createStationInputRuntime managed primary-agent launch", () => {
     await settle();
     baseRegistry.resize(AGENT_PANE_ID, { cols: 90, rows: 24 });
     scripted[0].helpers.emitExit({ exitCode: 0 });
-    dashboardRuntime.clientState.setSnapshot(retainedNoAgentSnapshot());
+    source.setSnapshot(retainedNoAgentSnapshot());
 
     // Exit and snapshot convergence alone retain the dead transcript.
     expect(observerService.preparedLaunches).toHaveLength(1);

@@ -469,7 +469,7 @@ describe("createManagedLaunchAttempt", () => {
     const harness = attemptHarness({ prepare: async () => await gate });
     const replacementRunner = createManagedLaunchAttempt({
       store: harness.store,
-      stationViewStore: harness.stationViewStore,
+      dashboardRuntime: harness.dashboardRuntime,
       observerService: harness.observerService,
       registry: harness.registry,
       managedTerminalAttacher: undefined,

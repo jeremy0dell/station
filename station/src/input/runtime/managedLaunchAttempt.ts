@@ -62,7 +62,6 @@ type ManagedLaunchAttemptDeps = {
   managedTerminalAttacher: ManagedTerminalAttacher | undefined;
 };
 
-type ManagedLaunchRuntime = ManagedLaunchAttemptDeps;
 
 type ManagedLaunchContext = {
   paneId: PaneId;
@@ -108,23 +107,23 @@ type PreparedPanePlacement =
 type PreparedActionResult = "performed" | "refused";
 
 function pushToast(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   message: string,
   kind: "info" | "error" = "error",
 ): void {
   runtime.dashboardRuntime?.actions.pushToast({ kind, message });
 }
 
-function pushSafeError(runtime: ManagedLaunchRuntime, error: SafeError): void {
+function pushSafeError(runtime: ManagedLaunchAttemptDeps, error: SafeError): void {
   runtime.dashboardRuntime?.actions.pushToast(safeErrorToNotice(error));
 }
 
-function pushError(runtime: ManagedLaunchRuntime, error: unknown): void {
+function pushError(runtime: ManagedLaunchAttemptDeps, error: unknown): void {
   pushSafeError(runtime, toSafeError(error, { clientLabel: "Station" }));
 }
 
 function createContext(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   paneId: PaneId,
   target: ManagedLaunchTarget,
 ): ManagedLaunchContext {
@@ -140,7 +139,7 @@ function createContext(
 }
 
 async function landOnPane(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   service: ObserverService | undefined,
   readiness: ManagedLaunchContext["turnReadiness"],
 ): Promise<void> {
@@ -162,7 +161,7 @@ async function landOnPane(
 }
 
 async function runPreflight(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   context: ManagedLaunchContext,
 ): Promise<ObserverService | undefined> {
   const pane = selectPaneRecord(runtime.store.getState(), context.paneId);
@@ -228,7 +227,7 @@ function buildPrepareParams(
 }
 
 async function prepareLaunch(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   service: ObserverService,
   target: ManagedLaunchTarget,
 ): Promise<
@@ -248,7 +247,7 @@ async function prepareLaunch(
 }
 
 function resolveExistingSession(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   prepared: Extract<PreparedLaunch, { kind: "existing-session" }>,
   target: ManagedLaunchTarget,
 ): ManagedLaunchAction {
@@ -282,7 +281,7 @@ function resolveExistingSession(
 }
 
 async function resolvePreparedLaunch(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   prepared: PreparedLaunch,
   target: ManagedLaunchTarget,
 ): Promise<ManagedLaunchAction | undefined> {
@@ -344,7 +343,7 @@ async function resolvePreparedLaunch(
 }
 
 async function focusExistingSession(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   service: ObserverService,
   sessionId: string,
 ): Promise<boolean> {
@@ -377,7 +376,7 @@ async function focusExistingSession(
 }
 
 async function performPreparedAction(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   context: ManagedLaunchContext,
   service: ObserverService,
   action: ManagedLaunchAction,
@@ -400,7 +399,7 @@ async function performPreparedAction(
 }
 
 async function openPreparedPane(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   context: ManagedLaunchContext,
   service: ObserverService,
   action: OpenPaneAction,
@@ -427,7 +426,7 @@ async function openPreparedPane(
 }
 
 function placePreparedTerminal(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   context: ManagedLaunchContext,
   action: OpenPaneAction,
 ): PreparedPanePlacement {
@@ -485,7 +484,7 @@ function ensurePreparedTerminal(
   }
 }
 
-function refusePaneReplacement(runtime: ManagedLaunchRuntime): PreparedPanePlacement {
+function refusePaneReplacement(runtime: ManagedLaunchAttemptDeps): PreparedPanePlacement {
   pushToast(runtime, "The agent pane changed while Station was preparing its relaunch.", "info");
   return { kind: "refused" };
 }
@@ -502,7 +501,7 @@ function agentIdentityEquals(
 }
 
 async function releaseUnplacedLocalLaunch(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   service: ObserverService,
   prepared: PreparedLaunch,
 ): Promise<void> {
@@ -521,7 +520,7 @@ async function releaseUnplacedLocalLaunch(
 }
 
 async function runManagedLaunchAttempt(
-  runtime: ManagedLaunchRuntime,
+  runtime: ManagedLaunchAttemptDeps,
   paneId: PaneId,
   target: ManagedLaunchTarget,
 ): Promise<ManagedLaunchAttemptResult> {
@@ -557,6 +556,6 @@ async function runManagedLaunchAttempt(
 export function createManagedLaunchAttempt(
   deps: ManagedLaunchAttemptDeps,
 ): (paneId: PaneId, target: ManagedLaunchTarget) => Promise<ManagedLaunchAttemptResult> {
-  const runtime: ManagedLaunchRuntime = { ...deps };
+  const runtime: ManagedLaunchAttemptDeps = { ...deps };
   return (paneId, target) => runManagedLaunchAttempt(runtime, paneId, target);
 }
