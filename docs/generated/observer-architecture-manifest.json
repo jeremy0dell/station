@@ -11353,6 +11353,43 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/popup.ts",
+      "declaration": "runPopupCommand",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Owns Observer startup, exact-selector UI admission, popup reconcile, and tmux popup opening.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
+          "declaration": "requireMatchingStationUiObserverBuild",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/tmux/src/popup/index.ts",
+          "declaration": "openTmuxPopup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/setup/adapters/config.ts",
       "declaration": "createSetupConfigAdapter",
       "kind": "function",
@@ -11603,12 +11640,27 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
+      "declaration": "requireMatchingStationUiObserverBuild",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Protects command-capable Station UI launch from delegating to a different-build Observer before renderer, reconcile, popup, or Host-producing effects.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/tui.ts",
       "declaration": "runTuiCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup, resolved-config propagation, exact child outcome evidence, renderer selection, and persistent popup control wiring.",
+      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup and exact-selector admission before renderer and reconcile effects, resolved-config propagation, exact child outcome evidence, renderer selection, and popup control wiring.",
       "dependencies": [
+        {
+          "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
+          "declaration": "requireMatchingStationUiObserverBuild",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/cli/src/commands/tuiRendererControl.ts",
           "declaration": "attachTuiRendererControl",

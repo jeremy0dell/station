@@ -331,6 +331,22 @@ it accepted at launch. The failed operation was not sent to the replacement.
 Close and relaunch that client, or use an isolated socket/state directory; do
 not retry the stale process in a loop.
 
+`TUI_OBSERVER_BUILD_MISMATCH` occurs earlier: a command-capable native or popup
+Station launcher reached a healthy Observer selected by normal singleton policy,
+but its complete caller selector did not exactly equal the accepted Observer
+selector. No renderer, startup or popup reconcile, tmux popup, Station Host,
+PTY, or layout effect should have started. Use the matching Observer build named
+in the error to inspect and account for live terminals. When hosted work is
+empty, stop the incumbent gracefully and retry, or select an isolated Observer
+state directory. Do not spoof either selector.
+
+This differs from `OBSERVER_HANDOFF_REFUSED`, where singleton ordering or safe
+replacement could not produce an acceptable handoff, and from
+`OBSERVER_BUILD_MISMATCH`, where an already-pinned client observed later
+replacement. `HOST_UPGRADE_BLOCKED` is independent: Station Host protocol or
+display build differs and the incumbent Host still owns live PTYs. Reopen the
+matching Host build and account for those terminals before replacement.
+
 A missing, invalid, or checkout/output-mismatched `station-build-id` stops a
 source client before it can claim compatibility. Run `pnpm build`, then relaunch
 the client; a scoped `tsc` output is not an identified whole-repository build.
@@ -374,7 +390,7 @@ When Station "does nothing" or panes read "exited", inspect the `cli`, `tui`, an
   that is impossible, inspect candidates independently with
   `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
   `kill -TERM <independently-verified-station-pid>` yourself.
-- The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy, uses another build, or speaks another protocol. `HOST_CLIENT_IDENTITY_MISMATCH` instead means one connection omitted or changed its UI correlation identity. Compatibility failures preserve the Host; correlation failures reject only the malformed client request.
+- The host the UI dials must match both its host protocol and Station display build version. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different display build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy, uses another display build, or speaks another protocol. `HOST_CLIENT_IDENTITY_MISMATCH` instead means one connection omitted or changed its UI correlation identity. Compatibility failures preserve the Host; correlation failures reject only the malformed client request. These are separate from Observer immutable-selector admission.
 - The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect live PTYs with `bun run host:list` in `station/`.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
 - Successful `agent.attach` entries in `station-host.jsonl` report `replayKind` (`raw-complete`, `semantic-truncation-recovery`, or `live-reset-recovery`), replay entry/byte counts, recorded geometry, and capture duration without terminal contents. `live-reset-recovery` means historical output could not be reconstructed exactly, so Station applied Host-captured control-only reset data, restored interaction modes, nudged geometry for a child repaint, and retained live I/O. The associated `pty.snapshot.degraded` entry classifies the content-free cause as `unsupported-state`, `model-update-failed`, or `serialization-failed`; unsupported state also carries an optional stable, content-free `detail` classification. `HOST_SNAPSHOT_PENDING` is retried because later output may finish an incomplete parser sequence. `HOST_SNAPSHOT_FAILED` is no longer an expected live-reconstruction outcome; if it appears, confirm the PTY in `host:list` and treat it as a Host/client regression rather than an Observer session exit.

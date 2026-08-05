@@ -32,6 +32,7 @@ import {
   resolveStationWorkspaceDir,
   stationUiInstallHint,
 } from "../stationWorkspace.js";
+import { requireMatchingStationUiObserverBuild } from "./stationUiBuildAdmission.js";
 import { attachTuiRendererControl, type TuiRendererControlAdapters } from "./tuiRendererControl.js";
 import { createTuiRendererLifecycleWitness } from "./tuiRendererLifecycle.js";
 
@@ -92,9 +93,9 @@ const nestedTuiDisabledError = {
 /**
  * COMPOSITION ROOT
  *
- * Owns one launcher-minted UI run identity per renderer child, Observer startup,
- * resolved-config propagation, exact child outcome evidence, renderer selection,
- * and persistent popup control wiring.
+ * Owns one launcher-minted UI run identity per renderer child, Observer startup and
+ * exact-selector admission before renderer and reconcile effects, resolved-config
+ * propagation, exact child outcome evidence, renderer selection, and popup control wiring.
  */
 export async function runTuiCommand(
   args: string[],
@@ -121,7 +122,7 @@ export async function runTuiCommand(
   if (parsed.devFakeDashboard) {
     // The Bun renderer carries its own mock source; the --fake-* counts are
     // accepted for back-compat but the mock uses its baseline scenario.
-    // --dev-fake-dashboard previews the read-only dashboard with mock data.
+    // --dev-fake-dashboard previews the observer-backed pane-free dashboard with mock data.
     return runRenderer(
       deps,
       buildRendererEnv(parsed, { STATION_SOURCE: "mock" }, options.configPath),
@@ -159,6 +160,7 @@ export async function runTuiCommand(
   if (observerBuildVersion === undefined) {
     throw new Error("The running Observer did not report a build version.");
   }
+  requireMatchingStationUiObserverBuild(clientBuildVersion, observerBuildVersion);
 
   const startupReconcile: {
     paths: ObserverPaths;
@@ -179,8 +181,8 @@ export async function runTuiCommand(
   // snapshot immediately, and the observer.reconciled event from this reconcile
   // refreshes the live view when the scan lands.
   scheduleReconcileBeforeTui(startupReconcile);
-  // Bare terminal launches the native Station workspace (its own panes); inside a
-  // tmux popup we keep the read-only dashboard, since tmux owns the panes there.
+  // Bare terminal launches native Station with its own panes; a tmux popup uses the
+  // observer-backed command-capable dashboard without native Station panes.
   return runRenderer(
     deps,
     buildRendererEnv(

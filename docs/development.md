@@ -468,7 +468,10 @@ also builds a second artifact from one production-source change in an isolated
 detached worktree, queries both exact selectors, proves lower-to-higher
 same-version replacement and post-handoff mutation refusal, then proves
 source/compiled ordering and Station Host PTY continuity across both Observer
-replacements. Singleton-cleanup promotion must also prove the same guarded
+replacements. In the mixed source/compiled branch it also proves that lower-build
+native and public-popup Station launchers refuse exact-selector admission before
+renderer, reconcile, tmux, Host, PTY, or layout mutation while non-UI lower-build
+reuse remains available. Singleton-cleanup promotion must also prove the same guarded
 SIGTERM-only behavior under the compiled Bun artifact before production
 composition leaves report-only mode. The smoke also chmods the physical Observer socket to `000`, proves status,
 start, restart, doctor, and ingress preserve the original PID/socket/pidfile,
@@ -528,8 +531,11 @@ The `0.0.0-local` display version exercises cross-version Observer handoff. The
 smoke first builds two independently stamped binaries at that display version,
 runs the lower identity as incumbent, replaces it with the higher identity, and
 verifies that a later mutating command from the loser is refused without
-changing the Observer, Station Host, or live PTY. It requires a committed clean
-checkout so the detached-worktree artifact has one controlled source delta.
+changing the Observer, Station Host, or live PTY. The same `0.0.0-local` lane
+then runs its mixed source/compiled native and popup admission checks against the
+higher source Observer and verifies the complete runtime baseline is unchanged.
+It requires a committed clean checkout so the detached-worktree artifact has one
+controlled source delta; do not weaken or bypass that requirement.
 
 For a local failure bundle, name an absolute path that does not exist and is
 outside the smoke root:

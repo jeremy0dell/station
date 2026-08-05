@@ -11,6 +11,7 @@ import { cliCommandRegistry } from "../../src/commandRegistry.js";
 import type { CliCommandNode } from "../../src/commands/cliCommand/types.js";
 
 const now = "2026-05-20T12:00:00.000Z";
+const observerBuildVersion = `0.0.0-local+station.${"a".repeat(64)}`;
 
 describe("CLI manual-smoke commands", () => {
   it("defaults to the TUI when no subcommand is provided", async () => {
@@ -306,7 +307,7 @@ function runningObserverDeps(options: {
   reconcile?: (reason?: string) => Promise<ReconcileReceipt>;
 }) {
   return {
-    buildVersion: "0.0.0",
+    buildVersion: observerBuildVersion,
     clientFactory: (socketPath: string) =>
       ({
         health: async () => ({
@@ -314,7 +315,7 @@ function runningObserverDeps(options: {
           status: "healthy",
           pid: 1234,
           startedAt: now,
-          version: "0.7.0",
+          version: observerBuildVersion,
           socketPath,
         }),
         getSnapshot: async () => options.snapshot ?? snapshotFixture(),

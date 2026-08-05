@@ -512,7 +512,7 @@ Advanced development/demo overrides:
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
 | `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Development/testing override for `stn-ingress`; fallback is the PATH name `stn-ingress`. |
-| `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the read-only dashboard renderer. Development/testing only. |
+| `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the observer-backed, command-capable, pane-free dashboard renderer. Development/testing only. |
 | `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |
 | `STATION_SHELL_AUTOCLOSE` | Native Station TUI | `1`/`true` or `0`/`false`; auto-close overlay when a `+sh` shell opens. |
 | `STATION_PROFILE` | Native Station TUI | `1`/`true` or `0`/`false`; enables dev render profiling. |
@@ -559,13 +559,17 @@ Generated launch/hook env vars are internal context, not hand-authored config:
 `STATION_TUI_PERSISTENT`,
 `STATION_FOCUS_PROVIDER`, and `STATION_FOCUS_CLIENT_ID`. The CLI supplies the two
 build variables as a pair: the first identifies the renderer artifact and the
-second pins it to the exact Observer selector the CLI accepted. The launcher
+second pins it to the exact Observer selector the CLI accepted. These values
+must match exactly for native or popup Station UI launch; the CLI refuses before
+UI effects rather than emitting a mixed pair. The launcher
 also mints `STATION_UI_RUN_ID` as content-free correlation for one renderer
 child; a direct source renderer mints and preserves its own ID across Bun HMR.
 A directly launched source renderer falls back to its own verified built selector. The
 renderer fixes that selector when it creates its Observer client; each later
 operation checks the socket owner on the same connection without running Git or
-hashing source from the UI. The CLI sets `STATION_TUI_PERSISTENT=1` when the
+hashing source from the UI. Station Host separately compares Host protocol and
+Station display build version rather than the Observer's immutable selector. The
+CLI sets `STATION_TUI_PERSISTENT=1` when the
 renderer requires its lifecycle-control IPC channel; it is not a standalone
 launch mode. Native Station child PTYs also receive standard terminal values
 `TERM=xterm-256color`, `COLORTERM=truecolor`, and `TERM_PROGRAM=Station` after

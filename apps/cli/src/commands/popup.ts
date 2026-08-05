@@ -1,6 +1,7 @@
 import type { StationConfig } from "@station/config";
 import { POPUP_OPEN_RECONCILE_REASON } from "@station/contracts";
 import { createObserverClient } from "@station/protocol";
+import { stationObserverBuildVersion } from "@station/runtime";
 import { openTmuxPopup, type TmuxPopupOptions, type TmuxPopupResult } from "@station/tmux";
 import {
   type ObserverProcessDeps,
@@ -8,6 +9,7 @@ import {
   startObserver,
 } from "../observerProcess.js";
 import { type ObserverPaths, resolveObserverPaths } from "../paths.js";
+import { requireMatchingStationUiObserverBuild } from "./stationUiBuildAdmission.js";
 
 export type PopupCommandDeps = Partial<
   Pick<
@@ -47,6 +49,12 @@ export type PopupCommandUnavailableResult = {
   observer: ObserverStatus;
 };
 
+/**
+ * COMPOSITION ROOT
+ *
+ * Owns Observer startup, exact-selector UI admission, popup reconcile, and tmux
+ * popup opening.
+ */
 export async function runPopupCommand(
   args: string[],
   options: PopupCommandOptions = {},
@@ -102,6 +110,11 @@ async function prepareObserverForPopup(
     return undefined;
   }
   const paths = resolveObserverPaths(options.config);
+  const clientBuildVersion = deps.buildVersion ?? stationObserverBuildVersion();
+  const observerDeps: ObserverProcessDeps = {
+    ...deps,
+    buildVersion: clientBuildVersion,
+  };
   const observer = await startObserver(
     {
       config: options.config,
@@ -110,7 +123,7 @@ async function prepareObserverForPopup(
       ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
       ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     },
-    deps,
+    observerDeps,
   );
   if (observer.status !== "running") {
     return {
@@ -120,15 +133,18 @@ async function prepareObserverForPopup(
       observer,
     };
   }
+  const observerBuildVersion = observer.health.version;
+  if (observerBuildVersion === undefined) {
+    throw new Error("The running Observer did not report a build version.");
+  }
+  requireMatchingStationUiObserverBuild(clientBuildVersion, observerBuildVersion);
 
   const client =
-    deps.clientFactory?.(observer.paths.socketPath) ??
+    observerDeps.clientFactory?.(observer.paths.socketPath) ??
     createObserverClient({
       socketPath: observer.paths.socketPath,
       timeoutMs: options.timeoutMs ?? 30_000,
-      ...(observer.health.version === undefined
-        ? {}
-        : { expectedBuildVersion: observer.health.version }),
+      expectedBuildVersion: observerBuildVersion,
     });
   void client.reconcile(POPUP_OPEN_RECONCILE_REASON).catch(() => undefined);
   return undefined;

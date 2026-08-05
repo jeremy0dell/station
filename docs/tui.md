@@ -29,6 +29,34 @@ the Node CLI to launch the Bun renderer:
   keeps the popup open.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
 
+## Observer Build Admission
+
+Native Station, direct `stn tui --popup`, and public `stn popup` are
+command-capable UI launchers. After ordinary Observer singleton selection, each
+compares its complete caller selector with the selector reported by the accepted
+Observer. Launch proceeds only on exact string equality. The check occurs before
+startup or popup reconcile, renderer startup, tmux popup routing, Station Host,
+PTY, or layout effects. The mock dashboard remains Observer-free and bypasses
+this admission path.
+
+The popup dashboard is observer-backed, command-capable, and has no native
+Station panes. It still requires admission because its commands can produce work
+that native Station later hosts. Native Station directly operates Station Host.
+Host compatibility remains a separate protocol and display-build-version check;
+Observer immutable selectors do not create a three-process build cohort.
+
+A lower or otherwise different launcher reports both complete selectors:
+
+```text
+Station UI caller selector "<caller>" does not match accepted Observer selector "<observer>"; launch was refused before Station Host-producing work could mix builds. (TUI_OBSERVER_BUILD_MISMATCH)
+Hint: Use the matching Observer build "<observer>" to account for live terminals. When hosted work is empty, stop the incumbent Observer and retry, or use isolated Observer state.
+```
+
+Reopen Station with the matching Observer build first so live terminals can be
+accounted for. When hosted work is empty, stop the incumbent and retry the other
+build, or use a separate Observer state directory. Non-UI commands, hooks,
+ingress, and generic protocol clients retain normal higher-incumbent reuse.
+
 ## Nested Workspaces
 
 Station-owned PTYs carry `STATION_PANE=1` because Station, rather than any outer
