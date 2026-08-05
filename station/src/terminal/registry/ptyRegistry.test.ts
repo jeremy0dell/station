@@ -4,6 +4,7 @@ import { createScriptedTerminal, type ScriptedTerminal } from "../testing/script
 import { waitFor } from "../testing/waitFor.js";
 import type {
   StationTerminalDisposable,
+  StationTerminalExit,
   StationTerminalProcess,
   StationTerminalReplay,
   StationTerminalSize,
@@ -591,6 +592,120 @@ describe("createPtyRegistry", () => {
     registry.resize(PANE_A, { cols: 40, rows: 12 });
     expect(attempts).toBe(1); // no retry
     expect(registry.write(PANE_A, "x")).toBe(false);
+  });
+
+  it("resets only the exact exited entry and respawns at its latest requested viewport", () => {
+    const { registry, scripted, spawnSizes } = harness({ count: 2 });
+    registry.ensure(PANE_A, { cwd: "/work/old" });
+    registry.resize(PANE_A, SIZE);
+    const exitedEntry = registry.get(PANE_A);
+    if (exitedEntry === undefined) throw new Error("expected registry entry");
+    scripted[0].helpers.emitExit({ exitCode: 0 });
+    const latest = { cols: 52, rows: 14 };
+    registry.resize(PANE_A, latest);
+    let notifications = 0;
+    registry.subscribe(() => {
+      notifications += 1;
+    });
+
+    const reset = registry.resetExited(exitedEntry, { cwd: "/work/new" });
+
+    expect(reset).toEqual({ kind: "reset", viewport: latest });
+    expect(notifications).toBe(0);
+    expect(scripted[0].helpers.isDisposed()).toBe(true);
+    expect(registry.get(PANE_A)).toMatchObject({
+      cwd: "/work/new",
+      exited: false,
+      screen: null,
+      terminal: null,
+    });
+    if (reset.kind !== "reset") throw new Error("expected reset");
+    registry.resize(PANE_A, reset.viewport);
+    expect(spawnSizes).toEqual([SIZE, latest]);
+    expect(registry.get(PANE_A)?.terminal).toBe(scripted[1].terminal);
+  });
+
+  it("ignores an old terminal's retained exit callback after replacement", () => {
+    const old = createScriptedTerminal();
+    const replacement = createScriptedTerminal();
+    let oldExit: ((event: StationTerminalExit) => void) | undefined;
+    const stickyOld: StationTerminalProcess = {
+      ...old.terminal,
+      onExit: (listener) => {
+        oldExit = listener;
+        // Model a callback already queued outside the subscription's cancellation boundary.
+        return { dispose: () => {} };
+      },
+    };
+    let spawn = 0;
+    let exitNotifications = 0;
+    const registry = createPtyRegistry({
+      createTerminal: () => (spawn++ === 0 ? stickyOld : replacement.terminal),
+      onPaneExit: () => {
+        exitNotifications += 1;
+      },
+    });
+    registry.resize(PANE_A, SIZE);
+    const exitedEntry = registry.get(PANE_A);
+    if (exitedEntry === undefined || oldExit === undefined) {
+      throw new Error("expected the old terminal exit subscription");
+    }
+    oldExit({ exitCode: 0 });
+    const reset = registry.resetExited(exitedEntry, { cwd: "/work/new" });
+    if (reset.kind !== "reset") throw new Error("expected reset");
+    registry.resize(PANE_A, reset.viewport);
+
+    oldExit({ exitCode: 1 });
+
+    expect(registry.get(PANE_A)?.terminal).toBe(replacement.terminal);
+    expect(registry.get(PANE_A)?.exited).toBe(false);
+    expect(exitNotifications).toBe(1);
+  });
+
+  it("refuses to reset live, unavailable, spawn-failed, missing, and superseded entries", () => {
+    const live = harness();
+    live.registry.resize(PANE_A, SIZE);
+    const liveEntry = live.registry.get(PANE_A);
+    if (liveEntry === undefined) throw new Error("expected live entry");
+    expect(live.registry.resetExited(liveEntry, { cwd: "/new" })).toEqual({
+      kind: "refused",
+      reason: "not-exited",
+    });
+
+    live.scripted[0].helpers.emitUnavailable({ code: "HOST_SNAPSHOT_FAILED", message: "gone" });
+    expect(live.registry.resetExited(liveEntry, { cwd: "/new" })).toEqual({
+      kind: "refused",
+      reason: "not-exited",
+    });
+
+    const failed = createPtyRegistry({
+      createTerminal: () => {
+        throw new Error("boom");
+      },
+    });
+    failed.resize(PANE_A, SIZE);
+    const failedEntry = failed.get(PANE_A);
+    if (failedEntry === undefined) throw new Error("expected failed entry");
+    expect(failed.resetExited(failedEntry, { cwd: "/new" })).toEqual({
+      kind: "refused",
+      reason: "not-exited",
+    });
+
+    const exited = harness({ count: 2 });
+    exited.registry.resize(PANE_A, SIZE);
+    const oldEntry = exited.registry.get(PANE_A);
+    if (oldEntry === undefined) throw new Error("expected old entry");
+    exited.scripted[0].helpers.emitExit({ exitCode: 0 });
+    exited.registry.dispose(PANE_A);
+    expect(exited.registry.resetExited(oldEntry, { cwd: "/new" })).toEqual({
+      kind: "refused",
+      reason: "missing",
+    });
+    exited.registry.ensure(PANE_A, { cwd: "/replacement" });
+    expect(exited.registry.resetExited(oldEntry, { cwd: "/new" })).toEqual({
+      kind: "refused",
+      reason: "superseded",
+    });
   });
 
   it("never falls back to the local terminal when a managed attach fails lazily", () => {

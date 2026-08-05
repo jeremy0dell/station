@@ -85,6 +85,10 @@ export type StationStore = {
   getState(): StationState;
   subscribe(listener: () => void): () => void;
   actions: StationStoreActions;
+  /** Process-local coordination that must survive compatible Bun hot reloads. */
+  transient: {
+    managedLaunchesInFlight: Set<PaneId>;
+  };
 };
 
 /**
@@ -359,6 +363,9 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
           feedback: { toast: null, dismissedAttention: state.feedback.dismissedAttention },
         });
       },
+    },
+    transient: {
+      managedLaunchesInFlight: new Set<PaneId>(),
     },
   };
 }

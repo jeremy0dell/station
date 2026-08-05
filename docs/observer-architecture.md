@@ -568,8 +568,9 @@ opaquely, and request reconcile after relevant lifecycle changes. Returning an
 existing live session precedes launch preflight. A new managed session repeats
 the full selected-harness preflight immediately before title, target, or process
 mutation, then durably seeds the session from canonical worktree title authority
-before target registration and process launch. Failed launch cleanup releases
-any opened target and discards only the fresh session projection.
+before target registration and process launch. Failed launch cleanup conditionally
+releases only the target still bound to that fresh session and discards its seed
+only after release is confirmed absent or complete.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new
@@ -577,6 +578,11 @@ session under its branch. Terminal-preparation or process-launch failure release
 the target before deleting the seed; if target release cannot be confirmed, the
 seed remains so a dangling target cannot lose its title. A title supplied while
 returning an existing session is ignored.
+
+External exit reports carry the target plus the Station session expected to own
+it. The managed-terminal adapter atomically forgets only that exact binding;
+missing identity, unknown targets, and superseded sessions are no-ops that do not
+request reconcile. Release never terminates the process.
 
 A managed launch result may include an opaque attachment that Station resolves
 to its host mechanics. An absent attachment permits Station's local launch path;
@@ -619,6 +625,7 @@ expires.
 | Socket ownership evidence | Connect success proves listening. Only `ECONNREFUSED`, or Bun's existing-path `ENOENT`, plus strict zero-holder `lsof` evidence proves stale. Permission failures, timeouts, live holders, evidence failure, path replacement, and non-socket collisions are inaccessible and authorize no spawn, unlink, stop, or signal. |
 | Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
+| Managed target release | Station target IDs are deterministic per worktree, so release is compare-and-delete on target plus expected Station session. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
 | Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
 | Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |

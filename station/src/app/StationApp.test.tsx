@@ -360,7 +360,7 @@ describe("Station app composition", () => {
     expect(station.composition.registry.has(MAIN_PANE_ID)).toBe(true);
   });
 
-  it("reports a primary-agent pane's PTY exit to the observer by its terminal target", () => {
+  it("reports a primary-agent pane's PTY exit with its exact target and session", () => {
     const { composition, store, service, scripted } = composeStationForExit();
     const paneId = agentWorktreePaneId("wt_station_idle");
     store.actions.createPane(paneId, { role: "primary-agent" });
@@ -375,7 +375,12 @@ describe("Station app composition", () => {
     scripted.helpers.emitExit({ exitCode: 0 });
 
     // The composition glue resolved paneId → terminalTargetId and reported it.
-    expect(service.reportedExits).toEqual(["native:wt_station_idle"]);
+    expect(service.reportedExits).toEqual([
+      {
+        terminalTargetId: "native:wt_station_idle",
+        expectedSessionId: "ses_managed",
+      },
+    ]);
   });
 
   it("preserves live screens while applying refreshed scrollback to future HMR spawns", async () => {
@@ -450,7 +455,12 @@ describe("Station app composition", () => {
     scripted.helpers.emitExit({ exitCode: 0 });
 
     expect(firstService.reportedExits).toEqual([]);
-    expect(secondService.reportedExits).toEqual(["native:wt_station_idle"]);
+    expect(secondService.reportedExits).toEqual([
+      {
+        terminalTargetId: "native:wt_station_idle",
+        expectedSessionId: "ses_managed",
+      },
+    ]);
   });
 
   it("does not report a [+sh] shell pane's exit (no managed identity)", () => {

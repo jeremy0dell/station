@@ -20,7 +20,10 @@ export type ManagedTerminalFactory = (
  * A rejection is terminal for the launch and must never permit a local spawn fallback.
  */
 export type ManagedTerminalAttacher = {
-  resolve(attachment: ManagedTerminalAttachment): Promise<ManagedTerminalFactory>;
+  resolve(
+    attachment: ManagedTerminalAttachment,
+    expectedSessionId: string,
+  ): Promise<ManagedTerminalFactory>;
 };
 
 type ManagedTerminalAttacherDeps = {
@@ -37,7 +40,7 @@ export function createStationHostManagedTerminalAttacher(
   const createTerminal = deps.createTerminal ?? createHostAttachedTerminal;
 
   return {
-    async resolve(attachment) {
+    async resolve(attachment, expectedSessionId) {
       const entries = await listHost(hostSocketPath);
       if (entries === undefined) {
         throw new StationHostProviderError("HOST_UNREACHABLE", "Station host is not reachable.");
@@ -46,7 +49,8 @@ export function createStationHostManagedTerminalAttacher(
         (candidate) =>
           candidate.kind === "agent" &&
           candidate.alive &&
-          candidate.terminalTargetId === attachment.terminalTargetId,
+          candidate.terminalTargetId === attachment.terminalTargetId &&
+          candidate.sessionId === expectedSessionId,
       );
       if (entry === undefined) {
         throw new StationHostProviderError(

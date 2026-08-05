@@ -44,7 +44,7 @@ describe("createStationHostManagedTerminalAttacher", () => {
       },
     });
 
-    const createTerminal = await attacher.resolve(ATTACHMENT);
+    const createTerminal = await attacher.resolve(ATTACHMENT, "ses-agent");
     expect(created).toEqual([]);
 
     expect(createTerminal({ size: { cols: 120, rows: 40 } })).toBe(scripted.terminal);
@@ -62,7 +62,7 @@ describe("createStationHostManagedTerminalAttacher", () => {
       listHost: async () => undefined,
     });
 
-    await expect(attacher.resolve(ATTACHMENT)).rejects.toMatchObject({
+    await expect(attacher.resolve(ATTACHMENT, "ses-agent")).rejects.toMatchObject({
       code: "HOST_UNREACHABLE",
     });
   });
@@ -73,10 +73,11 @@ describe("createStationHostManagedTerminalAttacher", () => {
         hostEntry({ alive: false }),
         hostEntry({ kind: "aux" }),
         hostEntry({ terminalTargetId: "native:other" }),
+        hostEntry({ sessionId: "ses-replacement" }),
       ],
     });
 
-    await expect(attacher.resolve(ATTACHMENT)).rejects.toMatchObject({
+    await expect(attacher.resolve(ATTACHMENT, "ses-agent")).rejects.toMatchObject({
       code: "HOST_ATTACH_GONE",
     });
   });
@@ -91,7 +92,7 @@ describe("createStationHostManagedTerminalAttacher", () => {
       },
     });
 
-    await expect(attacher.resolve(ATTACHMENT)).rejects.toMatchObject({
+    await expect(attacher.resolve(ATTACHMENT, "ses-agent")).rejects.toMatchObject({
       code: "HOST_VERSION_INCOMPATIBLE",
     });
   });

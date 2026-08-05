@@ -41,7 +41,7 @@ function createSlots(): StationHotSlots {
 }
 
 describe("station hot runtime", () => {
-  it("reuses a compatible v5 runtime so its live PTYs survive a reload", () => {
+  it("reuses a compatible v6 runtime so its live PTYs survive a reload", () => {
     const slots = createSlots();
     const first = getOrCreateStationHotRuntime(slots, FREEZE_CONFIG);
     first.store.actions.createPane("pane-second");
@@ -61,6 +61,9 @@ describe("station hot runtime", () => {
 
     expect(second).toBe(first);
     expect(second.store).toBe(first.store);
+    expect(second.store.transient.managedLaunchesInFlight).toBe(
+      first.store.transient.managedLaunchesInFlight,
+    );
     expect(second.registry).toBe(first.registry);
     expect(second.registry.get("pane-second")?.screen).toBe(screen);
     expect(second.registry.get("pane-second")?.terminal).toBe(terminal);
@@ -68,7 +71,7 @@ describe("station hot runtime", () => {
     expect(second.store.getState().workspace.activePaneId).toEqual("pane-second");
   });
 
-  it("reboots an incompatible v4 runtime and disposes its old PTYs", () => {
+  it("reboots a pre-launch-coordination v5 runtime and disposes its old PTYs", () => {
     const slots = createSlots();
     const oldStore = createStationStore();
     const paneId = agentWorktreePaneId("wt_station_idle");
@@ -77,7 +80,7 @@ describe("station hot runtime", () => {
     const oldRegistry = createPtyRegistry({ createTerminal: () => scripted.terminal });
     oldRegistry.resize(paneId, { cols: 80, rows: 24 });
     const oldRuntime: StationHotRuntime = {
-      version: 4,
+      version: 5,
       store: oldStore,
       registry: oldRegistry,
     };

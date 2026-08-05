@@ -30,6 +30,7 @@ export type PtyRegistryEntry = {
   readonly paneId: PaneId;
   readonly screen: StationVtScreen | null;
   readonly terminal: StationTerminalProcess | null;
+  /** Proven process exit; the only local state that authorizes managed-pane recycling. */
   readonly exited: boolean;
   readonly status: string;
   /**
@@ -40,6 +41,10 @@ export type PtyRegistryEntry = {
    */
   readonly cwd: string | undefined;
 };
+
+export type PtyRegistryResetExitedResult =
+  | { kind: "reset"; viewport: StationTerminalSize }
+  | { kind: "refused"; reason: "missing" | "superseded" | "not-exited" };
 
 export type PtyRegistry = {
   /**
@@ -56,6 +61,16 @@ export type PtyRegistry = {
      */
     createTerminalOverride?: (options: StationTerminalSpawnOptions) => StationTerminalProcess,
   ): PtyRegistryEntry;
+  /**
+   * Replaces only the exact exited entry captured by the caller, without notifying
+   * before the caller publishes replacement identity. The new entry stays lazy;
+   * the caller must resize it with the returned viewport to start its PTY.
+   */
+  resetExited(
+    expectedEntry: PtyRegistryEntry,
+    spawnOptions: StationTerminalSpawnOptions,
+    createTerminalOverride?: (options: StationTerminalSpawnOptions) => StationTerminalProcess,
+  ): PtyRegistryResetExitedResult;
   get(paneId: PaneId): PtyRegistryEntry | undefined;
   has(paneId: PaneId): boolean;
   entries(): readonly PtyRegistryEntry[];
@@ -142,6 +157,7 @@ type InternalEntry = {
   replayingSnapshot: boolean;
   lastResizeAt: number;
   pendingSize: StationTerminalSize | null;
+  lastRequestedSize: StationTerminalSize | null;
   spawnOptions: StationTerminalSpawnOptions | undefined;
   outputCompatibility: PtyOutputCompatibility;
   createTerminal: ((options: StationTerminalSpawnOptions) => StationTerminalProcess) | undefined;
@@ -193,6 +209,7 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       replayingSnapshot: false,
       lastResizeAt: 0,
       pendingSize: null,
+      lastRequestedSize: null,
       spawnOptions,
       outputCompatibility: createPtyOutputCompatibility(spawnOptions?.outputCompatibility),
       cwd: spawnOptions?.cwd,
@@ -218,15 +235,14 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         // (startup probes recorded in the ring); answering those would inject
         // stale replies into the child's stdin, so drop replies until the
         // replay settles.
-        if (entry.replayingSnapshot) {
+        if (entries.get(entry.paneId) !== entry || entry.replayingSnapshot) {
           return;
         }
         // Query replies (DA1/DSR/OSC...) go straight to the PTY: routing them
         // through the keyboard path would tangle them with chord filtering,
         // and TUIs block on these at startup.
-        const current = entries.get(entry.paneId);
-        if (current?.terminal && !current.exited) {
-          current.terminal.write(data);
+        if (entry.terminal !== null && !entry.exited) {
+          entry.terminal.write(data);
         }
       },
     });
@@ -236,7 +252,13 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     // the screen's per-frame channel (only the renderable consumes that). Bridge
     // the screen's title-only signal onto notify so the border refreshes when the
     // title changes, without re-notifying every pane on each output frame.
-    entry.subscriptions.push({ dispose: screen.onTitleChange(notify) });
+    entry.subscriptions.push({
+      dispose: screen.onTitleChange(() => {
+        if (entries.get(entry.paneId) === entry) {
+          notify();
+        }
+      }),
+    });
 
     let terminal: StationTerminalProcess;
     try {
@@ -257,6 +279,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     if (terminal.onReplay !== undefined) {
       entry.subscriptions.push(
         terminal.onReplay(async ({ initialSize, events }) => {
+          if (entries.get(entry.paneId) !== entry) {
+            return;
+          }
           const current = entry.screen;
           if (current === null) {
             return;
@@ -273,11 +298,17 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
                 continue;
               }
               await current.whenIdle();
+              if (entries.get(entry.paneId) !== entry) {
+                return;
+              }
               current.resize({ cols: event.cols, rows: event.rows });
             }
             await current.whenIdle();
           } finally {
             entry.replayingSnapshot = false;
+          }
+          if (entries.get(entry.paneId) !== entry) {
+            return;
           }
           if (terminal.onGeometry === undefined) {
             current.resize(entry.appliedSize ?? size);
@@ -291,6 +322,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     if (terminal.onGeometry !== undefined) {
       entry.subscriptions.push(
         terminal.onGeometry(async (nextSize) => {
+          if (entries.get(entry.paneId) !== entry) {
+            return;
+          }
           const current = entry.screen;
           if (current === null) {
             return;
@@ -298,6 +332,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
           // Complete older writes before applying the ordered barrier; the Host
           // awaits this callback before it emits data for the new geometry.
           await current.whenIdle();
+          if (entries.get(entry.paneId) !== entry) {
+            return;
+          }
           current.resize(nextSize);
           scheduleGeometryCheck(entry);
         }),
@@ -306,6 +343,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     if (terminal.onUnavailable !== undefined) {
       entry.subscriptions.push(
         terminal.onUnavailable((event) => {
+          if (entries.get(entry.paneId) !== entry) {
+            return;
+          }
           entry.unavailable = true;
           entry.status = "attachment unavailable";
           reportTerminalCorruption({
@@ -321,6 +361,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
       // Transport faults (failed host resizes, reconnects) feed the divergence
       // detector; without a subscriber they would be dropped silently.
       terminal.onDiagnostic((message) => {
+        if (entries.get(entry.paneId) !== entry) {
+          return;
+        }
         reportTerminalCorruption({
           kind: "terminal_diagnostic",
           pane: entry.paneId,
@@ -328,6 +371,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         });
       }),
       terminal.onData((data) => {
+        if (entries.get(entry.paneId) !== entry) {
+          return;
+        }
         const current = entry.screen;
         if (current === null) {
           return;
@@ -337,6 +383,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
         );
       }),
       terminal.onExit((event) => {
+        if (entries.get(entry.paneId) !== entry || entry.exited) {
+          return;
+        }
         entry.screen?.feed(entry.outputCompatibility.flush());
         entry.exited = true;
         entry.status = formatExit(event);
@@ -448,6 +497,9 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
   };
 
   const disposeEntry = (entry: InternalEntry): void => {
+    if (entries.get(entry.paneId) === entry) {
+      entries.delete(entry.paneId);
+    }
     if (entry.resizeTimer !== undefined) {
       clearTimeout(entry.resizeTimer);
       entry.resizeTimer = undefined;
@@ -462,12 +514,30 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
     entry.subscriptions = [];
     entry.terminal?.dispose();
     entry.screen?.dispose();
-    entries.delete(entry.paneId);
   };
 
   return {
     ensure: (paneId, spawnOptions, createTerminalOverride) =>
       ensureEntry(paneId, spawnOptions, createTerminalOverride),
+    resetExited: (expectedEntry, spawnOptions, createTerminalOverride) => {
+      const current = entries.get(expectedEntry.paneId);
+      if (current === undefined) {
+        return { kind: "refused", reason: "missing" };
+      }
+      if (current !== expectedEntry) {
+        return { kind: "refused", reason: "superseded" };
+      }
+      if (!current.exited) {
+        return { kind: "refused", reason: "not-exited" };
+      }
+      const viewport = current.lastRequestedSize ?? current.appliedSize;
+      if (viewport === null) {
+        return { kind: "refused", reason: "not-exited" };
+      }
+      disposeEntry(current);
+      ensureEntry(current.paneId, spawnOptions, createTerminalOverride);
+      return { kind: "reset", viewport };
+    },
     get: (paneId) => entries.get(paneId),
     has: (paneId) => entries.has(paneId),
     entries: () => [...entries.values()],
@@ -497,8 +567,12 @@ export function createPtyRegistry(options: PtyRegistryOptions = {}): PtyRegistry
 
     resize: (paneId, size) => {
       const entry = ensureEntry(paneId);
+      entry.lastRequestedSize = size;
       if (entry.screen === null) {
         startSession(entry, size);
+        return;
+      }
+      if (entry.exited) {
         return;
       }
       if (

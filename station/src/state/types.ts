@@ -70,8 +70,8 @@ export type PaneSplitDirection = "right" | "below";
 export type PaneRole = "primary-agent" | "shell";
 
 /**
- * Observer-minted identity for a managed primary agent; exit reports use the
- * terminal target id to close the observer session.
+ * Observer-minted identity for a managed primary agent; target and session form
+ * the compare-and-release identity used by process-exit reports.
  */
 export type AgentIdentity = {
   sessionId: string;

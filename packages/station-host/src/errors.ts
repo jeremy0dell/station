@@ -9,6 +9,7 @@ export const STATION_HOST_PROVIDER_ID = "native";
 
 export type StationHostErrorCode =
   | "HOST_SPAWN_FAILED"
+  | "HOST_TARGET_SESSION_CONFLICT"
   | "HOST_PTY_NOT_FOUND"
   | "HOST_ATTACH_GONE"
   | "HOST_SNAPSHOT_PENDING"
