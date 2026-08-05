@@ -174,7 +174,10 @@ diagnostics/*/errors.jsonl
 diagnostics/*/logs/observer.jsonl
 diagnostics/panes/
 spool/hooks/
+run/runtime-owners/v1/
 ```
+
+`run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to the Observer, Station Host, or Host-owned PTYs.
 
 `observer.sock.pid` is mode `0600` for the default socket and contains exactly:
 
@@ -362,6 +365,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.
 - `logs/observer.jsonl` and `logs/hooks.jsonl` explain runtime events around reconcile, command execution, hook delivery, projection, spool fallback, and provider health.
+- `logs/cli.jsonl` includes the native development owner lifecycle (`runtime.owner.registered`, process start, shutdown request, cleanup result/refusal/failure, orphan detection/recovery, and retirement). Query `stn debug logs "runtime." --component cli` and then `stn debug trace <traceId>`; records contain correlation and hashed roots, not argv, environment, terminal output, prompts, credentials, or arbitrary private paths.
 - `logs/tui.jsonl` carries the strict native UI lifecycle (`ui.started`, ready/surface changes, shutdown intent/completion, and fatal errors) plus pane corruption telemetry. Lifecycle records contain IDs, typed surfaces/reasons, process outcomes, and source ordering only; they never contain terminal output, prompts, keys, foreground applications, process lists, environment variables, cwd, or repository paths. `Terminal corruption signal.` lines retain `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
 - `logs/station-host.jsonl` keeps the frozen `agent.attach`/`agent.detach` operational timeline and replay metrics alongside typed client, attachment, and PTY lifecycle records. Use typed records for `uiRunId`, connection/attachment correlation, and detach reasons; a detached attachment is not evidence that its PTY exited.
 - `diagnostics/panes/` holds pane evidence dumps written when a detector trips: the visible grid plus the raw byte tail that produced it. Feed `rawTail` back through `createStationVtScreen` to replay the corruption offline.

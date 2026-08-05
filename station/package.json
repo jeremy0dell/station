@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build:ctty-helper": "mkdir -p dist && cc -std=c11 -Wall -Wextra -Werror -O2 -o dist/ctty-helper src/terminal/pty/station-ctty-helper.c && chmod 0755 dist/ctty-helper",
-    "dev": "bun run link:station && bun run repair:node-pty && bun --hot src/main.tsx",
+    "dev": "node ../scripts/native-hmr-runner.mjs",
     "link:station": "./scripts/link-station-packages.sh",
     "repair:node-pty": "./scripts/repair-node-pty.sh",
     "station": "./scripts/link-station-packages.sh && ./scripts/repair-node-pty.sh && bun src/main.tsx",
