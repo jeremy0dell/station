@@ -215,6 +215,11 @@ const fallbackStateDir = ${JSON.stringify(stateDir)};
 const fallbackSpoolDir = ${JSON.stringify(hookSpoolDir)};
 const ingressTimeoutMs = 5000;
 const sentOpenCodeEventTypes = new Set(${JSON.stringify(openCodeForwardedEventTypes)});
+// OpenCode's own auto-accept can resolve a permission ask within milliseconds of
+// emitting it. A resolved-before-confirmation ask never blocked a user, so hold it
+// briefly and suppress it when its matching reply arrives first.
+const permissionConfirmWindowMs = 300;
+const pendingPermissionAsks = new Map();
 
 export const StationObserverPlugin = async ({ directory, worktree }) => {
   return {
@@ -223,7 +228,34 @@ export const StationObserverPlugin = async ({ directory, worktree }) => {
         if (!isStationOpenCodeSession(process.env)) return;
         if (!shouldSendOpenCodeEvent(event)) return;
         const receivedAt = new Date().toISOString();
+        const eventType = stringValue(event?.type);
+        if (eventType === "permission.asked") {
+          const requestId = permissionRequestId(event);
+          if (requestId !== undefined) {
+            const payload = compactOpenCodeEvent(event, { directory, worktree, receivedAt });
+            const timer = setTimeout(() => {
+              pendingPermissionAsks.delete(requestId);
+              void sendHookEvent(payload, eventType, process.env).catch(() => undefined);
+            }, permissionConfirmWindowMs);
+            if (typeof timer.unref === "function") timer.unref();
+            pendingPermissionAsks.set(requestId, timer);
+            return;
+          }
+        }
         const payload = compactOpenCodeEvent(event, { directory, worktree, receivedAt });
+        if (eventType === "permission.replied") {
+          const requestId = permissionRequestId(event);
+          const pending = requestId === undefined ? undefined : pendingPermissionAsks.get(requestId);
+          if (pending !== undefined) {
+            // The ask was auto-resolved before any human could see it; suppress both events.
+            clearTimeout(pending);
+            pendingPermissionAsks.delete(requestId);
+            return;
+          }
+        }
+        if (eventType === "session.idle" || eventType === "session.deleted") {
+          clearPendingPermissionAsks();
+        }
         if (payload.event_type === "session.idle") {
           sendHookEventSync(payload, payload.event_type, process.env);
           return;
@@ -387,6 +419,18 @@ function stringValue(value) {
 
 function recordValue(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
+}
+
+function permissionRequestId(event) {
+  const properties = recordValue(event?.properties);
+  return stringValue(properties?.requestID) ?? stringValue(properties?.id);
+}
+
+function clearPendingPermissionAsks() {
+  for (const timer of pendingPermissionAsks.values()) {
+    clearTimeout(timer);
+  }
+  pendingPermissionAsks.clear();
 }
 `;
 }

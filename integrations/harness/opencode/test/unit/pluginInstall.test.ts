@@ -324,6 +324,124 @@ describe("OpenCode plugin setup", () => {
     }
   }, 8_000);
 
+  it("suppresses permission asks that opencode auto-accepts within the confirm window", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
+    const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
+    const recorder = await writeIngressRecorder(root);
+    await installOpenCodePlugin({ pluginPath, hookSpoolDir: join(root, "spool") });
+
+    const previousEnv = { ...process.env };
+    try {
+      process.env.STATION_HARNESS_PROVIDER = "opencode";
+      process.env.STATION_WORKTREE_ID = "wt_1";
+      process.env.STATION_SESSION_ID = "ses_1";
+      process.env.STATION_INGRESS_BIN = recorder.ingressPath;
+      process.env.STATION_OBSERVER_SOCKET_PATH = join(root, "observer.sock");
+      process.env.STATION_OBSERVER_STATE_DIR = join(root, "state");
+      process.env.STATION_HOOK_SPOOL_DIR = join(root, "spool");
+      process.env.STATION_CONFIG_PATH = join(root, "config.toml");
+      const moduleUrl = pathToFileURL(pluginPath);
+      moduleUrl.search = `v=${Date.now()}`;
+      const pluginModule = (await import(moduleUrl.href)) as {
+        StationObserverPlugin: (input: { directory: string; worktree: string }) => Promise<{
+          event: (input: { event: unknown }) => Promise<void>;
+        }>;
+      };
+
+      const plugin = await pluginModule.StationObserverPlugin({ directory: root, worktree: root });
+      const ask = (requestId: string) => ({
+        type: "permission.asked",
+        properties: {
+          id: requestId,
+          sessionID: "opencode_session_1",
+          permission: "external_directory",
+          patterns: ["/tmp/sibling/*"],
+          tool: { messageID: "msg_1", callID: "call_1" },
+        },
+      });
+      const reply = (requestId: string) => ({
+        type: "permission.replied",
+        properties: { requestID: requestId, sessionID: "opencode_session_1", reply: "once" },
+      });
+
+      await plugin.event({ event: ask("per_1") });
+      await plugin.event({ event: reply("per_1") });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expect(access(recorder.argsPath)).rejects.toThrow();
+
+      await plugin.event({ event: ask("per_2") });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await expect(access(recorder.argsPath)).rejects.toThrow();
+      await waitForFile(recorder.argsPath);
+      await waitForFile(recorder.stdinPath);
+      const flushed = JSON.parse(await readFile(recorder.stdinPath, "utf8"));
+      expect(flushed).toMatchObject({
+        event_type: "permission.asked",
+        request_id: "per_2",
+        opencode_session_id: "opencode_session_1",
+      });
+    } finally {
+      process.env = previousEnv;
+    }
+  }, 8_000);
+
+  it("forwards permission replies that resolve an already-flushed ask", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
+    const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
+    const recorder = await writeIngressRecorder(root);
+    await installOpenCodePlugin({ pluginPath, hookSpoolDir: join(root, "spool") });
+
+    const previousEnv = { ...process.env };
+    try {
+      process.env.STATION_HARNESS_PROVIDER = "opencode";
+      process.env.STATION_WORKTREE_ID = "wt_1";
+      process.env.STATION_SESSION_ID = "ses_1";
+      process.env.STATION_INGRESS_BIN = recorder.ingressPath;
+      process.env.STATION_OBSERVER_SOCKET_PATH = join(root, "observer.sock");
+      process.env.STATION_OBSERVER_STATE_DIR = join(root, "state");
+      process.env.STATION_HOOK_SPOOL_DIR = join(root, "spool");
+      process.env.STATION_CONFIG_PATH = join(root, "config.toml");
+      const moduleUrl = pathToFileURL(pluginPath);
+      moduleUrl.search = `v=${Date.now()}`;
+      const pluginModule = (await import(moduleUrl.href)) as {
+        StationObserverPlugin: (input: { directory: string; worktree: string }) => Promise<{
+          event: (input: { event: unknown }) => Promise<void>;
+        }>;
+      };
+
+      const plugin = await pluginModule.StationObserverPlugin({ directory: root, worktree: root });
+      const reply = () => ({
+        type: "permission.replied",
+        properties: { requestID: "per_3", sessionID: "opencode_session_1", reply: "once" },
+      });
+
+      await plugin.event({
+        event: {
+          type: "permission.asked",
+          properties: {
+            id: "per_3",
+            sessionID: "opencode_session_1",
+            permission: "external_directory",
+            patterns: ["/tmp/sibling/*"],
+            tool: { messageID: "msg_1", callID: "call_1" },
+          },
+        },
+      });
+      await waitForFile(recorder.argsPath);
+      await waitForFile(recorder.stdinPath);
+      const first = JSON.parse(await readFile(recorder.stdinPath, "utf8"));
+      expect(first.event_type).toBe("permission.asked");
+
+      await plugin.event({ event: reply() });
+      await waitForStdinEventType(recorder.stdinPath, "permission.replied");
+      const second = JSON.parse(await readFile(recorder.stdinPath, "utf8"));
+      expect(second.event_type).toBe("permission.replied");
+      expect(second.request_id).toBe("per_3");
+    } finally {
+      process.env = previousEnv;
+    }
+  }, 8_000);
+
   it("fails soft when synchronous completion ingress cannot start without local spooling", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
     const pluginPath = join(root, "opencode", "plugins", "station-agent-state.js");
@@ -555,6 +673,20 @@ async function waitForFile(path: string): Promise<void> {
     }
   }
   throw new Error(`Timed out waiting for ${path}.`);
+}
+
+async function waitForStdinEventType(path: string, eventType: string): Promise<void> {
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline) {
+    try {
+      const content = JSON.parse(await readFile(path, "utf8"));
+      if (content.event_type === eventType) return;
+    } catch {
+      // The recorder atomically replaces the file per ingress child; retry.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${eventType} in ${path}.`);
 }
 
 async function waitForProcessExit(pid: number): Promise<void> {
