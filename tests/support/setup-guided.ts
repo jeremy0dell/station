@@ -18,6 +18,7 @@ export type GuidedPtyResult = {
   readonly stderr: string;
   readonly timedOut: boolean;
   readonly answersSent: number;
+  readonly sigtermSent: boolean;
 };
 
 export type RunGuidedPtyOptions = {
@@ -29,6 +30,7 @@ export type RunGuidedPtyOptions = {
   readonly rows?: number;
   readonly columns?: number;
   readonly timeoutMs?: number;
+  readonly sendSigtermOnFirstRawMode?: boolean;
 };
 
 const rawModeMarker = "__STATION_GUIDED_PTY_RAW__\n";
@@ -51,6 +53,8 @@ export function runGuidedPty(options: RunGuidedPtyOptions): Promise<GuidedPtyRes
   let markerBuffer = "";
   let answerIndex = 0;
   let timedOut = false;
+  let sigtermAttempted = false;
+  let sigtermSent = false;
 
   bridge.stdout.on("data", (chunk: Buffer) => output.push(chunk));
   bridge.stderr.on("data", (chunk: Buffer) => {
@@ -59,10 +63,15 @@ export function runGuidedPty(options: RunGuidedPtyOptions): Promise<GuidedPtyRes
     while (markerIndex >= 0) {
       bridgeStderr += markerBuffer.slice(0, markerIndex);
       markerBuffer = markerBuffer.slice(markerIndex + rawModeMarker.length);
-      const input = options.inputs[answerIndex];
-      if (input !== undefined) {
-        bridge.stdin.write(encodeGuidedInput(input));
-        answerIndex += 1;
+      if (options.sendSigtermOnFirstRawMode === true && !sigtermAttempted) {
+        sigtermAttempted = true;
+        sigtermSent = bridge.kill("SIGTERM");
+      } else {
+        const input = options.inputs[answerIndex];
+        if (input !== undefined) {
+          bridge.stdin.write(encodeGuidedInput(input));
+          answerIndex += 1;
+        }
       }
       markerIndex = markerBuffer.indexOf(rawModeMarker);
     }
@@ -85,6 +94,7 @@ export function runGuidedPty(options: RunGuidedPtyOptions): Promise<GuidedPtyRes
         stderr: bridgeStderr,
         timedOut,
         answersSent: answerIndex,
+        sigtermSent,
       });
     });
   });

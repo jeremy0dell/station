@@ -432,9 +432,10 @@ async function writeRunScript(paths) {
   await writeExecutable(
     paths.runPath,
     `cleanup() {
+  # Cleanup receives EOF so it cannot compete with Clack for the controlling terminal.
   env -i \\
   ${assignments} \\
-  ${shellQuote(process.execPath)} ${shellQuote(paths.cliPath)} --config ${shellQuote(paths.configPath)} observer stop --timeout-ms 3000 >/dev/null 2>&1 || true
+  ${shellQuote(process.execPath)} ${shellQuote(paths.cliPath)} --config ${shellQuote(paths.configPath)} observer stop --timeout-ms 3000 </dev/null >/dev/null 2>&1 || true
 }
 trap cleanup EXIT HUP TERM
 cd ${shellQuote(paths.repo)}
