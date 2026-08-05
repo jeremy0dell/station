@@ -1,4 +1,5 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
+import type { StationClientStateSource } from "@station/client";
 import type { TuiIslandConfig } from "@station/config";
 import type { DashboardStateSource } from "@station/dashboard-core";
 import type { StationMouseEvent } from "../input/mouse.js";
@@ -19,21 +20,37 @@ import { useMergeCelebration } from "./useMergeCelebration.js";
 export type StationButtonProps = {
   /** Coordination store: pane focus + STATION overlay visibility. */
   store: StationStore;
-  /** Read-only dashboard state carrying session counts and attention. */
+  /** Dashboard-local state used only to decorate canonical rows with optimistic titles. */
   dashboardState: DashboardStateSource;
+  /** Canonical snapshot authority for counts, attention, and project rollups. */
+  clientState: StationClientStateSource;
   /** Station input runtime entry point, reused for the header toggle/context menu. */
   dispatchMouse: (target: MouseTargetRef, event: StationMouseEvent) => boolean;
   /** Opt-in island display modes from `[tui.island]`. */
   island?: TuiIslandConfig | undefined;
 };
 
-// Reuses the existing `{ kind: "header" }` mouse path so the route to STATION
-// mode survives the header's removal (some terminals never deliver Ctrl-O).
-export function StationButton({ store, dashboardState, dispatchMouse, island }: StationButtonProps) {
-  const getStatus = useStableStatus(dashboardState, island?.projectRollup === true);
+// Reuses the existing `{ kind: "header" }` mouse path so the route to STATION mode
+// survives the header's removal (some terminals never deliver Ctrl-O). Attention
+// clicks focus the flagged session instead of toggling.
+export function StationButton({
+  store,
+  dashboardState,
+  clientState,
+  dispatchMouse,
+  island,
+}: StationButtonProps) {
+  const getStatus = useStableStatus(clientState, dashboardState, island?.projectRollup === true);
   const subscribe = useCallback(
-    (onChange: () => void) => dashboardState.subscribe(onChange),
-    [dashboardState],
+    (onChange: () => void) => {
+      const unsubscribeClient = clientState.subscribe(onChange);
+      const unsubscribeDashboard = dashboardState.subscribe(onChange);
+      return () => {
+        unsubscribeDashboard();
+        unsubscribeClient();
+      };
+    },
+    [clientState, dashboardState],
   );
   const status = useSyncExternalStore(subscribe, getStatus, getStatus);
   // The record reference is stable between store actions, so this subscription
@@ -43,9 +60,9 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
     [store],
   );
   const dismissedAttention = useSyncExternalStore(store.subscribe, getDismissed, getDismissed);
-  const celebration = useMergeCelebration(dashboardState);
+  const celebration = useMergeCelebration(clientState);
 
-  const attention = status.attention && anyFlaggedNotDismissed(dashboardState, dismissedAttention);
+  const attention = status.attention && anyFlaggedNotDismissed(clientState, dismissedAttention);
 
   const onHeader = useCallback(
     (event: StationMouseEvent) => {
@@ -58,7 +75,7 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
     (event: StationMouseEvent) => {
       // Acting on the alert quiets every session currently asking for the user.
       store.actions.dismissAttentionKeys(
-        attentionKeysFromSnapshot(dashboardState.getState().snapshot),
+        attentionKeysFromSnapshot(clientState.getState().snapshot),
       );
       const worktreeId = status.attentionWorktreeId;
       const sessionId = status.attentionSessionId;
@@ -82,7 +99,7 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
         dispatchMouse({ kind: "header" }, event);
       }
     },
-    [dashboardState, dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
+    [clientState, dispatchMouse, status.attentionSessionId, status.attentionWorktreeId, store],
   );
 
   return (
@@ -102,11 +119,11 @@ export function StationButton({ store, dashboardState, dispatchMouse, island }: 
 
 /** True when any session asking for the user has not been dismissed. */
 function anyFlaggedNotDismissed(
-  dashboardState: DashboardStateSource,
+  clientState: StationClientStateSource,
   dismissed: Readonly<Record<string, number>>,
 ): boolean {
   const now = Date.now();
-  return attentionKeysFromSnapshot(dashboardState.getState().snapshot).some(
+  return attentionKeysFromSnapshot(clientState.getState().snapshot).some(
     (key) => !isAttentionDismissed(dismissed, key, now),
   );
 }
@@ -114,17 +131,22 @@ function anyFlaggedNotDismissed(
 // Returns the same reference until a field changes, so useSyncExternalStore
 // (Object.is-compared) doesn't loop on the fresh object built each call.
 function useStableStatus(
+  clientState: StationClientStateSource,
   dashboardState: DashboardStateSource,
   projectRollup: boolean,
 ): () => StationButtonStatus {
   const cache = useRef<StationButtonStatus | undefined>(undefined);
   return useCallback(() => {
-    const next = selectStationButtonStatus(dashboardState.getState(), { projectRollup });
+    const next = selectStationButtonStatus(
+      clientState.getState().snapshot,
+      dashboardState.getState().localRows,
+      { projectRollup },
+    );
     const prev = cache.current;
     if (prev !== undefined && stationButtonStatusEqual(prev, next)) {
       return prev;
     }
     cache.current = next;
     return next;
-  }, [dashboardState, projectRollup]);
+  }, [clientState, dashboardState, projectRollup]);
 }

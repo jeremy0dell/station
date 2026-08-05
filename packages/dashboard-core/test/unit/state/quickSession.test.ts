@@ -1,13 +1,13 @@
-import { createDashboardRuntime } from "@station/dashboard-core";
 import { describe, expect, it, vi } from "vitest";
 import { createCommandSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
+import { createTestDashboardRuntime } from "../../support/fakeClientStateSource.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 describe("quick session", () => {
   it("creates immediately with the project's configured harness and terminal", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
     const project = snapshot.projects[0];
     if (project === undefined) throw new Error("project fixture missing");
 
@@ -34,7 +34,7 @@ describe("quick session", () => {
   it("moves accepted empty-project Quick Session focus at the standalone consumer", async () => {
     const snapshot = createZeroWorktreeSnapshot();
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       initialState: { dashboardFocus: { kind: "emptyProjectAction", projectId: "web" } },
@@ -73,7 +73,7 @@ describe("quick session", () => {
       ),
     };
     const service = new FakeTuiObserverService(unavailable);
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: unavailable,
       initialState: { dashboardFocus: { kind: "emptyProjectAction", projectId: project.id } },
@@ -97,7 +97,7 @@ describe("quick session", () => {
   it("leaves a missing project inert", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.createQuickSession("missing-project");
 

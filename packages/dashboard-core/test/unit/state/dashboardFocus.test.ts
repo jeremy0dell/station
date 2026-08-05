@@ -2,7 +2,6 @@ import type { StationSnapshot } from "@station/contracts";
 import type { DashboardFocus, ProjectHeaderControl, TuiState } from "@station/dashboard-core";
 import {
   clearDashboardFocus,
-  createDashboardRuntime,
   createInitialTuiState,
   focusDashboardEmptyProjectAction,
   focusDashboardSession,
@@ -16,6 +15,7 @@ import {
   createDashboardSnapshot,
   createZeroWorktreeSnapshot,
 } from "../../fixtures/snapshots.js";
+import { createTestDashboardRuntime } from "../../support/fakeClientStateSource.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 const DOWN = { input: "", downArrow: true } as const;
@@ -91,7 +91,7 @@ describe("dashboard focus", () => {
     expect(cleared.scrollOffset).toBe(2);
 
     const snapshot = createDashboardSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { terminalRows: 12 },
@@ -271,7 +271,7 @@ describe("dashboard focus", () => {
     expect(current.dashboardFocus).toEqual(emptyAction("api"));
 
     const snapshot = createZeroWorktreeSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: {
@@ -457,7 +457,7 @@ describe("dashboard focus", () => {
     expect(refreshed.dashboardFocus).toEqual(header("api", "defaultAgent"));
 
     const snapshot = createDashboardSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: {

@@ -1,4 +1,4 @@
-import type { CommandId, SafeError } from "@station/contracts";
+import type { SafeError } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { toSafeError } from "../../services/errors/errors.js";
 import type { ObserverService } from "../../services/types.js";
@@ -16,8 +16,6 @@ export async function runCreateSessionOperation(
   runtime: CommandRuntimeOptions,
   operation: CreateSessionOperation,
   markCreateSessionRowFailed: (localId: string, error: SafeError) => void,
-  markCommandFailureHandled: (commandId: CommandId) => void,
-  hasCommandFailureBeenHandled: (commandId: CommandId) => boolean,
   addSafeErrorToast: (error: SafeError) => void,
 ): Promise<void> {
   try {
@@ -51,12 +49,8 @@ export async function runCreateSessionOperation(
       return;
     }
 
-    const alreadyHandled = hasCommandFailureBeenHandled(completion.commandId);
-    markCommandFailureHandled(completion.commandId);
     markCreateSessionRowFailed(operation.localId, completion.error);
-    if (!alreadyHandled) {
-      addSafeErrorToast(completion.error);
-    }
+    addSafeErrorToast(completion.error);
   } catch (error: unknown) {
     const safeError = toSafeError(error, { clientLabel: runtime.clientLabel });
     markCreateSessionRowFailed(operation.localId, safeError);

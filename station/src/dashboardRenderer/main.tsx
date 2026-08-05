@@ -105,6 +105,11 @@ export async function runDashboardMain(): Promise<void> {
     },
     ...popupRuntime.runtimeOptions,
   });
+  const dashboardInput = {
+    state: dashboardRuntime.state,
+    actions: dashboardRuntime.actions,
+    clientState: client.state,
+  };
   const copyNoticeText = (text: string): void => {
     copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
   };
@@ -181,7 +186,7 @@ export async function runDashboardMain(): Promise<void> {
       prependInputHandlers: [
         copySelectedText,
         createDashboardSequenceHandler(dashboardRuntime, (intent) => {
-          executeDashboardControlIntent(intent, dashboardRuntime, rendererEffects);
+          executeDashboardControlIntent(intent, dashboardInput, rendererEffects);
         }),
       ],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
@@ -212,7 +217,7 @@ export async function runDashboardMain(): Promise<void> {
     root = nextRoot;
     nextRoot.render(
       <StandaloneDashboardApp
-        runtime={dashboardRuntime}
+        runtime={dashboardInput}
         effects={rendererEffects}
         onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}

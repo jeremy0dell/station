@@ -9,11 +9,11 @@ import ts from "@typescript/typescript6";
 const STATION_VIEW_ROOT = fileURLToPath(new URL(".", import.meta.url));
 const STATION_SOURCE_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const CONTEXT_MENU_ROOT = fileURLToPath(new URL("../contextMenu/", import.meta.url));
+const STATION_SOURCES_ROOT = fileURLToPath(new URL("../sources/", import.meta.url));
 const DASHBOARD_CORE_SOURCE_ROOT = fileURLToPath(
   new URL("../../../packages/dashboard-core/src/", import.meta.url),
 );
 const DASHBOARD_OPERATIONS_ROOT = join(DASHBOARD_CORE_SOURCE_ROOT, "state/operations");
-const DASHBOARD_OBSERVER_BRIDGE = join(DASHBOARD_CORE_SOURCE_ROOT, "state/observerBridge.ts");
 const LINKED_STATION_PACKAGES = new Set([
   "cli",
   "client",
@@ -46,7 +46,6 @@ const PRIVATE_DASHBOARD_STATE_TYPES = new Set([
 ]);
 const DASHBOARD_CORE_INTERNAL_PATHS = [
   "@station/dashboard-core/state/runtime",
-  "@station/dashboard-core/state/observerBridge",
   "@station/dashboard-core/state/operations",
 ] as const;
 
@@ -310,10 +309,7 @@ function exportedNamesOf(module: SourceModule): string[] {
 
 function dashboardRuntimeInternalExports(): ReadonlySet<string> {
   const operationModules = sourceModules(DASHBOARD_OPERATIONS_ROOT);
-  const observerBridge = parseSourceModule(DASHBOARD_OBSERVER_BRIDGE, DASHBOARD_CORE_SOURCE_ROOT);
-  const names = new Set(
-    [...operationModules, observerBridge].flatMap((module) => exportedNamesOf(module)),
-  );
+  const names = new Set(operationModules.flatMap((module) => exportedNamesOf(module)));
   // TuiFocusTarget is a normalized renderer-control contract, not an operation implementation.
   names.delete("TuiFocusTarget");
   return names;
@@ -449,13 +445,10 @@ const RAW_DASHBOARD_STORE_MODULES = [] as const;
 const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {};
 const DIRECT_DASHBOARD_MUTATION_INVENTORY: DirectDashboardMutationInventory = {};
 const DASHBOARD_RUNTIME_IMPORT_INVENTORY = [
-  "app/createStation.ts: import DashboardRuntime from @station/dashboard-core",
   "app/types.ts: import DashboardRuntime from @station/dashboard-core",
   "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core",
 ] as const;
-const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [
-  "sources/observerStationClient.ts: import bridgeOperationService from @station/dashboard-core",
-] as const;
+const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [] as const;
 
 describe("station production boundaries", () => {
   it("finds every production layer and excludes test support", () => {
@@ -475,7 +468,6 @@ describe("station production boundaries", () => {
       "terminal/testing/frameProbe.ts",
     ];
     const expectedInternalExports = [
-      "createObserverBridgeHooks",
       "createTuiLocalOperationRunner",
       "prepareCommandForRuntime",
       "runCreateSessionOperation",
@@ -496,6 +488,17 @@ describe("station production boundaries", () => {
       ),
     ).sort();
     expect(failures).toEqual([]);
+  });
+
+  it("keeps the Station client-source tree independent of dashboard-core", () => {
+    const failures = sourceModules(STATION_SOURCES_ROOT, isProductionSource).flatMap((module) =>
+      moduleReferencesOf(module).flatMap((reference) =>
+        reference.specifier.startsWith(DASHBOARD_CORE_ROOT_IMPORT)
+          ? referenceDescriptors(module, reference)
+          : [],
+      ),
+    );
+    expect(failures.sort()).toEqual([]);
   });
 
   it("keeps Zustand React access read-only and rejects raw store imports", () => {

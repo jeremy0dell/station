@@ -1,4 +1,3 @@
-import type { DashboardRuntime } from "@station/dashboard-core";
 import type { Automation } from "../config/stationConfig.js";
 import {
   startWidgetConfigWrites,
@@ -27,7 +26,10 @@ import type { StationClient } from "../sources/types.js";
 import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
 import { createStationHostManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
+import {
+  createStationDashboardRuntime,
+  type StationDashboardRuntime,
+} from "../station/store/dashboardRuntime.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
 /**
@@ -205,7 +207,7 @@ function createLayoutPersistence(
 function createLifecycle(deps: {
   store: StationStore;
   stationClient: StationClient;
-  dashboardRuntime: DashboardRuntime;
+  dashboardRuntime: StationDashboardRuntime;
   registry: PtyRegistry;
   reconcilers: Reconcilers;
   layoutWriter: LayoutWriter | undefined;
@@ -308,7 +310,7 @@ function createInputRuntime(
   options: CreateStationOptions,
   deps: {
     store: StationStore;
-    dashboardRuntime: DashboardRuntime;
+    dashboardRuntime: StationDashboardRuntime;
     registry: PtyRegistry;
     observerService: StationClient["service"];
     automations: readonly Automation[];
@@ -329,7 +331,11 @@ function createInputRuntime(
   const inputOptions: Parameters<typeof createStationInputRuntime>[0] = {
     store: deps.store,
     shutdown: deps.onShutdown,
-    dashboardRuntime: deps.dashboardRuntime,
+    dashboardRuntime: {
+      state: deps.dashboardRuntime.state,
+      actions: deps.dashboardRuntime.actions,
+      clientState: deps.dashboardRuntime.clientState,
+    },
     registry: deps.registry,
     observerService: deps.observerService,
     autoCloseOverlayOnPaneOpen: options.shellAutoCloseOverlay ?? false,
@@ -353,7 +359,7 @@ function buildViewProps(
   deps: {
     store: StationStore;
     registry: PtyRegistry;
-    dashboardRuntime: DashboardRuntime;
+    dashboardRuntime: StationDashboardRuntime;
     dispatchMouse: StationInputRuntime["dispatchMouse"];
     onCopySelection: (text: string) => void;
     automations: readonly Automation[];
@@ -363,6 +369,7 @@ function buildViewProps(
     store: deps.store,
     registry: deps.registry,
     dashboardState: deps.dashboardRuntime.state,
+    clientState: deps.dashboardRuntime.clientState,
     dashboardActions: deps.dashboardRuntime.actions,
     dispatchMouse: deps.dispatchMouse,
     onCopySelection: deps.onCopySelection,

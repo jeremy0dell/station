@@ -1,4 +1,4 @@
-import type { SessionId, WorktreeId } from "@station/contracts";
+import type { SessionId, StationSnapshot, WorktreeId } from "@station/contracts";
 import {
   isReadyToRead,
   selectDashboardSessionRows,
@@ -65,10 +65,10 @@ export function attentionKeysFromSnapshot(
 // Counts come from the client-side fleet breakdown, not snapshot.counts: the
 // contract folds ready into idle and its attention count excludes stuck.
 export function selectStationButtonStatus(
-  state: DashboardStateView,
+  snapshot: StationSnapshot | undefined,
+  localRows: DashboardStateView["localRows"],
   options?: { projectRollup?: boolean },
 ): StationButtonStatus {
-  const snapshot = state.snapshot;
   if (snapshot === undefined) {
     return EMPTY_STATUS;
   }
@@ -83,7 +83,7 @@ export function selectStationButtonStatus(
     idleCount: fleet.idle,
   };
   if (attentionRow !== undefined) {
-    status.sessionName = sessionRowDisplayTitle(attentionRow, state.localRows);
+    status.sessionName = sessionRowDisplayTitle(attentionRow, localRows);
     status.attentionSessionId = attentionRow.session.id;
     status.attentionWorktreeId = attentionRow.worktree.id;
   }

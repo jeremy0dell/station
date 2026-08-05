@@ -1,3 +1,4 @@
+import type { ObserverService, StationClientCommandCompletion } from "@station/client";
 import type {
   AgentPrepareExternalLaunchParams,
   AgentPrepareExternalLaunchResult,
@@ -8,7 +9,6 @@ import type {
   StationEvent,
   StationSnapshot,
 } from "@station/contracts";
-import type { ObserverService, StationClientCommandCompletion } from "@station/dashboard-core";
 
 export class FakeTuiObserverService implements ObserverService {
   readonly dispatched: StationCommand[] = [];

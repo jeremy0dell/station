@@ -6,8 +6,10 @@
 // coordination store, and terminal passthrough is untouched when the
 // overlay is down.
 import { describe, expect, it } from "bun:test";
-import type { DashboardRuntime } from "@station/dashboard-core";
-import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
+import {
+  makeStationTestRuntime,
+  type StationTestDashboardRuntime,
+} from "../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import type { StationMouseEvent } from "./mouse.js";
@@ -23,7 +25,7 @@ import {
 } from "./keymap/stationBindings.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
-function makeViewStore(): DashboardRuntime {
+function makeViewStore(): StationTestDashboardRuntime {
   return makeStationTestRuntime().runtime;
 }
 

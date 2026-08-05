@@ -12,7 +12,7 @@ import {
 } from "../state/types.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { dispatchStationKey } from "../station/input/stationActions.js";
-import type { ObserverService } from "@station/client";
+import type { ObserverService, StationClientStateSource } from "@station/client";
 import type { ProviderId } from "@station/contracts";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
@@ -37,7 +37,10 @@ import { createPaneEffects } from "./runtime/paneEffects.js";
 import { createManagedLaunch, type ManagedLaunchTarget } from "./runtime/managedLaunch.js";
 
 type StationInputDashboard = {
+  /** Dashboard-local screen, focus, filter, optimistic-row, and toast projection. */
   state: DashboardStateSource;
+  /** Canonical Observer snapshot and connection state owned by the client runtime. */
+  clientState: StationClientStateSource;
   actions: Pick<
     DashboardActions,
     | "addPendingCreateSession"
@@ -211,7 +214,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
 
   const paneEffects = createPaneEffects({
     store: options.store,
-    dashboardState: options.dashboardRuntime?.state,
+    clientState: options.dashboardRuntime?.clientState,
     registry,
     resolveAuxShellPlacement: options.resolveAuxShellPlacement,
     autoCloseOverlay: options.autoCloseOverlayOnPaneOpen ?? false,
@@ -278,7 +281,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       const normalized = normalizeSequence(sequence, {
         preserveModifiedEnter: focusedPaneAcceptsModifiedEnter(state, registry, (providerId) =>
           providerSupportsModifiedEnterSoftNewline(
-            options.dashboardRuntime?.state.getState().snapshot,
+            options.dashboardRuntime?.clientState.getState().snapshot,
             providerId,
           ),
         ),
