@@ -53,6 +53,27 @@ describe("OpenCode plugin setup", () => {
     await expect(readFile(pluginPath, "utf8")).rejects.toThrow();
   });
 
+  it("renders the plugin script without template escapes or leftover tokens", async () => {
+    const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
+
+    const plan = await planOpenCodePlugin({
+      opencodeConfigDir: join(root, "opencode"),
+      observerSocketPath: "/tmp/station/run/observer.sock",
+      stateDir: "/tmp/station/state",
+      hookSpoolDir: "/tmp/station/state/spool/hooks",
+    });
+
+    // The generated artifact is plain JavaScript: any backtick or ${} here
+    // would be an interpolation leftover from the template literal, not code.
+    expect(plan.after).not.toContain("`");
+    expect(plan.after).not.toContain("${");
+    expect(plan.after).not.toContain("__STATION_");
+    expect(plan.after).toContain('const fallbackSocketPath = "/tmp/station/run/observer.sock";');
+    expect(plan.after).toContain(
+      'new Set(["command.executed","permission.asked","permission.replied"',
+    );
+  });
+
   it("resolves config dir from OPENCODE_CONFIG_DIR in process env", async () => {
     const previous = process.env.OPENCODE_CONFIG_DIR;
     process.env.OPENCODE_CONFIG_DIR = "/tmp/station/opencode-config";
