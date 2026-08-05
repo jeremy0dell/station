@@ -7,6 +7,10 @@
 // overlay is down.
 import { describe, expect, it } from "bun:test";
 import {
+  dashboardExecution,
+  type DashboardCapabilities,
+} from "@station/dashboard-core";
+import {
   makeStationTestRuntime,
   type StationTestDashboardRuntime,
 } from "../station/test/support/makeStationTestRuntime.js";
@@ -25,8 +29,32 @@ import {
 } from "./keymap/stationBindings.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
-function makeViewStore(): StationTestDashboardRuntime {
-  return makeStationTestRuntime().runtime;
+function makeViewStore(station?: StationStore): StationTestDashboardRuntime {
+  const capabilities: DashboardCapabilities | undefined =
+    station === undefined
+      ? undefined
+      : {
+          activation: { activate: () => dashboardExecution({ kind: "success" }) },
+          managedSessions: {
+            create: () => dashboardExecution({ kind: "success" }),
+            quickCreate: () => dashboardExecution({ kind: "success" }),
+            fork: () => dashboardExecution({ kind: "success" }),
+          },
+          shell: { open: () => dashboardExecution({ kind: "success" }) },
+          dismissal: {
+            dismissDashboard: () => {
+              station.actions.closeOverlay();
+              return dashboardExecution({ kind: "success" });
+            },
+            exitRenderer: () => {
+              station.actions.closeOverlay();
+              return dashboardExecution({ kind: "success" });
+            },
+          },
+        };
+  return makeStationTestRuntime({
+    ...(capabilities === undefined ? {} : { capabilities }),
+  }).runtime;
 }
 
 const LEFT_DOWN: StationMouseEvent = {
@@ -79,19 +107,16 @@ describe("station overlay layer in the keymap stack", () => {
     expect(view.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
-  it("maps dashboard dismiss intents to overlay-close", () => {
-    const view = makeViewStore();
+  it("dispatches dashboard dismissal through native capability authority", () => {
     const station = makeStationStore(true);
+    const view = makeViewStore(station);
     const keymap = createStationKeymap(view);
 
-    expect(routeKey("\x1b", station.getState(), keymap)).toEqual({
-      kind: "overlay-close",
-      overlayId: STATION_OVERLAY_ID,
-    });
-    expect(routeKey("Q", station.getState(), keymap)).toEqual({
-      kind: "overlay-close",
-      overlayId: STATION_OVERLAY_ID,
-    });
+    expect(routeKey("\x1b", station.getState(), keymap)).toEqual({ kind: "swallowed" });
+    expect(station.getState().input.activeOverlay).toBeNull();
+    station.actions.openOverlay(STATION_OVERLAY_ID);
+    expect(routeKey("Q", station.getState(), keymap)).toEqual({ kind: "swallowed" });
+    expect(station.getState().input.activeOverlay).toBeNull();
   });
 
   it("lets exit and toggle chords pierce the dashboard layer from any mode", () => {
@@ -117,18 +142,15 @@ describe("station overlay layer in the keymap stack", () => {
     });
   });
 
-  it("intercepts direct C as the native managed New Session launch", () => {
+  it("dispatches direct C through the semantic managed-session capability", () => {
     const view = makeViewStore();
     const station = makeStationStore(true);
     const keymap = createStationKeymap(view);
     routeKey("N", station.getState(), keymap);
     routeKey("\x1b[B", station.getState(), keymap);
 
-    expect(routeKey("C", station.getState(), keymap)).toMatchObject({
-      kind: "pane-launch-new-session",
-      projectId: "station",
-      harness: "codex",
-    });
+    expect(routeKey("C", station.getState(), keymap)).toEqual({ kind: "swallowed" });
+    expect(view.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("swallows native pane commands while the dashboard is open", () => {
@@ -180,8 +202,8 @@ describe("station input through the station runtime", () => {
       boot?: "empty";
     } = {},
   ) {
-    const view = makeViewStore();
     const station = makeStationStore(overlayOpen, options);
+    const view = makeViewStore(station);
     const written: string[] = [];
     const pasted: string[] = [];
     const runtime = createStationInputRuntime({

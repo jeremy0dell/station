@@ -1,8 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import {
-  FAILED_CREATE_ROW_TTL_MS,
-  selectDashboardViewport,
-} from "@station/dashboard-core";
 import { selectActivePaneId, selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore } from "../state/store.js";
 import {
@@ -16,25 +12,22 @@ import {
 import type { Automation } from "../config/stationConfig.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type { StationTerminalProcess, StationTerminalSpawnOptions } from "../terminal/types.js";
-import type {
-  ManagedTerminalAttacher,
-  ManagedTerminalFactory,
-} from "../terminal/pty/managedTerminalAttacher.js";
 import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
 import { waitFor } from "../terminal/testing/waitFor.js";
 import {
   externalAgentSnapshot,
   manyProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
-import type { AgentPrepareExternalLaunchResult } from "@station/client";
-import type { StationSnapshot, WorktreeRow } from "@station/contracts";
+import type { StationSnapshot } from "@station/contracts";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import {
   createStationTestDashboardRuntime,
   type StationTestDashboardRuntime,
 } from "../station/test/support/makeStationTestRuntime.js";
-import { resolveForkSessionSubmit, resolveNewSessionSubmit } from "../station/input/stationActions.js";
+import { createDashboardCapabilities } from "../app/dashboardCapabilities.js";
+import { createPaneEffects } from "./runtime/paneEffects.js";
+import type { ManagedLaunch } from "./runtime/managedLaunch.js";
 import type { StationMouseEvent } from "./mouse.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
@@ -719,25 +712,23 @@ describe("createStationInputRuntime", () => {
 });
 
 describe("createStationInputRuntime open-pane wiring", () => {
-  // wt_station_idle -> branch pty-buffer; the fixture derives both ids and path.
   const WORKTREE_ID = "wt_station_idle";
   const SESSION_ID = "ses_wt_station_idle";
   const PANE_ID = worktreePaneId(WORKTREE_ID);
   const CWD = "/Users/example/.worktrees/station/pty-buffer";
+  const managedLaunch: ManagedLaunch = {
+    activate: async () => ({ kind: "success", landed: true }),
+    create: async () => ({ kind: "success", landed: false }),
+    fork: async () => ({ kind: "success", landed: false }),
+  };
 
   function paneHarness(options?: {
     autoCloseOverlayOnPaneOpen?: boolean;
     storeOptions?: Parameters<typeof createStationStore>[0];
   }) {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createStationTestDashboardRuntime({
-      source: new FakeStationSource(snapshot),
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
-    });
+    const source = new FakeStationSource(snapshot);
+    const service = new FakeTuiObserverService(snapshot);
     const scripted = createScriptedTerminal();
     const base = createPtyRegistry({ createTerminal: () => scripted.terminal });
     const calls: string[] = [];
@@ -749,41 +740,61 @@ describe("createStationInputRuntime open-pane wiring", () => {
       },
     };
     const store = createStationStore(options?.storeOptions);
-    const origCreate = store.actions.createPane;
-    store.actions.createPane = (paneId, options) => {
+    const originalCreate = store.actions.createPane;
+    store.actions.createPane = (paneId, createOptions) => {
       calls.push(
-        `createPane:${paneId}:${options?.split?.anchorPaneId ?? ""}:${options?.split?.direction ?? ""}`,
+        `createPane:${paneId}:${createOptions?.split?.anchorPaneId ?? ""}:${createOptions?.split?.direction ?? ""}`,
       );
-      origCreate(paneId, options);
+      originalCreate(paneId, createOptions);
     };
-    const origReveal = store.actions.revealPane;
+    const originalReveal = store.actions.revealPane;
     store.actions.revealPane = (paneId) => {
       calls.push(`revealPane:${paneId}`);
-      origReveal(paneId);
+      originalReveal(paneId);
     };
+    const paneEffects = createPaneEffects({
+      store,
+      clientState: source,
+      registry,
+      resolveAuxShellPlacement: undefined,
+      autoCloseOverlay: options?.autoCloseOverlayOnPaneOpen ?? false,
+      automations: [],
+      writeToTerminal: undefined,
+      pasteToTerminal: undefined,
+    });
+    const dashboardRuntime = createStationTestDashboardRuntime({
+      source,
+      service,
+      initialSnapshot: snapshot,
+      capabilities: createDashboardCapabilities({
+        clientState: source,
+        observerService: service,
+        store,
+        paneEffects,
+        managedLaunch,
+      }),
+      initialState: { terminalRows: 12 },
+    });
     const runtime = createStationInputRuntime({
       store,
       shutdown: () => {},
       dashboardRuntime,
       registry,
-      autoCloseOverlayOnPaneOpen: options?.autoCloseOverlayOnPaneOpen ?? false,
+      paneEffects,
     });
-    const clickRowAffordance = (): boolean =>
+    const clickRowShell = (): boolean =>
       runtime.dispatchMouse(
         { kind: "station", target: { kind: "openShellForRow", rowId: SESSION_ID } },
         LEFT_DOWN,
       );
-    return { runtime, store, calls, clickRowAffordance };
+    return { runtime, store, calls, clickRowShell };
   }
 
-  it("ensures the pane with its cwd before createPane on first open", () => {
-    const { store, calls, clickRowAffordance } = paneHarness();
+  it("ensures a row shell with its cwd before adding it beside the active pane", () => {
+    const { store, calls, clickRowShell } = paneHarness();
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    expect(clickRowAffordance()).toBe(true);
-
-    // No worktree agent pane here, so the shell tiles off the active pane
-    // rather than rooting its own session (which stacked it full-screen).
+    expect(clickRowShell()).toBe(true);
     expect(calls).toEqual([
       `ensure:${PANE_ID}:${CWD}`,
       `createPane:${PANE_ID}:${MAIN_PANE_ID}:right`,
@@ -791,9 +802,9 @@ describe("createStationInputRuntime open-pane wiring", () => {
     expect(store.getState().workspace.panes.some((pane) => pane.id === PANE_ID)).toBe(true);
   });
 
-  it("tiles a shell into the visible session when no pane is active (restored layout)", () => {
+  it("tiles a row shell into a restored layout with no active pane", () => {
     const existing = "pane-restored";
-    const { store, calls, clickRowAffordance } = paneHarness({
+    const { store, calls, clickRowShell } = paneHarness({
       storeOptions: {
         initialWorkspace: {
           panes: [{ id: existing, split: null, role: "shell" }],
@@ -803,10 +814,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
     });
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    expect(clickRowAffordance()).toBe(true);
-
-    // activePaneId is null but a session is on screen; the shell tiles into it
-    // (the first record roots the visible tree) rather than covering it.
+    expect(clickRowShell()).toBe(true);
     expect(calls).toContain(`createPane:${PANE_ID}:${existing}:right`);
     expect(store.getState().workspace.panes.find((pane) => pane.id === PANE_ID)?.split).toEqual({
       anchorPaneId: existing,
@@ -814,80 +822,58 @@ describe("createStationInputRuntime open-pane wiring", () => {
     });
   });
 
-  it("dismisses the boot intro into the active restored session on Continue", () => {
-    const { runtime, store } = paneHarness({
-      storeOptions: {
-        initialWorkspace: {
-          panes: [{ id: "pane-a", split: null, role: "shell" }],
-          activePaneId: "pane-a",
+  it("dismisses the boot intro into a restored session from mouse and Enter", () => {
+    for (const activate of [
+      (runtime: ReturnType<typeof paneHarness>["runtime"]) =>
+        runtime.dispatchMouse({ kind: "welcomeContinue" }, LEFT_DOWN),
+      (runtime: ReturnType<typeof paneHarness>["runtime"]) => runtime.handleSequence("\r"),
+    ]) {
+      const { runtime, store } = paneHarness({
+        storeOptions: {
+          initialWorkspace: {
+            panes: [{ id: "pane-a", split: null, role: "shell" }],
+            activePaneId: "pane-a",
+          },
+          welcomeIntroOnBoot: true,
         },
-        welcomeIntroOnBoot: true,
-      },
-    });
-    expect(store.getState().input.introVisible).toBe(true);
+      });
 
-    runtime.dispatchMouse({ kind: "welcomeContinue" }, LEFT_DOWN);
-
-    expect(store.getState().input.introVisible).toBe(false);
-    expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: "pane-a" });
+      expect(activate(runtime)).toBe(true);
+      expect(store.getState().input.introVisible).toBe(false);
+      expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: "pane-a" });
+    }
   });
 
-  it("Enter on the intro continues into the restored session", () => {
-    const { runtime, store } = paneHarness({
-      storeOptions: {
-        initialWorkspace: {
-          panes: [{ id: "pane-a", split: null, role: "shell" }],
-          activePaneId: "pane-a",
-        },
-        welcomeIntroOnBoot: true,
-      },
-    });
-
-    expect(runtime.handleSequence("\r")).toBe(true);
-
-    expect(store.getState().input.introVisible).toBe(false);
-    expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: "pane-a" });
-  });
-
-  it("reuses the running pane via revealPane without a second ensure", () => {
-    const { store, calls, clickRowAffordance } = paneHarness();
+  it("reveals a reused row shell and keeps the overlay queued to it", () => {
+    const { store, calls, clickRowShell } = paneHarness();
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    clickRowAffordance();
-    clickRowAffordance();
+    clickRowShell();
+    clickRowShell();
 
     expect(calls).toEqual([
       `ensure:${PANE_ID}:${CWD}`,
       `createPane:${PANE_ID}:${MAIN_PANE_ID}:right`,
       `revealPane:${PANE_ID}`,
     ]);
-    // Open-or-focus: exactly one pane record, no second shell.
     expect(store.getState().workspace.panes.filter((pane) => pane.id === PANE_ID)).toHaveLength(1);
-  });
-
-  it("keeps the overlay up by default, queuing the pane as return focus", () => {
-    const { store, clickRowAffordance } = paneHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    clickRowAffordance();
-
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
     expect(selectActivePaneId(store.getState())).toBe(PANE_ID);
     expect(store.getState().input.overlayReturnFocus).toEqual({ kind: "pane", paneId: PANE_ID });
   });
 
-  it("auto-closes the overlay onto the new shell when opted in", () => {
-    const { store, clickRowAffordance } = paneHarness({ autoCloseOverlayOnPaneOpen: true });
+  it("auto-closes the overlay onto a row shell only when configured", () => {
+    const { store, clickRowShell } = paneHarness({ autoCloseOverlayOnPaneOpen: true });
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    clickRowAffordance();
+    clickRowShell();
 
     expect(selectStationOverlayVisible(store.getState())).toBe(false);
     expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: PANE_ID });
   });
 
-  it("opens a worktree shell as a split beside its primary agent pane", () => {
-    const { store, calls, clickRowAffordance } = paneHarness();
+  it("opens a row shell beside its primary agent pane", () => {
+    const { store, calls, clickRowShell } = paneHarness();
     const agentPaneId = agentWorktreePaneId(WORKTREE_ID);
     store.actions.createPane(agentPaneId, { role: "primary-agent" });
     store.actions.setPrimaryAgent(agentPaneId, {
@@ -896,16 +882,12 @@ describe("createStationInputRuntime open-pane wiring", () => {
     });
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
-    expect(clickRowAffordance()).toBe(true);
-
-    expect(calls).toContain(
-      `createPane:${PANE_ID}:${agentPaneId}:right`,
-    );
+    expect(clickRowShell()).toBe(true);
+    expect(calls).toContain(`createPane:${PANE_ID}:${agentPaneId}:right`);
     expect(store.getState().workspace.panes.find((pane) => pane.id === PANE_ID)?.split).toEqual({
       anchorPaneId: agentPaneId,
       direction: "right",
     });
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
   });
 
   it("passes STATION link clicks to the external URL opener", () => {
@@ -914,9 +896,6 @@ describe("createStationInputRuntime open-pane wiring", () => {
       source: new FakeStationSource(snapshot),
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
     });
     const store = createStationStore();
     const opened: string[] = [];
@@ -924,9 +903,7 @@ describe("createStationInputRuntime open-pane wiring", () => {
       store,
       shutdown: () => {},
       dashboardRuntime,
-      openExternalUrl: (url) => {
-        opened.push(url);
-      },
+      openExternalUrl: (url) => opened.push(url),
     });
     const url = "https://github.com/example/station/pull/73";
     store.actions.openOverlay(STATION_OVERLAY_ID);
@@ -934,26 +911,12 @@ describe("createStationInputRuntime open-pane wiring", () => {
     expect(runtime.dispatchMouse({ kind: "station", target: { kind: "link", url } }, LEFT_DOWN)).toBe(
       true,
     );
-
     expect(opened).toEqual([url]);
     expect(selectStationOverlayVisible(store.getState())).toBe(true);
   });
 
-  // The load-bearing invariant: the cwd seeded by ensure(paneId,{cwd}) before
-  // createPane must survive the reconciler's later no-option ensure(paneId) and
-  // reach the spawned shell. Exercise it through a real PtyRegistry + a
-  // StationApp-equivalent reconciler, then spawn on first resize and assert the
-  // captured cwd — closing the gap the plan flagged as manual-smoke-only.
-  it("threads the worktree cwd to the spawned shell through the real reconciler", () => {
+  it("preserves the row cwd through the reconciler's no-option ensure", () => {
     const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createStationTestDashboardRuntime({
-      source: new FakeStationSource(snapshot),
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
-    });
     const scripted = createScriptedTerminal();
     const spawns: Array<{ paneCwd: string | undefined }> = [];
     const registry = createPtyRegistry({
@@ -962,42 +925,59 @@ describe("createStationInputRuntime open-pane wiring", () => {
         return scripted.terminal;
       },
     });
+    const source = new FakeStationSource(snapshot);
+    const service = new FakeTuiObserverService(snapshot);
     const store = createStationStore();
-    // Mirror StationApp.reconcilePanes: ensure (NO options) every member, dispose
-    // entries no longer in the store. The no-option ensure is the step that must
-    // preserve — not clobber — the cwd seeded by openPane.
+    const paneEffects = createPaneEffects({
+      store,
+      clientState: source,
+      registry,
+      resolveAuxShellPlacement: undefined,
+      autoCloseOverlay: false,
+      automations: [],
+      writeToTerminal: undefined,
+      pasteToTerminal: undefined,
+    });
+    const dashboardRuntime = createStationTestDashboardRuntime({
+      source,
+      service,
+      initialSnapshot: snapshot,
+      capabilities: createDashboardCapabilities({
+        clientState: source,
+        observerService: service,
+        store,
+        paneEffects,
+        managedLaunch,
+      }),
+    });
     let lastPanes: readonly PaneRecord[] | undefined;
     const reconcile = (): void => {
       const panes = store.getState().workspace.panes;
-      if (panes === lastPanes) {
-        return;
-      }
+      if (panes === lastPanes) return;
       lastPanes = panes;
-      for (const pane of panes) {
-        registry.ensure(pane.id);
-      }
+      for (const pane of panes) registry.ensure(pane.id);
       for (const entry of registry.entries()) {
-        if (!panes.some((pane) => pane.id === entry.paneId)) {
-          registry.dispose(entry.paneId);
-        }
+        if (!panes.some((pane) => pane.id === entry.paneId)) registry.dispose(entry.paneId);
       }
     };
     store.subscribe(reconcile);
     reconcile();
-    const runtime = createStationInputRuntime({ store, shutdown: () => {}, dashboardRuntime, registry });
-    const expectedCwd = snapshot.rows.find((row) => row.id === WORKTREE_ID)?.path;
+    const runtime = createStationInputRuntime({
+      store,
+      shutdown: () => {},
+      dashboardRuntime,
+      registry,
+      paneEffects,
+    });
 
     store.actions.openOverlay(STATION_OVERLAY_ID);
     runtime.dispatchMouse(
       { kind: "station", target: { kind: "openShellForRow", rowId: SESSION_ID } },
       LEFT_DOWN,
     );
-    // Lazy spawn-on-first-resize: the shell starts here, at the cwd that must
-    // have survived openPane's ensure -> createPane -> reconciler's no-option ensure.
     registry.resize(PANE_ID, { cols: 80, rows: 24 });
 
-    expect(typeof expectedCwd).toBe("string");
-    expect(spawns.map((spawn) => spawn.paneCwd)).toContain(expectedCwd);
+    expect(spawns.map((spawn) => spawn.paneCwd)).toContain(CWD);
   });
 });
 
@@ -1171,1519 +1151,6 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
       name: "projectSettings",
       projectId: "station",
     });
-  });
-});
-
-describe("createStationInputRuntime managed primary-agent launch", () => {
-  // Same fixture row as the shell wiring suite (wt_station_idle, branch pty-buffer,
-  // project station), but the agent lands in the distinct agent pane id, not the
-  // [+sh] shell pane. The launch command/args/env come from the observer's plan.
-  const WORKTREE_ID = "wt_station_idle";
-  const ROW_ID = "ses_wt_station_idle";
-  const AGENT_PANE_ID = agentWorktreePaneId(WORKTREE_ID);
-  const CWD = "/Users/example/.worktrees/station/pty-buffer";
-  const TERMINAL_TARGET_ID = `native:${WORKTREE_ID}`;
-
-  function preparedPlan() {
-    return {
-      kind: "prepared",
-      sessionId: "ses_managed",
-      terminalTargetId: TERMINAL_TARGET_ID,
-      launchPlan: {
-        provider: "codex",
-        command: "codex",
-        args: ["--exec"],
-        cwd: CWD,
-        env: { STATION_SESSION_ID: "ses_managed", STATION_TERMINAL_TARGET_ID: TERMINAL_TARGET_ID },
-        mode: "interactive",
-      },
-    } satisfies AgentPrepareExternalLaunchResult;
-  }
-
-  // Records the role on createPane, the spawn options on ensure, and every
-  // setPrimaryAgent — so order and arguments are assertable. The observer is a
-  // configurable fake; settle() flushes the fire-and-forget async launch.
-  function agentHarness(
-    prepared: AgentPrepareExternalLaunchResult = preparedPlan(),
-    snapshot: StationSnapshot = manyProjectsSnapshot(),
-    managedTerminalAttacher?: ManagedTerminalAttacher,
-  ) {
-    const observerService = new FakeTuiObserverService(snapshot);
-    observerService.nextPreparedLaunch = prepared;
-    const source = new FakeStationSource(snapshot);
-    const dashboardRuntime = createStationTestDashboardRuntime({
-      source,
-      service: observerService,
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
-    });
-    const scripted = [createScriptedTerminal(), createScriptedTerminal()];
-    let spawnIndex = 0;
-    const base = createPtyRegistry({
-      createTerminal: () => {
-        const terminal = scripted[spawnIndex]?.terminal;
-        if (terminal === undefined) throw new Error("scripted terminal pool exhausted");
-        spawnIndex += 1;
-        return terminal;
-      },
-    });
-    const calls: string[] = [];
-    const ensured: StationTerminalSpawnOptions[] = [];
-    const terminalFactories: ManagedTerminalFactory[] = [];
-    const registry: PtyRegistry = {
-      ...base,
-      ensure: (paneId, spawnOptions, createTerminalOverride) => {
-        if (spawnOptions !== undefined) {
-          ensured.push(spawnOptions);
-        }
-        if (createTerminalOverride !== undefined) {
-          terminalFactories.push(createTerminalOverride);
-        }
-        calls.push(
-          `ensure:${paneId}:${spawnOptions?.cwd ?? ""}:${spawnOptions?.command ?? ""}:${(spawnOptions?.args ?? []).join(",")}`,
-        );
-        return base.ensure(paneId, spawnOptions, createTerminalOverride);
-      },
-    };
-    const store = createStationStore();
-    const origCreate = store.actions.createPane;
-    store.actions.createPane = (paneId, options) => {
-      calls.push(`createPane:${paneId}:${options?.role ?? "shell"}`);
-      origCreate(paneId, options);
-    };
-    const origSetPrimary = store.actions.setPrimaryAgent;
-    store.actions.setPrimaryAgent = (paneId, identity) => {
-      calls.push(`setPrimaryAgent:${paneId}:${identity.sessionId}:${identity.terminalTargetId}`);
-      origSetPrimary(paneId, identity);
-    };
-    const runtime = createStationInputRuntime({
-      store,
-      shutdown: () => {},
-      dashboardRuntime,
-      registry,
-      observerService,
-      ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),
-    });
-    const dispatch = (
-      target: { kind: "row"; rowId: string } | { kind: "openShellForRow"; rowId: string },
-    ): boolean => runtime.dispatchMouse({ kind: "station", target }, LEFT_DOWN);
-    const pressKey = (sequence: string): boolean => runtime.handleSequence(sequence);
-    // The launch is fire-and-forget; flush its microtask chain.
-    const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-    return {
-      store,
-      calls,
-      ensured,
-      terminalFactories,
-      dispatch,
-      pressKey,
-      settle,
-      observerService,
-      dashboardRuntime,
-      source,
-      registry,
-      baseRegistry: base,
-      scripted,
-    };
-  }
-
-  function stationHostedSnapshot(
-    terminalOverrides: Partial<NonNullable<WorktreeRow["terminal"]>> = {},
-  ): StationSnapshot {
-    const snapshot = manyProjectsSnapshot();
-    return {
-      ...snapshot,
-      rows: snapshot.rows.map((row): WorktreeRow => {
-        if (row.id !== WORKTREE_ID || row.terminal === undefined) {
-          return row;
-        }
-        return { ...row, terminal: { ...row.terminal, provider: "native", ...terminalOverrides } };
-      }),
-      sessions: snapshot.sessions.map((session) => {
-        if (session.id !== ROW_ID || session.terminal === undefined) {
-          return session;
-        }
-        return {
-          ...session,
-          terminal: { ...session.terminal, provider: "native", ...terminalOverrides },
-        };
-      }),
-    };
-  }
-
-  function liveAgentWithoutTerminalSnapshot(): StationSnapshot {
-    const snapshot = manyProjectsSnapshot();
-    return {
-      ...snapshot,
-      rows: snapshot.rows.map((row): WorktreeRow => {
-        if (row.id !== WORKTREE_ID) {
-          return row;
-        }
-        const next = { ...row };
-        delete next.terminal;
-        return next;
-      }),
-      sessions: snapshot.sessions.map((session) => {
-        if (session.id !== ROW_ID) {
-          return session;
-        }
-        const next = { ...session };
-        delete next.terminal;
-        return next;
-      }),
-    };
-  }
-
-  function retainedNoAgentSnapshot(): StationSnapshot {
-    const snapshot = manyProjectsSnapshot();
-    return {
-      ...snapshot,
-      rows: snapshot.rows.map((row): WorktreeRow => {
-        if (row.id !== WORKTREE_ID) {
-          return row;
-        }
-        const next: WorktreeRow = {
-          ...row,
-          display: { ...row.display, statusLabel: "no agent" },
-        };
-        delete next.agent;
-        delete next.terminal;
-        return next;
-      }),
-      sessions: snapshot.sessions.map((session) => {
-        if (session.id !== ROW_ID) {
-          return session;
-        }
-        const next = {
-          ...session,
-          status: {
-            value: "none" as const,
-            confidence: "high" as const,
-            reason: "No managed agent is running.",
-            source: "reconcile" as const,
-            updatedAt: snapshot.generatedAt,
-          },
-        };
-        delete next.terminal;
-        return next;
-      }),
-    };
-  }
-
-  function withTurnReadiness(snapshot: StationSnapshot): StationSnapshot {
-    return {
-      ...snapshot,
-      rows: snapshot.rows.map((row): WorktreeRow => {
-        if (row.id !== WORKTREE_ID || row.agent === undefined) {
-          return row;
-        }
-        return {
-          ...row,
-          agent: {
-            ...row.agent,
-            turnReadiness: {
-              state: "ready_to_read",
-              token: "report_station_ready",
-              completedAt: "2026-06-17T12:00:00.000Z",
-            },
-          },
-        };
-      }),
-    };
-  }
-
-  // The slot key the dashboard assigns to ROW_ID — pressing it is the keyboard
-  // "open" gesture, the twin of clicking the row.
-  function slotKeyFor(dashboardRuntime: ReturnType<typeof agentHarness>["dashboardRuntime"]): string {
-    const state = dashboardRuntime.state.getState();
-    const snapshot = state.snapshot;
-    if (snapshot === undefined) {
-      throw new Error("fixture snapshot is missing");
-    }
-    const slot = selectDashboardViewport(snapshot, state).rowChoices.find(
-      (choice) => choice.value.id === ROW_ID,
-    )?.key;
-    if (slot === undefined) {
-      throw new Error(`row ${ROW_ID} has no slot key`);
-    }
-    return slot;
-  }
-
-  it("prepares with the observer, then ensures the plan before createPane and records identity", async () => {
-    const { store, calls, ensured, dispatch, settle, observerService } = agentHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    expect(dispatch({ kind: "row", rowId: ROW_ID })).toBe(true);
-    await settle();
-
-    expect(observerService.preparedLaunches).toEqual([
-      { projectId: "station", worktreeId: WORKTREE_ID },
-    ]);
-    // Order is load-bearing: ensure (with the observer's plan) → createPane → setPrimaryAgent.
-    expect(calls).toEqual([
-      `ensure:${AGENT_PANE_ID}:${CWD}:codex:--exec`,
-      `createPane:${AGENT_PANE_ID}:primary-agent`,
-      `setPrimaryAgent:${AGENT_PANE_ID}:ses_managed:${TERMINAL_TARGET_ID}`,
-    ]);
-    // The launch plan's env (the STATION identity) reaches the spawn options.
-    expect(ensured[0]?.env).toMatchObject({ STATION_SESSION_ID: "ses_managed" });
-    const agentRecord = store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID);
-    expect(agentRecord?.role).toEqual("primary-agent");
-    expect(agentRecord?.agentIdentity).toEqual({
-      sessionId: "ses_managed",
-      terminalTargetId: TERMINAL_TARGET_ID,
-      harnessProvider: "codex",
-    });
-  });
-
-  it("launches identically from the row's slot key as from a click", async () => {
-    // The user's expectation, end to end: pressing the row's accelerator drives
-    // the SAME observer prepare and the SAME ensure→createPane→setPrimaryAgent
-    // ordering a click does — never the machine's start-or-focus against the
-    // default terminal Station does not spawn into.
-    const { store, calls, pressKey, settle, observerService, dashboardRuntime } = agentHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    expect(pressKey(slotKeyFor(dashboardRuntime))).toBe(true);
-    await settle();
-
-    expect(observerService.preparedLaunches).toEqual([
-      { projectId: "station", worktreeId: WORKTREE_ID },
-    ]);
-    expect(calls).toEqual([
-      `ensure:${AGENT_PANE_ID}:${CWD}:codex:--exec`,
-      `createPane:${AGENT_PANE_ID}:primary-agent`,
-      `setPrimaryAgent:${AGENT_PANE_ID}:ses_managed:${TERMINAL_TARGET_ID}`,
-    ]);
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-  });
-
-  it("brings the user to the agent: launching it closes the overlay onto its pane", async () => {
-    const { store, dispatch, settle } = agentHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-    expect(store.getState().input.focus).toEqual({ kind: "pane", paneId: AGENT_PANE_ID });
-  });
-
-  it("acknowledges a ready turn after a successful managed pane open", async () => {
-    const { store, dispatch, settle, observerService } = agentHarness(
-      preparedPlan(),
-      withTurnReadiness(manyProjectsSnapshot()),
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.dispatched).toEqual([
-      {
-        type: "session.acknowledgeTurn",
-        payload: { sessionId: "ses_wt_station_idle", token: "report_station_ready" },
-      },
-    ]);
-    expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1"]);
-  });
-
-  it("reveals the existing agent pane on re-click without preparing a second launch", async () => {
-    const { store, dispatch, settle, observerService } = agentHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.preparedLaunches).toHaveLength(1);
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-  });
-
-  it("relaunches a retained No Agent session only when its dashboard row is activated", async () => {
-    const {
-      store,
-      dispatch,
-      settle,
-      observerService,
-      source,
-      baseRegistry,
-      scripted,
-    } = agentHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-    baseRegistry.resize(AGENT_PANE_ID, { cols: 90, rows: 24 });
-    scripted[0].helpers.emitExit({ exitCode: 0 });
-    source.setSnapshot(retainedNoAgentSnapshot());
-
-    // Exit and snapshot convergence alone retain the dead transcript.
-    expect(observerService.preparedLaunches).toHaveLength(1);
-    expect(baseRegistry.get(AGENT_PANE_ID)?.exited).toBe(true);
-
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.preparedLaunches).toHaveLength(2);
-    expect(baseRegistry.get(AGENT_PANE_ID)?.terminal).toBe(scripted[1].terminal);
-    expect(baseRegistry.get(AGENT_PANE_ID)?.exited).toBe(false);
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-  });
-
-  it("ignores a second click while the first launch is still preparing", async () => {
-    const { store, dispatch, settle, observerService } = agentHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    // Two synchronous clicks before the async prepare resolves (no settle
-    // between): the in-flight guard makes the second a no-op, so the observer is
-    // asked to prepare exactly one launch — no orphaned second session/target.
-    dispatch({ kind: "row", rowId: ROW_ID });
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.preparedLaunches).toHaveLength(1);
-  });
-
-  it("surfaces a notice for an existing tmux session it can't display, without a dead focus", async () => {
-    // The observer reports a live agent already in this worktree, hosted by an
-    // external terminal (the fixture rows are tmux) Station can't render. Focusing
-    // it would have no visible effect — which reads as "clicking did nothing" — so
-    // Station explains that instead of dispatching the focus.
-    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness({
-      kind: "existing-session",
-      sessionId: "ses_elsewhere",
-      harnessProvider: "codex",
-    });
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(calls).toEqual([]);
-    expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
-    expect(observerService.dispatched).toEqual([]);
-    expect(observerService.waitedForCommandIds).toEqual([]);
-    const notice = dashboardRuntime.state.getState().toasts.at(-1)?.toast;
-    expect(notice?.kind).toBe("info");
-    expect(notice?.message).toContain("tmux");
-    // The overlay STAYS open so the user actually reads the notice.
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
-  });
-
-  it("attaches a non-focusable native session from its slot key and acknowledges readiness", async () => {
-    const attachment = {
-      kind: "managed-terminal",
-      terminalTargetId: `${TERMINAL_TARGET_ID}-host`,
-    } as const;
-    const resolutions: unknown[] = [];
-    const scripted = createScriptedTerminal();
-    const { store, pressKey, settle, observerService, dashboardRuntime } = agentHarness(
-      {
-        kind: "existing-session",
-        sessionId: "ses_wt_station_idle",
-        harnessProvider: "codex",
-        attachment,
-      },
-      withTurnReadiness(stationHostedSnapshot({ focusable: false })),
-      {
-        resolve: async (candidate) => {
-          resolutions.push(candidate);
-          return () => scripted.terminal;
-        },
-      },
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    expect(pressKey(slotKeyFor(dashboardRuntime))).toBe(true);
-    await settle();
-
-    expect(resolutions).toEqual([attachment]);
-    expect(observerService.dispatched).toEqual([
-      {
-        type: "session.acknowledgeTurn",
-        payload: { sessionId: "ses_wt_station_idle", token: "report_station_ready" },
-      },
-    ]);
-    expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1"]);
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-  });
-
-  it("toasts for an existing Station-hosted worktree with no attachable host PTY", async () => {
-    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
-      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      stationHostedSnapshot({ focusable: false }),
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(calls).toEqual([]);
-    expect(observerService.dispatched).toEqual([]);
-    expect(observerService.waitedForCommandIds).toEqual([]);
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "info",
-      message: "pty-buffer: Station has no attachable host PTY for this existing agent.",
-    });
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
-  });
-
-  it("toasts where a detached-terminal row lives instead of a silent focus no-op", async () => {
-    // A row whose agent sits in a detached terminal (e.g. a detached tmux
-    // session) can't be rendered as a Station pane; clicking it used to dispatch
-    // a focus the observer accepts but that paints nothing. Now it explains
-    // where the agent lives and leaves the overlay open to pick another row.
-    const base = manyProjectsSnapshot();
-    const snapshot: StationSnapshot = {
-      ...base,
-      rows: base.rows.map((row): WorktreeRow =>
-        row.id === WORKTREE_ID && row.terminal !== undefined
-          ? { ...row, terminal: { ...row.terminal, state: "detached" } }
-          : row,
-      ),
-      sessions: base.sessions.map((session) =>
-        session.id === ROW_ID && session.terminal !== undefined
-          ? { ...session, terminal: { ...session.terminal, state: "detached" } }
-          : session,
-      ),
-    };
-    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
-      preparedPlan(),
-      snapshot,
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    // No prepare, no spawn: Station does not try to launch or focus it.
-    expect(observerService.preparedLaunches).toEqual([]);
-    expect(calls).toEqual([]);
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "info",
-      message: "pty-buffer: agent is detached under 'tmux'; Station can't focus it here.",
-    });
-    // Overlay stays open so the toast is read in context.
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
-  });
-
-  it("resolves a prepared attachment before seeding the managed pane", async () => {
-    const attachment = {
-      kind: "managed-terminal",
-      terminalTargetId: `${TERMINAL_TARGET_ID}-host`,
-    } as const;
-    const base = preparedPlan();
-    if (base.kind !== "prepared") {
-      throw new Error("preparedPlan must be a prepared launch");
-    }
-    const resolutions: unknown[] = [];
-    const scripted = createScriptedTerminal();
-    const factory: ManagedTerminalFactory = () => scripted.terminal;
-    const managedTerminalAttacher: ManagedTerminalAttacher = {
-      resolve: async (candidate) => {
-        resolutions.push(candidate);
-        return factory;
-      },
-    };
-    const { store, calls, ensured, terminalFactories, dispatch, settle } = agentHarness(
-      { ...base, attachment },
-      manyProjectsSnapshot(),
-      managedTerminalAttacher,
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(resolutions).toEqual([attachment]);
-    expect(calls).toEqual([
-      `ensure:${AGENT_PANE_ID}:${CWD}::`,
-      `createPane:${AGENT_PANE_ID}:primary-agent`,
-      `setPrimaryAgent:${AGENT_PANE_ID}:ses_managed:${attachment.terminalTargetId}`,
-    ]);
-    expect(ensured[0]).toEqual({ cwd: CWD });
-    expect(terminalFactories).toEqual([factory]);
-    expect(
-      store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.agentIdentity,
-    ).toEqual({
-      sessionId: "ses_managed",
-      terminalTargetId: attachment.terminalTargetId,
-      harnessProvider: "codex",
-    });
-  });
-
-  it("uses the resolver and records the provider for an existing attached agent", async () => {
-    const attachment = {
-      kind: "managed-terminal",
-      terminalTargetId: `${TERMINAL_TARGET_ID}-host`,
-    } as const;
-    const resolutions: unknown[] = [];
-    const scripted = createScriptedTerminal();
-    const { store, calls, dispatch, settle, observerService } = agentHarness(
-      {
-        kind: "existing-session",
-        sessionId: "ses_live",
-        harnessProvider: "codex",
-        attachment,
-      },
-      stationHostedSnapshot({ focusable: false }),
-      {
-        resolve: async (candidate) => {
-          resolutions.push(candidate);
-          return () => scripted.terminal;
-        },
-      },
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(resolutions).toEqual([attachment]);
-    expect(calls).toEqual([
-      `ensure:${AGENT_PANE_ID}:${CWD}::`,
-      `createPane:${AGENT_PANE_ID}:primary-agent`,
-      `setPrimaryAgent:${AGENT_PANE_ID}:ses_live:${attachment.terminalTargetId}`,
-    ]);
-    expect(
-      store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.agentIdentity,
-    ).toEqual({
-      sessionId: "ses_live",
-      terminalTargetId: attachment.terminalTargetId,
-      harnessProvider: "codex",
-    });
-    expect(observerService.dispatched).toEqual([]);
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-  });
-
-  it("toasts attachment resolution failures without creating or locally spawning a pane", async () => {
-    const attachment = {
-      kind: "managed-terminal",
-      terminalTargetId: `${TERMINAL_TARGET_ID}-gone`,
-    } as const;
-    const base = preparedPlan();
-    if (base.kind !== "prepared") {
-      throw new Error("preparedPlan must be a prepared launch");
-    }
-    const { store, calls, dispatch, settle, dashboardRuntime } = agentHarness(
-      { ...base, attachment },
-      manyProjectsSnapshot(),
-      {
-        resolve: async () => {
-          throw {
-            tag: "TerminalProviderError",
-            code: "HOST_ATTACH_GONE",
-            message: "The managed terminal is no longer available.",
-            provider: "native",
-          };
-        },
-      },
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(calls).toEqual([]);
-    expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "The managed terminal is no longer available.",
-    });
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
-  });
-
-  it("retries a failed advertised attachment without taking the local-spawn fallback", async () => {
-    const attachment = {
-      kind: "managed-terminal",
-      terminalTargetId: `${TERMINAL_TARGET_ID}-gone`,
-    } as const;
-    const base = preparedPlan();
-    if (base.kind !== "prepared") {
-      throw new Error("preparedPlan must be a prepared launch");
-    }
-    let resolutions = 0;
-    const { store, calls, dispatch, settle, observerService } = agentHarness(
-      { ...base, attachment },
-      manyProjectsSnapshot(),
-      {
-        resolve: async () => {
-          resolutions += 1;
-          throw {
-            tag: "TerminalProviderError",
-            code: "HOST_ATTACH_GONE",
-            message: "The managed terminal is no longer available.",
-            provider: "native",
-          };
-        },
-      },
-    );
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.preparedLaunches).toHaveLength(2);
-    expect(resolutions).toBe(2);
-    expect(calls).toEqual([]);
-    expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
-  });
-
-  it("toasts the observer's error when prepareExternalLaunch rejects", async () => {
-    const { store, calls, dispatch, settle, observerService, dashboardRuntime } = agentHarness();
-    observerService.prepareExternalLaunch = async () => {
-      throw {
-        tag: "CommandValidationError",
-        code: "HARNESS_HOOKS_NOT_INSTALLED",
-        message: "Claude hooks are not installed.",
-        hint: "Run 'stn hooks install claude'.",
-      };
-    };
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(calls).toEqual([]);
-    // Routed through safeErrorToNotice now, so message and hint stay distinct
-    // fields rather than being concatenated into one string.
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "Claude hooks are not installed.",
-      hint: "Run 'stn hooks install claude'.",
-    });
-  });
-
-  it("accepts a retry after prepareExternalLaunch fails", async () => {
-    const { store, calls, dispatch, settle, observerService } = agentHarness();
-    let attempts = 0;
-    observerService.prepareExternalLaunch = async (params) => {
-      observerService.preparedLaunches.push(params);
-      attempts += 1;
-      if (attempts === 1) {
-        throw {
-          tag: "ClientObserverError",
-          code: "PREPARE_FAILED",
-          message: "Prepare failed once.",
-        };
-      }
-      return preparedPlan();
-    };
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.preparedLaunches).toHaveLength(2);
-    expect(calls).toEqual([
-      `ensure:${AGENT_PANE_ID}:${CWD}:codex:--exec`,
-      `createPane:${AGENT_PANE_ID}:primary-agent`,
-      `setPrimaryAgent:${AGENT_PANE_ID}:ses_managed:${TERMINAL_TARGET_ID}`,
-    ]);
-  });
-
-  it("toasts when launched with no observer service (no spawn)", async () => {
-    const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createStationTestDashboardRuntime({
-      source: new FakeStationSource(snapshot),
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
-    });
-    const store = createStationStore();
-    // No observerService threaded in → the launch can't prepare anything.
-    const runtime = createStationInputRuntime({ store, shutdown: () => {}, dashboardRuntime });
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    runtime.dispatchMouse({ kind: "station", target: { kind: "row", rowId: ROW_ID } }, LEFT_DOWN);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    const toast = dashboardRuntime.state.getState().toasts.at(-1)?.toast;
-    expect(toast?.kind).toBe("error");
-    expect(toast?.message).toContain("No observer connection");
-    expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
-  });
-
-  it("leaves the [+sh] shell path role-shell with no managed launch", () => {
-    const { store, calls, dispatch, observerService } = agentHarness();
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    expect(dispatch({ kind: "openShellForRow", rowId: ROW_ID })).toBe(true);
-
-    const shellPaneId = worktreePaneId(WORKTREE_ID);
-    // No command/args seeded (default shell), role shell, and no observer prepare.
-    expect(calls).toEqual([`ensure:${shellPaneId}:${CWD}::`, `createPane:${shellPaneId}:shell`]);
-    expect(store.getState().workspace.panes.find((pane) => pane.id === shellPaneId)?.role).toEqual(
-      "shell",
-    );
-    expect(store.getState().workspace.panes.some((pane) => pane.role === "primary-agent")).toBe(false);
-    expect(observerService.preparedLaunches).toEqual([]);
-  });
-
-  it("toasts and keeps the overlay open when focusing an existing session is rejected", async () => {
-    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
-      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      liveAgentWithoutTerminalSnapshot(),
-    );
-    observerService.nextReceipt = {
-      commandId: "cmd_tui_1",
-      accepted: false,
-      status: "rejected",
-      error: {
-        tag: "ClientObserverError",
-        code: "STATION_FOCUS_REJECTED",
-        message: "Focus was rejected.",
-      },
-    };
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.dispatched).toEqual([
-      { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
-    ]);
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "Focus was rejected.",
-    });
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
-  });
-
-  it("toasts and keeps the overlay open when the focus command completion fails", async () => {
-    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
-      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      liveAgentWithoutTerminalSnapshot(),
-    );
-    observerService.nextCompletion = {
-      status: "failed",
-      commandId: "cmd_tui_1",
-      error: {
-        tag: "ClientObserverError",
-        code: "STATION_FOCUS_FAILED",
-        message: "Focus never completed.",
-      },
-    };
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(observerService.waitedForCommandIds).toEqual(["cmd_tui_1"]);
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "Focus never completed.",
-    });
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
-  });
-
-  it("toasts and keeps the overlay open when the focus dispatch throws", async () => {
-    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
-      { kind: "existing-session", sessionId: "ses_elsewhere", harnessProvider: "codex" },
-      liveAgentWithoutTerminalSnapshot(),
-    );
-    observerService.dispatch = async () => {
-      throw {
-        tag: "ClientObserverError",
-        code: "STATION_FOCUS_THREW",
-        message: "Observer is gone.",
-      };
-    };
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "Observer is gone.",
-    });
-    expect(selectStationOverlayVisible(store.getState())).toBe(true);
-  });
-
-  it("still opens the pane when acknowledging the ready turn fails", async () => {
-    const { store, dispatch, settle, observerService, dashboardRuntime } = agentHarness(
-      preparedPlan(),
-      withTurnReadiness(manyProjectsSnapshot()),
-    );
-    // Only the turn ack throws; the launch itself is unaffected. A failed best-effort
-    // ack must not turn a successful open into an error.
-    observerService.dispatch = async (command) => {
-      if (command.type === "session.acknowledgeTurn") {
-        throw { tag: "ClientObserverError", code: "ACK_FAILED", message: "ack failed" };
-      }
-      return observerService.nextReceipt;
-    };
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-
-    dispatch({ kind: "row", rowId: ROW_ID });
-    await settle();
-
-    // The open succeeded: overlay closed onto the new primary-agent pane...
-    expect(selectStationOverlayVisible(store.getState())).toBe(false);
-    expect(store.getState().workspace.panes.find((pane) => pane.id === AGENT_PANE_ID)?.role).toBe(
-      "primary-agent",
-    );
-    // ...and the swallowed ack error produced no error toast.
-    expect(dashboardRuntime.state.getState().toasts.some((entry) => entry.toast.kind === "error")).toBe(
-      false,
-    );
-  });
-});
-
-describe("createStationInputRuntime New Session hosted launch", () => {
-  // Driven end to end through the public runtime: open the overlay, "N" opens the
-  // wizard's review screen, Enter submits as a Station-hosted launch (worktree.create
-  // + a background managed launch) instead of the machine's tmux session.create.
-  const PROJECT_ID = "station";
-
-  function newSessionPlan(worktreeId: string): AgentPrepareExternalLaunchResult {
-    return {
-      kind: "prepared",
-      sessionId: "ses_new",
-      terminalTargetId: `native:${worktreeId}`,
-      launchPlan: {
-        provider: "codex",
-        command: "codex",
-        args: ["--exec"],
-        cwd: "/tmp/new",
-        env: {},
-        mode: "interactive",
-      },
-    };
-  }
-
-  function newSessionHarness() {
-    const snapshot = manyProjectsSnapshot();
-    const observerService = new FakeTuiObserverService(snapshot);
-    const source = new FakeStationSource(snapshot);
-    const dashboardRuntime = createStationTestDashboardRuntime({
-      source,
-      service: observerService,
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
-    });
-    // Attach the source so source.setSnapshot later propagates to the store —
-    // the seam waitForWorktreeByBranch subscribes against.
-    dashboardRuntime.start();
-    const scripted = createScriptedTerminal();
-    const registry = createPtyRegistry({ createTerminal: () => scripted.terminal });
-    const store = createStationStore();
-    const runtime = createStationInputRuntime({
-      store,
-      shutdown: () => {},
-      dashboardRuntime,
-      registry,
-      observerService,
-    });
-    const pressKey = (sequence: string): boolean => runtime.handleSequence(sequence);
-    const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-    return { store, runtime, observerService, source, dashboardRuntime, pressKey, settle, snapshot };
-  }
-
-  // Open the wizard and read the submit the overlay drives on Enter. A custom
-  // title is edited through the real shared wizard while the branch stays hidden.
-  function openWizardAndCaptureSubmit(
-    harness: ReturnType<typeof newSessionHarness>,
-    title?: string,
-  ) {
-    harness.store.actions.openOverlay(STATION_OVERLAY_ID);
-    harness.pressKey("N");
-    if (title !== undefined) {
-      harness.pressKey("N");
-      harness.pressKey(title);
-      harness.pressKey("\r");
-    }
-    const submit = resolveNewSessionSubmit(harness.dashboardRuntime, {
-      type: "newSession.activate",
-      actionId: "review.create",
-    });
-    if (submit.kind !== "submit") {
-      throw new Error("expected the New Session wizard to be on the review screen");
-    }
-    return submit;
-  }
-
-  // Clone the snapshot with a freshly-created (agentless) worktree row for branch,
-  // mirroring what the observer's post-create reconcile delivers.
-  function snapshotWithWorktree(
-    base: StationSnapshot,
-    worktreeId: string,
-    branch: string,
-  ): StationSnapshot {
-    const template = base.rows.find((row) => row.projectId === PROJECT_ID);
-    if (template === undefined) {
-      throw new Error("fixture has no station row to clone");
-    }
-    const fresh: WorktreeRow = {
-      ...template,
-      id: worktreeId,
-      branch,
-      path: `/Users/example/.worktrees/station/${branch}`,
-      display: { ...template.display },
-    };
-    delete fresh.agent;
-    delete fresh.terminal;
-    return { ...base, rows: [...base.rows, fresh] };
-  }
-
-  it("creates the worktree, launches the agent in the background, and keeps the overlay open", async () => {
-    const harness = newSessionHarness();
-    const worktreeId = "wt_new_session";
-    harness.observerService.nextPreparedLaunch = newSessionPlan(worktreeId);
-    const submit = openWizardAndCaptureSubmit(harness, "Hexagonal PT 12");
-    const { branch } = submit;
-    const localId = `station-create:${PROJECT_ID}:${branch}`;
-
-    expect(harness.pressKey("\r")).toBe(true);
-    // Optimistic create row appears synchronously on submit, before the real
-    // worktree reaches the snapshot (which would prune it).
-    expect(
-      harness.dashboardRuntime.state
-        .getState()
-        .localRows.pendingCreate.map((row) => row.localId),
-    ).toContain(localId);
-    expect(
-      harness.dashboardRuntime.state.getState().localRows.pendingCreate.find(
-        (row) => row.localId === localId,
-      ),
-    ).toMatchObject({ title: "Hexagonal PT 12", branch });
-
-    // Let worktree.create dispatch + completion resolve and waitForWorktreeByBranch
-    // subscribe, then deliver the created worktree row so the launch proceeds.
-    await harness.settle();
-    harness.source.setSnapshot(snapshotWithWorktree(harness.snapshot, worktreeId, branch));
-    await harness.settle();
-
-    const createCommand = harness.observerService.dispatched.find(
-      (command) => command.type === "worktree.create",
-    );
-    expect(createCommand).toEqual({
-      type: "worktree.create",
-      payload: { projectId: PROJECT_ID, branch, launchHarness: "codex" },
-    });
-    // The New Session flow forwards the wizard's harness pick to the prepare.
-    expect(harness.observerService.preparedLaunches).toEqual([
-      {
-        projectId: PROJECT_ID,
-        worktreeId,
-        harness: "codex",
-        title: "Hexagonal PT 12",
-      },
-    ]);
-    const agentPaneId = agentWorktreePaneId(worktreeId);
-    expect(harness.store.getState().workspace.panes.some((pane) => pane.id === agentPaneId)).toBe(
-      true,
-    );
-    // Background launch: the dashboard overlay stays up and focus is not yanked
-    // into the new pane.
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
-    expect(harness.store.getState().input.focus).not.toEqual({ kind: "pane", paneId: agentPaneId });
-  });
-
-  it("keeps a background existing-session preparation on the overlay without focusing", async () => {
-    const harness = newSessionHarness();
-    const worktreeId = "wt_existing_session";
-    harness.observerService.nextPreparedLaunch = {
-      kind: "existing-session",
-      sessionId: "ses_existing_session",
-      harnessProvider: "codex",
-    };
-    const { branch } = openWizardAndCaptureSubmit(harness, "Existing Session");
-
-    expect(harness.pressKey("\r")).toBe(true);
-    await harness.settle();
-    harness.source.setSnapshot(snapshotWithWorktree(harness.snapshot, worktreeId, branch));
-    await harness.settle();
-
-    expect(harness.observerService.preparedLaunches).toEqual([
-      {
-        projectId: PROJECT_ID,
-        worktreeId,
-        harness: "codex",
-        title: "Existing Session",
-      },
-    ]);
-    expect(
-      harness.observerService.dispatched.some((command) => command.type === "terminal.focus"),
-    ).toBe(false);
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
-    expect(
-      harness.store
-        .getState()
-        .workspace.panes.some((pane) => pane.id === agentWorktreePaneId(worktreeId)),
-    ).toBe(false);
-  });
-
-  it("shows then expires a failed optimistic row when New preparation rejects", async () => {
-    const harness = newSessionHarness();
-    const worktreeId = "wt_failed_new_session";
-    harness.observerService.prepareExternalLaunch = async (params) => {
-      harness.observerService.preparedLaunches.push(params);
-      throw {
-        tag: "CommandValidationError",
-        code: "HARNESS_HOOKS_NOT_INSTALLED",
-        message: "Claude hooks are not installed.",
-        hint: "Run 'stn hooks install claude'.",
-      };
-    };
-    const { branch } = openWizardAndCaptureSubmit(harness, "Failed New Session");
-    const localId = `station-create:${PROJECT_ID}:${branch}`;
-
-    expect(harness.pressKey("\r")).toBe(true);
-    await harness.settle();
-
-    const realSetTimeout = globalThis.setTimeout;
-    let expireFailedRow: (() => void) | undefined;
-    globalThis.setTimeout = ((
-      callback: (...callbackArgs: unknown[]) => void,
-      ms?: number,
-      ...rest: unknown[]
-    ) => {
-      if (ms === FAILED_CREATE_ROW_TTL_MS) {
-        expireFailedRow = () => callback(...rest);
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }
-      return realSetTimeout(callback, ms, ...rest);
-    }) as typeof globalThis.setTimeout;
-    try {
-      harness.source.setSnapshot(snapshotWithWorktree(harness.snapshot, worktreeId, branch));
-      await harness.settle();
-    } finally {
-      globalThis.setTimeout = realSetTimeout;
-    }
-
-    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
-    const failedRow = harness.dashboardRuntime.state.getState().localRows.failedCreate[0];
-    expect(harness.dashboardRuntime.state.getState().localRows.failedCreate).toHaveLength(1);
-    expect(failedRow).toMatchObject({ localId, title: "Failed New Session", branch });
-    expect(failedRow?.error).toMatchObject({
-      code: "HARNESS_HOOKS_NOT_INSTALLED",
-      message: "Claude hooks are not installed.",
-    });
-    expect(
-      harness.store
-        .getState()
-        .workspace.panes.some((pane) => pane.id === agentWorktreePaneId(worktreeId)),
-    ).toBe(false);
-    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "Claude hooks are not installed.",
-      hint: "Run 'stn hooks install claude'.",
-    });
-
-    expect(expireFailedRow).toBeDefined();
-    expireFailedRow?.();
-    expect(harness.dashboardRuntime.state.getState().localRows.failedCreate).toEqual([]);
-  });
-
-  it("removes the optimistic row and toasts when the worktree create is rejected", async () => {
-    const harness = newSessionHarness();
-    harness.observerService.nextReceipt = {
-      commandId: "cmd_tui_1",
-      accepted: false,
-      status: "rejected",
-      error: {
-        tag: "CommandValidationError",
-        code: "WORKTREE_BRANCH_EXISTS",
-        message: "That branch already exists.",
-      },
-    };
-    const { branch } = openWizardAndCaptureSubmit(harness);
-
-    expect(harness.pressKey("\r")).toBe(true);
-    await harness.settle();
-
-    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
-    const toast = harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast;
-    expect(toast?.kind).toBe("error");
-    expect(toast?.message).toContain("That branch already exists.");
-    // No agent was launched: the create failed before any prepare.
-    expect(harness.observerService.preparedLaunches).toEqual([]);
-    expect(branch.length).toBeGreaterThan(0);
-  });
-
-  it("removes the optimistic row and toasts when the worktree create completion fails", async () => {
-    const harness = newSessionHarness();
-    harness.observerService.nextCompletion = {
-      status: "failed",
-      commandId: "cmd_tui_1",
-      error: {
-        tag: "ClientObserverError",
-        code: "WORKTREE_CREATE_FAILED",
-        message: "Create failed mid-flight.",
-      },
-    };
-    const { branch } = openWizardAndCaptureSubmit(harness);
-
-    expect(harness.pressKey("\r")).toBe(true);
-    await harness.settle();
-
-    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
-    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "Create failed mid-flight.",
-    });
-    // The create never completed, so no agent launch was prepared.
-    expect(harness.observerService.preparedLaunches).toEqual([]);
-    expect(branch.length).toBeGreaterThan(0);
-  });
-
-  it("toasts and clears the optimistic row when there is no observer connection", async () => {
-    const snapshot = manyProjectsSnapshot();
-    const dashboardRuntime = createStationTestDashboardRuntime({
-      source: new FakeStationSource(snapshot),
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
-    });
-    const store = createStationStore();
-    // No observerService threaded in → the New Session create cannot dispatch.
-    const runtime = createStationInputRuntime({ store, shutdown: () => {}, dashboardRuntime });
-    store.actions.openOverlay(STATION_OVERLAY_ID);
-    runtime.handleSequence("N");
-    expect(runtime.handleSequence("\r")).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
-    expect(dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "No observer connection; cannot create the session.",
-    });
-  });
-
-  it("toasts when the created worktree never reaches the snapshot in time", async () => {
-    const harness = newSessionHarness();
-    const { branch } = openWizardAndCaptureSubmit(harness);
-    const localId = `station-create:${PROJECT_ID}:${branch}`;
-
-    // Fire the 10s "worktree appeared" timeout deterministically instead of waiting
-    // WORKTREE_APPEAR_TIMEOUT_MS; sub-second settle timers pass through.
-    const realSetTimeout = globalThis.setTimeout;
-    const longTimers: Array<() => void> = [];
-    globalThis.setTimeout = ((
-      callback: (...callbackArgs: unknown[]) => void,
-      ms?: number,
-      ...rest: unknown[]
-    ) => {
-      if (typeof ms === "number" && ms >= 5000) {
-        longTimers.push(() => callback(...rest));
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }
-      return realSetTimeout(callback, ms, ...rest);
-    }) as typeof globalThis.setTimeout;
-    try {
-      expect(harness.pressKey("\r")).toBe(true);
-      // Let create dispatch + completion resolve and waitForWorktreeByBranch subscribe.
-      await harness.settle();
-      // The row never arrives; fire the appear-timeout so the wait resolves undefined.
-      for (const fire of longTimers) {
-        fire();
-      }
-      await harness.settle();
-    } finally {
-      globalThis.setTimeout = realSetTimeout;
-    }
-
-    expect(
-      harness.dashboardRuntime.state.getState().localRows.pendingCreate.map((row) => row.localId),
-    ).not.toContain(localId);
-    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "info",
-      message:
-        "Created the worktree, but it didn't appear in time to launch the agent — open it from the dashboard.",
-    });
-    // The launch never proceeded past the missing row.
-    expect(harness.observerService.preparedLaunches).toEqual([]);
-  });
-});
-
-describe("createStationInputRuntime Fork hosted launch", () => {
-  // Driven end to end through the public runtime: Name/Submit Enter hosts the
-  // fork in Station, while Copy-focused Enter remains a shared toggle.
-  function forkPlan(worktreeId: string): AgentPrepareExternalLaunchResult {
-    return {
-      kind: "prepared",
-      sessionId: "ses_fork",
-      terminalTargetId: `native:${worktreeId}`,
-      launchPlan: {
-        provider: "codex",
-        command: "codex",
-        args: ["--exec"],
-        cwd: "/tmp/fork",
-        env: {},
-        mode: "interactive",
-      },
-    };
-  }
-
-  function forkHarness() {
-    const snapshot = manyProjectsSnapshot();
-    const observerService = new FakeTuiObserverService(snapshot);
-    const source = new FakeStationSource(snapshot);
-    const dashboardRuntime = createStationTestDashboardRuntime({
-      source,
-      service: observerService,
-      initialSnapshot: snapshot,
-      persistentPopup: true,
-      onDismiss: async () => {},
-      initialState: { terminalRows: 12 },
-    });
-    dashboardRuntime.start();
-    const scripted = createScriptedTerminal();
-    const registry = createPtyRegistry({ createTerminal: () => scripted.terminal });
-    const store = createStationStore();
-    const runtime = createStationInputRuntime({
-      store,
-      shutdown: () => {},
-      dashboardRuntime,
-      registry,
-      observerService,
-    });
-    const pressKey = (sequence: string): boolean => runtime.handleSequence(sequence);
-    const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-    return { store, runtime, observerService, source, dashboardRuntime, pressKey, settle, snapshot };
-  }
-
-  // Open fork details for the first row and read the submit the overlay drives on
-  // Enter (resolveForkSessionSubmit), without coupling to the screen shape.
-  function openForkAndCaptureSubmit(
-    harness: ReturnType<typeof forkHarness>,
-    title?: string,
-  ) {
-    harness.store.actions.openOverlay(STATION_OVERLAY_ID);
-    harness.pressKey("F");
-    harness.pressKey("1");
-    if (title !== undefined) {
-      harness.pressKey("\u0015");
-      harness.pressKey(title);
-    }
-    const submit = resolveForkSessionSubmit(harness.dashboardRuntime);
-    if (submit.kind !== "submit") {
-      throw new Error("expected the fork flow to be on the details screen");
-    }
-    return submit;
-  }
-
-  // The harness Station inherits for the fork: the source row's live/recovery
-  // harness, else the project default — the same resolution the executor uses.
-  function inheritedHarness(harness: ReturnType<typeof forkHarness>, submit: { projectId: string; sourceWorktreeId: string }) {
-    const sourceRow = harness.snapshot.rows.find((row) => row.id === submit.sourceWorktreeId);
-    const project = harness.snapshot.projects.find((candidate) => candidate.id === submit.projectId);
-    return sourceRow?.agent?.harness ?? sourceRow?.recovery?.provider ?? project?.defaults.harness;
-  }
-
-  function snapshotWithWorktree(
-    base: StationSnapshot,
-    projectId: string,
-    worktreeId: string,
-    branch: string,
-  ): StationSnapshot {
-    const template = base.rows.find((row) => row.projectId === projectId);
-    if (template === undefined) {
-      throw new Error(`fixture has no ${projectId} row to clone`);
-    }
-    const fresh: WorktreeRow = {
-      ...template,
-      id: worktreeId,
-      branch,
-      path: `/Users/example/.worktrees/${projectId}/${branch}`,
-      display: { ...template.display },
-    };
-    delete fresh.agent;
-    delete fresh.terminal;
-    return { ...base, rows: [...base.rows, fresh] };
-  }
-
-  it("toggles Copy-focused Enter without dispatching a fork", () => {
-    const harness = forkHarness();
-    harness.store.actions.openOverlay(STATION_OVERLAY_ID);
-    harness.pressKey("F");
-    harness.pressKey("1");
-    harness.pressKey("\u001b[B");
-
-    expect(harness.dashboardRuntime.state.getState().screen).toMatchObject({
-      name: "fork",
-      step: "details",
-      focus: "copyDirty",
-      copyDirty: true,
-    });
-    expect(harness.pressKey("\r")).toBe(true);
-    expect(harness.dashboardRuntime.state.getState().screen).toMatchObject({
-      name: "fork",
-      step: "details",
-      focus: "copyDirty",
-      copyDirty: false,
-    });
-    expect(
-      harness.observerService.dispatched.some((command) => command.type === "worktree.fork"),
-    ).toBe(false);
-  });
-
-  it("forks the worktree, shows an optimistic row, and launches the inherited agent in the background", async () => {
-    const harness = forkHarness();
-    const worktreeId = "wt_forked";
-    harness.observerService.nextPreparedLaunch = forkPlan(worktreeId);
-    const submit = openForkAndCaptureSubmit(harness, "Hexagonal PT 12");
-    const localId = `station-fork:${submit.sourceWorktreeId}:${submit.branch}`;
-    const harnessProvider = inheritedHarness(harness, submit);
-
-    expect(harness.pressKey("\r")).toBe(true);
-    // Optimistic row appears synchronously on submit, carrying the inherited harness,
-    // before the real worktree reaches the snapshot (which would prune it).
-    expect(
-      harness.dashboardRuntime.state
-        .getState()
-        .localRows.pendingCreate.find((row) => row.localId === localId),
-    ).toMatchObject({
-      title: "Hexagonal PT 12",
-      branch: submit.branch,
-      harnessProvider,
-    });
-
-    await harness.settle();
-    harness.source.setSnapshot(
-      snapshotWithWorktree(harness.snapshot, submit.projectId, worktreeId, submit.branch),
-    );
-    await harness.settle();
-
-    const forkCommand = harness.observerService.dispatched.find(
-      (command) => command.type === "worktree.fork",
-    );
-    expect(forkCommand).toEqual({
-      type: "worktree.fork",
-      payload: {
-        projectId: submit.projectId,
-        sourceWorktreeId: submit.sourceWorktreeId,
-        branch: submit.branch,
-        copyDirty: true,
-        launchHarness: harnessProvider,
-      },
-    });
-    // The inherited harness is forwarded to the prepare for the new worktree.
-    expect(harness.observerService.preparedLaunches).toEqual([
-      {
-        projectId: submit.projectId,
-        worktreeId,
-        harness: harnessProvider,
-        title: "Hexagonal PT 12",
-      },
-    ]);
-    const agentPaneId = agentWorktreePaneId(worktreeId);
-    expect(harness.store.getState().workspace.panes.some((pane) => pane.id === agentPaneId)).toBe(
-      true,
-    );
-    // Background launch: the dashboard overlay stays up.
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
-  });
-
-  it("blocks a fork before dispatch when no inherited or default harness resolves", async () => {
-    const harness = forkHarness();
-    const submit = openForkAndCaptureSubmit(harness);
-    const sourceRow = harness.snapshot.rows.find((row) => row.id === submit.sourceWorktreeId);
-    const project = harness.snapshot.projects.find(
-      (candidate) => candidate.id === submit.projectId,
-    );
-    if (sourceRow === undefined || project === undefined) {
-      throw new Error("expected fork source and project fixtures");
-    }
-    delete sourceRow.agent;
-    delete sourceRow.recovery;
-    delete (project.defaults as Partial<typeof project.defaults>).harness;
-
-    expect(harness.pressKey("\r")).toBe(true);
-    await harness.settle();
-
-    expect(harness.observerService.dispatched).toEqual([]);
-    expect(harness.observerService.preparedLaunches).toEqual([]);
-    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
-    expect(harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "error",
-      message: "Station could not resolve a harness for the fork.",
-      hint: "Configure a project default harness and retry.",
-    });
-  });
-
-  it("shows a failed optimistic row without deleting the retained fork when preparation rejects", async () => {
-    const harness = forkHarness();
-    const worktreeId = "wt_failed_fork";
-    harness.observerService.prepareExternalLaunch = async (params) => {
-      harness.observerService.preparedLaunches.push(params);
-      throw {
-        tag: "ClientObserverError",
-        code: "HARNESS_UNAVAILABLE",
-        message: "The selected harness is unavailable.",
-      };
-    };
-    const submit = openForkAndCaptureSubmit(harness, "Failed Fork");
-    const localId = `station-fork:${submit.sourceWorktreeId}:${submit.branch}`;
-
-    expect(harness.pressKey("\r")).toBe(true);
-    await harness.settle();
-    harness.source.setSnapshot(
-      snapshotWithWorktree(harness.snapshot, submit.projectId, worktreeId, submit.branch),
-    );
-    await harness.settle();
-
-    expect(
-      harness.dashboardRuntime.state.getState().snapshot?.rows.some(
-        (row) => row.id === worktreeId && row.branch === submit.branch,
-      ),
-    ).toBe(true);
-    expect(harness.dashboardRuntime.state.getState().localRows.pendingCreate).toEqual([]);
-    const failedRow = harness.dashboardRuntime.state.getState().localRows.failedCreate[0];
-    expect(harness.dashboardRuntime.state.getState().localRows.failedCreate).toHaveLength(1);
-    expect(failedRow).toMatchObject({ localId, title: "Failed Fork", branch: submit.branch });
-    expect(failedRow?.error).toMatchObject({ code: "HARNESS_UNAVAILABLE" });
-    expect(
-      harness.store
-        .getState()
-        .workspace.panes.some((pane) => pane.id === agentWorktreePaneId(worktreeId)),
-    ).toBe(false);
-  });
-
-  it("removes the optimistic row and toasts when the worktree fork is rejected", async () => {
-    const harness = forkHarness();
-    harness.observerService.nextReceipt = {
-      commandId: "cmd_tui_1",
-      accepted: false,
-      status: "rejected",
-      error: {
-        tag: "WorktreeProviderError",
-        code: "WORKTREE_CREATE_FAILED",
-        message: "Could not seed the fork.",
-      },
-    };
-    const submit = openForkAndCaptureSubmit(harness);
-    const localId = `station-fork:${submit.sourceWorktreeId}:${submit.branch}`;
-
-    expect(harness.pressKey("\r")).toBe(true);
-    await harness.settle();
-
-    expect(
-      harness.dashboardRuntime.state
-        .getState()
-        .localRows.pendingCreate.some((row) => row.localId === localId),
-    ).toBe(false);
-    const toast = harness.dashboardRuntime.state.getState().toasts.at(-1)?.toast;
-    expect(toast?.kind).toBe("error");
-    expect(toast?.message).toContain("Could not seed the fork.");
-    expect(harness.observerService.preparedLaunches).toEqual([]);
   });
 });
 

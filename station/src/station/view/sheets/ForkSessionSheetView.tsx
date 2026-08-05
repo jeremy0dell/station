@@ -1,5 +1,5 @@
 // Fork details share semantic controls across pointer and keyboard activation;
-// native Station intercepts only submit so Copy-focused Enter remains a core toggle.
+// only submit invokes the managed-session capability, so Copy-focused Enter remains a core toggle.
 import {
   bottomSheetContentWidth,
   type DashboardScreenView,

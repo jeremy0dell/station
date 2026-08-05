@@ -467,11 +467,7 @@ describe("station production boundaries", () => {
       "sources/fixtures/mockObserverSnapshot.ts",
       "terminal/testing/frameProbe.ts",
     ];
-    const expectedInternalExports = [
-      "createTuiLocalOperationRunner",
-      "prepareCommandForRuntime",
-      "runCreateSessionOperation",
-    ];
+    const expectedInternalExports = ["createTuiLocalOperationRunner"];
     expect(expectedProduction.filter((path) => !paths.has(path))).toEqual([]);
     expect(expectedExcluded.filter((path) => paths.has(path))).toEqual([]);
     expect(

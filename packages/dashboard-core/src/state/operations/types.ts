@@ -1,24 +1,47 @@
-import type { ProviderId, SessionId, StationCommand, WorktreeId } from "@station/contracts";
+import type {
+  ProjectView,
+  ProviderId,
+  SessionId,
+  StationCommand,
+  WorktreeId,
+} from "@station/contracts";
 
-export type CreateSessionOperation = {
-  type: "createSession";
-  localId: string;
+export type ActivateSessionOperation = {
+  type: "activateSession";
+  sessionId: SessionId;
   projectId: string;
-  title: string;
+  worktreeId: WorktreeId;
   branch: string;
-  harnessProvider: ProviderId;
-  command: Extract<StationCommand, { type: "session.create" }>;
+  preferredObserverAction: "focus" | "start" | "resume";
+  localId?: string;
 };
 
-export type ForkSessionOperation = {
-  type: "forkSession";
+export type CreateManagedSessionOperation = {
+  type: "createManagedSession" | "quickCreateManagedSession";
   localId: string;
-  projectId: string;
+  project: ProjectView;
+  title: string;
+  hiddenBranch: string;
+  harness: ProviderId;
+};
+
+export type ForkManagedSessionOperation = {
+  type: "forkManagedSession";
+  localId: string;
+  project: ProjectView;
   sourceWorktreeId: WorktreeId;
   title: string;
-  branch: string;
-  command: Extract<StationCommand, { type: "session.fork" }>;
+  hiddenBranch: string;
+  copyDirty: boolean;
+  inheritedHarness?: ProviderId;
 };
+
+export type OpenDashboardShellOperation =
+  | { type: "openDashboardShell"; target: { kind: "project"; projectId: string } }
+  | { type: "openDashboardShell"; target: { kind: "session"; sessionId: SessionId } };
+
+export type DismissDashboardOperation = { type: "dismissDashboard" };
+export type ExitDashboardRendererOperation = { type: "exitDashboardRenderer"; exitCode: number };
 
 export type RemoveWorktreeOperation = {
   type: "removeWorktree";
@@ -27,24 +50,6 @@ export type RemoveWorktreeOperation = {
   worktreeId: WorktreeId;
   branch: string;
   command: Extract<StationCommand, { type: "worktree.remove" }>;
-};
-
-export type StartAgentOperation = {
-  type: "startAgent";
-  localId: string;
-  projectId: string;
-  worktreeId: WorktreeId;
-  branch: string;
-  command: Extract<StationCommand, { type: "session.startAgent" }>;
-};
-
-export type ResumeAgentOperation = {
-  type: "resumeAgent";
-  localId: string;
-  projectId: string;
-  worktreeId: WorktreeId;
-  branch: string;
-  command: Extract<StationCommand, { type: "session.resumeAgent" }>;
 };
 
 export type RenameSessionOperation = {
@@ -84,12 +89,17 @@ export type RemoveProjectOperation = {
   command: Extract<StationCommand, { type: "project.remove" }>;
 };
 
+export type DashboardCapabilityOperation =
+  | ActivateSessionOperation
+  | CreateManagedSessionOperation
+  | ForkManagedSessionOperation
+  | OpenDashboardShellOperation
+  | DismissDashboardOperation
+  | ExitDashboardRendererOperation;
+
 export type TuiOperation =
-  | CreateSessionOperation
-  | ForkSessionOperation
+  | DashboardCapabilityOperation
   | RemoveWorktreeOperation
-  | StartAgentOperation
-  | ResumeAgentOperation
   | RenameSessionOperation
   | LoadProjectDirectoryOperation
   | ReviewProjectFolderOperation

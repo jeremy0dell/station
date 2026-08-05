@@ -1,7 +1,6 @@
-import type { ProviderId } from "@station/contracts";
 import type { ContextMenuAnchor, ContextMenuTarget } from "../contextMenu/types.js";
 import type { StationMouseEvent } from "./mouse.js";
-import type { FocusTarget, OverlayId, PaneId, PaneRole, StationState } from "../state/types.js";
+import type { FocusTarget, OverlayId, PaneId, StationState } from "../state/types.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 import type { KeymapStack } from "./keymap/keymaps.js";
 
@@ -41,146 +40,9 @@ export type RouteOutcome =
    */
   | { kind: "context-menu-set-active"; index: number }
   | { kind: "context-menu-select"; itemIndex?: number }
-  /**
-   * Open-or-focus a pane rooted at `cwd`. Its own outcome kind rather than a
-   * StationCommandId because commands take no arguments; the executor resolves
-   * the cwd into a pane via the registry + store. Used for the `[+sh]` shell
-   * affordances; `command`/`args`/`worktreeId` stay absent for shells.
-   */
-  | {
-      kind: "pane-open";
-      paneId: PaneId;
-      cwd: string;
-      role: PaneRole;
-      command?: string;
-      args?: readonly string[];
-      worktreeId?: string;
-    }
-  /**
-   * Managed agent launch asks the observer for the spawn plan first, then records
-   * the minted Station identity after local PTY spawn.
-   */
-  | {
-      kind: "pane-launch-managed";
-      paneId: PaneId;
-      cwd: string;
-      projectId: string;
-      worktreeId: string;
-    }
-  /**
-   * Station New Session creates the worktree first, then launches its agent into
-   * a Station pane instead of an external tmux session.
-   */
-  | {
-      kind: "pane-launch-new-session";
-      projectId: string;
-      title: string;
-      branch: string;
-      harness: ProviderId;
-    }
-  /**
-   * Station Fork creates a seeded worktree off the source's HEAD (worktree.fork),
-   * then hosts the inherited harness in a Station pane instead of a tmux session.
-   */
-  | {
-      kind: "pane-launch-fork";
-      projectId: string;
-      sourceWorktreeId: string;
-      title: string;
-      branch: string;
-      copyDirty: boolean;
-    }
   | { kind: "open-url"; url: string }
   | { kind: "swallowed" }
   | { kind: "ignored" };
-
-/** Builds pane-open outcomes without materializing absent optional launch fields. */
-export function paneOpenOutcome(target: {
-  paneId: PaneId;
-  cwd: string;
-  role: PaneRole;
-  command?: string;
-  args?: readonly string[];
-  worktreeId?: string;
-}): Extract<RouteOutcome, { kind: "pane-open" }> {
-  const outcome: Extract<RouteOutcome, { kind: "pane-open" }> = {
-    kind: "pane-open",
-    paneId: target.paneId,
-    cwd: target.cwd,
-    role: target.role,
-  };
-  if (target.command !== undefined) {
-    outcome.command = target.command;
-  }
-  if (target.args !== undefined) {
-    outcome.args = target.args;
-  }
-  if (target.worktreeId !== undefined) {
-    outcome.worktreeId = target.worktreeId;
-  }
-  return outcome;
-}
-
-/**
- * The one place the managed-launch outcome is built — shared by the row click
- * (mouse binding) and the row slot key (overlay layer) so they can't drift.
- */
-export function paneLaunchManagedOutcome(target: {
-  paneId: PaneId;
-  cwd: string;
-  projectId: string;
-  worktreeId: string;
-}): Extract<RouteOutcome, { kind: "pane-launch-managed" }> {
-  return {
-    kind: "pane-launch-managed",
-    paneId: target.paneId,
-    cwd: target.cwd,
-    projectId: target.projectId,
-    worktreeId: target.worktreeId,
-  };
-}
-
-/**
- * The one place the new-session-launch outcome is built — shared by the review
- * screen's Enter (overlay layer) and a click on its create hint (mouse) so they
- * can't drift.
- */
-export function paneLaunchNewSessionOutcome(target: {
-  projectId: string;
-  title: string;
-  branch: string;
-  harness: ProviderId;
-}): Extract<RouteOutcome, { kind: "pane-launch-new-session" }> {
-  return {
-    kind: "pane-launch-new-session",
-    projectId: target.projectId,
-    title: target.title,
-    branch: target.branch,
-    harness: target.harness,
-  };
-}
-
-/**
- * The one place the fork-launch outcome is built — shared by the details
- * screen's Enter (overlay layer) and a click on its fork button (mouse) so they
- * can't drift.
- */
-export function paneLaunchForkSessionOutcome(target: {
-  projectId: string;
-  sourceWorktreeId: string;
-  title: string;
-  branch: string;
-  copyDirty: boolean;
-}): Extract<RouteOutcome, { kind: "pane-launch-fork" }> {
-  return {
-    kind: "pane-launch-fork",
-    projectId: target.projectId,
-    sourceWorktreeId: target.sourceWorktreeId,
-    title: target.title,
-    branch: target.branch,
-    copyDirty: target.copyDirty,
-  };
-}
 
 export type MouseTargetRef =
   | { kind: "header" }

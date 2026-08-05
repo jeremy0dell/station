@@ -330,11 +330,11 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the dashboard runtime, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
 - Dashboard key/behavior is shared, not feature-gated: reducers and render/input leaves never select filter behavior or inspect feature flags; session and optimistic-row matching remains centralized in the pure persistent-filter projection.
-- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is repeat-safe. Construction requires the composition's `StationClientStateSource` and convergence-safe `ObserverService`; dashboard-core never creates a fallback client runtime or accepts an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
+- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is repeat-safe. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, and all four `DashboardCapabilities` groups: session activation, managed session execution, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
 - `@station/client` owns canonical in-process snapshot and connection truth. Its runtime-backed service commits snapshot loads and reconcile results to that same state source before resolving. Snapshot-only native and standalone consumers read `StationClientStateSource`; dashboard-core mirrors the exact snapshot identity only to combine it with screens, filter, focus, collapse, scrolling, widgets, optimistic rows, and toasts.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
-- Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input and effect adapters receive only their explicit client-state, dashboard-state, and action capabilities, while native and standalone composition roots alone own full runtime lifecycle. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
-- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers or replacing runtime state. Hosted workspace creation temporarily crosses into dashboard state through the named `addPendingCreateSession`, `failPendingCreateSession`, and `removePendingCreateSession` actions; Station still owns failure-retention timers and expiry scheduling until that lifecycle moves behind the runtime facade.
+- Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the four semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
+- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods.
 - New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
@@ -453,11 +453,11 @@ negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
 The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
 Workflow controls dispatch renderer-neutral actions through `DashboardActions.dispatch(...)`; direct hotkeys
-and focused Enter decode to the same pure intents before transitions or effects run. Dashboard-core
-owns action availability and resolution, while native Station and standalone/tmux
-retain their terminal-specific effects after shared resolution. Session rows are resolved by their
-exact current row ID before their visible slot key is dispatched, so
-observer-backed focus, start, resume, and picker behavior stays on the existing command path.
+and focused Enter decode to the same pure intents before transitions or capability execution. Dashboard-core
+owns action availability and resolution, while native Station and standalone/tmux inject their
+terminal-specific capabilities at composition. Session rows are resolved by their exact current row
+ID before dispatching one semantic activation action, so pointer, focused Enter, and slot keys share
+the same focus, start, resume, and managed-pane behavior.
 Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header
 segments dispatch one `dashboard.projectHeader.activate` action, so a click first focuses the exact
 segment and then follows the same activation path as focused Enter. Wheel events over child rows use
@@ -502,17 +502,16 @@ the inner screen receives the click before the outer popup backdrop, so one clic
 topmost safe surface.
 
 Native and standalone rendering expose the same project actions. Header Quick Session and the
-empty-project button emit the same core quick-session intent, then resolve availability at their
-terminal-specific acceptance boundary: native Station hosts the session in a Station pane, while the
-standalone dashboard dispatches the configured terminal default. Pointer clicks use
+empty-project button emit the same core quick-session request through the injected managed-session
+capability: native Station hosts the session in a Station pane, while the standalone dashboard
+dispatches the configured terminal default. Pointer clicks use
 `dashboard.emptyProject.activate`; focused Enter routes through the same core activation helper.
 Blocked activation keeps Add Session focused while showing the existing error; stale targets are
-inert. Successful activation transfers focus to that project's header `quickSession` segment before
-an optimistic create row replaces the empty row. The agent-picker uses the shared
-project-default screen transition. Link cells use the same
-validated platform opener. The project-header shell control delegates only its
-terminal effect: native Station opens or focuses a Station pane, while a tmux
-popup sends a strict renderer-control request to its CLI parent. The tmux adapter
+inert. Accepted activation retains the bounded Add Session focus until an optimistic create row
+replaces the empty row. The agent-picker uses the shared project-default screen transition. Link
+cells use the same validated platform opener. The project-header shell control delegates through
+the injected shell capability: native Station opens or focuses a Station pane, while a tmux popup
+sends a strict renderer-control request to its CLI parent. The tmux adapter
 opens or focuses one cwd-bound shell window in the exact invoking client session,
 then dismisses that popup claim. Its separate propagation-stopping cell prevents
 it from also collapsing the project.
@@ -545,8 +544,8 @@ semantic actions, use the shared bounded button treatment, and keep trailing she
 Fork Session renders Name and Copy through the same bounded field-control grammar as Create Session.
 Clicking Name focuses its editor, clicking Copy focuses and toggles it once, and the Fork button
 submits through a shared semantic action. Copy-focused Enter toggles rather than submitting; Enter
-on Name or Fork submits. Native Station intercepts only submit to host the fork in a managed pane,
-while standalone/tmux keeps the shared observer operation path.
+on Name or Fork submits. The managed-session capability hosts native forks in a Station pane and
+routes standalone/tmux forks through the shared Observer-backed implementation.
 
 Create Session review renders Project, Name, and Agent as compact field controls, followed by a
 compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, and `C`), values, and inline
@@ -556,9 +555,10 @@ editor gives Name, Save, and Back independent semantic controls and hides the te
 action owns focus. Down moves from the Name field into the button row, Left/Right moves between Save
 and Back, and Up returns to Name; Left/Right remains text-cursor movement while Name owns focus.
 Selecting Name sets focus directly and never generates arrow input. Native pointer Create, focused Enter, and
-direct `C` pass through one semantic Create resolver and shared validation before producing the
-managed-pane effect; when validation disables Create, all three activation paths remain inert.
-Standalone creation applies the same action through its existing observer operation path.
+direct `C` pass through one semantic Create resolver and shared validation before invoking the
+managed-session capability; when validation disables Create, all three activation paths remain
+inert. Native composition hosts the result in a managed pane, while standalone composition uses its
+Observer-backed capability.
 
 All bottom-sheet text uses the shared non-selectable sheet text primitive. Dragging inside any sheet
 therefore remains pointer interaction and never starts OpenTUI terminal text selection.
@@ -593,7 +593,7 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 - Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
 - Attachment-unavailable state is not process exit: version and exhausted-reconnect failures stop pane input and resize forwarding and show `attachment unavailable`, while only proven Host absence, an exited acknowledgement, or an exit frame reaches the pane-exit lifecycle. Lost historical replay fidelity keeps the pane attached and logs a typed degraded-snapshot diagnostic instead.
 - A dashboard-authorized relaunch resolves Observer preparation and any advertised attachment for the exact prepared session before atomically replacing the exact exited registry entry. Failed preparation leaves the dead screen and pane tree intact; successful replacement preserves child panes and split anchors, starts an already-visible pane at its latest requested viewport, and lets a newly revealed tree report its current layout before spawning.
-- In `@station/dashboard-core`: `selectors/` owns snapshot-to-view grouping/filtering, `state/commandBuilders.ts` owns typed observer command construction, `state/screens/*` owns pure screen transitions, `state/sourceBridge.ts` mirrors canonical client state into dashboard projection, `state/operations/*` owns command/operation flow, and `components/`/`widgets/` owns shared layout/content logic.
+- In `@station/dashboard-core`: `selectors/` owns snapshot-to-view grouping/filtering, `state/commandBuilders.ts` owns typed observer command construction, `state/screens/*` owns pure screen transitions, `state/sourceBridge.ts` mirrors canonical client state into dashboard projection, `state/capabilities/*` defines semantic renderer authority, `state/operations/*` executes capability and remaining Observer command flow, and `components/`/`widgets/` owns shared layout/content logic.
 - The dashboard surface under `station/src/station/` may import only its linked dashboard-facing `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`). Other Station subsystems use only the additional packages named by the link script at their owned composition boundaries. Production Station source must never import `apps/tui`, `ink`, providers, or integrations (enforced by `station/src/station/importBoundaries.test.ts`).
 
 ## Testing

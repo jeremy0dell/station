@@ -32,18 +32,20 @@ the dashboard is open so the hidden native layout cannot change.
 Runtime keyboard dispatch goes through the shared dashboard-core transition
 machine. Workflow mouse targets call `DashboardActions.dispatch(...)` with
 renderer-neutral Dashboard actions; direct commands and focused Enter decode to the
-same core intents, and the runtime applies every resulting transition and effect
-through one executor.
+same core intents, and the runtime applies every resulting transition and semantic
+capability execution through one executor.
 `DashboardRuntime.state` is read-only (`getState`, `getInitialState`, and
 `subscribe`), while `DashboardRuntime.actions` is the only external mutation
 authority. Presentation receives the state source; input receives state plus actions;
 `createStation` alone owns `start` and repeat-safe `dispose`.
 
-Station keeps only sequence translation and managed-pane overrides needed for row
-activation, new sessions, and forks. Native pointer Create, direct `C`, and focused
-Create Enter converge after semantic resolution and shared validation in one native
-managed-launch resolver; standalone rendering applies the same action through the
-existing observer operation instead.
+Every renderer injects session-activation, managed-session, shell-opening, and
+dismissal capabilities. Native Station composes those capabilities with managed panes
+and overlay authority; standalone rendering composes Observer commands and popup IPC.
+Dashboard state contains no renderer control intents, and dashboard-core owns optimistic
+rows, notices, failures, and expiry. Native pointer Create, direct `C`, and focused
+Create Enter therefore converge after semantic resolution and shared validation before
+the same managed-session capability invocation.
 
 ## Acceptance suite
 

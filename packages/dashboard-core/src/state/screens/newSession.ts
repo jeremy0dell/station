@@ -10,9 +10,7 @@ import {
   transitionNewSessionFlow,
   validateNewSessionCreate,
 } from "../../flows/newSession.js";
-import { buildCreateSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
-import { addPendingCreateSessionRow } from "../localRows.js";
 import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
 import type { TuiTransition } from "../transition.js";
 import type { TuiState } from "../types.js";
@@ -104,43 +102,17 @@ function submitNewSession(state: TuiState): TuiTransition {
   const validation = validateNewSessionCreate(state.snapshot, state.screen.flow);
   if (!validation.ok) return { state };
 
-  const title = validation.title;
-  const branch = validation.branch;
-  const command = buildCreateSessionCommand({
-    project: validation.project,
-    title,
-    branch,
-    harnessProvider: validation.harnessProvider,
-  });
-  if (command.type !== "session.create") {
-    return { state };
-  }
-  const localId = `create:${validation.project.id}:${createNewSessionNameToken()}`;
-
+  // Close the pure screen before execution so every renderer observes the dashboard first.
   return {
-    state: addPendingCreateSessionRow(
-      {
-        ...state,
-        screen: { name: "dashboard" },
-      },
-      {
-        localId,
-        projectId: validation.project.id,
-        title,
-        branch,
-        harnessProvider: validation.harnessProvider,
-        createdAt: new Date().toISOString(),
-      },
-    ),
+    state: { ...state, screen: { name: "dashboard" } },
     operations: [
       {
-        type: "createSession",
-        localId,
-        projectId: validation.project.id,
-        title,
-        branch,
-        harnessProvider: validation.harnessProvider,
-        command,
+        type: "createManagedSession",
+        localId: `create:${validation.project.id}:${createNewSessionNameToken()}`,
+        project: validation.project,
+        title: validation.title,
+        hiddenBranch: validation.branch,
+        harness: validation.harnessProvider,
       },
     ],
   };

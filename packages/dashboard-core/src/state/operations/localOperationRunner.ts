@@ -3,7 +3,10 @@ import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
 import type { TuiFolderService } from "../../services/folderService.js";
 import type { ObserverService } from "../../services/types.js";
+import type { DashboardCapabilities, DashboardExecutionHandle } from "../capabilities/execution.js";
 import {
+  addPendingCreateSessionRow,
+  addPendingStartAgentRow,
   failPendingCreateSessionRow,
   removeCreateSessionLocalRow,
   removePendingProjectDefaultHarness,
@@ -25,12 +28,9 @@ import {
 import { FAILED_CREATE_ROW_TTL_MS } from "../timing.js";
 import { addTuiToast } from "../toasts.js";
 import type { DashboardState, TuiState } from "../types.js";
-import { runCreateSessionOperation } from "./createSession.js";
 import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
-import type { CommandRuntimeOptions } from "./runtimeCommands.js";
-import { type FocusStartedAgentRow, runStartAgentOperation } from "./startAgent.js";
-import type { TuiOperation } from "./types.js";
+import type { DashboardCapabilityOperation, TuiOperation } from "./types.js";
 
 export type TuiLocalOperationRunner = {
   run(operations: readonly TuiOperation[] | undefined): void;
@@ -83,30 +83,19 @@ export function createTuiLocalOperationRunner(input: {
   getStore: () => StoreApi<DashboardState>;
   service: ObserverService;
   folderService: TuiFolderService;
-  runtime: CommandRuntimeOptions;
+  capabilities: DashboardCapabilities;
   clientLabel: string;
-  focusStartedAgentRow: FocusStartedAgentRow;
 }): TuiLocalOperationRunner {
   const store = () => input.getStore();
 
   return {
     run: (operations) => {
       for (const operation of operations ?? []) {
-        if (operation.type === "createSession") {
-          void runCreateSessionOperation(
+        if (isDashboardCapabilityOperation(operation)) {
+          runDashboardCapabilityOperation(
             store(),
-            input.service,
-            input.runtime,
+            input.capabilities,
             operation,
-            (localId, error) => markCreateSessionRowFailed(store(), localId, error),
-            (error) => addSafeErrorToast(store(), error),
-          );
-        }
-        if (operation.type === "forkSession") {
-          void runForkSessionOperation(
-            store(),
-            input.service,
-            operation.command,
             input.clientLabel,
           );
         }
@@ -118,17 +107,6 @@ export function createTuiLocalOperationRunner(input: {
             input.clientLabel,
             (localId) => markRemoveWorktreeRowFailed(store(), localId),
             (error) => addSafeErrorToast(store(), error),
-          );
-        }
-        if (operation.type === "startAgent" || operation.type === "resumeAgent") {
-          void runStartAgentOperation(
-            store(),
-            input.service,
-            input.runtime,
-            operation,
-            (localId) => markStartAgentRowFailed(store(), localId),
-            (error) => addSafeErrorToast(store(), error),
-            input.focusStartedAgentRow,
           );
         }
         if (operation.type === "renameSession") {
@@ -188,6 +166,185 @@ export function createTuiLocalOperationRunner(input: {
       }
     },
   };
+}
+
+function isDashboardCapabilityOperation(
+  operation: TuiOperation,
+): operation is DashboardCapabilityOperation {
+  switch (operation.type) {
+    case "activateSession":
+    case "createManagedSession":
+    case "quickCreateManagedSession":
+    case "forkManagedSession":
+    case "openDashboardShell":
+    case "dismissDashboard":
+    case "exitDashboardRenderer":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function runDashboardCapabilityOperation(
+  store: StoreApi<DashboardState>,
+  capabilities: DashboardCapabilities,
+  operation: DashboardCapabilityOperation,
+  clientLabel: string,
+): void {
+  let handle: DashboardExecutionHandle;
+  try {
+    switch (operation.type) {
+      case "activateSession":
+        handle = capabilities.activation.activate({
+          sessionId: operation.sessionId,
+          projectId: operation.projectId,
+          worktreeId: operation.worktreeId,
+          branch: operation.branch,
+          preferredObserverAction: operation.preferredObserverAction,
+        });
+        break;
+      case "createManagedSession":
+      case "quickCreateManagedSession": {
+        const request = {
+          project: operation.project,
+          title: operation.title,
+          hiddenBranch: operation.hiddenBranch,
+          harness: operation.harness,
+        };
+        handle =
+          operation.type === "createManagedSession"
+            ? capabilities.managedSessions.create(request)
+            : capabilities.managedSessions.quickCreate(request);
+        break;
+      }
+      case "forkManagedSession":
+        handle = capabilities.managedSessions.fork({
+          project: operation.project,
+          sourceWorktreeId: operation.sourceWorktreeId,
+          title: operation.title,
+          hiddenBranch: operation.hiddenBranch,
+          copyDirty: operation.copyDirty,
+          ...(operation.inheritedHarness === undefined
+            ? {}
+            : { inheritedHarness: operation.inheritedHarness }),
+        });
+        break;
+      case "openDashboardShell":
+        handle = capabilities.shell.open(operation.target);
+        break;
+      case "dismissDashboard":
+        handle = capabilities.dismissal.dismissDashboard();
+        break;
+      case "exitDashboardRenderer":
+        handle = capabilities.dismissal.exitRenderer({ exitCode: operation.exitCode });
+        break;
+    }
+  } catch (error: unknown) {
+    addSafeErrorToast(store, toSafeError(error, { clientLabel }));
+    return;
+  }
+
+  applyCapabilityOptimisticState(store, operation, handle);
+  void handle.completion.then(
+    (result) => settleDashboardCapabilityOperation(store, operation, handle, result),
+    (error: unknown) => {
+      removeCapabilityOptimisticRow(store, operation);
+      addSafeErrorToast(store, toSafeError(error, { clientLabel }));
+    },
+  );
+}
+
+function applyCapabilityOptimisticState(
+  store: StoreApi<DashboardState>,
+  operation: DashboardCapabilityOperation,
+  handle: DashboardExecutionHandle,
+): void {
+  if (handle.optimistic === "pending-start" && operation.type === "activateSession") {
+    if (operation.localId === undefined) {
+      return;
+    }
+    store.setState(
+      addPendingStartAgentRow(store.getState(), {
+        localId: operation.localId,
+        operation: operation.preferredObserverAction === "resume" ? "resumeAgent" : "startAgent",
+        projectId: operation.projectId,
+        worktreeId: operation.worktreeId,
+        branch: operation.branch,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    return;
+  }
+  if (
+    handle.optimistic === "pending-create" &&
+    (operation.type === "createManagedSession" ||
+      operation.type === "quickCreateManagedSession" ||
+      operation.type === "forkManagedSession")
+  ) {
+    store.setState(
+      addPendingCreateSessionRow(store.getState(), {
+        localId: operation.localId,
+        projectId: operation.project.id,
+        title: operation.title,
+        branch: operation.hiddenBranch,
+        createdAt: new Date().toISOString(),
+        ...(operation.type === "forkManagedSession"
+          ? operation.inheritedHarness === undefined
+            ? {}
+            : { harnessProvider: operation.inheritedHarness }
+          : { harnessProvider: operation.harness }),
+      }),
+    );
+  }
+}
+
+function settleDashboardCapabilityOperation(
+  store: StoreApi<DashboardState>,
+  operation: DashboardCapabilityOperation,
+  handle: DashboardExecutionHandle,
+  result: Awaited<DashboardExecutionHandle["completion"]>,
+): void {
+  if (result.kind === "success") {
+    if (handle.successDisposition === "remove-immediately") {
+      removeCapabilityOptimisticRow(store, operation);
+    }
+    return;
+  }
+  if (result.kind === "notice") {
+    removeCapabilityOptimisticRow(store, operation);
+    store.setState(addTuiToast(store.getState(), result.notice));
+    return;
+  }
+  if (
+    result.disposition === "retain-failed" &&
+    (operation.type === "createManagedSession" ||
+      operation.type === "quickCreateManagedSession" ||
+      operation.type === "forkManagedSession")
+  ) {
+    markCreateSessionRowFailed(store, operation.localId, result.error);
+  } else {
+    removeCapabilityOptimisticRow(store, operation);
+  }
+  addSafeErrorToast(store, result.error);
+}
+
+function removeCapabilityOptimisticRow(
+  store: StoreApi<DashboardState>,
+  operation: DashboardCapabilityOperation,
+): void {
+  if (operation.type === "activateSession") {
+    if (operation.localId !== undefined) {
+      markStartAgentRowFailed(store, operation.localId);
+    }
+    return;
+  }
+  if (
+    operation.type === "createManagedSession" ||
+    operation.type === "quickCreateManagedSession" ||
+    operation.type === "forkManagedSession"
+  ) {
+    store.setState(removeCreateSessionLocalRow(store.getState(), operation.localId));
+  }
 }
 
 async function runSetProjectDefaultHarnessOperation(
@@ -316,38 +473,6 @@ async function runSearchProjectDirectoriesOperation(
     store.setState(applyAddProjectFolderSearchLoaded(store.getState(), result));
   } catch (error: unknown) {
     store.setState(applyAddProjectFolderSearchFailed(store.getState(), query, error, clientLabel));
-  }
-}
-
-async function runForkSessionOperation(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  command: Extract<StationCommand, { type: "session.fork" }>,
-  clientLabel: string,
-): Promise<void> {
-  try {
-    const receipt = await service.dispatch(command);
-    if (!receipt.accepted) {
-      addSafeErrorToast(
-        store,
-        receipt.error ??
-          ({
-            tag: "CommandDispatchError",
-            code: "SESSION_FORK_REJECTED",
-            message: "Fork was rejected.",
-          } satisfies SafeError),
-      );
-      return;
-    }
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "failed") {
-      addSafeErrorToast(store, completion.error);
-      return;
-    }
-    const snapshot = await service.loadSnapshot();
-    store.setState(replaceSnapshot(store.getState(), snapshot));
-  } catch (error: unknown) {
-    addSafeErrorToast(store, toSafeError(error, { clientLabel }));
   }
 }
 

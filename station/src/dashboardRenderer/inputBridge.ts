@@ -1,4 +1,4 @@
-import type { DashboardActions, TuiControlIntent } from "@station/dashboard-core";
+import type { DashboardActions } from "@station/dashboard-core";
 // Import the specific modules, not ../terminal/index.js — that barrel also
 // re-exports node-pty-backed PTY/VT/pane machinery the dashboard never uses,
 // which would pull node-pty into this multiplexer-free renderer.
@@ -19,7 +19,6 @@ type DashboardKeyInput = {
  */
 export function createDashboardSequenceHandler(
   store: DashboardKeyInput,
-  consumeControlIntent: (intent: TuiControlIntent) => void,
 ): (sequence: string) => boolean {
   return (sequence: string) => {
     const stripped = stripTerminalReplies(sequence);
@@ -34,11 +33,7 @@ export function createDashboardSequenceHandler(
     if (key === undefined) {
       return true; // a sequence the dashboard has no vocabulary for
     }
-    // State lands before a one-shot renderer effect is consumed, matching the mouse adapter.
-    const result = store.actions.handleKey(key);
-    if (result.controlIntent !== undefined) {
-      consumeControlIntent(result.controlIntent);
-    }
+    store.actions.handleKey(key);
     return true;
   };
 }

@@ -1,4 +1,3 @@
-import type { StationClientStateSource } from "@station/client";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
   deriveTuiInputMode,
@@ -10,19 +9,12 @@ import {
 } from "@station/dashboard-core";
 import { isPrimaryMouseEvent, wheelDirection, type StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
-import {
-  executeDashboardControlIntent,
-  openDashboardRowShell,
-  showStaleDashboardTargetNotice,
-  type DashboardRendererEffects,
-} from "./dashboardEffects.js";
 
 type DashboardMouseInput = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<
     DashboardActions,
-    "createQuickSession" | "dismissToasts" | "dispatch" | "handleKey" | "pushToast"
+    "dismissToasts" | "dispatch" | "handleKey" | "pushToast"
   >;
 };
 
@@ -40,12 +32,12 @@ const ADD_PROJECT_ROW_MODES: ReadonlySet<TuiInputMode> = new Set([
 ]);
 const SCROLL_PAGE_ROWS = 5;
 
-/** Translates standalone semantic targets into shared dashboard actions and renderer effects. */
+/** Translates standalone semantic targets into shared dashboard actions and URL presentation. */
 export function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
   store: DashboardMouseInput,
-  effects: DashboardRendererEffects,
+  openUrl: (url: string) => void,
 ): void {
   const mode = deriveTuiInputMode(store.state.getState());
   const scrollDirection = wheelDirection(event);
@@ -66,7 +58,7 @@ export function routeDashboardMouse(
     return;
   }
 
-  if (routeSurfaceClick(target, store, mode, effects)) {
+  if (routeSurfaceClick(target, store, mode, openUrl)) {
     return;
   }
   if (routeModalClick(target, store, mode)) {
@@ -79,32 +71,32 @@ function routeSurfaceClick(
   target: StationMouseTarget,
   store: DashboardMouseInput,
   mode: TuiInputMode,
-  effects: DashboardRendererEffects,
+  openUrl: (url: string) => void,
 ): boolean {
   switch (target.kind) {
     case "row":
       activateRowInMode(store, target.rowId, mode);
       return true;
     case "projectHeader":
-      activateProjectHeaderInMode(store, target.projectId, "primary", mode, effects);
+      activateProjectHeaderInMode(store, target.projectId, "primary", mode);
       return true;
     case "link":
-      openLinkInMode(target.url, mode, effects);
+      openLinkInMode(target.url, mode, openUrl);
       return true;
     case "openShellForRow":
-      openRowShellInMode(store, target.rowId, mode, effects);
+      openRowShellInMode(store, target.rowId, mode);
       return true;
     case "openShellForProject":
-      activateProjectHeaderInMode(store, target.projectId, "shell", mode, effects);
+      activateProjectHeaderInMode(store, target.projectId, "shell", mode);
       return true;
     case "quickSessionForProject":
-      activateProjectHeaderInMode(store, target.projectId, "quickSession", mode, effects);
+      activateProjectHeaderInMode(store, target.projectId, "quickSession", mode);
       return true;
     case "emptyProjectAction":
-      activateEmptyProjectInMode(store, target.projectId, mode, effects);
+      activateEmptyProjectInMode(store, target.projectId, mode);
       return true;
     case "showDefaultAgentPickerForProject":
-      activateProjectHeaderInMode(store, target.projectId, "defaultAgent", mode, effects);
+      activateProjectHeaderInMode(store, target.projectId, "defaultAgent", mode);
       return true;
     case "firstProjectAdd":
       if (mode === "dashboard") {
@@ -135,7 +127,7 @@ function activateRowInMode(
   mode: TuiInputMode,
 ): void {
   if (ROW_INTERACTIVE_MODES.has(mode)) {
-    activateCurrentRow(store, rowId);
+    activateCurrentRow(store, rowId, mode);
   }
 }
 
@@ -144,42 +136,38 @@ function activateProjectHeaderInMode(
   projectId: string,
   actionId: ProjectHeaderControl,
   mode: TuiInputMode,
-  effects: DashboardRendererEffects,
 ): void {
   if (mode !== "dashboard") {
     return;
   }
-  const result = store.actions.dispatch({
+  store.actions.dispatch({
     type: "dashboard.projectHeader.activate",
     projectId,
     actionId,
   });
-  if (result.controlIntent !== undefined) {
-    executeDashboardControlIntent(result.controlIntent, store, effects);
-  }
 }
 
 function activateEmptyProjectInMode(
   store: DashboardMouseInput,
   projectId: string,
   mode: TuiInputMode,
-  effects: DashboardRendererEffects,
 ): void {
   if (mode !== "dashboard") {
     return;
   }
-  const result = store.actions.dispatch({
+  store.actions.dispatch({
     type: "dashboard.emptyProject.activate",
     projectId,
   });
-  if (result.controlIntent !== undefined) {
-    executeDashboardControlIntent(result.controlIntent, store, effects);
-  }
 }
 
-function openLinkInMode(url: string, mode: TuiInputMode, effects: DashboardRendererEffects): void {
+function openLinkInMode(
+  url: string,
+  mode: TuiInputMode,
+  openUrl: (url: string) => void,
+): void {
   if (mode === "dashboard") {
-    effects.openUrl(url);
+    openUrl(url);
   }
 }
 
@@ -187,10 +175,9 @@ function openRowShellInMode(
   store: DashboardMouseInput,
   rowId: string,
   mode: TuiInputMode,
-  effects: DashboardRendererEffects,
 ): void {
   if (mode === "dashboard") {
-    openDashboardRowShell(store, rowId, effects);
+    store.actions.dispatch({ type: "dashboard.rowShell.open", rowId });
   }
 }
 
@@ -360,10 +347,14 @@ function routeWidgetClick(
   }
 }
 
-function activateCurrentRow(store: DashboardMouseInput, rowId: string): void {
+function activateCurrentRow(
+  store: DashboardMouseInput,
+  rowId: string,
+  mode: TuiInputMode,
+): void {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
-    showStaleDashboardTargetNotice(store);
+    store.actions.pushToast({ kind: "info", message: "That dashboard item is no longer available." });
     return;
   }
   const viewport = selectDashboardViewport(state.snapshot, state);
@@ -378,8 +369,12 @@ function activateCurrentRow(store: DashboardMouseInput, rowId: string): void {
   }
   const choice = viewport.rowChoices.find((candidate) => candidate.value.id === rowId);
   if (choice === undefined) {
-    showStaleDashboardTargetNotice(store);
+    store.actions.pushToast({ kind: "info", message: "That dashboard item is no longer available." });
     return;
   }
-  store.actions.handleKey({ input: choice.key });
+  if (mode === "dashboard") {
+    store.actions.dispatch({ type: "dashboard.row.activate", rowId });
+  } else {
+    store.actions.handleKey({ input: choice.key });
+  }
 }

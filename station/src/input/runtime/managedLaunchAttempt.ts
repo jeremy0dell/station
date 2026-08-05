@@ -1,11 +1,5 @@
-import {
-  safeErrorToNotice,
-  toSafeError,
-  type ObserverService,
-  type StationClientStateSource,
-} from "@station/client";
+import { toSafeError, type ClientNotice, type ObserverService, type StationClientStateSource } from "@station/client";
 import type { ProviderId, SafeError } from "@station/contracts";
-import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { StationHostProviderError } from "@station/host";
 import { paneTreeIds } from "../../state/paneTree.js";
 import { selectPaneRecord } from "../../state/selectors.js";
@@ -24,44 +18,26 @@ import {
   unreachableTerminalRow,
 } from "./stationRows.js";
 
-type ManagedLaunchDashboard = {
-  state: DashboardStateSource;
-  clientState: StationClientStateSource;
-  actions: Pick<DashboardActions, "pushToast">;
-};
-
 /** What a managed primary-agent launch needs to ask the observer to prepare it. */
 export type ManagedLaunchTarget = {
   projectId: string;
   worktreeId: string;
   cwd: string;
-  /**
-   * User-visible title to persist only when this preparation mints a fresh
-   * session; an existing session keeps its current title.
-   */
+  /** User-visible title persisted only when preparation mints a fresh session. */
   title?: string;
-  /**
-   * Harness to launch when minting a fresh session (the New Session wizard's
-   * pick). Absent for a row click, where the observer uses the worktree's
-   * remembered harness or the project default.
-   */
+  /** Harness selected for a fresh session; row activation lets Observer inherit it. */
   harness?: ProviderId;
-  /**
-   * Spawn the agent pane but leave the STATION overlay open and unfocused — the New
-   * Session flow stays on the dashboard instead of focusing the pane. A row click
-   * omits this and focuses the new pane.
-   */
+  /** Spawn in the background without landing on the pane. */
   background?: boolean;
 };
 
 type ManagedLaunchAttemptDeps = {
   store: StationStore;
-  dashboardRuntime: ManagedLaunchDashboard | undefined;
+  clientState: StationClientStateSource;
   observerService: ObserverService | undefined;
   registry: PtyRegistry | undefined;
   managedTerminalAttacher: ManagedTerminalAttacher | undefined;
 };
-
 
 type ManagedLaunchContext = {
   paneId: PaneId;
@@ -76,11 +52,16 @@ type ManagedLaunchContext = {
 
 type PreparedLaunch = Awaited<ReturnType<ObserverService["prepareExternalLaunch"]>>;
 
+/**
+ * Typed result of one native managed-launch attempt.
+ *
+ * `landed` is true only when a foreground activation actually revealed, focused,
+ * or opened its pane; notices and failures therefore cannot dismiss the overlay.
+ */
 export type ManagedLaunchAttemptResult =
-  | { kind: "settled" }
-  | { kind: "preparation-failed"; error: SafeError };
-
-const SETTLED_RESULT: ManagedLaunchAttemptResult = { kind: "settled" };
+  | { kind: "success"; landed: boolean }
+  | { kind: "notice"; notice: ClientNotice }
+  | { kind: "failure"; error: SafeError };
 
 type ManagedLaunchAction =
   | {
@@ -90,7 +71,7 @@ type ManagedLaunchAction =
       createTerminal?: ManagedTerminalFactory;
     }
   | { kind: "focus-existing"; sessionId: string }
-  | { kind: "notice"; message: string };
+  | { kind: "notice"; notice: ClientNotice };
 
 type OpenPaneAction = Extract<ManagedLaunchAction, { kind: "open-pane" }>;
 
@@ -104,22 +85,12 @@ type PreparedPanePlacement =
     }
   | { kind: "refused" };
 
-type PreparedActionResult = "performed" | "refused";
-
-function pushToast(
-  runtime: ManagedLaunchAttemptDeps,
-  message: string,
-  kind: "info" | "error" = "error",
-): void {
-  runtime.dashboardRuntime?.actions.pushToast({ kind, message });
+function failure(error: unknown): Extract<ManagedLaunchAttemptResult, { kind: "failure" }> {
+  return { kind: "failure", error: toSafeError(error, { clientLabel: "Station" }) };
 }
 
-function pushSafeError(runtime: ManagedLaunchAttemptDeps, error: SafeError): void {
-  runtime.dashboardRuntime?.actions.pushToast(safeErrorToNotice(error));
-}
-
-function pushError(runtime: ManagedLaunchAttemptDeps, error: unknown): void {
-  pushSafeError(runtime, toSafeError(error, { clientLabel: "Station" }));
+function notice(message: string): Extract<ManagedLaunchAttemptResult, { kind: "notice" }> {
+  return { kind: "notice", notice: { kind: "info", message } };
 }
 
 function createContext(
@@ -131,19 +102,14 @@ function createContext(
     paneId,
     target,
     landInPane: target.background !== true,
-    turnReadiness:
-      runtime.dashboardRuntime === undefined
-        ? undefined
-        : readinessForWorktree(runtime.dashboardRuntime.clientState, target.worktreeId),
+    turnReadiness: readinessForWorktree(runtime.clientState, target.worktreeId),
   };
 }
 
-async function landOnPane(
-  runtime: ManagedLaunchAttemptDeps,
+async function acknowledgeReadiness(
   service: ObserverService | undefined,
   readiness: ManagedLaunchContext["turnReadiness"],
 ): Promise<void> {
-  runtime.store.actions.closeOverlay();
   if (readiness === undefined || service === undefined) {
     return;
   }
@@ -156,14 +122,18 @@ async function landOnPane(
       await service.waitForCommandCompletion(receipt.commandId);
     }
   } catch {
-    // Readiness acknowledgement is best-effort after the pane has opened successfully.
+    // Readiness acknowledgement remains best-effort after successful landing.
   }
 }
+
+type ManagedLaunchPreflight =
+  | { kind: "continue"; service: ObserverService }
+  | { kind: "settled"; result: ManagedLaunchAttemptResult };
 
 async function runPreflight(
   runtime: ManagedLaunchAttemptDeps,
   context: ManagedLaunchContext,
-): Promise<ObserverService | undefined> {
+): Promise<ManagedLaunchPreflight> {
   const pane = selectPaneRecord(runtime.store.getState(), context.paneId);
   const entry = runtime.registry?.get(context.paneId);
   if (
@@ -172,42 +142,42 @@ async function runPreflight(
     entry?.exited === true &&
     context.landInPane
   ) {
-    context.exitedPane = {
-      entry,
-      identity: pane.agentIdentity,
-    };
+    context.exitedPane = { entry, identity: pane.agentIdentity };
   } else if (pane !== null) {
     if (context.landInPane) {
       runtime.store.actions.revealPane(context.paneId);
-      await landOnPane(runtime, runtime.observerService, context.turnReadiness);
+      await acknowledgeReadiness(runtime.observerService, context.turnReadiness);
     }
-    return undefined;
+    return { kind: "settled", result: { kind: "success", landed: context.landInPane } };
   }
 
-  const unreachable =
-    runtime.dashboardRuntime === undefined
-      ? undefined
-      : unreachableTerminalRow(runtime.dashboardRuntime.clientState, context.target.worktreeId);
+  const unreachable = unreachableTerminalRow(runtime.clientState, context.target.worktreeId);
   if (unreachable !== undefined) {
-    pushToast(
-      runtime,
-      `${unreachable.label}: agent is ${unreachable.state} under '${unreachable.provider}'; Station can't focus it here.`,
-      "info",
-    );
-    return undefined;
+    return {
+      kind: "settled",
+      result: notice(
+        `${unreachable.label}: agent is ${unreachable.state} under '${unreachable.provider}'; Station can't focus it here.`,
+      ),
+    };
   }
 
-  // The synchronous guard prevents duplicate clicks from minting a second Observer session.
+  // The HMR-shared synchronous guard prevents duplicate clicks from minting another session.
   if (runtime.store.transient.managedLaunchesInFlight.has(context.paneId)) {
-    return undefined;
+    return { kind: "settled", result: { kind: "success", landed: false } };
   }
   if (runtime.observerService === undefined) {
-    pushToast(runtime, "No observer connection; cannot launch the agent.");
-    return undefined;
+    return {
+      kind: "settled",
+      result: failure({
+        tag: "ClientObserverError",
+        code: "OBSERVER_UNAVAILABLE",
+        message: "No observer connection; cannot launch the agent.",
+      } satisfies SafeError),
+    };
   }
 
   runtime.store.transient.managedLaunchesInFlight.add(context.paneId);
-  return runtime.observerService;
+  return { kind: "continue", service: runtime.observerService };
 }
 
 function buildPrepareParams(
@@ -227,22 +197,13 @@ function buildPrepareParams(
 }
 
 async function prepareLaunch(
-  runtime: ManagedLaunchAttemptDeps,
   service: ObserverService,
   target: ManagedLaunchTarget,
-): Promise<
-  | { kind: "prepared"; launch: PreparedLaunch }
-  | Extract<ManagedLaunchAttemptResult, { kind: "preparation-failed" }>
-> {
+): Promise<{ kind: "prepared"; launch: PreparedLaunch } | { kind: "failed"; error: SafeError }> {
   try {
-    return {
-      kind: "prepared",
-      launch: await service.prepareExternalLaunch(buildPrepareParams(target)),
-    };
-  } catch (error) {
-    const safeError = toSafeError(error, { clientLabel: "Station" });
-    pushSafeError(runtime, safeError);
-    return { kind: "preparation-failed", error: safeError };
+    return { kind: "prepared", launch: await service.prepareExternalLaunch(buildPrepareParams(target)) };
+  } catch (error: unknown) {
+    return { kind: "failed", error: toSafeError(error, { clientLabel: "Station" }) };
   }
 }
 
@@ -251,30 +212,30 @@ function resolveExistingSession(
   prepared: Extract<PreparedLaunch, { kind: "existing-session" }>,
   target: ManagedLaunchTarget,
 ): ManagedLaunchAction {
-  const nonFocusableStation =
-    runtime.dashboardRuntime === undefined
-      ? undefined
-      : nonFocusableStationTerminalForWorktree(
-          runtime.dashboardRuntime.clientState,
-          target.worktreeId,
-        );
+  const nonFocusableStation = nonFocusableStationTerminalForWorktree(
+    runtime.clientState,
+    target.worktreeId,
+  );
   if (nonFocusableStation !== undefined) {
     return {
       kind: "notice",
-      message: `${nonFocusableStation.label}: Station has no attachable host PTY for this existing agent.`,
+      notice: {
+        kind: "info",
+        message: `${nonFocusableStation.label}: Station has no attachable host PTY for this existing agent.`,
+      },
     };
   }
-  const externalProvider =
-    runtime.dashboardRuntime === undefined
-      ? undefined
-      : externalTerminalProviderForWorktree(
-          runtime.dashboardRuntime.clientState,
-          target.worktreeId,
-        );
+  const externalProvider = externalTerminalProviderForWorktree(
+    runtime.clientState,
+    target.worktreeId,
+  );
   if (externalProvider !== undefined) {
     return {
       kind: "notice",
-      message: `This agent runs in the "${externalProvider}" terminal, which Station can't display. Attach to it from a ${externalProvider} client.`,
+      notice: {
+        kind: "info",
+        message: `This agent runs in the "${externalProvider}" terminal, which Station can't display. Attach to it from a ${externalProvider} client.`,
+      },
     };
   }
   return { kind: "focus-existing", sessionId: prepared.sessionId };
@@ -284,15 +245,13 @@ async function resolvePreparedLaunch(
   runtime: ManagedLaunchAttemptDeps,
   prepared: PreparedLaunch,
   target: ManagedLaunchTarget,
-): Promise<ManagedLaunchAction | undefined> {
+): Promise<ManagedLaunchAction | Extract<ManagedLaunchAttemptResult, { kind: "failure" }>> {
   // An advertised attachment is a commitment: resolution failure must never reach local spawn.
   if (prepared.attachment !== undefined) {
     if (runtime.managedTerminalAttacher === undefined) {
-      pushError(
-        runtime,
+      return failure(
         new StationHostProviderError("HOST_UNREACHABLE", "Station host is not reachable."),
       );
-      return undefined;
     }
     try {
       const createTerminal = await runtime.managedTerminalAttacher.resolve(
@@ -310,9 +269,8 @@ async function resolvePreparedLaunch(
             prepared.kind === "prepared" ? prepared.launchPlan.provider : prepared.harnessProvider,
         },
       };
-    } catch (error) {
-      pushError(runtime, error);
-      return undefined;
+    } catch (error: unknown) {
+      return failure(error);
     }
   }
 
@@ -343,58 +301,61 @@ async function resolvePreparedLaunch(
 }
 
 async function focusExistingSession(
-  runtime: ManagedLaunchAttemptDeps,
   service: ObserverService,
   sessionId: string,
-): Promise<boolean> {
+): Promise<DashboardFocusResult> {
   try {
     const receipt = await service.dispatch({
       type: "terminal.focus",
       payload: { sessionId },
     });
     if (!receipt.accepted) {
-      pushError(
-        runtime,
-        receipt.error ?? {
-          tag: "ClientObserverError",
-          code: "STATION_FOCUS_REJECTED",
-          message: "Station could not focus the existing agent.",
-        },
-      );
-      return false;
+      return {
+        kind: "failure",
+        error:
+          receipt.error ??
+          ({
+            tag: "ClientObserverError",
+            code: "STATION_FOCUS_REJECTED",
+            message: "Station could not focus the existing agent.",
+          } satisfies SafeError),
+      };
     }
     const completion = await service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "failed") {
-      pushError(runtime, completion.error);
-      return false;
-    }
-    return true;
-  } catch (error) {
-    pushError(runtime, error);
-    return false;
+    return completion.status === "succeeded"
+      ? { kind: "success" }
+      : { kind: "failure", error: completion.error };
+  } catch (error: unknown) {
+    return failure(error);
   }
 }
+
+type DashboardFocusResult =
+  | { kind: "success" }
+  | Extract<ManagedLaunchAttemptResult, { kind: "failure" }>;
 
 async function performPreparedAction(
   runtime: ManagedLaunchAttemptDeps,
   context: ManagedLaunchContext,
   service: ObserverService,
   action: ManagedLaunchAction,
-): Promise<PreparedActionResult> {
+): Promise<ManagedLaunchAttemptResult> {
   switch (action.kind) {
     case "open-pane":
-      return await openPreparedPane(runtime, context, service, action);
-    case "focus-existing":
-      if (
-        context.landInPane &&
-        (await focusExistingSession(runtime, service, action.sessionId))
-      ) {
-        await landOnPane(runtime, service, context.turnReadiness);
+      return openPreparedPane(runtime, context, service, action);
+    case "focus-existing": {
+      if (!context.landInPane) {
+        return { kind: "success", landed: false };
       }
-      return "performed";
+      const focused = await focusExistingSession(service, action.sessionId);
+      if (focused.kind === "failure") {
+        return focused;
+      }
+      await acknowledgeReadiness(service, context.turnReadiness);
+      return { kind: "success", landed: true };
+    }
     case "notice":
-      pushToast(runtime, action.message, "info");
-      return "performed";
+      return { kind: "notice", notice: action.notice };
   }
 }
 
@@ -403,10 +364,10 @@ async function openPreparedPane(
   context: ManagedLaunchContext,
   service: ObserverService,
   action: OpenPaneAction,
-): Promise<PreparedActionResult> {
+): Promise<ManagedLaunchAttemptResult> {
   const placement = placePreparedTerminal(runtime, context, action);
   if (placement.kind === "refused") {
-    return "refused";
+    return notice("The agent pane changed while Station was preparing its relaunch.");
   }
 
   runtime.store.actions.createPane(context.paneId, { role: "primary-agent" });
@@ -420,9 +381,9 @@ async function openPreparedPane(
     }
   }
   if (context.landInPane) {
-    await landOnPane(runtime, service, context.turnReadiness);
+    await acknowledgeReadiness(service, context.turnReadiness);
   }
-  return "performed";
+  return { kind: "success", landed: context.landInPane };
 }
 
 function placePreparedTerminal(
@@ -443,13 +404,14 @@ function placePreparedTerminal(
     (currentPane.role !== "primary-agent" ||
       !agentIdentityEquals(currentPane.agentIdentity, exitedPane.identity))
   ) {
-    return refusePaneReplacement(runtime);
+    return { kind: "refused" };
   }
   const workspace = runtime.store.getState().workspace;
   const activePaneId = workspace.activePaneId;
   const treeIsActive =
     activePaneId !== null && paneTreeIds(workspace.panes, context.paneId).has(activePaneId);
 
+  // The exact exited entry and replacement generation remain qualified through resetExited.
   const reset =
     action.createTerminal === undefined
       ? registry.resetExited(exitedPane.entry, action.spawnOptions)
@@ -459,8 +421,7 @@ function placePreparedTerminal(
       kind: "recycled",
       registry,
       viewport: reset.viewport,
-      // An inactive tree remounts after reveal and reports its current layout;
-      // spawning at its hidden historical size would force a startup correction.
+      // Inactive trees remount after reveal, so they must not respawn at a stale hidden viewport.
       startAtStoredViewport: treeIsActive,
     };
   }
@@ -468,7 +429,7 @@ function placePreparedTerminal(
     ensurePreparedTerminal(registry, context.paneId, action);
     return { kind: "fresh" };
   }
-  return refusePaneReplacement(runtime);
+  return { kind: "refused" };
 }
 
 function ensurePreparedTerminal(
@@ -484,15 +445,7 @@ function ensurePreparedTerminal(
   }
 }
 
-function refusePaneReplacement(runtime: ManagedLaunchAttemptDeps): PreparedPanePlacement {
-  pushToast(runtime, "The agent pane changed while Station was preparing its relaunch.", "info");
-  return { kind: "refused" };
-}
-
-function agentIdentityEquals(
-  left: AgentIdentity | undefined,
-  right: AgentIdentity,
-): boolean {
+function agentIdentityEquals(left: AgentIdentity | undefined, right: AgentIdentity): boolean {
   return (
     left?.sessionId === right.sessionId &&
     left.terminalTargetId === right.terminalTargetId &&
@@ -501,21 +454,22 @@ function agentIdentityEquals(
 }
 
 async function releaseUnplacedLocalLaunch(
-  runtime: ManagedLaunchAttemptDeps,
   service: ObserverService,
   prepared: PreparedLaunch,
-): Promise<void> {
+): Promise<Extract<ManagedLaunchAttemptResult, { kind: "failure" }> | undefined> {
   if (prepared.kind !== "prepared" || prepared.attachment !== undefined) {
-    return;
+    return undefined;
   }
   try {
+    // Observer compare-and-release is expected-session-qualified, so an old attempt
+    // cannot remove a replacement generation that won the pane race.
     await service.reportExternalExit({
       terminalTargetId: prepared.terminalTargetId,
       expectedSessionId: prepared.sessionId,
     });
-  } catch (error) {
-    // A rejected compare-and-release leaves target ownership uncertain; never hide that cleanup state.
-    pushError(runtime, error);
+    return undefined;
+  } catch (error: unknown) {
+    return failure(error);
   }
 }
 
@@ -525,33 +479,37 @@ async function runManagedLaunchAttempt(
   target: ManagedLaunchTarget,
 ): Promise<ManagedLaunchAttemptResult> {
   const context = createContext(runtime, paneId, target);
-  const service = await runPreflight(runtime, context);
-  if (service === undefined) {
-    return SETTLED_RESULT;
+  const preflight = await runPreflight(runtime, context);
+  if (preflight.kind === "settled") {
+    return preflight.result;
   }
   try {
-    const preparation = await prepareLaunch(runtime, service, target);
-    if (preparation.kind === "preparation-failed") {
-      return preparation;
+    const preparation = await prepareLaunch(preflight.service, target);
+    if (preparation.kind === "failed") {
+      return { kind: "failure", error: preparation.error };
     }
     const action = await resolvePreparedLaunch(runtime, preparation.launch, target);
-    if (action !== undefined) {
-      const result = await performPreparedAction(runtime, context, service, action);
-      if (result === "refused") {
-        await releaseUnplacedLocalLaunch(runtime, service, preparation.launch);
-      }
+    if (action.kind === "failure") {
+      return action;
     }
-    return SETTLED_RESULT;
+    const result = await performPreparedAction(runtime, context, preflight.service, action);
+    if (
+      result.kind === "notice" &&
+      result.notice.message === "The agent pane changed while Station was preparing its relaunch."
+    ) {
+      const cleanupFailure = await releaseUnplacedLocalLaunch(preflight.service, preparation.launch);
+      return cleanupFailure ?? result;
+    }
+    return result;
   } finally {
     runtime.store.transient.managedLaunchesInFlight.delete(paneId);
   }
 }
 
 /**
- * Creates one managed-launch runner whose phases preserve registry-before-pane publication,
- * apply output compatibility only to local spawns, and treat every advertised attachment as a
- * no-local-fallback commitment. Foreground dashboard activation may recycle only the exact exited
- * entry it observed, after preparation succeeds and before replacement identity can spawn.
+ * Create one native managed-launch runner while preserving registry-before-pane
+ * publication, advertised-attachment fail-closed behavior, exact exited-entry
+ * recycling, replacement guards, and viewport-aware retained-pane respawn.
  */
 export function createManagedLaunchAttempt(
   deps: ManagedLaunchAttemptDeps,

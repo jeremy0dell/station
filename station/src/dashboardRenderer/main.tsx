@@ -25,10 +25,7 @@ import {
   createStationThemeController,
   type StationThemeController,
 } from "../theme/index.js";
-import {
-  executeDashboardControlIntent,
-  type DashboardRendererEffects,
-} from "./dashboardEffects.js";
+import { createDashboardCapabilities } from "./dashboardCapabilities.js";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
 import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 import {
@@ -94,43 +91,28 @@ export async function runDashboardMain(): Promise<void> {
   );
 
   const client = createStationClient(env);
+  const capabilities = createDashboardCapabilities({
+    clientState: client.state,
+    observerService: client.service,
+    popupRuntime,
+    exitRenderer: exit,
+  });
   const dashboardRuntime = createDashboardRuntime({
     source: client.state,
     service: client.service,
+    capabilities,
     clientLabel: "station",
-    onExit: exit,
     initialState: {
       widgets: tuiConfig.config?.widgets ?? [],
       widgetsPersisted: tuiConfig.configPath !== undefined,
     },
-    ...popupRuntime.runtimeOptions,
   });
   const dashboardInput = {
     state: dashboardRuntime.state,
     actions: dashboardRuntime.actions,
-    clientState: client.state,
   };
   const copyNoticeText = (text: string): void => {
     copyToClipboard(text, DEFAULT_COPY_SINKS, clipboardEffects);
-  };
-  const rendererEffects: DashboardRendererEffects = {
-    openShell: ({ cwd }) => {
-      const openShell = popupRuntime.openShell;
-      if (openShell === undefined) {
-        dashboardRuntime.actions.pushToast({
-          kind: "error",
-          message: "Opening a shell is unavailable outside native Station or a tmux popup.",
-        });
-        return;
-      }
-      void openShell(cwd).catch(() => {
-        dashboardRuntime.actions.pushToast({
-          kind: "error",
-          message: "The tmux popup could not open the requested shell.",
-        });
-      });
-    },
-    openUrl: openExternalUrl,
   };
   if (tuiConfig.configPath !== undefined) {
     widgetConfigWrites = startWidgetConfigWrites(
@@ -185,9 +167,7 @@ export async function runDashboardMain(): Promise<void> {
       exitOnCtrlC: false,
       prependInputHandlers: [
         copySelectedText,
-        createDashboardSequenceHandler(dashboardRuntime, (intent) => {
-          executeDashboardControlIntent(intent, dashboardInput, rendererEffects);
-        }),
+        createDashboardSequenceHandler(dashboardRuntime),
       ],
       useKittyKeyboard: STATION_KEYBOARD_PROTOCOL,
     });
@@ -218,7 +198,7 @@ export async function runDashboardMain(): Promise<void> {
     nextRoot.render(
       <StandaloneDashboardApp
         runtime={dashboardInput}
-        effects={rendererEffects}
+        openUrl={openExternalUrl}
         onCopyNotice={copyNoticeText}
         hoverEnabled={!popupRenderer}
         themeSource={nextThemeController}

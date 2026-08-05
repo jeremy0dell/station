@@ -1,6 +1,7 @@
 import type { ObserverService, StationClientStateSource } from "@station/client";
 import type { ProjectId } from "@station/contracts";
 import { expect, it } from "vitest";
+import type { DashboardCapabilities } from "../../../src/state/capabilities/execution.js";
 import type { ReadonlyDeep } from "../../../src/state/readonly.js";
 import type { DashboardRuntimeOptions } from "../../../src/state/runtime.js";
 import type { DashboardSnapshotView, DashboardStateView } from "../../../src/state/types.js";
@@ -53,18 +54,23 @@ function verifyReadonlyStateSource(
 function verifyDashboardRuntimeOptions(
   service: ObserverService,
   source: StationClientStateSource,
+  capabilities: DashboardCapabilities,
 ): void {
-  const valid: DashboardRuntimeOptions = { service, source };
+  const valid: DashboardRuntimeOptions = { service, source, capabilities };
   // @ts-expect-error Dashboard composition must supply canonical client state.
-  const missingSource: DashboardRuntimeOptions = { service };
+  const missingSource: DashboardRuntimeOptions = { service, capabilities };
+  // @ts-expect-error Dashboard composition must supply every semantic capability group.
+  const missingCapabilities: DashboardRuntimeOptions = { service, source };
   const independentSnapshot: DashboardRuntimeOptions = {
     service,
     source,
+    capabilities,
     // @ts-expect-error Runtime snapshots come only from the canonical source.
     initialSnapshot: source.getState().snapshot,
   };
   void valid;
   void missingSource;
+  void missingCapabilities;
   void independentSnapshot;
 }
 

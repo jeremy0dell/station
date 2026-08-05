@@ -13,9 +13,11 @@ import type {
 } from "@station/dashboard-core";
 import {
   ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS,
+  createEmptyTuiLocalRows,
   selectedAddProjectFolderRow,
 } from "@station/dashboard-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { dashboardExecution } from "../../../src/state/capabilities/execution.js";
 import type { DashboardStateView } from "../../../src/state/types.js";
 import {
   createCommandSnapshot,
@@ -28,6 +30,7 @@ import {
   createTestDashboardRuntime,
   FakeClientStateSource,
 } from "../../support/fakeClientStateSource.js";
+import { createFakeDashboardCapabilities } from "../../support/fakeDashboardCapabilities.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 describe("dashboard runtime boundary", () => {
@@ -175,54 +178,56 @@ describe("dashboard runtime", () => {
     expect(actionStore.state.getState().screen).toEqual(keyStore.state.getState().screen);
   });
 
-  it("applies focus before returning each project-header control intent exactly once", () => {
+  it("commits project-header focus before invoking shell capability", () => {
     const snapshot = createDashboardSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    let focusAtInvocation: DashboardStateView["dashboardFocus"];
+    capabilities.shellHandle = () => {
+      focusAtInvocation = store.state.getState().dashboardFocus;
+      return dashboardExecution({ kind: "success" });
+    };
     const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
+      capabilities,
     });
 
-    const result = store.actions.dispatch({
+    store.actions.dispatch({
       type: "dashboard.projectHeader.activate",
       projectId: "web",
       actionId: "shell",
     });
 
-    expect(store.state.getState().dashboardFocus).toEqual({
+    expect(focusAtInvocation).toEqual({
       kind: "projectHeader",
       projectId: "web",
       control: "shell",
     });
-    expect(result.controlIntent).toEqual({ type: "projectShell.open", projectId: "web" });
-    expect(store.actions.handleKey({ input: "" }).controlIntent).toBeUndefined();
+    expect(capabilities.shellRequests).toEqual([{ kind: "project", projectId: "web" }]);
   });
 
-  it("returns an empty-project Quick Session intent before standalone resolution transfers focus", () => {
+  it("applies Quick Session optimistic state synchronously after screen focus", () => {
     const snapshot = createZeroWorktreeSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    capabilities.quickCreateHandle = () =>
+      dashboardExecution(new Promise(() => {}), {
+        optimistic: "pending-create",
+        successDisposition: "wait-for-canonical",
+      });
     const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
+      capabilities,
     });
 
-    const result = store.actions.dispatch({
-      type: "dashboard.emptyProject.activate",
-      projectId: "web",
-    });
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
 
-    expect(result.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "emptyProjectAction",
       projectId: "web",
     });
-    expect(store.actions.handleKey({ input: "" }).controlIntent).toBeUndefined();
-
-    store.actions.createQuickSession("web");
     expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
-    expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "web",
-      control: "quickSession",
-    });
+    expect(capabilities.quickCreateRequests).toHaveLength(1);
   });
 
   it("routes state-only actions through the transition executor", () => {
@@ -238,7 +243,7 @@ describe("dashboard runtime", () => {
       control: "defaultAgent",
     });
 
-    expect(result).toEqual({ dismissPopup: false });
+    expect(result).toBeUndefined();
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "web",
@@ -246,53 +251,34 @@ describe("dashboard runtime", () => {
     });
   });
 
-  it("owns the optimistic hosted-create row lifecycle without storing actions", () => {
-    const snapshot = createDashboardSnapshot();
-    const store = createTestDashboardRuntime({
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-      initialState: { terminalRows: 42 },
-    });
-    const actions = {
-      dispatch: store.actions.dispatch,
-      handleKey: store.actions.handleKey,
-    };
+  it("owns failed optimistic rows without exposing mutation methods", async () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
     const error: SafeError = {
       tag: "StationLaunchError",
       code: "HOSTED_CREATE_FAILED",
       message: "The hosted create failed.",
     };
-
-    store.actions.addPendingCreateSession({
-      localId: "local-create-1",
-      projectId: "web",
-      title: "new session",
-      branch: "new-session",
-      harnessProvider: "codex",
-      createdAt: fixtureNow,
+    capabilities.quickCreateHandle = () =>
+      dashboardExecution(
+        { kind: "failure", error, disposition: "retain-failed" },
+        { optimistic: "pending-create" },
+      );
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+      initialState: { terminalRows: 42 },
     });
-    expect(store.state.getState().localRows.pendingCreate).toEqual([
-      expect.objectContaining({ localId: "local-create-1", projectId: "web" }),
-    ]);
 
-    store.actions.failPendingCreateSession("local-create-1", error, 123_456);
-    expect(store.state.getState().localRows.pendingCreate).toEqual([]);
-    expect(store.state.getState().localRows.failedCreate).toEqual([
-      expect.objectContaining({
-        localId: "local-create-1",
-        error,
-        expiresAt: 123_456,
-      }),
-    ]);
-
-    store.actions.removePendingCreateSession("local-create-1");
-    expect(store.state.getState().localRows.failedCreate).toEqual([]);
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
+    await vi.waitFor(() => expect(store.state.getState().localRows.failedCreate).toHaveLength(1));
+    expect(store.state.getState().localRows.failedCreate[0]?.error).toEqual(error);
+    expect(store.actions).not.toHaveProperty("addPendingCreateSession");
+    expect(store.actions).not.toHaveProperty("failPendingCreateSession");
+    expect(store.actions).not.toHaveProperty("removePendingCreateSession");
     expect(store.state.getState().terminalRows).toBe(42);
-    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.actions.dispatch).toBe(actions.dispatch);
-    expect(store.actions.handleKey).toBe(actions.handleKey);
-    expect(store.state.getState()).not.toHaveProperty("dispatch");
-    expect(store.state.getState()).not.toHaveProperty("start");
   });
 
   it("seeds from the canonical source and cleans up its subscription", () => {
@@ -319,15 +305,20 @@ describe("dashboard runtime", () => {
       initialState: {
         persistentFilter: { query: "idle" },
         collapsedProjectIds: ["web"],
+        localRows: {
+          ...createEmptyTuiLocalRows(),
+          pendingCreate: [
+            {
+              localId: "local-source-projection",
+              projectId: "web",
+              title: "optimistic session",
+              branch: "optimistic-session",
+              harnessProvider: "codex",
+              createdAt: fixtureNow,
+            },
+          ],
+        },
       },
-    });
-    store.actions.addPendingCreateSession({
-      localId: "local-source-projection",
-      projectId: "web",
-      title: "optimistic session",
-      branch: "optimistic-session",
-      harnessProvider: "codex",
-      createdAt: fixtureNow,
     });
     store.start();
     const updated: StationSnapshot = {
@@ -654,7 +645,7 @@ describe("dashboard runtime", () => {
 
     const result = store.actions.handleKey({ input: "Q" });
 
-    expect(result).toEqual({ dismissPopup: true });
+    expect(result).toBeUndefined();
     await waitFor(() =>
       store.state
         .getState()

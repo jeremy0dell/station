@@ -1,40 +1,22 @@
 import type { StationClientStateSource } from "@station/client";
-import type {
-  CommandReceipt,
-  StationCommand,
-  StationSnapshot,
-  TerminalFocusOrigin,
-  WorktreeRow,
-} from "@station/contracts";
+import type { CommandReceipt, StationCommand } from "@station/contracts";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { sessionForWorktreeRow } from "../selectors/dashboardSessionRows.js";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
 import type { ClientNotice, ObserverService } from "../services/types.js";
-import { type DashboardActionResult, type DashboardActions, handleTuiAction } from "./actions.js";
-import { buildFocusCommand } from "./commandBuilders.js";
+import { type DashboardActions, handleTuiAction } from "./actions.js";
+import type { DashboardCapabilities } from "./capabilities/execution.js";
 import {
   clearDashboardFocus,
   focusDashboardSession,
   reconcileDashboardFocus,
 } from "./dashboardFocus.js";
 import {
-  addPendingCreateSessionRow,
-  failPendingCreateSessionRow,
-  removeCreateSessionLocalRow,
-} from "./localRows.js";
-import {
   createTuiLocalOperationRunner,
   type TuiLocalOperationRunner,
 } from "./operations/localOperationRunner.js";
-import {
-  prepareCommandForRuntime,
-  prepareFocusCommandForRuntime,
-  type TuiFocusTarget,
-} from "./operations/runtimeCommands.js";
 import { createInitialTuiState } from "./screen.js";
 import { applyAddProjectFolderRefreshed } from "./screens/addProjectScreen.js";
-import { submitQuickSession } from "./screens/quickSession.js";
 import { applySnapshotSourceState } from "./sourceBridge.js";
 import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
@@ -59,20 +41,17 @@ export type DashboardStateSource = {
 };
 
 /**
- * Construction options for a dashboard-local projection over one externally
- * owned canonical client source and convergence-safe service.
+ * Required construction boundary for a dashboard-local projection.
+ *
+ * Every renderer supplies canonical client state, a convergence-safe service, and
+ * all four semantic capability groups; dashboard-core never infers native or
+ * standalone execution from mutable UI state.
  */
 export type DashboardRuntimeOptions = {
   service: ObserverService;
   source: StationClientStateSource;
-  initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot" | "runtime">;
-  exitOnFocusSuccess?: boolean;
-  focusOrigin?: TerminalFocusOrigin;
-  resolveFocusTarget?: () => Promise<TuiFocusTarget | undefined>;
-  onFocusSuccess?: () => Promise<void>;
-  onDismiss?: () => Promise<void>;
-  persistentPopup?: boolean;
-  onExit?: (code: number) => void;
+  capabilities: DashboardCapabilities;
+  initialState?: Omit<CreateInitialTuiStateOptions, "initialSnapshot">;
   folderService?: TuiFolderService;
   clientLabel?: string;
 };
@@ -90,29 +69,21 @@ export type DashboardRuntime = {
 /**
  * Create a dashboard-local projection over an external canonical client source.
  *
- * The private Zustand store mirrors snapshot identity and owns only local UI
- * state. Its public wrapper omits `setState`; callers mutate through
- * {@link DashboardActions} and Observer operations use the supplied service.
+ * Every pure transition is committed before capability invocation. The runtime then
+ * owns optimistic rows, notices, failures, and expiry timers while injected
+ * capabilities receive only semantic request values.
  */
 export function createDashboardRuntime(options: DashboardRuntimeOptions): DashboardRuntime {
-  const runtime = createRuntimeOptions(options);
   const folderService = options.folderService ?? createNodeFolderService();
   const source = options.source;
+  const clientLabel = options.clientLabel ?? "TUI";
   let store: StoreApi<DashboardState>;
   const operations = createTuiLocalOperationRunner({
     getStore: () => store,
     service: options.service,
     folderService,
-    runtime,
-    clientLabel: runtime.clientLabel,
-    focusStartedAgentRow: async (snapshot, row) => {
-      await dispatchFocusWithLifecycle(
-        store,
-        options.service,
-        buildStartedAgentFocusCommand(snapshot, row),
-        runtime,
-      );
-    },
+    capabilities: options.capabilities,
+    clientLabel,
   });
   const initialSnapshot = source.getState().snapshot;
 
@@ -120,47 +91,32 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
     createInitialTuiState({
       ...(options.initialState ?? {}),
       ...(initialSnapshot === undefined ? {} : { initialSnapshot }),
-      runtime: {
-        persistentPopup: runtime.persistentPopup,
-        canDismissPopup: runtime.onDismiss !== undefined,
-        exitOnFocusSuccess: runtime.exitOnFocusSuccess,
-        canResolveFocusOrigin: runtime.resolveFocusTarget !== undefined,
-        hasFocusSuccessCallback: runtime.onFocusSuccess !== undefined,
-        ...(runtime.focusOrigin === undefined ? {} : { focusOrigin: runtime.focusOrigin }),
-      },
     }),
   );
 
   const actions: DashboardActions = {
-    handleKey: (key): DashboardActionResult =>
+    handleKey: (key): void => {
       applyTransition(
         store,
         options.service,
-        runtime,
+        clientLabel,
         operations,
         handleTuiKey(store.getState(), key, {
           cwd: folderService.cwd(),
           homeDir: folderService.homeDir(),
         }),
-      ),
-    dispatch: (action): DashboardActionResult =>
+      );
+    },
+    dispatch: (action): void => {
       applyTransition(
         store,
         options.service,
-        runtime,
+        clientLabel,
         operations,
         handleTuiAction(store.getState(), action, {
           cwd: folderService.cwd(),
           homeDir: folderService.homeDir(),
         }),
-      ),
-    createQuickSession: (projectId): void => {
-      applyTransition(
-        store,
-        options.service,
-        runtime,
-        operations,
-        submitQuickSession(store.getState(), projectId),
       );
     },
     setTerminalRows: (rows): void => {
@@ -187,18 +143,6 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
     },
     refreshActiveToastExpiry: (nowMs = Date.now()): void => {
       store.setState(refreshActiveTuiToastExpiry(store.getState(), nowMs), true);
-    },
-    addPendingCreateSession: (row): void => {
-      store.setState((state) => addPendingCreateSessionRow(state, row), true);
-    },
-    failPendingCreateSession: (localId, error, expiresAt): void => {
-      store.setState(
-        (state) => failPendingCreateSessionRow(state, localId, error, expiresAt),
-        true,
-      );
-    },
-    removePendingCreateSession: (localId): void => {
-      store.setState((state) => removeCreateSessionLocalRow(state, localId), true);
     },
   };
 
@@ -327,106 +271,44 @@ function replaceDashboardFocusState(next: TuiState): DashboardState {
   return replacement;
 }
 
-type RuntimeOptions = {
-  clientLabel: string;
-  exitOnFocusSuccess: boolean;
-  persistentPopup: boolean;
-  focusOrigin?: TerminalFocusOrigin;
-  resolveFocusTarget?: () => Promise<TuiFocusTarget | undefined>;
-  onFocusSuccess?: () => Promise<void>;
-  onDismiss?: () => Promise<void>;
-  onExit?: (code: number) => void;
-};
-
-function createRuntimeOptions(options: DashboardRuntimeOptions): RuntimeOptions {
-  const runtime: RuntimeOptions = {
-    clientLabel: options.clientLabel ?? "TUI",
-    exitOnFocusSuccess: options.exitOnFocusSuccess === true,
-    persistentPopup: options.persistentPopup === true,
-  };
-  if (options.focusOrigin !== undefined) {
-    runtime.focusOrigin = options.focusOrigin;
-  }
-  if (options.resolveFocusTarget !== undefined) {
-    runtime.resolveFocusTarget = options.resolveFocusTarget;
-  }
-  if (options.onFocusSuccess !== undefined) {
-    runtime.onFocusSuccess = options.onFocusSuccess;
-  }
-  if (options.onDismiss !== undefined) {
-    runtime.onDismiss = options.onDismiss;
-  }
-  if (options.onExit !== undefined) {
-    runtime.onExit = options.onExit;
-  }
-  return runtime;
-}
-
 function applyTransition(
   store: StoreApi<DashboardState>,
   service: ObserverService,
-  runtime: RuntimeOptions,
+  clientLabel: string,
   operations: TuiLocalOperationRunner,
   transition: TuiTransition,
-): DashboardActionResult {
+): void {
   const replacement: DashboardState = { ...transition.state };
   if (transition.state.persistentFilter === undefined) {
     // Full replacement must delete an absent exact-optional filter instead of materializing undefined.
     delete replacement.persistentFilter;
   }
-  // State lands before effects so one-shot control intents observe the transition they represent.
+  // State commits before capability invocation so screen closure and semantic intent are observable first.
   store.setState(replacement, true);
-  void applyTransitionEffects(store, service, runtime, operations, transition);
-  const result: DashboardActionResult = { dismissPopup: transition.dismissPopup === true };
-  if (transition.exitCode !== undefined) {
-    result.exitCode = transition.exitCode;
-  }
-  if (transition.controlIntent !== undefined) {
-    result.controlIntent = transition.controlIntent;
-  }
-  return result;
+  operations.run(transition.operations);
+  void applyTransitionEffects(store, service, clientLabel, transition);
 }
 
 async function applyTransitionEffects(
   store: StoreApi<DashboardState>,
   service: ObserverService,
-  runtime: RuntimeOptions,
-  operations: TuiLocalOperationRunner,
+  clientLabel: string,
   transition: TuiTransition,
 ): Promise<void> {
-  if (transition.dismissPopup === true && runtime.onDismiss !== undefined) {
-    await dismissPersistentPopup(store, runtime.onDismiss, runtime);
-  }
-
-  if (transition.exitCode !== undefined) {
-    runtime.onExit?.(transition.exitCode);
-  }
-
   if (transition.reconcileReason !== undefined) {
-    await reconcileSnapshot(store, service, transition.reconcileReason, runtime);
+    await reconcileSnapshot(store, service, transition.reconcileReason, clientLabel);
   }
 
   for (const command of transition.commands ?? []) {
-    if (shouldUseFocusLifecycle(command, runtime, store.getState().snapshot)) {
-      await dispatchFocusWithLifecycle(store, service, command, runtime);
-    } else {
-      try {
-        const prepared = await prepareCommandForRuntime(command, runtime);
-        await dispatchCommand(store, service, prepared, runtime);
-      } catch (error: unknown) {
-        addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
-      }
-    }
+    await dispatchCommand(store, service, command, clientLabel);
   }
-
-  operations.run(transition.operations);
 }
 
 async function reconcileSnapshot(
   store: StoreApi<DashboardState>,
   service: ObserverService,
   reason: string,
-  runtime: Pick<RuntimeOptions, "clientLabel">,
+  clientLabel: string,
 ): Promise<void> {
   try {
     // The client service commits the reconciled snapshot before resolving; the
@@ -439,7 +321,7 @@ async function reconcileSnapshot(
       }),
     );
   } catch (error: unknown) {
-    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
+    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel })));
     store.setState({ loading: false });
   }
 }
@@ -448,7 +330,7 @@ async function dispatchCommand(
   store: StoreApi<DashboardState>,
   service: ObserverService,
   command: StationCommand,
-  runtime: Pick<RuntimeOptions, "clientLabel">,
+  clientLabel: string,
 ): Promise<void> {
   try {
     const receipt = await service.dispatch(command);
@@ -459,173 +341,7 @@ async function dispatchCommand(
     }
     addToast(store, queuedCommandToast(command, receipt));
   } catch (error: unknown) {
-    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
-  }
-}
-
-async function dispatchCommandAndWaitForCompletion(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  command: StationCommand,
-  runtime: Pick<RuntimeOptions, "clientLabel">,
-): Promise<boolean> {
-  try {
-    const receipt = await service.dispatch(command);
-    const rejectedToast = rejectedCommandToast(command, receipt);
-    if (rejectedToast !== undefined) {
-      addToast(store, rejectedToast);
-      return false;
-    }
-
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "succeeded") {
-      return true;
-    }
-    addToast(store, safeErrorToToast(completion.error));
-    return false;
-  } catch (error: unknown) {
-    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
-    return false;
-  }
-}
-
-function shouldUseFocusLifecycle(
-  command: StationCommand,
-  runtime: Pick<
-    RuntimeOptions,
-    "exitOnFocusSuccess" | "persistentPopup" | "resolveFocusTarget" | "onFocusSuccess"
-  >,
-  snapshot: StationSnapshot | undefined,
-): command is Extract<StationCommand, { type: "terminal.focus" }> {
-  return (
-    command.type === "terminal.focus" &&
-    (runtime.exitOnFocusSuccess ||
-      runtime.persistentPopup ||
-      runtime.resolveFocusTarget !== undefined ||
-      runtime.onFocusSuccess !== undefined ||
-      turnReadinessForFocusCommand(snapshot, command) !== undefined)
-  );
-}
-
-function buildStartedAgentFocusCommand(
-  snapshot: StationSnapshot,
-  row: WorktreeRow,
-): Extract<StationCommand, { type: "terminal.focus" }> {
-  const session = sessionForWorktreeRow(row, snapshot.sessions);
-  if (row.agent === undefined && session !== undefined) {
-    return {
-      type: "terminal.focus",
-      payload: {
-        sessionId: session.id,
-      },
-    };
-  }
-  return buildFocusCommand(row);
-}
-
-async function dispatchFocusWithLifecycle(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  command: Extract<StationCommand, { type: "terminal.focus" }>,
-  runtime: RuntimeOptions,
-): Promise<void> {
-  let focusCommand: Extract<StationCommand, { type: "terminal.focus" }>;
-  let focusTarget: TuiFocusTarget | undefined;
-  try {
-    const prepared = await prepareFocusCommandForRuntime(command, runtime);
-    focusCommand = prepared.command;
-    focusTarget = prepared.target;
-  } catch (error: unknown) {
-    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
-    return;
-  }
-
-  const turnReadiness = turnReadinessForFocusCommand(store.getState().snapshot, focusCommand);
-  const waitsForCompletion =
-    runtime.exitOnFocusSuccess ||
-    runtime.persistentPopup ||
-    runtime.onFocusSuccess !== undefined ||
-    focusTarget?.onFocusSuccess !== undefined ||
-    turnReadiness !== undefined;
-  if (!waitsForCompletion) {
-    await dispatchCommand(store, service, focusCommand, runtime);
-    return;
-  }
-
-  const succeeded = await dispatchCommandAndWaitForCompletion(
-    store,
-    service,
-    focusCommand,
-    runtime,
-  );
-  if (!succeeded) {
-    return;
-  }
-
-  if (turnReadiness !== undefined) {
-    const acknowledged = await dispatchCommandAndWaitForCompletion(
-      store,
-      service,
-      {
-        type: "session.acknowledgeTurn",
-        payload: turnReadiness,
-      },
-      runtime,
-    );
-    if (!acknowledged) {
-      return;
-    }
-  }
-
-  const onFocusSuccess = focusTarget?.onFocusSuccess ?? runtime.onFocusSuccess;
-  if (onFocusSuccess !== undefined) {
-    try {
-      await onFocusSuccess();
-    } catch (error: unknown) {
-      addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
-      return;
-    }
-  }
-
-  if (runtime.exitOnFocusSuccess && !runtime.persistentPopup) {
-    runtime.onExit?.(0);
-  }
-}
-
-function turnReadinessForFocusCommand(
-  snapshot: StationSnapshot | undefined,
-  command: Extract<StationCommand, { type: "terminal.focus" }>,
-): { sessionId: string; token: string } | undefined {
-  if (snapshot === undefined) {
-    return undefined;
-  }
-  const row =
-    command.payload.sessionId === undefined
-      ? snapshot.rows.find((candidate) => candidate.id === command.payload.worktreeId)
-      : snapshot.rows.find((candidate) => candidate.agent?.sessionId === command.payload.sessionId);
-  const agent = row?.agent;
-  if (
-    agent?.state !== "idle" ||
-    agent.sessionId === undefined ||
-    agent.turnReadiness?.state !== "ready_to_read"
-  ) {
-    return undefined;
-  }
-  return {
-    sessionId: agent.sessionId,
-    token: agent.turnReadiness.token,
-  };
-}
-
-async function dismissPersistentPopup(
-  store: StoreApi<DashboardState>,
-  onDismiss: () => Promise<void>,
-  runtime: Pick<RuntimeOptions, "clientLabel">,
-): Promise<void> {
-  try {
-    await onDismiss();
-  } catch (error: unknown) {
-    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel: runtime.clientLabel })));
+    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel })));
   }
 }
 

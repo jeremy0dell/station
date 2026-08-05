@@ -10,6 +10,8 @@ import {
   DEFAULT_COPY_SINKS,
 } from "../copy/clipboard.js";
 import { createStationInputRuntime, type StationInputRuntime } from "../input/stationInput.js";
+import { createManagedLaunch } from "../input/runtime/managedLaunch.js";
+import { createPaneEffects, type PaneEffects } from "../input/runtime/paneEffects.js";
 import { buildLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import {
   createLayoutWriter,
@@ -28,6 +30,7 @@ import {
   createStationDashboardRuntime,
   type StationDashboardRuntime,
 } from "../station/store/dashboardRuntime.js";
+import { createDashboardCapabilities } from "./dashboardCapabilities.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
 /**
@@ -42,14 +45,40 @@ export function createStation(options: CreateStationOptions): Station {
   const { store, stationClient } = options;
   const automations = options.automations ?? [];
 
-  // The dashboard runtime and live-PTY registry everything else wires around. The
-  // config widget set seeds the runtime's live session copy; widget-settings
-  // edits are written back to config.toml when a config path exists.
-  const dashboardRuntime = createStationDashboardRuntime(stationClient, {
-    ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
-    widgetsPersisted: options.tuiConfigPath !== undefined,
-  });
+  // Native composition establishes terminal authority before dashboard execution.
   const registry = setupRegistry(options, store, stationClient);
+  const paneEffects = createPaneEffects({
+    store,
+    clientState: stationClient.state,
+    registry,
+    resolveAuxShellPlacement: options.resolveAuxShellPlacement,
+    autoCloseOverlay: options.shellAutoCloseOverlay ?? false,
+    automations,
+    writeToTerminal: undefined,
+    pasteToTerminal: undefined,
+  });
+  const managedLaunch = createManagedLaunch({
+    store,
+    clientState: stationClient.state,
+    observerService: stationClient.service,
+    registry,
+    managedTerminalAttacher: options.managedTerminalAttacher,
+  });
+  const dashboardCapabilities = createDashboardCapabilities({
+    clientState: stationClient.state,
+    observerService: stationClient.service,
+    store,
+    paneEffects,
+    managedLaunch,
+  });
+  const dashboardRuntime = createStationDashboardRuntime(
+    stationClient,
+    dashboardCapabilities,
+    {
+      ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
+      widgetsPersisted: options.tuiConfigPath !== undefined,
+    },
+  );
 
   // Source → store/registry bridges, plus debounced disk layout (production only).
   const reconcilers = createReconcilers(store, registry, stationClient);
@@ -72,7 +101,7 @@ export function createStation(options: CreateStationOptions): Station {
     store,
     dashboardRuntime,
     registry,
-    observerService: stationClient.service,
+    paneEffects,
     automations,
     onShutdown: () => {
       if (shutdownStarted) {
@@ -315,7 +344,7 @@ function createInputRuntime(
     store: StationStore;
     dashboardRuntime: StationDashboardRuntime;
     registry: PtyRegistry;
-    observerService: StationClient["service"];
+    paneEffects: PaneEffects;
     automations: readonly Automation[];
     onShutdown: () => void;
   },
@@ -329,18 +358,11 @@ function createInputRuntime(
       clientState: deps.dashboardRuntime.clientState,
     },
     registry: deps.registry,
-    observerService: deps.observerService,
-    autoCloseOverlayOnPaneOpen: options.shellAutoCloseOverlay ?? false,
+    paneEffects: deps.paneEffects,
     automations: deps.automations,
   };
   if (options.openExternalUrl !== undefined) {
     inputOptions.openExternalUrl = options.openExternalUrl;
-  }
-  if (options.resolveAuxShellPlacement !== undefined) {
-    inputOptions.resolveAuxShellPlacement = options.resolveAuxShellPlacement;
-  }
-  if (options.managedTerminalAttacher !== undefined) {
-    inputOptions.managedTerminalAttacher = options.managedTerminalAttacher;
   }
   return createStationInputRuntime(inputOptions);
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { selectDashboardViewport } from "@station/dashboard-core";
+import {
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  dashboardExecution,
+  selectDashboardViewport,
+  type DashboardCapabilities,
+} from "@station/dashboard-core";
 import type { TuiFolderService } from "@station/dashboard-core";
 import type { DashboardRuntime } from "@station/dashboard-core";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -108,19 +114,30 @@ describe("createStationDashboardRuntime", () => {
 function makeStore(folderService?: TuiFolderService): DashboardRuntime {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
-  const options: Parameters<typeof createStationDashboardRuntime>[1] = {};
+  const options: Parameters<typeof createStationDashboardRuntime>[2] = {};
   if (folderService !== undefined) {
     options.folderService = folderService;
   }
+  const service = createStationStubObserverService(source, { dispatchDelayMs: 1 });
+  const capabilities: DashboardCapabilities = {
+    activation: createObserverActivationCapabilities({ source, service, clientLabel: "Station" }),
+    managedSessions: createObserverManagedSessionCapabilities({ service, clientLabel: "Station" }),
+    shell: { open: () => dashboardExecution({ kind: "success" }) },
+    dismissal: {
+      dismissDashboard: () => dashboardExecution({ kind: "success" }),
+      exitRenderer: () => dashboardExecution({ kind: "success" }),
+    },
+  };
   const store = createStationDashboardRuntime(
     {
       state: source,
-      service: createStationStubObserverService(source, { dispatchDelayMs: 1 }),
+      service,
       start: () => {
         source.start();
       },
       stop: () => source.stop(),
     },
+    capabilities,
     options,
   );
   store.start();

@@ -1,10 +1,9 @@
 import type { StationSnapshot } from "@station/contracts";
 import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
-import type { CreateInitialTuiStateOptions, TuiRuntimeState, TuiState } from "./types.js";
+import type { CreateInitialTuiStateOptions, TuiState } from "./types.js";
 
 export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): TuiState {
-  const runtime = createRuntimeState(options.runtime);
   const state: TuiState = {
     loading: options.initialSnapshot === undefined,
     screen: { name: "dashboard" },
@@ -17,7 +16,6 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     selection: new Map(),
     widgets: options.widgets ?? [],
     widgetsPersisted: options.widgetsPersisted ?? true,
-    runtime,
   };
   if (options.initialSnapshot !== undefined) {
     state.snapshot = options.initialSnapshot;
@@ -39,18 +37,4 @@ export function replaceSnapshot(state: TuiState, snapshot: StationSnapshot): Tui
     localRows: pruneLocalRowsForSnapshot(state.localRows, snapshot),
   };
   return reconcileDashboardFocus(state, next);
-}
-
-function createRuntimeState(runtime: Partial<TuiRuntimeState> | undefined): TuiRuntimeState {
-  const built: TuiRuntimeState = {
-    persistentPopup: runtime?.persistentPopup ?? false,
-    canDismissPopup: runtime?.canDismissPopup ?? false,
-    exitOnFocusSuccess: runtime?.exitOnFocusSuccess ?? false,
-    canResolveFocusOrigin: runtime?.canResolveFocusOrigin ?? false,
-    hasFocusSuccessCallback: runtime?.hasFocusSuccessCallback ?? false,
-  };
-  if (runtime?.focusOrigin !== undefined) {
-    built.focusOrigin = runtime.focusOrigin;
-  }
-  return built;
 }

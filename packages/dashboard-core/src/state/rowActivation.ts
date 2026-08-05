@@ -1,25 +1,60 @@
-import type { TerminalFocusOrigin, WorktreeRow } from "@station/contracts";
-import { worktreeHasLiveAgent } from "@station/contracts";
-import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
-import { safeErrorToToast } from "../services/errors/errors.js";
+import { type WorktreeRow, worktreeHasLiveAgent } from "@station/contracts";
 import {
-  buildResumeAgentCommand,
-  buildSessionFocusCommand,
-  buildStartAgentCommand,
-} from "./commandBuilders.js";
-import { addPendingStartAgentRow } from "./localRows.js";
+  type DashboardSessionRow,
+  selectDashboardSessionRow,
+} from "../selectors/dashboardSessionRows.js";
+import { safeErrorToToast } from "../services/errors/errors.js";
 import { addTuiToast } from "./toasts.js";
 import type { TuiTransition } from "./transition.js";
 import type { TuiState } from "./types.js";
+
+const STALE_TARGET_NOTICE = "That dashboard item is no longer available.";
+
+/** Resolve a stable dashboard row identity before producing one activation operation. */
+export function activateDashboardRowById(state: TuiState, rowId: string): TuiTransition {
+  const sessionRow =
+    state.snapshot === undefined ? undefined : selectDashboardSessionRow(state.snapshot, rowId);
+  if (sessionRow === undefined) {
+    return {
+      state: addTuiToast(state, { kind: "info", message: STALE_TARGET_NOTICE }),
+    };
+  }
+  if (
+    state.localRows.pendingStart.some((pending) => pending.worktreeId === sessionRow.worktree.id) ||
+    state.localRows.pendingRemove.some((pending) => pending.worktreeId === sessionRow.worktree.id)
+  ) {
+    return { state };
+  }
+  return activateDashboardRow(state, sessionRow);
+}
+
+/** Resolve a stable session identity before delegating row-scoped shell execution. */
+export function openDashboardRowShell(state: TuiState, rowId: string): TuiTransition {
+  const sessionRow =
+    state.snapshot === undefined ? undefined : selectDashboardSessionRow(state.snapshot, rowId);
+  if (sessionRow === undefined) {
+    return {
+      state: addTuiToast(state, { kind: "info", message: STALE_TARGET_NOTICE }),
+    };
+  }
+  return {
+    state,
+    operations: [
+      {
+        type: "openDashboardShell",
+        target: { kind: "session", sessionId: sessionRow.session.id },
+      },
+    ],
+  };
+}
 
 export function activateDashboardRow(
   state: TuiState,
   sessionRow: DashboardSessionRow,
 ): TuiTransition {
   const { presentation: row, session, worktree } = sessionRow;
-  // Launch (or resume) unless the row has a genuinely live agent to focus. A "?"
-  // (unknown) row whose terminal is dead is launchable here, not a dead focus -
-  // the dashboard-side half of the observer's relaunch-unknown-rows fix.
+  // Unknown rows whose terminal is dead remain launchable; the selected renderer
+  // revalidates this stable identity before choosing its activation mechanics.
   if (!worktreeHasLiveAgent(row)) {
     if (session.origin === "external") {
       return {
@@ -37,29 +72,8 @@ export function activateDashboardRow(
         }),
       };
     }
-    return startOrResumeAgentForRow(state, worktree);
   }
-
-  if (session.terminal?.focusable !== true) {
-    // The agent's terminal cannot be focused from the dashboard (e.g. it is
-    // hosted by Station, whose provider reports canFocusTarget:false). Surface a
-    // one-time notice instead of dispatching a focus the provider can only
-    // reject, which otherwise spams error toasts on every open keypress.
-    return {
-      state: addTuiToast(state, {
-        kind: "info",
-        message:
-          session.terminal === undefined
-            ? "This session has no focusable terminal."
-            : `This agent runs in the "${session.terminal.provider}" terminal and can't be focused from the dashboard.`,
-      }),
-    };
-  }
-
-  return {
-    state,
-    commands: [buildSessionFocusCommand(session, focusCommandOptions(state.runtime.focusOrigin))],
-  };
+  return activationOperation(state, session.id, worktree);
 }
 
 function otherSessionHasLiveAgent(row: DashboardSessionRow): boolean {
@@ -72,7 +86,7 @@ function otherSessionHasLiveAgent(row: DashboardSessionRow): boolean {
   return row.worktree.agent?.runId !== row.session.harness.runId;
 }
 
-function startOrResumeAgentForRow(state: TuiState, row: WorktreeRow): TuiTransition {
+function activationOperation(state: TuiState, sessionId: string, row: WorktreeRow): TuiTransition {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === row.projectId);
   if (project === undefined) {
     return {
@@ -86,62 +100,25 @@ function startOrResumeAgentForRow(state: TuiState, row: WorktreeRow): TuiTransit
       ),
     };
   }
-
-  if (row.recovery !== undefined) {
-    const command = buildResumeAgentCommand(row, project);
-    const localId = `resume:${row.id}`;
-    return {
-      state: addPendingStartAgentRow(state, {
-        localId,
-        operation: "resumeAgent",
-        projectId: row.projectId,
-        worktreeId: row.id,
-        branch: row.branch,
-        createdAt: new Date().toISOString(),
-      }),
-      operations: [
-        {
-          type: "resumeAgent",
-          localId,
-          projectId: row.projectId,
-          worktreeId: row.id,
-          branch: row.branch,
-          command,
-        },
-      ],
-    };
-  }
-
-  const command = buildStartAgentCommand(row, project);
-  const localId = `start:${row.id}`;
+  const preferredObserverAction = worktreeHasLiveAgent(row)
+    ? "focus"
+    : row.recovery === undefined
+      ? "start"
+      : "resume";
+  const localId =
+    preferredObserverAction === "focus" ? undefined : `${preferredObserverAction}:${row.id}`;
   return {
-    state: addPendingStartAgentRow(state, {
-      localId,
-      operation: "startAgent",
-      projectId: row.projectId,
-      worktreeId: row.id,
-      branch: row.branch,
-      createdAt: new Date().toISOString(),
-    }),
+    state,
     operations: [
       {
-        type: "startAgent",
-        localId,
-        projectId: row.projectId,
+        type: "activateSession",
+        sessionId,
+        projectId: project.id,
         worktreeId: row.id,
         branch: row.branch,
-        command,
+        preferredObserverAction,
+        ...(localId === undefined ? {} : { localId }),
       },
     ],
   };
-}
-
-function focusCommandOptions(focusOrigin: TerminalFocusOrigin | undefined): {
-  origin?: TerminalFocusOrigin;
-} {
-  const options: { origin?: TerminalFocusOrigin } = {};
-  if (focusOrigin !== undefined) {
-    options.origin = focusOrigin;
-  }
-  return options;
 }
