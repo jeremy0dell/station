@@ -884,6 +884,35 @@ describe("reportExternalExit", () => {
     });
     expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_replacement" }]);
   });
+
+  it("fails closed when no managed lifecycle is registered", async () => {
+    const registry = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
+      terminal: new FakeTerminalProvider({ now: () => new Date(now) }),
+      harnesses: [new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) })],
+    });
+
+    const exit = await reportExternalExit(
+      {
+        core: fakeCore([row()]),
+        providers: registry,
+        persistence: fakePersistence,
+        clock: { now: () => new Date(now) },
+      },
+      {
+        terminalTargetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: "ses_current",
+      },
+    );
+
+    expect(exit).toEqual({
+      outcome: {
+        acknowledged: false,
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
+      reconcile: false,
+    });
+  });
 });
 
 describe("prepareExternalLaunch existing-agent state matrix", () => {

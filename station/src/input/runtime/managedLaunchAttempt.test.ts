@@ -516,6 +516,73 @@ describe("createManagedLaunchAttempt", () => {
     expect(harness.baseRegistry.get(PANE_ID)?.exited).toBe(true);
   });
 
+  it("toasts and keeps the overlay open when the exited pane's identity changes during preparation", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    openOverlay(harness);
+
+    const attempt = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    await Promise.resolve();
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_other",
+      terminalTargetId: "native:other",
+    });
+    release(preparedPlan());
+    await attempt;
+
+    expect(harness.lastToast()).toMatchObject({
+      kind: "info",
+      message: "The agent pane changed while Station was preparing its relaunch.",
+    });
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+    expect(harness.baseRegistry.get(PANE_ID)?.exited).toBe(true);
+  });
+
+  it("refuses to replace an exited entry superseded during preparation", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    openOverlay(harness);
+
+    const attempt = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    await Promise.resolve();
+    harness.baseRegistry.dispose(PANE_ID);
+    harness.baseRegistry.ensure(PANE_ID, { cwd: CWD });
+    release(preparedPlan());
+    await attempt;
+
+    expect(harness.lastToast()).toMatchObject({
+      kind: "info",
+      message: "The agent pane changed while Station was preparing its relaunch.",
+    });
+    expect(harness.observerService.reportedExits).toEqual([
+      {
+        terminalTargetId: TERMINAL_TARGET_ID,
+        expectedSessionId: "ses_managed",
+      },
+    ]);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
   it("surfaces uncertain cleanup when an unplaced local target cannot be released", async () => {
     let release!: (result: AgentPrepareExternalLaunchResult) => void;
     const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {

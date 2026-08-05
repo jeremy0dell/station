@@ -41,7 +41,7 @@ function createSlots(): StationHotSlots {
 }
 
 describe("station hot runtime", () => {
-  it("reuses a compatible v5 runtime so its live PTYs survive a reload", () => {
+  it("reuses a compatible v6 runtime so its live PTYs survive a reload", () => {
     const slots = createSlots();
     const first = getOrCreateStationHotRuntime(slots, FREEZE_CONFIG);
     first.store.actions.createPane("pane-second");
@@ -61,6 +61,9 @@ describe("station hot runtime", () => {
 
     expect(second).toBe(first);
     expect(second.store).toBe(first.store);
+    expect(second.store.transient.managedLaunchesInFlight).toBe(
+      first.store.transient.managedLaunchesInFlight,
+    );
     expect(second.registry).toBe(first.registry);
     expect(second.registry.get("pane-second")?.screen).toBe(screen);
     expect(second.registry.get("pane-second")?.terminal).toBe(terminal);
