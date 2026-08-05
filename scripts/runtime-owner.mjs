@@ -1354,17 +1354,9 @@ async function runOwnedChild() {
   if (pgid !== process.pid || start === undefined) process.exit(2);
 
   let launched = false;
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
-    process.on(signal, () => {
-      if (!launched) {
-        process.exitCode = signalExitCode(signal);
-        process.disconnect?.();
-      }
-    });
-  }
-  process.on("disconnect", () => {
-    if (!launched) process.exit(1);
-  });
+  let activeChild;
+  let keepAlive;
+  let shutdownSignal;
   const sendToOwner = (message) => {
     if (!process.connected) return;
     process.send?.(message, () => {});
@@ -1372,6 +1364,21 @@ async function runOwnedChild() {
   const disconnectOwner = () => {
     if (process.connected) process.disconnect?.();
   };
+  const finishSignaledShutdown = () => {
+    if (shutdownSignal === undefined || activeChild !== undefined) return;
+    if (keepAlive !== undefined) clearInterval(keepAlive);
+    process.exitCode = signalExitCode(shutdownSignal);
+    disconnectOwner();
+  };
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.on(signal, () => {
+      shutdownSignal ??= signal;
+      finishSignaledShutdown();
+    });
+  }
+  process.on("disconnect", () => {
+    if (!launched) process.exit(1);
+  });
   sendToOwner({ kind: "ready", pid: process.pid, pgid, osStartTime: start });
 
   process.on("message", async (message) => {
@@ -1386,24 +1393,29 @@ async function runOwnedChild() {
       .safeParse(message);
     if (!parsed.success) {
       sendToOwner({ kind: "completed", exitCode: 1, startupFailed: true });
-      disconnectOwner();
       return;
     }
+
+    // Keep the registered leader alive so TERM-resistant descendants can be revalidated before KILL.
+    keepAlive = setInterval(() => undefined, 60_000);
     const env = { ...process.env, ...(parsed.data.launch.env ?? {}) };
     for (const [index, step] of parsed.data.launch.steps.entries()) {
+      if (shutdownSignal !== undefined) {
+        finishSignaledShutdown();
+        return;
+      }
       const isFinal = index === parsed.data.launch.steps.length - 1;
-      let child;
       try {
-        child = spawn(step.command, step.args, {
+        activeChild = spawn(step.command, step.args, {
           cwd: parsed.data.launch.cwd,
           env,
           stdio: "inherit",
         });
       } catch {
         sendToOwner({ kind: "completed", exitCode: 1, startupFailed: true });
-        disconnectOwner();
         return;
       }
+      const child = activeChild;
       const result = await new Promise((resolvePromise) => {
         child.once("spawn", () => {
           if (isFinal) sendToOwner({ kind: "started", pid: child.pid });
@@ -1417,9 +1429,13 @@ async function runOwnedChild() {
           }),
         );
       });
+      activeChild = undefined;
+      if (shutdownSignal !== undefined) {
+        finishSignaledShutdown();
+        return;
+      }
       if (result.exitCode !== 0 || isFinal) {
         sendToOwner({ kind: "completed", ...result });
-        disconnectOwner();
         process.exitCode = result.exitCode;
         return;
       }
