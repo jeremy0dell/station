@@ -310,10 +310,15 @@ Application composition proceeds around that boundary in this order:
 Station Host is outside the Observer singleton lifecycle and continues to own
 live PTYs independently.
 
-After startup accepts an Observer, command, ingress, and Station clients pin
-that exact selector. Each later operation checks health and sends the request
-over the same socket connection, so replacement between readiness and mutation
-fails with `OBSERVER_BUILD_MISMATCH` instead of delegating work to new code.
+Singleton startup may hand commands, hooks, ingress, and generic protocol clients
+the healthy winner selected by the existing attach-versus-handoff policy. After
+acceptance, clients pin that exact selector. Each later operation checks health
+and sends the request over the same socket connection, so replacement between
+readiness and mutation fails with `OBSERVER_BUILD_MISMATCH` instead of delegating
+work to new code. Command-capable Station UI launchers add a stricter composition
+rule after singleton selection: their complete caller selector must equal the
+accepted Observer selector before renderer, reconcile, popup, or Host-producing
+effects. This does not change Observer ordering, attachment, or handoff.
 The exported Station client runtime therefore accepts either an injected service
 or a socket plus the already-accepted build selector; unpinned socket-backed
 construction refuses before any connection attempt.

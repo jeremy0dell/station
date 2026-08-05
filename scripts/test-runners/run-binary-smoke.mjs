@@ -881,6 +881,24 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
           expectedVersion,
           "station-host build remains unchanged across observer handoff",
         );
+        await verifyMixedBuildStationUiAdmission({
+          binaryPath,
+          compiledObserverVersion,
+          sourceObserverVersion,
+          observerClient,
+          stateDir,
+          socketPath,
+          hostClient,
+          hostSocketPath,
+          hostProcess,
+          spawned,
+          childEnv,
+          popupEnv,
+          popupConfigPath,
+          configPath,
+          root,
+          fakeTmuxStatePath,
+        });
       }
     }
     const livePty = (await hostClient.list()).find((entry) => entry.ptyId === spawned.ptyId);
@@ -2009,6 +2027,163 @@ function isolatedBinaryEnv({ homeDir: home, runtimeDir: runtime }) {
   };
 }
 
+async function verifyMixedBuildStationUiAdmission(input) {
+  await waitForStableObserverReconcile(input.observerClient, 300, 10_000);
+  const baselineReason = "binary-smoke-ui-build-admission-baseline";
+  await input.observerClient.reconcile(baselineReason);
+  const observerHealth = await waitForObserverLastReconcile(
+    input.observerClient,
+    baselineReason,
+    5_000,
+  );
+  const observerIdentity = stableObserverIdentity(observerHealth);
+  assertEqual(
+    observerIdentity.version,
+    input.sourceObserverVersion,
+    "UI admission baseline Observer selector",
+  );
+  assertEqual(
+    observerIdentity.socketPath,
+    input.socketPath,
+    "UI admission baseline Observer socket",
+  );
+  assertEqual(
+    observerIdentity.stateDir,
+    input.stateDir,
+    "UI admission baseline Observer state directory",
+  );
+
+  const pidfilePath = `${input.socketPath}.pid`;
+  const observerSocket = await socketState(input.socketPath);
+  const observerPidfile = await observerPidfileState(pidfilePath);
+  const commandCount = readCommandCount(join(input.stateDir, "observer.sqlite"));
+  const hostHealth = await input.hostClient.health();
+  const hostList = await input.hostClient.list();
+  const hostSocket = await socketState(input.hostSocketPath);
+  const hostPid = input.hostProcess.pid;
+  assertEqual(processIsAlive(hostPid), true, "UI admission baseline Host process");
+  const livePty = hostList.find((entry) => entry.ptyId === input.spawned.ptyId);
+  assertEqual(livePty?.alive, true, "UI admission baseline live PTY");
+  const ptyPid = livePty?.pid;
+  if (ptyPid === undefined) {
+    fail("UI admission baseline PTY did not report its child PID");
+  }
+  assertEqual(processIsAlive(ptyPid), true, "UI admission baseline PTY child");
+  const layoutPath = join(input.childEnv.XDG_STATE_HOME, "station", "station", "layout.json");
+  const layout = await optionalFileState(layoutPath);
+  const tmuxState = await readFakeTmuxState(input.fakeTmuxStatePath);
+
+  const popupRendererCanary = join(input.root, "lower-build-popup-renderer-started");
+  const refusedPopup = await run(input.binaryPath, ["--config", input.popupConfigPath, "popup"], {
+    env: {
+      ...input.popupEnv,
+      STATION_DASHBOARD_COMMAND: `/usr/bin/touch ${quoteShellWord(popupRendererCanary)}`,
+    },
+    allowedExitCodes: [1],
+    timeoutMs: 5_000,
+    terminateDescendants: true,
+  });
+  assertUiBuildAdmissionRefusal(
+    refusedPopup.stderr,
+    input.compiledObserverVersion,
+    input.sourceObserverVersion,
+    "lower-build public popup",
+  );
+  assertEqual(
+    await pathExists(popupRendererCanary),
+    false,
+    "lower-build public popup renderer canary",
+  );
+  assertDeepEqual(
+    await readFakeTmuxState(input.fakeTmuxStatePath),
+    tmuxState,
+    "lower-build public popup tmux state",
+  );
+
+  const nativeRendererCanary = join(input.root, "lower-build-native-renderer-started");
+  const refusedNative = await run(input.binaryPath, ["--config", input.configPath, "tui"], {
+    env: {
+      ...input.childEnv,
+      STATION_DASHBOARD_COMMAND: `/usr/bin/touch ${quoteShellWord(nativeRendererCanary)}`,
+    },
+    allowedExitCodes: [1],
+    timeoutMs: 5_000,
+    terminateDescendants: true,
+  });
+  assertUiBuildAdmissionRefusal(
+    refusedNative.stderr,
+    input.compiledObserverVersion,
+    input.sourceObserverVersion,
+    "lower-build native",
+  );
+  assertEqual(await pathExists(nativeRendererCanary), false, "lower-build native renderer canary");
+
+  await delay(350);
+  const healthAfterRefusal = await input.observerClient.health();
+  assertDeepEqual(
+    stableObserverIdentity(healthAfterRefusal),
+    observerIdentity,
+    "UI refusal preserves Observer identity",
+  );
+  assertDeepEqual(
+    healthAfterRefusal.lastReconcile,
+    observerHealth.lastReconcile,
+    "UI refusal preserves explicit reconcile baseline",
+  );
+  assertEqual(
+    healthAfterRefusal.lastReconcile?.reason,
+    baselineReason,
+    "UI refusal schedules no popup-open or tui-startup reconcile",
+  );
+  assertDeepEqual(
+    await socketState(input.socketPath),
+    observerSocket,
+    "UI refusal preserves Observer socket identity and holders",
+  );
+  assertDeepEqual(
+    await observerPidfileState(pidfilePath),
+    observerPidfile,
+    "UI refusal preserves Observer pidfile",
+  );
+  assertEqual(
+    readCommandCount(join(input.stateDir, "observer.sqlite")),
+    commandCount,
+    "UI refusal records no Observer command",
+  );
+  assertEqual(processIsAlive(hostPid), true, "UI refusal preserves Host process");
+  assertDeepEqual(await input.hostClient.health(), hostHealth, "UI refusal preserves Host health");
+  assertDeepEqual(
+    await socketState(input.hostSocketPath),
+    hostSocket,
+    "UI refusal preserves Host socket identity and holders",
+  );
+  assertDeepEqual(
+    await input.hostClient.list(),
+    hostList,
+    "UI refusal preserves complete Host PTY inventory",
+  );
+  assertDeepEqual(
+    await optionalFileState(layoutPath),
+    layout,
+    "UI refusal preserves Station layout",
+  );
+  assertDeepEqual(
+    await readFakeTmuxState(input.fakeTmuxStatePath),
+    tmuxState,
+    "UI refusal preserves final tmux state",
+  );
+  assertEqual(processIsAlive(ptyPid), true, "UI refusal preserves PTY child");
+  for (const rendererPid of tmuxState.rendererPids) {
+    assertEqual(processIsAlive(rendererPid), true, "UI refusal preserves existing popup renderer");
+  }
+}
+
+function assertUiBuildAdmissionRefusal(stderr, callerSelector, observerSelector, label) {
+  assertIncludes(stderr, "TUI_OBSERVER_BUILD_MISMATCH", `${label} refusal code`);
+  assertIncludes(stderr, callerSelector, `${label} caller selector`);
+  assertIncludes(stderr, observerSelector, `${label} Observer selector`);
+}
+
 async function verifyCompiledInaccessibleObserver(input) {
   const pidfilePath = `${input.socketPath}.pid`;
   const spoolDir = join(input.stateDir, "spool", "hooks");
@@ -3094,6 +3269,49 @@ async function waitForObserverClientHealth(client, timeoutMs) {
     await delay(25);
   } while (Date.now() < deadline);
   throw lastError ?? new Error("Observer did not become reachable.");
+}
+
+async function waitForObserverLastReconcile(client, reason, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const health = await client.health();
+    if (health.lastReconcile?.reason === reason) {
+      return health;
+    }
+    if (smokeRunSignal?.aborted === true) {
+      throw (
+        smokeRunSignal.reason ?? new SmokeRunCancelledError("Observer reconcile wait cancelled.")
+      );
+    }
+    await delay(25);
+  } while (Date.now() < deadline);
+  fail(`Observer last reconcile did not reach ${reason}.`);
+}
+
+async function waitForStableObserverReconcile(client, quietMs, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let previous;
+  let unchangedSince = Date.now();
+  do {
+    const health = await client.health();
+    const current =
+      health.lastReconcile === undefined ? undefined : JSON.stringify(health.lastReconcile);
+    if (current !== undefined && current === previous) {
+      if (Date.now() - unchangedSince >= quietMs) {
+        return health;
+      }
+    } else {
+      previous = current;
+      unchangedSince = Date.now();
+    }
+    if (smokeRunSignal?.aborted === true) {
+      throw (
+        smokeRunSignal.reason ?? new SmokeRunCancelledError("Observer reconcile wait cancelled.")
+      );
+    }
+    await delay(25);
+  } while (Date.now() < deadline);
+  fail("Observer reconcile activity did not settle.");
 }
 
 async function runObserverCancellationSelfCheck() {
