@@ -164,6 +164,14 @@ abrupt loss and exact process signals remain covered by the launcher. Ctrl-O is
 a surface transition inside one `uiRunId`, not a renderer restart. Direct
 development mints a valid run ID and preserves it across Bun HMR.
 
+Native Host clients carry the same typed run context with a fresh connection ID
+per socket and attachment ID per attach attempt. `station-host.jsonl` uses typed
+lifecycle records for client shutdown versus socket loss, attachment replacement,
+and independent PTY spawn/exit. The legacy `agent.attach`/`agent.detach` stream
+remains a frozen operational and replay-metrics vocabulary; it does not carry
+detach reasons. Idempotent PTY reuse keeps the original creator correlation and
+does not emit a second spawn event.
+
 This telemetry is local and content-free: it must not collect terminal output,
 prompts, key contents, foreground application names, environment variables,
 process lists, arbitrary cwd, or repository paths. Inspect it with bounded raw-event
@@ -172,6 +180,7 @@ queries or the JSONL files:
 ```bash
 stn debug logs "renderer." --component cli
 stn debug logs "ui." --component tui
+stn debug logs "host." --component station-host
 ```
 
 ## Native TTY Ownership

@@ -23,8 +23,6 @@ import { selectPaneRecord } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import type { PaneId } from "../state/types.js";
 import type { StationClient } from "../sources/types.js";
-import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
-import { createStationHostManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import {
   createStationDashboardRuntime,
@@ -35,7 +33,8 @@ import type { CreateStationOptions, Station, StationAppProps } from "./types.js"
 /**
  * Wire Station's runtime — dashboard, registry, source reconcilers, layout
  * persistence, lifecycle, and input — and hand back the view props plus a
- * start/dispose surface. The renderer (main.tsx / tests) mounts <StationApp />.
+ * start/dispose surface. Host placement arrives as capabilities from renderer
+ * composition; this module never selects a concrete Host adapter.
  *
  * Reads as a sequence of steps; each is one extracted helper below.
  */
@@ -305,7 +304,7 @@ function createLifecycle(deps: {
   };
 }
 
-/** Build the input runtime; aux shell placement uses the host when a socket is set. */
+/** Build input from composition-supplied terminal capabilities without selecting a Host adapter. */
 function createInputRuntime(
   options: CreateStationOptions,
   deps: {
@@ -317,17 +316,6 @@ function createInputRuntime(
     onShutdown: () => void;
   },
 ): StationInputRuntime {
-  // Aux shells land in the persistent host when a socket is configured; the
-  // placement resolver still falls back to local per spawn when the daemon is down.
-  const auxShellPlacement =
-    options.hostSocketPath === undefined
-      ? undefined
-      : resolveAuxShellPlacement(options.hostSocketPath);
-  const managedTerminalAttacher =
-    options.managedTerminalAttacher ??
-    (options.hostSocketPath === undefined
-      ? undefined
-      : createStationHostManagedTerminalAttacher(options.hostSocketPath));
   const inputOptions: Parameters<typeof createStationInputRuntime>[0] = {
     store: deps.store,
     shutdown: deps.onShutdown,
@@ -344,11 +332,11 @@ function createInputRuntime(
   if (options.openExternalUrl !== undefined) {
     inputOptions.openExternalUrl = options.openExternalUrl;
   }
-  if (auxShellPlacement !== undefined) {
-    inputOptions.resolveAuxShellPlacement = auxShellPlacement;
+  if (options.resolveAuxShellPlacement !== undefined) {
+    inputOptions.resolveAuxShellPlacement = options.resolveAuxShellPlacement;
   }
-  if (managedTerminalAttacher !== undefined) {
-    inputOptions.managedTerminalAttacher = managedTerminalAttacher;
+  if (options.managedTerminalAttacher !== undefined) {
+    inputOptions.managedTerminalAttacher = options.managedTerminalAttacher;
   }
   return createStationInputRuntime(inputOptions);
 }

@@ -85,7 +85,7 @@ type DebugLogFileMatch = {
   records: LogRecord[];
 };
 
-const defaultComponents: DebugLogComponent[] = ["observer", "cli", "tui"];
+const defaultComponents: DebugLogComponent[] = ["observer", "cli", "tui", "station-host"];
 const allComponents: DebugLogComponent[] = [
   "observer",
   "cli",
@@ -244,7 +244,9 @@ async function readJsonl<T>(
       if (parsed.success) {
         records.push(parsed.data);
       }
-    } catch {}
+    } catch {
+      // Ignore one malformed historical line; bounded search continues with valid records.
+    }
   }
   return records;
 }

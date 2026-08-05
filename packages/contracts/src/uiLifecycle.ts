@@ -67,6 +67,16 @@ export const UiLifecycleDetachReasonSchema = z.enum([
 ]);
 export type UiLifecycleDetachReason = z.infer<typeof UiLifecycleDetachReasonSchema>;
 
+export const UiLifecycleClientDetachReasonSchema = z.enum([
+  "client_shutdown",
+  "socket_closed",
+  "stream_failed",
+]);
+export type UiLifecycleClientDetachReason = z.infer<typeof UiLifecycleClientDetachReasonSchema>;
+
+export const UiLifecyclePtyKindSchema = z.enum(["agent", "aux"]);
+export type UiLifecyclePtyKind = z.infer<typeof UiLifecyclePtyKindSchema>;
+
 export const UiRendererSignalSchema = z.enum([
   "SIGHUP",
   "SIGINT",
@@ -175,6 +185,55 @@ export const UiLifecycleEventSchema = z.discriminatedUnion("kind", [
     component: z.literal("tui"),
     kind: z.literal("ui.shutdown.completed"),
     reason: UiShutdownReasonSchema,
+  }).strict(),
+  UiLifecycleEventBaseSchema.extend({
+    component: z.literal("station-host"),
+    kind: z.literal("host.client.attached"),
+    connectionId: nonEmptyStringSchema,
+    rendererPid: z.number().int().positive(),
+    clientKind: UiLifecycleClientKindSchema,
+  }).strict(),
+  UiLifecycleEventBaseSchema.extend({
+    component: z.literal("station-host"),
+    kind: z.literal("host.client.detached"),
+    connectionId: nonEmptyStringSchema,
+    rendererPid: z.number().int().positive(),
+    clientKind: UiLifecycleClientKindSchema,
+    reason: UiLifecycleClientDetachReasonSchema,
+  }).strict(),
+  UiLifecycleEventBaseSchema.extend({
+    component: z.literal("station-host"),
+    kind: z.literal("host.attachment.attached"),
+    connectionId: nonEmptyStringSchema,
+    attachmentId: nonEmptyStringSchema,
+    rendererPid: z.number().int().positive(),
+    clientKind: UiLifecycleClientKindSchema,
+    ptyId: nonEmptyStringSchema,
+  }).strict(),
+  UiLifecycleEventBaseSchema.extend({
+    component: z.literal("station-host"),
+    kind: z.literal("host.attachment.detached"),
+    connectionId: nonEmptyStringSchema,
+    attachmentId: nonEmptyStringSchema,
+    rendererPid: z.number().int().positive(),
+    clientKind: UiLifecycleClientKindSchema,
+    ptyId: nonEmptyStringSchema,
+    reason: UiLifecycleDetachReasonSchema,
+  }).strict(),
+  UiLifecycleEventBaseSchema.extend({
+    component: z.literal("station-host"),
+    kind: z.literal("host.pty.spawned"),
+    ptyId: nonEmptyStringSchema,
+    ptyKind: UiLifecyclePtyKindSchema,
+    pid: z.number().int().positive(),
+  }).strict(),
+  UiLifecycleEventBaseSchema.extend({
+    component: z.literal("station-host"),
+    kind: z.literal("host.pty.exited"),
+    ptyId: nonEmptyStringSchema,
+    ptyKind: UiLifecyclePtyKindSchema,
+    exitCode: z.number().int().nullable(),
+    signal: z.number().int().nullable().optional(),
   }).strict(),
 ]);
 

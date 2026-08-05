@@ -69,10 +69,12 @@ error code, and error message facts. It does not infer a subsystem or handler.
 
 `stn debug logs` reads structured JSONL logs from the configured state
 directory without contacting the observer. By default it searches `observer`,
-`cli`, and `tui` logs, excludes noisy hook logs, returns recent `warn`/`error`
+`cli`, `tui`, and `station-host` logs, excludes noisy hook logs, and returns recent `warn`/`error`
 records when no query is supplied, and searches all levels when a query is
 supplied. Use `--component hook` or `--all-components` only when hook delivery
-or provider-ingress noise is relevant. Each record marks `componentRole` as
+or provider-ingress noise is relevant. Station Host's legacy `agent.*` records
+retain operational/replay metrics; typed lifecycle payloads carry UI correlation
+and detach reasons. Each record marks `componentRole` as
 `logging_location`; queried records include bounded `matchEvidence` and scalar
 `context` for direct citation. An exactly matched warning or error record can
 establish the retained event as an observed proximate failure without
@@ -224,6 +226,7 @@ observer.sqlite
 logs/observer.jsonl
 logs/cli.jsonl
 logs/tui.jsonl
+logs/station-host.jsonl
 logs/hooks.jsonl
 diagnostics/
 spool/hooks/
