@@ -81,7 +81,7 @@ describe("dashboard runtime boundary", () => {
     unsubscribe();
   });
 
-  it("starts once and disposes source subscriptions repeat-safely", () => {
+  it("starts once and returns one repeat-safe source settlement", async () => {
     const snapshot = createCommandSnapshot("idle");
     const source = new FakeClientStateSource(snapshot);
     const service = new FakeTuiObserverService(snapshot);
@@ -92,9 +92,11 @@ describe("dashboard runtime boundary", () => {
     expect(source.subscribeCount).toBe(1);
     expect(service.subscribeCount).toBe(0);
 
-    runtime.dispose();
-    runtime.dispose();
+    const firstDisposal = runtime.dispose();
+    const secondDisposal = runtime.dispose();
+    expect(secondDisposal).toBe(firstDisposal);
     expect(source.unsubscribeCount).toBe(1);
+    await firstDisposal;
 
     runtime.start();
     expect(source.subscribeCount).toBe(1);
@@ -252,6 +254,7 @@ describe("dashboard runtime", () => {
   });
 
   it("owns failed optimistic rows without exposing mutation methods", async () => {
+    vi.useFakeTimers();
     const snapshot = createZeroWorktreeSnapshot();
     const capabilities = createFakeDashboardCapabilities();
     const error: SafeError = {
@@ -273,12 +276,107 @@ describe("dashboard runtime", () => {
 
     store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
     expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
-    await vi.waitFor(() => expect(store.state.getState().localRows.failedCreate).toHaveLength(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.state.getState().localRows.failedCreate).toHaveLength(1);
     expect(store.state.getState().localRows.failedCreate[0]?.error).toEqual(error);
     expect(store.actions).not.toHaveProperty("addPendingCreateSession");
     expect(store.actions).not.toHaveProperty("failPendingCreateSession");
     expect(store.actions).not.toHaveProperty("removePendingCreateSession");
     expect(store.state.getState().terminalRows).toBe(42);
+    expect(vi.getTimerCount()).toBe(1);
+    await store.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("drains admitted capability work while blocking late state writes and actions", async () => {
+    const snapshot = createZeroWorktreeSnapshot();
+    const capabilities = createFakeDashboardCapabilities();
+    const completion = deferred<Awaited<ReturnType<typeof dashboardExecution>["completion"]>>();
+    capabilities.quickCreateHandle = () =>
+      dashboardExecution(completion.promise, { optimistic: "pending-create" });
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
+    const stateAtDisposal = store.state.getState();
+    const firstDisposal = store.dispose();
+    const secondDisposal = store.dispose();
+
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    store.actions.pushToast({ kind: "info", message: "late" });
+    expect(secondDisposal).toBe(firstDisposal);
+    expect(capabilities.quickCreateRequests).toHaveLength(1);
+    expect(store.state.getState()).toBe(stateAtDisposal);
+
+    let disposed = false;
+    void observeSettlement(firstDisposal, () => {
+      disposed = true;
+    });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    completion.resolve({ kind: "success" });
+    await firstDisposal;
+    expect(store.state.getState()).toBe(stateAtDisposal);
+  });
+
+  it("uses one four-second scheduler for multiple failed create rows", async () => {
+    vi.useFakeTimers();
+    const baseSnapshot = createZeroWorktreeSnapshot();
+    const project = baseSnapshot.projects[0];
+    if (project === undefined) throw new Error("project fixture missing");
+    const snapshot: StationSnapshot = {
+      ...baseSnapshot,
+      projects: [
+        project,
+        {
+          ...project,
+          id: "api",
+          label: "api",
+          root: "/Users/example/Developer/api",
+        },
+      ],
+    };
+    const capabilities = createFakeDashboardCapabilities();
+    capabilities.quickCreateHandle = () =>
+      dashboardExecution(
+        {
+          kind: "failure",
+          disposition: "retain-failed",
+          error: {
+            tag: "CommandExecutionError",
+            code: "CREATE_FAILED",
+            message: "Create failed.",
+          },
+        },
+        { optimistic: "pending-create" },
+      );
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      initialSnapshot: snapshot,
+      capabilities,
+    });
+
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    await vi.advanceTimersByTimeAsync(1);
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "api" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.state.getState().localRows.failedCreate).toHaveLength(2);
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(3_998);
+    expect(store.state.getState().localRows.failedCreate).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.state.getState().localRows.failedCreate).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.state.getState().localRows.failedCreate).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+    await store.dispose();
   });
 
   it("seeds from the canonical source and cleans up its subscription", () => {
@@ -839,6 +937,52 @@ describe("dashboard runtime", () => {
     store.dispose();
   });
 
+  it("drains an in-flight directory read without a late write or reschedule", async () => {
+    const snapshot = createNoProjectsSnapshot();
+    const rootPath = "/Users/example/Developer/station";
+    const latePoll = deferred<TuiFolderReadResult>();
+    const reads: string[] = [];
+    const folderService = mutableFolderService(reads, (path) => {
+      if (reads.filter((read) => read === path).length > 1) {
+        return latePoll.promise;
+      }
+      return { path, entries: folderEntries("initial") };
+    });
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      source: staticSnapshotSource(snapshot),
+      initialSnapshot: snapshot,
+      folderService,
+    });
+
+    store.actions.handleKey({ input: "A" });
+    store.actions.handleKey({ input: "", rightArrow: true });
+    await waitFor(() => screenMode(store.state.getState()) === "choose");
+    expect(activeAddProjectPath(store.state.getState())).toBe(rootPath);
+
+    vi.useFakeTimers();
+    store.start();
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
+    expect(reads).toHaveLength(2);
+    const stateAtDisposal = store.state.getState();
+    const disposal = store.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+
+    let disposed = false;
+    void observeSettlement(disposal, () => {
+      disposed = true;
+    });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    latePoll.resolve({ path: rootPath, entries: folderEntries("late") });
+    await disposal;
+    expect(store.state.getState()).toBe(stateAtDisposal);
+    await vi.advanceTimersByTimeAsync(ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS * 2);
+    expect(reads).toHaveLength(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("opens the explicit first-project flow with Enter on an empty dashboard", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
@@ -1135,6 +1279,11 @@ function addProjectEntryNames(state: DashboardStateView): string[] {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.entries.map((entry) => entry.name)
     : [];
+}
+
+async function observeSettlement(settlement: Promise<void>, observe: () => void): Promise<void> {
+  await settlement;
+  observe();
 }
 
 function deferred<T>(): {

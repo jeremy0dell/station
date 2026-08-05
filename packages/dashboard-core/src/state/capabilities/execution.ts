@@ -35,9 +35,9 @@ export type DashboardExecutionResult =
 /**
  * Execution lifecycle returned synchronously by an injected dashboard capability.
  *
- * The runtime applies `optimistic` before observing `completion`, then settles its
- * local row according to the success or failure disposition without exposing the
- * dashboard store to the capability implementation.
+ * The runtime applies `optimistic` before registering `completion` in its private
+ * effect scope, then settles local state only while that scope remains open without
+ * exposing the dashboard store to the capability implementation.
  */
 export type DashboardExecutionHandle = {
   optimistic: DashboardOptimisticPolicy;

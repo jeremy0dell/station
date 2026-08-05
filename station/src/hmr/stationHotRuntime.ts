@@ -30,11 +30,44 @@ export type StationHotRuntime = {
 export type StationHotSlots = typeof globalThis & {
   __stationHotRuntime?: StationHotRuntime;
   __stationHotRenderer?: StationHotRenderer;
+  __stationHotDisposal?: Promise<void>;
   __stationUiRunId?: UiRunId;
 };
 
 export function stationHotSlots(): StationHotSlots {
   return globalThis as StationHotSlots;
+}
+
+/** Await the previous native composition's dashboard settlement before replacement. */
+export function waitForStationHotDisposal(slots: StationHotSlots): Promise<void> {
+  return slots.__stationHotDisposal ?? Promise.resolve();
+}
+
+/**
+ * Release native renderer ownership synchronously and publish the asynchronous
+ * composition disposer for the next HMR generation.
+ */
+export function beginStationHotDisposal(
+  slots: StationHotSlots,
+  releaseRenderer: () => void,
+  disposeRuntime: () => Promise<void>,
+): Promise<void> {
+  releaseRenderer();
+  let disposal: Promise<void>;
+  try {
+    disposal = disposeRuntime();
+  } catch (error: unknown) {
+    disposal = Promise.reject(error);
+  }
+  slots.__stationHotDisposal = disposal;
+  const clear = (): void => {
+    // A stale disposer must not erase a newer generation's settlement barrier.
+    if (slots.__stationHotDisposal === disposal) {
+      delete slots.__stationHotDisposal;
+    }
+  };
+  disposal.then(clear, clear);
+  return disposal;
 }
 
 /**

@@ -1,4 +1,3 @@
-import type { StationCommand } from "@station/contracts";
 import type { TuiKey } from "./keys.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
@@ -20,7 +19,6 @@ import type { TuiState } from "./types.js";
 
 export type TuiTransition = {
   state: TuiState;
-  commands?: StationCommand[];
   operations?: TuiOperation[];
   reconcileReason?: string;
 };

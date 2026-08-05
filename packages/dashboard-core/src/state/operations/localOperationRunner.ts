@@ -1,3 +1,4 @@
+import { executeObserverCommand, type ObserverCommandExecutionResult } from "@station/client";
 import type { SafeError, StationCommand } from "@station/contracts";
 import type { StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../../services/errors/errors.js";
@@ -14,6 +15,7 @@ import {
   removePendingRenameSessionTitle,
   removePendingStartAgentRow,
 } from "../localRows.js";
+import type { DashboardRuntimeEffectScope } from "../runtimeEffectScope.js";
 import { replaceSnapshot } from "../screen.js";
 import {
   applyAddProjectFolderLoaded,
@@ -28,10 +30,15 @@ import {
 import { FAILED_CREATE_ROW_TTL_MS } from "../timing.js";
 import { addTuiToast } from "../toasts.js";
 import type { DashboardState, TuiState } from "../types.js";
+import {
+  createFailedCreateExpiryScheduler,
+  type FailedCreateExpiryScheduler,
+} from "./failedCreateExpiry.js";
 import { runRemoveWorktreeOperation } from "./removeWorktree.js";
 import { runRenameSessionOperation } from "./renameSession.js";
 import type { DashboardCapabilityOperation, TuiOperation } from "./types.js";
 
+/** Scope-bound executor for dashboard-local operations and capability completion. */
 export type TuiLocalOperationRunner = {
   run(operations: readonly TuiOperation[] | undefined): void;
 };
@@ -40,6 +47,7 @@ function markCreateSessionRowFailed(
   store: StoreApi<DashboardState>,
   localId: string,
   error: SafeError,
+  expiry: FailedCreateExpiryScheduler,
 ): void {
   store.setState(
     failPendingCreateSessionRow(
@@ -49,9 +57,7 @@ function markCreateSessionRowFailed(
       Date.now() + FAILED_CREATE_ROW_TTL_MS,
     ),
   );
-  setTimeout(() => {
-    store.setState(removeCreateSessionLocalRow(store.getState(), localId));
-  }, FAILED_CREATE_ROW_TTL_MS);
+  expiry.schedule();
 }
 
 function markRemoveWorktreeRowFailed(store: StoreApi<DashboardState>, localId: string): void {
@@ -85,82 +91,121 @@ export function createTuiLocalOperationRunner(input: {
   folderService: TuiFolderService;
   capabilities: DashboardCapabilities;
   clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
 }): TuiLocalOperationRunner {
   const store = () => input.getStore();
+  const expiry = createFailedCreateExpiryScheduler({
+    getStore: input.getStore,
+    scope: input.scope,
+  });
+  const commit = (mutation: () => void): void => {
+    input.scope.commit(mutation);
+  };
 
   return {
     run: (operations) => {
       for (const operation of operations ?? []) {
         if (isDashboardCapabilityOperation(operation)) {
-          runDashboardCapabilityOperation(
-            store(),
-            input.capabilities,
-            operation,
-            input.clientLabel,
+          input.scope.run(() =>
+            runDashboardCapabilityOperation({
+              store: store(),
+              capabilities: input.capabilities,
+              operation,
+              clientLabel: input.clientLabel,
+              scope: input.scope,
+              expiry,
+            }),
           );
         }
         if (operation.type === "removeWorktree") {
-          void runRemoveWorktreeOperation(
-            store(),
-            input.service,
-            operation,
-            input.clientLabel,
-            (localId) => markRemoveWorktreeRowFailed(store(), localId),
-            (error) => addSafeErrorToast(store(), error),
+          input.scope.run(() =>
+            runRemoveWorktreeOperation({
+              service: input.service,
+              operation,
+              clientLabel: input.clientLabel,
+              markRemoveWorktreeRowFailed: (localId) =>
+                commit(() => markRemoveWorktreeRowFailed(store(), localId)),
+              addSafeErrorToast: (error) => commit(() => addSafeErrorToast(store(), error)),
+            }),
           );
         }
         if (operation.type === "renameSession") {
-          void runRenameSessionOperation(
-            store(),
-            input.service,
-            operation,
-            input.clientLabel,
-            (sessionId) => markRenameSessionFailed(store(), sessionId),
-            (error) => addSafeErrorToast(store(), error),
-            () => addRenameSuccessToast(store()),
+          input.scope.run(() =>
+            runRenameSessionOperation({
+              service: input.service,
+              operation,
+              clientLabel: input.clientLabel,
+              markRenameSessionFailed: (sessionId) =>
+                commit(() => markRenameSessionFailed(store(), sessionId)),
+              addSafeErrorToast: (error) => commit(() => addSafeErrorToast(store(), error)),
+              addRenameSuccessToast: () => commit(() => addRenameSuccessToast(store())),
+            }),
           );
         }
         if (operation.type === "loadProjectDirectory") {
-          void runLoadProjectDirectoryOperation(
-            store(),
-            input.folderService,
-            operation.path,
-            input.clientLabel,
+          input.scope.run(() =>
+            runLoadProjectDirectoryOperation({
+              store: store(),
+              folderService: input.folderService,
+              path: operation.path,
+              clientLabel: input.clientLabel,
+              scope: input.scope,
+            }),
           );
         }
         if (operation.type === "reviewProjectFolder") {
-          void runReviewProjectFolderOperation(
-            store(),
-            input.folderService,
-            operation.path,
-            input.clientLabel,
+          input.scope.run(() =>
+            runReviewProjectFolderOperation({
+              store: store(),
+              folderService: input.folderService,
+              path: operation.path,
+              clientLabel: input.clientLabel,
+              scope: input.scope,
+            }),
           );
         }
         if (operation.type === "searchProjectDirectories") {
-          void runSearchProjectDirectoriesOperation(
-            store(),
-            input.folderService,
-            operation.query,
-            input.clientLabel,
+          input.scope.run(() =>
+            runSearchProjectDirectoriesOperation({
+              store: store(),
+              folderService: input.folderService,
+              query: operation.query,
+              clientLabel: input.clientLabel,
+              scope: input.scope,
+            }),
           );
         }
         if (operation.type === "addProject") {
-          void runAddProjectOperation(store(), input.service, operation.command, input.clientLabel);
+          input.scope.run(() =>
+            runAddProjectOperation({
+              store: store(),
+              service: input.service,
+              command: operation.command,
+              clientLabel: input.clientLabel,
+              scope: input.scope,
+            }),
+          );
         }
         if (operation.type === "setProjectDefaultHarness") {
-          void runSetProjectDefaultHarnessOperation(
-            store(),
-            input.service,
-            operation.command,
-            input.clientLabel,
+          input.scope.run(() =>
+            runSetProjectDefaultHarnessOperation({
+              store: store(),
+              service: input.service,
+              command: operation.command,
+              clientLabel: input.clientLabel,
+              scope: input.scope,
+            }),
           );
         }
         if (operation.type === "removeProject") {
-          void runRemoveProjectOperation(
-            store(),
-            input.service,
-            operation.command,
-            input.clientLabel,
+          input.scope.run(() =>
+            runRemoveProjectOperation({
+              store: store(),
+              service: input.service,
+              command: operation.command,
+              clientLabel: input.clientLabel,
+              scope: input.scope,
+            }),
           );
         }
       }
@@ -185,12 +230,15 @@ function isDashboardCapabilityOperation(
   }
 }
 
-function runDashboardCapabilityOperation(
-  store: StoreApi<DashboardState>,
-  capabilities: DashboardCapabilities,
-  operation: DashboardCapabilityOperation,
-  clientLabel: string,
-): void {
+async function runDashboardCapabilityOperation(input: {
+  store: StoreApi<DashboardState>;
+  capabilities: DashboardCapabilities;
+  operation: DashboardCapabilityOperation;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+  expiry: FailedCreateExpiryScheduler;
+}): Promise<void> {
+  const { store, capabilities, operation, clientLabel, scope, expiry } = input;
   let handle: DashboardExecutionHandle;
   try {
     switch (operation.type) {
@@ -240,18 +288,22 @@ function runDashboardCapabilityOperation(
         break;
     }
   } catch (error: unknown) {
-    addSafeErrorToast(store, toSafeError(error, { clientLabel }));
+    scope.commit(() => addSafeErrorToast(store, toSafeError(error, { clientLabel })));
     return;
   }
 
-  applyCapabilityOptimisticState(store, operation, handle);
-  void handle.completion.then(
-    (result) => settleDashboardCapabilityOperation(store, operation, handle, result),
-    (error: unknown) => {
+  scope.commit(() => applyCapabilityOptimisticState(store, operation, handle));
+  try {
+    const result = await handle.completion;
+    scope.commit(() =>
+      settleDashboardCapabilityOperation({ store, operation, handle, result, expiry }),
+    );
+  } catch (error: unknown) {
+    scope.commit(() => {
       removeCapabilityOptimisticRow(store, operation);
       addSafeErrorToast(store, toSafeError(error, { clientLabel }));
-    },
-  );
+    });
+  }
 }
 
 function applyCapabilityOptimisticState(
@@ -298,12 +350,14 @@ function applyCapabilityOptimisticState(
   }
 }
 
-function settleDashboardCapabilityOperation(
-  store: StoreApi<DashboardState>,
-  operation: DashboardCapabilityOperation,
-  handle: DashboardExecutionHandle,
-  result: Awaited<DashboardExecutionHandle["completion"]>,
-): void {
+function settleDashboardCapabilityOperation(input: {
+  store: StoreApi<DashboardState>;
+  operation: DashboardCapabilityOperation;
+  handle: DashboardExecutionHandle;
+  result: Awaited<DashboardExecutionHandle["completion"]>;
+  expiry: FailedCreateExpiryScheduler;
+}): void {
+  const { store, operation, handle, result, expiry } = input;
   if (result.kind === "success") {
     if (handle.successDisposition === "remove-immediately") {
       removeCapabilityOptimisticRow(store, operation);
@@ -321,7 +375,7 @@ function settleDashboardCapabilityOperation(
       operation.type === "quickCreateManagedSession" ||
       operation.type === "forkManagedSession")
   ) {
-    markCreateSessionRowFailed(store, operation.localId, result.error);
+    markCreateSessionRowFailed(store, operation.localId, result.error, expiry);
   } else {
     removeCapabilityOptimisticRow(store, operation);
   }
@@ -347,86 +401,86 @@ function removeCapabilityOptimisticRow(
   }
 }
 
-async function runSetProjectDefaultHarnessOperation(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  command: Extract<StationCommand, { type: "project.setDefaultHarness" }>,
-  clientLabel: string,
-): Promise<void> {
+async function runSetProjectDefaultHarnessOperation(input: {
+  store: StoreApi<DashboardState>;
+  service: ObserverService;
+  command: Extract<StationCommand, { type: "project.setDefaultHarness" }>;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  const { store, service, command, clientLabel, scope } = input;
   // Roll the optimistic marker back to the snapshot's default; success leaves it
   // for the next snapshot to prune once the change has landed.
-  const revertOptimistic = () =>
-    store.setState(removePendingProjectDefaultHarness(store.getState(), command.payload.projectId));
+  const revertOptimistic = (): void => {
+    scope.commit(() =>
+      store.setState(
+        removePendingProjectDefaultHarness(store.getState(), command.payload.projectId),
+      ),
+    );
+  };
   try {
-    const receipt = await service.dispatch(command);
-    if (!receipt.accepted) {
+    const execution = await executeObserverCommand(service, command, { clientLabel });
+    const failure = commandExecutionError(execution, (error) => ({
+      ...error,
+      tag: "CommandExecutionError",
+      code: "COMMAND_REJECTED",
+      message: `${command.type} was rejected.`,
+    }));
+    if (failure !== undefined) {
       revertOptimistic();
-      addSafeCommandToast(
-        store,
-        receipt.error ?? {
-          tag: "CommandExecutionError",
-          code: "COMMAND_REJECTED",
-          message: `${command.type} was rejected.`,
-        },
-      );
-      return;
-    }
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "failed") {
-      revertOptimistic();
-      addSafeCommandToast(store, completion.error);
+      scope.commit(() => addSafeCommandToast(store, failure));
       return;
     }
     const snapshot = await service.loadSnapshot();
-    store.setState(
-      addTuiToast(replaceSnapshot(store.getState(), snapshot), {
-        kind: "success",
-        message: `Default agent set to ${command.payload.harness}.`,
-      }),
+    scope.commit(() =>
+      store.setState(
+        addTuiToast(replaceSnapshot(store.getState(), snapshot), {
+          kind: "success",
+          message: `Default agent set to ${command.payload.harness}.`,
+        }),
+      ),
     );
   } catch (error: unknown) {
     revertOptimistic();
-    addSafeCommandToast(store, toSafeError(error, { clientLabel }));
+    scope.commit(() => addSafeCommandToast(store, toSafeError(error, { clientLabel })));
   }
 }
 
-async function runRemoveProjectOperation(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  command: Extract<StationCommand, { type: "project.remove" }>,
-  clientLabel: string,
-): Promise<void> {
+async function runRemoveProjectOperation(input: {
+  store: StoreApi<DashboardState>;
+  service: ObserverService;
+  command: Extract<StationCommand, { type: "project.remove" }>;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  const { store, service, command, clientLabel, scope } = input;
   // Read the label before dispatch; the post-reload snapshot no longer has it.
   const label = store
     .getState()
     .snapshot?.projects.find((candidate) => candidate.id === command.payload.projectId)?.label;
   try {
-    const receipt = await service.dispatch(command);
-    if (!receipt.accepted) {
-      addSafeCommandToast(
-        store,
-        receipt.error ?? {
-          tag: "CommandExecutionError",
-          code: "COMMAND_REJECTED",
-          message: `${command.type} was rejected.`,
-        },
-      );
-      return;
-    }
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "failed") {
-      addSafeCommandToast(store, completion.error);
+    const execution = await executeObserverCommand(service, command, { clientLabel });
+    const failure = commandExecutionError(execution, (error) => ({
+      ...error,
+      tag: "CommandExecutionError",
+      code: "COMMAND_REJECTED",
+      message: `${command.type} was rejected.`,
+    }));
+    if (failure !== undefined) {
+      scope.commit(() => addSafeCommandToast(store, failure));
       return;
     }
     const snapshot = await service.loadSnapshot();
-    store.setState(
-      addTuiToast(replaceSnapshot(store.getState(), snapshot), {
-        kind: "success",
-        message: label === undefined ? "Project removed." : `Removed project ${label}.`,
-      }),
+    scope.commit(() =>
+      store.setState(
+        addTuiToast(replaceSnapshot(store.getState(), snapshot), {
+          kind: "success",
+          message: label === undefined ? "Project removed." : `Removed project ${label}.`,
+        }),
+      ),
     );
   } catch (error: unknown) {
-    addSafeCommandToast(store, toSafeError(error, { clientLabel }));
+    scope.commit(() => addSafeCommandToast(store, toSafeError(error, { clientLabel })));
   }
 }
 
@@ -434,83 +488,115 @@ function addSafeCommandToast(store: StoreApi<DashboardState>, error: SafeError):
   store.setState(addTuiToast(store.getState(), safeErrorToToast(error)));
 }
 
-async function runLoadProjectDirectoryOperation(
-  store: StoreApi<DashboardState>,
-  folderService: TuiFolderService,
-  path: string,
-  clientLabel: string,
-): Promise<void> {
+async function runLoadProjectDirectoryOperation(input: {
+  store: StoreApi<DashboardState>;
+  folderService: TuiFolderService;
+  path: string;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  const { store, folderService, path, clientLabel, scope } = input;
   try {
     const result = await folderService.readDirectory(path);
-    store.setState(applyAddProjectFolderLoaded(store.getState(), result));
+    scope.commit(() => store.setState(applyAddProjectFolderLoaded(store.getState(), result)));
   } catch (error: unknown) {
-    store.setState(applyAddProjectFolderLoadFailed(store.getState(), path, error, clientLabel));
+    scope.commit(() =>
+      store.setState(applyAddProjectFolderLoadFailed(store.getState(), path, error, clientLabel)),
+    );
   }
 }
 
-async function runReviewProjectFolderOperation(
-  store: StoreApi<DashboardState>,
-  folderService: TuiFolderService,
-  path: string,
-  clientLabel: string,
-): Promise<void> {
+async function runReviewProjectFolderOperation(input: {
+  store: StoreApi<DashboardState>;
+  folderService: TuiFolderService;
+  path: string;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  const { store, folderService, path, clientLabel, scope } = input;
   try {
     const review = await folderService.reviewFolder(path);
-    store.setState(applyAddProjectFolderReviewed(store.getState(), review));
+    scope.commit(() => store.setState(applyAddProjectFolderReviewed(store.getState(), review)));
   } catch (error: unknown) {
-    store.setState(applyAddProjectFolderReviewFailed(store.getState(), path, error, clientLabel));
+    scope.commit(() =>
+      store.setState(applyAddProjectFolderReviewFailed(store.getState(), path, error, clientLabel)),
+    );
   }
 }
 
-async function runSearchProjectDirectoriesOperation(
-  store: StoreApi<DashboardState>,
-  folderService: TuiFolderService,
-  query: string,
-  clientLabel: string,
-): Promise<void> {
+async function runSearchProjectDirectoriesOperation(input: {
+  store: StoreApi<DashboardState>;
+  folderService: TuiFolderService;
+  query: string;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  const { store, folderService, query, clientLabel, scope } = input;
   try {
     const result = await folderService.searchDirectories(query);
-    store.setState(applyAddProjectFolderSearchLoaded(store.getState(), result));
+    scope.commit(() => store.setState(applyAddProjectFolderSearchLoaded(store.getState(), result)));
   } catch (error: unknown) {
-    store.setState(applyAddProjectFolderSearchFailed(store.getState(), query, error, clientLabel));
+    scope.commit(() =>
+      store.setState(
+        applyAddProjectFolderSearchFailed(store.getState(), query, error, clientLabel),
+      ),
+    );
   }
 }
 
-async function runAddProjectOperation(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  command: Extract<StationCommand, { type: "project.add" }>,
-  clientLabel: string,
-): Promise<void> {
+async function runAddProjectOperation(input: {
+  store: StoreApi<DashboardState>;
+  service: ObserverService;
+  command: Extract<StationCommand, { type: "project.add" }>;
+  clientLabel: string;
+  scope: DashboardRuntimeEffectScope;
+}): Promise<void> {
+  const { store, service, command, clientLabel, scope } = input;
   try {
     const reviewedProject = currentReviewedProject(store.getState());
-    const receipt = await service.dispatch(command);
-    if (!receipt.accepted) {
-      const error =
-        receipt.error ??
-        ({
-          tag: "CommandDispatchError",
-          code: "PROJECT_ADD_REJECTED",
-          message: "Project add was rejected.",
-        } satisfies SafeError);
-      store.setState(applyAddProjectSubmitFailed(store.getState(), error));
-      return;
-    }
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "failed") {
-      store.setState(applyAddProjectSubmitFailed(store.getState(), completion.error));
+    const execution = await executeObserverCommand(service, command, { clientLabel });
+    const failure = commandExecutionError(execution, (error) => ({
+      ...error,
+      tag: "CommandDispatchError",
+      code: "PROJECT_ADD_REJECTED",
+      message: "Project add was rejected.",
+    }));
+    if (failure !== undefined) {
+      scope.commit(() => store.setState(applyAddProjectSubmitFailed(store.getState(), failure)));
       return;
     }
     const snapshot = await service.loadSnapshot();
-    const withSnapshot = replaceSnapshot(store.getState(), snapshot);
-    store.setState(
-      applyAddProjectSubmitted(withSnapshot, {
-        label: reviewedProject?.label ?? command.payload.label ?? command.payload.id ?? "project",
-        root: reviewedProject?.gitRoot ?? command.payload.path,
-      }),
-    );
+    scope.commit(() => {
+      const withSnapshot = replaceSnapshot(store.getState(), snapshot);
+      store.setState(
+        applyAddProjectSubmitted(withSnapshot, {
+          label: reviewedProject?.label ?? command.payload.label ?? command.payload.id ?? "project",
+          root: reviewedProject?.gitRoot ?? command.payload.path,
+        }),
+      );
+    });
   } catch (error: unknown) {
-    store.setState(applyAddProjectSubmitFailed(store.getState(), error, clientLabel));
+    scope.commit(() =>
+      store.setState(applyAddProjectSubmitFailed(store.getState(), error, clientLabel)),
+    );
+  }
+}
+
+function commandExecutionError(
+  execution: ObserverCommandExecutionResult,
+  rejectedFallback: (error: SafeError) => SafeError,
+): SafeError | undefined {
+  switch (execution.status) {
+    case "accepted":
+    case "succeeded":
+      return undefined;
+    case "failed":
+    case "thrown":
+      return execution.error;
+    case "rejected":
+      return execution.receipt.error === undefined
+        ? rejectedFallback(execution.error)
+        : execution.error;
   }
 }
 

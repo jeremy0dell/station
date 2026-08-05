@@ -11,9 +11,11 @@ import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
 import {
+  beginStationHotDisposal,
   getOrCreateStationHotRuntime,
   STATION_HOT_RUNTIME_VERSION,
   stationHotSlots,
+  waitForStationHotDisposal,
 } from "./hmr/stationHotRuntime.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
@@ -111,6 +113,11 @@ async function startStationMain(
   onLifecycleCreated: (lifecycle: UiLifecycleWitness) => void,
 ): Promise<boolean> {
   const env = process.env;
+  const stationGlobalSlots = stationHotSlots();
+  // A prior renderer releases process-global stdin synchronously before dashboard settlement is awaited.
+  stationGlobalSlots.__stationHotRenderer?.destroy();
+  await waitForStationHotDisposal(stationGlobalSlots);
+
   const stationClient = createStationClient(env, {
     onAttentionNeeded: () => {
       playStationAttentionSound();
@@ -123,7 +130,6 @@ async function startStationMain(
 
   const configsLoading = Promise.all([loadStationConfig({ env }), loadStationTuiConfig({ env })]);
 
-  const stationGlobalSlots = stationHotSlots();
   const uiContext = resolveUiRunContext({
     env,
     slots: stationGlobalSlots,
@@ -324,13 +330,6 @@ async function startStationMain(
     shutdown: () => finishProcessShutdown("ctrl_q"),
   });
 
-  // Under `bun --hot`, OpenTUI's stdin ownership is a process-global that outlives
-  // the reload and our dispose() may not run before the new createCliRenderer()
-  // below — which would then throw "stdin is already used". Destroy the prior
-  // renderer first (idempotent, frees stdin synchronously); stash on globalThis
-  // since module locals reset.
-  stationGlobalSlots.__stationHotRenderer?.destroy();
-
   if (ttyOwnership !== undefined && !currentStdinMatchesStationTty(ttyOwnership.identity)) {
     const error = stationTtyOwnershipUnavailableError();
     writeStartupError(error);
@@ -344,7 +343,11 @@ async function startStationMain(
   }
   ttyOwnership?.setTakeoverHandler(() => {
     void (async () => {
-      await station.disposeForShutdown().catch(() => undefined);
+      try {
+        await station.disposeForShutdown();
+      } catch {
+        // The shutdown witness still owns the final fatal path after best-effort disposal.
+      }
       finishProcessShutdown("tty_takeover");
     })();
   });
@@ -395,14 +398,19 @@ async function startStationMain(
   if (import.meta.hot) {
     import.meta.hot.accept();
     import.meta.hot.dispose(() => {
-      stopSurfaceObservation?.();
-      station.disposeForHotReload();
-      root.unmount();
-      renderer.destroy();
-      // Don't clobber a newer reload's stashed renderer.
-      if (stationGlobalSlots.__stationHotRenderer === renderer) {
-        stationGlobalSlots.__stationHotRenderer = undefined;
-      }
+      beginStationHotDisposal(
+        stationGlobalSlots,
+        () => {
+          // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
+          stopSurfaceObservation?.();
+          root.unmount();
+          renderer.destroy();
+          if (stationGlobalSlots.__stationHotRenderer === renderer) {
+            delete stationGlobalSlots.__stationHotRenderer;
+          }
+        },
+        () => station.disposeForHotReload(),
+      );
     });
   }
   return true;

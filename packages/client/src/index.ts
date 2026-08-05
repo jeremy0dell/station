@@ -4,6 +4,10 @@ export {
   safeErrorToNotice,
   toSafeError,
 } from "./errors.js";
+export {
+  executeObserverCommand,
+  type ObserverCommandExecutionResult,
+} from "./observerCommandExecution.js";
 export { createStationClientRuntime } from "./observerRuntime.js";
 export { createObserverService } from "./observerService.js";
 export { applyStationEvent } from "./snapshotReducer.js";

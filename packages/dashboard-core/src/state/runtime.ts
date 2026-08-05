@@ -1,9 +1,8 @@
 import type { StationClientStateSource } from "@station/client";
-import type { CommandReceipt, StationCommand } from "@station/contracts";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { safeErrorToToast, toSafeError } from "../services/errors/errors.js";
 import { createNodeFolderService, type TuiFolderService } from "../services/folderService.js";
-import type { ClientNotice, ObserverService } from "../services/types.js";
+import type { ObserverService } from "../services/types.js";
 import { type DashboardActions, handleTuiAction } from "./actions.js";
 import type { DashboardCapabilities } from "./capabilities/execution.js";
 import {
@@ -15,6 +14,8 @@ import {
   createTuiLocalOperationRunner,
   type TuiLocalOperationRunner,
 } from "./operations/localOperationRunner.js";
+import type { DashboardRuntimeEffectScope, DashboardRuntimeTimer } from "./runtimeEffectScope.js";
+import { createDashboardRuntimeEffectScope } from "./runtimeEffectScope.js";
 import { createInitialTuiState } from "./screen.js";
 import { applyAddProjectFolderRefreshed } from "./screens/addProjectScreen.js";
 import { applySnapshotSourceState } from "./sourceBridge.js";
@@ -56,27 +57,33 @@ export type DashboardRuntimeOptions = {
   clientLabel?: string;
 };
 
-/** Read-only state, closed actions, and lifecycle owned by one dashboard composition. */
+/**
+ * Read-only state, closed actions, and repeat-safe lifecycle owned by one dashboard composition.
+ *
+ * Disposal closes new effect admission synchronously, cancels subscriptions and timers,
+ * and resolves only after already-started operations settle without late state writes.
+ */
 export type DashboardRuntime = {
   state: DashboardStateSource;
   actions: DashboardActions;
   /** Activate source and directory-polling subscriptions at most once. */
   start(): void;
-  /** Repeat-safely detach source and directory-polling resources. */
-  dispose(): void;
+  /** Repeat-safely detach resources and await the one in-flight settlement. */
+  dispose(): Promise<void>;
 };
 
 /**
  * Create a dashboard-local projection over an external canonical client source.
  *
- * Every pure transition is committed before capability invocation. The runtime then
- * owns optimistic rows, notices, failures, and expiry timers while injected
- * capabilities receive only semantic request values.
+ * Every pure transition is committed before capability invocation. One private
+ * effect scope then owns operation settlement, subscriptions, polling, and expiry
+ * timers while injected capabilities receive only semantic request values.
  */
 export function createDashboardRuntime(options: DashboardRuntimeOptions): DashboardRuntime {
   const folderService = options.folderService ?? createNodeFolderService();
   const source = options.source;
   const clientLabel = options.clientLabel ?? "TUI";
+  const effectScope = createDashboardRuntimeEffectScope();
   let store: StoreApi<DashboardState>;
   const operations = createTuiLocalOperationRunner({
     getStore: () => store,
@@ -84,6 +91,7 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
     folderService,
     capabilities: options.capabilities,
     clientLabel,
+    scope: effectScope,
   });
   const initialSnapshot = source.getState().snapshot;
 
@@ -96,11 +104,13 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
 
   const actions: DashboardActions = {
     handleKey: (key): void => {
+      if (!effectScope.isOpen()) return;
       applyTransition(
         store,
         options.service,
         clientLabel,
         operations,
+        effectScope,
         handleTuiKey(store.getState(), key, {
           cwd: folderService.cwd(),
           homeDir: folderService.homeDir(),
@@ -108,11 +118,13 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
       );
     },
     dispatch: (action): void => {
+      if (!effectScope.isOpen()) return;
       applyTransition(
         store,
         options.service,
         clientLabel,
         operations,
+        effectScope,
         handleTuiAction(store.getState(), action, {
           cwd: folderService.cwd(),
           homeDir: folderService.homeDir(),
@@ -120,28 +132,35 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
       );
     },
     setTerminalRows: (rows): void => {
+      if (!effectScope.isOpen()) return;
       const current = store.getState();
       store.setState(reconcileDashboardFocus(current, { ...current, terminalRows: rows }), true);
     },
     focusDashboardSession: (sessionId): void => {
+      if (!effectScope.isOpen()) return;
       store.setState(
         (current) => replaceDashboardFocusState(focusDashboardSession(current, sessionId)),
         true,
       );
     },
     clearDashboardFocus: (): void => {
+      if (!effectScope.isOpen()) return;
       store.setState((current) => replaceDashboardFocusState(clearDashboardFocus(current)), true);
     },
     pushToast: (toast): void => {
+      if (!effectScope.isOpen()) return;
       store.setState(addTuiToast(store.getState(), toast), true);
     },
     dismissToasts: (): void => {
+      if (!effectScope.isOpen()) return;
       store.setState({ toasts: [] });
     },
     expireToasts: (nowMs = Date.now()): void => {
+      if (!effectScope.isOpen()) return;
       store.setState(expireTuiToasts(store.getState(), nowMs), true);
     },
     refreshActiveToastExpiry: (nowMs = Date.now()): void => {
+      if (!effectScope.isOpen()) return;
       store.setState(refreshActiveTuiToastExpiry(store.getState(), nowMs), true);
     },
   };
@@ -152,7 +171,7 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
     subscribe: (listener) => store.subscribe(listener),
   };
   let started = false;
-  let disposed = false;
+  let disposal: Promise<void> | undefined;
   let stopSnapshotUpdates: (() => void) | undefined;
   let stopDirectoryPolling: (() => void) | undefined;
 
@@ -160,22 +179,24 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
     state,
     actions,
     start: (): void => {
-      if (started || disposed) {
+      if (started || !effectScope.isOpen()) {
         return;
       }
       started = true;
-      stopSnapshotUpdates = attachSnapshotSource(store, source);
-      stopDirectoryPolling = attachAddProjectDirectoryPolling(store, folderService);
+      stopSnapshotUpdates = attachSnapshotSource(store, source, effectScope);
+      stopDirectoryPolling = attachAddProjectDirectoryPolling(store, folderService, effectScope);
     },
-    dispose: (): void => {
-      if (disposed) {
-        return;
+    dispose: (): Promise<void> => {
+      if (disposal !== undefined) {
+        return disposal;
       }
-      disposed = true;
+      effectScope.close();
       stopDirectoryPolling?.();
       stopDirectoryPolling = undefined;
       stopSnapshotUpdates?.();
       stopSnapshotUpdates = undefined;
+      disposal = effectScope.dispose();
+      return disposal;
     },
   };
 }
@@ -183,9 +204,15 @@ export function createDashboardRuntime(options: DashboardRuntimeOptions): Dashbo
 function attachSnapshotSource(
   store: StoreApi<DashboardState>,
   source: StationClientStateSource,
+  scope: DashboardRuntimeEffectScope,
 ): () => void {
   const apply = (): void => {
-    store.setState(applySnapshotSourceState(store.getState(), source.getState(), Date.now()), true);
+    scope.commit(() =>
+      store.setState(
+        applySnapshotSourceState(store.getState(), source.getState(), Date.now()),
+        true,
+      ),
+    );
   };
   apply();
   return source.subscribe(apply);
@@ -194,23 +221,24 @@ function attachSnapshotSource(
 function attachAddProjectDirectoryPolling(
   store: StoreApi<DashboardState>,
   folderService: TuiFolderService,
+  scope: DashboardRuntimeEffectScope,
 ): () => void {
   let activePath: string | undefined;
   let generation = 0;
   let stopped = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: DashboardRuntimeTimer | undefined;
 
   const clearTimer = (): void => {
     if (timer !== undefined) {
-      clearTimeout(timer);
+      scope.clearTimeout(timer);
       timer = undefined;
     }
   };
 
   const schedule = (path: string, token: number): void => {
-    timer = setTimeout(() => {
+    timer = scope.setTimeout(() => {
       timer = undefined;
-      void poll(path, token);
+      return poll(path, token);
     }, ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS);
   };
 
@@ -219,12 +247,15 @@ function attachAddProjectDirectoryPolling(
       const result = await folderService.readDirectory(path);
       // Navigation and teardown invalidate in-flight reads before they can update the chooser.
       if (!stopped && token === generation) {
-        store.setState(applyAddProjectFolderRefreshed(store.getState(), result));
+        scope.commit(() =>
+          store.setState(applyAddProjectFolderRefreshed(store.getState(), result)),
+        );
       }
     } catch {
       // A transient filesystem failure leaves the current listing intact and retries normally.
     } finally {
       if (
+        scope.isOpen() &&
         !stopped &&
         token === generation &&
         activeAddProjectDirectory(store.getState()) === path
@@ -276,6 +307,7 @@ function applyTransition(
   service: ObserverService,
   clientLabel: string,
   operations: TuiLocalOperationRunner,
+  scope: DashboardRuntimeEffectScope,
   transition: TuiTransition,
 ): void {
   const replacement: DashboardState = { ...transition.state };
@@ -286,7 +318,7 @@ function applyTransition(
   // State commits before capability invocation so screen closure and semantic intent are observable first.
   store.setState(replacement, true);
   operations.run(transition.operations);
-  void applyTransitionEffects(store, service, clientLabel, transition);
+  scope.run(() => applyTransitionEffects(store, service, clientLabel, transition, scope));
 }
 
 async function applyTransitionEffects(
@@ -294,13 +326,10 @@ async function applyTransitionEffects(
   service: ObserverService,
   clientLabel: string,
   transition: TuiTransition,
+  scope: DashboardRuntimeEffectScope,
 ): Promise<void> {
   if (transition.reconcileReason !== undefined) {
-    await reconcileSnapshot(store, service, transition.reconcileReason, clientLabel);
-  }
-
-  for (const command of transition.commands ?? []) {
-    await dispatchCommand(store, service, command, clientLabel);
+    await reconcileSnapshot(store, service, transition.reconcileReason, clientLabel, scope);
   }
 }
 
@@ -309,68 +338,26 @@ async function reconcileSnapshot(
   service: ObserverService,
   reason: string,
   clientLabel: string,
+  scope: DashboardRuntimeEffectScope,
 ): Promise<void> {
   try {
     // The client service commits the reconciled snapshot before resolving; the
     // source subscription projects it here before the feedback toast is added.
     await service.reconcile(reason);
-    store.setState(
-      addTuiToast(store.getState(), {
-        kind: "success",
-        message: "observer.reconcile refreshed",
-      }),
+    scope.commit(() =>
+      store.setState(
+        addTuiToast(store.getState(), {
+          kind: "success",
+          message: "observer.reconcile refreshed",
+        }),
+      ),
     );
   } catch (error: unknown) {
-    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel })));
-    store.setState({ loading: false });
+    scope.commit(() => {
+      store.setState(
+        addTuiToast(store.getState(), safeErrorToToast(toSafeError(error, { clientLabel }))),
+      );
+      store.setState({ loading: false });
+    });
   }
-}
-
-async function dispatchCommand(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  command: StationCommand,
-  clientLabel: string,
-): Promise<void> {
-  try {
-    const receipt = await service.dispatch(command);
-    const rejectedToast = rejectedCommandToast(command, receipt);
-    if (rejectedToast !== undefined) {
-      addToast(store, rejectedToast);
-      return;
-    }
-    addToast(store, queuedCommandToast(command, receipt));
-  } catch (error: unknown) {
-    addToast(store, safeErrorToToast(toSafeError(error, { clientLabel })));
-  }
-}
-
-function rejectedCommandToast(
-  command: StationCommand,
-  receipt: CommandReceipt,
-): ClientNotice | undefined {
-  const receiptError = receipt.error;
-  if (!receipt.accepted && receiptError !== undefined) {
-    return safeErrorToToast(receiptError);
-  }
-  if (!receipt.accepted) {
-    return {
-      kind: "error",
-      message: `${command.type} was rejected.`,
-    };
-  }
-  return undefined;
-}
-
-function queuedCommandToast(command: StationCommand, receipt: CommandReceipt): ClientNotice {
-  return {
-    kind: "success",
-    message: `${command.type} queued`,
-    commandId: receipt.commandId,
-    ...(receipt.traceId === undefined ? {} : { traceId: receipt.traceId }),
-  };
-}
-
-function addToast(store: StoreApi<DashboardState>, toast: ClientNotice): void {
-  store.setState(addTuiToast(store.getState(), toast));
 }

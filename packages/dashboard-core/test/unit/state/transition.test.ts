@@ -183,7 +183,6 @@ describe("TUI screen transitions", () => {
       { input: "1" },
     );
 
-    expect(transition.commands).toBeUndefined();
     expect(transition.state.localRows.pendingStart).toEqual([]);
     expect(transition.operations).toEqual([
       {
@@ -216,7 +215,6 @@ describe("TUI screen transitions", () => {
       { input: "1" },
     );
 
-    expect(transition.commands).toBeUndefined();
     expect(transition.state.localRows.pendingStart).toEqual([]);
     expect(transition.operations).toEqual([
       expect.objectContaining({
@@ -235,7 +233,6 @@ describe("TUI screen transitions", () => {
       { input: "1" },
     );
 
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toEqual([
       expect.objectContaining({
         type: "activateSession",
@@ -283,7 +280,6 @@ describe("TUI screen transitions", () => {
 
     const transition = handleTuiKey(state, { input: choice.key });
 
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toEqual([
       expect.objectContaining({
         type: "activateSession",
@@ -310,7 +306,6 @@ describe("TUI screen transitions", () => {
       input: "1",
     });
 
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toEqual([
       expect.objectContaining({ type: "activateSession", preferredObserverAction: "focus" }),
     ]);
@@ -341,7 +336,6 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(state, { input: "1" });
 
     expect(transition.state).toBe(state);
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toBeUndefined();
   });
 
@@ -441,7 +435,6 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(state, { input: "y" });
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.commands).toBeUndefined();
     expect(transition.state.localRows.pendingRemove).toMatchObject([
       {
         localId: "remove:wt_web_idle",
@@ -770,7 +763,6 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(state, key);
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.commands).toBeUndefined();
   });
 
   it("opens new session and submits semantic managed-session product values", () => {
@@ -783,7 +775,6 @@ describe("TUI screen transitions", () => {
     const submitted = handleTuiKey(opened.state, { input: "\r", return: true });
 
     expect(submitted.state.screen).toEqual({ name: "dashboard" });
-    expect(submitted.commands).toBeUndefined();
     expect(submitted.operations?.[0]).toMatchObject({
       type: "createManagedSession",
       project: { id: "web" },

@@ -26,7 +26,11 @@ export type CreateStationDashboardRuntimeOptions = {
   widgetsPersisted?: boolean;
 };
 
-/** Create Station's dashboard projection paired with its canonical client source. */
+/**
+ * Create Station's dashboard projection paired with its canonical client source.
+ * Its asynchronous repeat-safe disposal drains admitted dashboard work before the
+ * owning Station composition stops the shared client.
+ */
 export function createStationDashboardRuntime(
   client: StationClient,
   capabilities: DashboardCapabilities,

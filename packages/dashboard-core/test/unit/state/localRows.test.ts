@@ -1,7 +1,6 @@
 import {
   addPendingCreateSessionRow,
   addPendingStartAgentRow,
-  bindPendingStartAgentRow,
   createEmptyTuiLocalRows,
   createInitialTuiState,
   failPendingCreateSessionRow,
@@ -41,7 +40,7 @@ describe("TUI local rows", () => {
     ]);
   });
 
-  it("adds, binds, and removes pending start-agent rows", () => {
+  it("adds and removes pending start-agent rows without retaining command identity", () => {
     const state = addPendingStartAgentRow(createInitialTuiState(), {
       localId: "start:wt_web_no_agent",
       projectId: "web",
@@ -50,20 +49,18 @@ describe("TUI local rows", () => {
       createdAt: "2026-06-01T12:00:00.000Z",
     });
 
-    const bound = bindPendingStartAgentRow(state, "start:wt_web_no_agent", "cmd_start_1");
-    expect(bound.localRows.pendingStart).toEqual([
+    expect(state.localRows.pendingStart).toEqual([
       {
         localId: "start:wt_web_no_agent",
         projectId: "web",
         worktreeId: "wt_web_no_agent",
         branch: "feature-start",
         createdAt: "2026-06-01T12:00:00.000Z",
-        commandId: "cmd_start_1",
       },
     ]);
-
+    expect(state.localRows.pendingStart[0]).not.toHaveProperty("commandId");
     expect(
-      removePendingStartAgentRow(bound, "start:wt_web_no_agent").localRows.pendingStart,
+      removePendingStartAgentRow(state, "start:wt_web_no_agent").localRows.pendingStart,
     ).toEqual([]);
   });
 

@@ -1,3 +1,4 @@
+import { executeObserverCommand, type ObserverCommandExecutionResult } from "@station/client";
 import type {
   ProjectView,
   ProviderId,
@@ -137,32 +138,34 @@ async function dispatchAndWait(
   command: Extract<StationCommand, { type: "session.create" | "session.fork" }>,
   disposition: "remove-immediately" | "retain-failed",
 ): Promise<DashboardExecutionResult> {
-  try {
-    const receipt = await options.service.dispatch(command);
-    if (!receipt.accepted) {
-      return {
-        kind: "failure",
-        disposition,
-        error:
-          receipt.error ??
-          ({
-            tag: "CommandExecutionError",
-            code: "COMMAND_REJECTED",
-            message: `${command.type} was rejected.`,
-          } satisfies SafeError),
-      };
-    }
-    const completion = await options.service.waitForCommandCompletion(receipt.commandId);
-    return completion.status === "succeeded"
-      ? { kind: "success" }
-      : { kind: "failure", error: completion.error, disposition };
-  } catch (error: unknown) {
-    return {
-      kind: "failure",
-      error: toSafeError(error, { clientLabel: options.clientLabel ?? "TUI" }),
-      disposition,
-    };
+  const execution = await executeObserverCommand(options.service, command, {
+    clientLabel: options.clientLabel ?? "TUI",
+  });
+  if (execution.status === "succeeded" || execution.status === "accepted") {
+    return { kind: "success" };
   }
+  return {
+    kind: "failure",
+    error:
+      execution.status === "rejected"
+        ? rejectedCommandError(command.type, execution)
+        : execution.error,
+    disposition,
+  };
+}
+
+function rejectedCommandError(
+  type: StationCommand["type"],
+  execution: Extract<ObserverCommandExecutionResult, { status: "rejected" }>,
+): SafeError {
+  return (
+    execution.receipt.error ?? {
+      ...execution.error,
+      tag: "CommandExecutionError",
+      code: "COMMAND_REJECTED",
+      message: `${type} was rejected.`,
+    }
+  );
 }
 
 function invalidCommandFailure(

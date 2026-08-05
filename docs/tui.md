@@ -96,12 +96,17 @@ replacement popup.
 When the private tmux devbox runs the dashboard under Bun `--hot`, the CLI
 parent and its IPC channel remain authoritative for the lifetime of
 `_station-ui`. A source reload synchronously releases the prior OpenTUI stdin
-owner, then unmounts the old React root, removes popup listeners, detaches the
-old source/dashboard runtime, stops the old Station client, and recreates those
-renderer resources inside the same Bun process. The renderer disposer
-deliberately does not disconnect the CLI-owned IPC channel. Source build identity is verified
-once per OS process so a harmless reload reuses the accepted identity; a new
-process still verifies the current checkout and outputs.
+owner, unmounts the old React root, and removes appearance listeners. It then
+closes the old dashboard effect scope, cancels subscriptions and timers, drains
+already-started dashboard work including popup IPC, removes popup listeners,
+stops the old Station client, and only then creates the replacement
+client/dashboard composition in the same Bun process.
+The process-global disposer is installed before replacement can begin and uses
+compare-and-delete so an older settlement cannot erase a newer HMR barrier. The
+renderer disposer deliberately does not disconnect the CLI-owned IPC channel.
+Source build identity is verified once per OS process so a harmless reload
+reuses the accepted identity; a new process still verifies the current checkout
+and outputs.
 
 ## Adaptive Embedded Appearance
 
@@ -199,6 +204,14 @@ and independent PTY spawn/exit. The legacy `agent.attach`/`agent.detach` stream
 remains a frozen operational and replay-metrics vocabulary; it does not carry
 detach reasons. Idempotent PTY reuse keeps the original creator correlation and
 does not emit a second spawn event.
+
+Normal Ctrl-Q and cooperative TTY takeover close dashboard effect admission and
+await admitted dashboard work before stopping the shared client and completing
+process shutdown. Native HMR releases renderer/stdin ownership synchronously,
+retains compatible workspace state and PTYs, publishes the asynchronous disposer
+in a process-global slot, and makes the replacement composition await it. The
+unavoidable `process.on("exit")` path remains synchronous best-effort because the
+runtime cannot extend that event.
 
 This telemetry is local and content-free: it must not collect terminal output,
 prompts, key contents, foreground application names, environment variables,
@@ -330,11 +343,11 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the dashboard runtime, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
 - Dashboard key/behavior is shared, not feature-gated: reducers and render/input leaves never select filter behavior or inspect feature flags; session and optimistic-row matching remains centralized in the pure persistent-filter projection.
-- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is repeat-safe. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, and all four `DashboardCapabilities` groups: session activation, managed session execution, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
+- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is asynchronous and repeat-safe. Disposal closes actions and effect admission immediately, detaches canonical-source and directory-polling subscriptions once, clears owned timers, blocks late async state writes, and returns one promise that drains all already-started bounded work with settled outcomes. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, and all four `DashboardCapabilities` groups: session activation, managed session execution, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
 - `@station/client` owns canonical in-process snapshot and connection truth. Its runtime-backed service commits snapshot loads and reconcile results to that same state source before resolving. Snapshot-only native and standalone consumers read `StationClientStateSource`; dashboard-core mirrors the exact snapshot identity only to combine it with screens, filter, focus, collapse, scrolling, widgets, optimistic rows, and toasts.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
 - Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the four semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
-- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods.
+- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods. Failed create rows retain the four-second `expiresAt` authority but share one runtime-owned timer targeting the earliest deadline; each firing removes every expired row and schedules the next deadline.
 - New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
@@ -595,7 +608,7 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 - Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
 - Attachment-unavailable state is not process exit: version and exhausted-reconnect failures stop pane input and resize forwarding and show `attachment unavailable`, while only proven Host absence, an exited acknowledgement, or an exit frame reaches the pane-exit lifecycle. Lost historical replay fidelity keeps the pane attached and logs a typed degraded-snapshot diagnostic instead.
 - A dashboard-authorized relaunch resolves Observer preparation and any advertised attachment for the exact prepared session before atomically replacing the exact exited registry entry. Failed preparation leaves the dead screen and pane tree intact; successful replacement preserves child panes and split anchors, starts an already-visible pane at its latest requested viewport, and lets a newly revealed tree report its current layout before spawning.
-- In `@station/dashboard-core`: `selectors/` owns snapshot-to-view grouping/filtering, `state/commandBuilders.ts` owns typed observer command construction, `state/screens/*` owns pure screen transitions, `state/sourceBridge.ts` mirrors canonical client state into dashboard projection, `state/capabilities/*` defines semantic renderer authority, `state/operations/*` executes capability and remaining Observer command flow, and `components/`/`widgets/` owns shared layout/content logic.
+- In `@station/dashboard-core`: `selectors/` owns snapshot-to-view grouping/filtering, `state/commandBuilders.ts` owns typed observer command construction, `state/screens/*` owns pure screen transitions, `state/sourceBridge.ts` mirrors canonical client state into dashboard projection, `state/runtimeEffectScope.ts` owns private effect admission, timers, and settlement, `state/capabilities/*` defines semantic renderer authority, `state/operations/*` executes scope-bound capability and Observer command flow, and `components/`/`widgets/` owns shared layout/content logic.
 - The dashboard surface under `station/src/station/` may import only its linked dashboard-facing `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`). Other Station subsystems use only the additional packages named by the link script at their owned composition boundaries. Production Station source must never import `apps/tui`, `ink`, providers, or integrations (enforced by `station/src/station/importBoundaries.test.ts`).
 
 ## Testing

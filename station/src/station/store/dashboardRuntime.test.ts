@@ -15,6 +15,16 @@ import { createStationStubObserverService } from "./stubObserverService.js";
 import { createStationDashboardRuntime } from "./dashboardRuntime.js";
 
 describe("createStationDashboardRuntime", () => {
+  it("forwards one asynchronous repeat-safe dashboard settlement", async () => {
+    const store = makeStore();
+
+    const first = store.dispose();
+    const second = store.dispose();
+
+    expect(second).toBe(first);
+    await first;
+  });
+
   it("applies the persistent filter through the native composition", () => {
     const store = makeStore();
 

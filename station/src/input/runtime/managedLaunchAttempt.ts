@@ -1,4 +1,10 @@
-import { toSafeError, type ClientNotice, type ObserverService, type StationClientStateSource } from "@station/client";
+import {
+  executeObserverCommand,
+  toSafeError,
+  type ClientNotice,
+  type ObserverService,
+  type StationClientStateSource,
+} from "@station/client";
 import type { ProviderId, SafeError } from "@station/contracts";
 import { StationHostProviderError } from "@station/host";
 import { paneTreeIds } from "../../state/paneTree.js";
@@ -114,13 +120,14 @@ async function acknowledgeReadiness(
     return;
   }
   try {
-    const receipt = await service.dispatch({
-      type: "session.acknowledgeTurn",
-      payload: readiness,
-    });
-    if (receipt.accepted) {
-      await service.waitForCommandCompletion(receipt.commandId);
-    }
+    await executeObserverCommand(
+      service,
+      {
+        type: "session.acknowledgeTurn",
+        payload: readiness,
+      },
+      { clientLabel: "Station" },
+    );
   } catch {
     // Readiness acknowledgement remains best-effort after successful landing.
   }
@@ -304,30 +311,29 @@ async function focusExistingSession(
   service: ObserverService,
   sessionId: string,
 ): Promise<DashboardFocusResult> {
-  try {
-    const receipt = await service.dispatch({
+  const execution = await executeObserverCommand(
+    service,
+    {
       type: "terminal.focus",
       payload: { sessionId },
-    });
-    if (!receipt.accepted) {
-      return {
-        kind: "failure",
-        error:
-          receipt.error ??
-          ({
-            tag: "ClientObserverError",
-            code: "STATION_FOCUS_REJECTED",
-            message: "Station could not focus the existing agent.",
-          } satisfies SafeError),
-      };
-    }
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
-    return completion.status === "succeeded"
-      ? { kind: "success" }
-      : { kind: "failure", error: completion.error };
-  } catch (error: unknown) {
-    return failure(error);
+    },
+    { clientLabel: "Station" },
+  );
+  if (execution.status === "succeeded" || execution.status === "accepted") {
+    return { kind: "success" };
   }
+  if (execution.status === "rejected" && execution.receipt.error === undefined) {
+    return {
+      kind: "failure",
+      error: {
+        ...execution.error,
+        tag: "ClientObserverError",
+        code: "STATION_FOCUS_REJECTED",
+        message: "Station could not focus the existing agent.",
+      },
+    };
+  }
+  return { kind: "failure", error: execution.error };
 }
 
 type DashboardFocusResult =

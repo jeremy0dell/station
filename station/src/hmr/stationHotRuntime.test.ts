@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
+  beginStationHotDisposal,
   getOrCreateStationHotRuntime,
   type StationHotRuntime,
   type StationHotSlots,
+  waitForStationHotDisposal,
 } from "./stationHotRuntime.js";
 import type { WorkspaceConfig } from "../config/stationConfig.js";
 import { selectWelcomeCanContinue } from "../state/selectors.js";
@@ -41,6 +43,40 @@ function createSlots(): StationHotSlots {
 }
 
 describe("station hot runtime", () => {
+  it("releases renderer ownership before waiting and protects a newer disposal slot", async () => {
+    const slots = createSlots();
+    const order: string[] = [];
+    const oldGate = deferred();
+    const newGate = deferred();
+    const oldDisposal = beginStationHotDisposal(
+      slots,
+      () => order.push("release-old"),
+      () => oldGate.promise,
+    );
+
+    let priorSettled = false;
+    void observeSettlement(waitForStationHotDisposal(slots), () => {
+      priorSettled = true;
+    });
+    await Promise.resolve();
+    expect(order).toEqual(["release-old"]);
+    expect(priorSettled).toBe(false);
+
+    const newDisposal = beginStationHotDisposal(
+      slots,
+      () => order.push("release-new"),
+      () => newGate.promise,
+    );
+    oldGate.resolve();
+    await oldDisposal;
+    expect(slots.__stationHotDisposal).toBe(newDisposal);
+
+    newGate.resolve();
+    await newDisposal;
+    await Promise.resolve();
+    expect(slots.__stationHotDisposal).toBeUndefined();
+  });
+
   it("reuses a compatible v6 runtime so its live PTYs survive a reload", () => {
     const slots = createSlots();
     const first = getOrCreateStationHotRuntime(slots, FREEZE_CONFIG);
@@ -111,3 +147,19 @@ describe("station hot runtime", () => {
     expect(selectWelcomeCanContinue(next.store.getState())).toBe(false);
   });
 });
+
+async function observeSettlement(
+  settlement: Promise<void>,
+  observe: () => void,
+): Promise<void> {
+  await settlement;
+  observe();
+}
+
+function deferred(): { promise: Promise<void>; resolve(): void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}

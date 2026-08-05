@@ -1,4 +1,9 @@
-import { toSafeError, type ObserverService, type StationClientStateSource } from "@station/client";
+import {
+  executeObserverCommand,
+  toSafeError,
+  type ObserverService,
+  type StationClientStateSource,
+} from "@station/client";
 import type { ProviderId, SafeError, StationCommand } from "@station/contracts";
 import type { ManagedTerminalAttacher } from "../../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
@@ -74,19 +79,20 @@ export function createManagedLaunch(deps: ManagedLaunchDeps): ManagedLaunch {
       });
     }
     try {
-      const receipt = await service.dispatch(spec.command);
-      if (!receipt.accepted) {
-        return worktreeFailure(
-          receipt.error ?? {
-            tag: "ClientObserverError",
-            code: `STATION_WORKTREE_${spec.verb.toUpperCase()}_REJECTED`,
-            message: `Station could not ${spec.verb} the worktree.`,
-          },
-        );
-      }
-      const completion = await service.waitForCommandCompletion(receipt.commandId);
-      if (completion.status === "failed") {
-        return worktreeFailure(completion.error);
+      const execution = await executeObserverCommand(service, spec.command, {
+        clientLabel: "Station",
+      });
+      if (execution.status !== "succeeded" && execution.status !== "accepted") {
+        const error =
+          execution.status === "rejected" && execution.receipt.error === undefined
+            ? {
+                ...execution.error,
+                tag: "ClientObserverError" as const,
+                code: `STATION_WORKTREE_${spec.verb.toUpperCase()}_REJECTED`,
+                message: `Station could not ${spec.verb} the worktree.`,
+              }
+            : execution.error;
+        return worktreeFailure(error);
       }
       // A bare worktree does not prune the optimistic row; only canonical session projection does.
       const row = await waitForWorktreeByBranch(deps.clientState, spec.projectId, spec.branch);

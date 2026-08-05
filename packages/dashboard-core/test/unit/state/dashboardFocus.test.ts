@@ -379,7 +379,6 @@ describe("dashboard focus", () => {
       },
     };
     const transition = handleTuiKey(pending, RETURN);
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toBeUndefined();
   });
 

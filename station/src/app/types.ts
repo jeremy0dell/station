@@ -97,7 +97,8 @@ export type Station = {
   stationInput: StationInputRuntime;
   start(): void;
   dispose(): void;
-  /** Detach runtime resources and resolve after pending config edits are durable. */
+  /** Drain dashboard work and config writes before stopping the client and terminal resources. */
   disposeForShutdown(): Promise<void>;
-  disposeForHotReload(): void;
+  /** Retain PTYs and workspace state while draining dashboard work before HMR replacement. */
+  disposeForHotReload(): Promise<void>;
 };

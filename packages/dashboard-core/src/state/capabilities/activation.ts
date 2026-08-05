@@ -1,4 +1,8 @@
-import type { StationClientStateSource } from "@station/client";
+import {
+  executeObserverCommand,
+  type ObserverCommandExecutionResult,
+  type StationClientStateSource,
+} from "@station/client";
 import {
   type SafeError,
   type StationCommand,
@@ -203,24 +207,28 @@ async function runFocus(
       focusTarget?.onFocusSuccess !== undefined ||
       options.onFocusSuccess !== undefined ||
       readiness !== undefined;
-    const receipt = await options.service.dispatch(command);
-    if (!receipt.accepted) {
-      return rejectedExecution(command.type, receipt.error);
+    const execution = await executeObserverCommand(options.service, command, {
+      waitForCompletion: waitsForCompletion,
+      clientLabel: options.clientLabel ?? "TUI",
+    });
+    if (execution.status === "rejected") {
+      return rejectedExecution(command.type, execution);
     }
-    if (!waitsForCompletion) {
+    if (execution.status === "failed" || execution.status === "thrown") {
+      return { kind: "failure", error: execution.error, disposition: "remove-immediately" };
+    }
+    if (execution.status === "accepted") {
       return {
         kind: "notice",
         notice: {
           kind: "success",
           message: `${command.type} queued`,
-          commandId: receipt.commandId,
-          ...(receipt.traceId === undefined ? {} : { traceId: receipt.traceId }),
+          commandId: execution.receipt.commandId,
+          ...(execution.receipt.traceId === undefined
+            ? {}
+            : { traceId: execution.receipt.traceId }),
         },
       };
-    }
-    const completion = await options.service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "failed") {
-      return { kind: "failure", error: completion.error, disposition: "remove-immediately" };
     }
     if (readiness !== undefined) {
       const acknowledgement = await dispatchAndWait(options, {
@@ -243,32 +251,28 @@ async function dispatchAndWait(
   options: ObserverActivationCapabilitiesOptions,
   command: StationCommand,
 ): Promise<DashboardExecutionResult> {
-  try {
-    const receipt = await options.service.dispatch(command);
-    if (!receipt.accepted) {
-      return rejectedExecution(command.type, receipt.error);
-    }
-    const completion = await options.service.waitForCommandCompletion(receipt.commandId);
-    return completion.status === "succeeded"
-      ? { kind: "success" }
-      : { kind: "failure", error: completion.error, disposition: "remove-immediately" };
-  } catch (error: unknown) {
-    return executionFailure(error, options.clientLabel);
+  const execution = await executeObserverCommand(options.service, command, {
+    clientLabel: options.clientLabel ?? "TUI",
+  });
+  if (execution.status === "succeeded" || execution.status === "accepted") {
+    return { kind: "success" };
   }
+  return execution.status === "rejected"
+    ? rejectedExecution(command.type, execution)
+    : { kind: "failure", error: execution.error, disposition: "remove-immediately" };
 }
 
-function rejectedExecution(type: string, error: SafeError | undefined): DashboardExecutionResult {
-  return {
-    kind: "failure",
-    disposition: "remove-immediately",
-    error:
-      error ??
-      ({
-        tag: "CommandExecutionError",
-        code: "COMMAND_REJECTED",
-        message: `${type} was rejected.`,
-      } satisfies SafeError),
+function rejectedExecution(
+  type: string,
+  execution: Extract<ObserverCommandExecutionResult, { status: "rejected" }>,
+): DashboardExecutionResult {
+  const error: SafeError = execution.receipt.error ?? {
+    ...execution.error,
+    tag: "CommandExecutionError",
+    code: "COMMAND_REJECTED",
+    message: `${type} was rejected.`,
   };
+  return { kind: "failure", disposition: "remove-immediately", error };
 }
 
 function executionFailure(error: unknown, clientLabel = "TUI"): DashboardExecutionResult {
