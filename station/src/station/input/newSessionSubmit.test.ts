@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
-import { createDashboardRuntime } from "@station/dashboard-core";
 import { resolveInitialState } from "../../state/initialState.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
+import { createStationTestDashboardRuntime } from "../test/support/makeStationTestRuntime.js";
 import { resolveKeyNewSessionSubmit, resolveNewSessionSubmit } from "./stationActions.js";
 import { createStationOverlayLayer } from "./stationOverlayLayer.js";
 
@@ -15,7 +15,7 @@ const CREATE_ACTION = { type: "newSession.activate", actionId: "review.create" }
 // resolvers are the interception point: focused Enter or direct C on review
 // becomes a hosted launch; field/editor keys fall through to the machine.
 function newStore(snapshot = manyProjectsSnapshot()) {
-  return createDashboardRuntime({
+  return createStationTestDashboardRuntime({
     source: new FakeStationSource(snapshot),
     service: new FakeTuiObserverService(snapshot),
     initialSnapshot: snapshot,

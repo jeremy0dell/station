@@ -139,6 +139,33 @@ describe("DynamicStationButton", () => {
     expect(idleFrame).not.toContain("●");
   });
 
+  it("collapsed shows the needs-you lane without restCounts when sessions ask", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton input={input({ needsYouCount: 2, workingCount: 1, readyCount: 3 })} />,
+    );
+    expect(frame).toContain(STATION_ICON);
+    expect(frame).toContain("!2");
+    // Without restCounts the calm working/ready lanes stay hidden.
+    expect(frame).not.toContain("●");
+    expect(frame).not.toContain("3");
+    // A quieted alert never paints the framed mark.
+    expect(frame).not.toContain("!!!!");
+  });
+
+  it("collapsed needs-you joins working and ready lanes when restCounts is on", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton
+        input={input(
+          { needsYouCount: 2, workingCount: 1, readyCount: 3 },
+          { restCounts: true },
+        )}
+      />,
+    );
+    expect(frame).toContain("!2");
+    expect(frame).toContain("1");
+    expect(frame).toContain("●3");
+  });
+
   it("collapsed celebration announces the merged PR", async () => {
     const frame = await captureFrame(
       <DynamicStationButton input={input({ idleCount: 3 }, { celebration: { prNumber: 42 } })} />,
@@ -491,7 +518,7 @@ describe("DynamicStationButton", () => {
       />,
     );
     expect(frame).toContain("hook-scope");
-    expect(frame).toContain("needs your attention");
+    expect(frame).toContain("! 1 need you ›");
     expect(frame).toContain("↵ or click to focus");
 
     const lines = frame.split("\n");
@@ -514,7 +541,19 @@ describe("DynamicStationButton", () => {
       />,
     );
     expect(frame).toContain("! 3 need you ›");
-    expect(frame).not.toContain("needs your attention");
+    expect(frame).not.toContain("! 1 need you ›");
+  });
+
+  it("expanded base lists the dismissed queue before the working/idle totals", async () => {
+    const frame = await captureFrame(
+      <DynamicStationButton
+        input={input({ needsYouCount: 2, workingCount: 2, readyCount: 5, idleCount: 9 })}
+        hovered
+      />,
+    );
+    expect(frame).toContain("2 sessions need you");
+    expect(frame).toContain("2 sessions working");
+    expect(frame).toContain("14 sessions idle");
   });
 
   it("switches the mouse pointer to a hand on hover and back on leave", async () => {

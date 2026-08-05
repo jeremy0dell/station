@@ -1,4 +1,3 @@
-import type { DashboardRuntime } from "@station/dashboard-core";
 import type { Automation } from "../config/stationConfig.js";
 import {
   startWidgetConfigWrites,
@@ -24,16 +23,18 @@ import { selectPaneRecord } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import type { PaneId } from "../state/types.js";
 import type { StationClient } from "../sources/types.js";
-import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
-import { createStationHostManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
+import {
+  createStationDashboardRuntime,
+  type StationDashboardRuntime,
+} from "../station/store/dashboardRuntime.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
 /**
  * Wire Station's runtime — dashboard, registry, source reconcilers, layout
  * persistence, lifecycle, and input — and hand back the view props plus a
- * start/dispose surface. The renderer (main.tsx / tests) mounts <StationApp />.
+ * start/dispose surface. Host placement arrives as capabilities from renderer
+ * composition; this module never selects a concrete Host adapter.
  *
  * Reads as a sequence of steps; each is one extracted helper below.
  */
@@ -46,9 +47,6 @@ export function createStation(options: CreateStationOptions): Station {
   // edits are written back to config.toml when a config path exists.
   const dashboardRuntime = createStationDashboardRuntime(stationClient, {
     ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
-    ...(options.dashboardSearchExperience === undefined
-      ? {}
-      : { dashboardSearchExperience: options.dashboardSearchExperience }),
     widgetsPersisted: options.tuiConfigPath !== undefined,
   });
   const registry = setupRegistry(options, store, stationClient);
@@ -208,7 +206,7 @@ function createLayoutPersistence(
 function createLifecycle(deps: {
   store: StationStore;
   stationClient: StationClient;
-  dashboardRuntime: DashboardRuntime;
+  dashboardRuntime: StationDashboardRuntime;
   registry: PtyRegistry;
   reconcilers: Reconcilers;
   layoutWriter: LayoutWriter | undefined;
@@ -306,33 +304,26 @@ function createLifecycle(deps: {
   };
 }
 
-/** Build the input runtime; aux shell placement uses the host when a socket is set. */
+/** Build input from composition-supplied terminal capabilities without selecting a Host adapter. */
 function createInputRuntime(
   options: CreateStationOptions,
   deps: {
     store: StationStore;
-    dashboardRuntime: DashboardRuntime;
+    dashboardRuntime: StationDashboardRuntime;
     registry: PtyRegistry;
     observerService: StationClient["service"];
     automations: readonly Automation[];
     onShutdown: () => void;
   },
 ): StationInputRuntime {
-  // Aux shells land in the persistent host when a socket is configured; the
-  // placement resolver still falls back to local per spawn when the daemon is down.
-  const auxShellPlacement =
-    options.hostSocketPath === undefined
-      ? undefined
-      : resolveAuxShellPlacement(options.hostSocketPath);
-  const managedTerminalAttacher =
-    options.managedTerminalAttacher ??
-    (options.hostSocketPath === undefined
-      ? undefined
-      : createStationHostManagedTerminalAttacher(options.hostSocketPath));
   const inputOptions: Parameters<typeof createStationInputRuntime>[0] = {
     store: deps.store,
     shutdown: deps.onShutdown,
-    dashboardRuntime: deps.dashboardRuntime,
+    dashboardRuntime: {
+      state: deps.dashboardRuntime.state,
+      actions: deps.dashboardRuntime.actions,
+      clientState: deps.dashboardRuntime.clientState,
+    },
     registry: deps.registry,
     observerService: deps.observerService,
     autoCloseOverlayOnPaneOpen: options.shellAutoCloseOverlay ?? false,
@@ -341,11 +332,11 @@ function createInputRuntime(
   if (options.openExternalUrl !== undefined) {
     inputOptions.openExternalUrl = options.openExternalUrl;
   }
-  if (auxShellPlacement !== undefined) {
-    inputOptions.resolveAuxShellPlacement = auxShellPlacement;
+  if (options.resolveAuxShellPlacement !== undefined) {
+    inputOptions.resolveAuxShellPlacement = options.resolveAuxShellPlacement;
   }
-  if (managedTerminalAttacher !== undefined) {
-    inputOptions.managedTerminalAttacher = managedTerminalAttacher;
+  if (options.managedTerminalAttacher !== undefined) {
+    inputOptions.managedTerminalAttacher = options.managedTerminalAttacher;
   }
   return createStationInputRuntime(inputOptions);
 }
@@ -356,7 +347,7 @@ function buildViewProps(
   deps: {
     store: StationStore;
     registry: PtyRegistry;
-    dashboardRuntime: DashboardRuntime;
+    dashboardRuntime: StationDashboardRuntime;
     dispatchMouse: StationInputRuntime["dispatchMouse"];
     onCopySelection: (text: string) => void;
     automations: readonly Automation[];
@@ -366,6 +357,7 @@ function buildViewProps(
     store: deps.store,
     registry: deps.registry,
     dashboardState: deps.dashboardRuntime.state,
+    clientState: deps.dashboardRuntime.clientState,
     dashboardActions: deps.dashboardRuntime.actions,
     dispatchMouse: deps.dispatchMouse,
     onCopySelection: deps.onCopySelection,

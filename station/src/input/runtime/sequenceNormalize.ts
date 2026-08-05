@@ -3,8 +3,7 @@ import { stripTerminalReplies } from "../../terminal/input/terminalReplies.js";
 import { CURSOR_KEY_BYTES } from "../../terminal/protocol/cursorKeys.js";
 import type { PtyRegistryView } from "../../terminal/registry/ptyRegistry.js";
 import type { PaneId } from "../../state/types.js";
-import type { DashboardSnapshotView } from "@station/dashboard-core";
-import type { ProviderId } from "@station/contracts";
+import type { ProviderId, StationSnapshot } from "@station/contracts";
 
 export type NormalizedSequence = { consumed: true } | { consumed: false; legacy: string };
 
@@ -44,7 +43,7 @@ export function paneInputBytes(
 }
 
 export function providerSupportsModifiedEnterSoftNewline(
-  snapshot: DashboardSnapshotView | undefined,
+  snapshot: StationSnapshot | undefined,
   providerId: ProviderId,
 ): boolean {
   return (

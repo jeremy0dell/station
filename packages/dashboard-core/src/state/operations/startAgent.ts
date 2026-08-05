@@ -1,5 +1,4 @@
 import {
-  type CommandId,
   type SafeError,
   type StationCommand,
   type StationSnapshot,
@@ -23,12 +22,9 @@ export async function runStartAgentOperation(
   runtime: CommandRuntimeOptions,
   operation: StartAgentOperation | ResumeAgentOperation,
   markStartAgentRowFailed: (localId: string) => void,
-  markCommandFailureHandled: (commandId: CommandId) => void,
-  hasCommandFailureBeenHandled: (commandId: CommandId) => boolean,
   addSafeErrorToast: (error: SafeError) => void,
   focusStartedAgentRow: FocusStartedAgentRow,
 ): Promise<void> {
-  let commandId: CommandId | undefined;
   try {
     const command = (await prepareCommandForRuntime(operation.command, runtime)) as Extract<
       StationCommand,
@@ -46,22 +42,16 @@ export async function runStartAgentOperation(
       return;
     }
 
-    commandId = receipt.commandId;
-    store.setState(bindPendingStartAgentRow(store.getState(), operation.localId, commandId));
-    const completion = await service.waitForCommandCompletion(commandId);
+    store.setState(
+      bindPendingStartAgentRow(store.getState(), operation.localId, receipt.commandId),
+    );
+    const completion = await service.waitForCommandCompletion(receipt.commandId);
     if (completion.status === "failed") {
-      const alreadyHandled = hasCommandFailureBeenHandled(completion.commandId);
-      markCommandFailureHandled(completion.commandId);
       markStartAgentRowFailed(operation.localId);
-      if (!alreadyHandled) {
-        addSafeErrorToast(completion.error);
-      }
+      addSafeErrorToast(completion.error);
       return;
     }
   } catch (error: unknown) {
-    if (commandId !== undefined) {
-      markCommandFailureHandled(commandId);
-    }
     markStartAgentRowFailed(operation.localId);
     addSafeErrorToast(toSafeError(error, { clientLabel: runtime.clientLabel }));
     return;

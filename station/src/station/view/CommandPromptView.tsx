@@ -1,4 +1,4 @@
-// Legacy prompt renderer for search and existing chooser copy; persistent
+// Legacy prompt renderer for existing chooser copy; persistent
 // filtering owns the dashboard header and never enters this absolute layer.
 import {
   commandPromptLineForScreen,

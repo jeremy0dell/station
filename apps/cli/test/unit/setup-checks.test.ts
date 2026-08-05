@@ -18,9 +18,8 @@ import { normalizeSetupPlanningFacts } from "../../src/commands/setup/adapters/i
 import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
 import { checkSetupBun } from "../../src/commands/setup/checks/bun.js";
 import { setupProbeTimeoutMs } from "../../src/commands/setup/checks/constants.js";
-import { checkSetupDiffnav } from "../../src/commands/setup/checks/diffnav.js";
+import { checkSetupDiffViewer } from "../../src/commands/setup/checks/diffViewer.js";
 import { checkSetupGit } from "../../src/commands/setup/checks/git.js";
-import { checkSetupGitDelta } from "../../src/commands/setup/checks/gitDelta.js";
 import { checkSetupLaunchers } from "../../src/commands/setup/checks/launchers.js";
 import { checkSetupStateDir } from "../../src/commands/setup/checks/stateDir.js";
 import {
@@ -273,8 +272,7 @@ describe("setup dependency checks", () => {
       access: fakeAccess([
         "/fake/bin/wt",
         "/fake/bin/tmux",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
+        "/fake/bin/hunk",
         "/fake/bin/stn",
         "/fake/bin/stn-ingress",
         popupAlias,
@@ -396,8 +394,7 @@ describe("setup dependency checks", () => {
       access: fakeAccess([
         "/fake/bin/wt",
         "/fake/bin/tmux",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
+        "/fake/bin/hunk",
         "/fake/bin/stn",
         "/fake/bin/stn-ingress",
         popupAlias,
@@ -466,13 +463,7 @@ describe("setup dependency checks", () => {
       homeDir: join(root, "home"),
       env: { PATH: "/fake/bin" },
       runner,
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs,
       now: () => new Date("2026-06-08T12:00:00.000Z"),
       stationUiInstalled: async () => false,
@@ -525,15 +516,7 @@ describe("setup dependency checks", () => {
     expect(plan.summary.requiredOk).toBe(false);
     expect(
       plan.checks.filter((check) => check.status === "missing").map((check) => check.id),
-    ).toEqual([
-      "worktrunk",
-      "tmux",
-      "bun",
-      "config",
-      "harness-tracking:codex",
-      "diffnav",
-      "git-delta",
-    ]);
+    ).toEqual(["worktrunk", "tmux", "bun", "config", "harness-tracking:codex", "diff-viewer"]);
   });
 
   it("warns in setup check when Bun works but the station UI lane is not installed", async () => {
@@ -589,13 +572,7 @@ describe("setup dependency checks", () => {
         "agent --version": "cursor-agent 1.0.0\n",
         "opencode --version": "opencode 1.0.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
       stationUiInstalled: async () => false,
@@ -734,13 +711,7 @@ describe("setup dependency checks", () => {
         "brew --version": "Homebrew 4.0.0\n",
         "crush --version": "crush version 1.2.3\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({}),
       now: () => new Date("2026-06-08T12:00:00.000Z"),
       stationUiInstalled: async () => false,
@@ -772,13 +743,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         [`${home}/.local/bin/agent --version`]: "cursor-agent 1.0.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({}),
       noBrew: true,
     });
@@ -806,13 +771,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         [`${home}/.opencode/bin/opencode --version`]: "opencode 1.0.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({}),
       noBrew: true,
     });
@@ -841,13 +800,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           useLifecycleHooks: false,
@@ -895,13 +848,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        worktrunkCommand,
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess([worktrunkCommand, "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(home, ".config/station/config.toml")]: configToml(repo, {
           worktrunkCommand,
@@ -939,13 +886,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           useLifecycleHooks: true,
@@ -982,13 +923,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           useLifecycleHooks: false,
@@ -1026,13 +961,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({}),
       noBrew: true,
     });
@@ -1056,13 +985,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: "schema_version = 1\n[defaults\n",
       }),
@@ -1092,13 +1015,7 @@ describe("setup dependency checks", () => {
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: `${configToml(repo)}
 [harness.codex]
@@ -1167,13 +1084,7 @@ scroll_on_output = "teleport"
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(otherRepo, {
           worktreeProvider: "noop-worktree",
@@ -1203,13 +1114,7 @@ scroll_on_output = "teleport"
         "tmux -V": "tmux 3.5a\n",
         "codex --version": "codex 0.1.0\n",
       }),
-      access: fakeAccess([
-        "/fake/bin/wt",
-        "/fake/bin/tmux",
-        "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
-      ]),
+      access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
       fs: readOnlyFs({
         [join(root, "home/.config/station/config.toml")]: configToml(repo, {
           harness: "missing-harness",
@@ -1978,35 +1883,33 @@ scroll_on_output = "teleport"
   });
 });
 
-describe("checkSetupDiffnav", () => {
-  it("reports ok with the resolved path when diffnav is on PATH", async () => {
-    const fact = await checkSetupDiffnav({
+describe("checkSetupDiffViewer", () => {
+  it("reports ok with the resolved path when Hunk is on PATH", async () => {
+    const fact = await checkSetupDiffViewer({
       env: { PATH: "/fake/bin" },
-      access: fakeAccess(["/fake/bin/diffnav"]),
+      access: fakeAccess(["/fake/bin/hunk"]),
     });
     expect(fact).toMatchObject({
       status: "ok",
-      command: "diffnav",
-      resolvedPath: "/fake/bin/diffnav",
+      command: "hunk",
+      resolvedPath: "/fake/bin/hunk",
     });
   });
 
-  it("reports missing with an install hint when diffnav is absent", async () => {
-    const fact = await checkSetupDiffnav({
+  it("reports missing with a Hunk install hint when Hunk is absent", async () => {
+    const fact = await checkSetupDiffViewer({
       env: { PATH: "/fake/bin" },
       access: fakeAccess([]),
     });
     expect(fact.status).toBe("missing");
-    expect(fact.message).toContain("brew install diffnav");
+    expect(fact.message).toContain("brew install hunk");
   });
 
-  it("probes the literal diffnav the automation runs, ignoring any binary override", async () => {
-    const fact = await checkSetupDiffnav({
-      env: { PATH: "/fake/bin", STATION_DIFFNAV_BIN: "mydiff" },
-      access: fakeAccess(["/fake/bin/mydiff"]),
+  it("does not accept legacy diffnav and delta binaries", async () => {
+    const fact = await checkSetupDiffViewer({
+      env: { PATH: "/fake/bin" },
+      access: fakeAccess(["/fake/bin/diffnav", "/fake/bin/delta"]),
     });
-    // The automation command hardcodes `diffnav`; an override the station can't
-    // honor must not let the doctor report a green that fails at runtime.
     expect(fact.status).toBe("missing");
   });
 });
@@ -2041,29 +1944,6 @@ describe("checkSetupBun", () => {
       access: fakeAccess([]),
     });
     expect(fact).toMatchObject({ status: "ok", command: "bun" });
-  });
-});
-
-describe("checkSetupGitDelta", () => {
-  it("reports ok with the resolved path when delta is on PATH", async () => {
-    const fact = await checkSetupGitDelta({
-      env: { PATH: "/fake/bin" },
-      access: fakeAccess(["/fake/bin/delta"]),
-    });
-    expect(fact).toMatchObject({
-      status: "ok",
-      command: "delta",
-      resolvedPath: "/fake/bin/delta",
-    });
-  });
-
-  it("reports missing with a delta install hint when delta is absent", async () => {
-    const fact = await checkSetupGitDelta({
-      env: { PATH: "/fake/bin" },
-      access: fakeAccess([]),
-    });
-    expect(fact.status).toBe("missing");
-    expect(fact.message).toContain("git-delta");
   });
 });
 

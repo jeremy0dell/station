@@ -30,8 +30,7 @@ export const expectations = {
       worktrunk: "ok",
       tmux: "ok",
       bun: "ok",
-      diffnav: "ok",
-      "git-delta": "ok",
+      "diff-viewer": "ok",
       harness: "ok",
       config: "missing",
       "observer-socket-evidence": "warning",
@@ -41,10 +40,10 @@ export const expectations = {
   "no-tmux": { exitCode: 1, requiredOk: false, checks: { tmux: "missing" } },
   "no-worktrunk": { exitCode: 1, requiredOk: false, checks: { worktrunk: "missing" } },
   "no-bun": { exitCode: 1, requiredOk: false, checks: { bun: "missing" } },
-  "no-diffnav": {
+  "no-diff-viewer": {
     exitCode: 1,
     requiredOk: false,
-    checks: { diffnav: "missing", "git-delta": "missing" },
+    checks: { "diff-viewer": "missing" },
   },
   "no-harness": { exitCode: 1, requiredOk: false, checks: { harness: "missing" } },
 };

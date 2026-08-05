@@ -11607,7 +11607,7 @@
       "declaration": "runTuiCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns Observer startup, resolved-config propagation, renderer process selection, and persistent popup control wiring.",
+      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup, resolved-config propagation, exact child outcome evidence, renderer selection, and persistent popup control wiring.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/tuiRendererControl.ts",
@@ -13765,7 +13765,7 @@
       "declaration": "createStationClientRuntime",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates an injected service or pinned Observer socket transport into one live client projection.",
+      "purpose": "Owns one canonical client projection and convergence-safe service over an injected or pinned Observer transport.",
       "dependencies": [
         {
           "path": "packages/client/src/observerService.ts",

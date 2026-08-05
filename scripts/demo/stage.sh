@@ -21,7 +21,7 @@ step() { printf '\n==> %s\n' "$1"; }
 
 step "Checking demo dependencies"
 missing=()
-for tool in stn git wt tmux diffnav delta; do
+for tool in stn git wt tmux hunk; do
   command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 done
 harness_missing=()

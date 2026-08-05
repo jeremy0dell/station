@@ -25,7 +25,7 @@ Everything in Act 2 is isolated under `~/.station-demo`; it never touches your r
 | 2 | **New session (any harness)** | `N` → name → project → **pick agent: claude / codex** → agent launches into a pane | "What it does" |
 | 3 | **Add project** | `A` → folder picker → `~/.station-demo/repos/web` → review → success → `N` to start a session there | "What it does" |
 | 4 | **Split + run a command** | open `is-even` (`[+sh]` or a session) → split (`Ctrl-\`) → run `./check.sh` | optional |
-| 5 | **Split + see diff** | focus the `is-even` worktree → right-click → **See diff (split right)** → `diffnav` renders the planted O(n)→O(1) diff | the automations money shot |
+| 5 | **Split + see diff** | focus the `is-even` worktree → right-click → **See diff (split right)** → Hunk renders the planted O(n)→O(1) diff | the automations money shot |
 
 Shot 1 is the reliable hero — zero setup, no real data. The others are live.
 
@@ -72,7 +72,7 @@ label = "See diff (split right)"
 [[workspace.automations.steps]]
 split = "right"
 anchor = "origin"
-command = "git -c color.ui=always diff | delta --paging=always"
+command = 'base="$(git merge-base origin/main HEAD 2>/dev/null || true)"; [ -n "$base" ] || base=HEAD; hunk diff "$base" --watch --no-exclude-untracked'
 run = "execute"
 focus = true
 

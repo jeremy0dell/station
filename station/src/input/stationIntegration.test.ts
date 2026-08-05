@@ -7,11 +7,9 @@
 // overlay is down.
 import { describe, expect, it } from "bun:test";
 import {
-  persistentFilterExperience,
-  type DashboardSearchExperience,
-  type DashboardRuntime,
-} from "@station/dashboard-core";
-import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
+  makeStationTestRuntime,
+  type StationTestDashboardRuntime,
+} from "../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import { MAIN_PANE_ID, STATION_OVERLAY_ID } from "../state/types.js";
 import type { StationMouseEvent } from "./mouse.js";
@@ -27,12 +25,8 @@ import {
 } from "./keymap/stationBindings.js";
 import { createStationInputRuntime } from "./stationInput.js";
 
-function makeViewStore(
-  dashboardSearchExperience?: DashboardSearchExperience,
-): DashboardRuntime {
-  return makeStationTestRuntime({
-    ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
-  }).runtime;
+function makeViewStore(): StationTestDashboardRuntime {
+  return makeStationTestRuntime().runtime;
 }
 
 const LEFT_DOWN: StationMouseEvent = {
@@ -106,7 +100,7 @@ describe("station overlay layer in the keymap stack", () => {
     const keymap = createStationKeymap(view);
 
     routeKey("/", station.getState(), keymap);
-    expect(view.state.getState().screen).toMatchObject({ name: "search" });
+    expect(view.state.getState().screen).toMatchObject({ name: "persistentFilter" });
 
     expect(routeKey(OVERLAY_TOGGLE_LEGACY, station.getState(), keymap)).toEqual({
       kind: "overlay-close",
@@ -116,8 +110,11 @@ describe("station overlay layer in the keymap stack", () => {
       kind: "command",
       commandId: "station.exit",
     });
-    // The search mode never saw the chords as text.
-    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "" });
+    // The filter editor never saw the chords as draft text.
+    expect(view.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "", cursor: 0 },
+    });
   });
 
   it("intercepts direct C as the native managed New Session launch", () => {
@@ -157,7 +154,10 @@ describe("station overlay layer in the keymap stack", () => {
     routeKey("/", station.getState(), keymap);
     routeKey("a", station.getState(), keymap);
     expect(routeKey("\x1b[15~", station.getState(), keymap)).toEqual({ kind: "swallowed" });
-    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "a" });
+    expect(view.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "a", cursor: 1 },
+    });
   });
 
   it("leaves terminal passthrough untouched while the overlay is down", () => {
@@ -178,10 +178,9 @@ describe("station input through the station runtime", () => {
     overlayOpen: boolean,
     options: {
       boot?: "empty";
-      dashboardSearchExperience?: DashboardSearchExperience;
     } = {},
   ) {
-    const view = makeViewStore(options.dashboardSearchExperience);
+    const view = makeViewStore();
     const station = makeStationStore(overlayOpen, options);
     const written: string[] = [];
     const pasted: string[] = [];
@@ -206,18 +205,19 @@ describe("station input through the station runtime", () => {
 
     expect(runtime.handleSequence("/")).toBe(true);
     expect(runtime.handleSequence("p")).toBe(true);
-    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "p" });
+    expect(view.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "p", cursor: 1 },
+    });
 
-    expect(runtime.handleSequence("\x1b")).toBe(true); // cancel search
+    expect(runtime.handleSequence("\x1b")).toBe(true); // cancel filter
     expect(runtime.handleSequence("\x1b")).toBe(true); // dismiss overlay
     expect(station.getState().input.activeOverlay).toBeNull();
     expect(station.getState().input.focus.kind).toBe("pane");
   });
 
   it("drives persistent filter cancel, apply, retained close, and clear through the runtime", () => {
-    const { view, station, runtime } = makeRuntime(true, {
-      dashboardSearchExperience: persistentFilterExperience,
-    });
+    const { view, station, runtime } = makeRuntime(true);
 
     expect(runtime.handleSequence("/")).toBe(true);
     expect(runtime.handleSequence("working")).toBe(true);
@@ -238,9 +238,7 @@ describe("station input through the station runtime", () => {
     expect(station.getState().input.activeOverlay).toBeNull();
     expect(view.state.getState().persistentFilter).toEqual({ query: "working" });
 
-    const clearing = makeRuntime(true, {
-      dashboardSearchExperience: persistentFilterExperience,
-    });
+    const clearing = makeRuntime(true);
     clearing.runtime.handleSequence("/");
     clearing.runtime.handleSequence("working");
     clearing.runtime.handleSequence("\r");
@@ -258,9 +256,7 @@ describe("station input through the station runtime", () => {
   });
 
   it("keeps condition input modal and click-away returns only to filter editing", () => {
-    const { view, runtime } = makeRuntime(true, {
-      dashboardSearchExperience: persistentFilterExperience,
-    });
+    const { view, runtime } = makeRuntime(true);
     runtime.handleSequence("/");
     runtime.handleSequence("queue");
     runtime.handleSequence("\t");
@@ -288,9 +284,7 @@ describe("station input through the station runtime", () => {
   });
 
   it("swallows condition-panel right clicks without opening the workspace context menu", () => {
-    const { view, station, runtime } = makeRuntime(true, {
-      dashboardSearchExperience: persistentFilterExperience,
-    });
+    const { view, station, runtime } = makeRuntime(true);
     runtime.handleSequence("/");
     runtime.handleSequence("\t");
     runtime.handleSequence("S");
@@ -311,9 +305,7 @@ describe("station input through the station runtime", () => {
   });
 
   it("routes applied-filter footer targets through the runtime without piercing modals", () => {
-    const { view, runtime } = makeRuntime(true, {
-      dashboardSearchExperience: persistentFilterExperience,
-    });
+    const { view, runtime } = makeRuntime(true);
     runtime.handleSequence("/");
     runtime.handleSequence("working");
     runtime.handleSequence("\r");
@@ -353,9 +345,7 @@ describe("station input through the station runtime", () => {
   });
 
   it("sanitizes persistent-filter paste and reserves global chords from the draft", () => {
-    const { view, station, runtime } = makeRuntime(true, {
-      dashboardSearchExperience: persistentFilterExperience,
-    });
+    const { view, station, runtime } = makeRuntime(true);
     runtime.handleSequence("/");
 
     runtime.handlePaste({
@@ -407,7 +397,10 @@ describe("station input through the station runtime", () => {
 
     expect(prevented).toBe(true);
     expect(pasted).toEqual([]);
-    expect(view.state.getState().screen).toMatchObject({ name: "search", value: "station-overlay" });
+    expect(view.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "station-overlay" },
+    });
   });
 
   it("strips control bytes from pastes so they cannot leak into text inputs", () => {
@@ -420,8 +413,8 @@ describe("station input through the station runtime", () => {
     });
 
     expect(view.state.getState().screen).toMatchObject({
-      name: "search",
-      value: "sta[31mtion over lay",
+      name: "persistentFilter",
+      draft: { value: "sta[31mtion over lay" },
     });
   });
 

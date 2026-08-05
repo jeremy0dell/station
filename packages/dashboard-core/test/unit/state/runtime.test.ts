@@ -1,8 +1,8 @@
+import type { StationClientState, StationClientStateSource } from "@station/client";
 import type {
   ProviderId,
   SafeError,
   StationCommand,
-  StationEvent,
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
@@ -10,16 +10,12 @@ import type {
   TuiFolderEntry,
   TuiFolderReadResult,
   TuiFolderService,
-  TuiSnapshotSource,
-  TuiSnapshotSourceState,
 } from "@station/dashboard-core";
 import {
   ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS,
-  persistentFilterExperience,
   selectedAddProjectFolderRow,
 } from "@station/dashboard-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDashboardRuntime } from "../../../src/state/runtime.js";
 import type { DashboardStateView } from "../../../src/state/types.js";
 import {
   createCommandSnapshot,
@@ -28,6 +24,10 @@ import {
   createZeroWorktreeSnapshot,
   fixtureNow,
 } from "../../fixtures/snapshots.js";
+import {
+  createTestDashboardRuntime,
+  FakeClientStateSource,
+} from "../../support/fakeClientStateSource.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 describe("dashboard runtime boundary", () => {
@@ -37,7 +37,7 @@ describe("dashboard runtime boundary", () => {
 
   it("publishes data-only state through a read-only source", () => {
     const snapshot = createDashboardSnapshot();
-    const runtime = createDashboardRuntime({
+    const runtime = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
@@ -53,7 +53,7 @@ describe("dashboard runtime boundary", () => {
 
   it("projects state without copying, freezing, or changing notification identity", () => {
     const snapshot = createDashboardSnapshot();
-    const runtime = createDashboardRuntime({
+    const runtime = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
@@ -78,22 +78,23 @@ describe("dashboard runtime boundary", () => {
     unsubscribe();
   });
 
-  it("starts once and disposes subscriptions repeat-safely", async () => {
+  it("starts once and disposes source subscriptions repeat-safely", () => {
     const snapshot = createCommandSnapshot("idle");
+    const source = new FakeClientStateSource(snapshot);
     const service = new FakeTuiObserverService(snapshot);
-    const runtime = createDashboardRuntime({ service });
+    const runtime = createTestDashboardRuntime({ service, source });
 
     runtime.start();
     runtime.start();
-    await waitFor(() => service.subscribeCount === 1);
+    expect(source.subscribeCount).toBe(1);
+    expect(service.subscribeCount).toBe(0);
 
     runtime.dispose();
     runtime.dispose();
-    await waitFor(() => service.cleanupCount === 1);
+    expect(source.unsubscribeCount).toBe(1);
 
     runtime.start();
-    await Promise.resolve();
-    expect(service.subscribeCount).toBe(1);
+    expect(source.subscribeCount).toBe(1);
   });
 
   it("does not notify subscribers when a source re-emits an equal failure", () => {
@@ -106,7 +107,7 @@ describe("dashboard runtime boundary", () => {
     const source = mutableSnapshotSource({
       connection: { state: "loading", since: now },
     });
-    const runtime = createDashboardRuntime({
+    const runtime = createTestDashboardRuntime({
       service: new FakeTuiObserverService(createDashboardSnapshot()),
       source,
     });
@@ -137,11 +138,10 @@ describe("dashboard runtime boundary", () => {
 
   it("deletes an absent persistent filter during full replacement", () => {
     const snapshot = createDashboardSnapshot();
-    const runtime = createDashboardRuntime({
+    const runtime = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { persistentFilter: { query: "working" } },
-      dashboardSearchExperience: persistentFilterExperience,
     });
 
     runtime.actions.handleKey({ input: "/" });
@@ -159,11 +159,11 @@ describe("dashboard runtime", () => {
 
   it("applies semantic actions through the same transition executor as keys", () => {
     const snapshot = createNoProjectsSnapshot();
-    const keyStore = createDashboardRuntime({
+    const keyStore = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
-    const actionStore = createDashboardRuntime({
+    const actionStore = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
@@ -177,7 +177,7 @@ describe("dashboard runtime", () => {
 
   it("applies focus before returning each project-header control intent exactly once", () => {
     const snapshot = createDashboardSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
@@ -199,7 +199,7 @@ describe("dashboard runtime", () => {
 
   it("returns an empty-project Quick Session intent before standalone resolution transfers focus", () => {
     const snapshot = createZeroWorktreeSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
@@ -227,7 +227,7 @@ describe("dashboard runtime", () => {
 
   it("routes state-only actions through the transition executor", () => {
     const snapshot = createDashboardSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
     });
@@ -248,7 +248,7 @@ describe("dashboard runtime", () => {
 
   it("owns the optimistic hosted-create row lifecycle without storing actions", () => {
     const snapshot = createDashboardSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { terminalRows: 42 },
@@ -295,96 +295,100 @@ describe("dashboard runtime", () => {
     expect(store.state.getState()).not.toHaveProperty("start");
   });
 
-  it("loads initial snapshots and cleans up event subscriptions", async () => {
+  it("seeds from the canonical source and cleans up its subscription", () => {
     const snapshot = createCommandSnapshot("idle");
-    const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service });
-    store.start();
+    const source = new FakeClientStateSource(snapshot);
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      source,
+    });
 
-    await waitFor(() => store.state.getState().snapshot?.rows.length === 1);
-    await waitFor(() => service.subscribeCount === 1);
+    expect(store.state.getState().snapshot).toBe(snapshot);
+    store.start();
+    expect(source.subscribeCount).toBe(1);
     store.dispose();
-    await waitFor(() => service.cleanupCount === 1);
+    expect(source.unsubscribeCount).toBe(1);
   });
 
-  it("applies live events to rendered state", async () => {
+  it("projects canonical source snapshots without replacing dashboard-local state", () => {
     const snapshot = createCommandSnapshot("idle");
-    const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service });
+    const source = new FakeClientStateSource(snapshot);
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      source,
+      initialState: {
+        persistentFilter: { query: "idle" },
+        collapsedProjectIds: ["web"],
+      },
+    });
+    store.actions.addPendingCreateSession({
+      localId: "local-source-projection",
+      projectId: "web",
+      title: "optimistic session",
+      branch: "optimistic-session",
+      harnessProvider: "codex",
+      createdAt: fixtureNow,
+    });
     store.start();
-    const event: StationEvent = {
-      type: "worktree.updated",
-      worktreeId: "wt_web_idle",
-      patch: {
+    const updated: StationSnapshot = {
+      ...snapshot,
+      rows: snapshot.rows.map((row) => ({
+        ...row,
         display: {
           statusLabel: "working",
           sortPriority: 30,
           alert: false,
           reason: "Harness reported active generation.",
         },
-      },
+      })),
     };
 
-    await waitFor(() => service.subscribeCount === 1);
-    service.emit(event);
+    source.setSnapshot(updated);
 
-    await waitFor(
-      () => store.state.getState().snapshot?.rows[0]?.display.statusLabel === "working",
-    );
+    const projected = store.state.getState();
+    expect(projected.snapshot).toBe(updated);
+    expect(projected.persistentFilter).toEqual({ query: "idle" });
+    expect(projected.collapsedProjectIds.has("web")).toBe(true);
+    expect(projected.localRows.pendingCreate[0]?.localId).toBe("local-source-projection");
     store.dispose();
   });
 
-  it("removes worktree rows and surfaces command failure toasts from observer events", async () => {
+  it("marks an existing snapshot as display-only from canonical client state", () => {
     const snapshot = createCommandSnapshot("idle");
-    const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const source = new FakeClientStateSource(snapshot);
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(snapshot),
+      source,
+    });
     store.start();
 
-    await waitFor(() => service.subscribeCount === 1);
-    service.emit({ type: "worktree.removed", worktreeId: "wt_web_idle" });
-    service.emit({
-      type: "command.failed",
-      commandId: "cmd_focus_1",
-      error: {
-        tag: "TerminalProviderError",
-        code: "TERMINAL_TARGET_MISSING",
-        message: "The terminal target for this worktree no longer exists.",
-        diagnosticId: "diag_terminal_missing",
-      },
+    source.setConnection({
+      state: "displayOnly",
+      since: Date.now(),
+      lastError: connectSafeError(),
     });
 
-    await waitFor(
-      () =>
-        store.state.getState().snapshot?.rows.length === 0 &&
-        store.state
-          .getState()
-          .toasts.some((entry) => entry.toast.diagnosticId === "diag_terminal_missing"),
-    );
-    store.dispose();
-  });
-
-  it("marks an existing snapshot as display-only on observer connect failures without a toast", async () => {
-    const snapshot = createCommandSnapshot("idle");
-    const service = new SnapshotConnectFailingService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
-    store.start();
-
-    await waitFor(() => service.subscribeCount === 1);
-    service.failSubscriptions(wrappedConnectError());
-
-    await waitFor(() => store.state.getState().observerConnectionStatus.state === "displayOnly");
-    expect(store.state.getState().snapshot?.rows).toHaveLength(1);
+    expect(store.state.getState().observerConnectionStatus.state).toBe("displayOnly");
+    expect(store.state.getState().snapshot).toBe(snapshot);
     expect(store.state.getState().toasts).toEqual([]);
     store.dispose();
   });
 
-  it("marks cold starts as reconnecting on observer connect failures without a toast", async () => {
-    const snapshot = createCommandSnapshot("idle");
-    const service = new ColdStartConnectFailingService(snapshot);
-    const store = createDashboardRuntime({ service });
+  it("marks a snapshot-free client source as reconnecting without a toast", () => {
+    const source = new FakeClientStateSource(undefined, { state: "loading", since: Date.now() });
+    const store = createTestDashboardRuntime({
+      service: new FakeTuiObserverService(createCommandSnapshot("idle")),
+      source,
+    });
     store.start();
 
-    await waitFor(() => store.state.getState().observerConnectionStatus.state === "reconnecting");
+    source.setConnection({
+      state: "reconnecting",
+      since: Date.now(),
+      lastError: connectSafeError(),
+    });
+
+    expect(store.state.getState().observerConnectionStatus.state).toBe("reconnecting");
     expect(store.state.getState().snapshot).toBeUndefined();
     expect(store.state.getState().toasts).toEqual([]);
     store.dispose();
@@ -400,7 +404,7 @@ describe("dashboard runtime", () => {
         lastError: connectSafeError(),
       },
     });
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       source,
       initialSnapshot: snapshot,
@@ -428,7 +432,7 @@ describe("dashboard runtime", () => {
         lastError: connectSafeError(),
       },
     });
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       source,
       initialSnapshot: snapshot,
@@ -445,7 +449,7 @@ describe("dashboard runtime", () => {
   it("acknowledges a ready turn after successful focus", async () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.handleKey({ input: "1" });
 
@@ -468,7 +472,7 @@ describe("dashboard runtime", () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const service = new ReadinessFailureService(snapshot, failure);
     let focusSuccessCount = 0;
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -497,7 +501,7 @@ describe("dashboard runtime", () => {
     const snapshot = withTurnReadiness(createCommandSnapshot("idle"));
     const order: string[] = [];
     const service = new OrderedFocusService(snapshot, order);
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -545,7 +549,7 @@ describe("dashboard runtime", () => {
       },
     };
     let focusSuccessCount = 0;
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -567,7 +571,7 @@ describe("dashboard runtime", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
     let focusSuccessCount = 0;
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -601,7 +605,7 @@ describe("dashboard runtime", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
     const exitCodes: number[] = [];
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       exitOnFocusSuccess: true,
@@ -634,7 +638,7 @@ describe("dashboard runtime", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
     const exitCodes: number[] = [];
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       persistentPopup: true,
@@ -664,7 +668,7 @@ describe("dashboard runtime", () => {
   it("does not treat a retained no-agent session as completed start truth", async () => {
     const snapshot = createCommandSnapshot("none");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.handleKey({ input: "1" });
 
@@ -676,7 +680,7 @@ describe("dashboard runtime", () => {
   it("syncs terminal rows into view state and clamps dashboard scroll", () => {
     const snapshot = createDashboardSnapshot();
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       initialState: {
@@ -695,7 +699,7 @@ describe("dashboard runtime", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
@@ -750,7 +754,7 @@ describe("dashboard runtime", () => {
       },
       "/Users/example/Developer",
     );
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       source: staticSnapshotSource(snapshot),
       initialSnapshot: snapshot,
@@ -814,7 +818,7 @@ describe("dashboard runtime", () => {
         entries: path === rootPath ? [folderEntry("child", childPath)] : [],
       };
     });
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       source: staticSnapshotSource(snapshot),
       initialSnapshot: snapshot,
@@ -847,7 +851,7 @@ describe("dashboard runtime", () => {
   it("opens the explicit first-project flow with Enter on an empty dashboard", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService: fakeFolderService(),
@@ -865,7 +869,7 @@ describe("dashboard runtime", () => {
     const snapshot = createDashboardSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     service.setSnapshot(snapshotWithProjectHarness(snapshot, "web", "opencode"));
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
     store.actions.handleKey({ input: "2" });
@@ -900,7 +904,7 @@ describe("dashboard runtime", () => {
         message: "Default harness was rejected.",
       },
     };
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
     store.actions.handleKey({ input: "2" });
@@ -926,7 +930,7 @@ describe("dashboard runtime", () => {
         message: "Project-local config keeps claude effective.",
       },
     };
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
     store.actions.handleKey({ input: "2" });
@@ -950,7 +954,7 @@ describe("dashboard runtime", () => {
       code: "PROTOCOL_SOCKET_CLOSED",
       message: "Observer socket closed.",
     };
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
     store.actions.handleKey({ input: "2" });
@@ -964,7 +968,7 @@ describe("dashboard runtime", () => {
     expect(service.loadCount).toBe(0);
   });
 
-  it("shows a single toast when a failed default-harness command also broadcasts command.failed", async () => {
+  it("shows one local toast when a default-harness command fails completion", async () => {
     const snapshot = createDashboardSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const failure: SafeError = {
@@ -973,45 +977,27 @@ describe("dashboard runtime", () => {
       message: "Project-local config keeps claude effective.",
     };
     service.nextCompletion = { status: "failed", commandId: "cmd_tui_1", error: failure };
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
-    store.start();
-    await waitFor(() => service.subscribeCount === 1);
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot });
 
     store.actions.dispatch({ type: "projectDefaultAgent.open", projectId: "web" });
     store.actions.handleKey({ input: "2" });
 
-    // The op registers the command before awaiting, so the observer's separate
-    // command.failed broadcast must be suppressed (one toast, not two). A second
-    // unrelated failure is emitted after as an ordering barrier: once its toast
-    // lands, the earlier event has already been processed (FIFO).
     await waitFor(() => service.waitedForCommandIds.includes("cmd_tui_1"));
-    service.emit({ type: "command.failed", commandId: "cmd_tui_1", error: failure });
-    service.emit({
-      type: "command.failed",
-      commandId: "cmd_other",
-      error: {
-        tag: "CommandExecutionError",
-        code: "COMMAND_REJECTED",
-        message: "Unrelated failure.",
-      },
-    });
-
     await waitFor(
       () =>
-        store.state.getState().toasts.some((entry) => entry.toast.message === failure.message) &&
-        store.state.getState().toasts.some((entry) => entry.toast.message === "Unrelated failure."),
+        store.state.getState().toasts.filter((entry) => entry.toast.message === failure.message)
+          .length === 1,
     );
     expect(
       store.state.getState().toasts.filter((entry) => entry.toast.message === failure.message),
     ).toHaveLength(1);
-    store.dispose();
   });
 
   it("reviews a pasted full path when folder filtering has no matches", async () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
@@ -1042,7 +1028,7 @@ describe("dashboard runtime", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
@@ -1067,7 +1053,7 @@ describe("dashboard runtime", () => {
     const snapshot = createNoProjectsSnapshot();
     const service = new FakeTuiObserverService(snapshot);
     const folderService = fakeFolderService();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service,
       initialSnapshot: snapshot,
       folderService,
@@ -1110,31 +1096,12 @@ function withTurnReadiness(snapshot: StationSnapshot): StationSnapshot {
   };
 }
 
-function staticSnapshotSource(snapshot: StationSnapshot): TuiSnapshotSource {
-  return {
-    getState: () => ({ snapshot, connection: { state: "connected", since: Date.now() } }),
-    subscribe: () => () => {},
-  };
+function staticSnapshotSource(snapshot: StationSnapshot): StationClientStateSource {
+  return new FakeClientStateSource(snapshot);
 }
 
-function mutableSnapshotSource(initial: TuiSnapshotSourceState): TuiSnapshotSource & {
-  setConnection(connection: TuiSnapshotSourceState["connection"]): void;
-} {
-  let current = initial;
-  const listeners = new Set<() => void>();
-  return {
-    getState: () => current,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    setConnection: (connection) => {
-      current = { ...current, connection };
-      for (const listener of listeners) {
-        listener();
-      }
-    },
-  };
+function mutableSnapshotSource(initial: StationClientState): FakeClientStateSource {
+  return new FakeClientStateSource(initial.snapshot, initial.connection);
 }
 
 function mutableFolderService(
@@ -1368,44 +1335,12 @@ class ReadinessFailureService extends FakeTuiObserverService {
   }
 }
 
-class SnapshotConnectFailingService extends FakeTuiObserverService {
-  override async loadSnapshot(): Promise<StationSnapshot> {
-    this.loadCount += 1;
-    throw wrappedConnectError();
-  }
-}
-
-class ColdStartConnectFailingService extends FakeTuiObserverService {
-  override async loadSnapshot(): Promise<StationSnapshot> {
-    this.loadCount += 1;
-    throw wrappedConnectError();
-  }
-
-  override subscribeEvents(): AsyncIterable<StationEvent> {
-    this.subscribeCount += 1;
-    return {
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          throw wrappedConnectError();
-        },
-        return: async () => ({ done: true, value: undefined }),
-      }),
-    };
-  }
-}
-
 function connectSafeError(): SafeError {
   return {
     tag: "ProtocolError",
     code: "PROTOCOL_CONNECT_FAILED",
     message: "Could not connect to observer socket /tmp/station-test.sock.",
   };
-}
-
-function wrappedConnectError(): Error {
-  const error = new Error("wrapped connect failure");
-  (error as Error & { cause?: unknown }).cause = connectSafeError();
-  return error;
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

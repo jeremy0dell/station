@@ -56,7 +56,7 @@ describe("dashboard footer model", () => {
   it("preserves the ready dashboard footer", () => {
     expect(footer()).toEqual({
       kind: "dashboard",
-      text: "↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close",
+      text: "↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close",
     });
   });
 
@@ -70,7 +70,7 @@ describe("dashboard footer model", () => {
   it("preserves compact and error quit-hint behavior", () => {
     expect(footer({ columns: 40 })).toEqual({
       kind: "dashboard",
-      text: "↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close",
+      text: "↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close",
     });
     expect(footer({ columns: 40, quitHint: QUIT_HINT_DISMISS_ERROR })).toEqual({
       kind: "dashboard",

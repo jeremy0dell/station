@@ -222,6 +222,29 @@ describe("observer client runtime refresh coalescing and shutdown", () => {
     expect(notified).toBe(0);
     expect(outcomes.length).toBe(outcomesAtStop);
   });
+
+  it("rejects a caller load when stop wins without changing frozen state", async () => {
+    const snapshot = createCommandSnapshot("idle");
+    const service = new DeferredLoadService(snapshot);
+    const runtime = track(
+      createStationClientRuntime({
+        service,
+        initialSnapshot: snapshot,
+        reconnect: { initialDelayMs: 5, maxDelayMs: 20 },
+      }),
+    );
+
+    const loading = runtime.service.loadSnapshot();
+    await waitFor(() => service.loadCount === 1);
+    await runtime.stop();
+    const frozen = runtime.getState();
+    service.releaseLoads();
+
+    await expect(loading).rejects.toThrow(
+      "Observer snapshot load resolved after the client runtime stopped.",
+    );
+    expect(runtime.getState()).toBe(frozen);
+  });
 });
 
 describe("observer client runtime resync-after-gap contract", () => {

@@ -428,7 +428,8 @@ describe("createPtyTable", () => {
     const { table, scripteds } = tableWithScripted();
     const first = table.spawn(baseParams);
     const second = table.spawn(baseParams);
-    expect(second.ptyId).toBe(first.ptyId);
+    expect(first.created).toBe(true);
+    expect(second).toEqual({ ...first, created: false });
     expect(scripteds).toHaveLength(1);
     expect(table.list()).toHaveLength(1);
   });
@@ -456,8 +457,8 @@ describe("createPtyTable", () => {
       cwd: "/repo/wt-2",
     });
 
-    expect(first).toEqual({ ptyId: "pty-1", pid: 4200 });
-    expect(second).toEqual({ ptyId: "pty-2", pid: 4201 });
+    expect(first).toEqual({ ptyId: "pty-1", pid: 4200, created: true });
+    expect(second).toEqual({ ptyId: "pty-2", pid: 4201, created: true });
     expect(scripteds).toHaveLength(2);
     expect(table.list().map((entry) => [entry.terminalTargetId, entry.ptyId, entry.pid])).toEqual([
       ["native:wt-1", "pty-1", 4200],

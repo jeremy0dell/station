@@ -47,7 +47,7 @@ Use the narrowest tool that can answer the question:
 Use `stn debug logs [query]` for bounded historical log inspection when there is no
 trace, command, or diagnostic ID yet. It reads structured JSONL logs from the
 configured state directory without contacting the observer. By default it searches
-`observer`, `cli`, and `tui` logs, excludes noisy hook logs, returns recent
+`observer`, `cli`, `tui`, and `station-host` logs, excludes noisy hook logs, returns recent
 `warn`/`error` records when no query is supplied, and searches all levels when a
 query is supplied. Opt into hook logs explicitly:
 
@@ -167,6 +167,7 @@ logs/observer.jsonl
 logs/hooks.jsonl
 logs/cli.jsonl
 logs/tui.jsonl
+logs/station-host.jsonl
 diagnostics/*/diagnostic-index.json
 diagnostics/*/commands.jsonl
 diagnostics/*/errors.jsonl
@@ -345,7 +346,8 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.
 - `logs/observer.jsonl` and `logs/hooks.jsonl` explain runtime events around reconcile, command execution, hook delivery, projection, spool fallback, and provider health.
-- `logs/tui.jsonl` carries pane corruption telemetry from the native workspace: `Terminal corruption signal.` lines with `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
+- `logs/tui.jsonl` carries the strict native UI lifecycle (`ui.started`, ready/surface changes, shutdown intent/completion, and fatal errors) plus pane corruption telemetry. Lifecycle records contain IDs, typed surfaces/reasons, process outcomes, and source ordering only; they never contain terminal output, prompts, keys, foreground applications, process lists, environment variables, cwd, or repository paths. `Terminal corruption signal.` lines retain `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
+- `logs/station-host.jsonl` keeps the frozen `agent.attach`/`agent.detach` operational timeline and replay metrics alongside typed client, attachment, and PTY lifecycle records. Use typed records for `uiRunId`, connection/attachment correlation, and detach reasons; a detached attachment is not evidence that its PTY exited.
 - `diagnostics/panes/` holds pane evidence dumps written when a detector trips: the visible grid plus the raw byte tail that produced it. Feed `rawTail` back through `createStationVtScreen` to replay the corruption offline.
 - SQLite is observer-owned runtime history; inspect through existing debug/diagnostic surfaces unless a task explicitly needs database-level investigation.
 - Logs and bundles are diagnostic evidence only. Reconcile from config/providers/current observer state before treating old evidence as current truth.
@@ -355,7 +357,8 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 
 Station (the OpenTUI terminal workspace under `station/`) adds a second runtime process beside the observer: the `station-station-host` daemon, which owns PTYs that outlive the UI so panes can warm-reattach across a UI restart.
 
-When Station "does nothing" or panes read "exited", check the process topology before the code:
+When Station "does nothing" or panes read "exited", inspect the `cli`, `tui`, and
+`station-host` lifecycle logs, then check the process topology before the code:
 
 - Native Station coordinates one UI per input TTY with an active SQLite write
   transaction and a cooperative Unix-socket endpoint under
@@ -371,7 +374,7 @@ When Station "does nothing" or panes read "exited", check the process topology b
   that is impossible, inspect candidates independently with
   `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
   `kill -TERM <independently-verified-station-pid>` yourself.
-- The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy or speaks another protocol. Both are deliberate preservation failures, not stale-socket evidence.
+- The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy, uses another build, or speaks another protocol. `HOST_CLIENT_IDENTITY_MISMATCH` instead means one connection omitted or changed its UI correlation identity. Compatibility failures preserve the Host; correlation failures reject only the malformed client request.
 - The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect live PTYs with `bun run host:list` in `station/`.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
 - Successful `agent.attach` entries in `station-host.jsonl` report `replayKind` (`raw-complete`, `semantic-truncation-recovery`, or `live-reset-recovery`), replay entry/byte counts, recorded geometry, and capture duration without terminal contents. `live-reset-recovery` means historical output could not be reconstructed exactly, so Station applied Host-captured control-only reset data, restored interaction modes, nudged geometry for a child repaint, and retained live I/O. The associated `pty.snapshot.degraded` entry classifies the content-free cause as `unsupported-state`, `model-update-failed`, or `serialization-failed`; unsupported state also carries an optional stable, content-free `detail` classification. `HOST_SNAPSHOT_PENDING` is retried because later output may finish an incomplete parser sequence. `HOST_SNAPSHOT_FAILED` is no longer an expected live-reconstruction outcome; if it appears, confirm the PTY in `host:list` and treat it as a Host/client regression rather than an Observer session exit.

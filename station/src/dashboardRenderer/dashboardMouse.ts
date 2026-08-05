@@ -1,3 +1,4 @@
+import type { StationClientStateSource } from "@station/client";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import {
   deriveTuiInputMode,
@@ -18,6 +19,7 @@ import {
 
 type DashboardMouseInput = {
   state: DashboardStateSource;
+  clientState: StationClientStateSource;
   actions: Pick<
     DashboardActions,
     "createQuickSession" | "dismissToasts" | "dispatch" | "handleKey" | "pushToast"

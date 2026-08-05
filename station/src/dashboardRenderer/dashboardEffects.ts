@@ -1,3 +1,4 @@
+import type { StationClientStateSource } from "@station/client";
 import {
   selectDashboardSessionRow,
   type DashboardActions,
@@ -6,12 +7,13 @@ import {
 } from "@station/dashboard-core";
 
 type DashboardTargetInput = {
-  state: DashboardStateSource;
+  clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "pushToast">;
 };
 
 type DashboardControlInput = {
   state: DashboardStateSource;
+  clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "createQuickSession" | "pushToast">;
 };
 
@@ -50,7 +52,7 @@ export function openDashboardRowShell(
   rowId: string,
   effects: DashboardRendererEffects,
 ): void {
-  const snapshot = store.state.getState().snapshot;
+  const snapshot = store.clientState.getState().snapshot;
   if (snapshot === undefined) {
     return;
   }
@@ -67,7 +69,7 @@ function openProjectShell(
   projectId: string,
   effects: DashboardRendererEffects,
 ): void {
-  const project = store.state
+  const project = store.clientState
     .getState()
     .snapshot?.projects.find((candidate) => candidate.id === projectId);
   if (project === undefined) {

@@ -73,7 +73,7 @@ export function activeTuiToast(
 }
 
 export function isTuiToastHiddenByScreen(screen: DashboardScreenView): boolean {
-  if (screen.name === "dashboard" || screen.name === "search") {
+  if (screen.name === "dashboard") {
     return false;
   }
   return screen.name !== "renameSession" || screen.step === "editName";

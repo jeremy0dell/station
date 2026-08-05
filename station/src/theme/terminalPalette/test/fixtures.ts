@@ -74,6 +74,34 @@ export const veryLightTerminalColors = {
   defaultBackground: "#ffffff",
 } as const;
 
+export const nearWhiteTerminalColors = {
+  ...lightTerminalColors,
+  defaultForeground: "#111827",
+  defaultBackground: "#fefefe",
+} as const;
+
+export const weakAnsiLightTerminalColors = {
+  ...lightTerminalColors,
+  palette: [
+    "#f1f2f3",
+    "#f2efee",
+    "#eef2ee",
+    "#f2f1e9",
+    "#eef1f4",
+    "#f1eef3",
+    "#edf2f2",
+    "#f3f3f3",
+    "#e9eaec",
+    "#f0c4c4",
+    "#c9e8c9",
+    "#ebe6b4",
+    "#c4d9f2",
+    "#e0c8ee",
+    "#bae4ea",
+    "#ebebeb",
+  ],
+} as const;
+
 export const weakAnsiTerminalColors = {
   ...darkTerminalColors,
   palette: [
@@ -112,4 +140,57 @@ export const unsupportedTerminalColors = {
   defaultForeground: null,
   defaultBackground: null,
   ...nullableSpecialColors,
+} as const;
+
+export const saturatedLightTerminalColors = {
+  ...lightTerminalColors,
+  palette: [
+    "#111827",
+    "#991b1b",
+    "#065f46",
+    "#854d0e",
+    "#1e40af",
+    "#6b21a8",
+    "#155e75",
+    "#374151",
+    "#4b5563",
+    "#ff5f5f",
+    "#7bff7b",
+    "#fff95b",
+    "#5f8bff",
+    "#ff7bff",
+    "#5fffff",
+    "#1f2937",
+  ],
+} as const;
+
+export const saturatedDarkTerminalColors = {
+  ...darkTerminalColors,
+  palette: [
+    "#111827",
+    "#7a0000",
+    "#004d00",
+    "#7a5f00",
+    "#001d7a",
+    "#5c007a",
+    "#004d5c",
+    "#d1d5db",
+    "#9ca3af",
+    "#ff0000",
+    "#00d500",
+    "#d5d500",
+    "#0055ff",
+    "#d500ff",
+    "#00e5e5",
+    "#f9fafb",
+  ],
+} as const;
+
+export const grayTerminalColors = {
+  ...darkTerminalColors,
+  palette: Array.from({ length: 16 }, (_, index) => {
+    const channel = 0x30 + index * 4;
+    const value = channel.toString(16).padStart(2, "0");
+    return `#${value}${value}${value}`;
+  }),
 } as const;

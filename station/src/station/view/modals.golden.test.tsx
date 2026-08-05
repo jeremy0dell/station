@@ -22,13 +22,11 @@ import {
 } from "../fixtures/scenarios.js";
 import type {
   DashboardRuntime,
-  DashboardSearchExperience,
   DashboardState,
   DashboardStateSource,
   TuiKey,
 } from "@station/dashboard-core";
 import {
-  persistentFilterExperience,
   addPendingProjectDefaultHarness,
   applyAddProjectFolderLoaded,
   applyAddProjectFolderReviewFailed,
@@ -59,7 +57,6 @@ type ModalCase = {
   prepare?: (state: DashboardState) => DashboardState;
   size?: { width: number; height: number };
   trimSnapshotTrailingWhitespace?: true;
-  dashboardSearchExperience?: DashboardSearchExperience;
   expect: string[];
   reject?: string[];
 };
@@ -108,21 +105,13 @@ const CASES: ModalCase[] = [
     ],
   },
   {
-    name: "search prompt",
+    name: "persistent filter header editor",
     keys: [{ input: "/" }, { input: "api" }],
-    expect: ["search: api"],
-  },
-  {
-    name: "persistent filter header editor without prompt overlay",
-    keys: [{ input: "/" }, { input: "api" }],
-    dashboardSearchExperience: persistentFilterExperience,
     expect: ["FILTER /api▏", "FILTER", "Enter apply", "api-cache"],
-    reject: ["search: api"],
   },
   {
     name: "persistent filter condition field chooser",
     keys: [{ input: "/" }, { input: "i", ctrl: true }],
-    dashboardSearchExperience: persistentFilterExperience,
     expect: [
       "FILTER CONDITIONS",
       "[×]",
@@ -136,7 +125,6 @@ const CASES: ModalCase[] = [
   {
     name: "persistent filter status condition values",
     keys: [{ input: "/" }, { input: "i", ctrl: true }, { input: "S" }, { input: "3" }],
-    dashboardSearchExperience: persistentFilterExperience,
     expect: [
       "STATUS CONDITION",
       "3 [✓] Working",
@@ -162,7 +150,6 @@ const CASES: ModalCase[] = [
       { input: "", downArrow: true },
     ],
     size: { width: 40, height: 12 },
-    dashboardSearchExperience: persistentFilterExperience,
     expect: [
       "STATUS CONDITION ↑5",
       "▸ 7 [ ] No agent",
@@ -571,13 +558,9 @@ describe("modal flow golden frames", () => {
     }
   });
 
-  function makeStore(
-    snapshot = manyProjectsSnapshot(),
-    dashboardSearchExperience?: DashboardSearchExperience,
-  ): DashboardRuntime {
+  function makeStore(snapshot = manyProjectsSnapshot()): DashboardRuntime {
     return makeStationTestRuntime({
       snapshot,
-      ...(dashboardSearchExperience === undefined ? {} : { dashboardSearchExperience }),
       folderService: {
         cwd: () => "/Users/example/Developer/station",
         homeDir: () => "/Users/example",
@@ -599,10 +582,7 @@ describe("modal flow golden frames", () => {
     let state = createInitialTuiState({ initialSnapshot: snapshot });
     for (const key of modal.keys) {
       const context = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
-      state =
-        modal.dashboardSearchExperience === undefined
-          ? handleTuiKey(state, key, context).state
-          : handleTuiKey(state, key, context, modal.dashboardSearchExperience).state;
+      state = handleTuiKey(state, key, context).state;
     }
     return modal.prepare(state);
   }
@@ -610,7 +590,7 @@ describe("modal flow golden frames", () => {
   for (const modal of CASES) {
     it(`renders the ${modal.name}`, async () => {
       const snapshot = modal.snapshot?.() ?? manyProjectsSnapshot();
-      const store = makeStore(snapshot, modal.dashboardSearchExperience);
+      const store = makeStore(snapshot);
       for (const key of modal.keys) {
         store.actions.handleKey(key);
       }
@@ -677,12 +657,6 @@ describe("modal flow golden frames", () => {
         foreground: LIGHT_TERMINAL_THEME.text.primary,
         border: true,
       },
-      {
-        name: "search prompt",
-        needle: "search: api",
-        foreground: LIGHT_TERMINAL_THEME.status.warning,
-        border: false,
-      },
     ];
 
     for (const representative of representatives) {
@@ -747,7 +721,7 @@ describe("modal flow golden frames", () => {
   }
 
   it("keeps condition controls undimmed beneath the modal backdrop", async () => {
-    const store = makeStore(manyProjectsSnapshot(), persistentFilterExperience);
+    const store = makeStore(manyProjectsSnapshot());
     for (const key of [
       { input: "/" },
       { input: "i", ctrl: true },

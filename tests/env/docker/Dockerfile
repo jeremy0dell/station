@@ -34,8 +34,8 @@ RUN corepack enable && corepack prepare pnpm@11.0.0 --activate \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app /app
-# Fake Worktrunk, Bun, diffnav, delta, and an agent CLI on PATH (presence is enough).
-RUN for tool in wt bun diffnav delta codex; do \
+# Fake Worktrunk, Bun, Hunk, and an agent CLI on PATH (presence is enough).
+RUN for tool in wt bun hunk codex; do \
       printf '#!/bin/sh\necho "%s stub"\nexit 0\n' "$tool" > "/usr/local/bin/$tool" && \
       chmod +x "/usr/local/bin/$tool"; \
     done
@@ -61,9 +61,9 @@ RUN rm -f /usr/local/bin/wt
 FROM happy-linux AS no-bun
 RUN rm -f /usr/local/bin/bun
 
-# ---- no-diffnav: diffnav + delta withheld --------------------------------------
-FROM happy-linux AS no-diffnav
-RUN rm -f /usr/local/bin/diffnav /usr/local/bin/delta
+# ---- no-diff-viewer: Hunk withheld ---------------------------------------------
+FROM happy-linux AS no-diff-viewer
+RUN rm -f /usr/local/bin/hunk
 
 # ---- no-harness: agent CLI withheld --------------------------------------------
 FROM happy-linux AS no-harness

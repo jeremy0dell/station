@@ -89,7 +89,7 @@ const DASHBOARD_FULL_SHORTCUTS: readonly FooterShortcut[] = [
   ["tui.dashboard.newSession", "new"],
   ["tui.dashboard.addProject", "add"],
   ["tui.dashboard.nextNeedsMe", "next-needs-me"],
-  ["tui.dashboard.search", "search"],
+  ["tui.dashboard.filter", "filter"],
   ["tui.dashboard.remove", "delete"],
   ["tui.dashboard.helpAlias", "help"],
 ];
@@ -98,7 +98,7 @@ const DASHBOARD_COMPACT_SHORTCUTS: readonly FooterShortcut[] = [
   ["tui.dashboard.focusActivate", "activate"],
   ["tui.dashboard.newSession", "new"],
   ["tui.dashboard.nextNeedsMe", "next"],
-  ["tui.dashboard.search", "search"],
+  ["tui.dashboard.filter", "filter"],
   ["tui.dashboard.remove", "delete"],
   ["tui.dashboard.helpAlias", "help"],
 ];
@@ -108,21 +108,21 @@ const APPLIED_FILTER_FULL_SHORTCUTS: readonly AppliedFooterShortcut[] = [
   ["tui.dashboard.newSession", "new"],
   ["tui.dashboard.addProject", "add"],
   ["tui.dashboard.nextNeedsMe", "next-needs-me"],
-  ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+  ["tui.dashboard.filter", "edit", "persistentFilter.edit"],
   ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
   ["tui.dashboard.remove", "delete"],
   ["tui.dashboard.helpAlias", "help"],
 ];
 
 const APPLIED_FILTER_PRIORITIZED_SHORTCUTS: readonly AppliedFooterShortcut[] = [
-  ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+  ["tui.dashboard.filter", "edit", "persistentFilter.edit"],
   ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
   ["tui.dashboard.focusActivate", "activate"],
   ["tui.dashboard.newSession", "new"],
 ];
 
 const APPLIED_FILTER_ESSENTIAL_SHORTCUTS: readonly AppliedFooterShortcut[] = [
-  ["tui.dashboard.search", "edit", "persistentFilter.edit"],
+  ["tui.dashboard.filter", "edit", "persistentFilter.edit"],
   ["tui.dashboard.dismissEsc", "clear", "persistentFilter.clear"],
 ];
 
@@ -226,7 +226,7 @@ function appliedFilterFooter(
 
 function labeledAppliedFilterActions(): readonly DashboardFilterFooterSegment[] {
   const edit = footerActionSegment(
-    shortcut("tui.dashboard.search", "edit"),
+    shortcut("tui.dashboard.filter", "edit"),
     "persistentFilter.edit",
   );
   const clear = footerActionSegment(

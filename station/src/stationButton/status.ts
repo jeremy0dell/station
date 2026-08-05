@@ -1,4 +1,4 @@
-import type { SessionId, WorktreeId } from "@station/contracts";
+import type { SessionId, StationSnapshot, WorktreeId } from "@station/contracts";
 import {
   isReadyToRead,
   selectDashboardSessionRows,
@@ -7,6 +7,7 @@ import {
   type DashboardSessionRow,
   type DashboardStateView,
 } from "@station/dashboard-core";
+import { attentionKey } from "../state/attentionDismissal.js";
 
 /** Worst agent status across a project's sessions, calmest last. */
 export type ProjectRollupStatus = "needsYou" | "working" | "ready" | "idle";
@@ -49,13 +50,25 @@ export function rowNeedsUser(row: DashboardSessionRow["presentation"]): boolean 
   return row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck";
 }
 
+/** The attention keys of every session currently asking for the user. */
+export function attentionKeysFromSnapshot(
+  snapshot: DashboardStateView["snapshot"],
+): readonly string[] {
+  if (snapshot === undefined) {
+    return [];
+  }
+  return selectDashboardSessionRows(snapshot)
+    .filter((row) => rowNeedsUser(row.presentation))
+    .map((row) => attentionKey(row.session.id, row.worktree.id));
+}
+
 // Counts come from the client-side fleet breakdown, not snapshot.counts: the
 // contract folds ready into idle and its attention count excludes stuck.
 export function selectStationButtonStatus(
-  state: DashboardStateView,
+  snapshot: StationSnapshot | undefined,
+  localRows: DashboardStateView["localRows"],
   options?: { projectRollup?: boolean },
 ): StationButtonStatus {
-  const snapshot = state.snapshot;
   if (snapshot === undefined) {
     return EMPTY_STATUS;
   }
@@ -70,7 +83,7 @@ export function selectStationButtonStatus(
     idleCount: fleet.idle,
   };
   if (attentionRow !== undefined) {
-    status.sessionName = sessionRowDisplayTitle(attentionRow, state.localRows);
+    status.sessionName = sessionRowDisplayTitle(attentionRow, localRows);
     status.attentionSessionId = attentionRow.session.id;
     status.attentionWorktreeId = attentionRow.worktree.id;
   }

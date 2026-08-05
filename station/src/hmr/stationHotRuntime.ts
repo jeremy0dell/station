@@ -1,3 +1,4 @@
+import type { UiRunId } from "@station/contracts";
 import type { WorkspaceConfig } from "../config/stationConfig.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import type { WorkspaceSlice } from "../state/types.js";
@@ -25,6 +26,7 @@ export type StationHotRuntime = {
 export type StationHotSlots = typeof globalThis & {
   __stationHotRuntime?: StationHotRuntime;
   __stationHotRenderer?: StationHotRenderer;
+  __stationUiRunId?: UiRunId;
 };
 
 export function stationHotSlots(): StationHotSlots {

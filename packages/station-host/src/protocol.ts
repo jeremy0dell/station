@@ -1,31 +1,59 @@
-import { SafeErrorSchema, TerminalOutputCompatibilitySchema } from "@station/contracts";
+import {
+  SafeErrorSchema,
+  TerminalOutputCompatibilitySchema,
+  UiLifecycleDetachReasonSchema,
+  UiRunContextSchema,
+} from "@station/contracts";
 import { z } from "zod";
 
 /**
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 5;
+export const HOST_PROTOCOL_VERSION = 6;
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
+
+/** Wire/build identity used only for guarded Host compatibility decisions. */
+export const HostCompatibilityIdentitySchema = z
+  .object({
+    protocolVersion: z.number().int(),
+    buildVersion: z.string().min(1),
+  })
+  .strict();
+export type HostCompatibilityIdentity = z.infer<typeof HostCompatibilityIdentitySchema>;
+
+/** Content-free UI and connection identity used only for lifecycle correlation. */
+export const HostCorrelationIdentitySchema = UiRunContextSchema.extend({
+  connectionId: idSchema,
+}).strict();
+export type HostCorrelationIdentity = z.infer<typeof HostCorrelationIdentitySchema>;
+
+/** Compatibility and diagnostic correlation carried on every operational Host request. */
+export const HostClientIdentitySchema = HostCompatibilityIdentitySchema.merge(
+  HostCorrelationIdentitySchema,
+).strict();
+export type HostClientIdentity = z.infer<typeof HostClientIdentitySchema>;
 
 export const HostRequestSchema = z
   .object({
     id: idSchema,
     method: z.string().min(1),
     params: z.unknown().optional(),
-    protocolVersion: z.number().int().optional(),
-    buildVersion: z.string().min(1).optional(),
+    client: HostClientIdentitySchema.optional(),
   })
   .strict();
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 
-/** Exact client identity carried by operational requests so the host can reject old callers. */
-export type HostClientIdentity = {
-  protocolVersion: number;
-  buildVersion: string;
-};
+/** One-way normal-shutdown notice; the server must not write a response. */
+export const HostClientShutdownNotificationSchema = z
+  .object({
+    method: z.literal("host.clientShutdown"),
+    client: HostClientIdentitySchema,
+  })
+  .strict();
+export type HostClientShutdownNotification = z.infer<typeof HostClientShutdownNotificationSchema>;
 
 export const HostResponseSchema = z.union([
   z.object({ id: idSchema, ok: z.literal(true), result: z.unknown() }).strict(),
@@ -41,10 +69,15 @@ export function hostRequest(
 ): HostRequest {
   const request: HostRequest = params === undefined ? { id, method } : { id, method, params };
   if (client !== undefined) {
-    request.protocolVersion = client.protocolVersion;
-    request.buildVersion = client.buildVersion;
+    request.client = client;
   }
   return request;
+}
+
+export function hostClientShutdownNotification(
+  client: HostClientIdentity,
+): HostClientShutdownNotification {
+  return { method: "host.clientShutdown", client };
 }
 
 export function hostSuccess(id: string, result: unknown): HostResponse {
@@ -152,7 +185,9 @@ export const HostStopIfIdleParamsSchema = z
 export const HostStopIfIdleResultSchema = z.object({ stopping: z.literal(true) }).strict();
 export type HostStopIfIdleResult = z.infer<typeof HostStopIfIdleResultSchema>;
 
-export const HostAttachParamsSchema = z.object({ ptyId: idSchema }).strict();
+export const HostAttachParamsSchema = z
+  .object({ ptyId: idSchema, attachmentId: idSchema })
+  .strict();
 export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;
 
 export const HostReplayDataEventSchema = z
@@ -237,7 +272,13 @@ export const HostAttachAckSchema = z
   });
 export type HostAttachAck = z.infer<typeof HostAttachAckSchema>;
 
-export const HostDetachParamsSchema = z.object({ ptyId: idSchema }).strict();
+export const HostDetachParamsSchema = z
+  .object({
+    ptyId: idSchema,
+    attachmentId: idSchema,
+    reason: UiLifecycleDetachReasonSchema.extract(["explicit_detach", "client_shutdown"]),
+  })
+  .strict();
 export const HostFrameSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("data"), ptyId: idSchema, data: z.string() }).strict(),
   z
