@@ -973,11 +973,7 @@ function isManagedWorktreeObservation(
 }
 
 function isMainWorktree(project: ProviderProjectConfig, observation: WorktreeObservation): boolean {
-  const defaultBranch = project.defaultBranch ?? project.worktrunk.base;
-  return (
-    samePath(observation.path, project.root) ||
-    (defaultBranch !== undefined && observation.branch === defaultBranch)
-  );
+  return samePath(observation.path, project.root) || observation.isPrimaryCheckout === true;
 }
 
 function worktrunkProjectConfigIdentifier(
