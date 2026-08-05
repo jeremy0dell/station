@@ -11,14 +11,10 @@ import {
   type DashboardStateSource,
 } from "@station/dashboard-core";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
-import {
-  paneLaunchForkSessionOutcome,
-  paneLaunchManagedOutcome,
-  paneLaunchNewSessionOutcome,
-  paneOpenOutcome,
-  type MouseBindings,
-  type RouteOutcome,
-  type StationCommandId,
+import type {
+  MouseBindings,
+  RouteOutcome,
+  StationCommandId,
 } from "../router.js";
 import {
   isPrimaryMouseEvent,
@@ -351,21 +347,6 @@ export function createStationMouseBindings(
         };
       }
       const outcome = routeStationMouse(target.target, event, dashboardRuntime);
-      if (outcome.kind === "close-overlay") {
-        return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
-      }
-      if (outcome.kind === "open-pane") {
-        return paneOpenOutcome(outcome);
-      }
-      if (outcome.kind === "launch-managed") {
-        return paneLaunchManagedOutcome(outcome);
-      }
-      if (outcome.kind === "launch-new-session") {
-        return paneLaunchNewSessionOutcome(outcome);
-      }
-      if (outcome.kind === "launch-fork") {
-        return paneLaunchForkSessionOutcome(outcome);
-      }
       if (outcome.kind === "open-url") {
         return { kind: "open-url", url: outcome.url };
       }

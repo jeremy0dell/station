@@ -13,6 +13,9 @@ import {
   removeObserverProcessIdentity,
 } from "../../src/runtime/observerPidfile.js";
 
+const PROCESS_TOKEN = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
+const REPLACEMENT_PROCESS_TOKEN = ["b47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
+
 const pidfileFailures = vi.hoisted(() => ({
   failClaimedLink: false,
   failClaimedUnlink: false,
@@ -72,14 +75,14 @@ describe("observer pidfile", () => {
     expect(
       createObserverProcessIdentity({
         pid: process.pid,
-        processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+        processToken: PROCESS_TOKEN,
         version: "1.2.3",
         socketPath,
       }),
     ).toEqual({
       pid: process.pid,
       osStartTime: expectedStartTime,
-      processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+      processToken: PROCESS_TOKEN,
       version: "1.2.3",
       socketPath,
     });
@@ -92,7 +95,7 @@ describe("observer pidfile", () => {
       expect(
         createObserverProcessIdentity({
           pid: process.pid,
-          processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+          processToken: PROCESS_TOKEN,
           version: "1.2.3",
           socketPath: "/tmp/station/observer.sock",
         }).osStartTime,
@@ -115,7 +118,7 @@ describe("observer pidfile", () => {
 
     const path = observerPidfilePath(socketPath);
     expect(await readObserverProcessIdentity(socketPath)).toEqual(identity);
-    expect(JSON.parse(await readFile(path, "utf8"))).toEqual(identity);
+    expect(await readFile(path, "utf8")).toBe(`${JSON.stringify(identity)}\n`);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
     expect(await readdir(socketDir)).toEqual([basename(observerPidfilePath(socketPath))]);
   });
@@ -181,7 +184,7 @@ describe("observer pidfile", () => {
   it.each([
     ["pid", { pid: process.pid + 1 }],
     ["osStartTime", { osStartTime: "Mon Jan  1 00:00:00 2001" }],
-    ["processToken", { processToken: "b47ac10b-58cc-4372-a567-0e02b2c3d479" }],
+    ["processToken", { processToken: REPLACEMENT_PROCESS_TOKEN }],
     ["version", { version: "9.9.9" }],
     ["socketPath", { socketPath: "/tmp/other/observer.sock" }],
   ] as const)("leaves the pidfile when %s does not match", async (_field, replacement) => {
@@ -252,7 +255,7 @@ function processIdentity(socketPath: string): ObserverProcessIdentity {
   return {
     pid: process.pid,
     osStartTime: "Sat Jul 11 12:34:56 2026",
-    processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+    processToken: PROCESS_TOKEN,
     version: "1.2.3",
     socketPath,
   };

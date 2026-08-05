@@ -2,6 +2,11 @@ import type { StationClientConnectionState, StationClientStateSource } from "@st
 import type { StationSnapshot } from "@station/contracts";
 import {
   createDashboardRuntime,
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  dashboardExecution,
+  type DashboardCapabilities,
+  type DashboardFocusTarget,
   type DashboardRuntime,
   type DashboardRuntimeOptions,
   type TuiFolderService,
@@ -18,6 +23,7 @@ export type MakeStationTestRuntimeOptions = {
   seedInitialSnapshot?: boolean | undefined;
   terminalRows?: number | undefined;
   initialState?: DashboardRuntimeOptions["initialState"];
+  capabilities?: DashboardCapabilities;
   folderService?: TuiFolderService | undefined;
 };
 
@@ -25,19 +31,108 @@ export type StationTestDashboardRuntime = DashboardRuntime & {
   clientState: StationClientStateSource;
 };
 
-export type CreateStationTestDashboardRuntimeOptions = Omit<DashboardRuntimeOptions, "source"> & {
+export type CreateStationTestDashboardRuntimeOptions = Omit<
+  DashboardRuntimeOptions,
+  "source" | "capabilities"
+> & {
   source?: StationClientStateSource;
   initialSnapshot?: StationSnapshot;
+  capabilities?: DashboardCapabilities;
+  persistentPopup?: boolean;
+  focusOrigin?: import("@station/contracts").TerminalFocusOrigin;
+  resolveFocusTarget?: () => Promise<DashboardFocusTarget | undefined>;
+  onFocusSuccess?: () => Promise<void>;
+  onDismiss?: () => Promise<void>;
+  onExit?: (code: number) => void;
+  exitOnFocusSuccess?: boolean;
 };
 
 /** Dashboard test runtime with an explicit canonical source attached to the test facade. */
 export function createStationTestDashboardRuntime(
   options: CreateStationTestDashboardRuntimeOptions,
 ): StationTestDashboardRuntime {
-  const { initialSnapshot, ...runtimeOptions } = options;
+  const {
+    initialSnapshot,
+    capabilities,
+    persistentPopup,
+    focusOrigin,
+    resolveFocusTarget,
+    onFocusSuccess,
+    onDismiss,
+    onExit,
+    exitOnFocusSuccess,
+    ...runtimeOptions
+  } = options;
   const clientState = options.source ?? new FakeStationSource(initialSnapshot);
-  const runtime = createDashboardRuntime({ ...runtimeOptions, source: clientState });
+  const resolvedCapabilities =
+    capabilities ??
+    createStationTestCapabilities({
+      clientState,
+      service: options.service,
+      persistentPopup: persistentPopup === true,
+      ...(focusOrigin === undefined ? {} : { focusOrigin }),
+      ...(resolveFocusTarget === undefined ? {} : { resolveFocusTarget }),
+      ...(onFocusSuccess === undefined ? {} : { onFocusSuccess }),
+      ...(onDismiss === undefined ? {} : { onDismiss }),
+      ...(onExit === undefined ? {} : { onExit }),
+      exitOnFocusSuccess: exitOnFocusSuccess === true,
+    });
+  const runtime = createDashboardRuntime({
+    ...runtimeOptions,
+    source: clientState,
+    capabilities: resolvedCapabilities,
+  });
   return { ...runtime, clientState };
+}
+
+function createStationTestCapabilities(options: {
+  clientState: StationClientStateSource;
+  service: DashboardRuntimeOptions["service"];
+  persistentPopup: boolean;
+  focusOrigin?: import("@station/contracts").TerminalFocusOrigin;
+  resolveFocusTarget?: () => Promise<DashboardFocusTarget | undefined>;
+  onFocusSuccess?: () => Promise<void>;
+  onDismiss?: () => Promise<void>;
+  onExit?: (code: number) => void;
+  exitOnFocusSuccess: boolean;
+}): DashboardCapabilities {
+  const activationOptions: Parameters<typeof createObserverActivationCapabilities>[0] = {
+    source: options.clientState,
+    service: options.service,
+    clientLabel: "Station test",
+    waitForFocusCompletion: options.persistentPopup || options.exitOnFocusSuccess,
+  };
+  if (options.focusOrigin !== undefined) activationOptions.focusOrigin = options.focusOrigin;
+  if (options.resolveFocusTarget !== undefined) {
+    activationOptions.resolveFocusTarget = options.resolveFocusTarget;
+  }
+  if (options.onFocusSuccess !== undefined) activationOptions.onFocusSuccess = options.onFocusSuccess;
+  const managedOptions: Parameters<typeof createObserverManagedSessionCapabilities>[0] = {
+    service: options.service,
+    clientLabel: "Station test",
+  };
+  if (options.focusOrigin !== undefined) managedOptions.focusOrigin = options.focusOrigin;
+  if (options.resolveFocusTarget !== undefined) {
+    managedOptions.resolveFocusTarget = options.resolveFocusTarget;
+  }
+  return {
+    activation: createObserverActivationCapabilities(activationOptions),
+    managedSessions: createObserverManagedSessionCapabilities(managedOptions),
+    shell: { open: () => dashboardExecution({ kind: "success" }) },
+    dismissal: {
+      dismissDashboard: () => {
+        const completion = options.onDismiss?.() ?? Promise.resolve();
+        return dashboardExecution(completion.then(() => ({ kind: "success" } as const)));
+      },
+      exitRenderer: ({ exitCode }) => {
+        if (options.persistentPopup && options.onDismiss !== undefined) {
+          return dashboardExecution(options.onDismiss().then(() => ({ kind: "success" } as const)));
+        }
+        options.onExit?.(exitCode);
+        return dashboardExecution({ kind: "success" });
+      },
+    },
+  };
 }
 
 export type StationTestRuntime = {
@@ -63,6 +158,7 @@ export function makeStationTestRuntime(
     service,
     persistentPopup: true,
     onDismiss: async () => {},
+    ...(options.capabilities === undefined ? {} : { capabilities: options.capabilities }),
     initialState: {
       ...(options.initialState ?? {}),
       ...(options.terminalRows === undefined ? {} : { terminalRows: options.terminalRows }),

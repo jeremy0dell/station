@@ -1,5 +1,4 @@
 import type { MouseEvent } from "@opentui/core";
-import type { StationClientStateSource } from "@station/client";
 import { useTerminalDimensions } from "@opentui/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
 import { useCallback } from "react";
@@ -14,15 +13,12 @@ import {
   StationMouseProvider,
   type StationMouseDispatch,
 } from "../station/view/stationMouseContext.js";
-import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { routeDashboardMouse } from "./dashboardMouse.js";
 
 type FullscreenDashboardInput = {
   state: DashboardStateSource;
-  clientState: StationClientStateSource;
   actions: Pick<
     DashboardActions,
-    | "createQuickSession"
     | "dismissToasts"
     | "dispatch"
     | "expireToasts"
@@ -40,19 +36,19 @@ type FullscreenDashboardInput = {
  * screen (the CLI `tui`/`popup` surface that replaced the retired Ink UI).
  * The reserved first row reuses Station's title and configured-widget chrome.
  *
- * Mouse targets route through the standalone dashboard adapter, which reuses
- * shared dashboard actions and delegates terminal effects to its environment.
+ * Mouse targets dispatch semantic dashboard actions; only URL presentation
+ * remains a direct renderer callback.
  */
 export type FullscreenDashboardProps = {
   runtime: FullscreenDashboardInput;
-  effects: DashboardRendererEffects;
+  openUrl: (url: string) => void;
   onCopyNotice: (text: string) => void;
   hoverEnabled?: boolean;
 };
 
 export function FullscreenDashboard({
   runtime,
-  effects,
+  openUrl,
   onCopyNotice,
   hoverEnabled = true,
 }: FullscreenDashboardProps) {
@@ -62,9 +58,9 @@ export function FullscreenDashboard({
   const topRowWidgets = useTopRowWidgets(widgets);
   const dispatch = useCallback<StationMouseDispatch>(
     (target, event: MouseEvent) => {
-      routeDashboardMouse(target, normalizeStationMouseEvent(event), runtime, effects);
+      routeDashboardMouse(target, normalizeStationMouseEvent(event), runtime, openUrl);
     },
-    [effects, runtime],
+    [openUrl, runtime],
   );
   return (
     <StationHoverProvider value={hoverEnabled}>

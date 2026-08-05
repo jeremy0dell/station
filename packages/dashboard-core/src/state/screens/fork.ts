@@ -8,7 +8,6 @@ import {
 } from "../../components/EditableTextInput/editing.js";
 import { createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardSessionRow } from "../../selectors/dashboardSessionRows.js";
-import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
@@ -50,8 +49,7 @@ export type ForkSessionCreateValidation =
     }
   | { ok: false; message: string };
 
-// Single source of truth for fork submit validation, shared by the machine's
-// submitFork (inline error) and the native station submit resolver (intercept).
+// Single source of truth for fork submit validation across every input modality.
 export function validateForkSessionCreate(
   snapshot: DashboardSnapshotView,
   screen: ForkDetailsScreenView,
@@ -265,30 +263,26 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
     return rejected(state, screen, validation.message);
   }
 
-  // Omit base + harness so the observer pins base to the source HEAD and inherits the
-  // source worktree's harness; copyDirty is passed explicitly from the toggle.
-  const command = buildForkSessionCommand({
-    project: validation.project,
-    sourceWorktreeId: validation.sourceWorktreeId,
-    title: validation.title,
-    branch: validation.branch,
-    copyDirty: validation.copyDirty,
-  });
-  if (command.type !== "session.fork") {
-    return { state };
-  }
+  const source = state.snapshot.rows.find(
+    (candidate) => candidate.id === validation.sourceWorktreeId,
+  );
+  const inheritedHarness =
+    source?.agent?.harness ?? source?.recovery?.provider ?? validation.project.defaults.harness;
 
+  // Close the pure screen before execution so Copy-focused Enter can only toggle,
+  // while every actual submit observes the dashboard before its capability starts.
   return {
     state: { ...state, screen: { name: "dashboard" } },
     operations: [
       {
-        type: "forkSession",
+        type: "forkManagedSession",
         localId: `fork:${validation.sourceWorktreeId}:${validation.branch}`,
-        projectId: screen.projectId,
+        project: validation.project,
         sourceWorktreeId: validation.sourceWorktreeId,
         title: validation.title,
-        branch: validation.branch,
-        command,
+        hiddenBranch: validation.branch,
+        copyDirty: validation.copyDirty,
+        ...(inheritedHarness === undefined ? {} : { inheritedHarness }),
       },
     ],
   };

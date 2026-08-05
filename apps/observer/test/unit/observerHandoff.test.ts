@@ -460,7 +460,7 @@ function handoffFixture() {
   const identity: ObserverProcessIdentity = {
     pid: 100,
     osStartTime: "Sat Jul 12 11:00:00 2026",
-    processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+    processToken: "00000000-0000-4000-8000-000000000001",
     version: "1.0.0",
     socketPath,
   };

@@ -342,8 +342,12 @@ describe("dashboard focus", () => {
 
   it("activates focused sessions and leaves missing focus inert", () => {
     const focused = state({ dashboardFocus: session("ses_wt_web_working") });
-    expect(handleTuiKey(focused, RETURN).commands).toEqual([
-      { type: "terminal.focus", payload: { sessionId: "ses_wt_web_working" } },
+    expect(handleTuiKey(focused, RETURN).operations).toEqual([
+      expect.objectContaining({
+        type: "activateSession",
+        sessionId: "ses_wt_web_working",
+        preferredObserverAction: "focus",
+      }),
     ]);
     const initial = state();
     expect(handleTuiKey(initial, RETURN).state).toBe(initial);
@@ -375,7 +379,6 @@ describe("dashboard focus", () => {
       },
     };
     const transition = handleTuiKey(pending, RETURN);
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toBeUndefined();
   });
 

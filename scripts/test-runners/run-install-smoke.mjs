@@ -25,6 +25,17 @@ import { gzipSync } from "node:zlib";
 const inheritedUmask = process.umask(0o077);
 const runner = fileURLToPath(import.meta.url);
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+let releaseVersion;
+try {
+  const packageManifest = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  if (typeof packageManifest.version !== "string") {
+    throw new Error("package.json version must be a string");
+  }
+  releaseVersion = packageManifest.version;
+} catch (cause) {
+  throw new Error("Failed to read release version from package.json", { cause });
+}
+const releaseTag = `v${releaseVersion}`;
 const installer = join(repoRoot, "scripts", "install.sh");
 const timeoutScaleText = process.env.STATION_INSTALL_SMOKE_TIMEOUT_SCALE ?? "1";
 if (!/^(?:[1-9]|10)$/.test(timeoutScaleText)) {
@@ -40,7 +51,6 @@ const dataDir = join(root, "data");
 const tempDir = join(root, "tmp");
 const ghLogsDir = join(root, "gh-logs");
 const curlLogsDir = join(root, "curl-logs");
-const releaseTag = "v0.0.0-pre-alpha.4";
 const rollbackTag = "v0.7.1-rc.8";
 const removedPersistenceOption = ["--persist", "path"].join("-");
 const activeChildren = new Set();

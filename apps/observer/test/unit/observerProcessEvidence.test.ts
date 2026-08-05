@@ -9,7 +9,7 @@ import {
 } from "../../src/runtime/observerProcessEvidence.js";
 
 const BUILD = `1.2.3+station.${"a".repeat(64)}`;
-const TOKEN = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
+const TOKEN = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
 
 describe("local Observer process evidence", () => {
   it("parses only source and compiled Observer argv with resolved sockets", () => {
@@ -72,7 +72,7 @@ describe("local Observer process evidence", () => {
   });
 
   it("does not let a same-second PID replacement inherit a launch nonce", () => {
-    const replacementToken = "b47ac10b-58cc-4372-a567-0e02b2c3d479";
+    const replacementToken = ["b47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
     const output = [
       ` 42 Sat Jul  4 17:45:33 2026 /opt/station/stn __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${TOKEN}`,
       ` 43 Sat Jul  4 17:45:33 2026 /opt/station/stn __observer --socket /tmp/observer.sock --state-dir /tmp/state --startup-timeout-ms 10000 --build-version ${BUILD} --process-token ${replacementToken}`,

@@ -182,7 +182,7 @@ spool/hooks/
 {
   "pid": 12345,
   "osStartTime": "Sat Jul 11 10:42:03 2026",
-  "processToken": "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "processToken": "00000000-0000-4000-8000-000000000001",
   "version": "0.7.0+station.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "socketPath": "/resolved/socket/directory/observer.sock"
 }

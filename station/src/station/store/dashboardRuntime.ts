@@ -5,6 +5,7 @@
 // so onDismiss records that capability without owning the effect.
 import {
   createDashboardRuntime,
+  type DashboardCapabilities,
   type DashboardRuntime,
   type TuiFolderService,
 } from "@station/dashboard-core";
@@ -25,22 +26,21 @@ export type CreateStationDashboardRuntimeOptions = {
   widgetsPersisted?: boolean;
 };
 
-/** Create Station's dashboard projection paired with its canonical client source. */
+/**
+ * Create Station's dashboard projection paired with its canonical client source.
+ * Its asynchronous repeat-safe disposal drains admitted dashboard work before the
+ * owning Station composition stops the shared client.
+ */
 export function createStationDashboardRuntime(
   client: StationClient,
+  capabilities: DashboardCapabilities,
   options: CreateStationDashboardRuntimeOptions = {},
 ): StationDashboardRuntime {
   const runtimeOptions: Parameters<typeof createDashboardRuntime>[0] = {
     source: client.state,
     service: client.service,
+    capabilities,
     clientLabel: "Station",
-    persistentPopup: true,
-    onDismiss: async () => {
-      // Dismiss is the router's job: the overlay layer maps the transition's
-      // dismissPopup to an overlay-close outcome and executeOutcome closes
-      // via the coordination store. This callback exists only so the shared
-      // machine sees canDismissPopup=true.
-    },
   };
   if (options.folderService !== undefined) {
     runtimeOptions.folderService = options.folderService;

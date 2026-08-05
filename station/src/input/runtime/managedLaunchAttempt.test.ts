@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { AgentPrepareExternalLaunchParams, AgentPrepareExternalLaunchResult } from "@station/client";
+import {
+  safeErrorToNotice,
+  type AgentPrepareExternalLaunchParams,
+  type AgentPrepareExternalLaunchResult,
+} from "@station/client";
 import type { StationCommand, StationSnapshot, WorktreeRow } from "@station/contracts";
 import { selectPaneRecord, selectStationOverlayVisible } from "../../state/selectors.js";
 import { createStationStore } from "../../state/store.js";
@@ -20,6 +24,7 @@ import type {
 } from "../../terminal/types.js";
 import {
   createManagedLaunchAttempt,
+  type ManagedLaunchAttemptResult,
   type ManagedLaunchTarget,
 } from "./managedLaunchAttempt.js";
 
@@ -225,13 +230,21 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
     calls.push(`reveal:${paneId}`);
     revealPane(paneId);
   };
-  const runManagedLaunchAttempt = createManagedLaunchAttempt({
+  const rawManagedLaunchAttempt = createManagedLaunchAttempt({
     store,
-    dashboardRuntime,
+    clientState: source,
     observerService: options.observer === false ? undefined : observerService,
     registry: options.registry === false ? undefined : registry,
     managedTerminalAttacher: options.attacher,
   });
+  let lastResult: ManagedLaunchAttemptResult | undefined;
+  const runManagedLaunchAttempt = async (
+    paneId: PaneId,
+    target: ManagedLaunchTarget,
+  ): Promise<ManagedLaunchAttemptResult> => {
+    lastResult = await rawManagedLaunchAttempt(paneId, target);
+    return lastResult;
+  };
   return {
     store,
     dashboardRuntime,
@@ -246,7 +259,12 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
     scripted,
     spawnSizes,
     runManagedLaunchAttempt,
-    lastToast: () => dashboardRuntime.state.getState().toasts.at(-1)?.toast,
+    lastToast: () =>
+      lastResult?.kind === "notice"
+        ? lastResult.notice
+        : lastResult?.kind === "failure"
+          ? safeErrorToNotice(lastResult.error)
+          : undefined,
   };
 }
 
@@ -265,7 +283,7 @@ describe("createManagedLaunchAttempt", () => {
 
     expect(foreground.prepareCalls).toEqual([]);
     expect(foreground.calls).toEqual([`reveal:${PANE_ID}`]);
-    expect(selectStationOverlayVisible(foreground.store.getState())).toBe(false);
+    expect(selectStationOverlayVisible(foreground.store.getState())).toBe(true);
 
     const background = attemptHarness();
     background.store.actions.createPane(PANE_ID, { role: "primary-agent" });
@@ -314,7 +332,7 @@ describe("createManagedLaunchAttempt", () => {
       terminalTargetId: TERMINAL_TARGET_ID,
       harnessProvider: "codex",
     });
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(false);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
   });
 
   it("waits for current layout before spawning a newly revealed exited pane", async () => {
@@ -385,7 +403,7 @@ describe("createManagedLaunchAttempt", () => {
 
     const result = await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
 
-    expect(result.kind).toBe("preparation-failed");
+    expect(result.kind).toBe("failure");
     expect(harness.baseRegistry.get(PANE_ID)).toBe(oldEntry);
     expect(harness.scripted[0].helpers.isDisposed()).toBe(false);
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
@@ -469,7 +487,7 @@ describe("createManagedLaunchAttempt", () => {
     const harness = attemptHarness({ prepare: async () => await gate });
     const replacementRunner = createManagedLaunchAttempt({
       store: harness.store,
-      dashboardRuntime: harness.dashboardRuntime,
+      clientState: harness.source,
       observerService: harness.observerService,
       registry: harness.registry,
       managedTerminalAttacher: undefined,
@@ -629,14 +647,14 @@ describe("createManagedLaunchAttempt", () => {
 
     expect(harness.prepareCalls).toHaveLength(2);
     expect(failure).toEqual({
-      kind: "preparation-failed",
+      kind: "failure",
       error: {
         tag: "ClientObserverError",
         code: "CLIENT_OBSERVER_OPERATION_FAILED",
         message: "The Station could not complete the observer operation.",
       },
     });
-    expect(retry).toEqual({ kind: "settled" });
+    expect(retry).toEqual({ kind: "success", landed: true });
     expect(harness.calls).toEqual([
       `ensure:${PANE_ID}`,
       `pane:${PANE_ID}:primary-agent`,
@@ -716,7 +734,10 @@ describe("createManagedLaunchAttempt", () => {
     const result = await failing.runManagedLaunchAttempt(PANE_ID, TARGET);
     await failing.runManagedLaunchAttempt(PANE_ID, TARGET);
 
-    expect(result).toEqual({ kind: "settled" });
+    expect(result).toMatchObject({
+      kind: "failure",
+      error: { code: "HOST_ATTACH_FAILED", message: "attachment failed" },
+    });
     expect(failing.prepareCalls).toHaveLength(2);
     expect(failing.calls).toEqual([]);
     expect(failing.lastToast()?.message).toContain("attachment failed");
@@ -819,7 +840,7 @@ describe("createManagedLaunchAttempt", () => {
     expect(harness.observerService.dispatched).toEqual([
       { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
     ]);
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(false);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
   });
 
   it("does not land after rejected, failed, or thrown focus operations", async () => {
@@ -887,7 +908,7 @@ describe("createManagedLaunchAttempt", () => {
 
     await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
 
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(false);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
     expect(
       harness.store
         .getState()

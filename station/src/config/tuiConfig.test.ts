@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "bun:test";
 import type { DashboardRuntime } from "@station/dashboard-core";
-import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
 import { manyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { FakeStationSource } from "../station/test/support/fakeStationSource.js";
 import { FakeTuiObserverService } from "../station/test/support/fakeObserverService.js";
@@ -231,15 +230,11 @@ root = "${projectRoot}"
 
     const initialWidgets = [{ type: "time" }] as const;
     const nativeSource = new FakeStationSource(manyProjectsSnapshot());
-    const nativeStore = createStationDashboardRuntime(
-      {
-        state: nativeSource,
-        service: new FakeTuiObserverService(manyProjectsSnapshot()),
-        start: () => nativeSource.start(),
-        stop: () => nativeSource.stop(),
-      },
-      { widgets: initialWidgets, widgetsPersisted: true },
-    );
+    const nativeStore = createStationTestDashboardRuntime({
+      source: nativeSource,
+      service: new FakeTuiObserverService(manyProjectsSnapshot()),
+      initialState: { widgets: initialWidgets, widgetsPersisted: true },
+    });
     const popupSource = new FakeStationSource(manyProjectsSnapshot());
     const popupStore = createStationTestDashboardRuntime({
       source: popupSource,

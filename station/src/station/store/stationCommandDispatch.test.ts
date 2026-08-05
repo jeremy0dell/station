@@ -3,7 +3,13 @@
 // via client runtime (keeping store and runtime reducer synchronized).
 import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
-import { selectDashboardViewport } from "@station/dashboard-core";
+import {
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  dashboardExecution,
+  selectDashboardViewport,
+  type DashboardCapabilities,
+} from "@station/dashboard-core";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -39,7 +45,24 @@ describe("station command dispatch through the shared client", () => {
   async function makeLiveStore(snapshot = manyProjectsSnapshot()): Promise<Harness> {
     const fake = new FakeTuiObserverService(snapshot);
     const client = createObserverStationClient({ service: fake });
-    const store = createStationDashboardRuntime(client);
+    const capabilities: DashboardCapabilities = {
+      activation: createObserverActivationCapabilities({
+        source: client.state,
+        service: client.service,
+        clientLabel: "Station test",
+        waitForFocusCompletion: true,
+      }),
+      managedSessions: createObserverManagedSessionCapabilities({
+        service: client.service,
+        clientLabel: "Station test",
+      }),
+      shell: { open: () => dashboardExecution({ kind: "success" }) },
+      dismissal: {
+        dismissDashboard: () => dashboardExecution({ kind: "success" }),
+        exitRenderer: () => dashboardExecution({ kind: "success" }),
+      },
+    };
+    const store = createStationDashboardRuntime(client, capabilities);
     store.start();
     client.start();
     const harness: Harness = { fake, client, store, detach: () => store.dispose() };
@@ -66,7 +89,7 @@ describe("station command dispatch through the shared client", () => {
     expect(errorToastMessages(store)).toEqual([]);
   });
 
-  it("launches the worktree's managed primary agent on row click instead of dispatching focus", async () => {
+  it("routes row clicks through the same semantic activation as keyboard", async () => {
     const { fake, store } = await makeLiveStore();
 
     const outcome = routeStationMouse(
@@ -75,20 +98,12 @@ describe("station command dispatch through the shared client", () => {
       store,
     );
 
-    // The mouse row-click now launches the session's managed primary agent (a
-    // router outcome the Station store consumes that asks the observer to
-    // prepare the launch), so it no longer dispatches the observer/tmux
-    // terminal.focus the keyboard slot key still drives.
-    expect(outcome).toMatchObject({
-      kind: "launch-managed",
-      paneId: "pane-agent-wt-wt_station_idle",
-      worktreeId: "wt_station_idle",
-      projectId: "station",
-    });
-    // Let any (unexpected) async dispatch settle, then assert none happened.
-    await Promise.resolve();
-    expect(fake.dispatched).toEqual([]);
-    expect(fake.waitedForCommandIds).toEqual([]);
+    expect(outcome).toEqual({ kind: "handled" });
+    await waitFor(() => fake.waitedForCommandIds.length === 1);
+    expect(fake.dispatched).toEqual([
+      { type: "terminal.focus", payload: { sessionId: "ses_wt_station_idle" } },
+    ]);
+    expect(fake.waitedForCommandIds).toEqual([fake.nextReceipt.commandId]);
     expect(errorToastMessages(store)).toEqual([]);
   });
 

@@ -6,7 +6,6 @@ import type {
   SafeError,
   SessionId,
   StationSnapshot,
-  TerminalFocusOrigin,
   WorktreeId,
 } from "@station/contracts";
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
@@ -25,15 +24,6 @@ export type DashboardFocus =
   | { kind: "session"; sessionId: SessionId }
   | { kind: "projectHeader"; projectId: ProjectId; control: ProjectHeaderControl }
   | { kind: "emptyProjectAction"; projectId: ProjectId };
-
-export type TuiRuntimeState = {
-  persistentPopup: boolean;
-  canDismissPopup: boolean;
-  exitOnFocusSuccess: boolean;
-  canResolveFocusOrigin: boolean;
-  hasFocusSuccessCallback: boolean;
-  focusOrigin?: TerminalFocusOrigin;
-};
 
 export type DashboardFilterConditionField = "status" | "project" | "agent";
 
@@ -110,7 +100,6 @@ export type DashboardState = TuiViewState & {
   screen: TuiScreen;
   toasts: TuiToastEntry[];
   observerConnectionStatus: TuiObserverConnectionStatus;
-  runtime: TuiRuntimeState;
   /**
    * Live top-row widget set, seeded from `[tui].widgets`. Widget-settings
    * edits land here first and are written back to config.toml when a config
@@ -229,5 +218,4 @@ export type CreateInitialTuiStateOptions = {
   dashboardFocus?: DashboardFocus;
   widgets?: readonly TuiWidgetConfig[];
   widgetsPersisted?: boolean;
-  runtime?: Partial<TuiRuntimeState>;
 };

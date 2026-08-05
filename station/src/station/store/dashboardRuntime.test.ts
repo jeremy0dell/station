@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { selectDashboardViewport } from "@station/dashboard-core";
+import {
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  dashboardExecution,
+  selectDashboardViewport,
+  type DashboardCapabilities,
+} from "@station/dashboard-core";
 import type { TuiFolderService } from "@station/dashboard-core";
 import type { DashboardRuntime } from "@station/dashboard-core";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -9,6 +15,16 @@ import { createStationStubObserverService } from "./stubObserverService.js";
 import { createStationDashboardRuntime } from "./dashboardRuntime.js";
 
 describe("createStationDashboardRuntime", () => {
+  it("forwards one asynchronous repeat-safe dashboard settlement", async () => {
+    const store = makeStore();
+
+    const first = store.dispose();
+    const second = store.dispose();
+
+    expect(second).toBe(first);
+    await first;
+  });
+
   it("applies the persistent filter through the native composition", () => {
     const store = makeStore();
 
@@ -108,19 +124,30 @@ describe("createStationDashboardRuntime", () => {
 function makeStore(folderService?: TuiFolderService): DashboardRuntime {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
-  const options: Parameters<typeof createStationDashboardRuntime>[1] = {};
+  const options: Parameters<typeof createStationDashboardRuntime>[2] = {};
   if (folderService !== undefined) {
     options.folderService = folderService;
   }
+  const service = createStationStubObserverService(source, { dispatchDelayMs: 1 });
+  const capabilities: DashboardCapabilities = {
+    activation: createObserverActivationCapabilities({ source, service, clientLabel: "Station" }),
+    managedSessions: createObserverManagedSessionCapabilities({ service, clientLabel: "Station" }),
+    shell: { open: () => dashboardExecution({ kind: "success" }) },
+    dismissal: {
+      dismissDashboard: () => dashboardExecution({ kind: "success" }),
+      exitRenderer: () => dashboardExecution({ kind: "success" }),
+    },
+  };
   const store = createStationDashboardRuntime(
     {
       state: source,
-      service: createStationStubObserverService(source, { dispatchDelayMs: 1 }),
+      service,
       start: () => {
         source.start();
       },
       stop: () => source.stop(),
     },
+    capabilities,
     options,
   );
   store.start();

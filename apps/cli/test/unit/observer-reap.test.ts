@@ -14,7 +14,7 @@ import {
 const SOCK = "/Users/u/.local/state/station/observer.sock";
 const OTHER = "/Users/u/.local/state/unrelated/observer.sock";
 const BUILD = `1.2.3+station.${"a".repeat(64)}`;
-const TOKEN = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
+const TOKEN = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
 const SOCKET_IDENTITY = { ino: 1n, birthtimeNs: 2n };
 
 function runTestObserverReap(
@@ -51,7 +51,8 @@ function proc(
     argv,
     executablePath,
     startToken: token,
-    processToken: pid === 100 ? TOKEN : "b47ac10b-58cc-4372-a567-0e02b2c3d479",
+    processToken:
+      pid === 100 ? TOKEN : ["b47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-"),
     buildVersion: BUILD,
   };
   return socketPath === undefined ? entry : { ...entry, socketPath };

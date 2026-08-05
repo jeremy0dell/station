@@ -80,7 +80,7 @@ describe("fork screen", () => {
     expect(retry.branch).not.toBe(first.branch);
   });
 
-  it("submits a session.fork operation with the generated branch and copyDirty", () => {
+  it("submits semantic fork product values with the generated branch and copyDirty", () => {
     const opened = openDetails();
     const screen = detailsScreen(opened);
     const transition = step(opened, ENTER);
@@ -88,18 +88,13 @@ describe("fork screen", () => {
     expect(transition.state.screen).toEqual({ name: "dashboard" });
     expect(transition.operations).toHaveLength(1);
     const operation = transition.operations?.[0];
-    expect(operation?.type).toBe("forkSession");
-    if (operation?.type !== "forkSession") throw new Error("unreachable");
+    expect(operation?.type).toBe("forkManagedSession");
+    if (operation?.type !== "forkManagedSession") throw new Error("unreachable");
     expect(operation.title).toBe(`${screen.sourceBranch}-fork`);
-    expect(operation.branch).toBe(screen.branch);
+    expect(operation.hiddenBranch).toBe(screen.branch);
     expect(operation.sourceWorktreeId).toBe(screen.sourceWorktreeId);
-    expect(operation.command.type).toBe("session.fork");
-    expect(operation.command.payload.title).toBe(operation.title);
-    expect(operation.command.payload.copyDirty).toBe(true);
-    expect(operation.command.payload.sourceWorktreeId).toBe(screen.sourceWorktreeId);
-    // Base + harness are omitted so the observer pins the base and inherits the harness.
-    expect(operation.command.payload.base).toBeUndefined();
-    expect(operation.command.payload.harness).toBeUndefined();
+    expect(operation.copyDirty).toBe(true);
+    expect(operation.inheritedHarness).toBeDefined();
   });
 
   it("toggles copy-dirty off and reflects it in the submitted command", () => {
@@ -110,8 +105,8 @@ describe("fork screen", () => {
     const submitFocused = step(toggled, DOWN).state;
     const transition = step(submitFocused, ENTER);
     const operation = transition.operations?.[0];
-    if (operation?.type !== "forkSession") throw new Error("expected fork operation");
-    expect(operation.command.payload.copyDirty).toBe(false);
+    if (operation?.type !== "forkManagedSession") throw new Error("expected fork operation");
+    expect(operation.copyDirty).toBe(false);
   });
 
   it("uses semantic field actions for pointer focus and Copy toggling", () => {
@@ -156,7 +151,7 @@ describe("fork screen", () => {
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
     expect(transition.operations?.[0]).toMatchObject({
-      type: "forkSession",
+      type: "forkManagedSession",
       sourceWorktreeId: detailsScreen(opened).sourceWorktreeId,
     });
   });
@@ -175,9 +170,9 @@ describe("fork screen", () => {
     const edited = drive(clearTitle(opened), "Hexagonal PT 12!".split("").map(type));
     const transition = step(edited, ENTER);
     const operation = transition.operations?.[0];
-    if (operation?.type !== "forkSession") throw new Error("expected fork operation");
+    if (operation?.type !== "forkManagedSession") throw new Error("expected fork operation");
     expect(operation.title).toBe("Hexagonal PT 12!");
-    expect(operation.branch).toBe(branch);
+    expect(operation.hiddenBranch).toBe(branch);
   });
 
   it("rejects an empty title without dispatching an operation", () => {
@@ -204,9 +199,9 @@ describe("fork screen", () => {
 
     const transition = step(collided, ENTER);
     const operation = transition.operations?.[0];
-    if (operation?.type !== "forkSession") throw new Error("expected fork operation");
+    if (operation?.type !== "forkManagedSession") throw new Error("expected fork operation");
     expect(operation.title).toBe(screen.draftTitle.value);
-    expect(operation.branch).toBe(`${screen.branch}-2`);
+    expect(operation.hiddenBranch).toBe(`${screen.branch}-2`);
   });
 
   it("scopes branch collisions and suggestions to the source project", () => {
@@ -230,8 +225,8 @@ describe("fork screen", () => {
     const transition = step(opened, ENTER);
     expect(transition.operations).toHaveLength(1);
     const operation = transition.operations?.[0];
-    if (operation?.type !== "forkSession") throw new Error("expected fork operation");
-    expect(operation.branch).toBe(initial.branch);
+    if (operation?.type !== "forkManagedSession") throw new Error("expected fork operation");
+    expect(operation.hiddenBranch).toBe(initial.branch);
   });
 
   it("escapes from details back to chooseSlot, then to the dashboard", () => {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
+import type { StationClientCommandCompletion } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets/types";
 import type { StationMouseEvent } from "../input/mouse.js";
@@ -99,7 +100,7 @@ describe("Station app composition", () => {
     await station.setup.mockInput.typeText("allowed");
     await waitFor(() => station.scripted.helpers.writes.join("").includes("allowed"));
 
-    station.composition.dispose();
+    await station.composition.disposeForShutdown();
     // Two source subscribers detach on dispose: the STATION view store and the
     // session-removal reconciler.
     expect(station.source.unsubscribeCount).toBe(2);
@@ -383,6 +384,61 @@ describe("Station app composition", () => {
     ]);
   });
 
+  it("drains dashboard command work before hot-reload client shutdown", async () => {
+    const baseSnapshot = manyProjectsSnapshot();
+    const project = baseSnapshot.projects[0];
+    if (project === undefined) throw new Error("project fixture missing");
+    const snapshot: StationSnapshot = {
+      ...baseSnapshot,
+      projects: [project],
+      rows: [],
+      sessions: [],
+    };
+    const source = new FakeStationSource(snapshot);
+    const service = new FakeTuiObserverService(snapshot);
+    const completion = deferred<StationClientCommandCompletion>();
+    service.waitForCommandCompletion = async () => completion.promise;
+    let stopped = false;
+    const composition = createStation({
+      store: createStationStore(),
+      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
+      stationClient: {
+        state: source,
+        service,
+        start: () => source.start(),
+        stop: async () => {
+          stopped = true;
+          await source.stop();
+        },
+      },
+      shutdown: () => {},
+    });
+    teardowns.push(() => composition.dispose());
+    composition.start();
+    composition.dashboard.actions.dispatch({
+      type: "dashboard.emptyProject.activate",
+      projectId: project.id,
+    });
+
+    const firstDisposal = composition.disposeForHotReload();
+    const secondDisposal = composition.disposeForHotReload();
+    expect(secondDisposal).toBe(firstDisposal);
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+
+    completion.resolve({
+      status: "failed",
+      commandId: service.nextReceipt.commandId,
+      error: {
+        tag: "CommandExecutionError",
+        code: "CREATE_FAILED",
+        message: "Create failed.",
+      },
+    });
+    await firstDisposal;
+    expect(stopped).toBe(true);
+  });
+
   it("preserves live screens while applying refreshed scrollback to future HMR spawns", async () => {
     const store = createStationStore();
     const firstSource = new FakeStationSource(manyProjectsSnapshot());
@@ -412,7 +468,7 @@ describe("Station app composition", () => {
     first.registry.ensure(paneId, { cwd: "/tmp/station/station/idle" });
     first.registry.resize(paneId, { cols: 80, rows: 24 });
 
-    first.disposeForHotReload();
+    await first.disposeForHotReload();
     expect(scripted.helpers.isDisposed()).toBe(false);
     expect(first.registry.has(paneId)).toBe(true);
     expect(store.getState().workspace.activePaneId).toBe(paneId);
@@ -776,4 +832,12 @@ function buttonRows(frame: string): string[] {
 
 function hasStandaloneStationLine(frame: string): boolean {
   return frame.split("\n").some((row) => row.trim() === "station");
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }

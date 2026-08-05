@@ -1,4 +1,3 @@
-import type { ProjectId, StationCommand } from "@station/contracts";
 import type { TuiKey } from "./keys.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
@@ -18,19 +17,10 @@ import { selectionMiddleware } from "./selection/middleware.js";
 import { activeTuiToast, isTuiToastHiddenByScreen } from "./toasts.js";
 import type { TuiState } from "./types.js";
 
-/** Product intents whose terminal-specific effects are owned by a renderer adapter. */
-export type TuiControlIntent =
-  | { type: "projectShell.open"; projectId: ProjectId }
-  | { type: "quickSession.create"; projectId: ProjectId };
-
 export type TuiTransition = {
   state: TuiState;
-  controlIntent?: TuiControlIntent;
-  commands?: StationCommand[];
   operations?: TuiOperation[];
   reconcileReason?: string;
-  exitCode?: number;
-  dismissPopup?: true;
 };
 
 export type TuiRuntimeContext = {
@@ -46,7 +36,7 @@ export function handleTuiKey(
   if (key.ctrl === true && key.input === "c") {
     return {
       state,
-      exitCode: 0,
+      operations: [{ type: "exitDashboardRenderer", exitCode: 0 }],
     };
   }
 

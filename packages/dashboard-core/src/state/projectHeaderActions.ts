@@ -6,6 +6,7 @@ import {
   reconcileDashboardFocus,
 } from "./dashboardFocus.js";
 import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
+import { submitQuickSession } from "./screens/quickSession.js";
 import type { TuiTransition } from "./transition.js";
 import type { ProjectHeaderControl, TuiState } from "./types.js";
 
@@ -25,29 +26,27 @@ export function activateProjectHeaderControl(
     case "shell":
       return {
         state: focused,
-        controlIntent: { type: "projectShell.open", projectId },
+        operations: [{ type: "openDashboardShell", target: { kind: "project", projectId } }],
       };
     case "quickSession":
-      return {
-        state: focused,
-        controlIntent: { type: "quickSession.create", projectId },
-      };
+      return submitQuickSession(focused, projectId);
     case "defaultAgent":
       return { state: openProjectDefaultAgentPicker(focused, projectId) };
   }
 }
 
-/**
- * Focuses the rendered empty-project action and emits its Quick Session intent.
- * Renderer consumers alone resolve project availability and move accepted focus.
- */
+/** Focus the rendered empty-project action before the shared Quick Session transition. */
 export function activateEmptyProjectAction(state: TuiState, projectId: ProjectId): TuiTransition {
   if (state.screen.name !== "dashboard" || !hasVisibleEmptyProject(state, projectId)) {
     return { state };
   }
+  const transition = submitQuickSession(
+    focusDashboardEmptyProjectAction(state, projectId),
+    projectId,
+  );
   return {
-    state: focusDashboardEmptyProjectAction(state, projectId),
-    controlIntent: { type: "quickSession.create", projectId },
+    ...transition,
+    state: focusDashboardEmptyProjectAction(transition.state, projectId),
   };
 }
 

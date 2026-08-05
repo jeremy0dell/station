@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, readFileSync } from "node:fs";
 import {
   access,
   chmod,
@@ -38,6 +38,16 @@ import {
 } from "./binary-smoke-evidence.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+let packageVersion;
+try {
+  const packageManifest = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  if (typeof packageManifest.version !== "string") {
+    throw new Error("package.json version must be a string");
+  }
+  packageVersion = packageManifest.version;
+} catch (cause) {
+  throw new Error("Failed to read expected version from package.json", { cause });
+}
 const alternateProductionSource = "apps/cli/src/commandRegistry.ts";
 const alternateBuildMarker = " (alternate binary smoke build)";
 let smokeRunSignal;
@@ -1463,9 +1473,14 @@ async function executeStressRound(context) {
 async function assertStressObserverOwnership(context, health, version, label) {
   assertEqual(health.status, "healthy", `${label} Observer health`);
   assertEqual(health.version, version, `${label} Observer selector`);
-  const identity = ObserverProcessIdentitySchema.parse(
-    JSON.parse(await readFile(`${context.socketPath}.pid`, "utf8")),
-  );
+  const pidfileText = await readFile(`${context.socketPath}.pid`, "utf8");
+  let pidfileJson;
+  try {
+    pidfileJson = JSON.parse(pidfileText);
+  } catch (cause) {
+    throw new Error(`Failed to parse Observer pidfile at ${context.socketPath}.pid`, { cause });
+  }
+  const identity = ObserverProcessIdentitySchema.parse(pidfileJson);
   assertEqual(identity.pid, health.pid, `${label} pidfile PID`);
   assertEqual(identity.version, version, `${label} pidfile selector`);
   assertEqual(identity.socketPath, context.socketPath, `${label} pidfile socket`);
@@ -2001,7 +2016,7 @@ function environmentWithoutGitLocals(source) {
 function parseExpectedVersion(args) {
   const normalized = args[0] === "--" ? args.slice(1) : args;
   if (normalized.length === 0) {
-    return "0.0.0-pre-alpha.4";
+    return packageVersion;
   }
   if (
     normalized.length === 2 &&
@@ -2347,10 +2362,17 @@ async function socketState(path) {
 
 async function observerPidfileState(path) {
   const bytes = await readFile(path);
+  const identityText = bytes.toString("utf8");
+  let identityJson;
+  try {
+    identityJson = JSON.parse(identityText);
+  } catch (cause) {
+    throw new Error(`Failed to parse Observer pidfile at ${path}`, { cause });
+  }
   return {
     identity: fileIdentity(await lstat(path)),
     hash: sha256(bytes),
-    process: ObserverProcessIdentitySchema.parse(JSON.parse(bytes.toString("utf8"))),
+    process: ObserverProcessIdentitySchema.parse(identityJson),
   };
 }
 

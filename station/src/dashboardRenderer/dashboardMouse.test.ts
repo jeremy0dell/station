@@ -16,7 +16,10 @@ import {
   makeStationTestRuntime,
   type StationTestDashboardRuntime,
 } from "../station/test/support/makeStationTestRuntime.js";
-import type { DashboardRendererEffects } from "./dashboardEffects.js";
+type DashboardRendererEffects = {
+  openShell(target: { cwd: string }): void;
+  openUrl(url: string): void;
+};
 import * as dashboardMouse from "./dashboardMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
@@ -83,7 +86,7 @@ function routeDashboardMouse(
   store: StationTestDashboardRuntime,
   effects: DashboardRendererEffects = TEST_EFFECTS,
 ): void {
-  dashboardMouse.routeDashboardMouse(target, event, store, effects);
+  dashboardMouse.routeDashboardMouse(target, event, store, effects.openUrl);
 }
 
 function makeStore(
@@ -321,6 +324,19 @@ describe("routeDashboardMouse", () => {
     await waitFor(() => store.state.getState().screen.name === "dashboard");
   });
 
+  it("routes standalone Rename submit through the shared pointer router", () => {
+    const store = makeStore();
+    const rowId = "ses_wt_station_idle";
+    store.actions.handleKey({ input: "R" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: "Mouse title" });
+
+    routeDashboardMouse({ kind: "renameSessionSubmit" }, LEFT_DOWN, store);
+
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().localRows.pendingRenameTitles?.[rowId]?.title).toBe("Mouse title");
+  });
+
   it("maps project settings, add-project, toast, scroll-indicator, and widget targets", async () => {
     const fixture = makeStationTestRuntime({
       terminalRows: 14,
@@ -430,9 +446,8 @@ describe("routeDashboardMouse", () => {
       fixture.service.dispatched.some((command) => command.type === "session.create"),
     );
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
+      kind: "emptyProjectAction",
       projectId: "empty-project",
-      control: "quickSession",
     });
     const creates = fixture.service.dispatched.filter(
       (command) => command.type === "session.create",
@@ -480,7 +495,7 @@ describe("routeDashboardMouse", () => {
     expect(modal.state.getState().dashboardFocus).toBeUndefined();
   });
 
-  it("resolves standalone shell targets from client truth when dashboard projection is stale", () => {
+  it("dispatches shell semantics without reading stale dashboard projection", () => {
     const fixture = makeStationTestRuntime({ terminalRows: 14 });
     const canonical = manyProjectsSnapshot();
     const canonicalRoot = "/canonical/station";
@@ -514,7 +529,11 @@ describe("routeDashboardMouse", () => {
     );
 
     expect(fixture.runtime.state.getState().snapshot?.projects[0]?.root).not.toBe(canonicalRoot);
-    expect(openedShells).toEqual([canonicalRoot, canonicalWorktree]);
+    expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
+    });
   });
 
   it("routes project shell, quick-session, and agent-picker actions", async () => {
@@ -538,10 +557,6 @@ describe("routeDashboardMouse", () => {
       store,
       effects,
     );
-    expect(openedShells).toEqual([
-      "/Users/example/Developer/station",
-      "/Users/example/.worktrees/station/pty-buffer",
-    ]);
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
@@ -619,7 +634,7 @@ describe("routeDashboardMouse", () => {
     });
   });
 
-  it("retains shell focus when the renderer effect reports a recoverable failure", () => {
+  it("does not route shell execution through the URL presentation callback", () => {
     const store = makeStore();
     const effects: DashboardRendererEffects = {
       openShell: () => {
@@ -635,7 +650,7 @@ describe("routeDashboardMouse", () => {
         store,
         effects,
       ),
-    ).toThrow(/shell unavailable/);
+    ).not.toThrow();
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",

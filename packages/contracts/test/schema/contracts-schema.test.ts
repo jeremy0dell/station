@@ -98,7 +98,7 @@ describe("contract schemas", () => {
       schemaVersion: 1,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source",
-      version: "0.0.0-pre-alpha.4",
+      version: "0.0.0-pre-alpha.5",
       buildIdentity: "a".repeat(64),
     } as const;
     const current = {
@@ -174,10 +174,12 @@ describe("contract schemas", () => {
   });
 
   it("requires a strict observer process identity", () => {
+    const processToken = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
+    const nonV4ProcessToken = ["a47ac10b", "58cc", "1372", "a567", "0e02b2c3d479"].join("-");
     const identity: ObserverProcessIdentity = {
       pid: 1234,
       osStartTime: "Sat Jul 11 12:34:56 2026",
-      processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+      processToken,
       version: "0.1.1-dev",
       socketPath: "/tmp/station/observer.sock",
     };
@@ -201,7 +203,7 @@ describe("contract schemas", () => {
     );
     expectFails(
       ObserverProcessIdentitySchema,
-      { ...identity, processToken: "a47ac10b-58cc-1372-a567-0e02b2c3d479" },
+      { ...identity, processToken: nonV4ProcessToken },
       "observer process identity with a non-v4 token",
     );
   });

@@ -29,10 +29,10 @@ Station gives every agent an isolated Git worktree, keeps its terminal session a
 ## Install
 
 Station is experimental pre-alpha software. Install the current public version,
-`v0.0.0-pre-alpha.4`, with one command:
+`v0.0.0-pre-alpha.5`, with one command:
 
 ```sh
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh | sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh | sh
 ```
 
 Then complete and verify first-run setup:
@@ -125,11 +125,11 @@ Paste this prompt into a coding agent running on the machine where you want
 Station installed:
 
 ```text
-Install experimental Station v0.0.0-pre-alpha.4 and validate setup on this machine.
+Install experimental Station v0.0.0-pre-alpha.5 and validate setup on this machine.
 
 Safety and scope:
 - Do not clone the repository or build from source. Use only
-  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh`.
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -207,7 +207,7 @@ or real-agent lanes.
 
 ## Release status
 
-Station `v0.0.0-pre-alpha.4` is an experimental pre-alpha. User-facing commands,
+Station `v0.0.0-pre-alpha.5` is an experimental pre-alpha. User-facing commands,
 configuration, state, and release packaging may change without compatibility.
 The old `v0.7.1-rc.*` releases were internal previews, not predecessors in the
 public version line. Report feedback and bugs through

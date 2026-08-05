@@ -50,8 +50,12 @@ const setTimeoutAllowlist = new Map([
     "Shutdown backstop and final exit timers keep a stopped Observer process from lingering.",
   ],
   [
-    "packages/dashboard-core/src/state/operations/localOperationRunner.ts",
-    "Short failed-create row expiry is local TUI operation feedback, isolated from observer command timeout plumbing.",
+    "packages/dashboard-core/src/state/operations/failedCreateExpiry.ts",
+    "A single earliest-deadline timer schedules local failed-row expiry, isolated from observer command timeout plumbing.",
+  ],
+  [
+    "packages/dashboard-core/src/state/runtimeEffectScope.ts",
+    "The dashboard-owned timer registry cancels local UI scheduling during disposal before draining admitted effects.",
   ],
   [
     "packages/dashboard-core/src/state/runtime.ts",

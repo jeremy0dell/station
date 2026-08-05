@@ -10,11 +10,13 @@ import { loadStationTuiConfig } from "./config/tuiConfig.js";
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
+import { beginHotDisposal, waitForHotDisposal } from "./hmr/hotDisposalBarrier.js";
 import {
   getOrCreateStationHotRuntime,
   STATION_HOT_RUNTIME_VERSION,
   stationHotSlots,
 } from "./hmr/stationHotRuntime.js";
+import { invokeCleanup, settleCleanupSteps } from "./lifecycle/cleanup.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
@@ -111,6 +113,13 @@ async function startStationMain(
   onLifecycleCreated: (lifecycle: UiLifecycleWitness) => void,
 ): Promise<boolean> {
   const env = process.env;
+  const stationGlobalSlots = stationHotSlots();
+  // A prior renderer releases process-global stdin synchronously before dashboard settlement is awaited.
+  await invokeCleanup(() => stationGlobalSlots.__stationHotRenderer?.destroy()).catch(
+    reportNativeHotDisposalFailure,
+  );
+  await waitForHotDisposal(stationGlobalSlots);
+
   const stationClient = createStationClient(env, {
     onAttentionNeeded: () => {
       playStationAttentionSound();
@@ -123,7 +132,6 @@ async function startStationMain(
 
   const configsLoading = Promise.all([loadStationConfig({ env }), loadStationTuiConfig({ env })]);
 
-  const stationGlobalSlots = stationHotSlots();
   const uiContext = resolveUiRunContext({
     env,
     slots: stationGlobalSlots,
@@ -288,10 +296,15 @@ async function startStationMain(
       let exitCode = 0;
       await uiLifecycle.shutdownRequested(reason);
       try {
-        rootForShutdown?.unmount();
-        rendererForInput?.destroy();
-        ptyRuntime?.dispose();
-        await stationClient.stop();
+        await settleCleanupSteps(
+          [
+            () => rootForShutdown?.unmount(),
+            () => rendererForInput?.destroy(),
+            () => ptyRuntime?.dispose(),
+            () => stationClient.stop(),
+          ],
+          "Native renderer shutdown cleanup failed.",
+        );
         await uiLifecycle.shutdownCompleted(reason);
       } catch (error) {
         exitCode = 1;
@@ -324,13 +337,6 @@ async function startStationMain(
     shutdown: () => finishProcessShutdown("ctrl_q"),
   });
 
-  // Under `bun --hot`, OpenTUI's stdin ownership is a process-global that outlives
-  // the reload and our dispose() may not run before the new createCliRenderer()
-  // below — which would then throw "stdin is already used". Destroy the prior
-  // renderer first (idempotent, frees stdin synchronously); stash on globalThis
-  // since module locals reset.
-  stationGlobalSlots.__stationHotRenderer?.destroy();
-
   if (ttyOwnership !== undefined && !currentStdinMatchesStationTty(ttyOwnership.identity)) {
     const error = stationTtyOwnershipUnavailableError();
     writeStartupError(error);
@@ -344,7 +350,11 @@ async function startStationMain(
   }
   ttyOwnership?.setTakeoverHandler(() => {
     void (async () => {
-      await station.disposeForShutdown().catch(() => undefined);
+      try {
+        await station.disposeForShutdown();
+      } catch {
+        // The shutdown witness still owns the final fatal path after best-effort disposal.
+      }
       finishProcessShutdown("tty_takeover");
     })();
   });
@@ -395,17 +405,43 @@ async function startStationMain(
   if (import.meta.hot) {
     import.meta.hot.accept();
     import.meta.hot.dispose(() => {
-      stopSurfaceObservation?.();
-      station.disposeForHotReload();
-      root.unmount();
-      renderer.destroy();
-      // Don't clobber a newer reload's stashed renderer.
-      if (stationGlobalSlots.__stationHotRenderer === renderer) {
-        stationGlobalSlots.__stationHotRenderer = undefined;
-      }
+      beginHotDisposal(
+        stationGlobalSlots,
+        () =>
+          settleCleanupSteps(
+            [
+              // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
+              () => stopSurfaceObservation?.(),
+              () => root.unmount(),
+              () => renderer.destroy(),
+              () => {
+                if (stationGlobalSlots.__stationHotRenderer === renderer) {
+                  delete stationGlobalSlots.__stationHotRenderer;
+                }
+              },
+              () => station.disposeForHotReload(),
+            ],
+            "Native Station HMR cleanup failed.",
+          ),
+        (error) => {
+          void uiLifecycle.fatal(error).catch(() => {
+            // HMR replacement ordering cannot depend on diagnostic persistence.
+          });
+        },
+      );
     });
   }
   return true;
+}
+
+function reportNativeHotDisposalFailure(error: unknown): void {
+  writeStartupError(
+    toSafeError(error, {
+      tag: "TuiLifecycleError",
+      code: "TUI_HMR_CLEANUP_FAILED",
+      message: "Native Station hot-reload cleanup failed.",
+    }),
+  );
 }
 
 function writeStartupError(error: { code: string; message: string; hint?: string }): void {

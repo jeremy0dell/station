@@ -3,6 +3,7 @@ import type { WorkspaceConfig } from "../config/stationConfig.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import type { WorkspaceSlice } from "../state/types.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
+import type { StationHotDisposalSlots } from "./hotDisposalBarrier.js";
 
 // Bump only when a code change makes a preserved store/registry unsafe to reuse
 // across a hot reload (e.g. an incompatible store-state shape). A mismatch
@@ -27,7 +28,7 @@ export type StationHotRuntime = {
   registry: PtyRegistry;
 };
 
-export type StationHotSlots = typeof globalThis & {
+export type StationHotSlots = StationHotDisposalSlots & {
   __stationHotRuntime?: StationHotRuntime;
   __stationHotRenderer?: StationHotRenderer;
   __stationUiRunId?: UiRunId;

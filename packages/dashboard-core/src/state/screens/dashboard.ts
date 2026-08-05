@@ -99,14 +99,12 @@ function handleDashboardAction(
         },
       };
     case "tui.exit":
-      return exitOrDismissPopup(state);
+      return exitDashboardRenderer(state);
     case "tui.popup.dismiss": {
       if (state.persistentFilter !== undefined) {
         return clearDashboardPersistentFilter(state);
       }
-      return state.runtime.persistentPopup && state.runtime.canDismissPopup
-        ? { state, dismissPopup: true }
-        : { state };
+      return { state, operations: [{ type: "dismissDashboard" }] };
     }
     case "tui.filter.open":
       return openDashboardPersistentFilter(state);
@@ -180,17 +178,10 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled dashboard binding: ${JSON.stringify(value)}`);
 }
 
-function exitOrDismissPopup(state: TuiState): TuiTransition {
-  if (state.runtime.persistentPopup && state.runtime.canDismissPopup) {
-    return {
-      state,
-      dismissPopup: true,
-    };
-  }
-
+function exitDashboardRenderer(state: TuiState): TuiTransition {
   return {
     state,
-    exitCode: 0,
+    operations: [{ type: "exitDashboardRenderer", exitCode: 0 }],
   };
 }
 

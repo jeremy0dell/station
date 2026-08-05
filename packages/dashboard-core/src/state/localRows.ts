@@ -1,5 +1,4 @@
 import type {
-  CommandId,
   ProjectId,
   ProviderId,
   SafeError,
@@ -17,7 +16,6 @@ export type PendingCreateSessionRow = {
   branch: string;
   harnessProvider?: ProviderId;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 export type FailedCreateSessionRow = {
@@ -35,7 +33,6 @@ export type PendingRemoveWorktreeRow = {
   worktreeId: WorktreeId;
   branch: string;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 export type PendingStartAgentRow = {
@@ -45,14 +42,12 @@ export type PendingStartAgentRow = {
   worktreeId: WorktreeId;
   branch: string;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 export type PendingRenameSessionTitle = {
   sessionId: SessionId;
   title: string;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 /**
@@ -105,25 +100,6 @@ export function addPendingCreateSessionRow(
   };
 }
 
-export function bindPendingCreateSessionRow(
-  state: TuiState,
-  localId: string,
-  commandId: CommandId,
-): TuiState {
-  return {
-    ...state,
-    localRows: {
-      ...state.localRows,
-      pendingCreate: state.localRows.pendingCreate.map((row) => {
-        if (row.localId !== localId) {
-          return row;
-        }
-        return { ...row, commandId };
-      }),
-    },
-  };
-}
-
 export function failPendingCreateSessionRow(
   state: TuiState,
   localId: string,
@@ -167,6 +143,20 @@ export function removeCreateSessionLocalRow(state: TuiState, localId: string): T
   };
 }
 
+export function removeExpiredFailedCreateSessionRows(state: TuiState, nowMs: number): TuiState {
+  const failedCreate = state.localRows.failedCreate.filter((row) => row.expiresAt > nowMs);
+  if (failedCreate.length === state.localRows.failedCreate.length) {
+    return state;
+  }
+  return {
+    ...state,
+    localRows: {
+      ...state.localRows,
+      failedCreate,
+    },
+  };
+}
+
 export function addPendingRemoveWorktreeRow(
   state: TuiState,
   row: PendingRemoveWorktreeRow,
@@ -181,25 +171,6 @@ export function addPendingRemoveWorktreeRow(
         ),
         row,
       ],
-    },
-  };
-}
-
-export function bindPendingRemoveWorktreeRow(
-  state: TuiState,
-  localId: string,
-  commandId: CommandId,
-): TuiState {
-  return {
-    ...state,
-    localRows: {
-      ...state.localRows,
-      pendingRemove: state.localRows.pendingRemove.map((row) => {
-        if (row.localId !== localId) {
-          return row;
-        }
-        return { ...row, commandId };
-      }),
     },
   };
 }
@@ -229,25 +200,6 @@ export function addPendingStartAgentRow(state: TuiState, row: PendingStartAgentR
   };
 }
 
-export function bindPendingStartAgentRow(
-  state: TuiState,
-  localId: string,
-  commandId: CommandId,
-): TuiState {
-  return {
-    ...state,
-    localRows: {
-      ...state.localRows,
-      pendingStart: state.localRows.pendingStart.map((row) => {
-        if (row.localId !== localId) {
-          return row;
-        }
-        return { ...row, commandId };
-      }),
-    },
-  };
-}
-
 export function removePendingStartAgentRow(state: TuiState, localId: string): TuiState {
   return {
     ...state,
@@ -267,27 +219,6 @@ export function addPendingRenameSessionTitle(
     localRows: withPendingRenameTitles(state.localRows, {
       ...pendingRenameTitles(state.localRows),
       [row.sessionId]: row,
-    }),
-  };
-}
-
-export function bindPendingRenameSessionTitle(
-  state: TuiState,
-  sessionId: SessionId,
-  commandId: CommandId,
-): TuiState {
-  const pending = state.localRows.pendingRenameTitles?.[sessionId];
-  if (pending === undefined) {
-    return state;
-  }
-  return {
-    ...state,
-    localRows: withPendingRenameTitles(state.localRows, {
-      ...pendingRenameTitles(state.localRows),
-      [sessionId]: {
-        ...pending,
-        commandId,
-      },
     }),
   };
 }
