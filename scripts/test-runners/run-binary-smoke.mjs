@@ -2326,6 +2326,50 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function stableObserverIdentity(health) {
+  return {
+    pid: health.pid,
+    startedAt: health.startedAt,
+    version: health.version,
+    socketPath: health.socketPath,
+    stateDir: health.stateDir,
+  };
+}
+
+async function socketState(path) {
+  const stats = await lstat(path);
+  assertEqual(stats.isSocket(), true, `socket type at ${path}`);
+  return {
+    identity: fileIdentity(stats),
+    holders: readUnixSocketHolderPids(path),
+  };
+}
+
+async function observerPidfileState(path) {
+  const bytes = await readFile(path);
+  return {
+    identity: fileIdentity(await lstat(path)),
+    hash: sha256(bytes),
+    process: ObserverProcessIdentitySchema.parse(JSON.parse(bytes.toString("utf8"))),
+  };
+}
+
+async function optionalFileState(path) {
+  try {
+    const stats = await lstat(path);
+    return {
+      status: "present",
+      identity: fileIdentity(stats),
+      hash: sha256(await readFile(path)),
+    };
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { status: "missing" };
+    }
+    throw error;
+  }
+}
+
 async function observerProcessInventory(socketPath) {
   const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
   const result = await run(psPath, ["-axo", "pid=,command="]);
