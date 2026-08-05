@@ -5,6 +5,7 @@
 // dispatches the same observer commands the Ink TUI did (no Station panes).
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import { toSafeError } from "@station/client";
 import { createDashboardRuntime } from "@station/dashboard-core";
 import {
   loadStationTuiConfig,
@@ -33,15 +34,21 @@ import {
   createProcessRendererControlChannel,
 } from "./popupRuntime.js";
 import {
-  beginDashboardRendererHotDisposal,
+  beginHotDisposal,
+  type StationHotDisposalSlots,
+  waitForHotDisposal,
+} from "../hmr/hotDisposalBarrier.js";
+import { invokeCleanup } from "../lifecycle/cleanup.js";
+import {
   createDashboardRendererRuntimeLifecycle,
-  dashboardRendererHotSlots,
   type DashboardRendererRuntimeLifecycle,
-  waitForDashboardRendererHotDisposal,
 } from "./runtimeLifecycle.js";
 
 type DashboardRenderer = Pick<CliRenderer, "destroy" | "getSelection">;
 type DashboardHotRoot = { unmount(): void };
+type DashboardRendererHotSlots = StationHotDisposalSlots & {
+  __stationDashboardHotRenderer?: DashboardRenderer;
+};
 
 /**
  * Callable entry for the interactive observer-backed dashboard without native Station panes.
@@ -51,7 +58,7 @@ type DashboardHotRoot = { unmount(): void };
  */
 export async function runDashboardMain(): Promise<void> {
   const env = process.env;
-  const hotSlots = dashboardRendererHotSlots();
+  const hotSlots = globalThis as DashboardRendererHotSlots;
   const clipboardEffects = createRuntimeClipboardEffects({
     env,
     platform: process.platform,
@@ -59,8 +66,10 @@ export async function runDashboardMain(): Promise<void> {
   });
 
   // The prior OpenTUI owner must release process-global stdin synchronously before replacement.
-  hotSlots.__stationDashboardHotRenderer?.destroy();
-  await waitForDashboardRendererHotDisposal(hotSlots);
+  await invokeCleanup(() => hotSlots.__stationDashboardHotRenderer?.destroy()).catch(
+    reportDashboardHotDisposalFailure,
+  );
+  await waitForHotDisposal(hotSlots);
 
   const tuiConfig = await loadStationTuiConfig({ env });
   // Print config degradation before OpenTUI takes over the terminal.
@@ -76,10 +85,14 @@ export async function runDashboardMain(): Promise<void> {
       return;
     }
     exiting = true;
-    void (async () => {
-      await runtimeLifecycle?.dispose();
-      process.exit(code);
-    })();
+    const settlement = runtimeLifecycle?.dispose() ?? Promise.resolve();
+    void settlement.then(
+      () => process.exit(code),
+      (error: unknown) => {
+        reportDashboardHotDisposalFailure(error);
+        process.exit(code === 0 ? 1 : code);
+      },
+    );
   }
   const popupRuntime = createPopupRuntime(
     env,
@@ -130,15 +143,19 @@ export async function runDashboardMain(): Promise<void> {
   let themeController: StationThemeController | undefined;
   const onProcessExit = (): void => runtimeLifecycle?.disposeForProcessExit();
   runtimeLifecycle = createDashboardRendererRuntimeLifecycle({
-    releaseRendererResources: () => {
-      root?.unmount();
-      themeController?.dispose();
-      renderer?.destroy();
-      process.off("exit", onProcessExit);
-      if (hotSlots.__stationDashboardHotRenderer === renderer) {
-        delete hotSlots.__stationDashboardHotRenderer;
-      }
-    },
+    releaseRendererResources: [
+      () => root?.unmount(),
+      () => themeController?.dispose(),
+      () => renderer?.destroy(),
+      () => {
+        process.off("exit", onProcessExit);
+      },
+      () => {
+        if (hotSlots.__stationDashboardHotRenderer === renderer) {
+          delete hotSlots.__stationDashboardHotRenderer;
+        }
+      },
+    ],
     disposeWidgetWrites: () => widgetConfigWrites?.dispose() ?? Promise.resolve(),
     disposeDashboardRuntime: () => Promise.resolve(dashboardRuntime.dispose()),
     disposeRuntimeCapabilities: () => popupRuntime.dispose(),
@@ -199,13 +216,26 @@ export async function runDashboardMain(): Promise<void> {
     if (import.meta.hot) {
       import.meta.hot.accept();
       import.meta.hot.dispose(() => {
-        beginDashboardRendererHotDisposal(hotSlots, () => runtimeLifecycle.dispose());
+        beginHotDisposal(
+          hotSlots,
+          () => runtimeLifecycle.dispose(),
+          reportDashboardHotDisposalFailure,
+        );
       });
     }
   } catch (error) {
-    await runtimeLifecycle.dispose();
+    try {
+      await runtimeLifecycle.dispose();
+    } catch (cleanupError: unknown) {
+      reportDashboardHotDisposalFailure(cleanupError);
+    }
     throw error;
   }
+}
+
+function reportDashboardHotDisposalFailure(error: unknown): void {
+  const safeError = toSafeError(error, { clientLabel: "Station dashboard" });
+  process.stderr.write(`[station] ${safeError.code}: ${safeError.message}\n`);
 }
 
 if (import.meta.main) {

@@ -1,17 +1,14 @@
 import { describe, expect, it } from "bun:test";
-import {
-  beginDashboardRendererHotDisposal,
-  createDashboardRendererRuntimeLifecycle,
-  type DashboardRendererHotSlots,
-  waitForDashboardRendererHotDisposal,
-} from "./runtimeLifecycle.js";
+import { createDashboardRendererRuntimeLifecycle } from "./runtimeLifecycle.js";
 
 describe("standalone dashboard renderer lifecycle", () => {
   it("releases renderer resources synchronously and repeat-safely drains before client stop", async () => {
     const dashboard = deferred();
     const order: string[] = [];
     const lifecycle = createDashboardRendererRuntimeLifecycle({
-      releaseRendererResources: () => order.push("release"),
+      releaseRendererResources: [() => {
+        order.push("release");
+      }],
       disposeWidgetWrites: async () => {
         order.push("widgets");
       },
@@ -31,71 +28,168 @@ describe("standalone dashboard renderer lifecycle", () => {
     const second = lifecycle.dispose();
 
     expect(second).toBe(first);
-    expect(order).toEqual(["release", "dashboard", "widgets"]);
+    expect(order).toEqual(["release", "dashboard", "widgets", "capabilities"]);
     dashboard.resolve();
     await first;
     expect(order).toEqual(["release", "dashboard", "widgets", "capabilities", "client"]);
   });
 
-  it("starts every cleanup immediately on the non-extendable process exit path", () => {
+  it("disposes capabilities immediately so they can settle admitted dashboard work", async () => {
+    const popupRequest = deferred();
     const order: string[] = [];
     const lifecycle = createDashboardRendererRuntimeLifecycle({
-      releaseRendererResources: () => order.push("release"),
+      releaseRendererResources: [() => {
+        order.push("release");
+      }],
       disposeWidgetWrites: async () => {
         order.push("widgets");
       },
       disposeDashboardRuntime: async () => {
         order.push("dashboard");
+        try {
+          await popupRequest.promise;
+        } catch {
+          order.push("popup-rejected");
+        }
+        order.push("dashboard-settled");
       },
       disposeRuntimeCapabilities: () => {
         order.push("capabilities");
+        popupRequest.reject(new Error("popup request disposed"));
       },
       stopClient: async () => {
         order.push("client");
       },
     });
 
-    lifecycle.disposeForProcessExit();
+    await lifecycle.dispose();
 
-    expect(order).toEqual(["release", "dashboard", "widgets", "capabilities", "client"]);
+    expect(order).toEqual([
+      "release",
+      "dashboard",
+      "widgets",
+      "capabilities",
+      "popup-rejected",
+      "dashboard-settled",
+      "client",
+    ]);
   });
 
-  it("awaits the prior HMR disposer and keeps a newer hot slot when an old disposer settles", async () => {
-    const slots = {} as DashboardRendererHotSlots;
-    const oldGate = deferred();
-    const newGate = deferred();
-    const oldDisposal = beginDashboardRendererHotDisposal(slots, () => oldGate.promise);
-    let priorSettled = false;
-    void observeSettlement(waitForDashboardRendererHotDisposal(slots), () => {
-      priorSettled = true;
+  it("isolates failures, returns one aggregate settlement, and still stops the client", async () => {
+    const order: string[] = [];
+    const lifecycle = createDashboardRendererRuntimeLifecycle({
+      releaseRendererResources: [
+        () => {
+          order.push("release");
+          throw new Error("release failed");
+        },
+        () => {
+          order.push("release-after-failure");
+        },
+      ],
+      disposeWidgetWrites: async () => {
+        order.push("widgets");
+        throw new Error("widgets failed");
+      },
+      disposeDashboardRuntime: async () => {
+        order.push("dashboard");
+        throw new Error("dashboard failed");
+      },
+      disposeRuntimeCapabilities: () => {
+        order.push("capabilities");
+        throw new Error("capabilities failed");
+      },
+      stopClient: async () => {
+        order.push("client");
+        throw new Error("client failed");
+      },
     });
-    await Promise.resolve();
-    expect(priorSettled).toBe(false);
 
-    const newDisposal = beginDashboardRendererHotDisposal(slots, () => newGate.promise);
-    oldGate.resolve();
-    await oldDisposal;
-    expect(slots.__stationDashboardHotDispose).toBe(newDisposal);
+    const first = lifecycle.dispose();
+    const second = lifecycle.dispose();
 
-    newGate.resolve();
-    await newDisposal;
-    await Promise.resolve();
-    expect(slots.__stationDashboardHotDispose).toBeUndefined();
+    expect(second).toBe(first);
+    let failure: unknown;
+    try {
+      await first;
+    } catch (error: unknown) {
+      failure = error;
+    }
+    expect(failure instanceof AggregateError).toBe(true);
+    expect(order).toEqual([
+      "release",
+      "release-after-failure",
+      "dashboard",
+      "widgets",
+      "capabilities",
+      "client",
+    ]);
+  });
+
+  it("starts every cleanup despite synchronous throws on the non-extendable process exit path", async () => {
+    const order: string[] = [];
+    const lifecycle = createDashboardRendererRuntimeLifecycle({
+      releaseRendererResources: [
+        () => {
+          order.push("release");
+          throw new Error("release failed");
+        },
+        () => {
+          order.push("release-after-failure");
+        },
+      ],
+      disposeWidgetWrites: async () => {
+        order.push("widgets");
+        throw new Error("widgets failed");
+      },
+      disposeDashboardRuntime: async () => {
+        order.push("dashboard");
+        throw new Error("dashboard failed");
+      },
+      disposeRuntimeCapabilities: () => {
+        order.push("capabilities");
+        throw new Error("capabilities failed");
+      },
+      stopClient: async () => {
+        order.push("client");
+        throw new Error("client failed");
+      },
+    });
+
+    const unhandled: unknown[] = [];
+    const observeUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", observeUnhandled);
+    try {
+      expect(() => lifecycle.disposeForProcessExit()).not.toThrow();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    } finally {
+      process.off("unhandledRejection", observeUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+    expect(order).toEqual([
+      "release",
+      "release-after-failure",
+      "dashboard",
+      "widgets",
+      "capabilities",
+      "client",
+    ]);
   });
 });
 
-async function observeSettlement(
-  settlement: Promise<void>,
-  observe: () => void,
-): Promise<void> {
-  await settlement;
-  observe();
-}
-
-function deferred(): { promise: Promise<void>; resolve(): void } {
+function deferred(): {
+  promise: Promise<void>;
+  resolve(): void;
+  reject(error: unknown): void;
+} {
   let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<void>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }

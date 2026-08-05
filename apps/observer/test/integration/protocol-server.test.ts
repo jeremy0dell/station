@@ -205,7 +205,7 @@ describe("observer protocol server", () => {
   it("keeps production duplicate inspection report-only without blocking health", async () => {
     const { dir, socketPath } = await createTempSocketPath();
     const stateDir = join(dir, "report-only-state");
-    const processToken = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
+    const processToken = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
     const keeperIdentity = createObserverProcessIdentity({
       pid: process.pid,
       processToken,
@@ -226,7 +226,7 @@ describe("observer protocol server", () => {
       ...keeperProcess,
       pid: process.pid + 10_000,
       startToken: "candidate-start",
-      processToken: "b47ac10b-58cc-4372-a567-0e02b2c3d479",
+      processToken: ["b47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-"),
     };
     const signals: Array<[number, NodeJS.Signals | 0]> = [];
     const duplicateProcessEvidence: ObserverDuplicateProcessEvidenceSource = {

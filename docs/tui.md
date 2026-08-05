@@ -97,10 +97,10 @@ When the private tmux devbox runs the dashboard under Bun `--hot`, the CLI
 parent and its IPC channel remain authoritative for the lifetime of
 `_station-ui`. A source reload synchronously releases the prior OpenTUI stdin
 owner, unmounts the old React root, and removes appearance listeners. It then
-closes the old dashboard effect scope, cancels subscriptions and timers, drains
-already-started dashboard work including popup IPC, removes popup listeners,
-stops the old Station client, and only then creates the replacement
-client/dashboard composition in the same Bun process.
+closes the old dashboard effect scope, cancels subscriptions and timers,
+immediately disposes popup control so pending IPC rejects locally, drains all
+already-started dashboard work, stops the old Station client, and only then
+creates the replacement client/dashboard composition in the same Bun process.
 The process-global disposer is installed before replacement can begin and uses
 compare-and-delete so an older settlement cannot erase a newer HMR barrier. The
 renderer disposer deliberately does not disconnect the CLI-owned IPC channel.
@@ -208,10 +208,11 @@ does not emit a second spawn event.
 Normal Ctrl-Q and cooperative TTY takeover close dashboard effect admission and
 await admitted dashboard work before stopping the shared client and completing
 process shutdown. Native HMR releases renderer/stdin ownership synchronously,
-retains compatible workspace state and PTYs, publishes the asynchronous disposer
-in a process-global slot, and makes the replacement composition await it. The
-unavoidable `process.on("exit")` path remains synchronous best-effort because the
-runtime cannot extend that event.
+retains compatible workspace state and PTYs, publishes a settlement-only cleanup
+barrier in a process-global slot, and starts the replacement composition after
+that barrier even when prior cleanup reports a failure. Only the standalone
+dashboard registers `process.on("exit")`; that path remains synchronous
+best-effort because the runtime cannot extend the event.
 
 This telemetry is local and content-free: it must not collect terminal output,
 prompts, key contents, foreground application names, environment variables,

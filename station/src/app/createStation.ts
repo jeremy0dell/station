@@ -12,6 +12,11 @@ import {
 import { createStationInputRuntime, type StationInputRuntime } from "../input/stationInput.js";
 import { createManagedLaunch } from "../input/runtime/managedLaunch.js";
 import { createPaneEffects, type PaneEffects } from "../input/runtime/paneEffects.js";
+import {
+  invokeCleanup,
+  settleCleanupPromises,
+  settleCleanupSteps,
+} from "../lifecycle/cleanup.js";
 import { buildLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import {
   createLayoutWriter,
@@ -108,13 +113,8 @@ export function createStation(options: CreateStationOptions): Station {
         return;
       }
       shutdownStarted = true;
-      void (async () => {
-        try {
-          await lifecycle.disposeForShutdown();
-        } finally {
-          options.shutdown();
-        }
-      })();
+      const finishShutdown = (): void => options.shutdown();
+      void lifecycle.disposeForShutdown().then(finishShutdown, finishShutdown);
     },
   });
 
@@ -277,42 +277,75 @@ function createLifecycle(deps: {
     if (pendingDisposal !== undefined) {
       return pendingDisposal;
     }
-    // The reconciler must detach before the dashboard source so teardown cannot
-    // synchronize transient overlay focus into a disposing runtime.
-    detachOverlayRowFocus?.();
+
+    let resolveDisposal!: () => void;
+    let rejectDisposal!: (error: unknown) => void;
+    pendingDisposal = new Promise<void>((resolve, reject) => {
+      resolveDisposal = resolve;
+      rejectDisposal = reject;
+    });
+
+    const stopOverlayRowFocus = detachOverlayRowFocus;
     detachOverlayRowFocus = undefined;
-    const dashboardSettlement = dashboardRuntime.dispose();
-    detachReconcile?.();
+    const stopReconcile = detachReconcile;
     detachReconcile = undefined;
-    detachSessionReconcile?.();
+    const stopSessionReconcile = detachSessionReconcile;
     detachSessionReconcile = undefined;
-    detachLayoutWriter?.();
+    const stopLayoutWriter = detachLayoutWriter;
     detachLayoutWriter = undefined;
-    const pendingWidgetWrites = widgetConfigWrites?.dispose() ?? Promise.resolve();
+    const pendingWidgetWrites = widgetConfigWrites;
     widgetConfigWrites = undefined;
-    // Real shutdown flushes pending layout synchronously (process.exit follows);
-    // an HMR teardown just drops the timer — the reused store/registry keep it.
-    if (disposeTerminals) {
-      layoutWriter?.flush();
-    } else {
-      layoutWriter?.dispose();
-    }
-    // Deliberately keep the registry's pane-exit handler: across an HMR reload Bun
-    // may run this dispose AFTER the next composition installed its handler, so
-    // clearing would strand managed-agent exits. The next composition reinstalls
-    // its own, and shutdown disposes the registry outright.
-    pendingDisposal = Promise.all([
-      pendingWidgetWrites,
-      (async () => {
-        // Accepted commands and native launch phases settle before their client disappears.
-        await Promise.resolve(dashboardSettlement);
-        // React unmount work scheduled during shutdown cannot own live PTY cleanup.
-        if (disposeTerminals) {
-          registry.disposeAll();
-        }
-        await stationClient.stop();
-      })(),
-    ]).then(() => undefined);
+
+    // The overlay reconciler must detach before dashboard disposal closes its source.
+    const overlay = invokeCleanup(() => stopOverlayRowFocus?.());
+    const dashboard = invokeCleanup(() => dashboardRuntime.dispose());
+    const reconcile = invokeCleanup(() => stopReconcile?.());
+    const sessionReconcile = invokeCleanup(() => stopSessionReconcile?.());
+    const layoutSubscription = invokeCleanup(() => stopLayoutWriter?.());
+    const widgets = invokeCleanup(() => pendingWidgetWrites?.dispose());
+    const layout = invokeCleanup(() => {
+      // Shutdown flushes synchronously; HMR drops the timer because its runtime is retained.
+      if (disposeTerminals) {
+        layoutWriter?.flush();
+      } else {
+        layoutWriter?.dispose();
+      }
+    });
+
+    // Deliberately keep the registry's pane-exit handler during HMR: an older
+    // disposer can run after the replacement installed the current handler.
+    const disposeTerminalAndClient = (): Promise<void> =>
+      settleCleanupSteps(
+        [
+          () => {
+            // React unmount work scheduled during shutdown cannot own live PTY cleanup.
+            if (disposeTerminals) {
+              registry.disposeAll();
+            }
+          },
+          // Accepted commands and launch phases settle before their client disappears.
+          () => stationClient.stop(),
+        ],
+        "Native terminal and client cleanup failed.",
+      );
+    const terminalAndClient = dashboard.then(
+      disposeTerminalAndClient,
+      disposeTerminalAndClient,
+    );
+    const settlement = settleCleanupPromises(
+      [
+        overlay,
+        dashboard,
+        reconcile,
+        sessionReconcile,
+        layoutSubscription,
+        widgets,
+        layout,
+        terminalAndClient,
+      ],
+      "Native Station cleanup failed.",
+    );
+    settlement.then(resolveDisposal, rejectDisposal);
     return pendingDisposal;
   };
 

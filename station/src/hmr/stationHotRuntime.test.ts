@@ -1,10 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { beginHotDisposal, waitForHotDisposal } from "./hotDisposalBarrier.js";
 import {
-  beginStationHotDisposal,
   getOrCreateStationHotRuntime,
   type StationHotRuntime,
   type StationHotSlots,
-  waitForStationHotDisposal,
 } from "./stationHotRuntime.js";
 import type { WorkspaceConfig } from "../config/stationConfig.js";
 import { selectWelcomeCanContinue } from "../state/selectors.js";
@@ -43,40 +42,6 @@ function createSlots(): StationHotSlots {
 }
 
 describe("station hot runtime", () => {
-  it("releases renderer ownership before waiting and protects a newer disposal slot", async () => {
-    const slots = createSlots();
-    const order: string[] = [];
-    const oldGate = deferred();
-    const newGate = deferred();
-    const oldDisposal = beginStationHotDisposal(
-      slots,
-      () => order.push("release-old"),
-      () => oldGate.promise,
-    );
-
-    let priorSettled = false;
-    void observeSettlement(waitForStationHotDisposal(slots), () => {
-      priorSettled = true;
-    });
-    await Promise.resolve();
-    expect(order).toEqual(["release-old"]);
-    expect(priorSettled).toBe(false);
-
-    const newDisposal = beginStationHotDisposal(
-      slots,
-      () => order.push("release-new"),
-      () => newGate.promise,
-    );
-    oldGate.resolve();
-    await oldDisposal;
-    expect(slots.__stationHotDisposal).toBe(newDisposal);
-
-    newGate.resolve();
-    await newDisposal;
-    await Promise.resolve();
-    expect(slots.__stationHotDisposal).toBeUndefined();
-  });
-
   it("reuses a compatible v6 runtime so its live PTYs survive a reload", () => {
     const slots = createSlots();
     const first = getOrCreateStationHotRuntime(slots, FREEZE_CONFIG);
@@ -105,6 +70,38 @@ describe("station hot runtime", () => {
     expect(second.registry.get("pane-second")?.terminal).toBe(terminal);
     expect(scripted.helpers.isDisposed()).toBe(false);
     expect(second.store.getState().workspace.activePaneId).toEqual("pane-second");
+  });
+
+  it("starts replacement after failed cleanup while retaining compatible live PTYs", async () => {
+    const slots = createSlots();
+    const first = getOrCreateStationHotRuntime(slots, FREEZE_CONFIG);
+    const scripted = createScriptedTerminal();
+    first.store.actions.createPane("pane-retained-after-failure");
+    first.registry.setRuntimeOptions({
+      createTerminal: () => scripted.terminal,
+      scrollOnOutput: FREEZE_CONFIG.scroll_on_output,
+      scrollbackLines: FREEZE_CONFIG.scrollback_lines,
+    });
+    first.registry.resize("pane-retained-after-failure", { cols: 80, rows: 24 });
+    const retainedTerminal = first.registry.get("pane-retained-after-failure")?.terminal;
+    const reported: unknown[] = [];
+
+    beginHotDisposal(
+      slots,
+      async () => {
+        throw new Error("old generation cleanup failed");
+      },
+      (error) => reported.push(error),
+    );
+    await waitForHotDisposal(slots);
+    const replacement = getOrCreateStationHotRuntime(slots, FOLLOW_CONFIG);
+
+    expect(replacement).toBe(first);
+    expect(replacement.registry.get("pane-retained-after-failure")?.terminal).toBe(
+      retainedTerminal,
+    );
+    expect(scripted.helpers.isDisposed()).toBe(false);
+    expect(reported).toHaveLength(1);
   });
 
   it("reboots a pre-launch-coordination v5 runtime and disposes its old PTYs", () => {
@@ -147,19 +144,3 @@ describe("station hot runtime", () => {
     expect(selectWelcomeCanContinue(next.store.getState())).toBe(false);
   });
 });
-
-async function observeSettlement(
-  settlement: Promise<void>,
-  observe: () => void,
-): Promise<void> {
-  await settlement;
-  observe();
-}
-
-function deferred(): { promise: Promise<void>; resolve(): void } {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}

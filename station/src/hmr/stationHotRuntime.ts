@@ -3,6 +3,7 @@ import type { WorkspaceConfig } from "../config/stationConfig.js";
 import { createStationStore, type StationStore } from "../state/store.js";
 import type { WorkspaceSlice } from "../state/types.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
+import type { StationHotDisposalSlots } from "./hotDisposalBarrier.js";
 
 // Bump only when a code change makes a preserved store/registry unsafe to reuse
 // across a hot reload (e.g. an incompatible store-state shape). A mismatch
@@ -27,47 +28,14 @@ export type StationHotRuntime = {
   registry: PtyRegistry;
 };
 
-export type StationHotSlots = typeof globalThis & {
+export type StationHotSlots = StationHotDisposalSlots & {
   __stationHotRuntime?: StationHotRuntime;
   __stationHotRenderer?: StationHotRenderer;
-  __stationHotDisposal?: Promise<void>;
   __stationUiRunId?: UiRunId;
 };
 
 export function stationHotSlots(): StationHotSlots {
   return globalThis as StationHotSlots;
-}
-
-/** Await the previous native composition's dashboard settlement before replacement. */
-export function waitForStationHotDisposal(slots: StationHotSlots): Promise<void> {
-  return slots.__stationHotDisposal ?? Promise.resolve();
-}
-
-/**
- * Release native renderer ownership synchronously and publish the asynchronous
- * composition disposer for the next HMR generation.
- */
-export function beginStationHotDisposal(
-  slots: StationHotSlots,
-  releaseRenderer: () => void,
-  disposeRuntime: () => Promise<void>,
-): Promise<void> {
-  releaseRenderer();
-  let disposal: Promise<void>;
-  try {
-    disposal = disposeRuntime();
-  } catch (error: unknown) {
-    disposal = Promise.reject(error);
-  }
-  slots.__stationHotDisposal = disposal;
-  const clear = (): void => {
-    // A stale disposer must not erase a newer generation's settlement barrier.
-    if (slots.__stationHotDisposal === disposal) {
-      delete slots.__stationHotDisposal;
-    }
-  };
-  disposal.then(clear, clear);
-  return disposal;
 }
 
 /**

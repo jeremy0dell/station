@@ -10,13 +10,13 @@ import { loadStationTuiConfig } from "./config/tuiConfig.js";
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
+import { beginHotDisposal, waitForHotDisposal } from "./hmr/hotDisposalBarrier.js";
 import {
-  beginStationHotDisposal,
   getOrCreateStationHotRuntime,
   STATION_HOT_RUNTIME_VERSION,
   stationHotSlots,
-  waitForStationHotDisposal,
 } from "./hmr/stationHotRuntime.js";
+import { invokeCleanup, settleCleanupSteps } from "./lifecycle/cleanup.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
@@ -115,8 +115,10 @@ async function startStationMain(
   const env = process.env;
   const stationGlobalSlots = stationHotSlots();
   // A prior renderer releases process-global stdin synchronously before dashboard settlement is awaited.
-  stationGlobalSlots.__stationHotRenderer?.destroy();
-  await waitForStationHotDisposal(stationGlobalSlots);
+  await invokeCleanup(() => stationGlobalSlots.__stationHotRenderer?.destroy()).catch(
+    reportNativeHotDisposalFailure,
+  );
+  await waitForHotDisposal(stationGlobalSlots);
 
   const stationClient = createStationClient(env, {
     onAttentionNeeded: () => {
@@ -294,10 +296,15 @@ async function startStationMain(
       let exitCode = 0;
       await uiLifecycle.shutdownRequested(reason);
       try {
-        rootForShutdown?.unmount();
-        rendererForInput?.destroy();
-        ptyRuntime?.dispose();
-        await stationClient.stop();
+        await settleCleanupSteps(
+          [
+            () => rootForShutdown?.unmount(),
+            () => rendererForInput?.destroy(),
+            () => ptyRuntime?.dispose(),
+            () => stationClient.stop(),
+          ],
+          "Native renderer shutdown cleanup failed.",
+        );
         await uiLifecycle.shutdownCompleted(reason);
       } catch (error) {
         exitCode = 1;
@@ -398,22 +405,43 @@ async function startStationMain(
   if (import.meta.hot) {
     import.meta.hot.accept();
     import.meta.hot.dispose(() => {
-      beginStationHotDisposal(
+      beginHotDisposal(
         stationGlobalSlots,
-        () => {
-          // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
-          stopSurfaceObservation?.();
-          root.unmount();
-          renderer.destroy();
-          if (stationGlobalSlots.__stationHotRenderer === renderer) {
-            delete stationGlobalSlots.__stationHotRenderer;
-          }
+        () =>
+          settleCleanupSteps(
+            [
+              // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
+              () => stopSurfaceObservation?.(),
+              () => root.unmount(),
+              () => renderer.destroy(),
+              () => {
+                if (stationGlobalSlots.__stationHotRenderer === renderer) {
+                  delete stationGlobalSlots.__stationHotRenderer;
+                }
+              },
+              () => station.disposeForHotReload(),
+            ],
+            "Native Station HMR cleanup failed.",
+          ),
+        (error) => {
+          void uiLifecycle.fatal(error).catch(() => {
+            // HMR replacement ordering cannot depend on diagnostic persistence.
+          });
         },
-        () => station.disposeForHotReload(),
       );
     });
   }
   return true;
+}
+
+function reportNativeHotDisposalFailure(error: unknown): void {
+  writeStartupError(
+    toSafeError(error, {
+      tag: "TuiLifecycleError",
+      code: "TUI_HMR_CLEANUP_FAILED",
+      message: "Native Station hot-reload cleanup failed.",
+    }),
+  );
 }
 
 function writeStartupError(error: { code: string; message: string; hint?: string }): void {

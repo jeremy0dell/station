@@ -59,6 +59,66 @@ describe("dashboard runtime effect scope", () => {
       vi.useRealTimers();
     }
   });
+
+  it("drains a timer callback admitted immediately before disposal", async () => {
+    vi.useFakeTimers();
+    try {
+      const scope = createDashboardRuntimeEffectScope();
+      const gate = deferred();
+      const completed: string[] = [];
+      scope.setTimeout(async () => {
+        await gate.promise;
+        completed.push("timer-settled");
+      }, 10);
+
+      await vi.advanceTimersByTimeAsync(10);
+      const disposal = scope.dispose();
+      let disposed = false;
+      void observeSettlement(disposal, () => {
+        disposed = true;
+      });
+      await Promise.resolve();
+      expect(disposed).toBe(false);
+
+      gate.resolve();
+      await disposal;
+      expect(completed).toEqual(["timer-settled"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps admitted continuations owned while rejecting separately admitted follow-up work", async () => {
+    const scope = createDashboardRuntimeEffectScope();
+    const firstGate = deferred();
+    const followUpGate = deferred();
+    const completed: string[] = [];
+    let followUpAdmitted: boolean | undefined;
+    scope.run(async () => {
+      await firstGate.promise;
+      followUpAdmitted = scope.run(() => {
+        completed.push("separate-follow-up");
+      });
+      await followUpGate.promise;
+      completed.push("admitted-continuation");
+    });
+
+    const disposal = scope.dispose();
+    firstGate.resolve();
+    await Promise.resolve();
+    expect(followUpAdmitted).toBe(false);
+
+    let disposed = false;
+    void observeSettlement(disposal, () => {
+      disposed = true;
+    });
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    followUpGate.resolve();
+    await disposal;
+    expect(completed).toEqual(["admitted-continuation"]);
+  });
 });
 
 async function observeSettlement(settlement: Promise<void>, observe: () => void): Promise<void> {
