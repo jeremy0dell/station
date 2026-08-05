@@ -10,7 +10,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && cp src/pluginScriptBody.js dist/pluginScriptBody.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

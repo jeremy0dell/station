@@ -13689,7 +13689,7 @@
       "declaration": "StationOpenCodePluginScriptInput",
       "kind": "type",
       "role": "ADAPTER",
-      "purpose": "Owns the generated `station-agent-state.js` plugin body and its rendering from install-time values. The body is plain JavaScript with no backticks or `${` interpolation so the surrounding template literal needs no escaping; install-time values are `__STATION_*__` placeholder tokens that `renderStationOpenCodePlugin` replaces with JSON-encoded literals.",
+      "purpose": "Renders the generated `station-agent-state.js` plugin body from `pluginScriptBody.js` with install-time values JSON-encoded into the `__STATION_*__` placeholder tokens.",
       "dependencies": []
     },
     {

@@ -1,7 +1,7 @@
 import { access, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ProviderHookArtifactOwner } from "@station/contracts";
 import { providerHookOwnerMarker } from "@station/runtime";
 import { describe, expect, it } from "vitest";
@@ -53,7 +53,7 @@ describe("OpenCode plugin setup", () => {
     await expect(readFile(pluginPath, "utf8")).rejects.toThrow();
   });
 
-  it("renders the plugin script without template escapes or leftover tokens", async () => {
+  it("renders the plugin script from the checked-in body with values injected", async () => {
     const root = await mkdtemp(join(tmpdir(), "station-opencode-plugin-"));
 
     const plan = await planOpenCodePlugin({
@@ -63,15 +63,19 @@ describe("OpenCode plugin setup", () => {
       hookSpoolDir: "/tmp/station/state/spool/hooks",
     });
 
-    // The generated artifact is plain JavaScript: any backtick or ${} here
-    // would be an interpolation leftover from the template literal, not code.
-    expect(plan.after).not.toContain("`");
-    expect(plan.after).not.toContain("${");
+    // Every install-time placeholder must be replaced by its JSON-encoded value.
     expect(plan.after).not.toContain("__STATION_");
     expect(plan.after).toContain('const fallbackSocketPath = "/tmp/station/run/observer.sock";');
     expect(plan.after).toContain(
       'new Set(["command.executed","permission.asked","permission.replied"',
     );
+    // The body is the checked-in file itself, not a copy embedded in source.
+    const bodySource = await readFile(
+      fileURLToPath(new URL("../../src/pluginScriptBody.js", import.meta.url)),
+      "utf8",
+    );
+    expect(plan.after).toContain(bodySource.split("\n")[0]);
+    expect(plan.after).toContain(bodySource.split("\n").at(-1) ?? "");
   });
 
   it("resolves config dir from OPENCODE_CONFIG_DIR in process env", async () => {
