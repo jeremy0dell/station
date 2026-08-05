@@ -71,7 +71,7 @@ describe("OpenCode plugin setup", () => {
     );
     // The body is the checked-in file itself, not a copy embedded in source.
     const bodySource = await readFile(
-      fileURLToPath(new URL("../../src/pluginScriptBody.js", import.meta.url)),
+      fileURLToPath(new URL("../../pluginScriptBody.js", import.meta.url)),
       "utf8",
     );
     expect(plan.after).toContain(bodySource.split("\n")[0]);

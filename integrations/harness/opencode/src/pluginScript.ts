@@ -26,7 +26,7 @@ const compiledBodyPath = process.env.STATION_OPENCODE_PLUGIN_BODY_PATH;
 const stationOpenCodePluginBody = readFileSync(
   compiledBodyPath !== undefined && compiledBodyPath.length > 0
     ? compiledBodyPath
-    : fileURLToPath(new URL("./pluginScriptBody.js", import.meta.url)),
+    : fileURLToPath(new URL("../pluginScriptBody.js", import.meta.url)),
   "utf8",
 );
 

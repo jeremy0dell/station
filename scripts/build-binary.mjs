@@ -115,7 +115,7 @@ async function main() {
   const openCodePluginBodyPath = join(outputDir, "..", "station-opencode-plugin-body.js");
   await mkdir(dirname(openCodePluginBodyPath), { recursive: true });
   await cp(
-    join(repoRoot, "integrations", "harness", "opencode", "src", "pluginScriptBody.js"),
+    join(repoRoot, "integrations", "harness", "opencode", "pluginScriptBody.js"),
     openCodePluginBodyPath,
   );
 

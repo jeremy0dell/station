@@ -28,5 +28,3 @@ integrations/*/*/src/**/*.js
 integrations/*/*/src/**/*.js.map
 integrations/*/*/src/**/*.d.ts
 integrations/*/*/src/**/*.d.ts.map
-# The OpenCode plugin body is a checked-in source artifact, not tsc output.
-!integrations/harness/opencode/src/pluginScriptBody.js
