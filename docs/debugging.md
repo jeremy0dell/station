@@ -177,7 +177,7 @@ spool/hooks/
 run/runtime-owners/v1/
 ```
 
-`run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to the Observer, Station Host, or Host-owned PTYs.
+`run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR and the supervised setup guided E2E lane. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to the Observer, Station Host, or Host-owned PTYs.
 
 `observer.sock.pid` is mode `0600` for the default socket and contains exactly:
 

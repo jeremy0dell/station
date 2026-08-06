@@ -205,15 +205,25 @@ pnpm test:e2e:setup:guided
 pnpm test:e2e:setup:guided:all-shells
 ```
 
+Both guided entrypoints run under a disposable runtime owner
+(`scripts/test-runners/run-setup-guided-e2e.mjs`): it registers a private
+`setup-guided-e2e` owner record before Vitest spawns, reaps the exact
+supervised process group on normal completion, interruption, or terminal loss,
+and recovers only an exact registered abandoned group on the next start.
+Records live at `<state_dir>/run/runtime-owners/v1` beside the native-HMR
+records, and lifecycle events reach `<state_dir>/logs/cli.jsonl` through the
+existing `stn debug logs` surface. Fixture cleanup inside the tests remains
+defense in depth, not the sole owner; do not invoke Vitest directly for the
+guided suites except through the owner's passthrough arguments.
+
 The PTY support normalizes terminal controls and redraws. When intentional copy or layout changes
 alter `apps/cli/test/fixtures/setup-guided-transcript.txt`, regenerate from the fixed 100×24 happy
 scenario with the command below, review the normalized transcript manually, and verify it contains
 no environment paths, JSON envelopes, provider values, or raw operation structures:
 
 ```bash
-STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm exec vitest run \
-  --config config/vitest/vitest.setup-e2e.config.ts \
-  tests/e2e/setup-guided-feedback.test.ts -t "writes multiple selected agent CLIs"
+STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm test:e2e:setup:guided -- \
+  -t "writes multiple selected agent CLIs"
 ```
 
 Python must never reach the user's

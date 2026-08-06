@@ -25,6 +25,12 @@ import {
   writeSessionRescueManifest,
 } from "../../scripts/maintenance/session-rescue.mjs";
 import {
+  buildGuidedVitestArgs,
+  guidedConfigPath,
+  guidedTestFiles,
+  resolveVitestCommand,
+} from "../../scripts/test-runners/run-setup-guided-e2e.mjs";
+import {
   commandFromArgs,
   defaultDevSessionNameForRoot,
   globalOptionsFromArgs,
@@ -822,6 +828,56 @@ describe("tui dev script", () => {
     expect(isolatedScript).toContain("exec bun run dev");
     expect(devboxScript).toContain('run("bun", ["run", "station:isolated", "dev"]');
     expect(stationPackage.scripts?.dev).not.toContain("bun --hot");
+  });
+
+  it("routes setup guided E2E entrypoints through the supervised owner", () => {
+    const rootPackageResult = packageScriptsSchema.safeParse(
+      JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")),
+    );
+    expect(rootPackageResult.success).toBe(true);
+    if (!rootPackageResult.success) return;
+    const rootPackage = rootPackageResult.data;
+
+    expect(rootPackage.scripts?.["test:e2e:setup:guided"]).toBe(
+      "node scripts/test-runners/run-setup-guided-e2e.mjs",
+    );
+    expect(rootPackage.scripts?.["test:e2e:setup:guided"]).not.toContain("vitest");
+    expect(rootPackage.scripts?.["test:e2e:setup:guided:all-shells"]).toBe(
+      "STATION_SETUP_E2E_ALL_SHELLS=true pnpm test:e2e:setup:guided",
+    );
+
+    expect(guidedTestFiles).toEqual([
+      "tests/e2e/setup-guided-feedback.test.ts",
+      "tests/e2e/setup-guided-tty.test.ts",
+      "tests/e2e/setup-guided-sandbox.test.ts",
+    ]);
+    expect(buildGuidedVitestArgs()).toEqual([
+      "run",
+      "--config",
+      guidedConfigPath,
+      ...guidedTestFiles,
+    ]);
+    expect(buildGuidedVitestArgs(["-t", "writes multiple selected agent CLIs"])).toEqual([
+      "run",
+      "--config",
+      guidedConfigPath,
+      ...guidedTestFiles,
+      "-t",
+      "writes multiple selected agent CLIs",
+    ]);
+
+    const isolatedRoot = mkdtempSync(join(tmpdir(), "station-guided-runner-"));
+    try {
+      expect(resolveVitestCommand({ STATION_SETUP_E2E_VITEST_BIN: "/tmp/stub-vitest" })).toBe(
+        "/tmp/stub-vitest",
+      );
+      expect(resolveVitestCommand({}, isolatedRoot)).toBe("vitest");
+      expect(resolveVitestCommand({}, fileURLToPath(new URL("../../", import.meta.url)))).toBe(
+        join(fileURLToPath(new URL("../../", import.meta.url)), "node_modules", ".bin", "vitest"),
+      );
+    } finally {
+      rmSync(isolatedRoot, { recursive: true, force: true });
+    }
   });
 
   it("keeps turbo build watch inputs from reacting to tests", () => {
