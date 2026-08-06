@@ -1,9 +1,5 @@
 import type { StationClientStateSource } from "@station/client";
-import type {
-  DashboardActions,
-  DashboardRuntime,
-  DashboardStateSource,
-} from "@station/dashboard-core";
+import type { DashboardActions, DashboardRuntime, DashboardStateSource } from "@station/dashboard-core/runtime";
 import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,

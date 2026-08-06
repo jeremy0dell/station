@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import type { StationMouseTarget } from "./input/stationMouse.js";
-import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
 import { DashboardFrameTitle } from "./view/DashboardFrameTitle.js";
 import { DashboardRoot } from "./view/DashboardRoot.js";

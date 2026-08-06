@@ -7,11 +7,8 @@ import {
   setTuiWidgetsInConfig,
   type TuiConfig,
 } from "@station/config";
-import type {
-  DashboardActions,
-  DashboardStateSource,
-  DashboardStateView,
-} from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { DashboardStateView } from "@station/dashboard-core/state";
 import { safeErrorFromUnknown } from "@station/runtime";
 
 export type StationTuiConfigLoadResult = {

@@ -1,12 +1,7 @@
 import type { ObserverService, StationClientStateSource } from "@station/client";
 import type { SafeError } from "@station/contracts";
-import {
-  createObserverActivationCapabilities,
-  dashboardExecution,
-  type DashboardCapabilities,
-  type DashboardExecutionHandle,
-  type DashboardExecutionResult,
-} from "@station/dashboard-core";
+import { createObserverActivationCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import type { DashboardCapabilities, DashboardExecutionHandle, DashboardExecutionResult } from "@station/dashboard-core/runtime";
 import {
   resolveDashboardShellTarget,
   STALE_DASHBOARD_TARGET_NOTICE,

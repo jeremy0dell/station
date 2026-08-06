@@ -6,7 +6,7 @@
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { toSafeError } from "@station/client";
-import { createDashboardRuntime } from "@station/dashboard-core";
+import { createDashboardRuntime } from "@station/dashboard-core/runtime";
 import {
   loadStationTuiConfig,
   startWidgetConfigWrites,

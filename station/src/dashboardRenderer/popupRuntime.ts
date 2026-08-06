@@ -7,7 +7,7 @@ import {
   type TuiRendererControlRequest,
   type TuiRendererControlResponse,
 } from "@station/contracts";
-import type { DashboardFocusTarget } from "@station/dashboard-core";
+import type { DashboardFocusTarget } from "@station/dashboard-core/runtime";
 
 /** Minimal request/response transport used by popup renderer-control IPC. */
 export type RendererControlChannel = {

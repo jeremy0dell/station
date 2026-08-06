@@ -5,18 +5,14 @@
 // machine; this layer is render + mouse targets only.
 import { TextAttributes } from "@opentui/core";
 import type { ProviderId } from "@station/contracts";
-import {
+import { projectSettingsPanelLayout, selectNewSessionHarnessChoices, selectProjectDefaultHarness } from "@station/dashboard-core/selectors";
+import { 
   isRemoveProjectArmed,
   PROJECT_SETTINGS_AGENT_LIST_ID,
   PROJECT_SETTINGS_ITEMS,
-  projectSettingsPanelLayout,
   removeProjectConfirmPhrase,
-  selectNewSessionHarnessChoices,
-  selectProjectDefaultHarness,
-  type DashboardScreenView,
-  type DashboardSnapshotView,
-  type DashboardStateView,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/state";
+import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "../sheets/AgentChoiceListView.js";
 import { fit, SheetLine } from "../sheets/parts.js";

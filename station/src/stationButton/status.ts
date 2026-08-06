@@ -1,12 +1,12 @@
 import type { SessionId, StationSnapshot, WorktreeId } from "@station/contracts";
-import {
+import { 
   isReadyToRead,
   selectDashboardSessionRows,
   selectFleetSummary,
   sessionRowDisplayTitle,
-  type DashboardSessionRow,
-  type DashboardStateView,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/selectors";
+import type { DashboardSessionRow } from "@station/dashboard-core/selectors";
+import type { DashboardStateView } from "@station/dashboard-core/state";
 import { attentionKey } from "../state/attentionDismissal.js";
 
 /** Worst agent status across a project's sessions, calmest last. */

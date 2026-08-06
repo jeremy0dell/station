@@ -1,16 +1,14 @@
 import type { ProviderId } from "@station/contracts";
-import {
+import { 
   bottomSheetContentWidth,
   newSessionContentRowCount,
   newSessionEditNameContent,
   newSessionReviewContent,
-  selectedProject,
   selectNewSessionHarnessChoices,
   selectNewSessionProjectChoices,
-  type DashboardSnapshotView,
-  type DashboardStateView,
-  type NewSessionFlowStateView,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/selectors";
+import { selectedProject } from "@station/dashboard-core/state";
+import type { DashboardSnapshotView, DashboardStateView, NewSessionFlowStateView } from "@station/dashboard-core/state";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";

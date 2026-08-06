@@ -1,5 +1,5 @@
 import type { ProviderHealth } from "@station/contracts";
-import type { RowColor, ToastBorderColorName } from "@station/dashboard-core";
+import type { RowColor, ToastBorderColorName } from "@station/dashboard-core/selectors";
 import type { StationSemanticColor, StationTheme } from "./types.js";
 
 export { nativeStationTheme } from "./builtInTheme.js";

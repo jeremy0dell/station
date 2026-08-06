@@ -1,19 +1,16 @@
-import {
-  deriveTuiInputMode,
-  isRemoveProjectArmed,
-  LIST_REGISTRY,
-  type AddProjectActionId,
-  type DashboardActions,
-  type DashboardFilterConditionField,
-  type DashboardStateSource,
-  type ForkSessionActionId,
-  type NewSessionActionId,
-  type PersistentFilterActionId,
-  type ProjectHeaderControl,
-  type ProjectSettingsItemId,
-  type RemoveWorktreeActionId,
-  type TuiInputMode,
-} from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import { deriveTuiInputMode, isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core/state";
+import type { 
+  AddProjectActionId,
+  DashboardFilterConditionField,
+  ForkSessionActionId,
+  NewSessionActionId,
+  PersistentFilterActionId,
+  ProjectHeaderControl,
+  ProjectSettingsItemId,
+  RemoveWorktreeActionId,
+  TuiInputMode,
+ } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import {
   dismissStationToasts,

@@ -1,6 +1,6 @@
 import type { MouseEvent } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
-import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import { useCallback } from "react";
 import { useStore } from "zustand/react";
 import { normalizeStationMouseEvent } from "../input/mouse.js";

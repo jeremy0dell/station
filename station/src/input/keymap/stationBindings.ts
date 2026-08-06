@@ -5,11 +5,8 @@ import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
 import { rowNeedsUser } from "../../stationButton/status.js";
-import {
-  selectDashboardSessionRows,
-  type DashboardActions,
-  type DashboardStateSource,
-} from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import { selectDashboardSessionRows } from "@station/dashboard-core/selectors";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
 import type {
   MouseBindings,

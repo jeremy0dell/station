@@ -2,31 +2,18 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import {
+import { 
   dashboardTableHeaderModel,
   fleetCountsLabel,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
   rowGridInputForViewportItem,
-} from "@station/dashboard-core";
-import {
-  layoutWorktreeRowGrid,
-  textSegment,
-  truncateCells,
-  type RowGridLayout,
-  type RowGridRowInput,
-} from "@station/dashboard-core";
-import {
-  selectDashboardViewport,
-  selectFleetSummary,
-  type DashboardViewportItem,
-  type FleetSummary,
-} from "@station/dashboard-core";
-import type {
-  DashboardScreenView,
-  DashboardSnapshotView,
-  DashboardViewState,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/selectors";
+import { layoutWorktreeRowGrid, textSegment, truncateCells } from "@station/dashboard-core/selectors";
+import type { RowGridLayout, RowGridRowInput } from "@station/dashboard-core/selectors";
+import { selectDashboardViewport, selectFleetSummary } from "@station/dashboard-core/selectors";
+import type { DashboardViewportItem, FleetSummary } from "@station/dashboard-core/selectors";
+import type { DashboardScreenView, DashboardSnapshotView, DashboardViewState } from "@station/dashboard-core/state";
 
 type DashboardFocusView = DashboardViewState["dashboardFocus"];
 import {

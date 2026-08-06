@@ -445,8 +445,8 @@ const RAW_DASHBOARD_STORE_MODULES = [] as const;
 const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {};
 const DIRECT_DASHBOARD_MUTATION_INVENTORY: DirectDashboardMutationInventory = {};
 const DASHBOARD_RUNTIME_IMPORT_INVENTORY = [
-  "app/types.ts: import DashboardRuntime from @station/dashboard-core",
-  "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core",
+  "app/types.ts: import DashboardRuntime from @station/dashboard-core/runtime",
+  "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core/runtime",
 ] as const;
 const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [] as const;
 
@@ -580,7 +580,11 @@ describe("station production boundaries", () => {
           internalImports.push(...referenceDescriptors(module, reference));
           continue;
         }
-        if (reference.specifier !== DASHBOARD_CORE_ROOT_IMPORT) continue;
+        if (
+          reference.specifier !== DASHBOARD_CORE_ROOT_IMPORT &&
+          reference.specifier !== "@station/dashboard-core/runtime"
+        )
+          continue;
         const runtimeNames = reference.importedNames.filter((name) => name === "DashboardRuntime");
         runtimeImports.push(...referenceDescriptors(module, reference, runtimeNames));
         const internalNames = reference.importedNames.filter((name) =>
