@@ -22,7 +22,7 @@ import {
 } from "../fixtures/scenarios.js";
 import type { DashboardRuntime, DashboardStateSource } from "@station/dashboard-core/runtime";
 import type { TuiKey } from "@station/dashboard-core/state";
-import { 
+import {
   addPendingProjectDefaultHarness,
   applyAddProjectFolderLoaded,
   applyAddProjectFolderReviewFailed,

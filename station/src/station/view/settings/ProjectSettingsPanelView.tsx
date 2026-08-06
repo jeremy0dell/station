@@ -6,7 +6,7 @@
 import { TextAttributes } from "@opentui/core";
 import type { ProviderId } from "@station/contracts";
 import { projectSettingsPanelLayout, selectNewSessionHarnessChoices, selectProjectDefaultHarness } from "@station/dashboard-core/selectors";
-import { 
+import {
   isRemoveProjectArmed,
   PROJECT_SETTINGS_AGENT_LIST_ID,
   PROJECT_SETTINGS_ITEMS,

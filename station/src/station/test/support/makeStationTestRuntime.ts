@@ -1,12 +1,12 @@
 import type { StationClientConnectionState, StationClientStateSource } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import { 
+import {
   createDashboardRuntime,
   createObserverActivationCapabilities,
   createObserverManagedSessionCapabilities,
   dashboardExecution,
  } from "@station/dashboard-core/runtime";
-import type { 
+import type {
   DashboardCapabilities,
   DashboardFocusTarget,
   DashboardRuntime,

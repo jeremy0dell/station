@@ -1,5 +1,5 @@
 import type { ProviderId } from "@station/contracts";
-import { 
+import {
   bottomSheetContentWidth,
   newSessionContentRowCount,
   newSessionEditNameContent,

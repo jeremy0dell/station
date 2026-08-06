@@ -3,7 +3,7 @@ import { useStore } from "zustand/react";
 import type { DashboardStateSource } from "@station/dashboard-core/runtime";
 import { dashboardFooterModel, truncateCells } from "@station/dashboard-core/selectors";
 import type { DashboardFooterModel } from "@station/dashboard-core/selectors";
-import { 
+import {
   activeTuiToast,
   isTuiToastHiddenByScreen,
   QUIT_HINT_CLOSE,

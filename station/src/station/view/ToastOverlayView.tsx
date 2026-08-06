@@ -1,7 +1,7 @@
 // Render layer: a bottom-anchored notice that grows upward for actionable errors.
 // Only the header dismiss control routes dismissal; body text stays selectable.
 import { MouseButton, TextAttributes } from "@opentui/core";
-import { 
+import {
   toastBorderColor,
   toastCopyText,
   toastDetail,

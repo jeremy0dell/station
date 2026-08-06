@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import { commandPromptRows, snapshotLoadingLines } from "@station/dashboard-core/selectors";
-import { 
+import {
   activeTuiToast,
   isTuiToastHiddenByScreen,
   nextTuiToastExpiry,

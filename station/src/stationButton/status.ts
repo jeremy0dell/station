@@ -1,5 +1,5 @@
 import type { SessionId, StationSnapshot, WorktreeId } from "@station/contracts";
-import { 
+import {
   isReadyToRead,
   selectDashboardSessionRows,
   selectFleetSummary,

@@ -2,7 +2,7 @@
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import { 
+import {
   dashboardTableHeaderModel,
   fleetCountsLabel,
   emptyProjectLabel,

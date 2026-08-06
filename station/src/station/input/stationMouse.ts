@@ -1,6 +1,6 @@
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import { deriveTuiInputMode, isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core/state";
-import type { 
+import type {
   AddProjectActionId,
   DashboardFilterConditionField,
   ForkSessionActionId,
