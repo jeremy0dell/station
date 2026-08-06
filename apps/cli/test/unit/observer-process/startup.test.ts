@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { startObserver } from "@station/cli";
 import type { ChildProcessLike } from "@station/cli/internal";
+import type { ObserverHealth, SafeError } from "@station/contracts";
 import { stationObserverBuildVersion } from "@station/runtime";
 import { describe, expect, it, vi } from "vitest";
 import { createTempState } from "../../../../../tests/support/temp-projects";
@@ -40,6 +41,16 @@ async function writeObserverBootLog(stateDir: string, content: string): Promise<
 
 function fakeChild(overrides: Partial<ChildProcessLike> = {}): ChildProcessLike {
   return { pid: 1234, unref: () => undefined, ...overrides };
+}
+
+type ObserverStatusResult = Awaited<ReturnType<typeof startObserver>>;
+
+function statusError(result: ObserverStatusResult): SafeError | undefined {
+  return result.status === "running" ? undefined : result.error;
+}
+
+function statusHealth(result: ObserverStatusResult): ObserverHealth | undefined {
+  return result.status === "running" ? result.health : undefined;
 }
 
 function fakeClientFactory(health: () => Promise<unknown>) {
@@ -149,12 +160,12 @@ describe("CLI observer process startup", () => {
           hint: expect.stringContaining(`Latest observer boot log: ${bootLogPath}`),
         },
       });
-      expect(result.error?.hint).toContain("This attempt's last 15 lines (redacted):");
-      expect(result.error?.hint).toContain("boot-line-6");
-      expect(result.error?.hint).not.toContain("boot-line-5\n");
-      expect(result.error?.hint).toContain("API_TOKEN=[REDACTED]");
-      expect(result.error?.hint).not.toContain("super-secret-value");
-      expect(result.error?.hint).not.toContain("winning-attempt");
+      expect(statusError(result)?.hint).toContain("This attempt's last 15 lines (redacted):");
+      expect(statusError(result)?.hint).toContain("boot-line-6");
+      expect(statusError(result)?.hint).not.toContain("boot-line-5\n");
+      expect(statusError(result)?.hint).toContain("API_TOKEN=[REDACTED]");
+      expect(statusError(result)?.hint).not.toContain("super-secret-value");
+      expect(statusError(result)?.hint).not.toContain("winning-attempt");
       await expect(readFile(bootLogPath, "utf8")).resolves.toBe("winning-attempt\n");
       expect(bootLogDisposals).toBe(1);
       const healthCallsAtExit = healthCalls;
@@ -235,7 +246,7 @@ describe("CLI observer process startup", () => {
       status: "running",
       health: { version: stationObserverBuildVersion() },
     });
-    expect(result.health?.pid).toBeUndefined();
+    expect(statusHealth(result)?.pid).toBeUndefined();
     expect(kills).toBe(1);
   });
 
@@ -321,15 +332,17 @@ describe("CLI observer process startup", () => {
       status: "unhealthy",
       error: { code: "OBSERVER_HANDOFF_REFUSED", traceId: expect.any(String) },
     });
-    expect(result.error?.hint).toContain(expected);
-    expect(result.error?.hint).toContain(
+    expect(statusError(result)?.hint).toContain(expected);
+    expect(statusError(result)?.hint).toContain(
       "Health convergence: OBSERVER_INCUMBENT_HEALTH_TIMEOUT after 1000 ms",
     );
-    expect(result.error?.hint).toContain("Boot-log tail unavailable");
-    expect(result.error?.hint).toContain("1.0.0 (build bbbbbbbbbbbb)");
-    expect(result.error?.hint).toContain("2.0.0 (build aaaaaaaaaaaa)");
-    expect(result.error?.hint).toContain(`station debug trace ${result.error?.traceId}`);
-    expect(result.error?.hint).not.toContain("super-secret-value");
+    expect(statusError(result)?.hint).toContain("Boot-log tail unavailable");
+    expect(statusError(result)?.hint).toContain("1.0.0 (build bbbbbbbbbbbb)");
+    expect(statusError(result)?.hint).toContain("2.0.0 (build aaaaaaaaaaaa)");
+    expect(statusError(result)?.hint).toContain(
+      `station debug trace ${statusError(result)?.traceId}`,
+    );
+    expect(statusError(result)?.hint).not.toContain("super-secret-value");
     expect(healthCalls).toBeGreaterThan(1);
   });
 
@@ -382,9 +395,9 @@ describe("CLI observer process startup", () => {
       const result = await startup;
 
       expect(result.status).toBe(expectedStatus);
-      expect(result.error?.code).toBe(expectedCode);
+      expect(statusError(result)?.code).toBe(expectedCode);
       if (delayMs === 1_001) {
-        expect(result.error?.hint).toContain(
+        expect(statusError(result)?.hint).toContain(
           "Health convergence: OBSERVER_INCUMBENT_HEALTH_TIMEOUT after 1000 ms",
         );
       }
@@ -415,11 +428,11 @@ describe("CLI observer process startup", () => {
       },
     );
 
-    expect(result.error?.code).toBe("OBSERVER_HANDOFF_REFUSED");
-    expect(result.error?.hint).toContain("Health convergence: OBSERVER_HANDOFF_REFUSED");
-    expect(result.error?.hint).toContain("This attempt's last 15 lines (redacted):");
-    expect(result.error?.hint).toContain("API_TOKEN=[REDACTED]");
-    expect(result.error?.hint).not.toContain("super-secret-value");
+    expect(statusError(result)?.code).toBe("OBSERVER_HANDOFF_REFUSED");
+    expect(statusError(result)?.hint).toContain("Health convergence: OBSERVER_HANDOFF_REFUSED");
+    expect(statusError(result)?.hint).toContain("This attempt's last 15 lines (redacted):");
+    expect(statusError(result)?.hint).toContain("API_TOKEN=[REDACTED]");
+    expect(statusError(result)?.hint).not.toContain("super-secret-value");
   });
 
   it("lets the outer startup timeout preempt incumbent convergence", async () => {
@@ -497,7 +510,7 @@ describe("CLI observer process startup", () => {
         hint: expect.stringContaining(observerBootLogPath(fixture.stateDir)),
       },
     });
-    expect(result.error?.message).not.toContain("super-secret-value");
+    expect(statusError(result)?.message).not.toContain("super-secret-value");
   });
 
   it("reports the signal when the child is terminated during startup", async () => {
@@ -547,9 +560,9 @@ describe("CLI observer process startup", () => {
       },
     );
 
-    expect(result.error?.hint).toContain(`Observer boot log: ${bootLogPath}`);
-    expect(result.error?.hint).toContain("Boot-log tail unavailable");
-    expect(result.error?.hint).not.toContain("Last 15 lines");
+    expect(statusError(result)?.hint).toContain(`Observer boot log: ${bootLogPath}`);
+    expect(statusError(result)?.hint).toContain("Boot-log tail unavailable");
+    expect(statusError(result)?.hint).not.toContain("Last 15 lines");
   });
 
   it("emits delayed startup progress at 1.5s and 5s, then clears its timers", async () => {
@@ -671,5 +684,88 @@ describe("CLI observer process startup", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("includes the redacted boot-log tail in a startup timeout hint", async () => {
+    const fixture = await createTempState();
+    const readBootLogTail = vi.fn(async () => "boot crashed after API_TOKEN=super-secret-value");
+    let killed = false;
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 60 },
+      {
+        spawnObserver: async (): Promise<ChildProcessLike> =>
+          fakeChild({
+            exited: new Promise<never>(() => undefined),
+            readBootLogTail,
+            kill: () => {
+              killed = true;
+              return true;
+            },
+          }),
+        clientFactory: unavailableClientFactory(),
+      },
+    );
+
+    expect(killed).toBe(true);
+    expect(statusError(result)?.code).toBe("OBSERVER_START_FAILED");
+    expect(statusError(result)?.hint).toMatch(/^Run station debug trace trc_/);
+    expect(readBootLogTail).toHaveBeenCalled();
+    expect(statusError(result)?.hint).toContain(
+      `Latest observer boot log: ${observerBootLogPath(fixture.stateDir)}`,
+    );
+    expect(statusError(result)?.hint).toContain("boot crashed after API_TOKEN=[REDACTED]");
+    expect(statusError(result)?.hint).not.toContain("super-secret-value");
+  });
+
+  it("includes the redacted one-line spawn failure reason in a flattened startup error hint", async () => {
+    const fixture = await createTempState();
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 5_000 },
+      {
+        spawnObserver: async (): Promise<ChildProcessLike> => {
+          throw new Error(
+            "spawn aborted: listener failed with API_TOKEN=super-secret-value\n    at internal-frame",
+          );
+        },
+        clientFactory: unavailableClientFactory(),
+      },
+    );
+
+    expect(statusError(result)?.code).toBe("OBSERVER_START_FAILED");
+    expect(statusError(result)?.message).toBe("Observer startup failed.");
+    expect(statusError(result)?.hint).toMatch(/^Run station debug trace trc_/);
+    expect(statusError(result)?.hint).toContain(
+      "Startup failure: spawn aborted: listener failed with API_TOKEN=[REDACTED]",
+    );
+    expect(statusError(result)?.hint).toContain(
+      `Observer boot log: ${observerBootLogPath(fixture.stateDir)}`,
+    );
+    expect(statusError(result)?.hint).not.toContain("super-secret-value");
+    expect(statusError(result)?.hint).not.toContain("internal-frame");
+  });
+
+  it("leaves a SafeError-shaped health failure reason out of the enriched hint", async () => {
+    const fixture = await createTempState();
+
+    const result = await startObserver(
+      { config: fixture.config, timeoutMs: 60 },
+      {
+        spawnObserver: async (): Promise<ChildProcessLike> =>
+          fakeChild({
+            exited: new Promise<never>(() => undefined),
+            kill: () => true,
+          }),
+        clientFactory: fakeClientFactory(async () => {
+          throw new Error("raw process failure\n    at internal-frame");
+        }),
+      },
+    );
+
+    expect(statusError(result)?.code).toBe("OBSERVER_START_FAILED");
+    expect(statusError(result)?.hint).toMatch(/^Run station debug trace trc_/);
+    expect(statusError(result)?.hint).not.toContain("Startup failure:");
+    expect(JSON.stringify(statusError(result))).not.toContain("internal-frame");
   });
 });

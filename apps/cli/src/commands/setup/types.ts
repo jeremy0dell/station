@@ -72,7 +72,11 @@ export type SetupCommandDeps = {
   env?: CliEnv;
   cwd?: string;
   homeDir?: string;
-  activateObserverConfig?: (input: { configPath: string; homeDir: string }) => Promise<void>;
+  activateObserverConfig?: (input: {
+    configPath: string;
+    homeDir: string;
+    onStartupProgress?: (message: string) => void;
+  }) => Promise<void>;
   now?: () => Date;
   nodeVersion?: string;
   // Defaults to process.platform; injected by machine-state tests to drive the

@@ -95,7 +95,8 @@ describe("guided setup command", () => {
         fs,
         activateObserverConfig: async (input) => {
           expect(fs.files[input.configPath]).toContain("projects = []");
-          activations.push(input);
+          expect(input.onStartupProgress).toEqual(expect.any(Function));
+          activations.push({ configPath: input.configPath, homeDir: input.homeDir });
         },
         prompt: prompt({ confirms: [false, false, true, false, false] }),
         writeStdout: (chunk) => {
@@ -116,6 +117,57 @@ describe("guided setup command", () => {
     expect(chunks.join("")).toContain("Activate Observer configuration");
     expect(chunks.join("")).toContain("Observer configuration active.");
     expect(chunks.join("")).toContain("Core setup complete.");
+  });
+
+  it("surfaces observer startup progress through the guided presenter during activation", async () => {
+    const root = await tempRoot(tempRoots);
+    const repo = join(root, "repo");
+    await mkdir(repo, { recursive: true });
+    const fs = fakeFs({});
+    const chunks: string[] = [];
+
+    const result = await runSetupCommand(
+      [],
+      {},
+      {
+        cwd: repo,
+        homeDir: join(root, "home"),
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner([], {
+          "git rev-parse --show-toplevel": repo,
+          "git symbolic-ref --quiet --short refs/remotes/origin/HEAD": "origin/main\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "wt -y config shell install --dry-run zsh": "shell integration update pending\n",
+          "tmux -V": "tmux 3.5a\n",
+          "brew --version": "Homebrew 4.0.0\n",
+          "codex --version": "codex 0.1.0\n",
+        }),
+        access: fakeAccess([
+          "/fake/bin/wt",
+          "/fake/bin/tmux",
+          "/fake/bin/bun",
+          "/fake/bin/diffnav",
+          "/fake/bin/delta",
+        ]),
+        fs,
+        activateObserverConfig: async (input) => {
+          input.onStartupProgress?.("Starting STATION observer…");
+          input.onStartupProgress?.(
+            "Still waiting for STATION observer; boot log: /tmp/observer-boot.log",
+          );
+        },
+        prompt: prompt({ confirms: [false, false, true, false, false] }),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+        now: () => new Date("2026-06-08T12:00:00.000Z"),
+      },
+    );
+
+    expect(result.code).toBe(0);
+    const output = chunks.join("");
+    expect(output).toContain("Starting STATION observer…");
+    expect(output).toContain("Still waiting for STATION observer");
   });
 
   it("shows an unusable Git blocker before harness prompts without mutation", async () => {

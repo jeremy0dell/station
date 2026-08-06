@@ -11412,7 +11412,7 @@
       "declaration": "createObserverActivationAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation.",
+      "purpose": "Translates setup activation into config loading, Observer path resolution, restart, and health confirmation. Forwards Observer startup progress to the caller-supplied callback without interpreting it.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",
@@ -11435,7 +11435,7 @@
       "declaration": "createSetupOperationAdapter",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Assigns package/bootstrap, config, provider, process, filesystem, and Observer operations to their final outward implementations. Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.",
+      "purpose": "Assigns package/bootstrap, config, provider, process, filesystem, and Observer operations to their final outward implementations. Tmux changes revalidate the selected key and admitted config bytes immediately before mutation. Observer activation forwards startup progress to the caller-supplied callback.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/config.ts",
@@ -11479,7 +11479,7 @@
       "declaration": "createSetupComposition",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation.",
+      "purpose": "Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation. The lazily created operation adapter routes Observer startup progress through the guided prompt adapter's logInfo.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/setup/adapters/inspection.ts",
@@ -11894,7 +11894,7 @@
       "declaration": "restartObserver",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build.",
+      "purpose": "Translates a CLI restart request while preserving a newer winning Observer build. A failed replacement annotates the error hint with the incumbent build identity it tried to replace.",
       "dependencies": [
         {
           "path": "apps/cli/src/observerProcess.ts",

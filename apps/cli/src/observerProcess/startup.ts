@@ -4,9 +4,11 @@ import type { ObserverHealth, SafeError } from "@station/contracts";
 import { redactString } from "@station/observability";
 import {
   Effect,
+  isSafeError,
   publicSafeErrorFromUnknown,
   type RuntimeBoundaryResult,
   type RuntimeClock,
+  type RuntimeSafeError,
   type RuntimeTraceContext,
   runRuntimeBoundaryWithTimeout,
 } from "@station/runtime";
@@ -26,6 +28,11 @@ import type {
 
 const incumbentHealthGraceMs = 1_000;
 
+/**
+ * Starts the Observer child and waits for exact-build health inside one timed runtime boundary.
+ * Startup failures are enriched with the redacted boot reason and the child-owned boot-log tail
+ * before the boot-log handle is disposed.
+ */
 export async function startObserverProcess(
   input: {
     paths: SpawnObserverInput["paths"];
@@ -40,6 +47,7 @@ export async function startObserverProcess(
 ): Promise<RuntimeBoundaryResult<ObserverHealth>> {
   const progressTimers = scheduleObserverStartupProgress(input.onStartupProgress, input.paths);
   let child: ChildProcessLike | undefined;
+  let startupFailureReason: string | undefined;
   const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: "cli.observer.start",
@@ -62,36 +70,41 @@ export async function startObserverProcess(
       trace: input.trace,
     },
     async ({ signal }) => {
-      await mkdir(input.paths.stateDir, { recursive: true, mode: 0o700 });
-      await mkdir(dirname(input.paths.socketPath), { recursive: true, mode: 0o700 });
-      const spawnInput: SpawnObserverInput = { paths: input.paths };
-      if (input.configPath !== undefined) {
-        spawnInput.configPath = input.configPath;
+      try {
+        await mkdir(input.paths.stateDir, { recursive: true, mode: 0o700 });
+        await mkdir(dirname(input.paths.socketPath), { recursive: true, mode: 0o700 });
+        const spawnInput: SpawnObserverInput = { paths: input.paths };
+        if (input.configPath !== undefined) {
+          spawnInput.configPath = input.configPath;
+        }
+        child =
+          deps.spawnObserver === undefined
+            ? await defaultSpawnObserver({
+                ...spawnInput,
+                startupTimeoutMs: input.timeoutMs,
+                buildVersion: input.buildVersion,
+              })
+            : await deps.spawnObserver(spawnInput);
+        if (signal.aborted) {
+          child.kill?.();
+          throw observerHealthWaitCancelledError();
+        }
+        child.unref?.();
+        return await waitForStartedObserver(
+          {
+            child,
+            paths: input.paths,
+            timeoutMs: input.timeoutMs,
+            buildVersion: input.buildVersion,
+            trace: input.trace,
+            signal,
+          },
+          deps,
+        );
+      } catch (error) {
+        startupFailureReason = redactedStartupFailureReason(error);
+        throw error;
       }
-      child =
-        deps.spawnObserver === undefined
-          ? await defaultSpawnObserver({
-              ...spawnInput,
-              startupTimeoutMs: input.timeoutMs,
-              buildVersion: input.buildVersion,
-            })
-          : await deps.spawnObserver(spawnInput);
-      if (signal.aborted) {
-        child.kill?.();
-        throw observerHealthWaitCancelledError();
-      }
-      child.unref?.();
-      return waitForStartedObserver(
-        {
-          child,
-          paths: input.paths,
-          timeoutMs: input.timeoutMs,
-          buildVersion: input.buildVersion,
-          trace: input.trace,
-          signal,
-        },
-        deps,
-      );
     },
   ).finally(() => clearObserverStartupProgress(progressTimers));
 
@@ -102,8 +115,18 @@ export async function startObserverProcess(
   if (!result.ok && result.error.code !== "OBSERVER_EXITED_ON_START") {
     child?.kill?.();
   }
+  if (result.ok) {
+    await disposeObserverBootLog(child);
+    return result;
+  }
+  const error = await enrichStartupFailureEvidence({
+    error: result.error,
+    reason: startupFailureReason,
+    paths: input.paths,
+    child,
+  });
   await disposeObserverBootLog(child);
-  return result;
+  return { ...result, error };
 }
 
 async function waitForStartedObserver(
@@ -271,10 +294,10 @@ function childExitDescription(exit: ChildExitResult): string {
 
 async function observerBootLogHint(
   paths: SpawnObserverInput["paths"],
-  child: ChildProcessLike,
+  child: ChildProcessLike | undefined,
 ): Promise<string> {
   const path = observerBootLogPath(paths);
-  if (child.readBootLogTail !== undefined) {
+  if (child?.readBootLogTail !== undefined) {
     const pathHint = `Latest observer boot log: ${path}`;
     try {
       const tail = await child.readBootLogTail();
@@ -323,6 +346,40 @@ function waitForIncumbentHealth(
       },
     );
   });
+}
+
+/**
+ * Appends the redacted spawn reason and the child-owned boot-log tail to a flattened or timed-out
+ * startup error. Runs after the runtime boundary so one path covers both the timeout failure and
+ * non-SafeError flattening, neither of which reaches the early-exit error builders that already
+ * carry this evidence.
+ */
+async function enrichStartupFailureEvidence(input: {
+  error: RuntimeSafeError;
+  reason: string | undefined;
+  paths: SpawnObserverInput["paths"];
+  child: ChildProcessLike | undefined;
+}): Promise<RuntimeSafeError> {
+  if (input.error.hint?.includes(observerBootLogPath(input.paths)) === true) {
+    return input.error;
+  }
+  const evidence = [
+    ...(input.reason === undefined ? [] : [`Startup failure: ${input.reason}`]),
+    await observerBootLogHint(input.paths, input.child),
+  ].join("\n");
+  const hint = input.error.hint === undefined ? evidence : `${input.error.hint}\n${evidence}`;
+  return { ...input.error, hint };
+}
+
+/**
+ * Reduces a non-SafeError startup escape to its first redacted line; typed SafeErrors already
+ * carry their own sanitized shape and pass through the boundary untouched.
+ */
+function redactedStartupFailureReason(error: unknown): string | undefined {
+  if (isSafeError(error)) return undefined;
+  const message = error instanceof Error ? error.message : String(error);
+  const [firstLine] = redactString(message).split("\n");
+  return firstLine === undefined || firstLine.length === 0 ? undefined : firstLine;
 }
 
 async function disposeObserverBootLog(child: ChildProcessLike | undefined): Promise<void> {
