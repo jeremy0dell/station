@@ -595,6 +595,24 @@ describe("station production boundaries", () => {
     expect(runtimeImports.sort()).toEqual([...DASHBOARD_RUNTIME_IMPORT_INVENTORY].sort());
     expect(internalImports.sort()).toEqual([...DASHBOARD_INTERNAL_IMPORT_INVENTORY].sort());
   });
+
+  it("only reaches dashboard-core through role entrypoints", () => {
+    const violations: string[] = [];
+    for (const module of PRODUCTION_MODULES) {
+      for (const reference of moduleReferencesOf(module)) {
+        if (!reference.specifier.startsWith(DASHBOARD_CORE_ROOT_IMPORT)) continue;
+        const isRoleEntrypoint =
+          reference.specifier === "@station/dashboard-core/runtime" ||
+          reference.specifier === "@station/dashboard-core/state" ||
+          reference.specifier === "@station/dashboard-core/selectors" ||
+          reference.specifier === "@station/dashboard-core/widgets";
+        if (!isRoleEntrypoint) {
+          violations.push(...referenceDescriptors(module, reference));
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
 });
 
 describe("station view import boundaries", () => {

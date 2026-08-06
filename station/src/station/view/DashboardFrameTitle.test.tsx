@@ -7,7 +7,7 @@ import {
   manyProjectsSnapshot,
   scenarioState,
 } from "../fixtures/scenarios.js";
-import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets";
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardFrameTitle } from "./DashboardFrameTitle.js";
 import {

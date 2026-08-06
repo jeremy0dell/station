@@ -4,7 +4,7 @@ import type {
   TopRowWidgetRuntimeDeps,
   TuiConfig,
   TuiIslandConfig,
-} from "@station/dashboard-core/widgets/types";
+} from "@station/dashboard-core/widgets";
 import type { Automation, ScrollOnOutputMode } from "../config/stationConfig.js";
 import type { ClipboardEffects } from "../copy/clipboard.js";
 import type { StationInputRuntime } from "../input/stationInput.js";

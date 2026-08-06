@@ -5,7 +5,7 @@ import { normalizeStationMouseEvent, type StationMouseEvent } from "../input/mou
 import type { MouseTargetRef } from "../input/router.js";
 import type { StationMouseTarget } from "./input/stationMouse.js";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
-import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets";
 import { DashboardFrameTitle } from "./view/DashboardFrameTitle.js";
 import { DashboardRoot } from "./view/DashboardRoot.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../theme/index.js";
