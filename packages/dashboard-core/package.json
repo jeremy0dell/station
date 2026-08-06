@@ -8,6 +8,22 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./runtime": {
+      "types": "./dist/entrypoints/runtime.d.ts",
+      "import": "./dist/entrypoints/runtime.js"
+    },
+    "./state": {
+      "types": "./dist/entrypoints/state.d.ts",
+      "import": "./dist/entrypoints/state.js"
+    },
+    "./selectors": {
+      "types": "./dist/entrypoints/selectors.d.ts",
+      "import": "./dist/entrypoints/selectors.js"
+    },
+    "./widgets": {
+      "types": "./dist/entrypoints/widgets.d.ts",
+      "import": "./dist/entrypoints/widgets.js"
+    },
     "./components/*": {
       "types": "./dist/components/*.d.ts",
       "import": "./dist/components/*.js"
