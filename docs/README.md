@@ -73,6 +73,7 @@ only when that boundary is involved.
 - [Local development](local-development.md) — run isolated observer, TUI, and tmux development lanes.
 - [Architecture](architecture.md) — understand repository-wide boundaries and sources of truth.
 - [Observer architecture](observer-architecture.md) — work with Observer ports, adapters, flows, persistence, and dependency direction.
+- [Dashboard architecture](dashboard-architecture.md) — work with the dashboard runtime, role entrypoints, and state ownership.
 - [TUI development](tui.md) — change the OpenTUI workspace and its tests.
 - [Harness authoring](harness-authoring.md) — add or upgrade an agent harness integration.
 - [System dependencies](system-dependencies.md) — understand external tools and setup checks.
