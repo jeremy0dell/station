@@ -5,7 +5,7 @@ import type {
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
 } from "@station/client";
-import type { StationClientCommandCompletion, ObserverService } from "@station/dashboard-core";
+import type { StationClientCommandCompletion, ObserverService } from "@station/dashboard-core/runtime";
 
 export class FakeTuiObserverService implements ObserverService {
   readonly dispatched: StationCommand[] = [];

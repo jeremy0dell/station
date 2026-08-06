@@ -1,6 +1,6 @@
 import { selectProjectChooserChoices } from "../../selectors/selectors.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 /**
  * Opens the dashboard's project choosers (`C` collapse, `P` settings). Both
@@ -10,7 +10,10 @@ import type { TuiState } from "../types.js";
  */
 export type ProjectPickerScreen = "projectCollapse" | "projectSettingsPicker";
 
-export function openProjectSlotPicker(state: TuiState, name: ProjectPickerScreen): TuiTransition {
+export function openProjectSlotPicker(
+  state: DashboardState,
+  name: ProjectPickerScreen,
+): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }

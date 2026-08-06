@@ -1,25 +1,25 @@
 import type { StationSnapshot } from "@station/contracts";
-import type { TuiKey, TuiState, TuiTransition } from "@station/dashboard-core";
-import {
-  createInitialTuiState,
-  handleTuiAction,
-  handleTuiKey,
-  openForkDetailsForRow,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { handleTuiAction } from "../../../../src/state/actions.js";
+import type { TuiKey } from "../../../../src/state/keys.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
+import { openForkDetailsForRow } from "../../../../src/state/screens/fork.js";
+import type { TuiTransition } from "../../../../src/state/transition.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const CTX = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
 
-function base(): TuiState {
+function base(): DashboardState {
   return createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
 }
 
-function step(state: TuiState, key: TuiKey): TuiTransition {
+function step(state: DashboardState, key: TuiKey): TuiTransition {
   return handleTuiKey(state, key, CTX);
 }
 
-function drive(state: TuiState, keys: readonly TuiKey[]): TuiState {
+function drive(state: DashboardState, keys: readonly TuiKey[]): DashboardState {
   let current = state;
   for (const key of keys) {
     current = handleTuiKey(current, key, CTX).state;
@@ -33,18 +33,18 @@ const DOWN: TuiKey = { input: "", downArrow: true };
 const BACKSPACE: TuiKey = { input: "", backspace: true };
 const type = (char: string): TuiKey => ({ input: char });
 
-function detailsScreen(state: TuiState) {
+function detailsScreen(state: DashboardState) {
   if (state.screen.name !== "fork" || state.screen.step !== "details") {
     throw new Error(`expected fork details, got ${state.screen.name}`);
   }
   return state.screen;
 }
 
-function openDetails(branchToken = "aaaaaa"): TuiState {
+function openDetails(branchToken = "aaaaaa"): DashboardState {
   return openForkDetailsForRow(base(), "ses_wt_web_idle", { branchToken });
 }
 
-function clearTitle(state: TuiState): TuiState {
+function clearTitle(state: DashboardState): DashboardState {
   let current = state;
   while (
     current.screen.name === "fork" &&
@@ -189,7 +189,7 @@ describe("fork screen", () => {
     if (snapshot === undefined) throw new Error("expected snapshot");
     const sourceRow = snapshot.rows.find((candidate) => candidate.id === screen.sourceWorktreeId);
     if (sourceRow === undefined) throw new Error("expected source row");
-    const collided: TuiState = {
+    const collided: DashboardState = {
       ...opened,
       snapshot: {
         ...snapshot,

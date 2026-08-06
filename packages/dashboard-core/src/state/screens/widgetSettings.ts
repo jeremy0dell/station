@@ -3,7 +3,7 @@ import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { ReadonlyDeep } from "../readonly.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export const widgetSettingsScreenBehavior = {
   dashboardHoverEnabled: false,
@@ -35,7 +35,7 @@ export function widgetSettingsRowLabel(config: ReadonlyDeep<TuiWidgetConfig>): s
   }
 }
 
-export function openWidgetSettings(state: TuiState): TuiState {
+export function openWidgetSettings(state: DashboardState): DashboardState {
   return {
     ...state,
     screen: { name: "widgetSettings", focus: "list", cursor: 0, pickerCursor: 0 },
@@ -43,7 +43,7 @@ export function openWidgetSettings(state: TuiState): TuiState {
 }
 
 /** Mouse path: toggle the clicked row and move the cursor onto it. */
-export function widgetSettingsToggleAt(state: TuiState, index: number): TuiState {
+export function widgetSettingsToggleAt(state: DashboardState, index: number): DashboardState {
   const screen = state.screen;
   if (screen.name !== "widgetSettings" || index < 0 || index >= state.widgets.length) {
     return state;
@@ -56,7 +56,7 @@ export function widgetSettingsToggleAt(state: TuiState, index: number): TuiState
 
 /** Mouse path: remove the clicked row; the cursor follows the widget it was on
  * (rows above it shift up by one), clamping only when the cursor row itself went away. */
-export function widgetSettingsRemoveAt(state: TuiState, index: number): TuiState {
+export function widgetSettingsRemoveAt(state: DashboardState, index: number): DashboardState {
   const screen = state.screen;
   if (screen.name !== "widgetSettings" || index < 0 || index >= state.widgets.length) {
     return state;
@@ -76,7 +76,7 @@ export function widgetSettingsRemoveAt(state: TuiState, index: number): TuiState
 }
 
 /** Mouse path: open the add-widget picker. */
-export function widgetSettingsOpenPicker(state: TuiState): TuiState {
+export function widgetSettingsOpenPicker(state: DashboardState): DashboardState {
   const screen = state.screen;
   if (screen.name !== "widgetSettings") {
     return state;
@@ -85,7 +85,10 @@ export function widgetSettingsOpenPicker(state: TuiState): TuiState {
 }
 
 /** Mouse path: add the clicked picker choice and land the cursor on it. */
-export function widgetSettingsAddFromPicker(state: TuiState, pickerIndex: number): TuiState {
+export function widgetSettingsAddFromPicker(
+  state: DashboardState,
+  pickerIndex: number,
+): DashboardState {
   const screen = state.screen;
   if (screen.name !== "widgetSettings") {
     return state;
@@ -101,7 +104,7 @@ export function widgetSettingsAddFromPicker(state: TuiState, pickerIndex: number
   );
 }
 
-export function handleWidgetSettingsKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleWidgetSettingsKey(state: DashboardState, key: TuiKey): TuiTransition {
   const screen = state.screen;
   if (screen.name !== "widgetSettings") {
     return { state };
@@ -116,9 +119,13 @@ export function handleWidgetSettingsKey(state: TuiState, key: TuiKey): TuiTransi
   return handleListKey(state, screen, key);
 }
 
-type WidgetSettingsScreen = Extract<TuiState["screen"], { name: "widgetSettings" }>;
+type WidgetSettingsScreen = Extract<DashboardState["screen"], { name: "widgetSettings" }>;
 
-function handleListKey(state: TuiState, screen: WidgetSettingsScreen, key: TuiKey): TuiTransition {
+function handleListKey(
+  state: DashboardState,
+  screen: WidgetSettingsScreen,
+  key: TuiKey,
+): TuiTransition {
   const widgets = state.widgets;
   const cursor = clampCursor(screen.cursor, widgets.length);
   if (key.escape === true) {
@@ -175,7 +182,7 @@ function handleListKey(state: TuiState, screen: WidgetSettingsScreen, key: TuiKe
 }
 
 function handlePickerKey(
-  state: TuiState,
+  state: DashboardState,
   screen: WidgetSettingsScreen,
   key: TuiKey,
 ): TuiTransition {
@@ -211,11 +218,11 @@ function handlePickerKey(
   return { state };
 }
 
-function withScreen(state: TuiState, screen: WidgetSettingsScreen): TuiState {
+function withScreen(state: DashboardState, screen: WidgetSettingsScreen): DashboardState {
   return { ...state, screen };
 }
 
-function backFromWidgetSettings(state: TuiState): TuiState {
+function backFromWidgetSettings(state: DashboardState): DashboardState {
   if (state.screen.name !== "widgetSettings") {
     return state;
   }
@@ -224,7 +231,7 @@ function backFromWidgetSettings(state: TuiState): TuiState {
     : closeWidgetSettings(state);
 }
 
-function closeWidgetSettings(state: TuiState): TuiState {
+function closeWidgetSettings(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
 }
 

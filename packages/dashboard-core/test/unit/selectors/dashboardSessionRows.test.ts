@@ -1,5 +1,3 @@
-import type { TuiViewState } from "@station/dashboard-core";
-import { createInitialTuiState } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
   selectDashboardSessionRows,
@@ -7,6 +5,8 @@ import {
   sessionForWorktreeRow,
   sessionRowDisplayTitle,
 } from "../../../src/selectors/dashboardSessionRows.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import type { TuiViewState } from "../../../src/state/types.js";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
 
 describe("dashboard session rows", () => {

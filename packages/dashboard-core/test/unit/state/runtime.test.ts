@@ -6,18 +6,16 @@ import type {
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   TuiFolderEntry,
   TuiFolderReadResult,
   TuiFolderService,
-} from "@station/dashboard-core";
-import {
-  ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS,
-  createEmptyTuiLocalRows,
-  selectedAddProjectFolderRow,
-} from "@station/dashboard-core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+} from "../../../src/services/folderService.js";
 import { dashboardExecution } from "../../../src/state/capabilities/execution.js";
+import { createEmptyTuiLocalRows } from "../../../src/state/localRows.js";
+import { selectedAddProjectFolderRow } from "../../../src/state/selection/addProject.js";
+import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "../../../src/state/timing.js";
 import type { DashboardStateView } from "../../../src/state/types.js";
 import {
   createCommandSnapshot,

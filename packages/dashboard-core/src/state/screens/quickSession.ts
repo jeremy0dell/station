@@ -8,7 +8,7 @@ import { safeErrorToToast } from "../../services/errors/errors.js";
 import { focusDashboardProjectHeader } from "../dashboardFocus.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
-import type { DashboardStateView, TuiState } from "../types.js";
+import type { DashboardState, DashboardStateView } from "../types.js";
 
 export type QuickSessionIntent = {
   projectId: string;
@@ -50,7 +50,7 @@ export function resolveQuickSessionIntent(
  * Resolves Quick Session availability and emits the same semantic operation for
  * pointer, direct-key, and focused activation paths.
  */
-export function submitQuickSession(state: TuiState, projectId: string): TuiTransition {
+export function submitQuickSession(state: DashboardState, projectId: string): TuiTransition {
   const resolution = resolveQuickSessionIntent(state, projectId);
   if (resolution.kind === "missing") return { state };
   if (resolution.kind === "blocked") {

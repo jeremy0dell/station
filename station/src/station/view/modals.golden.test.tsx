@@ -20,13 +20,9 @@ import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../fixtures/scenarios.js";
-import type {
-  DashboardRuntime,
-  DashboardState,
-  DashboardStateSource,
-  TuiKey,
-} from "@station/dashboard-core";
-import {
+import type { DashboardRuntime, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { TuiKey } from "@station/dashboard-core/state";
+import { 
   addPendingProjectDefaultHarness,
   applyAddProjectFolderLoaded,
   applyAddProjectFolderReviewFailed,
@@ -37,7 +33,10 @@ import {
   openRemoveWorktreeConfirmForRow,
   openProjectDefaultAgentPicker,
   openProjectSettings,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/state";
+
+/** Pure-reducer state threaded through the golden cases; named through the public factory. */
+type GoldenDashboardState = ReturnType<typeof createInitialTuiState>;
 import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
 import { DashboardRoot } from "./DashboardRoot.js";
 import { StationMouseProvider } from "./stationMouseContext.js";
@@ -54,7 +53,7 @@ type ModalCase = {
   name: string;
   keys: TuiKey[];
   snapshot?: () => ReturnType<typeof manyProjectsSnapshot>;
-  prepare?: (state: DashboardState) => DashboardState;
+  prepare?: (state: GoldenDashboardState) => GoldenDashboardState;
   size?: { width: number; height: number };
   trimSnapshotTrailingWhitespace?: true;
   expect: string[];
@@ -79,7 +78,7 @@ function snapshotWithCodexHealth(
   };
 }
 
-function openAddProjectReview(state: DashboardState, gitRoot: boolean): DashboardState {
+function openAddProjectReview(state: GoldenDashboardState, gitRoot: boolean): GoldenDashboardState {
   const opened = handleTuiKey(state, { input: "A" }).state;
   return applyAddProjectFolderReviewed(opened, {
     selectedPath: "/Users/example/Developer/station",
@@ -575,7 +574,7 @@ describe("modal flow golden frames", () => {
   function prepareModalState(
     modal: ModalCase,
     snapshot: ReturnType<typeof manyProjectsSnapshot>,
-  ): DashboardState | undefined {
+  ): GoldenDashboardState | undefined {
     if (modal.prepare === undefined) {
       return undefined;
     }
@@ -712,7 +711,7 @@ describe("modal flow golden frames", () => {
     }
   });
 
-  function staticDashboardState(state: DashboardState): DashboardStateSource {
+  function staticDashboardState(state: GoldenDashboardState): DashboardStateSource {
     return {
       getState: () => state,
       getInitialState: () => state,

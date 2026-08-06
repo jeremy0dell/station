@@ -1,16 +1,18 @@
 import type { StationClientConnectionState, StationClientStateSource } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import {
+import { 
   createDashboardRuntime,
   createObserverActivationCapabilities,
   createObserverManagedSessionCapabilities,
   dashboardExecution,
-  type DashboardCapabilities,
-  type DashboardFocusTarget,
-  type DashboardRuntime,
-  type DashboardRuntimeOptions,
-  type TuiFolderService,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/runtime";
+import type { 
+  DashboardCapabilities,
+  DashboardFocusTarget,
+  DashboardRuntime,
+  DashboardRuntimeOptions,
+  TuiFolderService,
+ } from "@station/dashboard-core/runtime";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import { FakeStationSource } from "./fakeStationSource.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";

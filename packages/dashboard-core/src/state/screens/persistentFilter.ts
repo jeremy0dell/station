@@ -12,7 +12,7 @@ import { reconcileDashboardFocus } from "../dashboardFocus.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import {
   cancelPersistentFilterConditionEditor,
   handlePersistentFilterConditionKey,
@@ -26,18 +26,18 @@ const persistentFilterConditionScreenBehavior = {
 };
 
 export function persistentFilterScreenBehavior(
-  screen: Extract<TuiState["screen"], { name: "persistentFilter" }>,
+  screen: Extract<DashboardState["screen"], { name: "persistentFilter" }>,
 ) {
   return screen.conditionEditor === undefined
     ? persistentFilterEditingScreenBehavior
     : persistentFilterConditionScreenBehavior;
 }
 
-export function openDashboardPersistentFilter(state: TuiState): TuiTransition {
+export function openDashboardPersistentFilter(state: DashboardState): TuiTransition {
   if (state.screen.name !== "dashboard") {
     return { state };
   }
-  const next: TuiState = {
+  const next: DashboardState = {
     ...state,
     screen: {
       name: "persistentFilter",
@@ -48,7 +48,10 @@ export function openDashboardPersistentFilter(state: TuiState): TuiTransition {
   return { state: reconcileDashboardFocus(state, next) };
 }
 
-export function handleDashboardPersistentFilterKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleDashboardPersistentFilterKey(
+  state: DashboardState,
+  key: TuiKey,
+): TuiTransition {
   if (state.screen.name !== "persistentFilter") {
     return { state };
   }
@@ -102,22 +105,22 @@ export function handleDashboardPersistentFilterKey(state: TuiState, key: TuiKey)
 }
 
 /** Clears applied state through the same projection reconciliation used by keyboard Escape. */
-export function clearDashboardPersistentFilter(state: TuiState): TuiTransition {
+export function clearDashboardPersistentFilter(state: DashboardState): TuiTransition {
   if (state.screen.name !== "dashboard" || state.persistentFilter === undefined) {
     return { state };
   }
   return clearPersistentFilterState(state);
 }
 
-function cancelDashboardPersistentFilter(state: TuiState): TuiTransition {
+function cancelDashboardPersistentFilter(state: DashboardState): TuiTransition {
   if (state.screen.name !== "persistentFilter") {
     return { state };
   }
-  const next: TuiState = { ...state, screen: { name: "dashboard" } };
+  const next: DashboardState = { ...state, screen: { name: "dashboard" } };
   return { state: reconcileDashboardFocus(state, next) };
 }
 
-export function applyDashboardPersistentFilter(state: TuiState): TuiTransition {
+export function applyDashboardPersistentFilter(state: DashboardState): TuiTransition {
   if (state.screen.name !== "persistentFilter") {
     return { state };
   }
@@ -125,7 +128,7 @@ export function applyDashboardPersistentFilter(state: TuiState): TuiTransition {
   const conditions = normalizeDashboardFilterConditions(state.screen.draftConditions);
   if (dashboardPersistentFilterHasCriteria({ query, conditions })) {
     const persistentFilter = conditions.length === 0 ? { query } : { query, conditions };
-    const next: TuiState = {
+    const next: DashboardState = {
       ...state,
       persistentFilter,
       screen: { name: "dashboard" },
@@ -136,7 +139,7 @@ export function applyDashboardPersistentFilter(state: TuiState): TuiTransition {
 }
 
 function isConditionFilterApplyKey(
-  screen: Extract<TuiState["screen"], { name: "persistentFilter" }>,
+  screen: Extract<DashboardState["screen"], { name: "persistentFilter" }>,
   key: TuiKey,
 ): boolean {
   const editor = screen.conditionEditor;
@@ -155,9 +158,9 @@ function isCompleteDraftClearKey(key: TuiKey): boolean {
   return key.ctrl === true && key.input.toLowerCase() === "u";
 }
 
-function clearPersistentFilterState(state: TuiState): TuiTransition {
+function clearPersistentFilterState(state: DashboardState): TuiTransition {
   const { persistentFilter: _removed, ...withoutPersistentFilter } = state;
-  const next: TuiState = {
+  const next: DashboardState = {
     ...withoutPersistentFilter,
     screen: { name: "dashboard" },
   };

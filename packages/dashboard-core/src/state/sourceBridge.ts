@@ -3,17 +3,17 @@ import { safeErrorEquals } from "../services/errors/errors.js";
 import { replaceSnapshot } from "./screen.js";
 import { OBSERVER_RECOVERY_TOAST_THRESHOLD_MS } from "./timing.js";
 import { addTuiToast } from "./toasts.js";
-import type { TuiObserverConnectionStatus, TuiState } from "./types.js";
+import type { DashboardState, TuiObserverConnectionStatus } from "./types.js";
 
 /**
  * Projects canonical client state into dashboard-local state without changing
  * snapshot identity; recovery after a long outage emits the dashboard toast.
  */
 export function applySnapshotSourceState(
-  state: TuiState,
+  state: DashboardState,
   sourceState: StationClientState,
   nowMs: number,
-): TuiState {
+): DashboardState {
   let next = state;
   if (sourceState.snapshot !== undefined && sourceState.snapshot !== state.snapshot) {
     next = replaceSnapshot(next, sourceState.snapshot);
@@ -22,10 +22,10 @@ export function applySnapshotSourceState(
 }
 
 function applyConnectionState(
-  state: TuiState,
+  state: DashboardState,
   connection: StationClientConnectionState,
   nowMs: number,
-): TuiState {
+): DashboardState {
   switch (connection.state) {
     case "idle":
     case "loading":
@@ -71,12 +71,12 @@ function sameFailureStatus(
   );
 }
 
-function observerConnectedState(state: TuiState, nowMs: number): TuiState {
+function observerConnectedState(state: DashboardState, nowMs: number): DashboardState {
   const previous = state.observerConnectionStatus;
   if (previous.state === "connected") {
     return state;
   }
-  let next: TuiState = {
+  let next: DashboardState = {
     ...state,
     observerConnectionStatus: { state: "connected" },
   };

@@ -41,7 +41,6 @@ const PRIVATE_DASHBOARD_STATE_TYPES = new Set([
   "NewSessionFlowState",
   "TuiLocalRows",
   "TuiScreen",
-  "TuiState",
   "TuiViewState",
 ]);
 const DASHBOARD_CORE_INTERNAL_PATHS = [

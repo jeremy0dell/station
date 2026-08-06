@@ -6,10 +6,8 @@
 // coordination store, and terminal passthrough is untouched when the
 // overlay is down.
 import { describe, expect, it } from "bun:test";
-import {
-  dashboardExecution,
-  type DashboardCapabilities,
-} from "@station/dashboard-core";
+import { dashboardExecution } from "@station/dashboard-core/runtime";
+import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
 import {
   makeStationTestRuntime,
   type StationTestDashboardRuntime,

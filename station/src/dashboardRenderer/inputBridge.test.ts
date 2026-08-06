@@ -1,4 +1,4 @@
-import type { TuiKey } from "@station/dashboard-core";
+import type { TuiKey } from "@station/dashboard-core/state";
 import { describe, expect, it } from "bun:test";
 import { createDashboardSequenceHandler } from "./inputBridge.js";
 

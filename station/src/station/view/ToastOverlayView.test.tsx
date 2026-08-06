@@ -3,7 +3,7 @@ import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
-import type { ClientNotice } from "@station/dashboard-core";
+import type { ClientNotice } from "@station/dashboard-core/runtime";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";

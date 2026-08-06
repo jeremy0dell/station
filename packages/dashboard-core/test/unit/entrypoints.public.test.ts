@@ -11,7 +11,7 @@ const PRIVATE_MODELS = [
   "NewSessionFlowState",
   "TuiLocalRows",
   "TuiScreen",
-  "TuiState",
+  "DashboardState",
   "TuiViewState",
 ];
 

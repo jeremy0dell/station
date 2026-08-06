@@ -110,10 +110,6 @@ export type DashboardState = TuiViewState & {
   widgetsPersisted: boolean;
 };
 
-/** Temporary private reducer/store alias retained while pure reducer naming is migrated. */
-// biome-ignore lint/plugin: retained compatibility boundary during the reducer naming migration
-export type TuiState = DashboardState;
-
 /** Recursively readonly public projection of the private dashboard store model. */
 export type DashboardStateView = ReadonlyDeep<DashboardState>;
 

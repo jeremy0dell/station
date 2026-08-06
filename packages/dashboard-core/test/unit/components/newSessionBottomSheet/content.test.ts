@@ -1,10 +1,12 @@
+import { describe, expect, it } from "vitest";
 import {
-  createNewSessionFlow,
   newSessionEditNameContent,
   newSessionReviewContent,
+} from "../../../../src/components/NewSessionBottomSheet/content.js";
+import {
+  createNewSessionFlow,
   transitionNewSessionFlow,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../../src/flows/newSession.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 function reviewState(status: "healthy" | "degraded" | "unavailable" = "healthy") {

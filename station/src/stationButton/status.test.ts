@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
-import {
-  createInitialTuiState,
-  selectDashboardSessionRows,
-  selectFleetSummary,
-} from "@station/dashboard-core";
+import { selectDashboardSessionRows, selectFleetSummary } from "@station/dashboard-core/selectors";
+import { createInitialTuiState } from "@station/dashboard-core/state";
 import {
   attentionAndFailuresSnapshot,
   manyProjectsSnapshot,

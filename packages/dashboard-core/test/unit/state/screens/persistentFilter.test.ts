@@ -1,10 +1,7 @@
-import {
-  createInitialTuiState,
-  handleTuiKey,
-  replaceSnapshot,
-  selectDashboardItems,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { selectDashboardItems } from "../../../../src/selectors/dashboardViewport.js";
+import { createInitialTuiState, replaceSnapshot } from "../../../../src/state/screen.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };

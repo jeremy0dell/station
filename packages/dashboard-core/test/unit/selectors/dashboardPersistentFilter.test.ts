@@ -1,8 +1,6 @@
-import {
-  type DashboardPersistentFilterCandidate,
-  selectDashboardPersistentFilter,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import type { DashboardPersistentFilterCandidate } from "../../../src/selectors/dashboardPersistentFilter.js";
+import { selectDashboardPersistentFilter } from "../../../src/selectors/dashboardPersistentFilter.js";
 
 const candidates: DashboardPersistentFilterCandidate[] = [
   {

@@ -1,26 +1,31 @@
 import type { StationSnapshot } from "@station/contracts";
-import type { TuiKey, TuiState } from "@station/dashboard-core";
+import { describe, expect, it } from "vitest";
 import {
-  createInitialTuiState,
-  focusProjectSettingsItem,
-  handleTuiKey,
-  openProjectSettings,
+  selectNewSessionHarnessChoices,
+  selectProjectDefaultHarness,
+} from "../../../../src/selectors/selectors.js";
+import type { TuiKey } from "../../../../src/state/keys.js";
+import {
   pendingProjectDefaultHarnesses,
   pruneLocalRowsForSnapshot,
   removePendingProjectDefaultHarness,
+} from "../../../../src/state/localRows.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
+import {
+  focusProjectSettingsItem,
+  openProjectSettings,
   removeProjectConfirmPhrase,
-  selectNewSessionHarnessChoices,
-  selectProjectDefaultHarness,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../../src/state/screens/projectSettings.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
-function panelState(): TuiState {
+function panelState(): DashboardState {
   const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
   return openProjectSettings(base, "web");
 }
 
-function drive(state: TuiState, keys: TuiKey[]): TuiState {
+function drive(state: DashboardState, keys: TuiKey[]): DashboardState {
   let current = state;
   for (const key of keys) {
     current = handleTuiKey(current, key).state;

@@ -1,6 +1,6 @@
 import type { TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export const projectSettingsPickerScreenBehavior = {
   dashboardHoverEnabled: false,
@@ -9,7 +9,7 @@ export const projectSettingsPickerScreenBehavior = {
 
 // Slot/↑↓/↵/mouse are handled by the shared selectionMiddleware
 // (projectSettingsPickerListSpec); only esc-to-dashboard stays bespoke.
-export function handleProjectSettingsPickerKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleProjectSettingsPickerKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "projectSettingsPicker") {
     return { state };
   }
@@ -19,6 +19,6 @@ export function handleProjectSettingsPickerKey(state: TuiState, key: TuiKey): Tu
   return { state };
 }
 
-function closeProjectSettingsPicker(state: TuiState): TuiState {
+function closeProjectSettingsPicker(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
 }

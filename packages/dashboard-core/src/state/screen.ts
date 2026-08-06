@@ -1,10 +1,10 @@
 import type { StationSnapshot } from "@station/contracts";
 import { reconcileDashboardFocus } from "./dashboardFocus.js";
 import { createEmptyTuiLocalRows, pruneLocalRowsForSnapshot } from "./localRows.js";
-import type { CreateInitialTuiStateOptions, TuiState } from "./types.js";
+import type { CreateInitialTuiStateOptions, DashboardState } from "./types.js";
 
-export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): TuiState {
-  const state: TuiState = {
+export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): DashboardState {
+  const state: DashboardState = {
     loading: options.initialSnapshot === undefined,
     screen: { name: "dashboard" },
     toasts: [],
@@ -29,8 +29,8 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
   return state.snapshot === undefined ? state : reconcileDashboardFocus(state, state);
 }
 
-export function replaceSnapshot(state: TuiState, snapshot: StationSnapshot): TuiState {
-  const next: TuiState = {
+export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot): DashboardState {
+  const next: DashboardState = {
     ...state,
     snapshot,
     loading: false,
