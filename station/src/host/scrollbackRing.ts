@@ -70,6 +70,34 @@ export class ScrollbackRing {
     return this.#byteLength;
   }
 
+  /** Force the incomplete flag: an external gap (e.g. an evicted park backlog) invalidates replay. */
+  markEvicted(): void {
+    this.#evicted = true;
+  }
+
+  /** Rebuild a ring from a persisted export, charging every event through the usual budget. */
+  static restore(
+    maxBytes: number,
+    exportData: {
+      initialCols: number;
+      initialRows: number;
+      events: readonly HostReplayEvent[];
+    },
+  ): ScrollbackRing {
+    const ring = new ScrollbackRing(maxBytes, {
+      cols: exportData.initialCols,
+      rows: exportData.initialRows,
+    });
+    for (const event of exportData.events) {
+      if (event.type === "data") {
+        ring.push(event.data);
+      } else {
+        ring.resize({ cols: event.cols, rows: event.rows });
+      }
+    }
+    return ring;
+  }
+
   #retain(entry: ScrollbackEntry): void {
     this.#entries.push(entry);
     this.#byteLength += entry.bytes;

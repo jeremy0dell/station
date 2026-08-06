@@ -6,6 +6,7 @@ export * from "./featureFlags.js";
 export * from "./harnessIngress.js";
 export * from "./harnessTerminalBinding.js";
 export * from "./hooks.js";
+export * from "./hostHandoff.js";
 export * from "./ids.js";
 export * from "./liveness.js";
 export * from "./logging.js";

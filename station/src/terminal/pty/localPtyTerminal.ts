@@ -1,16 +1,19 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { chmodSync, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { PtyBridgeProtocolVersion } from "@station/contracts";
 import type {
   StationTerminalDisposable,
   StationTerminalExit,
   StationTerminalProcess,
   StationTerminalSize,
   StationTerminalSpawnOptions,
+  StationTerminalUnavailable,
 } from "../types.js";
 import {
   CTTY_HELPER_PATH,
@@ -35,6 +38,7 @@ type BridgeMessage =
   | {
       type: "ready";
       pid: number;
+      bridgePid?: number;
     }
   | {
       type: "data";
@@ -124,7 +128,7 @@ export function createLocalPtyTerminal(
   }
 
   ensureSpawnHelperExecutable();
-  const bridgeOptions = {
+  const bridgeOptions: Record<string, unknown> = {
     args,
     cols: size.cols,
     command,
@@ -133,6 +137,9 @@ export function createLocalPtyTerminal(
     name,
     rows: size.rows,
   };
+  if (options.orphan !== undefined) {
+    bridgeOptions.orphan = options.orphan;
+  }
 
   try {
     const bridge = spawn(resolveNodeCommand(), [
@@ -159,6 +166,7 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   #events = new TerminalProcessEmitter();
   #stdoutBuffer = "";
   #pid: number;
+  #bridgePid: number | undefined;
   #size: StationTerminalSize;
 
   constructor(
@@ -211,6 +219,10 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
 
   get pid(): number {
     return this.#pid;
+  }
+
+  get bridgePid(): number | undefined {
+    return this.#bridgePid;
   }
 
   get size(): StationTerminalSize {
@@ -311,6 +323,7 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
     switch (message.type) {
       case "ready":
         this.#pid = message.pid;
+        this.#bridgePid = message.bridgePid;
         return;
       case "data":
         this.emitData(message.data);
@@ -358,6 +371,329 @@ export type LocalPtyTerminalRuntime = {
   implementation?: PtyImplementation;
   cttyHelperPath?: string;
 };
+
+type BridgeControlStatus = {
+  bridgeProtocol: number;
+  pid: number;
+  bridgePid: number;
+  cols: number;
+  rows: number;
+  adopted: boolean;
+  exited: boolean;
+  parkedEvicted: boolean;
+  exitCode?: number;
+  signal?: number;
+};
+
+type BridgeControlMessage =
+  | ({ type: "status" } & BridgeControlStatus)
+  | { type: "data"; data: string }
+  | { type: "exit"; exitCode: number; signal?: number }
+  | { type: "error"; message: string; code?: string };
+
+/** A parked bridge rebound as a live terminal; adoption extras ride beside the interface. */
+export type AdoptedPtyBridge = StationTerminalProcess & {
+  /** True when the bridge dropped parked output before adoption. */
+  readonly parkedEvicted: boolean;
+  /** Recorded exit when the PTY died before adoption; undefined while alive. */
+  readonly recordedExit: StationTerminalExit | undefined;
+};
+
+export type AdoptLocalPtyBridgeOptions = {
+  id: string;
+  command: string;
+  controlSocketPath: string;
+  size: StationTerminalSize;
+  /** Fail the adoption when the bridge does not answer in time. */
+  timeoutMs?: number;
+};
+
+const DEFAULT_ADOPT_TIMEOUT_MS = 5_000;
+
+/**
+ * ADAPTER
+ *
+ * Rebinds a parked orphan bridge's control socket as a live terminal process so
+ * a new host adopts the surviving PTY instead of respawning its payload.
+ * Geometry comes from the bridge's status reply, which is the PTY's truth.
+ */
+export function adoptLocalPtyBridge(
+  options: AdoptLocalPtyBridgeOptions,
+): Promise<AdoptedPtyBridge> {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(options.controlSocketPath);
+    let settled = false;
+    const timer = setTimeout(() => {
+      finishWithError(
+        new Error(`Timed out adopting the parked bridge at ${options.controlSocketPath}.`),
+      );
+    }, options.timeoutMs ?? DEFAULT_ADOPT_TIMEOUT_MS);
+    const finishWithError = (error: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      reject(error);
+    };
+    let buffer = "";
+    socket.setEncoding("utf8");
+    socket.on("error", (error) => {
+      finishWithError(error);
+    });
+    socket.on("connect", () => {
+      socket.write(`${JSON.stringify({ type: "adopt" })}\n`);
+    });
+    socket.on("data", (chunk: string) => {
+      buffer += chunk;
+      const newlineIndex = buffer.indexOf("\n");
+      if (newlineIndex === -1) {
+        return;
+      }
+      const line = buffer.slice(0, newlineIndex);
+      const remainder = buffer.slice(newlineIndex + 1);
+      let message: BridgeControlMessage;
+      try {
+        message = JSON.parse(line) as BridgeControlMessage;
+      } catch (error) {
+        finishWithError(
+          error instanceof Error ? error : new Error("Unparseable bridge adoption reply."),
+        );
+        return;
+      }
+      if (message.type === "error") {
+        finishWithError(new Error(message.message));
+        return;
+      }
+      if (message.type !== "status") {
+        finishWithError(new Error(`Unexpected bridge adoption reply ${message.type}.`));
+        return;
+      }
+      if (message.bridgeProtocol !== PtyBridgeProtocolVersion) {
+        finishWithError(
+          new Error(
+            `Bridge control protocol ${message.bridgeProtocol} does not match ${PtyBridgeProtocolVersion}.`,
+          ),
+        );
+        return;
+      }
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      socket.removeAllListeners("error");
+      socket.removeAllListeners("data");
+      resolve(
+        new AdoptedLocalPtyBridgeProcess({
+          id: options.id,
+          command: options.command,
+          size: {
+            cols: normalizeDimension(message.cols, options.size.cols, MIN_COLS),
+            rows: normalizeDimension(message.rows, options.size.rows, MIN_ROWS),
+          },
+          socket,
+          status: message,
+          initialBuffer: remainder,
+        }),
+      );
+    });
+  });
+}
+
+class AdoptedLocalPtyBridgeProcess implements StationTerminalProcess {
+  readonly id: string;
+  readonly command: string;
+  readonly pid: number;
+  readonly bridgePid: number;
+  readonly parkedEvicted: boolean;
+  readonly recordedExit: StationTerminalExit | undefined;
+
+  #socket: net.Socket;
+  #events = new TerminalProcessEmitter();
+  #unavailableListeners = new Set<(event: StationTerminalUnavailable) => void>();
+  #buffer = "";
+  #size: StationTerminalSize;
+  #socketClosed = false;
+  #disposed = false;
+
+  constructor(init: {
+    id: string;
+    command: string;
+    size: StationTerminalSize;
+    socket: net.Socket;
+    status: BridgeControlStatus;
+    initialBuffer: string;
+  }) {
+    const { id, command, size, socket, status, initialBuffer } = init;
+    this.id = id;
+    this.command = command;
+    this.pid = status.pid;
+    this.bridgePid = status.bridgePid;
+    this.parkedEvicted = status.parkedEvicted;
+    if (status.exited) {
+      const event: StationTerminalExit = {
+        exitCode: status.exitCode ?? 1,
+      };
+      if (status.signal !== undefined) {
+        event.signal = status.signal;
+      }
+      this.recordedExit = event;
+    }
+    this.#size = size;
+    this.#socket = socket;
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk: string) => {
+      this.handleChunk(chunk);
+    });
+    socket.on("error", (error) => {
+      this.#events.emitDiagnostic(`adopted bridge socket error: ${error.message}`);
+    });
+    socket.on("close", () => {
+      this.handleSocketClose();
+    });
+    if (initialBuffer.length > 0) {
+      this.handleChunk(initialBuffer);
+    }
+  }
+
+  get size(): StationTerminalSize {
+    return this.#size;
+  }
+
+  onData(listener: (data: string) => void): StationTerminalDisposable {
+    return this.#events.onData(listener);
+  }
+
+  onExit(listener: (event: StationTerminalExit) => void): StationTerminalDisposable {
+    return this.#events.onExit(listener);
+  }
+
+  onDiagnostic(listener: (message: string) => void): StationTerminalDisposable {
+    return this.#events.onDiagnostic(listener);
+  }
+
+  onUnavailable(
+    listener: (event: StationTerminalUnavailable) => void,
+  ): StationTerminalDisposable {
+    this.#events.assertActive("subscribe to terminal unavailability");
+    this.#unavailableListeners.add(listener);
+    return {
+      dispose: () => {
+        this.#unavailableListeners.delete(listener);
+      },
+    };
+  }
+
+  write(data: string): void {
+    this.#events.assertActive("write to terminal");
+    if (this.#events.exited || this.#socketClosed) {
+      return;
+    }
+    this.sendControl({ type: "write", data });
+  }
+
+  resize(size: StationTerminalSize): void {
+    this.#events.assertActive("resize terminal");
+    if (this.#events.exited || this.#socketClosed) {
+      return;
+    }
+    this.#size = normalizeSize(size);
+    this.sendControl({ type: "resize", cols: this.#size.cols, rows: this.#size.rows });
+  }
+
+  kill(signal?: string): void {
+    if (this.#disposed || this.#events.exited || this.#socketClosed) {
+      return;
+    }
+    this.sendControl({ type: "kill", signal });
+  }
+
+  dispose(): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.#disposed = true;
+    const exited = this.#events.exited;
+    this.#events.dispose();
+    this.#unavailableListeners.clear();
+    if (!exited && !this.#socketClosed) {
+      // Kill before ending the socket: an EOF without a kill tells the bridge
+      // its adopter died, which re-parks the PTY instead of tearing it down.
+      this.sendControl({ type: "kill" });
+    }
+    this.#socket.end();
+  }
+
+  private handleChunk(chunk: string): void {
+    this.#buffer += chunk;
+    while (true) {
+      const newlineIndex = this.#buffer.indexOf("\n");
+      if (newlineIndex === -1) {
+        return;
+      }
+      const line = this.#buffer.slice(0, newlineIndex);
+      this.#buffer = this.#buffer.slice(newlineIndex + 1);
+      let message: BridgeControlMessage;
+      try {
+        message = JSON.parse(line) as BridgeControlMessage;
+      } catch {
+        this.#events.emitDiagnostic(`unparseable adopted-bridge line: ${line.slice(0, 200)}`);
+        continue;
+      }
+      this.handleControlMessage(message);
+    }
+  }
+
+  private handleControlMessage(message: BridgeControlMessage): void {
+    switch (message.type) {
+      case "data":
+        this.#events.emitData(message.data);
+        return;
+      case "exit": {
+        const event: StationTerminalExit = {
+          exitCode: message.exitCode,
+        };
+        if (message.signal !== undefined) {
+          event.signal = message.signal;
+        }
+        this.#events.emitExit(event);
+        return;
+      }
+      case "error":
+        this.#events.emitDiagnostic(`adopted bridge command error: ${message.message}`);
+        return;
+      case "status":
+        // A status frame after adoption is a stray probe reply; nothing to do.
+        return;
+    }
+  }
+
+  private handleSocketClose(): void {
+    this.#socketClosed = true;
+    if (this.#disposed || this.#events.exited) {
+      return;
+    }
+    // The bridge vanished or re-parked without an exit frame: attachment is
+    // lost, but no exit evidence exists, so report unavailability, not death.
+    this.#events.emitDiagnostic("adopted bridge socket closed before terminal exit.");
+    for (const listener of [...this.#unavailableListeners]) {
+      listener({
+        code: "ADOPTED_BRIDGE_LOST",
+        message: "The adopted bridge connection closed before the terminal exited.",
+      });
+    }
+  }
+
+  private sendControl(command: object): void {
+    this.#socket.write(`${JSON.stringify(command)}\n`, (error) => {
+      if (error !== undefined && error !== null) {
+        this.#events.emitDiagnostic(`adopted bridge send failed: ${error.message}`);
+      }
+    });
+  }
+}
 
 export function resolvePtyImplementation(
   value: string | undefined,

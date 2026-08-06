@@ -9,12 +9,27 @@ import {
   type HostSpawnResult,
   StationHostProviderError,
 } from "@station/host";
-import { createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
+import {
+  PtyBridgeProtocolVersion,
+  type PtyHandoffEntry,
+  PtyHandoffManifestSchema,
+  type PtyHandoffManifest,
+  type PtyScrollbackExport,
+} from "@station/contracts";
+import { adoptLocalPtyBridge, createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
 import type {
   StationTerminalDisposable,
   StationTerminalProcess,
+  StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
+import {
+  DEFAULT_ORPHAN_TTL_MS,
+  bridgeControlSocketPath,
+  bridgeParkStatePath,
+  readScrollbackExport,
+  writeScrollbackExport,
+} from "./orphanBridges.js";
 import { ScrollbackRing } from "./scrollbackRing.js";
 import {
   createSemanticTerminalSnapshot,
@@ -42,6 +57,10 @@ export type PtyTableOptions = {
   onEvent?: (event: string, attributes: Record<string, unknown>) => void;
   /** Typed PTY exit boundary, separate from the legacy operational event stream. */
   onPtyExit?: (event: PtyExitEvent) => void;
+  /** Enables bridge orphan mode: parked bridges live under this directory until adopted or TTL-reaped. */
+  orphanBridges?: PtyTableOrphanOptions;
+  /** Test seam for adoption without real control sockets; defaults to the bridge adopter. */
+  adoptTerminal?: PtyTerminalAdopter;
 };
 
 export type PtySpawnOutcome = HostSpawnResult & { created: boolean };
@@ -51,6 +70,30 @@ export type PtyExitEvent = {
   ptyKind: HostPtyIdentity["kind"];
   exitCode: number | null;
   signal?: number | null;
+};
+
+export type PtyTableOrphanOptions = {
+  directory: string;
+  ttlMs?: number;
+};
+
+export type PtyAdoptionTarget = {
+  ptyId: string;
+  command: string;
+  controlSocketPath: string;
+  size: StationTerminalSize;
+};
+
+/** An adopted terminal plus the park-backlog completeness flag, when the transport reports one. */
+export type PtyAdoptedTerminal = StationTerminalProcess & {
+  readonly parkedEvicted?: boolean | undefined;
+};
+
+export type PtyTerminalAdopter = (target: PtyAdoptionTarget) => Promise<PtyAdoptedTerminal>;
+
+export type PtyAdoptionReport = {
+  adopted: string[];
+  failed: Array<{ ptyId: string; reason: string }>;
 };
 
 /** Raw-ring diagnostic used by Host tests; wire replay is chosen asynchronously by attach. */
@@ -68,8 +111,7 @@ export type PtyTable = {
   write(ptyId: string, data: string): void;
   resize(ptyId: string, cols: number, rows: number): void;
   list(): HostListEntry[];
-  snapshot(ptyId: string): PtySnapshot;
-  /**
+  snapshot(ptyId: string): PtySnapshot;  /**
    * Register the live sink before capturing raw history or semantic state, so
    * output after the capture boundary is queued exactly once as live frames.
    * Ordered resize barriers preserve geometry; classified exact-capture failure
@@ -81,12 +123,27 @@ export type PtyTable = {
   /** Best-effort focus: broadcast a focus frame to attached clients. */
   focus(ptyId: string): boolean;
   has(ptyId: string): boolean;
+  /**
+   * Capture every live PTY as a handoff manifest entry, persisting each
+   * scrollback ring beside its parked bridge so an adopter can restore replay.
+   * Non-bridge transports are skipped with an event, never failed.
+   */
+  exportRegistry(): Promise<PtyHandoffManifest>;
+  /**
+   * ADAPTER
+   *
+   * Rebind the parked bridges named by a validated manifest as live entries so
+   * this host serves them without respawning; per-entry failures are reported,
+   * never thrown, and an invalid manifest fails closed.
+   */
+  adoptRegistry(manifest: unknown): Promise<PtyAdoptionReport>;
   disposeAll(): void;
 };
 
 type PtyEntry = {
   ptyId: string;
   identity: HostPtyIdentity;
+  command: string;
   terminal: StationTerminalProcess;
   ring: ScrollbackRing;
   semantic: SemanticTerminalModel;
@@ -107,6 +164,9 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     options.createSemanticTerminal ?? createSemanticTerminalSnapshot;
   const emit = options.onEvent ?? (() => undefined);
   const emitPtyExit = options.onPtyExit ?? (() => undefined);
+  const orphanBridges = options.orphanBridges;
+  const adoptTerminal: PtyTerminalAdopter =
+    options.adoptTerminal ?? ((target) => adoptLocalPtyBridge({ id: target.ptyId, ...target }));
   const entries = new Map<string, PtyEntry>();
   let sequence = 0;
 
@@ -195,6 +255,18 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     return entry;
   }
 
+  // Adopted ids keep the old host's numbering; later spawns must not collide.
+  function advanceSequencePast(ptyId: string): void {
+    const match = /^pty-(\d+)$/.exec(ptyId);
+    if (match === null) {
+      return;
+    }
+    const adopted = Number.parseInt(match[1], 10);
+    if (Number.isInteger(adopted) && adopted > sequence) {
+      sequence = adopted;
+    }
+  }
+
   return {
     spawn(params) {
       // Idempotency is session-qualified: deterministic target ids are reused
@@ -223,15 +295,29 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         TMUX: undefined,
         TMUX_PANE: undefined,
       };
+      // The ptyId must exist before spawn: orphan-mode bridges name their
+      // control socket and park state after it.
+      sequence += 1;
+      const ptyId = `pty-${sequence}`;
+      const spawnOptions: StationTerminalSpawnOptions = {
+        id: ptyId,
+        command: params.command,
+        args: params.args,
+        cwd: params.cwd,
+        env,
+        size: { cols, rows },
+      };
+      if (orphanBridges !== undefined) {
+        spawnOptions.orphan = {
+          controlSocketPath: bridgeControlSocketPath(orphanBridges.directory, ptyId),
+          parkStatePath: bridgeParkStatePath(orphanBridges.directory, ptyId),
+          ttlMs: orphanBridges.ttlMs ?? DEFAULT_ORPHAN_TTL_MS,
+          identity: identityOf(params),
+        };
+      }
       let terminal: StationTerminalProcess;
       try {
-        terminal = createTerminal({
-          command: params.command,
-          args: params.args,
-          cwd: params.cwd,
-          env,
-          size: { cols, rows },
-        });
+        terminal = createTerminal(spawnOptions);
       } catch (error) {
         throw new StationHostProviderError(
           "HOST_SPAWN_FAILED",
@@ -255,10 +341,10 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           { cause: error, worktreeId: params.worktreeId, sessionId: params.sessionId },
         );
       }
-      sequence += 1;
       const entry: PtyEntry = {
-        ptyId: `pty-${sequence}`,
+        ptyId,
         identity: identityOf(params),
+        command: params.command,
         terminal,
         ring: new ScrollbackRing(maxScrollbackBytes, { cols, rows }),
         semantic,
@@ -483,6 +569,182 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
     has(ptyId) {
       return entries.has(ptyId);
+    },
+
+    async exportRegistry() {
+      const manifest: PtyHandoffManifest = {};
+      for (const entry of entries.values()) {
+        if (entry.exited) {
+          continue;
+        }
+        const bridgePid = entry.terminal.bridgePid;
+        if (bridgePid === undefined || orphanBridges === undefined) {
+          // In-process transports have no bridge process to park; adoption is a
+          // bridge-lane capability, so report the skip instead of failing.
+          emit("pty.handoff.export-skipped", {
+            ptyId: entry.ptyId,
+            reason: bridgePid === undefined ? "no-bridge-transport" : "orphan-mode-disabled",
+          });
+          continue;
+        }
+        const snapshot = entry.ring.snapshot();
+        const exportData: PtyScrollbackExport = {
+          initialCols: snapshot.initialCols,
+          initialRows: snapshot.initialRows,
+          complete: snapshot.complete,
+          events: snapshot.events,
+        };
+        const handoffEntry: PtyHandoffEntry = {
+          bridgeProtocolVersion: PtyBridgeProtocolVersion,
+          bridgePid,
+          controlSocket: bridgeControlSocketPath(orphanBridges.directory, entry.ptyId),
+          command: entry.command,
+          cols: entry.cols,
+          rows: entry.rows,
+          identity: { ...entry.identity },
+          ringComplete: snapshot.complete,
+        };
+        try {
+          handoffEntry.scrollbackRef = await writeScrollbackExport(
+            orphanBridges.directory,
+            entry.ptyId,
+            exportData,
+          );
+        } catch (error) {
+          // A scrollback write failure degrades adoption replay, not adoption itself.
+          emit("pty.handoff.scrollback-export-failed", {
+            ptyId: entry.ptyId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+        manifest[entry.ptyId] = handoffEntry;
+      }
+      emit("pty.handoff.export", { count: Object.keys(manifest).length });
+      return manifest;
+    },
+
+    async adoptRegistry(manifestInput) {
+      let manifest: PtyHandoffManifest;
+      try {
+        manifest = PtyHandoffManifestSchema.parse(manifestInput);
+      } catch (error) {
+        throw new StationHostProviderError(
+          "HOST_HANDOFF_MANIFEST_INVALID",
+          "The PTY handoff manifest is invalid.",
+          { cause: error },
+        );
+      }
+      const report: PtyAdoptionReport = { adopted: [], failed: [] };
+      for (const [ptyId, handoffEntry] of Object.entries(manifest)) {
+        if (entries.has(ptyId)) {
+          report.failed.push({ ptyId, reason: "duplicate-pty-id" });
+          continue;
+        }
+        let terminal: PtyAdoptedTerminal;
+        try {
+          terminal = await adoptTerminal({
+            ptyId,
+            command: handoffEntry.command,
+            controlSocketPath: handoffEntry.controlSocket,
+            size: { cols: handoffEntry.cols, rows: handoffEntry.rows },
+          });
+        } catch (error) {
+          // Per-entry isolation: one unreachable bridge never blocks the rest.
+          report.failed.push({ ptyId, reason: "adopt-failed" });
+          emit("pty.handoff.adopt-failed", {
+            ptyId,
+            reason: "adopt-failed",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+        const cols = Math.max(MIN_COLS, handoffEntry.cols);
+        const rows = Math.max(MIN_ROWS, handoffEntry.rows);
+        let ring: ScrollbackRing | undefined;
+        if (handoffEntry.scrollbackRef !== undefined) {
+          const exportData = await readScrollbackExport(handoffEntry.scrollbackRef);
+          if (exportData !== undefined) {
+            ring = ScrollbackRing.restore(maxScrollbackBytes, exportData);
+          } else {
+            emit("pty.handoff.scrollback-import-failed", { ptyId });
+          }
+        }
+        if (ring === undefined) {
+          ring = new ScrollbackRing(maxScrollbackBytes, { cols, rows });
+        }
+        // An evicted park backlog leaves a gap between the exported ring and
+        // live output; replay must fail closed into semantic recovery.
+        if (terminal.parkedEvicted === true) {
+          ring.markEvicted();
+        }
+        let semantic: SemanticTerminalModel;
+        try {
+          semantic = createSemanticTerminal(cols, rows);
+        } catch (error) {
+          terminal.dispose();
+          report.failed.push({ ptyId, reason: "semantic-init-failed" });
+          emit("pty.handoff.adopt-failed", {
+            ptyId,
+            reason: "semantic-init-failed",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+        // Adopted entries lose the launch-time output-compatibility policy;
+        // they serve bytes exactly as parked and live from here on.
+        const entry: PtyEntry = {
+          ptyId,
+          identity: { ...handoffEntry.identity },
+          command: handoffEntry.command,
+          terminal,
+          ring,
+          semantic,
+          outputCompatibility: createPtyOutputCompatibility(undefined),
+          compatibilityRewriteReported: false,
+          cols,
+          rows,
+          exited: false,
+          sinks: new Set(),
+          subscriptions: [],
+        };
+
+        // Retained data/exit may replay synchronously during subscription, so the
+        // entry and its adoption event must exist before a replay can reap it.
+        entries.set(ptyId, entry);
+        advanceSequencePast(ptyId);
+        emit("agent.adopted", {
+          ptyId,
+          worktreeId: entry.identity.worktreeId,
+          sessionId: entry.identity.sessionId,
+          terminalTargetId: entry.identity.terminalTargetId,
+        });
+
+        entry.subscriptions.push(
+          terminal.onData((data) => {
+            transformAndPublish(entry, data);
+          }),
+        );
+        entry.subscriptions.push(
+          terminal.onExit((event) => {
+            reap(
+              entry,
+              {
+                type: "exit",
+                ptyId: entry.ptyId,
+                exitCode: event.exitCode,
+                ...(event.signal === undefined ? {} : { signal: event.signal }),
+              },
+              "exit",
+            );
+          }),
+        );
+        report.adopted.push(ptyId);
+      }
+      emit("pty.handoff.adopt", {
+        adopted: report.adopted.length,
+        failed: report.failed.length,
+      });
+      return report;
     },
 
     disposeAll() {
