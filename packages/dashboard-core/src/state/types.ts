@@ -1,4 +1,3 @@
-import type { TuiWidgetConfig } from "@station/config";
 import type {
   AgentState,
   ProjectId,
@@ -6,6 +5,7 @@ import type {
   SafeError,
   SessionId,
   StationSnapshot,
+  TuiWidgetConfig,
   WorktreeId,
 } from "@station/contracts";
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";

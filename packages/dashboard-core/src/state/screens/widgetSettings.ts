@@ -1,4 +1,4 @@
-import type { TuiWidgetConfig } from "@station/config";
+import type { TuiWidgetConfig } from "@station/contracts";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { ReadonlyDeep } from "../readonly.js";
