@@ -9,27 +9,27 @@ import {
   type HostSpawnResult,
   StationHostProviderError,
 } from "@station/host";
-import {
-  PtyBridgeProtocolVersion,
-  type PtyHandoffEntry,
-  PtyHandoffManifestSchema,
-  type PtyHandoffManifest,
-  type PtyScrollbackExport,
-} from "@station/contracts";
-import { adoptLocalPtyBridge, createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
+import type { PtyHandoffManifest } from "@station/contracts";
+import { adoptLocalPtyBridge } from "../terminal/pty/ptyBridgeAdoption.js";
+import { createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
 import type {
-  StationTerminalDisposable,
   StationTerminalProcess,
-  StationTerminalSize,
   StationTerminalSpawnOptions,
 } from "../terminal/types.js";
+import { createPtyOutputCompatibility } from "../terminal/ptyOutputCompatibility.js";
+import { createFrameStream } from "./frameStream.js";
 import {
   DEFAULT_ORPHAN_TTL_MS,
   bridgeControlSocketPath,
   bridgeParkStatePath,
-  readScrollbackExport,
-  writeScrollbackExport,
 } from "./orphanBridges.js";
+import { clampSize, type PtyEntry, type PtyEntryInit } from "./ptyEntry.js";
+import {
+  createPtyHandoff,
+  type PtyAdoptionReport,
+  type PtyTableOrphanOptions,
+  type PtyTerminalAdopter,
+} from "./ptyHandoff.js";
 import { ScrollbackRing } from "./scrollbackRing.js";
 import {
   createSemanticTerminalSnapshot,
@@ -38,13 +38,14 @@ import {
   TerminalSnapshotPendingError,
   TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
-import {
-  createPtyOutputCompatibility,
-  type PtyOutputCompatibility,
-} from "../terminal/ptyOutputCompatibility.js";
 
-const MIN_COLS = 2;
-const MIN_ROWS = 1;
+export type {
+  PtyAdoptedTerminal,
+  PtyAdoptionTarget,
+  PtyTableOrphanOptions,
+  PtyTerminalAdopter,
+} from "./ptyHandoff.js";
+
 const DEFAULT_SCROLLBACK_BYTES = 256 * 1024;
 
 export type PtyTableOptions = {
@@ -72,30 +73,6 @@ export type PtyExitEvent = {
   signal?: number | null;
 };
 
-export type PtyTableOrphanOptions = {
-  directory: string;
-  ttlMs?: number;
-};
-
-export type PtyAdoptionTarget = {
-  ptyId: string;
-  command: string;
-  controlSocketPath: string;
-  size: StationTerminalSize;
-};
-
-/** An adopted terminal plus the park-backlog completeness flag, when the transport reports one. */
-export type PtyAdoptedTerminal = StationTerminalProcess & {
-  readonly parkedEvicted?: boolean | undefined;
-};
-
-export type PtyTerminalAdopter = (target: PtyAdoptionTarget) => Promise<PtyAdoptedTerminal>;
-
-export type PtyAdoptionReport = {
-  adopted: string[];
-  failed: Array<{ ptyId: string; reason: string }>;
-};
-
 /** Raw-ring diagnostic used by Host tests; wire replay is chosen asynchronously by attach. */
 export type PtySnapshot = {
   pid: number;
@@ -111,7 +88,8 @@ export type PtyTable = {
   write(ptyId: string, data: string): void;
   resize(ptyId: string, cols: number, rows: number): void;
   list(): HostListEntry[];
-  snapshot(ptyId: string): PtySnapshot;  /**
+  snapshot(ptyId: string): PtySnapshot;
+  /**
    * Register the live sink before capturing raw history or semantic state, so
    * output after the capture boundary is queued exactly once as live frames.
    * Ordered resize barriers preserve geometry; classified exact-capture failure
@@ -138,23 +116,6 @@ export type PtyTable = {
    */
   adoptRegistry(manifest: unknown): Promise<PtyAdoptionReport>;
   disposeAll(): void;
-};
-
-type PtyEntry = {
-  ptyId: string;
-  identity: HostPtyIdentity;
-  command: string;
-  terminal: StationTerminalProcess;
-  ring: ScrollbackRing;
-  semantic: SemanticTerminalModel;
-  outputCompatibility: PtyOutputCompatibility;
-  compatibilityRewriteReported: boolean;
-  cols: number;
-  rows: number;
-  exited: boolean;
-  lastExit?: HostExitFrame;
-  sinks: Set<(frame: HostFrame) => void>;
-  subscriptions: StationTerminalDisposable[];
 };
 
 export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
@@ -267,6 +228,71 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     }
   }
 
+  function buildPtyEntry(init: PtyEntryInit): PtyEntry {
+    const { cols, rows } = clampSize(init.cols, init.rows);
+    return {
+      ...init,
+      cols,
+      rows,
+      compatibilityRewriteReported: false,
+      exited: false,
+      sinks: new Set(),
+      subscriptions: [],
+    };
+  }
+
+  // Retained data/exit may replay synchronously during subscription, so the
+  // entry and its lifecycle event must exist before a replay can reap it.
+  function activateEntry(entry: PtyEntry, event: "agent.spawn" | "agent.adopted"): void {
+    entries.set(entry.ptyId, entry);
+    advanceSequencePast(entry.ptyId);
+    emit(event, {
+      ptyId: entry.ptyId,
+      worktreeId: entry.identity.worktreeId,
+      sessionId: entry.identity.sessionId,
+      terminalTargetId: entry.identity.terminalTargetId,
+    });
+    entry.subscriptions.push(
+      entry.terminal.onData((data) => {
+        transformAndPublish(entry, data);
+      }),
+    );
+    entry.subscriptions.push(
+      entry.terminal.onExit((exitEvent) => {
+        reap(
+          entry,
+          {
+            type: "exit",
+            ptyId: entry.ptyId,
+            exitCode: exitEvent.exitCode,
+            ...(exitEvent.signal === undefined ? {} : { signal: exitEvent.signal }),
+          },
+          "exit",
+        );
+      }),
+    );
+  }
+
+  const handoff = createPtyHandoff({
+    entries,
+    orphanBridges,
+    adoptTerminal,
+    createSemanticTerminal,
+    maxScrollbackBytes,
+    emit,
+    activateAdoptedEntry: (init) => {
+      // Adopted entries lose the launch-time output-compatibility policy;
+      // they serve bytes exactly as parked and live from here on.
+      activateEntry(
+        buildPtyEntry({
+          ...init,
+          outputCompatibility: createPtyOutputCompatibility(undefined),
+        }),
+        "agent.adopted",
+      );
+    },
+  });
+
   return {
     spawn(params) {
       // Idempotency is session-qualified: deterministic target ids are reused
@@ -284,8 +310,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         }
       }
 
-      const cols = Math.max(MIN_COLS, params.cols);
-      const rows = Math.max(MIN_ROWS, params.rows);
+      const { cols, rows } = clampSize(params.cols, params.rows);
+      const identity = identityOf(params);
       const env: Record<string, string | undefined> = {
         ...params.env,
         // A Host may inherit styling controls from a headless provider hook, so only launch-request values are authoritative for its PTYs.
@@ -312,7 +338,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           controlSocketPath: bridgeControlSocketPath(orphanBridges.directory, ptyId),
           parkStatePath: bridgeParkStatePath(orphanBridges.directory, ptyId),
           ttlMs: orphanBridges.ttlMs ?? DEFAULT_ORPHAN_TTL_MS,
-          identity: identityOf(params),
+          identity,
+          parkMaxBytes: maxScrollbackBytes,
         };
       }
       let terminal: StationTerminalProcess;
@@ -341,51 +368,18 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           { cause: error, worktreeId: params.worktreeId, sessionId: params.sessionId },
         );
       }
-      const entry: PtyEntry = {
+      const entry = buildPtyEntry({
         ptyId,
-        identity: identityOf(params),
+        identity,
         command: params.command,
         terminal,
         ring: new ScrollbackRing(maxScrollbackBytes, { cols, rows }),
         semantic,
         outputCompatibility: createPtyOutputCompatibility(params.outputCompatibility),
-        compatibilityRewriteReported: false,
         cols,
         rows,
-        exited: false,
-        sinks: new Set(),
-        subscriptions: [],
-      };
-
-      // Retained data/exit may replay synchronously during subscription, so the
-      // entry and its spawn event must exist before a replay can reap it.
-      entries.set(entry.ptyId, entry);
-      emit("agent.spawn", {
-        ptyId: entry.ptyId,
-        worktreeId: params.worktreeId,
-        sessionId: params.sessionId,
-        terminalTargetId: params.terminalTargetId,
       });
-
-      entry.subscriptions.push(
-        terminal.onData((data) => {
-          transformAndPublish(entry, data);
-        }),
-      );
-      entry.subscriptions.push(
-        terminal.onExit((event) => {
-          reap(
-            entry,
-            {
-              type: "exit",
-              ptyId: entry.ptyId,
-              exitCode: event.exitCode,
-              ...(event.signal === undefined ? {} : { signal: event.signal }),
-            },
-            "exit",
-          );
-        }),
-      );
+      activateEntry(entry, "agent.spawn");
 
       // pid stabilizes to PTY's child once bridge reports ready; host.list is authoritative.
       return { ptyId: entry.ptyId, pid: terminal.pid, created: true };
@@ -400,10 +394,11 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       // A compatibility parser may retain an incomplete pre-resize sequence;
       // publish it before the geometry barrier so its production order survives.
       publishOutput(entry, entry.outputCompatibility.flush());
-      entry.cols = Math.max(MIN_COLS, cols);
-      entry.rows = Math.max(MIN_ROWS, rows);
-      entry.ring.resize({ cols: entry.cols, rows: entry.rows });
-      entry.semantic.resize(entry.cols, entry.rows);
+      const size = clampSize(cols, rows);
+      entry.cols = size.cols;
+      entry.rows = size.rows;
+      entry.ring.resize(size);
+      entry.semantic.resize(size.cols, size.rows);
       // Publish first so output synchronously triggered by TIOCSWINSZ is ordered
       // after the geometry it was produced for on every attachment.
       broadcast(entry, {
@@ -412,7 +407,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         cols: entry.cols,
         rows: entry.rows,
       });
-      entry.terminal.resize({ cols: entry.cols, rows: entry.rows });
+      entry.terminal.resize(size);
     },
 
     list() {
@@ -571,180 +566,12 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       return entries.has(ptyId);
     },
 
-    async exportRegistry() {
-      const manifest: PtyHandoffManifest = {};
-      for (const entry of entries.values()) {
-        if (entry.exited) {
-          continue;
-        }
-        const bridgePid = entry.terminal.bridgePid;
-        if (bridgePid === undefined || orphanBridges === undefined) {
-          // In-process transports have no bridge process to park; adoption is a
-          // bridge-lane capability, so report the skip instead of failing.
-          emit("pty.handoff.export-skipped", {
-            ptyId: entry.ptyId,
-            reason: bridgePid === undefined ? "no-bridge-transport" : "orphan-mode-disabled",
-          });
-          continue;
-        }
-        const snapshot = entry.ring.snapshot();
-        const exportData: PtyScrollbackExport = {
-          initialCols: snapshot.initialCols,
-          initialRows: snapshot.initialRows,
-          complete: snapshot.complete,
-          events: snapshot.events,
-        };
-        const handoffEntry: PtyHandoffEntry = {
-          bridgeProtocolVersion: PtyBridgeProtocolVersion,
-          bridgePid,
-          controlSocket: bridgeControlSocketPath(orphanBridges.directory, entry.ptyId),
-          command: entry.command,
-          cols: entry.cols,
-          rows: entry.rows,
-          identity: { ...entry.identity },
-          ringComplete: snapshot.complete,
-        };
-        try {
-          handoffEntry.scrollbackRef = await writeScrollbackExport(
-            orphanBridges.directory,
-            entry.ptyId,
-            exportData,
-          );
-        } catch (error) {
-          // A scrollback write failure degrades adoption replay, not adoption itself.
-          emit("pty.handoff.scrollback-export-failed", {
-            ptyId: entry.ptyId,
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-        manifest[entry.ptyId] = handoffEntry;
-      }
-      emit("pty.handoff.export", { count: Object.keys(manifest).length });
-      return manifest;
+    exportRegistry() {
+      return handoff.exportRegistry();
     },
 
-    async adoptRegistry(manifestInput) {
-      let manifest: PtyHandoffManifest;
-      try {
-        manifest = PtyHandoffManifestSchema.parse(manifestInput);
-      } catch (error) {
-        throw new StationHostProviderError(
-          "HOST_HANDOFF_MANIFEST_INVALID",
-          "The PTY handoff manifest is invalid.",
-          { cause: error },
-        );
-      }
-      const report: PtyAdoptionReport = { adopted: [], failed: [] };
-      for (const [ptyId, handoffEntry] of Object.entries(manifest)) {
-        if (entries.has(ptyId)) {
-          report.failed.push({ ptyId, reason: "duplicate-pty-id" });
-          continue;
-        }
-        let terminal: PtyAdoptedTerminal;
-        try {
-          terminal = await adoptTerminal({
-            ptyId,
-            command: handoffEntry.command,
-            controlSocketPath: handoffEntry.controlSocket,
-            size: { cols: handoffEntry.cols, rows: handoffEntry.rows },
-          });
-        } catch (error) {
-          // Per-entry isolation: one unreachable bridge never blocks the rest.
-          report.failed.push({ ptyId, reason: "adopt-failed" });
-          emit("pty.handoff.adopt-failed", {
-            ptyId,
-            reason: "adopt-failed",
-            message: error instanceof Error ? error.message : String(error),
-          });
-          continue;
-        }
-        const cols = Math.max(MIN_COLS, handoffEntry.cols);
-        const rows = Math.max(MIN_ROWS, handoffEntry.rows);
-        let ring: ScrollbackRing | undefined;
-        if (handoffEntry.scrollbackRef !== undefined) {
-          const exportData = await readScrollbackExport(handoffEntry.scrollbackRef);
-          if (exportData !== undefined) {
-            ring = ScrollbackRing.restore(maxScrollbackBytes, exportData);
-          } else {
-            emit("pty.handoff.scrollback-import-failed", { ptyId });
-          }
-        }
-        if (ring === undefined) {
-          ring = new ScrollbackRing(maxScrollbackBytes, { cols, rows });
-        }
-        // An evicted park backlog leaves a gap between the exported ring and
-        // live output; replay must fail closed into semantic recovery.
-        if (terminal.parkedEvicted === true) {
-          ring.markEvicted();
-        }
-        let semantic: SemanticTerminalModel;
-        try {
-          semantic = createSemanticTerminal(cols, rows);
-        } catch (error) {
-          terminal.dispose();
-          report.failed.push({ ptyId, reason: "semantic-init-failed" });
-          emit("pty.handoff.adopt-failed", {
-            ptyId,
-            reason: "semantic-init-failed",
-            message: error instanceof Error ? error.message : String(error),
-          });
-          continue;
-        }
-        // Adopted entries lose the launch-time output-compatibility policy;
-        // they serve bytes exactly as parked and live from here on.
-        const entry: PtyEntry = {
-          ptyId,
-          identity: { ...handoffEntry.identity },
-          command: handoffEntry.command,
-          terminal,
-          ring,
-          semantic,
-          outputCompatibility: createPtyOutputCompatibility(undefined),
-          compatibilityRewriteReported: false,
-          cols,
-          rows,
-          exited: false,
-          sinks: new Set(),
-          subscriptions: [],
-        };
-
-        // Retained data/exit may replay synchronously during subscription, so the
-        // entry and its adoption event must exist before a replay can reap it.
-        entries.set(ptyId, entry);
-        advanceSequencePast(ptyId);
-        emit("agent.adopted", {
-          ptyId,
-          worktreeId: entry.identity.worktreeId,
-          sessionId: entry.identity.sessionId,
-          terminalTargetId: entry.identity.terminalTargetId,
-        });
-
-        entry.subscriptions.push(
-          terminal.onData((data) => {
-            transformAndPublish(entry, data);
-          }),
-        );
-        entry.subscriptions.push(
-          terminal.onExit((event) => {
-            reap(
-              entry,
-              {
-                type: "exit",
-                ptyId: entry.ptyId,
-                exitCode: event.exitCode,
-                ...(event.signal === undefined ? {} : { signal: event.signal }),
-              },
-              "exit",
-            );
-          }),
-        );
-        report.adopted.push(ptyId);
-      }
-      emit("pty.handoff.adopt", {
-        adopted: report.adopted.length,
-        failed: report.failed.length,
-      });
-      return report;
+    adoptRegistry(manifest) {
+      return handoff.adoptRegistry(manifest);
     },
 
     disposeAll() {
@@ -753,64 +580,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       for (const entry of [...entries.values()]) {
         reap(entry, { type: "exit", ptyId: entry.ptyId, exitCode: 0 }, "host-stop");
       }
-    },
-  };
-}
-
-type FrameStream = {
-  frames: AsyncIterable<HostFrame>;
-  push(frame: HostFrame): void;
-  end(): void;
-};
-
-/** A pull-based frame stream fed by `push`/`end`; `frames.return()` runs onReturn. */
-function createFrameStream(onReturn: () => void): FrameStream {
-  const queue: HostFrame[] = [];
-  const waiters: Array<(result: IteratorResult<HostFrame>) => void> = [];
-  let ended = false;
-
-  const drain = () => {
-    while (waiters.length > 0 && (queue.length > 0 || ended)) {
-      const waiter = waiters.shift();
-      if (waiter === undefined) {
-        break;
-      }
-      const next = queue.shift();
-      waiter(next === undefined ? { done: true, value: undefined } : { done: false, value: next });
-    }
-  };
-
-  return {
-    push: (frame) => {
-      queue.push(frame);
-      drain();
-    },
-    end: () => {
-      ended = true;
-      drain();
-    },
-    frames: {
-      [Symbol.asyncIterator]: () => ({
-        next: () =>
-          new Promise<IteratorResult<HostFrame>>((resolve) => {
-            const next = queue.shift();
-            if (next !== undefined) {
-              resolve({ done: false, value: next });
-              return;
-            }
-            if (ended) {
-              resolve({ done: true, value: undefined });
-              return;
-            }
-            waiters.push(resolve);
-          }),
-        return: () => {
-          ended = true;
-          onReturn();
-          drain();
-          return Promise.resolve({ done: true, value: undefined });
-        },
-      }),
     },
   };
 }

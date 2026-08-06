@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitFor } from "../testing/waitFor.js";
-import { adoptLocalPtyBridge } from "./localPtyTerminal.js";
+import { PtyBridgeProtocolVersion } from "@station/contracts";
+import { adoptLocalPtyBridge } from "./ptyBridgeAdoption.js";
 
 const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
 
@@ -52,6 +53,8 @@ async function spawnOrphanBridge(
     Buffer.from(
       JSON.stringify({
         args,
+        // Mirrors the production spawn, which always sends the owner's version.
+        bridgeProtocol: PtyBridgeProtocolVersion,
         cols: 80,
         command,
         cwd: process.cwd(),
@@ -204,6 +207,7 @@ describe("localPtyBridge orphan mode", () => {
       const status = JSON.parse(statusLine);
       expect(status.exited).toEqual(false);
       expect(status.adopted).toEqual(false);
+      expect(status.bridgeProtocol).toEqual(PtyBridgeProtocolVersion);
       expect(typeof status.pid).toEqual("number");
       probe.destroy();
     } finally {

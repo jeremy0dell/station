@@ -22,6 +22,8 @@ export type StationTerminalOrphanOptions = {
   parkStatePath: string;
   ttlMs: number;
   identity: PtyHandoffIdentity;
+  /** Parked-output budget; the owner passes its scrollback capacity so the backlog cannot outgrow what an adopter replays. */
+  parkMaxBytes?: number;
 };
 
 export type StationTerminalSpawnOptions = {

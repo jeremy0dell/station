@@ -22,6 +22,8 @@ const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 const EXITED_RETENTION_MS = 5 * 60 * 1000;
 const SOCKET_RETRY_MS = 30 * 1000;
 const SOCKET_PROBE_TIMEOUT_MS = 1000;
+// Fallback for owners too old to pass bridgeProtocol in the spawn options;
+// current owners always send it, keeping this file free of a hardcoded twin.
 const BRIDGE_CONTROL_PROTOCOL = 1;
 
 const [, , encodedOptions] = process.argv;
@@ -60,7 +62,9 @@ if (
   (typeof orphan.controlSocketPath !== "string" ||
     typeof orphan.parkStatePath !== "string" ||
     !Number.isInteger(orphan.ttlMs) ||
-    orphan.ttlMs <= 0)
+    orphan.ttlMs <= 0 ||
+    (orphan.parkMaxBytes !== undefined &&
+      (!Number.isInteger(orphan.parkMaxBytes) || orphan.parkMaxBytes <= 0)))
 ) {
   process.stderr.write("Ignoring malformed orphan options; falling back to owned mode.\n");
   orphan = undefined;
@@ -475,7 +479,7 @@ function handleControlCommand(socket, command) {
 function statusMessage() {
   const message = {
     type: "status",
-    bridgeProtocol: BRIDGE_CONTROL_PROTOCOL,
+    bridgeProtocol: options.bridgeProtocol ?? BRIDGE_CONTROL_PROTOCOL,
     pid: pty.pid,
     bridgePid: process.pid,
     cols: currentCols,
@@ -514,9 +518,12 @@ function controlSend(socket, message) {
 }
 
 function parkData(data) {
+  // The owner passes its scrollback capacity as parkMaxBytes; the constant only
+  // covers owners older than that option.
+  const budget = orphan.parkMaxBytes ?? PARK_MAX_BYTES;
   parkedChunks.push(data);
   parkedBytes += Buffer.byteLength(data, "utf8");
-  while (parkedBytes > PARK_MAX_BYTES && parkedChunks.length > 1) {
+  while (parkedBytes > budget && parkedChunks.length > 1) {
     const dropped = parkedChunks.shift();
     parkedBytes -= Buffer.byteLength(dropped, "utf8");
     parkedEvicted = true;
