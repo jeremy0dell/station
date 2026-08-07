@@ -181,4 +181,16 @@ describe("ScrollbackRing", () => {
     expect(replay.complete).toBe(false);
     expect(ring.byteLength).toBe(64);
   });
+
+  it("restores a truncated export as incomplete", () => {
+    const ring = ScrollbackRing.restore(1024, {
+      initialCols: 80,
+      initialRows: 24,
+      complete: false,
+      events: [{ type: "data", data: "tail" }],
+    });
+
+    expect(ring.snapshot().events).toEqual([{ type: "data", data: "tail" }]);
+    expect(ring.snapshot().complete).toBe(false);
+  });
 });
