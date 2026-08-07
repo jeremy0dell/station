@@ -186,20 +186,27 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
         }
         const { cols, rows } = clampSize(handoffEntry.cols, handoffEntry.rows);
         let ring: ScrollbackRing | undefined;
+        let importFailed = false;
         if (handoffEntry.scrollbackRef !== undefined) {
           const exportData = await readScrollbackExport(handoffEntry.scrollbackRef);
           if (exportData !== undefined) {
             ring = ScrollbackRing.restore(maxScrollbackBytes, exportData);
           } else {
+            importFailed = true;
             emit("pty.handoff.scrollback-import-failed", { ptyId });
           }
         }
         if (ring === undefined) {
           ring = new ScrollbackRing(maxScrollbackBytes, { cols, rows });
         }
-        // An evicted park backlog leaves a gap between the exported ring and
-        // live output; replay must fail closed into semantic recovery.
-        if (terminal.parkedEvicted === true) {
+        // Fail closed on any known gap — an evicted park backlog, an export
+        // that recorded truncation, or a scrollback ref that would not read:
+        // replay falls into semantic recovery, never a partial raw stream.
+        if (
+          terminal.parkedEvicted === true ||
+          handoffEntry.ringComplete === false ||
+          importFailed
+        ) {
           ring.markEvicted();
         }
         let semantic: SemanticTerminalModel;

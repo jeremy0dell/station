@@ -230,6 +230,50 @@ describe("createPtyTable registry adoption", () => {
     table.disposeAll();
   });
 
+  it("keeps a truncated exported ring incomplete through adoption", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-adopt-"));
+    const scrollbackRef = await writeScrollbackExport(directory, "pty-6", {
+      initialCols: 80,
+      initialRows: 24,
+      complete: false,
+      events: [{ type: "data", data: "tail-only" }],
+    });
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const pool = adopterPool(new Map([["pty-6", scripted.terminal]]));
+    const table = createPtyTable({ adoptTerminal: pool.adoptTerminal });
+
+    await table.adoptRegistry({
+      "pty-6": handoffEntry("pty-6", { scrollbackRef, ringComplete: false }),
+    });
+    const snapshot = table.snapshot("pty-6");
+    expect(snapshot.rawChunks.join("")).toContain("tail-only");
+    expect(snapshot.rawComplete).toEqual(false);
+    table.disposeAll();
+  });
+
+  it("fails closed when a scrollback ref cannot be read back", async () => {
+    const events: string[] = [];
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const pool = adopterPool(new Map([["pty-6", scripted.terminal]]));
+    const table = createPtyTable({
+      adoptTerminal: pool.adoptTerminal,
+      onEvent: (event) => {
+        events.push(event);
+      },
+    });
+
+    const report = await table.adoptRegistry({
+      "pty-6": handoffEntry("pty-6", {
+        scrollbackRef: "/nonexistent/pty-6.scrollback.json",
+        ringComplete: true,
+      }),
+    });
+    expect(report.adopted).toEqual(["pty-6"]);
+    expect(table.snapshot("pty-6").rawComplete).toEqual(false);
+    expect(events).toContain("pty.handoff.scrollback-import-failed");
+    table.disposeAll();
+  });
+
   it("reaps an adopted PTY whose bridge reports exit after adoption", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const pool = adopterPool(new Map([["pty-5", scripted.terminal]]));

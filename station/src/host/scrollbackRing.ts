@@ -81,6 +81,7 @@ export class ScrollbackRing {
     exportData: {
       initialCols: number;
       initialRows: number;
+      complete: boolean;
       events: readonly HostReplayEvent[];
     },
   ): ScrollbackRing {
@@ -94,6 +95,11 @@ export class ScrollbackRing {
       } else {
         ring.resize({ cols: event.cols, rows: event.rows });
       }
+    }
+    // A truncated export restores as incomplete: replaying it as raw-complete
+    // would ship a head-truncated VT stream across the wire.
+    if (!exportData.complete) {
+      ring.markEvicted();
     }
     return ring;
   }

@@ -53,6 +53,18 @@ try {
   process.exit(2);
 }
 
+// Parseable is not a shape guarantee: a JSON value without command/args must
+// never reach node-pty, where an options-less spawn starts a default shell.
+if (
+  options === null ||
+  typeof options !== "object" ||
+  typeof options.command !== "string" ||
+  !Array.isArray(options.args)
+) {
+  process.stderr.write("Invalid node-pty bridge options shape.\n");
+  process.exit(2);
+}
+
 // Orphan mode is opt-in per spawn: with it, owner-pipe EOF parks the PTY
 // behind a control socket instead of killing it. A malformed orphan block
 // degrades to legacy behavior rather than risking the PTY at spawn time.
@@ -75,6 +87,7 @@ if (
 let mode = "owned";
 let adopterSocket = null;
 let server = null;
+let serverBound = false;
 let serverReclaimScheduled = false;
 let tornDown = false;
 let killRequested = false;
@@ -124,14 +137,19 @@ pty.onData((data) => {
 
 pty.onExit((event) => {
   ptyExited = true;
-  exitEvent = event;
+  // node-pty reports signal 0 on a clean code exit; normalize so an absent
+  // signal means "exited by code" across exit frames, status, and park state.
+  exitEvent = { exitCode: event.exitCode };
+  if (event.signal) {
+    exitEvent.signal = event.signal;
+  }
   if (mode === "owned") {
     // Unchanged drain sequence; with orphan enabled the stdin-close handler
     // below transitions into park instead of exiting.
     send({
       type: "exit",
-      exitCode: event.exitCode,
-      signal: event.signal,
+      exitCode: exitEvent.exitCode,
+      signal: exitEvent.signal,
     });
     // process.exit() would discard stdout's buffered backlog, truncating the
     // final output burst of short-lived commands; close the inputs and let the
@@ -150,8 +168,8 @@ pty.onExit((event) => {
   if (adopterSocket !== null) {
     controlSend(adopterSocket, {
       type: "exit",
-      exitCode: event.exitCode,
-      signal: event.signal,
+      exitCode: exitEvent.exitCode,
+      signal: exitEvent.signal,
     });
     // The adopter is expected to dispose after seeing exit; do not linger
     // indefinitely with a dead PTY if it never does.
@@ -306,6 +324,9 @@ function listenControlSocket() {
     // Best-effort: the listen below reports the real failure.
   }
   server = net.createServer(handleControlConnection);
+  server.on("listening", () => {
+    serverBound = true;
+  });
   server.on("error", (error) => {
     if (tornDown) {
       return;
@@ -410,6 +431,12 @@ function handleControlCommand(socket, command) {
       return;
     case "adopt": {
       if (mode === "adopted") {
+        if (socket === adopterSocket) {
+          // A duplicate adopt on the owning socket is idempotent: resend the
+          // status rather than severing the adopter's own connection.
+          controlSend(socket, statusMessage());
+          return;
+        }
         controlSend(socket, {
           type: "error",
           code: "ALREADY_ADOPTED",
@@ -528,6 +555,16 @@ function parkData(data) {
     parkedBytes -= Buffer.byteLength(dropped, "utf8");
     parkedEvicted = true;
   }
+  if (parkedBytes > budget) {
+    // A single read larger than the budget still honors the bound. The slice
+    // can split a VT sequence, which is safe: eviction sends adopters down
+    // semantic recovery instead of raw replay.
+    const only = Buffer.from(parkedChunks[0], "utf8");
+    const kept = only.subarray(only.length - budget);
+    parkedChunks[0] = kept.toString("utf8");
+    parkedBytes = kept.length;
+    parkedEvicted = true;
+  }
 }
 
 function onAdopterClose() {
@@ -601,10 +638,14 @@ function teardownAndExit() {
     // Closing a never-bound server can throw; teardown proceeds regardless.
   }
   if (orphan !== undefined) {
-    try {
-      fs.unlinkSync(orphan.controlSocketPath);
-    } catch {
-      // Already gone.
+    // Only this bridge's own bind may be unlinked: after a lost EADDRINUSE
+    // race the file belongs to the live owner.
+    if (serverBound) {
+      try {
+        fs.unlinkSync(orphan.controlSocketPath);
+      } catch {
+        // Already gone.
+      }
     }
     try {
       fs.unlinkSync(orphan.parkStatePath);

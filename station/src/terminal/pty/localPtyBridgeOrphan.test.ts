@@ -44,10 +44,24 @@ async function spawnOrphanBridge(
   command: string,
   args: string[],
   ttlMs = 60_000,
+  orphanOverrides: Record<string, unknown> = {},
 ): Promise<OrphanSpawn> {
   const dir = await mkdtemp(join(tmpdir(), "station-orphan-"));
-  const controlSocketPath = join(dir, "pty-1.sock");
-  const parkStatePath = join(dir, "pty-1.park.json");
+  const orphan = {
+    controlSocketPath: join(dir, "pty-1.sock"),
+    parkStatePath: join(dir, "pty-1.park.json"),
+    ttlMs,
+    identity: {
+      kind: "agent",
+      terminalTargetId: "native:wt-orphan",
+      worktreeId: "wt-orphan",
+      projectId: "proj-orphan",
+      sessionId: "ses-orphan",
+      worktreePath: process.cwd(),
+      harnessProvider: "scripted",
+    },
+    ...orphanOverrides,
+  };
   const bridge = spawn(process.env.STATION_NODE ?? "node", [
     BRIDGE_PATH,
     Buffer.from(
@@ -61,20 +75,7 @@ async function spawnOrphanBridge(
         env: { ...process.env, TERM: "xterm-256color" },
         name: "xterm-256color",
         rows: 24,
-        orphan: {
-          controlSocketPath,
-          parkStatePath,
-          ttlMs,
-          identity: {
-            kind: "agent",
-            terminalTargetId: "native:wt-orphan",
-            worktreeId: "wt-orphan",
-            projectId: "proj-orphan",
-            sessionId: "ses-orphan",
-            worktreePath: process.cwd(),
-            harnessProvider: "scripted",
-          },
-        },
+        orphan,
       }),
       "utf8",
     ).toString("base64url"),
@@ -86,8 +87,8 @@ async function spawnOrphanBridge(
   });
   return {
     bridge,
-    controlSocketPath,
-    parkStatePath,
+    controlSocketPath: String(orphan.controlSocketPath),
+    parkStatePath: String(orphan.parkStatePath),
     dir,
     stdout: () => stdout,
   };
@@ -435,6 +436,8 @@ describe("localPtyBridge orphan mode", () => {
       );
       expect(status.exited).toEqual(true);
       expect(status.exitCode).toEqual(3);
+      // node-pty's signal 0 on a clean exit is normalized away at the bridge.
+      expect("signal" in status).toEqual(false);
       probe.destroy();
 
       const terminal = await adoptLocalPtyBridge({
@@ -478,6 +481,125 @@ describe("localPtyBridge orphan mode", () => {
       socket.destroy();
     } finally {
       await cleanup(spawned);
+    }
+  });
+
+  it("answers a duplicate adopt on the owning socket without severing it", async () => {
+    if (gated()) return;
+    const spawned = await spawnOrphanBridge("/bin/sh", [
+      "-c",
+      "read line; echo got-$line; sleep 30",
+    ]);
+    try {
+      await waitForReady(spawned);
+      await park(spawned);
+      const { socket, reader } = await adoptRaw(spawned.controlSocketPath);
+      send(socket, { type: "adopt" });
+      await waitForAsync(
+        async () => reader.lines.filter((line) => line.includes('"status"')).length >= 2,
+        5_000,
+      );
+      const statusLines = reader.lines.filter((line) => line.includes('"status"'));
+      const status = JSON.parse(statusLines[statusLines.length - 1] ?? "");
+      expect(status.adopted).toEqual(true);
+      // The connection still belongs to the adopter: no re-park, writes flow.
+      send(socket, { type: "write", data: "still-mine\n" });
+      await reader.waitForLine((line) => line.includes("got-still-mine"));
+      send(socket, { type: "kill" });
+      await reader.waitForLine((line) => line.includes('"exit"'));
+      socket.destroy();
+      await waitFor(() => !existsSync(spawned.controlSocketPath), 5_000);
+    } finally {
+      await cleanup(spawned);
+    }
+  });
+
+  it("bounds a single oversized parked chunk to parkMaxBytes", async () => {
+    if (gated()) return;
+    const spawned = await spawnOrphanBridge(
+      "/bin/sh",
+      ["-c", `sleep 0.3; echo ${"x".repeat(500)}; sleep 30`],
+      60_000,
+      { parkMaxBytes: 64 },
+    );
+    try {
+      await waitForReady(spawned);
+      await park(spawned);
+      await delay(600);
+      const probe = await connectControl(spawned.controlSocketPath);
+      const probeReader = readLines(probe);
+      send(probe, { type: "exit-status" });
+      const status = JSON.parse(
+        await probeReader.waitForLine((line) => line.includes('"status"')),
+      );
+      expect(status.parkedEvicted).toEqual(true);
+      probe.destroy();
+
+      const { socket, reader } = await adoptRaw(spawned.controlSocketPath);
+      const dataLine = await reader.waitForLine((line) => line.includes('"data"'));
+      const payload = JSON.parse(dataLine).data as string;
+      expect(Buffer.byteLength(payload, "utf8") <= 64).toEqual(true);
+      expect(payload.endsWith("\n")).toEqual(true);
+      send(socket, { type: "kill" });
+      socket.destroy();
+    } finally {
+      await cleanup(spawned);
+    }
+  });
+
+  it("does not unlink a live foreign socket file when reaped", async () => {
+    if (gated()) return;
+    const dir = await mkdtemp(join(tmpdir(), "station-orphan-impostor-"));
+    const controlSocketPath = join(dir, "pty-1.sock");
+    // A live impostor owns the path and answers probes, so the parked bridge
+    // classifies it as occupied and retries instead of stealing it.
+    const impostor = net.createServer((socket) => {
+      socket.on("data", () => {
+        socket.write("{}\n");
+      });
+    });
+    await new Promise<void>((resolve) => {
+      impostor.listen(controlSocketPath, resolve);
+    });
+    const spawned = await spawnOrphanBridge("/bin/sh", ["-c", "sleep 30"], 60_000, {
+      controlSocketPath,
+      parkStatePath: join(dir, "pty-1.park.json"),
+    });
+    let bridgeExited = false;
+    try {
+      await waitForReady(spawned);
+      spawned.bridge.on("exit", () => {
+        bridgeExited = true;
+      });
+      spawned.bridge.stdin.end();
+      await waitFor(() => existsSync(spawned.parkStatePath), 5_000);
+      await delay(300);
+      spawned.bridge.kill("SIGTERM");
+      await waitFor(() => bridgeExited, 5_000);
+      // The reaped bridge never bound the path, so the impostor's file survives.
+      expect(existsSync(controlSocketPath)).toEqual(true);
+      const probe = await connectControl(controlSocketPath);
+      probe.destroy();
+    } finally {
+      await cleanup(spawned);
+      await new Promise<void>((resolve) => {
+        impostor.close(() => resolve());
+      });
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects parseable but shape-invalid options before any PTY exists", async () => {
+    if (gated()) return;
+    for (const payload of ["{}", "5", "null"]) {
+      const bridge = spawn(process.env.STATION_NODE ?? "node", [
+        BRIDGE_PATH,
+        Buffer.from(payload, "utf8").toString("base64url"),
+      ]);
+      const exitCode = await new Promise<number | null>((resolve) => {
+        bridge.on("exit", (code) => resolve(code));
+      });
+      expect(exitCode).toEqual(2);
     }
   });
 });
