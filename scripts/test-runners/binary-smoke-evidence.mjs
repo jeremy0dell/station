@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readdir, readFile, rename } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import {
@@ -28,10 +28,12 @@ const manifestMaxBytes = 65_536;
 const failureMaxBytes = 32_768;
 const runtimeMaxBytes = 32_768;
 const lifecycleMaxBytes = 32_768;
+const reservationFile = ".station-binary-smoke-run";
 const bootMaxBytes = 65_536;
 const diagnosticErrorsMaxBytes = 65_536;
 const diagnosticErrorLines = 100;
 const outputStatusSchema = z.enum(["failed", "cancelled"]);
+const runIdSchema = z.string().regex(/^run_[0-9a-f-]{36}$/i);
 const fileStatusSchema = z.enum([
   "captured",
   "missing",
@@ -72,8 +74,28 @@ const cleanupSchema = z
     hostExited: z.boolean(),
     socketRemoved: z.boolean(),
     pidfileRemoved: z.boolean(),
+    hostSocketRemoved: z.boolean(),
+    rootRemoved: z.boolean(),
   })
-  .strict();
+  .strict()
+  .superRefine((cleanup, context) => {
+    if (
+      cleanup.status === "complete" &&
+      ![
+        cleanup.observerExited,
+        cleanup.hostExited,
+        cleanup.socketRemoved,
+        cleanup.pidfileRemoved,
+        cleanup.hostSocketRemoved,
+        cleanup.rootRemoved,
+      ].every(Boolean)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Complete binary smoke cleanup requires zero owned residue.",
+      });
+    }
+  });
 const runtimeProcessSchema = z
   .object({
     role: z.string().min(1),
@@ -99,6 +121,7 @@ const BinarySmokeEvidenceManifestSchema = z
   .object({
     schemaVersion: z.literal(1),
     kind: z.literal("station-binary-smoke-failure"),
+    runId: runIdSchema,
     status: outputStatusSchema,
     capturedAt: z.iso.datetime(),
     limits: z
@@ -189,11 +212,10 @@ export { BinarySmokeEvidenceManifestSchema, BinarySmokeExitDispositionSchema };
 
 export async function captureBinarySmokeEvidence(input) {
   validateEvidenceSources(input.stateDir, input.socketPath, input.smokeRoot);
-  validateEvidenceDestination(input.evidenceDir, input.smokeRoot);
+  await prepareEvidenceDestination(input.evidenceDir, input.smokeRoot, input.runId);
   const capturedAt = (input.now ?? new Date()).toISOString();
   const roundName = `${String(input.round).padStart(4, "0")}-${safeName(input.direction.physical)}`;
   const roundRoot = `rounds/${roundName}`;
-  await createPrivateDirectory(input.evidenceDir);
   await createPrivateDirectory(resolve(input.evidenceDir, "rounds"));
   await createPrivateDirectory(resolve(input.evidenceDir, roundRoot));
 
@@ -236,6 +258,7 @@ export async function captureBinarySmokeEvidence(input) {
   const manifest = BinarySmokeEvidenceManifestSchema.parse({
     schemaVersion: 1,
     kind: "station-binary-smoke-failure",
+    runId: runIdSchema.parse(input.runId),
     status: input.status,
     capturedAt,
     limits: BINARY_SMOKE_EVIDENCE_LIMITS,
@@ -258,6 +281,8 @@ export async function captureBinarySmokeEvidence(input) {
           hostExited: false,
           socketRemoved: false,
           pidfileRemoved: false,
+          hostSocketRemoved: false,
+          rootRemoved: false,
         },
       },
     ],
@@ -276,6 +301,7 @@ export async function captureBinarySmokeEvidence(input) {
     throw new Error("Binary smoke evidence exceeded its total byte budget before manifest write.");
   }
   await atomicWrite(resolve(input.evidenceDir, "manifest.json"), manifestBytes);
+  await removeMatchingReservation(input.evidenceDir, input.runId);
   return manifest;
 }
 
@@ -303,6 +329,10 @@ export async function finalizeBinarySmokeEvidence(input) {
     throw new Error("Binary smoke evidence manifest exceeds its read limit.");
   }
   const manifest = BinarySmokeEvidenceManifestSchema.parse(JSON.parse(source));
+  const expectedRunId = runIdSchema.parse(input.expectedRunId);
+  if (manifest.runId !== expectedRunId) {
+    throw new Error("Binary smoke evidence belongs to a different binary smoke run.");
+  }
   const [round] = manifest.rounds;
   if (round === undefined) throw new Error("Binary smoke evidence manifest has no round.");
   round.cleanup = cleanupSchema.parse(input.cleanup);
@@ -320,6 +350,7 @@ export async function finalizeBinarySmokeEvidence(input) {
     throw new Error(`Binary smoke evidence manifest exceeded ${manifestMaxBytes} bytes.`);
   }
   await atomicWrite(manifestPath, bytes, true);
+  await removeMatchingReservation(input.evidenceDir, expectedRunId);
 }
 
 function validateEvidenceDestination(evidenceDir, smokeRoot) {
@@ -330,6 +361,86 @@ function validateEvidenceDestination(evidenceDir, smokeRoot) {
   const root = resolve(smokeRoot);
   if (output === root || output.startsWith(`${root}${sep}`) || root.startsWith(`${output}${sep}`)) {
     throw new Error("STATION_BINARY_SMOKE_EVIDENCE_DIR must be outside the smoke root.");
+  }
+}
+
+export async function assertNewBinarySmokeEvidenceDestination(evidenceDir, smokeRoot) {
+  validateEvidenceDestination(evidenceDir, smokeRoot);
+  try {
+    await lstat(resolve(evidenceDir));
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error("STATION_BINARY_SMOKE_EVIDENCE_DIR must not exist.");
+}
+
+export async function reserveBinarySmokeEvidenceDestination(input) {
+  await assertNewBinarySmokeEvidenceDestination(input.evidenceDir, input.smokeRoot);
+  const runId = runIdSchema.parse(input.runId);
+  await createPrivateDirectory(input.evidenceDir);
+  const marker = await open(resolve(input.evidenceDir, reservationFile), "wx", 0o600);
+  try {
+    await marker.writeFile(`${runId}\n`, "utf8");
+  } finally {
+    await marker.close();
+  }
+}
+
+export async function resetReservedBinarySmokeEvidenceDestination(input) {
+  await assertReservedEvidenceDestination(input.evidenceDir, input.smokeRoot, input.runId);
+  for (const entry of await readdir(resolve(input.evidenceDir))) {
+    if (entry !== reservationFile) {
+      await rm(resolve(input.evidenceDir, entry), { recursive: true });
+    }
+  }
+}
+
+export async function releaseBinarySmokeEvidenceReservation(input) {
+  await assertReservedEvidenceDestination(input.evidenceDir, input.smokeRoot, input.runId);
+  const entries = await readdir(resolve(input.evidenceDir));
+  if (entries.some((entry) => entry !== reservationFile)) {
+    throw new Error("Binary smoke evidence reservation contains captured data.");
+  }
+  await removeMatchingReservation(input.evidenceDir, input.runId);
+  await rmdir(resolve(input.evidenceDir));
+}
+
+async function prepareEvidenceDestination(evidenceDir, smokeRoot, runId) {
+  try {
+    await assertReservedEvidenceDestination(evidenceDir, smokeRoot, runId);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    await reserveBinarySmokeEvidenceDestination({ evidenceDir, smokeRoot, runId });
+  }
+}
+
+async function assertReservedEvidenceDestination(evidenceDir, smokeRoot, runId) {
+  validateEvidenceDestination(evidenceDir, smokeRoot);
+  const output = resolve(evidenceDir);
+  const stats = await lstat(output);
+  if (!stats.isDirectory() || stats.isSymbolicLink() || (stats.mode & 0o077) !== 0) {
+    throw new Error(`Evidence path is not a private directory: ${output}`);
+  }
+  const markerPath = resolve(output, reservationFile);
+  const markerStats = await lstat(markerPath);
+  if (!markerStats.isFile() || markerStats.isSymbolicLink() || (markerStats.mode & 0o177) !== 0) {
+    throw new Error("Binary smoke evidence reservation is not a private regular file.");
+  }
+  if ((await readFile(markerPath, "utf8")).trim() !== runIdSchema.parse(runId)) {
+    throw new Error("Binary smoke evidence reservation belongs to a different run.");
+  }
+}
+
+async function removeMatchingReservation(evidenceDir, runId) {
+  const markerPath = resolve(evidenceDir, reservationFile);
+  try {
+    if ((await readFile(markerPath, "utf8")).trim() !== runIdSchema.parse(runId)) {
+      throw new Error("Binary smoke evidence reservation belongs to a different run.");
+    }
+    await unlink(markerPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
   }
 }
 

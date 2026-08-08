@@ -62,6 +62,7 @@ function captureInput(input: Awaited<ReturnType<typeof fixture>>) {
     },
   });
   return {
+    runId: "run_22222222-2222-4222-8222-222222222222",
     evidenceDir: input.evidenceDir,
     smokeRoot: input.smokeRoot,
     stateDir: input.stateDir,
@@ -203,7 +204,10 @@ describe("binary smoke failure evidence", () => {
         hostExited: true,
         socketRemoved: true,
         pidfileRemoved: true,
+        hostSocketRemoved: true,
+        rootRemoved: true,
       },
+      expectedRunId: captured.runId,
       processes: [{ role: "incumbent", pid: process.pid, exists: true }],
       warnings: [],
       lifecycleEvents: [
@@ -223,6 +227,7 @@ describe("binary smoke failure evidence", () => {
     });
     const finalized = JSON.parse(await readFile(join(input.evidenceDir, "manifest.json"), "utf8"));
     expect(finalized.rounds[0].cleanup.status).toBe("complete");
+    expect(finalized.runId).toBe(captured.runId);
     expect(
       finalized.rounds[0].runtime.lifecycle.map((event: { message: string }) => event.message),
     ).toContain("runtime.owner.retired");
@@ -254,6 +259,11 @@ describe("binary smoke failure evidence", () => {
   it("rejects unsafe destinations and creates no directory for an uncaptured success", async () => {
     const input = await fixture();
     const module = await loadEvidenceModule();
+    await mkdir(input.evidenceDir, { mode: 0o700 });
+    await expect(
+      module.assertNewBinarySmokeEvidenceDestination(input.evidenceDir, input.smokeRoot),
+    ).rejects.toThrow("must not exist");
+    await rm(input.evidenceDir, { recursive: true, force: true });
     await expect(
       module.captureBinarySmokeEvidence({
         ...captureInput(input),
@@ -267,5 +277,47 @@ describe("binary smoke failure evidence", () => {
       }),
     ).rejects.toThrow("outside the smoke root");
     await expect(lstat(input.evidenceDir)).rejects.toMatchObject({ code: "ENOENT" });
+
+    const captured = captureInput(input);
+    await module.reserveBinarySmokeEvidenceDestination(captured);
+    await module.releaseBinarySmokeEvidenceReservation(captured);
+    await expect(lstat(input.evidenceDir)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("binds finalization to the current run and rejects false complete cleanup", async () => {
+    const input = await fixture();
+    const module = await loadEvidenceModule();
+    const captured = captureInput(input);
+    await module.reserveBinarySmokeEvidenceDestination(captured);
+    await mkdir(join(input.evidenceDir, "partial"), { mode: 0o700 });
+    await module.resetReservedBinarySmokeEvidenceDestination(captured);
+    expect(await readdir(input.evidenceDir)).toEqual([".station-binary-smoke-run"]);
+    await module.captureBinarySmokeEvidence(captured);
+
+    const cleanup = {
+      status: "complete",
+      observerExited: true,
+      hostExited: true,
+      socketRemoved: true,
+      pidfileRemoved: true,
+      hostSocketRemoved: true,
+      rootRemoved: true,
+    } as const;
+    await expect(
+      module.finalizeBinarySmokeEvidence({
+        evidenceDir: input.evidenceDir,
+        expectedRunId: "run_33333333-3333-4333-8333-333333333333",
+        cleanup,
+        warnings: [],
+      }),
+    ).rejects.toThrow("different binary smoke run");
+    await expect(
+      module.finalizeBinarySmokeEvidence({
+        evidenceDir: input.evidenceDir,
+        expectedRunId: captured.runId,
+        cleanup: { ...cleanup, rootRemoved: false },
+        warnings: [],
+      }),
+    ).rejects.toThrow("Complete binary smoke cleanup requires zero owned residue");
   });
 });

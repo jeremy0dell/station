@@ -552,13 +552,15 @@ higher source Observer and verifies the complete runtime baseline is unchanged.
 It requires a committed clean checkout so the detached-worktree artifact has one
 controlled source delta; do not weaken or bypass that requirement.
 
-Before any child starts, the runner records a disposable runtime owner for the
-Observer, Station Host, and popup-renderer process groups. INT, TERM, and HUP
-cleanup sends TERM first, escalates only after bounded identity revalidation,
-and records the result in the failure bundle's `runtime/lifecycle.jsonl`.
-Persistent PTYs and unavailable or ambiguous identities are preserved and leave
-the private root for inspection; the next binary-smoke or handoff-stress start
-rescues only owner-dead disposable roots with unchanged evidence.
+Before any child starts, the runner records one disposable process group for
+the smoke runner, Observer, Station Host, and popup renderer in private,
+checkout-and-mode-keyed owner state. INT, TERM, and HUP cleanup sends TERM
+first, escalates only after bounded identity revalidation, and records the
+result in the failure bundle's `runtime/lifecycle.jsonl`. Unrelated persistent
+Station runtime remains outside that group. The next ordinary binary-smoke or
+handoff-stress start reopens the same owner state and rescues only an owner-dead
+exact group; device-and-inode-pinned abandoned roots remain carried forward
+until exact deletion succeeds. Ambiguous process or root identity is preserved.
 
 For a local failure bundle, name an absolute path that does not exist and is
 outside the smoke root:
@@ -568,11 +570,17 @@ STATION_BINARY_SMOKE_EVIDENCE_DIR=/absolute/new/path \
   pnpm smoke:binary -- --expected-version 0.0.0-local
 ```
 
-The runner creates that private directory only for failure or cancellation,
-captures evidence before teardown, records cleanup afterward, and preserves the
-original failure. Inspect `manifest.json` first; `rounds/*/runtime/lifecycle.jsonl`
-shows registration, signal, escalation, refusal, rescue, and final zero-residue
-counts. In hosted CI, use:
+The outer launcher refuses an existing destination before spawning, then
+reserves it with a private per-run marker that is removed after an uncaptured
+success. The same per-run ID binds capture and finalization to the current
+invocation, including outer capture after a hard-killed inner runner. Failure or
+cancellation evidence is captured before teardown and finalized once after
+exact group and root cleanup while preserving the original failure. `complete`
+requires the owned group, private roots,
+Observer and Host sockets, and Observer pidfile all to be absent. Inspect
+`manifest.json` first; `rounds/*/runtime/lifecycle.jsonl` shows registration,
+signal, escalation, refusal, rescue, and final zero-residue counts. In hosted
+CI, use:
 
 ```bash
 gh run download <run-id> \

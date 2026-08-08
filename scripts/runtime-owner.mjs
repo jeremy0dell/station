@@ -106,6 +106,7 @@ export const DisposableRuntimeOwnerRecordSchema = z
     correlation: CorrelationSchema,
     socketRoots: z.array(AbsolutePathSchema),
     persistenceRoots: z.array(AbsolutePathSchema).min(1),
+    cleanupRoots: z.array(FileIdentitySchema).optional(),
     survivorPolicy: SurvivorPolicySchema,
     state: RuntimeStateSchema,
     createdAt: z.iso.datetime({ offset: true }),
@@ -206,10 +207,19 @@ const OwnedRuntimeInputSchema = z
     stateDir: AbsolutePathSchema,
     socketRoots: z.array(AbsolutePathSchema),
     persistenceRoots: z.array(AbsolutePathSchema).min(1),
+    cleanupRoots: z.array(FileIdentitySchema).optional(),
     survivorPolicy: SurvivorPolicySchema,
     terminalKey: z.string().min(1),
+    recoveryKey: z.string().min(1).optional(),
     correlation: CorrelationSchema,
     launch: LaunchPlanSchema,
+  })
+  .strict();
+const OwnedRuntimeChildInputSchema = z
+  .object({
+    role: RuntimeRoleSchema,
+    stateDir: AbsolutePathSchema,
+    runtimeId: z.string().regex(/^run_[0-9a-f-]{36}$/i),
   })
   .strict();
 
@@ -226,9 +236,42 @@ export function runtimeOwnerRecordDirectory(stateDir) {
   return join(resolve(stateDir), "run", OWNER_DIRECTORY_NAME, OWNER_DIRECTORY_VERSION);
 }
 
+/** Verify that the current process belongs to the exact active runtime owner record. */
+export async function assertOwnedDisposableRuntimeChild(rawInput) {
+  try {
+    const input = OwnedRuntimeChildInputSchema.parse(rawInput);
+    const record = await readValidatedRecord(
+      recordPath(runtimeOwnerRecordDirectory(input.stateDir), input.runtimeId),
+    );
+    if (
+      record.role !== input.role ||
+      !["starting", "running"].includes(record.state.phase) ||
+      record.processGroup === undefined
+    ) {
+      throw new Error("The active owner record does not match this child.");
+    }
+    const group = await inspectGroupIdentity(record.processGroup, record.runtimeId);
+    if (
+      group.kind !== "exact" ||
+      !group.members.includes(process.pid) ||
+      processGroupId(process.pid) !== record.processGroup.pgid
+    ) {
+      throw new Error("The current process is outside the recorded process group.");
+    }
+    return { runtimeId: record.runtimeId };
+  } catch (cause) {
+    throw new RuntimeOwnerError(
+      "RUNTIME_OWNER_CHILD_UNCORROBORATED",
+      "The disposable runtime child is not corroborated by an active exact owner record.",
+      { cause },
+    );
+  }
+}
+
 /**
  * Register, launch, await, and exactly reap one disposable process group.
- * Durable registration precedes work spawn; uncertainty always refuses destructive action.
+ * Durable registration precedes work spawn; stable recovery can carry identity-pinned cleanup
+ * roots across repeated owner loss for caller-controlled deletion.
  */
 export async function runOwnedDisposableRuntime(rawInput) {
   assertSupportedPlatform();
@@ -242,22 +285,34 @@ export async function runOwnedDisposableRuntime(rawInput) {
   let helper;
   let helperMessages;
   let started = false;
+  let cleanupRoots = [];
 
   try {
     lock = await acquireRuntimeLock(context, signals);
-    await recoverMatchingOrphans(context, emitter);
+    const recoveredRoots = await recoverMatchingOrphans(context, emitter);
     if (signals.signal !== undefined) {
-      return interruptedResult(context.runtimeId, input.correlation.uiRunId, signals.signal);
+      return interruptedResult(
+        context.runtimeId,
+        input.correlation.uiRunId,
+        signals.signal,
+        recoveredRoots,
+      );
     }
 
-    record = await createInitialRecord(context);
+    record = await createInitialRecord(context, recoveredRoots);
+    cleanupRoots = record.cleanupRoots ?? [];
     await emitLifecycle(emitter, record, "runtime.owner.registered", "info");
 
     if (signals.signal !== undefined) {
       record = await setRecordState(record, { phase: "retiring" });
       await retireRecord(record);
       await emitLifecycle(emitter, record, "runtime.owner.retired", "info");
-      return interruptedResult(context.runtimeId, input.correlation.uiRunId, signals.signal);
+      return interruptedResult(
+        context.runtimeId,
+        input.correlation.uiRunId,
+        signals.signal,
+        cleanupRoots,
+      );
     }
 
     const spawned = spawnOwnedHelper(record);
@@ -286,7 +341,12 @@ export async function runOwnedDisposableRuntime(rawInput) {
           "Interrupted runtime startup could not be cleaned.",
         );
       }
-      return interruptedResult(context.runtimeId, input.correlation.uiRunId, signals.signal);
+      return interruptedResult(
+        context.runtimeId,
+        input.correlation.uiRunId,
+        signals.signal,
+        cleanupRoots,
+      );
     }
 
     // The helper remains gated until its exact group identity is durably published.
@@ -350,11 +410,13 @@ export async function runOwnedDisposableRuntime(rawInput) {
         "Disposable runtime cleanup was refused or failed.",
       );
     }
+    const resultSignal = outcome.signal ?? outcome.childSignal;
     return {
       runtimeId: context.runtimeId,
       ...(input.correlation.uiRunId === undefined ? {} : { uiRunId: input.correlation.uiRunId }),
       exitCode: outcome.exitCode,
-      ...(outcome.childSignal === undefined ? {} : { signal: outcome.childSignal }),
+      ...(resultSignal === undefined ? {} : { signal: resultSignal }),
+      ...(cleanupRoots.length === 0 ? {} : { cleanupRoots }),
     };
   } catch (cause) {
     if (
@@ -362,7 +424,12 @@ export async function runOwnedDisposableRuntime(rawInput) {
       cause.code === "RUNTIME_OWNER_INTERRUPTED" &&
       signals.signal !== undefined
     ) {
-      return interruptedResult(context.runtimeId, input.correlation.uiRunId, signals.signal);
+      return interruptedResult(
+        context.runtimeId,
+        input.correlation.uiRunId,
+        signals.signal,
+        cleanupRoots,
+      );
     }
     if (record !== undefined && record.processGroup !== undefined) {
       try {
@@ -419,9 +486,29 @@ async function createRuntimeContext(input) {
     input.role,
     checkoutKey,
     resolve(input.stateDir),
-    ...input.socketRoots.map((path) => resolve(path)).sort(),
-    ...input.persistenceRoots.map((path) => resolve(path)).sort(),
+    ...(input.recoveryKey === undefined
+      ? [
+          ...input.socketRoots.map((path) => resolve(path)).sort(),
+          ...input.persistenceRoots.map((path) => resolve(path)).sort(),
+        ]
+      : [input.recoveryKey]),
   );
+  const cleanupRoots = [];
+  for (const expected of input.cleanupRoots ?? []) {
+    const actual = await fileIdentity(expected.path);
+    const metadata = await lstat(expected.path);
+    if (
+      !metadata.isDirectory() ||
+      metadata.isSymbolicLink() ||
+      !fileIdentityMatches(actual, expected)
+    ) {
+      throw new RuntimeOwnerError(
+        "RUNTIME_OWNER_CLEANUP_ROOT_CHANGED",
+        "A disposable runtime cleanup root changed before registration.",
+      );
+    }
+    cleanupRoots.push(actual);
+  }
   return {
     input,
     runtimeId: `run_${randomUUID()}`,
@@ -443,11 +530,12 @@ async function createRuntimeContext(input) {
     },
     recordDirectory: runtimeOwnerRecordDirectory(input.stateDir),
     logPath: join(input.stateDir, "logs", "cli.jsonl"),
+    cleanupRoots,
     hash,
   };
 }
 
-async function createInitialRecord(context) {
+async function createInitialRecord(context, recoveredRoots) {
   const timestamp = new Date().toISOString();
   const record = DisposableRuntimeOwnerRecordSchema.parse({
     schemaVersion: SCHEMA_VERSION,
@@ -463,6 +551,9 @@ async function createInitialRecord(context) {
     correlation: context.input.correlation,
     socketRoots: context.input.socketRoots.map((path) => resolve(path)),
     persistenceRoots: context.input.persistenceRoots.map((path) => resolve(path)),
+    ...(context.cleanupRoots.length === 0 && recoveredRoots.length === 0
+      ? {}
+      : { cleanupRoots: uniqueFileIdentities([...recoveredRoots, ...context.cleanupRoots]) }),
     survivorPolicy: context.input.survivorPolicy,
     state: { phase: "registered" },
     createdAt: timestamp,
@@ -681,6 +772,7 @@ async function refuseCleanup(record, emitter, startedAt, refusalCode) {
 
 async function recoverMatchingOrphans(context, emitter) {
   const entries = await listOwnerRecords(context.recordDirectory);
+  const cleanupRoots = [];
   for (const entry of entries) {
     const record = await readValidatedRecord(entry);
     if (record.runtimeKey !== context.runtimeKey) continue;
@@ -705,6 +797,7 @@ async function recoverMatchingOrphans(context, emitter) {
       const retiring = await setRecordState(record, { phase: "retiring" });
       await retireRecord(retiring);
       await emitLifecycle(emitter, retiring, "runtime.owner.retired", "info");
+      cleanupRoots.push(...(record.cleanupRoots ?? []));
       continue;
     }
     const requested = await requestRecordShutdown(record, emitter, "orphan-recovery");
@@ -716,7 +809,20 @@ async function recoverMatchingOrphans(context, emitter) {
       );
     }
     await emitLifecycle(emitter, requested, "runtime.orphan.recovered", "info");
+    cleanupRoots.push(...(record.cleanupRoots ?? []));
   }
+  return uniqueFileIdentities(cleanupRoots);
+}
+
+function uniqueFileIdentities(identities) {
+  return [
+    ...new Map(
+      identities.map((identity) => [
+        `${identity.path}\0${identity.device}\0${identity.inode}`,
+        identity,
+      ]),
+    ).values(),
+  ];
 }
 
 async function inspectOwnerIdentity(identity) {
@@ -1325,12 +1431,13 @@ function signalExitCode(signal) {
   return number === undefined ? 143 : 128 + number;
 }
 
-function interruptedResult(runtimeId, uiRunId, signal) {
+function interruptedResult(runtimeId, uiRunId, signal, cleanupRoots = []) {
   return {
     runtimeId,
     ...(uiRunId === undefined ? {} : { uiRunId }),
     exitCode: signalExitCode(signal),
     signal,
+    ...(cleanupRoots.length === 0 ? {} : { cleanupRoots }),
   };
 }
 
@@ -1406,7 +1513,11 @@ async function runOwnedChild() {
 
     // Keep the registered leader alive so TERM-resistant descendants can be revalidated before KILL.
     keepAlive = setInterval(() => undefined, 60_000);
-    const env = { ...process.env, ...(parsed.data.launch.env ?? {}) };
+    const env = {
+      ...process.env,
+      ...(parsed.data.launch.env ?? {}),
+      STATION_RUNTIME_OWNER_ID: runtimeId,
+    };
     for (const [index, step] of parsed.data.launch.steps.entries()) {
       if (shutdownSignal !== undefined) {
         finishSignaledShutdown();
