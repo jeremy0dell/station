@@ -13,7 +13,7 @@
     "doctor": "./scripts/doctor.sh",
     "station:profile": "bun run link:station && bun run repair:node-pty && STATION_PROFILE=1 bun src/main.tsx",
     "station:devtools": "bun run link:station && bun run repair:node-pty && DEV=true bun src/main.tsx",
-    "station:isolated": "bun run link:station && bun run repair:node-pty && ./scripts/station-isolated.sh",
+    "station:isolated": "./scripts/station-isolated.sh",
     "station:isolated:stop": "./scripts/station-isolated.sh stop",
     "test": "bun run link:station && bun test",
     "e2e:persist": "bun run link:station && bun run repair:node-pty && bun src/host/e2eReattachDemo.ts",

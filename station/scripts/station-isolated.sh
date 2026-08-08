@@ -47,6 +47,11 @@ if [ "$COMMAND" != "start" ] && [ "$COMMAND" != "dev" ]; then
   exit 1
 fi
 
+(
+  cd "$STATION_DIR"
+  bun install --frozen-lockfile
+)
+
 mkdir -p "$DS/observer"
 
 # This wrapper owns only its checkout-keyed directory, so it may repair that

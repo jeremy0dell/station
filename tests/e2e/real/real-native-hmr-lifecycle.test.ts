@@ -10,6 +10,9 @@ const execFileAsync = promisify(execFile);
 const describeReal = environmentValue("STATION_REAL_E2E") === "1" ? describe : describe.skip;
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const ownerModule = fileURLToPath(new URL("../../../scripts/runtime-owner.mjs", import.meta.url));
+const ttyClaimModule = fileURLToPath(
+  new URL("../../../station/src/singleInstance.ts", import.meta.url),
+);
 
 describeReal("real native HMR process ownership", () => {
   it.each([
@@ -35,6 +38,11 @@ describeReal("real native HMR process ownership", () => {
     expect(result).toMatchObject({ exitCode: 143, groupGone: true, records: 0 });
     expect(result.events).toContain("runtime.cleanup.escalated");
     expect(result.signals).toContain("SIGKILL");
+  });
+
+  it("claims the real input TTY from inside the detached supervised renderer tree", async () => {
+    const result = await runScenario("tty-claim");
+    expect(result).toMatchObject({ exitCode: 0, ttyClaimKind: "owned", records: 0 });
   });
 
   it("recovers a killed launcher's group and preserves an unrelated persistent group", async () => {
@@ -63,6 +71,8 @@ type ScenarioResult = {
   groupGone?: boolean;
   oldGroupGone?: boolean;
   survivorPreserved?: boolean;
+  ttyClaimKind?: string;
+  ttyClaimCode?: string;
   records: number;
   events: string[];
   signals: string[];
@@ -87,6 +97,8 @@ async function runScenario(scenario: string): Promise<ScenarioResult> {
         STATION_HMR_E2E_FIXTURE: fixturePath,
         STATION_HMR_E2E_OWNER_MODULE: ownerModule,
         STATION_HMR_E2E_ROOT: root,
+        STATION_HMR_E2E_TTY_CLAIM_MODULE: ttyClaimModule,
+        STATION_HMR_E2E_TTY_CLAIM_RESULT: join(root, "tty-claim-result.json"),
         STATION_HMR_E2E_SCENARIO: scenario,
       },
       maxBuffer: 1024 * 1024,
@@ -132,7 +144,22 @@ process.exitCode = result.exitCode;
 `;
 
 const BUN_FIXTURE = `
+import { writeFileSync } from "node:fs";
+
 const mode = process.argv[2];
+if (mode === "tty-claim") {
+  const { acquireStationTtyOwnership } = await import(
+    process.env.STATION_HMR_E2E_TTY_CLAIM_MODULE
+  );
+  const result = await acquireStationTtyOwnership();
+  const payload = {
+    kind: result.kind,
+    ...(result.kind === "refused" ? { code: result.error.code } : {}),
+  };
+  if (result.kind === "owned") result.ownership.release();
+  writeFileSync(process.env.STATION_HMR_E2E_TTY_CLAIM_RESULT, JSON.stringify(payload));
+  process.exit(result.kind === "owned" ? 0 : 1);
+}
 if (mode === "normal") process.exit(0);
 if (mode === "ignore-term") {
   process.on("SIGTERM", () => {});
@@ -279,6 +306,17 @@ try:
         result = {
             "exitCode": code,
             "groupGone": not group_members(group),
+            "records": len(record_paths()),
+        }
+    elif scenario == "tty-claim":
+        owner, master, _ = start_owner("tty-claim", wait_for_running=False)
+        code = await_exit(owner, 12.0)
+        with open(os.environ["STATION_HMR_E2E_TTY_CLAIM_RESULT"], encoding="utf-8") as file:
+            claim = json.load(file)
+        result = {
+            "exitCode": code,
+            "ttyClaimKind": claim.get("kind"),
+            "ttyClaimCode": claim.get("code"),
             "records": len(record_paths()),
         }
     elif scenario == "rescue":

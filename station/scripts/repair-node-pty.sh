@@ -16,6 +16,6 @@ for helper in "${helpers[@]}"; do
 done
 
 if [[ "${found}" -eq 0 ]]; then
-  echo "node-pty spawn-helper was not found. Run bun install first." >&2
+  echo "node-pty spawn-helper was not found. Run 'cd \"${root}\" && bun install --frozen-lockfile' first." >&2
   exit 1
 fi

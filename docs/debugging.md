@@ -385,9 +385,13 @@ When Station "does nothing" or panes read "exited", inspect the `cli`, `tui`, an
   transaction and a cooperative Unix-socket endpoint under
   `/tmp/station-tui-<uid>/<tty-hash>.{sqlite,sock}`. Database-file presence is
   never evidence of ownership: process exit releases the transaction, and the
-  file should not be deleted as a stale lock. A second current UI asks the
-  incumbent to close and enters raw mode only after acquiring the transaction;
-  Station sends no process signal.
+  file should not be deleted as a stale lock. Under native-HMR supervision the
+  detached renderer and helper have no controlling TTY, so legacy-owner checks
+  walk a bounded exact parent chain to the nearest controlling-TTY ancestor,
+  corroborate `/dev/<tty>` against stdin, anchor and revalidate the `ps -t` scan,
+  and refuse on missing, malformed, cyclic, or changing ancestry. A second
+  current UI asks the incumbent to close and enters raw mode only after acquiring
+  the transaction; Station sends no process signal.
 - `TUI_TTY_LEGACY_OWNER_POSSIBLE` means same-TTY evidence may describe a
   pre-protocol Station. `TUI_TTY_TAKEOVER_REFUSED` and
   `TUI_TTY_TAKEOVER_TIMEOUT` mean a current endpoint did not cooperate or did
@@ -421,8 +425,9 @@ station/layout.json
 The per-TTY claim and endpoint live in the separate cross-config rendezvous
 directory `/tmp/station-tui-<uid>/`; they are intentionally not state-directory
 files. Inspect their owner, type, and mode when diagnosing
-`TUI_TTY_OWNERSHIP_UNAVAILABLE`, but do not infer a live owner from the SQLite
-file or remove it.
+`TUI_TTY_OWNERSHIP_UNAVAILABLE`; for a supervised renderer also inspect its
+bounded parent chain and controlling-TTY evidence. Do not infer a live owner
+from the SQLite file or remove it.
 
 ## Harness Event Census
 
