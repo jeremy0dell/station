@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -589,6 +589,16 @@ describe("binary smoke script", () => {
       expect(failedManifest.rounds[0].failure.message).toBe(
         "synthetic binary smoke evidence failure",
       );
+      expect(failedManifest.rounds[0].runtime.lifecycle).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message: "runtime.cleanup.completed",
+            attributes: expect.objectContaining({
+              memberCount: 0,
+            }),
+          }),
+        ]),
+      );
 
       const captureFailed = spawnSync(process.execPath, [scriptPath], {
         env: {
@@ -686,6 +696,95 @@ describe("binary smoke script", () => {
     expect(excessiveRounds.status).toBe(1);
     expect(excessiveRounds.stderr).toContain("--rounds must be between 1 and 1000");
   });
+});
+
+describe("binary smoke runtime ownership", () => {
+  it("uses the shared disposable owner for the complete smoke family", () => {
+    const script = readFileSync(
+      fileURLToPath(new URL("../../scripts/test-runners/run-binary-smoke.mjs", import.meta.url)),
+      "utf8",
+    );
+    expect(script).toContain("runOwnedDisposableRuntime");
+    expect(script).toContain('role: "binary-smoke"');
+    expect(script).toContain("STATION_RUNTIME_OWNER_FOREGROUND");
+    expect(script).not.toContain("createRuntimeOwner");
+    expect(script).not.toContain("rescueRuntimeOwners");
+  });
+
+  it("maps INT, TERM, and HUP cancellation to the owner exit codes", () => {
+    const scriptPath = fileURLToPath(
+      new URL("../../scripts/test-runners/run-binary-smoke.mjs", import.meta.url),
+    );
+    for (const [signal, status] of [
+      ["SIGINT", 130],
+      ["SIGTERM", 143],
+      ["SIGHUP", 129],
+    ] as const) {
+      const result = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_CANCELLATION_EXIT_SELF_CHECK: "1",
+          STATION_BINARY_SMOKE_CANCELLATION_SIGNAL_SELF_CHECK: signal,
+        },
+        encoding: "utf8",
+      });
+      expect(result.status, `${signal}: ${result.stderr}`).toBe(status);
+    }
+  });
+
+  it("rescues the binary-smoke family after launcher loss on the next start", async () => {
+    const scriptPath = fileURLToPath(
+      new URL("../../scripts/test-runners/run-binary-smoke.mjs", import.meta.url),
+    );
+    const child = spawn(process.execPath, [scriptPath], {
+      env: { ...process.env, STATION_BINARY_SMOKE_LAUNCHER_LOSS_SELF_CHECK: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk) => (stdout += chunk));
+    child.stderr?.on("data", (chunk) => (stderr += chunk));
+    const exited = new Promise<void>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", () => resolve());
+    });
+    try {
+      const deadline = Date.now() + 5_000;
+      while (stdout.trim().length === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(stderr).toBe("");
+      const descriptor = JSON.parse(stdout.trim()) as { root: string; pid: number };
+      child.kill("SIGKILL");
+      await exited;
+      const rescue = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_LAUNCHER_LOSS_SELF_CHECK: "1",
+          STATION_BINARY_SMOKE_LAUNCHER_LOSS_RESCUE_ROOT: descriptor.root,
+        },
+        encoding: "utf8",
+      });
+      expect(rescue.status, rescue.stderr).toBe(0);
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        try {
+          process.kill(descriptor.pid, 0);
+        } catch (error) {
+          expect((error as NodeJS.ErrnoException).code).toBe("ESRCH");
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error(`binary-smoke child ${descriptor.pid} remained alive`);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await exited.catch(() => undefined);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+    }
+  }, 15_000);
 });
 
 describe("tui dev script", () => {

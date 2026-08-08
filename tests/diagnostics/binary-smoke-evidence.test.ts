@@ -35,6 +35,32 @@ function artifact(path: string, marker: string) {
 }
 
 function captureInput(input: Awaited<ReturnType<typeof fixture>>) {
+  const runtimeId = "run_11111111-1111-4111-8111-111111111111";
+  const lifecycleEvent = (
+    message: string,
+    timestamp: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    timestamp,
+    level: message === "runtime.cleanup.escalated" ? "warn" : "info",
+    component: "cli",
+    message,
+    traceId: "trc_runtime_owner_test",
+    spanId: "spn_runtime_owner_test",
+    attributes: {
+      runtimeId,
+      role: "binary-smoke",
+      disposition: "disposable",
+      runtimeKey: "a".repeat(64),
+      checkoutKey: "b".repeat(64),
+      socketRootsKey: "c".repeat(64),
+      persistenceRootsKey: "d".repeat(64),
+      survivorPolicy: "preserve-persistent-station-runtime",
+      ownerPid: process.pid,
+      ownerStartTime: "2026-07-29T16:59:00.000Z",
+      ...extra,
+    },
+  });
   return {
     evidenceDir: input.evidenceDir,
     smokeRoot: input.smokeRoot,
@@ -59,6 +85,19 @@ function captureInput(input: Awaited<ReturnType<typeof fixture>>) {
       requested: "alternate",
     },
     knownProcesses: [{ role: "incumbent", pid: process.pid }],
+    lifecycleEvents: [
+      lifecycleEvent("runtime.owner.registered", "2026-07-29T17:00:00.000Z"),
+      lifecycleEvent("runtime.process.started", "2026-07-29T17:00:01.000Z", {
+        groupLeaderPid: 1234,
+        pgid: 1234,
+        groupStartTime: "2026-07-29T17:00:01.000Z",
+      }),
+      lifecycleEvent("runtime.cleanup.completed", "2026-07-29T17:00:02.000Z", {
+        reason: "normal-exit",
+        durationMs: 100,
+        memberCount: 0,
+      }),
+    ],
     now: new Date("2026-07-29T17:00:00.000Z"),
   } as const;
 }
@@ -115,7 +154,8 @@ describe("binary smoke failure evidence", () => {
       { mode: 0o600 },
     );
 
-    const manifest = await module.captureBinarySmokeEvidence(captureInput(input));
+    const captured = captureInput(input);
+    const manifest = await module.captureBinarySmokeEvidence(captured);
     expect(module.BinarySmokeEvidenceManifestSchema.parse(manifest)).toEqual(manifest);
     expect(manifest.rounds[0].correlation.traceIds).toEqual(["trc_example"]);
     expect(manifest.rounds[0].runtime.pidfile).toMatchObject({
@@ -123,6 +163,11 @@ describe("binary smoke failure evidence", () => {
       pid: process.pid,
       buildIdentity: "aaaaaaaaaaaa",
     });
+    expect(manifest.rounds[0].runtime.lifecycle.map((event) => event.message)).toEqual([
+      "runtime.owner.registered",
+      "runtime.process.started",
+      "runtime.cleanup.completed",
+    ]);
     expect(manifest.redaction.replacements).toBeGreaterThan(0);
     expect(manifest.redaction.suspiciousSecretsFound).toBeGreaterThan(0);
 
@@ -130,6 +175,7 @@ describe("binary smoke failure evidence", () => {
     const failure = await readFile(join(roundDir, "failure.json"), "utf8");
     const boot = await readFile(join(roundDir, "observer-boot.log"), "utf8");
     const observer = await readFile(join(roundDir, "logs/observer.jsonl"), "utf8");
+    const lifecycle = await readFile(join(roundDir, "runtime/lifecycle.jsonl"), "utf8");
     expect(failure).toContain("$SMOKE_ROOT");
     expect(failure).toContain("API_TOKEN=[REDACTED]");
     expect(failure).not.toContain(input.smokeRoot);
@@ -140,6 +186,8 @@ describe("binary smoke failure evidence", () => {
     expect(observer.split("\n").filter(Boolean)).toHaveLength(200);
     expect(observer).not.toContain("providerData");
     expect(observer).not.toContain("must-not-survive");
+    expect(lifecycle).toContain('"message":"runtime.owner.registered"');
+    expect(lifecycle).not.toContain(input.smokeRoot);
     expect(Buffer.byteLength(boot)).toBeLessThanOrEqual(65_536);
     expect(Buffer.byteLength(observer)).toBeLessThanOrEqual(131_072);
     expect(await treeBytes(input.evidenceDir)).toBeLessThanOrEqual(1_048_576);
@@ -158,9 +206,26 @@ describe("binary smoke failure evidence", () => {
       },
       processes: [{ role: "incumbent", pid: process.pid, exists: true }],
       warnings: [],
+      lifecycleEvents: [
+        ...captured.lifecycleEvents,
+        {
+          timestamp: "2026-07-29T17:00:03.000Z",
+          level: "info",
+          component: "cli",
+          message: "runtime.owner.retired",
+          traceId: "trc_runtime_owner_test",
+          spanId: "spn_runtime_owner_test",
+          attributes: {
+            ...captured.lifecycleEvents[0].attributes,
+          },
+        },
+      ],
     });
     const finalized = JSON.parse(await readFile(join(input.evidenceDir, "manifest.json"), "utf8"));
     expect(finalized.rounds[0].cleanup.status).toBe("complete");
+    expect(
+      finalized.rounds[0].runtime.lifecycle.map((event: { message: string }) => event.message),
+    ).toContain("runtime.owner.retired");
     expect(await readdir(input.evidenceDir)).toEqual(["manifest.json", "rounds"]);
   }, 15_000);
 

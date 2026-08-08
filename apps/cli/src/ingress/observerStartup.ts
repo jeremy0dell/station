@@ -371,7 +371,7 @@ function defaultSpawnObserver(
     randomUUID(),
   ];
   return spawn(command, args, {
-    detached: true,
+    detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
     env: environmentWithoutGitLocals(),
     stdio: "ignore",
   });
