@@ -1,15 +1,18 @@
 import type { StationSnapshot } from "@station/contracts";
-import type { DashboardFocus, ProjectHeaderControl, TuiState } from "@station/dashboard-core";
+import { describe, expect, it } from "vitest";
+import { selectDashboardItems } from "../../../src/selectors/dashboardViewport.js";
 import {
   clearDashboardFocus,
-  createInitialTuiState,
   focusDashboardEmptyProjectAction,
   focusDashboardSession,
-  handleTuiKey,
-  replaceSnapshot,
-  selectDashboardItems,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/state/dashboardFocus.js";
+import { createInitialTuiState, replaceSnapshot } from "../../../src/state/screen.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
+import type {
+  DashboardFocus,
+  DashboardState,
+  ProjectHeaderControl,
+} from "../../../src/state/types.js";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
@@ -25,7 +28,7 @@ const RIGHT = { input: "", rightArrow: true } as const;
 const NEXT_NEEDS_ME = { input: "i", ctrl: true } as const;
 const RETURN = { input: "\r", return: true } as const;
 
-function state(options: Partial<Parameters<typeof createInitialTuiState>[0]> = {}): TuiState {
+function state(options: Partial<Parameters<typeof createInitialTuiState>[0]> = {}): DashboardState {
   return createInitialTuiState({ initialSnapshot: createDashboardSnapshot(), ...options });
 }
 
@@ -61,7 +64,7 @@ describe("dashboard focus", () => {
       "ses_wt_api_working",
     ],
   ])("clears focus for a %s without moving the viewport", (_label, update, sessionId) => {
-    const initial: TuiState = {
+    const initial: DashboardState = {
       ...state(),
       dashboardFocus: session("ses_wt_web_attention"),
       scrollOffset: 3,
@@ -81,7 +84,7 @@ describe("dashboard focus", () => {
   });
 
   it("clears focus without changing the viewport and preserves store methods", () => {
-    const initial: TuiState = {
+    const initial: DashboardState = {
       ...state(),
       dashboardFocus: session("ses_wt_web_attention"),
       scrollOffset: 2,
@@ -362,7 +365,7 @@ describe("dashboard focus", () => {
     expect(selectDashboardItems(snapshot, initial).some((item) => item.type === "session")).toBe(
       true,
     );
-    const pending: TuiState = {
+    const pending: DashboardState = {
       ...initial,
       localRows: {
         ...initial.localRows,

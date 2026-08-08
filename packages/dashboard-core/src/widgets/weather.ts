@@ -1,4 +1,4 @@
-import type { TuiWeatherWidgetConfig } from "@station/config";
+import type { TuiWeatherWidgetConfig } from "@station/contracts";
 import type { WeatherCurrentConditions } from "./types.js";
 import { WEATHER_ERROR_EMOJI, WEATHER_LOADING_EMOJI, weatherEmoji } from "./weatherEmoji.js";
 

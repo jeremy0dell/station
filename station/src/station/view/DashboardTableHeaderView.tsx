@@ -1,9 +1,5 @@
-import { scrollIndicatorLabel } from "@station/dashboard-core";
-import type {
-  DashboardSessionOverflow,
-  DashboardTableHeaderModel,
-  RowGridLayout,
-} from "@station/dashboard-core";
+import { scrollIndicatorLabel } from "@station/dashboard-core/selectors";
+import type { DashboardSessionOverflow, DashboardTableHeaderModel, RowGridLayout } from "@station/dashboard-core/selectors";
 import { DashboardFilterView } from "./DashboardFilterView.js";
 import { Segments } from "./segments.js";
 import { stationMouseProps, useStationMouse } from "./stationMouseContext.js";

@@ -4,12 +4,9 @@
 // are interactive.
 import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
-import {
-  addProjectSelectedIndex,
-  removeProjectConfirmPhrase,
-  selectDashboardViewport,
-  type DashboardRuntimeOptions,
-} from "@station/dashboard-core";
+import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
 import {

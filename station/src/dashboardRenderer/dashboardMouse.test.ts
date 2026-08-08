@@ -1,11 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
-import {
-  addProjectSelectedIndex,
-  removeProjectConfirmPhrase,
-  selectDashboardViewport,
-  type DashboardRuntimeOptions,
-} from "@station/dashboard-core";
+import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 import {

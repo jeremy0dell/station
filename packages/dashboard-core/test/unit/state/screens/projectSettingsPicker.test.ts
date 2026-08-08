@@ -1,17 +1,16 @@
-import type { TuiKey, TuiState } from "@station/dashboard-core";
-import {
-  createInitialTuiState,
-  handleTuiKey,
-  selectProjectChooserChoices,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { selectProjectChooserChoices } from "../../../../src/selectors/selectors.js";
+import type { TuiKey } from "../../../../src/state/keys.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
-function dashboardState(): TuiState {
+function dashboardState(): DashboardState {
   return createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
 }
 
-function drive(state: TuiState, keys: TuiKey[]): TuiState {
+function drive(state: DashboardState, keys: TuiKey[]): DashboardState {
   let current = state;
   for (const key of keys) {
     current = handleTuiKey(current, key).state;

@@ -509,6 +509,7 @@ Advanced development/demo overrides:
 | `STATION_SCENARIO` | Native Station mock data | Fixture scenario name when `STATION_SOURCE=mock`; defaults to `baseline`. |
 | `STATION_PTY_IMPL` | Station local and persistent-host PTYs | Source mode defaults to `bridge`; a compiled binary defaults to `bun`. Explicit `bun` uses `Bun.Terminal` through the controlling-terminal helper; `bun-nocctty` starts the payload directly without job-control or orphan-cleanup guarantees. `bridge` is source-only. |
 | `STATION_NODE` | Station local PTY bridge | Node executable path/name; fallback is `node`. |
+| `STATION_PTY_ORPHAN_TTL_MS` | Host PTY orphan-bridge park lifetime | Positive integer of milliseconds an unadopted parked bridge keeps its PTY alive before self-reaping. Defaults to 24 hours; an unparsable or non-positive value falls back to the default. |
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
 | `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Development/testing override for `stn-ingress`; fallback is the PATH name `stn-ingress`. |

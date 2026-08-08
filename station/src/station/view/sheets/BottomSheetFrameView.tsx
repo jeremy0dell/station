@@ -3,7 +3,7 @@
 // ({ kind: "sheetBackdrop" }) so clicks don't fall through to the dashboard.
 import { TextAttributes } from "@opentui/core";
 import type { ReactNode } from "react";
-import { bottomSheetContentWidth, bottomSheetFrameLayout } from "@station/dashboard-core";
+import { bottomSheetContentWidth, bottomSheetFrameLayout } from "@station/dashboard-core/selectors";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "../stationMouseContext.js";
 import { SheetText } from "./parts.js";

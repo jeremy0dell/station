@@ -1,4 +1,4 @@
-import type { TuiTimezoneWidgetConfig, TuiTimezoneZone } from "@station/config";
+import type { TuiTimezoneWidgetConfig, TuiTimezoneZone } from "@station/contracts";
 import type { ReadonlyDeep } from "../state/readonly.js";
 
 type TuiTimezoneZoneView = ReadonlyDeep<TuiTimezoneZone>;

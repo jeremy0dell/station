@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
-import type { DashboardRuntime, DashboardRuntimeOptions } from "@station/dashboard-core";
+import type { DashboardRuntime, DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
 import { manyProjectsSnapshot } from "../../station/fixtures/scenarios.js";
 import { makeStationTestRuntime } from "../../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../store.js";

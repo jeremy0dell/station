@@ -1,5 +1,5 @@
-import { projectSettingsPanelLayout } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { projectSettingsPanelLayout } from "../../../../src/components/ProjectSettingsPanel/layout.js";
 
 describe("project settings panel layout", () => {
   it("caps and centers on a wide terminal", () => {

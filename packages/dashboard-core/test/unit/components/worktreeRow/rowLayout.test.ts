@@ -1,5 +1,9 @@
-import { layoutWorktreeRowGrid, type RowGridLayout, segmentsWidth } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import type { RowGridLayout } from "../../../../src/components/WorktreeRow/layout.js";
+import {
+  layoutWorktreeRowGrid,
+  segmentsWidth,
+} from "../../../../src/components/WorktreeRow/layout.js";
 import { worktreeStyleRowGridInput } from "../../../../src/components/WorktreeRow/rowInput.js";
 
 function rowText(layout: RowGridLayout): string {

@@ -1,11 +1,9 @@
 import type { StationClientConnectionState } from "@station/client";
 import type { SafeError, StationSnapshot } from "@station/contracts";
-import {
-  applySnapshotSourceState,
-  createInitialTuiState,
-  type TuiState,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { createInitialTuiState } from "../../src/state/screen.js";
+import { applySnapshotSourceState } from "../../src/state/sourceBridge.js";
+import type { DashboardState } from "../../src/state/types.js";
 import { createDashboardSnapshot, createZeroWorktreeSnapshot } from "../fixtures/snapshots.js";
 
 const NOW = 1_750_000_000_000;
@@ -35,7 +33,7 @@ describe("applySnapshotSourceState", () => {
   it("returns the same state when a display-only update is content-identical", () => {
     // Only identity matters on this path; the snapshot's fields are never read.
     const snapshot = {} as StationSnapshot;
-    const initial: TuiState = { ...createInitialTuiState(), snapshot };
+    const initial: DashboardState = { ...createInitialTuiState(), snapshot };
     const connection: StationClientConnectionState = {
       state: "displayOnly",
       since: NOW - 500,

@@ -2,10 +2,10 @@ import { choiceValueByKey } from "../../selectors/selectors.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import type { RegisteredListSpec } from "./types.js";
 
-function selectableIds(spec: RegisteredListSpec, state: TuiState): string[] {
+function selectableIds(spec: RegisteredListSpec, state: DashboardState): string[] {
   return spec.rows(state).flatMap((row) => (row.selectable ? [row.id] : []));
 }
 
@@ -13,7 +13,7 @@ function selectableIds(spec: RegisteredListSpec, state: TuiState): string[] {
  * The current cursor id, or undefined. Repair is keep-or-unfocus: a stale
  * cursor (its row left the list) reads as unfocused and the next move re-seeds.
  */
-export function cursorId(spec: RegisteredListSpec, state: TuiState): string | undefined {
+export function cursorId(spec: RegisteredListSpec, state: DashboardState): string | undefined {
   const current = state.selection.get(spec.listId);
   if (current === undefined) {
     return undefined;
@@ -21,7 +21,7 @@ export function cursorId(spec: RegisteredListSpec, state: TuiState): string | un
   return selectableIds(spec, state).includes(current) ? current : undefined;
 }
 
-function withCursor(state: TuiState, listId: string, id: string): TuiState {
+function withCursor(state: DashboardState, listId: string, id: string): DashboardState {
   const selection = new Map(state.selection);
   selection.set(listId, id);
   return { ...state, selection };
@@ -31,13 +31,20 @@ function withCursor(state: TuiState, listId: string, id: string): TuiState {
  * Commits the canonical current cursor through the registered list's own behavior.
  * Stale or absent cursors remain inert, so keyboard Enter and semantic controls share one commit.
  */
-export function commitCurrentCursor(spec: RegisteredListSpec, state: TuiState): TuiTransition {
+export function commitCurrentCursor(
+  spec: RegisteredListSpec,
+  state: DashboardState,
+): TuiTransition {
   const id = cursorId(spec, state);
   return id === undefined ? { state } : spec.commit(state, id, "cursor");
 }
 
 /** Move the cursor one selectable row; clamp (never wrap) and seed from the edge if unset. */
-export function moveCursor(spec: RegisteredListSpec, state: TuiState, delta: -1 | 1): TuiState {
+export function moveCursor(
+  spec: RegisteredListSpec,
+  state: DashboardState,
+  delta: -1 | 1,
+): DashboardState {
   const ids = selectableIds(spec, state);
   if (ids.length === 0) {
     return state;
@@ -58,7 +65,7 @@ export function moveCursor(spec: RegisteredListSpec, state: TuiState, delta: -1 
  */
 export function resolveListKey(
   spec: RegisteredListSpec,
-  state: TuiState,
+  state: DashboardState,
   key: TuiKey,
 ): TuiTransition | undefined {
   if (spec.slots !== undefined && isSlotKey(key)) {

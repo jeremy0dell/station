@@ -1,5 +1,6 @@
-import { dashboardFilterConditionPanelModel, type TuiScreen } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { dashboardFilterConditionPanelModel } from "../../../src/components/Dashboard/filterConditionPanel.js";
+import type { TuiScreen } from "../../../src/state/types.js";
 
 function filterScreen(
   conditionEditor: Extract<TuiScreen, { name: "persistentFilter" }>["conditionEditor"],

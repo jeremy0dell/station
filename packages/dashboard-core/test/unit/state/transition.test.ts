@@ -1,16 +1,13 @@
-import {
-  addTuiToast,
-  createInitialTuiState,
-  deriveTuiInputMode,
-  handleTuiKey,
-  openProjectDefaultAgentPicker,
-  openRenameEditForRow,
-  replaceSnapshot,
-  selectDashboardViewport,
-  type TuiKey,
-  tuiScreenBehavior,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
+import { deriveTuiInputMode } from "../../../src/state/keymap.js";
+import type { TuiKey } from "../../../src/state/keys.js";
+import { createInitialTuiState, replaceSnapshot } from "../../../src/state/screen.js";
+import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
+import { openProjectDefaultAgentPicker } from "../../../src/state/screens/projectDefaultAgent.js";
+import { openRenameEditForRow } from "../../../src/state/screens/sessionRows.js";
+import { addTuiToast } from "../../../src/state/toasts.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,

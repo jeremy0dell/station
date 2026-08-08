@@ -1,14 +1,7 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type {
-  DashboardScreenView,
-  DashboardStateView,
-  WidgetSettingsFocus,
-} from "@station/dashboard-core";
-import {
-  widgetSettingsPanelLayout,
-  widgetSettingsPanelModel,
-  type WidgetSettingsLine,
-} from "@station/dashboard-core";
+import type { DashboardScreenView, DashboardStateView, WidgetSettingsFocus } from "@station/dashboard-core/state";
+import { widgetSettingsPanelLayout, widgetSettingsPanelModel } from "@station/dashboard-core/selectors";
+import type { WidgetSettingsLine } from "@station/dashboard-core/selectors";
 import { fit } from "../sheets/parts.js";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../../theme/index.js";
 import {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { selectDashboardSessionRows } from "@station/dashboard-core";
+import { selectDashboardSessionRows } from "@station/dashboard-core/selectors";
 import type { StationSnapshot } from "@station/contracts";
 import {
   attentionAndFailuresSnapshot,

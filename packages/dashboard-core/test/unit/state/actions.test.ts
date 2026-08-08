@@ -1,27 +1,31 @@
+import { describe, expect, it } from "vitest";
+import type { DashboardStateAction } from "../../../src/state/actions.js";
+import { handleTuiAction } from "../../../src/state/actions.js";
+import { focusDashboardProjectHeader } from "../../../src/state/dashboardFocus.js";
+import { scrollDashboard } from "../../../src/state/dashboardScroll.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
 import {
   applyAddProjectFolderReviewed,
-  createInitialTuiState,
-  type DashboardStateAction,
-  focusDashboardProjectHeader,
-  focusProjectSettingsItem,
-  handleTuiKey,
   openAddProject,
-  openProjectDefaultAgentPicker,
-  openProjectSettings,
-  openRemoveWorktreeConfirmForRow,
-  openRenameEditForRow,
-  openWidgetSettings,
-  scrollDashboard,
   selectAddProjectRow,
-  type TuiState,
-  tuiScreenBehavior,
+} from "../../../src/state/screens/addProjectScreen.js";
+import { openProjectDefaultAgentPicker } from "../../../src/state/screens/projectDefaultAgent.js";
+import {
+  focusProjectSettingsItem,
+  openProjectSettings,
+} from "../../../src/state/screens/projectSettings.js";
+import { openRemoveWorktreeConfirmForRow } from "../../../src/state/screens/removeWorktree.js";
+import { openRenameEditForRow } from "../../../src/state/screens/sessionRows.js";
+import {
+  openWidgetSettings,
   widgetSettingsAddFromPicker,
   widgetSettingsOpenPicker,
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
-import { handleTuiAction } from "../../../src/state/actions.js";
+} from "../../../src/state/screens/widgetSettings.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
+import type { DashboardState } from "../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 const context = {
@@ -32,8 +36,8 @@ const context = {
 type StateActionCase = Readonly<{
   name: string;
   action: DashboardStateAction;
-  state: () => TuiState;
-  reduce: (state: TuiState) => TuiState;
+  state: () => DashboardState;
+  reduce: (state: DashboardState) => DashboardState;
 }>;
 
 const STATE_ACTION_CASES: readonly StateActionCase[] = [
@@ -371,30 +375,30 @@ describe("dashboard state actions", () => {
   });
 });
 
-function dashboardState(): TuiState {
+function dashboardState(): DashboardState {
   return createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
 }
 
-function scrollingDashboardState(): TuiState {
+function scrollingDashboardState(): DashboardState {
   return { ...dashboardState(), terminalRows: 8 };
 }
 
-function projectSettingsState(): TuiState {
+function projectSettingsState(): DashboardState {
   return openProjectSettings(dashboardState(), "web");
 }
 
-function addProjectStartState(): TuiState {
+function addProjectStartState(): DashboardState {
   return openAddProject(createInitialTuiState(), context);
 }
 
-function widgetSettingsState(): TuiState {
+function widgetSettingsState(): DashboardState {
   return openWidgetSettings({
     ...dashboardState(),
     widgets: [{ type: "time" }, { type: "moon" }],
   });
 }
 
-function clickAwayActiveScreen(state: TuiState): TuiState {
+function clickAwayActiveScreen(state: DashboardState): DashboardState {
   const clickAway = tuiScreenBehavior(state.screen).clickAway;
   if (clickAway === undefined) {
     throw new Error("expected active screen click-away behavior");
@@ -402,7 +406,7 @@ function clickAwayActiveScreen(state: TuiState): TuiState {
   return clickAway(state);
 }
 
-function addProjectReviewState(): TuiState {
+function addProjectReviewState(): DashboardState {
   const state = openAddProject(createInitialTuiState(), context);
   return applyAddProjectFolderReviewed(state, {
     selectedPath: "/workspace/station",
@@ -413,8 +417,8 @@ function addProjectReviewState(): TuiState {
 }
 
 function addProjectFlow(
-  state: TuiState,
-): Extract<TuiState["screen"], { name: "addProject" }>["flow"] & { mode: "review" } {
+  state: DashboardState,
+): Extract<DashboardState["screen"], { name: "addProject" }>["flow"] & { mode: "review" } {
   if (state.screen.name !== "addProject" || state.screen.flow.mode !== "review") {
     throw new Error("expected Add Project review");
   }

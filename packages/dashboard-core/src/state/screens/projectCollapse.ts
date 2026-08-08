@@ -1,6 +1,6 @@
 import type { TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export const projectCollapseScreenBehavior = {
   dashboardHoverEnabled: false,
@@ -9,7 +9,7 @@ export const projectCollapseScreenBehavior = {
 
 // Slot/↑↓/↵/mouse are handled by the shared selectionMiddleware
 // (projectCollapseListSpec); only esc-to-dashboard stays bespoke.
-export function handleProjectCollapseKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleProjectCollapseKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "projectCollapse") {
     return { state };
   }
@@ -19,6 +19,6 @@ export function handleProjectCollapseKey(state: TuiState, key: TuiKey): TuiTrans
   return { state };
 }
 
-function closeProjectCollapse(state: TuiState): TuiState {
+function closeProjectCollapse(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
 }

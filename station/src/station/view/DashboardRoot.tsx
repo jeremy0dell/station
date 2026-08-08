@@ -5,16 +5,14 @@
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand/react";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import { commandPromptRows, snapshotLoadingLines } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
-  commandPromptRows,
   isTuiToastHiddenByScreen,
   nextTuiToastExpiry,
-  snapshotLoadingLines,
   tuiScreenBehavior,
-  type DashboardActions,
-  type DashboardStateSource,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/state";
 import { ActiveScreenOverlayView } from "./ActiveScreenOverlayView.js";
 import { CommandPromptView } from "./CommandPromptView.js";
 import { DashboardFooterView } from "./DashboardFooterView.js";

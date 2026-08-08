@@ -18,7 +18,7 @@ import {
 import { isReturnKey, type TuiKey } from "../keys.js";
 import { addPendingProjectDefaultHarness } from "../localRows.js";
 import type { TuiTransition } from "../transition.js";
-import type { ProjectSettingsItemId, TuiState } from "../types.js";
+import type { DashboardState, ProjectSettingsItemId } from "../types.js";
 
 export type ProjectSettingsItem = { id: ProjectSettingsItemId; label: string };
 
@@ -42,19 +42,19 @@ export function removeProjectConfirmPhrase(projectId: string): string {
 }
 
 export function isRemoveProjectArmed(
-  screen: Extract<TuiState["screen"], { name: "projectSettings" }>,
+  screen: Extract<DashboardState["screen"], { name: "projectSettings" }>,
 ): boolean {
   return screen.removeDraft.value.trim() === removeProjectConfirmPhrase(screen.projectId);
 }
 
-type ProjectSettingsScreen = Extract<TuiState["screen"], { name: "projectSettings" }>;
+type ProjectSettingsScreen = Extract<DashboardState["screen"], { name: "projectSettings" }>;
 
 export const projectSettingsScreenBehavior = {
   dashboardHoverEnabled: false,
   clickAway: toDashboard,
 };
 
-export function openProjectSettings(state: TuiState, projectId: string): TuiState {
+export function openProjectSettings(state: DashboardState, projectId: string): DashboardState {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === projectId);
   if (project === undefined) {
     return state;
@@ -72,7 +72,10 @@ export function openProjectSettings(state: TuiState, projectId: string): TuiStat
 }
 
 /** Mouse: clicking a left item selects it and drops into its detail pane. */
-export function focusProjectSettingsItem(state: TuiState, itemId: ProjectSettingsItemId): TuiState {
+export function focusProjectSettingsItem(
+  state: DashboardState,
+  itemId: ProjectSettingsItemId,
+): DashboardState {
   if (state.screen.name !== "projectSettings") {
     return state;
   }
@@ -85,7 +88,7 @@ export function focusProjectSettingsItem(state: TuiState, itemId: ProjectSetting
 
 // Enter the detail pane, seeding the agent cursor to the current effective
 // default so ↑↓ start from what is selected and ↵ is immediately meaningful.
-function descend(state: TuiState, screen: ProjectSettingsScreen): TuiState {
+function descend(state: DashboardState, screen: ProjectSettingsScreen): DashboardState {
   if (screen.activeId !== "agent") {
     return state;
   }
@@ -101,7 +104,7 @@ function descend(state: TuiState, screen: ProjectSettingsScreen): TuiState {
   return { ...state, selection };
 }
 
-export function handleProjectSettingsKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleProjectSettingsKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "projectSettings") {
     return { state };
   }
@@ -132,7 +135,11 @@ export function handleProjectSettingsKey(state: TuiState, key: TuiKey): TuiTrans
   return { state };
 }
 
-function handleListKey(state: TuiState, screen: ProjectSettingsScreen, key: TuiKey): TuiTransition {
+function handleListKey(
+  state: DashboardState,
+  screen: ProjectSettingsScreen,
+  key: TuiKey,
+): TuiTransition {
   if (key.escape === true) {
     return { state: toDashboard(state) };
   }
@@ -152,7 +159,11 @@ function handleListKey(state: TuiState, screen: ProjectSettingsScreen, key: TuiK
 // The cross-pane slot handler: resolve the harness from the slot key, then
 // commit through the shared path so keyboard slot, right-pane click, and the
 // engine cursor all produce the same optimistic change.
-function selectAgent(state: TuiState, screen: ProjectSettingsScreen, key: TuiKey): TuiTransition {
+function selectAgent(
+  state: DashboardState,
+  screen: ProjectSettingsScreen,
+  key: TuiKey,
+): TuiTransition {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === screen.projectId);
   if (state.snapshot === undefined || project === undefined) {
     return { state: toDashboard(state) };
@@ -172,7 +183,7 @@ function selectAgent(state: TuiState, screen: ProjectSettingsScreen, key: TuiKey
  * no-op-and-ascend and picking anything else overrides the pending change.
  */
 export function commitProjectSettingsAgentById(
-  state: TuiState,
+  state: DashboardState,
   harness: ProviderId,
 ): TuiTransition {
   if (state.screen.name !== "projectSettings" || state.snapshot === undefined) {
@@ -183,7 +194,7 @@ export function commitProjectSettingsAgentById(
   if (project === undefined) {
     return { state: toDashboard(state) };
   }
-  const ascended: TuiState = { ...state, screen: { ...screen, focus: "list" } };
+  const ascended: DashboardState = { ...state, screen: { ...screen, focus: "list" } };
   if (harness === selectProjectDefaultHarness(state.localRows, project).harness) {
     return { state: ascended };
   }
@@ -205,7 +216,7 @@ export function commitProjectSettingsAgentById(
 }
 
 function handleRemoveDetail(
-  state: TuiState,
+  state: DashboardState,
   screen: ProjectSettingsScreen,
   key: TuiKey,
 ): TuiTransition {
@@ -240,7 +251,11 @@ function handleRemoveDetail(
   };
 }
 
-function moveActive(state: TuiState, screen: ProjectSettingsScreen, delta: number): TuiState {
+function moveActive(
+  state: DashboardState,
+  screen: ProjectSettingsScreen,
+  delta: number,
+): DashboardState {
   const index = PROJECT_SETTINGS_ITEMS.findIndex((item) => item.id === screen.activeId);
   const next = Math.min(
     Math.max(0, (index === -1 ? 0 : index) + delta),
@@ -269,6 +284,6 @@ function editableKeyFlags(key: TuiKey): EditableTextInputInput["key"] {
   return flags;
 }
 
-function toDashboard(state: TuiState): TuiState {
+function toDashboard(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
 }

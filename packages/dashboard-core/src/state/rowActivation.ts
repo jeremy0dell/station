@@ -6,10 +6,10 @@ import {
 import { safeErrorToToast } from "../services/errors/errors.js";
 import { addTuiToast, STALE_DASHBOARD_TARGET_NOTICE } from "./toasts.js";
 import type { TuiTransition } from "./transition.js";
-import type { TuiState } from "./types.js";
+import type { DashboardState } from "./types.js";
 
 /** Resolve a stable dashboard row identity before producing one activation operation. */
-export function activateDashboardRowById(state: TuiState, rowId: string): TuiTransition {
+export function activateDashboardRowById(state: DashboardState, rowId: string): TuiTransition {
   const sessionRow =
     state.snapshot === undefined ? undefined : selectDashboardSessionRow(state.snapshot, rowId);
   if (sessionRow === undefined) {
@@ -27,7 +27,7 @@ export function activateDashboardRowById(state: TuiState, rowId: string): TuiTra
 }
 
 /** Resolve a stable session identity before delegating row-scoped shell execution. */
-export function openDashboardRowShell(state: TuiState, rowId: string): TuiTransition {
+export function openDashboardRowShell(state: DashboardState, rowId: string): TuiTransition {
   const sessionRow =
     state.snapshot === undefined ? undefined : selectDashboardSessionRow(state.snapshot, rowId);
   if (sessionRow === undefined) {
@@ -47,7 +47,7 @@ export function openDashboardRowShell(state: TuiState, rowId: string): TuiTransi
 }
 
 export function activateDashboardRow(
-  state: TuiState,
+  state: DashboardState,
   sessionRow: DashboardSessionRow,
 ): TuiTransition {
   const { presentation: row, session, worktree } = sessionRow;
@@ -84,7 +84,11 @@ function otherSessionHasLiveAgent(row: DashboardSessionRow): boolean {
   return row.worktree.agent?.runId !== row.session.harness.runId;
 }
 
-function activationOperation(state: TuiState, sessionId: string, row: WorktreeRow): TuiTransition {
+function activationOperation(
+  state: DashboardState,
+  sessionId: string,
+  row: WorktreeRow,
+): TuiTransition {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === row.projectId);
   if (project === undefined) {
     return {

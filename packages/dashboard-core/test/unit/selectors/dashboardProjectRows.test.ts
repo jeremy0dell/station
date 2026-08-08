@@ -1,9 +1,9 @@
-import { createInitialTuiState } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
 import {
   persistentFilterCandidateForDashboardRow,
   selectDashboardProjectRowGroups,
 } from "../../../src/selectors/dashboardProjectRows.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("dashboard project rows", () => {

@@ -1,12 +1,7 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import {
-  projectHeaderLabelParts,
-  textMatchSegments,
-  truncateCells,
-  type DashboardPersistentFilterProjectMatch,
-  type DashboardSnapshotView,
-  type ProjectHeaderControl,
-} from "@station/dashboard-core";
+import { projectHeaderLabelParts, textMatchSegments, truncateCells } from "@station/dashboard-core/selectors";
+import type { DashboardPersistentFilterProjectMatch } from "@station/dashboard-core/selectors";
+import type { DashboardSnapshotView, ProjectHeaderControl } from "@station/dashboard-core/state";
 
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";

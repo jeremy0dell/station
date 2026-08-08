@@ -1,4 +1,4 @@
-import type { DashboardActions } from "@station/dashboard-core";
+import type { DashboardActions } from "@station/dashboard-core/runtime";
 // Import the specific modules, not ../terminal/index.js — that barrel also
 // re-exports node-pty-backed PTY/VT/pane machinery the dashboard never uses,
 // which would pull node-pty into this multiplexer-free renderer.

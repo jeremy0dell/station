@@ -19,6 +19,7 @@ export type StationHostErrorCode =
   | "HOST_VERSION_INCOMPATIBLE"
   | "HOST_CLIENT_IDENTITY_MISMATCH"
   | "HOST_UPGRADE_BLOCKED"
+  | "HOST_HANDOFF_MANIFEST_INVALID"
   | "HOST_BAD_REQUEST";
 
 export type StationHostErrorOptions = {
