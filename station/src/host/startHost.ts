@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import type { PtyHandoffManifest } from "@station/contracts";
 import {
   componentLogPath,
   createJsonlLogger,
@@ -9,6 +11,8 @@ import { listenUnixSocket } from "@station/protocol";
 import { stationBuildInfo } from "@station/runtime";
 import {
   HOST_PROTOCOL_VERSION,
+  HostAdoptRegistryParamsSchema,
+  HostBeginHandoffParamsSchema,
   HostCloseParamsSchema,
   HostFocusParamsSchema,
   type HostClientIdentity,
@@ -32,6 +36,7 @@ import {
   ptyBridgesDirectory,
   reapStaleOrphanBridges,
   resolveOrphanTtlMs,
+  waitForParkedBridge,
 } from "./orphanBridges.js";
 import {
   type PtyImplementation,
@@ -45,6 +50,11 @@ export type StartStationHostOptions = {
   ptyTableOptions?: PtyTableOptions;
   /** Prepared compiled runtimes supply the fixed selector reported at startup. */
   ptyImplementation?: PtyImplementation;
+  /**
+   * Test-only opaque build identity override for A/B upgrade lanes. Production
+   * entrypoints leave this unset and use `stationBuildInfo().version`.
+   */
+  buildVersion?: string;
 };
 
 export type StationHostInstance = {
@@ -53,6 +63,8 @@ export type StationHostInstance = {
   readonly closed: Promise<void>;
   close(): Promise<void>;
 };
+
+type CloseReason = "requested" | "upgrade" | "handoff";
 
 /**
  * The host owns PTYs independently of any client and answers
@@ -64,7 +76,7 @@ export async function startStationHost(
 ): Promise<StationHostInstance> {
   const ptyImplementation =
     options.ptyImplementation ?? resolvePtyImplementation(process.env.STATION_PTY_IMPL);
-  const buildVersion = stationBuildInfo().version;
+  const buildVersion = options.buildVersion ?? stationBuildInfo().version;
   const orphanTtlMs = resolveOrphanTtlMs(process.env.STATION_PTY_ORPHAN_TTL_MS);
   const logger =
     options.logger ??
@@ -131,11 +143,15 @@ export async function startStationHost(
   let closePromise: Promise<void> | undefined;
 
   let server: Awaited<ReturnType<typeof listenUnixSocket>>;
-  async function shutdownHost(reason: "requested" | "upgrade"): Promise<void> {
+  async function shutdownHost(reason: CloseReason): Promise<void> {
     try {
       await server.close();
     } finally {
-      ptyTable.disposeAll();
+      // Handoff already parked bridges and cleared the table; disposeAll would
+      // only kill parks if any residual entries remained.
+      if (reason !== "handoff") {
+        ptyTable.disposeAll();
+      }
       await logger.log({
         level: "info",
         message: "host.stop",
@@ -144,7 +160,7 @@ export async function startStationHost(
       await hostLifecycle.flush();
     }
   }
-  const closeHost = (reason: "requested" | "upgrade"): Promise<void> => {
+  const closeHost = (reason: CloseReason): Promise<void> => {
     if (closePromise !== undefined) {
       return closePromise;
     }
@@ -188,7 +204,7 @@ export async function startStationHost(
 function buildHostHandlers(
   ptyTable: PtyTable,
   buildVersion: string,
-  closeHost: (reason: "requested" | "upgrade") => Promise<void>,
+  closeHost: (reason: CloseReason) => Promise<void>,
   onPtySpawned: (
     client: HostClientIdentity,
     outcome: PtySpawnOutcome,
@@ -196,8 +212,19 @@ function buildHostHandlers(
   ) => void,
 ): HostHandlers {
   let drainingForBuild: string | undefined;
+  let handoffManifest: PtyHandoffManifest | undefined;
+
+  const assertNotDraining = (): void => {
+    if (drainingForBuild !== undefined) {
+      throw drainingSpawnBlocked(buildVersion, drainingForBuild);
+    }
+  };
+
   const stopHostIfIdle = (params: unknown) => {
     const { requestingBuildVersion } = HostStopIfIdleParamsSchema.parse(params);
+    if (handoffManifest !== undefined) {
+      throw handoffInvalidState("A live handoff is already in progress.");
+    }
     const livePtyCount = ptyTable.list().length;
     if (livePtyCount !== 0) {
       throw livePtyUpgradeBlocked(buildVersion, requestingBuildVersion, livePtyCount);
@@ -206,13 +233,101 @@ function buildHostHandlers(
     drainingForBuild = requestingBuildVersion;
     return { stopping: true as const };
   };
+
+  const beginHandoff = async (params: unknown) => {
+    const { requestingBuildVersion, fidelity } = HostBeginHandoffParamsSchema.parse(params);
+    if (drainingForBuild !== undefined || handoffManifest !== undefined) {
+      throw handoffInvalidState("The host is already draining or handing off.");
+    }
+    const livePtyCount = ptyTable.list().length;
+    if (livePtyCount === 0) {
+      throw handoffInvalidState(
+        "Live handoff requires at least one live terminal; use idle stop-if-idle replacement instead.",
+      );
+    }
+    drainingForBuild = requestingBuildVersion;
+    try {
+      const report = await ptyTable.releaseRegistryForHandoff(fidelity);
+      if (report.released.length === 0) {
+        drainingForBuild = undefined;
+        throw handoffInvalidState(
+          report.skipped.length > 0
+            ? "Live handoff requires every live terminal to be bridge-backed and releasable."
+            : "No bridge-backed terminals could be released for handoff.",
+        );
+      }
+      handoffManifest = report.manifest;
+      // Real bridges write park.json and listen on the control socket. Scripted
+      // releases create neither. A park file without a socket is a hard failure
+      // (common when the unix socket path exceeds the OS sun_path limit).
+      for (const ptyId of report.released) {
+        const controlSocket = report.manifest[ptyId]?.controlSocket;
+        if (controlSocket === undefined) {
+          continue;
+        }
+        const parkStatePath = controlSocket.endsWith(".sock")
+          ? `${controlSocket.slice(0, -".sock".length)}.park.json`
+          : `${controlSocket}.park.json`;
+        const artifact = await waitForParkArtifact(controlSocket, parkStatePath, 500);
+        if (artifact === "none") {
+          continue;
+        }
+        if (artifact === "park-only") {
+          await abortHandoff();
+          throw handoffInvalidState(
+            `Released terminal "${ptyId}" wrote park state but never opened its control socket.`,
+          );
+        }
+        const ready = await waitForParkedBridge(controlSocket, { timeoutMs: 3_000 });
+        if (!ready) {
+          await abortHandoff();
+          throw handoffInvalidState(
+            `Released terminal "${ptyId}" did not park in time for live handoff.`,
+          );
+        }
+      }
+      return {
+        manifest: report.manifest,
+        fidelity: report.fidelity,
+        released: report.released,
+        skipped: report.skipped,
+      };
+    } catch (error) {
+      if (handoffManifest === undefined) {
+        drainingForBuild = undefined;
+      }
+      throw error;
+    }
+  };
+
+  const completeHandoff = () => {
+    if (handoffManifest === undefined) {
+      throw handoffInvalidState("No handoff is in progress.");
+    }
+    return { stopping: true as const };
+  };
+
+  const abortHandoff = async () => {
+    if (handoffManifest === undefined) {
+      throw handoffInvalidState("No handoff is in progress.");
+    }
+    const manifest = handoffManifest;
+    const report = await ptyTable.adoptRegistry(manifest);
+    handoffManifest = undefined;
+    drainingForBuild = undefined;
+    return report;
+  };
+
+  const adoptRegistry = async (params: unknown) => {
+    const { manifest } = HostAdoptRegistryParamsSchema.parse(params);
+    return ptyTable.adoptRegistry(manifest);
+  };
+
   const spawnPty = (
     params: unknown,
     client: HostClientIdentity | undefined,
   ) => {
-    if (drainingForBuild !== undefined) {
-      throw drainingSpawnBlocked(buildVersion, drainingForBuild);
-    }
+    assertNotDraining();
     const parsed = HostSpawnParamsSchema.parse(params);
     const outcome = ptyTable.spawn(parsed);
     if (client !== undefined) {
@@ -230,6 +345,10 @@ function buildHostHandlers(
         buildVersion,
       }),
       "host.stopIfIdle": stopHostIfIdle,
+      "host.beginHandoff": beginHandoff,
+      "host.completeHandoff": completeHandoff,
+      "host.abortHandoff": abortHandoff,
+      "host.adoptRegistry": adoptRegistry,
       "host.spawn": spawnPty,
       "host.write": (params) => {
         const { ptyId, data } = HostWriteParamsSchema.parse(params);
@@ -253,11 +372,17 @@ function buildHostHandlers(
         return { closed: ptyTable.close(ptyId) };
       },
     },
-    attach: (params) => ptyTable.attach(params.ptyId),
+    attach: (params) => {
+      assertNotDraining();
+      return ptyTable.attach(params.ptyId);
+    },
     // Draining is set before the ack, and close starts only after it is written, excluding spawn and response-loss races.
     afterUnaryResponseSent: (method) => {
       if (method === "host.stopIfIdle") {
         void closeHost("upgrade");
+      }
+      if (method === "host.completeHandoff") {
+        void closeHost("handoff");
       }
     },
   };
@@ -286,4 +411,37 @@ function drainingSpawnBlocked(
     "HOST_UPGRADE_BLOCKED",
     `Station host build "${runningBuildVersion}" is stopping for build "${requestingBuildVersion}" and cannot spawn a new terminal.`,
   );
+}
+
+function handoffInvalidState(message: string): StationHostProviderError {
+  return new StationHostProviderError("HOST_HANDOFF_INVALID_STATE", message);
+}
+
+async function waitForParkArtifact(
+  controlSocket: string,
+  parkStatePath: string,
+  timeoutMs: number,
+): Promise<"socket" | "park-only" | "none"> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(controlSocket)) {
+      return "socket";
+    }
+    if (existsSync(parkStatePath)) {
+      // Give listen() a brief chance after park.json is written.
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      if (existsSync(controlSocket)) {
+        return "socket";
+      }
+      return "park-only";
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+  }
+  if (existsSync(controlSocket)) {
+    return "socket";
+  }
+  if (existsSync(parkStatePath)) {
+    return "park-only";
+  }
+  return "none";
 }

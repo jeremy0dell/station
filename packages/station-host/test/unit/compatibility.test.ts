@@ -1,7 +1,9 @@
 import {
   classifyHostCompatibility,
   HOST_PROTOCOL_VERSION,
+  isStationHostCompatibilityError,
   stationHostCompatibilityError,
+  stationHostSafeError,
 } from "@station/host";
 import { describe, expect, it } from "vitest";
 
@@ -65,5 +67,26 @@ describe("stationHostCompatibilityError", () => {
       code: "HOST_VERSION_INCOMPATIBLE",
       message: expect.stringContaining('build "build-old"'),
     });
+  });
+});
+
+describe("isStationHostCompatibilityError", () => {
+  it("recognizes upgrade/version blocks but not handoff lifecycle codes", () => {
+    expect(
+      isStationHostCompatibilityError(stationHostSafeError("HOST_UPGRADE_BLOCKED", "busy")),
+    ).toBe(true);
+    expect(
+      isStationHostCompatibilityError(stationHostSafeError("HOST_VERSION_INCOMPATIBLE", "skew")),
+    ).toBe(true);
+    expect(
+      isStationHostCompatibilityError(
+        stationHostSafeError("HOST_HANDOFF_INVALID_STATE", "no begin"),
+      ),
+    ).toBe(false);
+    expect(
+      isStationHostCompatibilityError(
+        stationHostSafeError("HOST_HANDOFF_MANIFEST_INVALID", "bad manifest"),
+      ),
+    ).toBe(false);
   });
 });

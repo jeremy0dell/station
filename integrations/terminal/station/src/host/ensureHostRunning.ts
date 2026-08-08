@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { SafeError } from "@station/contracts";
+import type { HostHandoffFidelity, PtyHandoffManifest, SafeError } from "@station/contracts";
 import {
   assertHostReusable,
   classifyHostCompatibility,
@@ -10,6 +10,7 @@ import {
   isStationHostCompatibilityError,
   type StationHostClient,
   stationHostCompatibilityError,
+  stationHostErrorFromUnknown,
   stationHostSafeError,
 } from "@station/host";
 import { probeUnixSocket, unixSocketHolderEvidencePath } from "@station/protocol";
@@ -50,12 +51,20 @@ export type EnsureStationHostOptions = {
   /** Expected opaque Station build version; defaults to this process's build. */
   expectedBuildVersion?: string;
   timeoutMs?: number;
+  /**
+   * Opt-in busy-host live handoff. Absent means today's visible refuse when the
+   * incumbent has live PTYs.
+   */
+  handoff?: {
+    fidelity: HostHandoffFidelity;
+  };
 };
 
 const defaultTimeoutMs = 10_000;
 
 type IncumbentHostDecision =
   | { outcome: "start" }
+  | { outcome: "start-with-handoff"; manifest: PtyHandoffManifest }
   | { outcome: "running" }
   | { outcome: "unavailable"; error: SafeError };
 
@@ -63,7 +72,8 @@ type IncumbentHostDecision =
  * ADAPTER
  *
  * Preserves inaccessible Host ownership and defers definite stale reclaim to
- * the child binder while retaining compatibility-aware idle replacement.
+ * the child binder while retaining compatibility-aware idle replacement and an
+ * opt-in busy-host live handoff path.
  */
 export async function ensureStationHostRunning(
   options: EnsureStationHostOptions,
@@ -98,6 +108,7 @@ export async function ensureStationHostRunning(
           replacementConfigured: options.hostCommand[0].length > 0,
           timeoutMs: options.timeoutMs ?? defaultTimeoutMs,
           client,
+          ...(options.handoff === undefined ? {} : { handoff: options.handoff }),
         });
   if (incumbent.outcome === "running") {
     return { status: "running", socketPath, client };
@@ -106,6 +117,8 @@ export async function ensureStationHostRunning(
     disposeOwned();
     return { status: "unavailable", socketPath, error: incumbent.error };
   }
+  const handoffManifest =
+    incumbent.outcome === "start-with-handoff" ? incumbent.manifest : undefined;
 
   if (options.hostCommand[0].length === 0) {
     disposeOwned();
@@ -154,6 +167,22 @@ export async function ensureStationHostRunning(
       disposeOwned();
       return { status: "unavailable", socketPath, error: ready.error };
     }
+    if (handoffManifest !== undefined) {
+      try {
+        await client.adoptRegistry(handoffManifest);
+      } catch (error) {
+        disposeOwned();
+        return {
+          status: "unavailable",
+          socketPath,
+          error: stationHostErrorFromUnknown(error, {
+            code: "HOST_HANDOFF_MANIFEST_INVALID",
+            message: "Successor host could not adopt the handoff manifest.",
+            hint: "Parked bridges remain under the state dir until TTL reap or a retry.",
+          }),
+        };
+      }
+    }
     return { status: "running", socketPath, client };
   } catch (error) {
     disposeOwned();
@@ -174,6 +203,7 @@ async function negotiateIncumbentHost(input: {
   replacementConfigured: boolean;
   timeoutMs: number;
   client: StationHostClient;
+  handoff?: { fidelity: HostHandoffFidelity };
 }): Promise<IncumbentHostDecision> {
   let health: HostHealthResult;
   try {
@@ -212,6 +242,35 @@ async function negotiateIncumbentHost(input: {
     await waitForSocketRelease(input.socketPath, input.timeoutMs);
     return { outcome: "start" };
   } catch (error) {
+    const blocked =
+      isStationHostCompatibilityError(error) && error.code === "HOST_UPGRADE_BLOCKED"
+        ? error
+        : undefined;
+    if (blocked !== undefined && input.handoff !== undefined) {
+      try {
+        const begun = await input.client.beginHandoff(
+          input.expectedBuildVersion,
+          input.handoff.fidelity,
+        );
+        await input.client.completeHandoff();
+        await waitForSocketRelease(input.socketPath, input.timeoutMs);
+        return { outcome: "start-with-handoff", manifest: begun.manifest };
+      } catch (handoffError) {
+        try {
+          await input.client.abortHandoff();
+        } catch {
+          // Abort is best-effort when begin never committed or complete already ran.
+        }
+        return {
+          outcome: "unavailable",
+          error: stationHostErrorFromUnknown(handoffError, {
+            code: "HOST_VERSION_INCOMPATIBLE",
+            message: "Station host live handoff could not be completed safely.",
+            hint: "The existing host and terminals were preserved when possible. Retry, or reopen with the running build.",
+          }),
+        };
+      }
+    }
     return {
       outcome: "unavailable",
       error: isStationHostCompatibilityError(error)

@@ -139,7 +139,13 @@ async function handleMessage(
     return;
   }
   const request = parsed.data;
-  const lifecycleRequest = request.method === "host.health" || request.method === "host.stopIfIdle";
+  const lifecycleRequest =
+    request.method === "host.health" ||
+    request.method === "host.stopIfIdle" ||
+    request.method === "host.beginHandoff" ||
+    request.method === "host.completeHandoff" ||
+    request.method === "host.abortHandoff" ||
+    request.method === "host.adoptRegistry";
   if (!lifecycleRequest) {
     const binding = bindClientIdentity(request.client, handlers.hostIdentity, state, logger);
     if (!binding.ok) {

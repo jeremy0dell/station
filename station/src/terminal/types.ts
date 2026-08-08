@@ -105,5 +105,10 @@ export type StationTerminalProcess = {
   write(data: string): void;
   resize(size: StationTerminalSize): void;
   kill(signal?: string): void;
+  /**
+   * Bridge-only negotiated handoff: close owner pipes without SIGTERM so the
+   * bridge parks the PTY. Absent on transports that cannot park.
+   */
+  releaseToOrphan?(): void;
   dispose(): void;
 };

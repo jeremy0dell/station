@@ -4,6 +4,8 @@ import path from "node:path";
 import {
   PtyBridgeParkStateSchema,
   type PtyBridgeParkState,
+  PtyScreenSnapshotSchema,
+  type PtyScreenSnapshot,
   PtyScrollbackExportSchema,
   type PtyScrollbackExport,
 } from "@station/contracts";
@@ -28,6 +30,10 @@ export function bridgeParkStatePath(directory: string, ptyId: string): string {
 
 export function bridgeScrollbackExportPath(directory: string, ptyId: string): string {
   return path.join(directory, `${ptyId}.scrollback.json`);
+}
+
+export function bridgeScreenSnapshotPath(directory: string, ptyId: string): string {
+  return path.join(directory, `${ptyId}.screen.json`);
 }
 
 /** An unparsable or non-positive override degrades to the default instead of failing host startup. */
@@ -99,6 +105,24 @@ export async function reapStaleOrphanBridges(
   return { reaped, parked };
 }
 
+/** Poll until a parked bridge answers exit-status, or the deadline elapses. */
+export async function waitForParkedBridge(
+  socketPath: string,
+  options: { timeoutMs?: number; probeTimeoutMs?: number; intervalMs?: number } = {},
+): Promise<boolean> {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const probeTimeoutMs = options.probeTimeoutMs ?? 200;
+  const intervalMs = options.intervalMs ?? 50;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await probeBridgeControlSocket(socketPath, probeTimeoutMs)) {
+      return true;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return false;
+}
+
 /** Connect-and-query liveness probe; any failure or silence reads as dead. */
 export function probeBridgeControlSocket(socketPath: string, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -133,6 +157,7 @@ export async function removeBridgeFiles(directory: string, ptyId: string): Promi
     bridgeControlSocketPath(directory, ptyId),
     bridgeParkStatePath(directory, ptyId),
     bridgeScrollbackExportPath(directory, ptyId),
+    bridgeScreenSnapshotPath(directory, ptyId),
   ]) {
     try {
       await unlink(filePath);
@@ -179,6 +204,33 @@ export async function readScrollbackExport(
   }
   try {
     return PtyScrollbackExportSchema.parse(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+}
+
+export async function writeScreenSnapshot(
+  directory: string,
+  ptyId: string,
+  snapshot: PtyScreenSnapshot,
+): Promise<string> {
+  await mkdir(directory, { recursive: true });
+  const finalPath = bridgeScreenSnapshotPath(directory, ptyId);
+  const tmpPath = `${finalPath}.tmp-${process.pid}`;
+  await writeFile(tmpPath, `${JSON.stringify(snapshot)}\n`, "utf8");
+  await rename(tmpPath, finalPath);
+  return finalPath;
+}
+
+export async function readScreenSnapshot(
+  screenSnapshotRef: string,
+): Promise<PtyScreenSnapshot | undefined> {
+  const raw = await readFileQuiet(screenSnapshotRef);
+  if (raw === undefined) {
+    return undefined;
+  }
+  try {
+    return PtyScreenSnapshotSchema.parse(JSON.parse(raw));
   } catch {
     return undefined;
   }

@@ -110,6 +110,66 @@ describe("serveHostConnection", () => {
     client.close();
   });
 
+  it("allows handoff lifecycle methods without correlation identity", async () => {
+    const { client, server } = inMemoryNdjsonConnectionPair();
+    const calls: string[] = [];
+    void serveHostConnection(server, {
+      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      unary: {
+        "host.beginHandoff": () => {
+          calls.push("begin");
+          return {
+            manifest: {},
+            fidelity: "processes",
+            released: ["pty-1"],
+            skipped: [],
+          };
+        },
+        "host.completeHandoff": () => {
+          calls.push("complete");
+          return { stopping: true };
+        },
+        "host.abortHandoff": () => {
+          calls.push("abort");
+          return { adopted: [], failed: [] };
+        },
+        "host.adoptRegistry": () => {
+          calls.push("adopt");
+          return { adopted: [], failed: [] };
+        },
+      },
+    });
+    const responses = client.messages()[Symbol.asyncIterator]();
+
+    client.send(
+      hostRequest("begin", "host.beginHandoff", {
+        requestingBuildVersion: "next",
+        fidelity: "processes",
+      }),
+    );
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "begin",
+      ok: true,
+    });
+    client.send(hostRequest("complete", "host.completeHandoff"));
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "complete",
+      ok: true,
+    });
+    client.send(hostRequest("abort", "host.abortHandoff"));
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "abort",
+      ok: true,
+    });
+    client.send(hostRequest("adopt", "host.adoptRegistry", { manifest: {} }));
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "adopt",
+      ok: true,
+    });
+    expect(calls).toEqual(["begin", "complete", "abort", "adopt"]);
+    client.close();
+  });
+
   it("classifies build compatibility separately from correlation changes", async () => {
     const identity = TEST_CLIENT_IDENTITY;
     const { client, server } = inMemoryNdjsonConnectionPair();

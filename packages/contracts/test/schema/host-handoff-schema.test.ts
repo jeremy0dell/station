@@ -1,9 +1,11 @@
 import {
+  HostHandoffFidelitySchema,
   PtyBridgeParkStateSchema,
   PtyBridgeProtocolVersion,
   PtyHandoffEntrySchema,
   PtyHandoffIdentitySchema,
   PtyHandoffManifestSchema,
+  PtyScreenSnapshotSchema,
   PtyScrollbackExportSchema,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
@@ -50,17 +52,33 @@ describe("pty handoff identity schema", () => {
 });
 
 describe("pty handoff manifest schema", () => {
-  it("parses a manifest keyed by ptyId with optional scrollback fields", () => {
+  it("parses a manifest keyed by ptyId with optional scrollback and screen fields", () => {
     const manifest = PtyHandoffManifestSchema.parse({
       "pty-1": entry(),
       "pty-2": entry({
         bridgePid: 4243,
         scrollbackRef: "/state/run/pty-bridges/pty-2.scrollback.json",
         ringComplete: true,
+        screenSnapshotRef: "/state/run/pty-bridges/pty-2.screen.json",
       }),
     });
     expect(Object.keys(manifest)).toEqual(["pty-1", "pty-2"]);
     expect(manifest["pty-2"]?.scrollbackRef).toContain("pty-2.scrollback.json");
+    expect(manifest["pty-2"]?.screenSnapshotRef).toContain("pty-2.screen.json");
+  });
+
+  it("accepts handoff fidelity values and screen snapshot payloads", () => {
+    expect(HostHandoffFidelitySchema.parse("processes")).toEqual("processes");
+    expect(HostHandoffFidelitySchema.parse("screen")).toEqual("screen");
+    expect(() => HostHandoffFidelitySchema.parse("exact")).toThrow();
+    expect(
+      PtyScreenSnapshotSchema.parse({
+        cols: 80,
+        rows: 24,
+        sequences: ["\x1bcrestored"],
+      }),
+    ).toMatchObject({ cols: 80, rows: 24, sequences: ["\x1bcrestored"] });
+    expect(() => PtyScreenSnapshotSchema.parse({ cols: 80, rows: 24, sequences: [] })).toThrow();
   });
 
   it("rejects unknown entry fields and malformed values", () => {

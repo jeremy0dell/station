@@ -65,6 +65,9 @@ importers:
       '@station/github-repository':
         specifier: workspace:*
         version: link:../../integrations/repository/github
+      '@station/host':
+        specifier: workspace:*
+        version: link:../../packages/station-host
       '@station/observability':
         specifier: workspace:*
         version: link:../../packages/observability

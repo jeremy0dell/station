@@ -50,6 +50,7 @@
     "@station/contracts": "workspace:*",
     "@station/cursor": "workspace:*",
     "@station/github-repository": "workspace:*",
+    "@station/host": "workspace:*",
     "@station/observability": "workspace:*",
     "@station/observer": "workspace:*",
     "@station/opencode": "workspace:*",

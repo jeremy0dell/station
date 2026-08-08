@@ -336,7 +336,15 @@ function listenControlSocket() {
       return;
     }
     // Unusual listen failures leave the PTY alive but not adoptable; the TTL
-    // still bounds the park.
+    // still bounds the park. Persist a content-free diagnostic beside the park.
+    try {
+      fs.writeFileSync(
+        `${orphan.parkStatePath}.listen-error`,
+        `${error && error.code ? error.code : "error"}: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    } catch {
+      // Ignore diagnostic write failures.
+    }
   });
   server.listen(orphan.controlSocketPath);
 }

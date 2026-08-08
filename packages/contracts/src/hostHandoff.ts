@@ -37,6 +37,10 @@ export const PtyHandoffIdentitySchema = z
   .strict();
 export type PtyHandoffIdentity = z.infer<typeof PtyHandoffIdentitySchema>;
 
+/** Composable handoff fidelity; `screen` never blocks when capture is unavailable. */
+export const HostHandoffFidelitySchema = z.enum(["processes", "screen"]);
+export type HostHandoffFidelity = z.infer<typeof HostHandoffFidelitySchema>;
+
 export const PtyHandoffEntrySchema = z
   .object({
     bridgeProtocolVersion: PtyBridgeProtocolVersionSchema,
@@ -48,6 +52,8 @@ export const PtyHandoffEntrySchema = z
     identity: PtyHandoffIdentitySchema,
     scrollbackRef: nonEmptyStringSchema.optional(),
     ringComplete: z.boolean().optional(),
+    /** Best-effort semantic snapshot path; absence degrades to scrollback replay. */
+    screenSnapshotRef: nonEmptyStringSchema.optional(),
   })
   .strict();
 export type PtyHandoffEntry = z.infer<typeof PtyHandoffEntrySchema>;
@@ -55,6 +61,16 @@ export type PtyHandoffEntry = z.infer<typeof PtyHandoffEntrySchema>;
 /** ptyId → entry; every field an adopter needs to rebind a parked bridge. */
 export const PtyHandoffManifestSchema = z.record(nonEmptyStringSchema, PtyHandoffEntrySchema);
 export type PtyHandoffManifest = z.infer<typeof PtyHandoffManifestSchema>;
+
+/** Serialized semantic restore sequences captured at handoff time. */
+export const PtyScreenSnapshotSchema = z
+  .object({
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+    sequences: z.array(z.string()).min(1),
+  })
+  .strict();
+export type PtyScreenSnapshot = z.infer<typeof PtyScreenSnapshotSchema>;
 
 /**
  * Durable park state written atomically by an orphaned bridge; a fresh host

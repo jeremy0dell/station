@@ -11,7 +11,43 @@ import {
   bridgeScrollbackExportPath,
   reapStaleOrphanBridges,
   resolveOrphanTtlMs,
+  waitForParkedBridge,
 } from "./orphanBridges.js";
+import net from "node:net";
+
+describe("waitForParkedBridge", () => {
+  it("returns true once a control socket answers exit-status", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-wait-park-"));
+    const socketPath = bridgeControlSocketPath(directory, "pty-1");
+    const server = net.createServer((socket) => {
+      socket.on("data", () => {
+        socket.write(`${JSON.stringify({ type: "exit-status", exited: false })}\n`);
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, resolve);
+    });
+    try {
+      await expect(
+        waitForParkedBridge(socketPath, { timeoutMs: 1_000, probeTimeoutMs: 100 }),
+      ).resolves.toEqual(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("returns false when nothing listens before the deadline", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-wait-miss-"));
+    await expect(
+      waitForParkedBridge(bridgeControlSocketPath(directory, "pty-missing"), {
+        timeoutMs: 120,
+        probeTimeoutMs: 30,
+        intervalMs: 20,
+      }),
+    ).resolves.toEqual(false);
+  });
+});
 
 describe("resolveOrphanTtlMs", () => {
   it("keeps the default for absent or unparsable overrides", () => {

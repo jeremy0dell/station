@@ -604,21 +604,34 @@ Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 The isolated or configured `logs/station-host.jsonl` should record
 `ptyImplementation` as `bun`.
 
-To verify binary host upgrades, build two copies with distinct prerelease
-versions (for example `0.7.0-host-a` and `0.7.0-host-b`) and use an isolated
-config with `station_persistent_agents = true`. Start A, open a hosted terminal,
-print a recognizable marker, leave a long command running, and exit the UI so
-the host survives. Because Observer version eviction is separate B3 work,
-explicitly stop the A observer and start B's observer before launching B.
+Host upgrade handoff is gated by automated lanes (preferred over a manual A/B
+binary pair for day-to-day validation):
 
-B must report `HOST_UPGRADE_BLOCKED` with both versions and the live-terminal
-count without opening or rewriting the saved layout. Reopen A and confirm the
-command and marker scrollback survived. Close every hosted agent and auxiliary
-terminal, retry B, then open a hosted terminal so the stopped idle host is
-replaced on demand. The next `host.start` record in `logs/station-host.jsonl`
-must show B's build and protocol versions. Legacy or different-protocol hosts
-refuse automatic replacement and must be stopped explicitly only after their
-sessions are accounted for.
+```bash
+pnpm --dir station test:pty          # includes hostHandoff.smoke (STATION_PTY_SMOKE=1)
+pnpm test:e2e:host-upgrade           # focused A→B refuse + opt-in handoff smoke
+```
+
+The smoke uses test-only `--build-version` overrides on `hostMain` so two host
+identities share one checkout entrypoint. Cases covered: busy refuse without
+opt-in (`HOST_UPGRADE_BLOCKED`, child survives), negotiated
+`beginHandoff` → `completeHandoff` → successor `adoptRegistry` with the same
+child PID, and idle `stopIfIdle` remains the empty-host path.
+
+CLI surface for operators:
+
+```bash
+pnpm stn host status
+pnpm stn host handoff --dry-run
+pnpm stn host handoff --fidelity processes|screen
+```
+
+Manual UX check (optional): isolated config with `station_persistent_agents = true`,
+start a hosted terminal, leave a long command running, exit the UI, then run
+`stn host handoff` from the newer build. Without opt-in, B must still report
+`HOST_UPGRADE_BLOCKED`. Legacy or different-protocol hosts refuse automatic
+replacement and must be stopped explicitly only after their sessions are
+accounted for.
 
 ## Hosted Workflow Security
 
