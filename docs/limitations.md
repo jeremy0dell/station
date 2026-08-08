@@ -43,14 +43,15 @@ Avoid sending binary data directly to a Station pane. Encode it first or write i
 
 ## Source-Checkout Panes Exit Immediately
 
-A source checkout may show `terminal exited 1` when Bun installation clears the executable bit on node-pty's `spawn-helper`. Station repairs the bit before each spawn. If panes still exit immediately, run:
+A source checkout may show `terminal exited 1` when Bun installation clears the executable bit on node-pty's `spawn-helper`. Station repairs the bit before each spawn. The isolated devbox runs the nested frozen install automatically before Observer startup. If panes still exit immediately in another source workflow, run from the checkout root:
 
 ```sh
 cd station
+bun install --frozen-lockfile
 bun run repair:node-pty
 ```
 
-Then relaunch the source checkout. This workaround does not apply to the compiled binary.
+Then relaunch the source checkout. A missing-helper error prints the exact `station/` directory and frozen install command. This workaround does not apply to the compiled binary.
 
 ## The Station Button Pointer Can Disappear
 

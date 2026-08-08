@@ -1115,9 +1115,24 @@ describe("tui dev script", () => {
       new URL("../../scripts/station-devbox.mjs", import.meta.url),
       "utf8",
     );
+    const nodePtyRepairScript = readFileSync(
+      new URL("../../station/scripts/repair-node-pty.sh", import.meta.url),
+      "utf8",
+    );
 
     expect(rootPackage.scripts?.["station:ui-dev"]).toBe("cd station && bun run dev");
     expect(stationPackage.scripts?.dev).toBe("node ../scripts/native-hmr-runner.mjs");
+    expect(stationPackage.scripts?.["station:isolated"]).toBe("./scripts/station-isolated.sh");
+    expect(stationPackage.scripts?.["station:isolated"]).not.toContain("link:station");
+    expect(stationPackage.scripts?.["station:isolated"]).not.toContain("repair:node-pty");
+    expect(stationPackage.scripts?.station).toContain("./scripts/link-station-packages.sh");
+    expect(stationPackage.scripts?.station).toContain("./scripts/repair-node-pty.sh");
+    expect(nodePtyRepairScript).toMatch(/cd \\"\$\{root\}\\" && bun install --frozen-lockfile/u);
+
+    const frozenInstall = isolatedScript.indexOf("bun install --frozen-lockfile");
+    expect(frozenInstall).toBeGreaterThan(isolatedScript.indexOf('if [ "$COMMAND" = "stop" ]'));
+    expect(frozenInstall).toBeLessThan(isolatedScript.indexOf('mkdir -p "$DS/observer"'));
+    expect(frozenInstall).toBeLessThan(isolatedScript.indexOf("observer start 2>&1"));
     expect(isolatedScript).toContain("exec bun run dev");
     expect(devboxScript).toContain('run("bun", ["run", "station:isolated", "dev"]');
     expect(stationPackage.scripts?.dev).not.toContain("bun --hot");

@@ -55,7 +55,21 @@ const PsRowSchema = z
     command: z.string().min(1).max(32_768),
   })
   .strict();
+const PsProcessRowSchema = z
+  .object({
+    pid: z.number().int().positive(),
+    ppid: z.number().int().nonnegative(),
+    tty: PsTtySchema.nullable(),
+  })
+  .strict();
+const PsNoTtySchema = z.enum(["?", "??", "-"]);
 const ErrorCodeSchema = z.looseObject({ code: z.string() });
+const MAX_TTY_ANCESTOR_DEPTH = 16;
+
+type PsProcessRow = z.infer<typeof PsProcessRowSchema>;
+type LegacyTtyAnchor =
+  | { kind: "self"; pid: number; tty: string }
+  | { kind: "ancestor"; pid: number; tty: string; chain: PsProcessRow[] };
 
 export function ttyIdentity(platform: NodeJS.Platform, stat: TtyStat): StationTtyIdentity {
   if ((platform !== "darwin" && platform !== "linux") || !stat.isCharacterDevice()) {
@@ -133,27 +147,106 @@ export function releaseDatabase(database: SqliteDatabase): void {
   }
 }
 
+/**
+ * Corroborates legacy same-TTY evidence against the renderer or its nearest bounded
+ * controlling-TTY ancestor, failing closed if ancestry or device identity cannot be revalidated.
+ */
 export function legacyOwnerPossible(
   stdinIdentity: StationTtyIdentity,
   deps: StationTtyOwnershipDeps,
 ): boolean | undefined {
   try {
-    const tty = PsTtySchema.parse(deps.runPs(["-p", String(deps.selfPid), "-o", "tty="]).trim());
-    // `ps` reports the controlling TTY, which must match fd 0 before it can scope legacy evidence.
-    const controllingTtyIdentity = ttyIdentity(
-      deps.platform,
-      deps.readTtyPathStat(join("/dev", tty)),
-    );
+    const anchor = findLegacyTtyAnchor(deps);
+    const ttyPath = join("/dev", anchor.tty);
+    const controllingTtyIdentity = ttyIdentity(deps.platform, deps.readTtyPathStat(ttyPath));
     if (!sameIdentity(stdinIdentity, controllingTtyIdentity)) return undefined;
-    const output = deps.runPs(["-t", tty, "-o", "pid=,tty=,command="]);
+
+    const output = deps.runPs(["-t", anchor.tty, "-o", "pid=,tty=,command="]);
     if (!output.endsWith("\n")) return undefined;
     const rows = output.split("\n").filter(Boolean).map(parsePsRow);
-    if (!rows.some((row) => row.pid === deps.selfPid && row.tty === tty)) return undefined;
-    if (rows.some((row) => row.tty !== tty)) return undefined;
-    return rows.some((row) => row.pid !== deps.selfPid && looksLikeLegacyStation(row.command));
+    if (!rows.some((row) => row.pid === anchor.pid && row.tty === anchor.tty)) return undefined;
+    if (rows.some((row) => row.tty !== anchor.tty)) return undefined;
+    if (!revalidateLegacyTtyAnchor(anchor, deps)) return undefined;
+
+    const revalidatedTtyIdentity = ttyIdentity(deps.platform, deps.readTtyPathStat(ttyPath));
+    if (
+      !sameIdentity(stdinIdentity, revalidatedTtyIdentity) ||
+      !sameIdentity(controllingTtyIdentity, revalidatedTtyIdentity)
+    ) {
+      return undefined;
+    }
+    return rows.some((row) => row.pid !== anchor.pid && looksLikeLegacyStation(row.command));
   } catch {
     return undefined;
   }
+}
+
+function findLegacyTtyAnchor(deps: StationTtyOwnershipDeps): LegacyTtyAnchor {
+  const selfTty = readProcessTty(deps.selfPid, deps);
+  if (selfTty !== null) return { kind: "self", pid: deps.selfPid, tty: selfTty };
+
+  let current = readProcessRow(deps.selfPid, deps);
+  if (current.tty !== null) throw new Error("Renderer controlling TTY changed.");
+  const chain = [current];
+  const visited = new Set([current.pid]);
+  for (let depth = 0; depth < MAX_TTY_ANCESTOR_DEPTH; depth += 1) {
+    if (current.ppid === 0 || visited.has(current.ppid)) {
+      throw new Error("TTY ancestry is missing or cyclic.");
+    }
+    const parent = readProcessRow(current.ppid, deps);
+    visited.add(parent.pid);
+    chain.push(parent);
+    if (parent.tty !== null) {
+      return { kind: "ancestor", pid: parent.pid, tty: parent.tty, chain };
+    }
+    current = parent;
+  }
+  throw new Error("TTY ancestry exceeded its bound.");
+}
+
+function revalidateLegacyTtyAnchor(
+  anchor: LegacyTtyAnchor,
+  deps: StationTtyOwnershipDeps,
+): boolean {
+  if (anchor.kind === "self") return readProcessTty(anchor.pid, deps) === anchor.tty;
+  return anchor.chain.every((expected) => {
+    const actual = readProcessRow(expected.pid, deps);
+    return (
+      actual.pid === expected.pid && actual.ppid === expected.ppid && actual.tty === expected.tty
+    );
+  });
+}
+
+function readProcessTty(pid: number, deps: StationTtyOwnershipDeps): string | null {
+  const output = deps.runPs(["-p", String(pid), "-o", "tty="]);
+  if (!output.endsWith("\n")) throw new Error("Truncated ps output.");
+  const fields = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (fields.length !== 1) throw new Error("Malformed ps output.");
+  return parsePsTty(fields[0] ?? "");
+}
+
+function readProcessRow(pid: number, deps: StationTtyOwnershipDeps): PsProcessRow {
+  const output = deps.runPs(["-p", String(pid), "-o", "pid=,ppid=,tty="]);
+  if (!output.endsWith("\n")) throw new Error("Truncated ps output.");
+  const lines = output.split("\n").filter((line) => line.trim().length > 0);
+  if (lines.length !== 1) throw new Error("Malformed ps output.");
+  const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s*$/.exec(lines[0] ?? "");
+  if (match === null) throw new Error("Malformed ps output.");
+  const row = PsProcessRowSchema.parse({
+    pid: Number(match[1]),
+    ppid: Number(match[2]),
+    tty: parsePsTty(match[3] ?? ""),
+  });
+  if (row.pid !== pid) throw new Error("ps returned a different process.");
+  return row;
+}
+
+function parsePsTty(value: string): string | null {
+  if (PsNoTtySchema.safeParse(value).success) return null;
+  return PsTtySchema.parse(value);
 }
 
 function parsePsRow(line: string): z.infer<typeof PsRowSchema> {
