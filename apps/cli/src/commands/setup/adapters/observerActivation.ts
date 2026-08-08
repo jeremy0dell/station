@@ -6,9 +6,12 @@ import { restartObserver } from "../../../observerProcess.js";
 export type SetupObserverActivationAdapterOptions = {
   readonly configPath: () => string | undefined;
   readonly homeDir: string;
+  /** Receives delayed Observer startup progress lines during activation. */
+  readonly onStartupProgress?: (message: string) => void;
   readonly activateObserverConfig?: (input: {
     configPath: string;
     homeDir: string;
+    onStartupProgress?: (message: string) => void;
   }) => Promise<void>;
 };
 
@@ -16,6 +19,7 @@ export type SetupObserverActivationAdapterOptions = {
  * ADAPTER
  *
  * Translates setup activation into config loading, Observer path resolution, restart, and health confirmation.
+ * Forwards Observer startup progress to the caller-supplied callback without interpreting it.
  */
 export function createObserverActivationAdapter(
   options: SetupObserverActivationAdapterOptions,
@@ -29,6 +33,9 @@ export function createObserverActivationAdapter(
       await (options.activateObserverConfig ?? activateObserverConfig)({
         configPath,
         homeDir: options.homeDir,
+        ...(options.onStartupProgress === undefined
+          ? {}
+          : { onStartupProgress: options.onStartupProgress }),
       });
       return {
         status: "completed",
@@ -47,6 +54,7 @@ export function createObserverActivationAdapter(
 async function activateObserverConfig(input: {
   configPath: string;
   homeDir: string;
+  onStartupProgress?: (message: string) => void;
 }): Promise<void> {
   try {
     const loaded = await loadConfig({ configPath: input.configPath, homeDir: input.homeDir });
@@ -55,6 +63,9 @@ async function activateObserverConfig(input: {
       config: loaded.config,
       configPath: loaded.configPath,
       paths,
+      ...(input.onStartupProgress === undefined
+        ? {}
+        : { onStartupProgress: input.onStartupProgress }),
     });
     if (status.status !== "running") {
       throw safeErrorFromUnknown(status.error, observerActivationError);

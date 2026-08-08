@@ -38,6 +38,8 @@ import { createObserverActivationAdapter } from "./observerActivation.js";
 export type SetupOperationAdapterOptions = {
   readonly facts?: SetupFacts | (() => SetupFacts | undefined);
   readonly deps: SetupCommandDeps | (() => SetupCommandDeps);
+  /** Receives delayed Observer startup progress lines during activation. */
+  readonly observerStartupProgress?: (message: string) => void;
 };
 
 /**
@@ -45,6 +47,7 @@ export type SetupOperationAdapterOptions = {
  *
  * Assigns package/bootstrap, config, provider, process, filesystem, and Observer operations to their final outward implementations.
  * Tmux changes revalidate the selected key and admitted config bytes immediately before mutation.
+ * Observer activation forwards startup progress to the caller-supplied callback.
  */
 export function createSetupOperationAdapter(
   options: SetupOperationAdapterOptions,
@@ -68,6 +71,9 @@ export function createSetupOperationAdapter(
   const observer = createObserverActivationAdapter({
     configPath: () => committedConfigPath,
     homeDir: initialFacts?.homeDir ?? initialDeps.homeDir ?? process.env.HOME ?? "",
+    ...(options.observerStartupProgress === undefined
+      ? {}
+      : { onStartupProgress: options.observerStartupProgress }),
     ...(initialDeps.activateObserverConfig === undefined
       ? {}
       : { activateObserverConfig: initialDeps.activateObserverConfig }),

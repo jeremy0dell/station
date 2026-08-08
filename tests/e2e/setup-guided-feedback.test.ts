@@ -456,7 +456,7 @@ describe("setup guided feedback e2e", () => {
         answers: ["n", "n", "y", "y", "n", "n"],
       });
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       await expect(readFile(shellRcPath(fixture.home, "zsh"), "utf8")).rejects.toThrow();
       await expect(readFile(bashrc, "utf8")).resolves.toBe(existingBashrc);
       expect(result.stdout).not.toContain("fake shell integration installed");
@@ -802,10 +802,25 @@ async function expectReviewedSetupTranscript(input: {
     .replaceAll(input.fixtureRoot, "<FIXTURE_ROOT>")
     .replaceAll(input.runtimeDir, "<RUNTIME_DIR>")
     .replaceAll(process.cwd(), "<CHECKOUT>");
+  const stableTranscript = dropTimingDependentProgressLines(transcript);
   if (process.env.STATION_UPDATE_SETUP_TRANSCRIPT === "1") {
-    await writeFile(reviewedTranscriptPath, transcript, "utf8");
+    await writeFile(reviewedTranscriptPath, stableTranscript, "utf8");
   }
-  expect(transcript).toBe(await readFile(reviewedTranscriptPath, "utf8"));
+  expect(stableTranscript).toBe(await readFile(reviewedTranscriptPath, "utf8"));
+}
+
+// Startup progress lines fire on elapsed-time timers (1.5s/5s), so whether they
+// appear in a recorded transcript depends on machine speed; verbatim copy is
+// covered by the guided unit tests instead.
+function dropTimingDependentProgressLines(transcript: string): string {
+  const lines = transcript
+    .split("\n")
+    .filter(
+      (line) =>
+        !line.startsWith("●  Starting STATION observer") &&
+        !line.startsWith("●  Still waiting for STATION observer"),
+    );
+  return lines.filter((line, index) => index === 0 || line !== lines[index - 1]).join("\n");
 }
 
 function shellRcPath(...pathArguments: [home: string, shell: SupportedShell]): string {
