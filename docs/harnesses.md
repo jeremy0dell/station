@@ -64,7 +64,7 @@ Events (`integrations/harness/cursor/src/hooks/hookConstants.ts`): `sessionStart
 
 Hooks: entries in `~/.cursor/hooks.json` call `station-cursor-hook.sh`.
 
-Coverage: full, with one nuance. Attention comes from a `stop` event whose status is `error`, rather than from a live permission prompt. A `stop` with `completed` or `aborted` drives **idle**, and `sessionEnd` drives **exited**.
+Coverage: full, with one nuance. Attention comes from a `stop` event whose status is `error`, rather than from a live permission prompt. A completed `stop` drives **idle** and marks the turn ready-to-read; an aborted `stop` drives plain **idle**, and `sessionEnd` drives **exited**.
 
 ### OpenCode (Full)
 
