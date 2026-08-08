@@ -15,6 +15,7 @@ import {
   redact,
 } from "../../packages/observability/dist/index.js";
 import { readUnixSocketHolderPids } from "../../packages/protocol/dist/index.js";
+import { RuntimeLifecycleEventSchema } from "../runtime-owner.mjs";
 
 export const BINARY_SMOKE_EVIDENCE_LIMITS = Object.freeze({
   maxTotalBytes: 1_048_576,
@@ -26,6 +27,7 @@ export const BINARY_SMOKE_EVIDENCE_LIMITS = Object.freeze({
 const manifestMaxBytes = 65_536;
 const failureMaxBytes = 32_768;
 const runtimeMaxBytes = 32_768;
+const lifecycleMaxBytes = 32_768;
 const bootMaxBytes = 65_536;
 const diagnosticErrorsMaxBytes = 65_536;
 const diagnosticErrorLines = 100;
@@ -92,6 +94,7 @@ const runtimePidfileSchema = z
     buildIdentity: z.string().min(12).optional(),
   })
   .strict();
+const lifecycleSchema = z.array(RuntimeLifecycleEventSchema);
 const BinarySmokeEvidenceManifestSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -139,6 +142,7 @@ const BinarySmokeEvidenceManifestSchema = z
               socket: runtimeSocketSchema,
               pidfile: runtimePidfileSchema,
               processes: z.array(runtimeProcessSchema),
+              lifecycle: lifecycleSchema,
             })
             .strict(),
           files: z.array(capturedFileSchema),
@@ -196,6 +200,7 @@ export async function captureBinarySmokeEvidence(input) {
   const state = {
     input,
     capturedAt,
+    roundRoot,
     files: [],
     redactionReports: [],
     warnings: [],
@@ -301,7 +306,14 @@ export async function finalizeBinarySmokeEvidence(input) {
   const [round] = manifest.rounds;
   if (round === undefined) throw new Error("Binary smoke evidence manifest has no round.");
   round.cleanup = cleanupSchema.parse(input.cleanup);
-  round.runtime.processes = input.processes.map((process) => runtimeProcessSchema.parse(process));
+  if (input.processes !== undefined) {
+    round.runtime.processes = input.processes.map((process) => runtimeProcessSchema.parse(process));
+  }
+  if (input.lifecycleEvents !== undefined) {
+    const lifecycle = lifecycleSchema.parse(input.lifecycleEvents);
+    round.runtime.lifecycle = lifecycle;
+    await writeFinalLifecycle(input.evidenceDir, round, lifecycle);
+  }
   manifest.warnings.push(...input.warnings.map((warning) => boundedText(warning, 1_000)));
   const bytes = jsonBytes(BinarySmokeEvidenceManifestSchema.parse(manifest));
   if (bytes.length > manifestMaxBytes) {
@@ -353,8 +365,78 @@ async function runtimeRecord(input, state) {
     pid,
     exists: processExists(pid),
   }));
-  const runtime = { socket, pidfile, processes };
-  return redactValue(runtime, state);
+  const lifecycle = await captureLifecycle(input, state);
+  const redacted = redactValue({ socket, pidfile, processes }, state);
+  return { ...redacted, lifecycle };
+}
+
+async function captureLifecycle(input, state) {
+  const lifecycle = normalizeLifecycleEvents(
+    input.lifecycleEvents ??
+      (await readLifecycleSource(
+        input.ownerEventsPath ?? resolve(input.stateDir, "logs", "cli.jsonl"),
+        input.smokeRoot,
+      )),
+  );
+  const bytes = Buffer.from(`${lifecycle.map((event) => JSON.stringify(event)).join("\n")}\n`);
+  await writeCaptured(
+    state,
+    `${state.roundRoot}/runtime/lifecycle.jsonl`,
+    "runtime/owner-lifecycle.jsonl",
+    bytes,
+    {
+      maxBytes: lifecycleMaxBytes,
+      lines: lifecycle.length,
+    },
+  );
+  return lifecycle;
+}
+
+async function readLifecycleSource(path, smokeRoot) {
+  const read = await boundedSourceRead(path, smokeRoot, lifecycleMaxBytes, true);
+  if (read.status !== "ready") return [];
+  const parsed = parseJsonlTail(
+    read.bytes.toString("utf8"),
+    RuntimeLifecycleEventSchema,
+    256,
+    read.truncated,
+  );
+  return parsed.status === "malformed" ? [] : parsed.records;
+}
+
+function normalizeLifecycleEvents(events) {
+  const parsed = lifecycleSchema.parse(events ?? []);
+  if (parsed.length <= 256) return parsed;
+  return [...parsed.slice(0, 128), ...parsed.slice(-128)];
+}
+
+async function writeFinalLifecycle(evidenceDir, round, lifecycle) {
+  const roundRoot = resolve(
+    evidenceDir,
+    "rounds",
+    `${String(round.round).padStart(4, "0")}-${safeName(round.direction.physical)}`,
+  );
+  const path = resolve(roundRoot, "runtime/lifecycle.jsonl");
+  const bytes = Buffer.from(`${lifecycle.map((event) => JSON.stringify(event)).join("\n")}\n`);
+  if (bytes.length > lifecycleMaxBytes)
+    throw new Error("Binary smoke lifecycle evidence exceeded its file cap.");
+  await createParentDirectories(path, evidenceDir);
+  await atomicWrite(path, bytes, true);
+  const file = round.files.find((entry) => entry.source === "runtime/owner-lifecycle.jsonl");
+  if (file === undefined) {
+    round.files.push({
+      path: `rounds/${String(round.round).padStart(4, "0")}-${safeName(round.direction.physical)}/runtime/lifecycle.jsonl`,
+      source: "runtime/owner-lifecycle.jsonl",
+      status: "captured",
+      bytes: bytes.length,
+      lines: lifecycle.length,
+    });
+  } else {
+    file.status = "captured";
+    file.bytes = bytes.length;
+    file.lines = lifecycle.length;
+    delete file.truncated;
+  }
 }
 
 async function socketSummary(path, smokeRoot) {

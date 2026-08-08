@@ -76,7 +76,7 @@ provider homes are checkout-local. See the copy-paste recipe in
 - `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout. The foreground native-HMR owner registers a private disposable process group before Bun starts, reaps it on exit or interruption, and recovers an exact abandoned group on the next start. Observer, Station Host, and Host-owned PTYs remain outside that group.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` only to select a controlled development config. This selector retains ordinary CLI Observer startup and handoff behavior; it is not a safe real-state popup lane and should not target a live runtime that must remain undisturbed. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer. After isolated Observer and hook setup, it enters the same native-HMR owner as `station:ui-dev`, so UI cleanup does not stop the persistent devbox Observer, Host, or agent PTYs.
-- Native-HMR records live at `<state_dir>/run/runtime-owners/v1` in a `0700` directory with `0600` files. Do not delete an uncertain record: the next matching start revalidates owner PID/start identity and the exact disposable PGID before TERM, bounded wait, and any KILL escalation.
+- Disposable runtime records live at `<state_dir>/run/runtime-owners/v1` in a `0700` directory with `0600` files. Do not delete an uncertain record: the next matching start revalidates owner PID/start identity and the exact disposable PGID before TERM, bounded wait, and any KILL escalation.
 - Before Observer startup, `station:devbox` creates or repairs only its checkout-keyed socket directory to mode `0700`. It refuses symlinks, non-directories, and directories owned by another user; it never repairs or replaces socket and claim files.
 - If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
 - `pnpm station:devbox tmux dev` builds the checkout, starts or safely reuses a checkout-keyed private tmux server and isolated live Observer, claims cleanup ownership, and attaches the invoking terminal. Inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`; `Ctrl-b d` detaches and cleans up the owned lane. Use `tmux start` plus `tmux attach` when automation needs a persistent lane that is stopped explicitly.
@@ -210,8 +210,8 @@ Both guided entrypoints run under a disposable runtime owner
 `setup-guided-e2e` owner record before Vitest spawns, reaps the exact
 supervised process group on normal completion, interruption, or terminal loss,
 and recovers only an exact registered abandoned group on the next start.
-Records live at `<state_dir>/run/runtime-owners/v1` beside the native-HMR
-records, and lifecycle events reach `<state_dir>/logs/cli.jsonl` through the
+Records live at `<state_dir>/run/runtime-owners/v1` beside the other disposable
+runtime records, and lifecycle events reach `<state_dir>/logs/cli.jsonl` through the
 existing `stn debug logs` surface. Fixture cleanup inside the tests remains
 defense in depth, not the sole owner; do not invoke Vitest directly for the
 guided suites except through the owner's passthrough arguments.
@@ -552,6 +552,14 @@ higher source Observer and verifies the complete runtime baseline is unchanged.
 It requires a committed clean checkout so the detached-worktree artifact has one
 controlled source delta; do not weaken or bypass that requirement.
 
+Before any child starts, the runner records a disposable runtime owner for the
+Observer, Station Host, and popup-renderer process groups. INT, TERM, and HUP
+cleanup sends TERM first, escalates only after bounded identity revalidation,
+and records the result in the failure bundle's `runtime/lifecycle.jsonl`.
+Persistent PTYs and unavailable or ambiguous identities are preserved and leave
+the private root for inspection; the next binary-smoke or handoff-stress start
+rescues only owner-dead disposable roots with unchanged evidence.
+
 For a local failure bundle, name an absolute path that does not exist and is
 outside the smoke root:
 
@@ -562,7 +570,9 @@ STATION_BINARY_SMOKE_EVIDENCE_DIR=/absolute/new/path \
 
 The runner creates that private directory only for failure or cancellation,
 captures evidence before teardown, records cleanup afterward, and preserves the
-original failure. Inspect `manifest.json` first. In hosted CI, use:
+original failure. Inspect `manifest.json` first; `rounds/*/runtime/lifecycle.jsonl`
+shows registration, signal, escalation, refusal, rescue, and final zero-residue
+counts. In hosted CI, use:
 
 ```bash
 gh run download <run-id> \

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants, readFileSync } from "node:fs";
 import {
   access,
@@ -32,6 +32,7 @@ import {
   stationObserverBuildVersion,
 } from "../../packages/runtime/dist/index.js";
 import { createStationHostClient } from "../../packages/station-host/dist/index.js";
+import { RuntimeLifecycleEventSchema, runOwnedDisposableRuntime } from "../runtime-owner.mjs";
 import {
   captureBinarySmokeEvidence,
   finalizeBinarySmokeEvidence,
@@ -67,12 +68,20 @@ class SmokeCommandError extends Error {
 
 if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   await runObserverCancellationSelfCheck();
+} else if (process.env.STATION_BINARY_SMOKE_LAUNCHER_LOSS_SELF_CHECK === "1") {
+  await runLauncherLossSelfCheck();
 } else if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   await runFakeTmuxProcess(process.argv.slice(2));
 } else if (
   process.argv.some((arg, index, args) => arg === "--mode" && args[index + 1] === "handoff-stress")
 ) {
-  await runHandoffStress(parseHandoffStressOptions(process.argv.slice(2)));
+  if (process.env.STATION_BINARY_SMOKE_OWNED_CHILD === "1") {
+    await runHandoffStress(parseHandoffStressOptions(process.argv.slice(2)));
+  } else {
+    await runOwnedBinarySmoke(process.argv.slice(2), "handoff-stress");
+  }
+} else if (process.env.STATION_BINARY_SMOKE_OWNED_CHILD !== "1") {
+  await runOwnedBinarySmoke(process.argv.slice(2), "binary-smoke");
 } else {
   const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
   const sourceCliPath = resolve("apps/cli/dist/main.js");
@@ -86,7 +95,11 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
     buildIdentity,
   });
   const ptyOnly = process.env.STATION_BINARY_SMOKE_PTY_ONLY === "1";
-  const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-"));
+  const externalOwner = process.env.STATION_BINARY_SMOKE_OWNED_CHILD === "1";
+  const root = resolve(
+    process.env.STATION_BINARY_SMOKE_ROOT ??
+      (await mkdtemp(join(tmpdir(), "station-binary-smoke-"))),
+  );
   const rootIdentity = fileIdentity(await lstat(root));
   const smokeStartedAt = Date.now();
   const alternateWorktreePath = join(root, "alternate-worktree");
@@ -95,6 +108,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   const runtimeDir = join(root, "runtime");
   const hostileDir = join(root, "hostile");
   const socketPath = join(runtimeDir, "observer.sock");
+  const hostSocketPath = join(runtimeDir, "station-host.sock");
   const configPath = join(root, "config.toml");
   const popupConfigPath = join(homeDir, ".config", "station", "config.toml");
   const markerPath = join(root, "ambient-config-pwned");
@@ -131,12 +145,17 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   let evidenceRequested = "alternate";
   let primaryFailure;
   let evidenceCaptured = false;
+  let lifecycleEvents;
   const cancellation = installSmokeCancellation();
   smokeRunSignal = cancellation.signal;
 
   try {
     if (process.env.STATION_BINARY_SMOKE_CANCELLATION_EXIT_SELF_CHECK === "1") {
-      process.kill(process.pid, "SIGINT");
+      const signal = process.env.STATION_BINARY_SMOKE_CANCELLATION_SIGNAL_SELF_CHECK ?? "SIGINT";
+      if (!["SIGINT", "SIGTERM", "SIGHUP"].includes(signal)) {
+        throw new Error(`Unsupported cancellation self-check signal: ${signal}`);
+      }
+      process.kill(process.pid, signal);
       await delay(0);
       throw runCancelledError(process.execPath, [], cancellation.signal);
     }
@@ -377,6 +396,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
           client: observerClient,
           env: childEnv,
           socketPath,
+          stateDir,
         },
       );
       const health = await observerClient.health();
@@ -415,6 +435,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
           client: observerClient,
           env: childEnv,
           socketPath,
+          stateDir,
         },
       );
       assertEqual((await observerClient.health()).pid, observerPid, "same-build observer reuse");
@@ -652,7 +673,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         await runObserverStart(
           lowerBuild.binaryPath,
           ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-          { client: observerClient, env: childEnv, socketPath },
+          { client: observerClient, env: childEnv, socketPath, stateDir },
         );
         const lowerHealth = await observerClient.health();
         observerPid = lowerHealth.pid;
@@ -664,13 +685,13 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       }
     }
 
-    const hostSocketPath = join(runtimeDir, "station-host.sock");
     hostProcess = spawn(
       binaryPath,
       ["__station-host", "--socket", hostSocketPath, "--state-dir", stateDir],
       {
         cwd: hostileDir,
         env: childEnv,
+        detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -717,7 +738,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       await runObserverStart(
         higherBuild.binaryPath,
         ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-        { client: observerClient, env: childEnv, socketPath },
+        { client: observerClient, env: childEnv, socketPath, stateDir },
       );
       const higherHealth = await observerClient.health();
       observerPid = higherHealth.pid;
@@ -830,7 +851,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         await runObserverStart(
           process.execPath,
           [sourceCliPath, "--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-          { client: observerClient, env: childEnv, socketPath },
+          { client: observerClient, env: childEnv, socketPath, stateDir },
         );
         const successorHealth = await observerClient.health();
         observerPid = successorHealth.pid;
@@ -861,7 +882,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         await runObserverStart(
           binaryPath,
           ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-          { client: observerClient, env: childEnv, socketPath },
+          { client: observerClient, env: childEnv, socketPath, stateDir },
         );
         assertEqual(
           (await observerClient.health()).pid,
@@ -973,12 +994,12 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
     await observerClient.stop().catch(() => undefined);
     await waitForMissing(socketPath).catch(() => undefined);
   });
-  await cleanupAction(cleanupWarnings, "Observer process cleanup", async () => {
-    if (observerPid !== undefined) await terminateProcess(observerPid);
-  });
   await cleanupAction(cleanupWarnings, "Station Host client cleanup", async () =>
     hostClient?.dispose(),
   );
+  await cleanupAction(cleanupWarnings, "Observer process cleanup", async () => {
+    if (observerPid !== undefined) await terminateProcess(observerPid);
+  });
   await cleanupAction(cleanupWarnings, "Station Host process cleanup", async () => {
     if (
       hostProcess === undefined ||
@@ -1001,6 +1022,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   await cleanupAction(cleanupWarnings, "alternate worktree cleanup", async () => {
     if (alternateWorktreeAdded) await removeTemporaryWorktree(alternateWorktreePath);
   });
+  lifecycleEvents = await readRuntimeLifecycleEvents(stateDir);
 
   if (primaryFailure === undefined && cleanupWarnings.length > 0) {
     primaryFailure = new AggregateError(
@@ -1035,9 +1057,9 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
     }
   }
 
-  await cleanupAction(cleanupWarnings, "smoke root cleanup", () =>
-    removeExactSmokeRoot(root, rootIdentity),
-  );
+  await cleanupAction(cleanupWarnings, "smoke root cleanup", async () => {
+    if (!externalOwner) await removeExactSmokeRoot(root, rootIdentity);
+  });
   if (primaryFailure === undefined && cleanupWarnings.length > 0) {
     primaryFailure = new AggregateError(
       cleanupWarnings.map((warning) => new Error(warning)),
@@ -1086,6 +1108,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
         cleanup,
         processes: knownProcessSummaries(observerPid, hostProcess?.pid),
         warnings: cleanupWarnings,
+        lifecycleEvents,
       });
     } catch (error) {
       cleanupWarnings.push(`Evidence finalization failed: ${errorMessage(error)}`);
@@ -1101,9 +1124,147 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   }
 }
 
+async function runOwnedBinarySmoke(args, mode) {
+  const prefix = mode === "handoff-stress" ? "stn-h-" : "station-binary-smoke-";
+  const root = resolve(
+    process.env.STATION_BINARY_SMOKE_ROOT ?? (await mkdtemp(join(tmpdir(), prefix))),
+  );
+  const rootIdentity = fileIdentity(await lstat(root));
+  const stateDir = join(root, "state");
+  const evidenceDir = process.env.STATION_BINARY_SMOKE_EVIDENCE_DIR;
+  let result;
+  let ownerError;
+  try {
+    result = await runOwnedDisposableRuntime({
+      role: "binary-smoke",
+      checkoutRoot: repoRoot,
+      stateDir,
+      socketRoots: [join(root, "runtime")],
+      persistenceRoots: [root, stateDir],
+      survivorPolicy: "preserve-persistent-station-runtime",
+      terminalKey: "binary-smoke-runner",
+      correlation: {
+        traceId: `trc_${randomUUID()}`,
+        spanId: `spn_${randomUUID()}`,
+      },
+      launch: {
+        cwd: repoRoot,
+        steps: [
+          {
+            command: process.execPath,
+            args: [fileURLToPath(import.meta.url), ...args],
+          },
+        ],
+        env: {
+          STATION_BINARY_SMOKE_OWNED_CHILD: "1",
+          STATION_BINARY_SMOKE_ROOT: root,
+          STATION_RUNTIME_OWNER_FOREGROUND: "1",
+        },
+      },
+    });
+  } catch (error) {
+    ownerError = error;
+  }
+
+  const finalizationWarnings = [];
+  if (evidenceDir !== undefined && evidenceDir.length > 0) {
+    await finalizeOwnedSmokeEvidence({
+      evidenceDir,
+      stateDir,
+      ownerError,
+      warnings: finalizationWarnings,
+    });
+  }
+
+  if (ownerError === undefined) {
+    try {
+      await removeExactTemporaryRoot(root, rootIdentity, prefix);
+    } catch (error) {
+      finalizationWarnings.push(`owned smoke root cleanup: ${errorMessage(error)}`);
+    }
+  }
+  if (finalizationWarnings.length > 0) {
+    for (const warning of finalizationWarnings)
+      process.stderr.write(`Binary smoke warning: ${warning}\n`);
+  }
+  if (ownerError !== undefined) throw ownerError;
+  if (finalizationWarnings.length > 0) {
+    process.exitCode = 1;
+    return;
+  }
+  process.exitCode = result?.exitCode ?? 1;
+}
+
+async function finalizeOwnedSmokeEvidence({ evidenceDir, stateDir, ownerError, warnings }) {
+  const manifestPath = join(resolve(evidenceDir), "manifest.json");
+  if (!(await pathExists(manifestPath))) return;
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const round = manifest.rounds?.[0];
+    const currentCleanup = round?.cleanup;
+    const processes = round?.runtime?.processes ?? [];
+    const observerProcesses = processes.filter((entry) =>
+      ["observer", "incumbent", "replacement"].includes(entry.role),
+    );
+    const hostProcesses = processes.filter((entry) => entry.role === "station-host");
+    await finalizeBinarySmokeEvidence({
+      evidenceDir,
+      cleanup: {
+        status:
+          ownerError === undefined && currentCleanup?.status !== "incomplete"
+            ? "complete"
+            : "incomplete",
+        observerExited:
+          currentCleanup?.observerExited ??
+          observerProcesses.every((entry) => !processIsAlive(entry.pid)),
+        hostExited:
+          currentCleanup?.hostExited ?? hostProcesses.every((entry) => !processIsAlive(entry.pid)),
+        socketRemoved:
+          currentCleanup?.socketRemoved ??
+          !(await pathExists(join(dirname(stateDir), "runtime", "observer.sock"))),
+        pidfileRemoved:
+          currentCleanup?.pidfileRemoved ??
+          !(await pathExists(join(dirname(stateDir), "runtime", "observer.sock.pid"))),
+      },
+      warnings: [
+        ...warnings,
+        ...(ownerError === undefined ? [] : [`runtime owner: ${errorMessage(ownerError)}`]),
+      ],
+      lifecycleEvents: await readRuntimeLifecycleEvents(stateDir),
+    });
+  } catch (error) {
+    warnings.push(`Evidence finalization failed: ${errorMessage(error)}`);
+  }
+}
+
+async function readRuntimeLifecycleEvents(source) {
+  const path = source.endsWith(".jsonl") ? source : join(source, "logs", "cli.jsonl");
+  let content;
+  try {
+    content = await readFile(path, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  return content
+    .split(/\r?\n/)
+    .filter((line) => line.length > 0)
+    .flatMap((line) => {
+      try {
+        const event = RuntimeLifecycleEventSchema.safeParse(JSON.parse(line));
+        return event.success ? [event.data] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
 async function runHandoffStress(options) {
   const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
-  const baseRoot = await mkdtemp(join(tmpdir(), "stn-h-"));
+  const externalOwner = process.env.STATION_BINARY_SMOKE_OWNED_CHILD === "1";
+  const baseRoot = resolve(
+    process.env.STATION_BINARY_SMOKE_ROOT ?? (await mkdtemp(join(tmpdir(), "stn-h-"))),
+  );
   const baseIdentity = fileIdentity(await lstat(baseRoot));
   const alternateWorktreePath = join(baseRoot, "alternate-worktree");
   const evidenceDir = process.env.STATION_BINARY_SMOKE_EVIDENCE_DIR;
@@ -1173,9 +1334,9 @@ async function runHandoffStress(options) {
   await cleanupAction(cleanupWarnings, "alternate worktree cleanup", async () => {
     if (alternateWorktreeAdded) await removeTemporaryWorktree(alternateWorktreePath);
   });
-  await cleanupAction(cleanupWarnings, "stress root cleanup", () =>
-    removeExactTemporaryRoot(baseRoot, baseIdentity, "stn-h-"),
-  );
+  await cleanupAction(cleanupWarnings, "stress root cleanup", async () => {
+    if (!externalOwner) await removeExactTemporaryRoot(baseRoot, baseIdentity, "stn-h-");
+  });
   cancellation.dispose();
 
   if (primaryFailure === undefined && cleanupWarnings.length > 0) {
@@ -1253,14 +1414,15 @@ async function runHandoffStressRound(input) {
         cleanup,
         processes: stressKnownProcessSummaries(context),
         warnings: cleanupWarnings,
+        lifecycleEvents: await readRuntimeLifecycleEvents(context.ownerEventsPath),
       });
     } catch (error) {
       cleanupWarnings.push(`Evidence finalization failed: ${errorMessage(error)}`);
     }
   }
-  await cleanupAction(cleanupWarnings, "stress round root cleanup", () =>
-    removeExactDirectory(roundRoot, roundIdentity, input.baseRoot),
-  );
+  await cleanupAction(cleanupWarnings, "stress round root cleanup", () => {
+    return removeExactDirectory(roundRoot, roundIdentity, input.baseRoot);
+  });
 
   reportCleanupWarnings(`Binary handoff stress round ${input.round}`, cleanupWarnings);
   if (primaryFailure !== undefined) throw primaryFailure;
@@ -1301,6 +1463,7 @@ async function createStressRoundContext(input, roundRoot) {
     hostSocketPath,
     configPath,
     releasePath,
+    ownerEventsPath: join(input.baseRoot, "state", "logs", "cli.jsonl"),
     env: isolatedBinaryEnv({ homeDir, runtimeDir }),
     client: createObserverClient({ socketPath, timeoutMs: 5000 }),
     timings: {},
@@ -1329,6 +1492,7 @@ async function executeStressRound(context) {
       client: context.client,
       env: context.env,
       socketPath: context.socketPath,
+      stateDir: context.stateDir,
       timeoutMs: context.roundTimeoutMs,
     },
   );
@@ -1342,7 +1506,11 @@ async function executeStressRound(context) {
   context.hostProcess = spawn(
     lower.binaryPath,
     ["__station-host", "--socket", context.hostSocketPath, "--state-dir", context.stateDir],
-    { env: context.env, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
+      env: context.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
   );
   const hostDiagnostics = collectOutput(context.hostProcess);
   context.hostClient = createStationHostClient({
@@ -1386,6 +1554,7 @@ async function executeStressRound(context) {
       client: context.client,
       env: context.env,
       socketPath: context.socketPath,
+      stateDir: context.stateDir,
       timeoutMs: context.roundTimeoutMs,
     },
   );
@@ -1538,6 +1707,7 @@ async function captureStressRoundEvidence(context, primaryFailure, startedAt, ev
       requested: higher.label,
     },
     knownProcesses: stressKnownProcesses(context),
+    lifecycleEvents: await readRuntimeLifecycleEvents(context.ownerEventsPath),
   });
 }
 
@@ -1726,6 +1896,7 @@ async function captureSmokeFailureEvidence(input) {
       requested: input.evidenceRequested,
     },
     knownProcesses: knownProcesses(input.observerPid, input.hostPid),
+    lifecycleEvents: await readRuntimeLifecycleEvents(input.stateDir),
   });
 }
 
@@ -1911,7 +2082,6 @@ async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, l
   const configPath = join(root, "config.toml");
   const env = isolatedBinaryEnv({ homeDir, runtimeDir });
   const client = createObserverClient({ socketPath, timeoutMs: 5000 });
-  let pid;
 
   await Promise.all([
     mkdir(join(homeDir, "tmp"), { recursive: true, mode: 0o700 }),
@@ -1925,10 +2095,9 @@ async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, l
     const startup = await runObserverStart(
       binaryPath,
       ["--config", configPath, "observer", "start", "--timeout-ms", "30000"],
-      { client, env, socketPath },
+      { client, env, socketPath, stateDir },
     );
     const health = startup.health;
-    pid = health.pid;
     assertEqual(health.status, "healthy", `${label} health`);
     if (health.version === undefined) {
       fail(`${label} did not publish an exact build selector`);
@@ -1937,9 +2106,6 @@ async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, l
   } finally {
     await client.stop().catch(() => undefined);
     await waitForMissing(socketPath).catch(() => undefined);
-    if (pid !== undefined) {
-      await terminateProcess(pid);
-    }
   }
 }
 
@@ -2039,6 +2205,7 @@ function isolatedBinaryEnv({ homeDir: home, runtimeDir: runtime }) {
     LANG: "C",
     TERM: "xterm-256color",
     TMPDIR: join(home, "tmp"),
+    STATION_RUNTIME_OWNER_FOREGROUND: "1",
   };
 }
 
@@ -2957,7 +3124,7 @@ function createFakeTmuxSession(state, args) {
   if (sessionName.length === 0) return fakeTmuxResult(1);
   if (state.sessions[sessionName] !== undefined) return fakeTmuxResult(1);
   const renderer = spawn("/bin/sleep", ["2147483647"], {
-    detached: true,
+    detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
     stdio: "ignore",
   });
   renderer.unref();
@@ -3212,7 +3379,9 @@ function run(command, args, options = {}) {
       return;
     }
     const terminateDescendants =
-      options.terminateDescendants === true && process.platform !== "win32";
+      options.terminateDescendants === true &&
+      process.platform !== "win32" &&
+      process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1";
     const child = spawn(command, args, {
       cwd: options.cwd,
       detached: terminateDescendants,
@@ -3296,7 +3465,7 @@ async function runObserverStart(command, args, { client, env, socketPath, timeou
   if (cancellationSignal?.aborted === true) {
     throw runCancelledError(command, args, cancellationSignal);
   }
-  // The launcher owns its detached child until startup resolves, so cancellation waits for that bounded handoff.
+  // Defer cancellation while the command publishes its Observer health so the owner can reap one group.
   const result = await run(command, args, {
     deferSmokeCancellation: true,
     env,
@@ -3426,20 +3595,97 @@ async function runObserverCancellationSelfCheck() {
   }
 }
 
+async function runLauncherLossSelfCheck() {
+  const rescueRoot = process.env.STATION_BINARY_SMOKE_LAUNCHER_LOSS_RESCUE_ROOT;
+  if (rescueRoot !== undefined) {
+    await rescueLauncherLossRoot(resolve(rescueRoot));
+    return;
+  }
+
+  const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-escape-"));
+  const descriptorPath = join(root, "descriptor.json");
+  const stateDir = join(root, "state");
+  const source = [
+    "const { writeFileSync } = require('node:fs');",
+    `writeFileSync(${JSON.stringify(descriptorPath)}, JSON.stringify({ root: ${JSON.stringify(root)}, pid: process.pid }));`,
+    "process.on('SIGTERM', () => {});",
+    "process.on('SIGHUP', () => {});",
+    "setInterval(() => {}, 1000);",
+  ].join("\n");
+  const ownerPromise = runOwnedDisposableRuntime({
+    role: "binary-smoke",
+    checkoutRoot: repoRoot,
+    stateDir,
+    socketRoots: [join(root, "runtime")],
+    persistenceRoots: [root, stateDir],
+    survivorPolicy: "preserve-persistent-station-runtime",
+    terminalKey: "binary-smoke-launcher-loss-self-check",
+    correlation: {
+      traceId: `trc_${randomUUID()}`,
+      spanId: `spn_${randomUUID()}`,
+    },
+    launch: {
+      cwd: repoRoot,
+      steps: [{ command: process.execPath, args: ["-e", source] }],
+    },
+  });
+  await waitForPath(descriptorPath, 5_000);
+  process.stdout.write(`${await readFile(descriptorPath, "utf8")}\n`);
+  const result = await ownerPromise;
+  process.exitCode = result.exitCode;
+}
+
+async function rescueLauncherLossRoot(root) {
+  const stateDir = join(root, "state");
+  const result = await runOwnedDisposableRuntime({
+    role: "binary-smoke",
+    checkoutRoot: repoRoot,
+    stateDir,
+    socketRoots: [join(root, "runtime")],
+    persistenceRoots: [root, stateDir],
+    survivorPolicy: "preserve-persistent-station-runtime",
+    terminalKey: "binary-smoke-launcher-loss-self-check",
+    correlation: {
+      traceId: `trc_${randomUUID()}`,
+      spanId: `spn_${randomUUID()}`,
+    },
+    launch: {
+      cwd: repoRoot,
+      steps: [{ command: process.execPath, args: ["-e", ""] }],
+    },
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(`launcher-loss rescue exited ${result.exitCode}`);
+  }
+  await removeExactTemporaryRoot(root, fileIdentity(await lstat(root)), "station-binary-smoke-");
+}
+
+async function waitForPath(path, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await pathExists(path)) return;
+    await delay(25);
+  }
+  throw new Error(`Timed out waiting for ${path}.`);
+}
+
 function installSmokeCancellation() {
   const controller = new AbortController();
   const handleSignal = (signal) => {
-    process.exitCode = signal === "SIGINT" ? 130 : 143;
+    process.exitCode = signal === "SIGINT" ? 130 : signal === "SIGHUP" ? 129 : 143;
     controller.abort(signal);
   };
   const onInterrupt = () => handleSignal("SIGINT");
+  const onHangup = () => handleSignal("SIGHUP");
   const onTerminate = () => handleSignal("SIGTERM");
   process.on("SIGINT", onInterrupt);
+  process.on("SIGHUP", onHangup);
   process.on("SIGTERM", onTerminate);
   return {
     signal: controller.signal,
     dispose: () => {
       process.off("SIGINT", onInterrupt);
+      process.off("SIGHUP", onHangup);
       process.off("SIGTERM", onTerminate);
     },
   };
@@ -3471,6 +3717,27 @@ function collectOutput(child) {
   child.stdout?.on("data", (chunk) => (stdout += chunk));
   child.stderr?.on("data", (chunk) => (stderr += chunk));
   return () => ({ stdout, stderr });
+}
+
+async function waitForExit(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolvePromise, reject) => {
+    const timeout = setTimeout(() => {
+      child.off("close", onClose);
+      child.off("error", onError);
+      reject(new Error(`child did not exit within ${timeoutMs} ms`));
+    }, timeoutMs);
+    const onClose = () => {
+      clearTimeout(timeout);
+      resolvePromise();
+    };
+    const onError = (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    };
+    child.once("close", onClose);
+    child.once("error", onError);
+  });
 }
 
 async function waitForHost(client, diagnostics) {
@@ -3563,17 +3830,6 @@ async function waitForMissing(path) {
     }
   }
   fail(`path remained present: ${path}`);
-}
-
-function waitForExit(child, timeoutMs) {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolveWait, reject) => {
-    const timeout = setTimeout(() => reject(new Error("process did not exit")), timeoutMs);
-    child.once("exit", () => {
-      clearTimeout(timeout);
-      resolveWait();
-    });
-  });
 }
 
 async function terminateProcess(pid) {
