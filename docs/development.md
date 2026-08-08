@@ -616,7 +616,29 @@ The smoke uses test-only `--build-version` overrides on `hostMain` so two host
 identities share one checkout entrypoint. Cases covered: busy refuse without
 opt-in (`HOST_UPGRADE_BLOCKED`, child survives), negotiated
 `beginHandoff` → `completeHandoff` → successor `adoptRegistry` with the same
-child PID, and idle `stopIfIdle` remains the empty-host path.
+child PID, idle `stopIfIdle` remains the empty-host path, multi-PTY + abort +
+recovery, and a packaging-shape handoff (source-style `bun hostMain` → trampoline
+successor argv, proving adopt still works when the successor is not launched with
+the same command prefix). Set `STATION_BINARY_PATH=/path/to/stn` to additionally
+exercise a real compiled `__station-host` successor in that packaging case.
+
+### Source ↔ binary and `station:devbox`
+
+Host compatibility is display `buildVersion` + protocol major only — not
+`compiled` vs source, and not Observer content identity. Consequences:
+
+- Source and a binary that report the **same** display version **reuse** the host;
+  `stn host handoff` refuses as unnecessary.
+- Different display versions with matching protocol are `replace`; busy hosts still
+  default to `HOST_UPGRADE_BLOCKED` until someone opts into handoff. The successor
+  packaging follows the requesting CLI (`bun hostMain.ts` vs `<stn> __station-host`).
+- Protocol major skew never handoffs.
+- Both sides must target the same socket/state dir (same config). Global state and
+  a worktree `.dev-state` are different islands.
+- `pnpm station:devbox` always wants a Bun source host. Mixing a binary
+  `stn host handoff` into that socket can flip packaging; `station:devbox status`
+  warns on mismatch. Prefer `stop` then `start` to restore the source host.
+  `restart` recycles the Observer only and intentionally leaves the host alive.
 
 CLI surface for operators:
 
@@ -624,6 +646,7 @@ CLI surface for operators:
 pnpm stn host status
 pnpm stn host handoff --dry-run
 pnpm stn host handoff --fidelity processes|screen
+pnpm station:devbox status           # warns if host build ≠ this checkout's CLI
 ```
 
 Manual UX check (optional): isolated config with `station_persistent_agents = true`,
