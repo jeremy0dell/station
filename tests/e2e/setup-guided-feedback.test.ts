@@ -456,7 +456,7 @@ describe("setup guided feedback e2e", () => {
         answers: ["n", "n", "y", "y", "n", "n"],
       });
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
       await expect(readFile(shellRcPath(fixture.home, "zsh"), "utf8")).rejects.toThrow();
       await expect(readFile(bashrc, "utf8")).resolves.toBe(existingBashrc);
       expect(result.stdout).not.toContain("fake shell integration installed");

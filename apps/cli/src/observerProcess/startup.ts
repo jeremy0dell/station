@@ -45,7 +45,7 @@ export async function startObserverProcess(
   },
   deps: ObserverProcessDeps,
 ): Promise<RuntimeBoundaryResult<ObserverHealth>> {
-  const progressTimers = scheduleObserverStartupProgress(input.onStartupProgress, input.paths);
+  const startupProgress = scheduleObserverStartupProgress(input.onStartupProgress, input.paths);
   let child: ChildProcessLike | undefined;
   let startupFailureReason: string | undefined;
   const result = await runRuntimeBoundaryWithTimeout(
@@ -106,7 +106,7 @@ export async function startObserverProcess(
         throw error;
       }
     },
-  ).finally(() => clearObserverStartupProgress(progressTimers));
+  ).finally(() => startupProgress.dispose());
 
   // A child queued on the boot claim must not outlive the incumbent this caller attached to.
   if (result.ok && child?.pid !== undefined && child.pid !== result.value.pid) {
@@ -393,21 +393,31 @@ async function disposeObserverBootLog(child: ChildProcessLike | undefined): Prom
 function scheduleObserverStartupProgress(
   onProgress: ObserverProcessOptions["onStartupProgress"],
   paths: SpawnObserverInput["paths"],
-): Array<ReturnType<typeof setTimeout>> {
+): { dispose: () => void } {
   if (onProgress === undefined) {
-    return [];
+    return { dispose: () => undefined };
   }
-  return [
-    setTimeout(() => emitObserverStartupProgress(onProgress, "Starting STATION observer…"), 1_500),
+  // clearTimeout alone cannot retract a callback the event loop already
+  // dequeued, and a late emission would land in whatever the caller moved on
+  // to (an active Clack prompt swallows its pending answer when log output
+  // interleaves), so emission is gated on startup still being in flight.
+  let settled = false;
+  const emit = (message: string): void => {
+    if (!settled) emitObserverStartupProgress(onProgress, message);
+  };
+  const timers = [
+    setTimeout(() => emit("Starting STATION observer…"), 1_500),
     setTimeout(
-      () =>
-        emitObserverStartupProgress(
-          onProgress,
-          `Still waiting for STATION observer; boot log: ${observerBootLogPath(paths)}`,
-        ),
+      () => emit(`Still waiting for STATION observer; boot log: ${observerBootLogPath(paths)}`),
       5_000,
     ),
   ];
+  return {
+    dispose: () => {
+      settled = true;
+      clearObserverStartupProgress(timers);
+    },
+  };
 }
 
 function emitObserverStartupProgress(
