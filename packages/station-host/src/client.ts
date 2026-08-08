@@ -332,8 +332,9 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     completeHandoff: () =>
       rawRequest("host.completeHandoff", undefined, HostCompleteHandoffResultSchema),
     abortHandoff: () => rawRequest("host.abortHandoff", undefined, HostAbortHandoffResultSchema),
+    // Successor adopt requires matching build identity; not a lifecycle exemption.
     adoptRegistry: (manifest) =>
-      rawRequest("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
+      request("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     write: async (ptyId, data) => {
       await request("host.write", { ptyId, data }, HostOkResultSchema);

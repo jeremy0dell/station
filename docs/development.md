@@ -612,8 +612,9 @@ pnpm --dir station test:pty          # includes hostHandoff.smoke (STATION_PTY_S
 pnpm test:e2e:host-upgrade           # focused A→B refuse + opt-in handoff smoke
 ```
 
-The smoke uses test-only `--build-version` overrides on `hostMain` so two host
-identities share one checkout entrypoint. Cases covered: busy refuse without
+The smoke uses test-only `--build-version` overrides on `hostMain` (requires
+`STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE=1`) so two host identities share one
+checkout entrypoint. Cases covered: busy refuse without
 opt-in (`HOST_UPGRADE_BLOCKED`, child survives), negotiated
 `beginHandoff` → `completeHandoff` → successor `adoptRegistry` with the same
 child PID, idle `stopIfIdle` remains the empty-host path, multi-PTY + abort +

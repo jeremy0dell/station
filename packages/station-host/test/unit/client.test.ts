@@ -345,8 +345,7 @@ describe("createStationHostClient", () => {
         if (
           method === "host.beginHandoff" ||
           method === "host.completeHandoff" ||
-          method === "host.abortHandoff" ||
-          method === "host.adoptRegistry"
+          method === "host.abortHandoff"
         ) {
           lifecycle.push(method);
         }
@@ -364,9 +363,9 @@ describe("createStationHostClient", () => {
     expect(begun.released).toEqual(["pty-1"]);
     await expect(client.completeHandoff()).resolves.toEqual({ stopping: true });
     await expect(client.abortHandoff()).resolves.toEqual({ adopted: ["pty-1"], failed: [] });
-    await expect(client.adoptRegistry(begun.manifest)).resolves.toEqual({
-      adopted: ["pty-1"],
-      failed: [],
+    // adoptRegistry is identity-bound and requires a reusable successor build.
+    await expect(client.adoptRegistry(begun.manifest)).rejects.toMatchObject({
+      code: "HOST_VERSION_INCOMPATIBLE",
     });
     await expect(
       client.spawn({
@@ -384,12 +383,7 @@ describe("createStationHostClient", () => {
       }),
     ).rejects.toMatchObject({ code: "HOST_VERSION_INCOMPATIBLE" });
     expect(spawnRequests).toBe(0);
-    expect(lifecycle).toEqual([
-      "host.beginHandoff",
-      "host.completeHandoff",
-      "host.abortHandoff",
-      "host.adoptRegistry",
-    ]);
+    expect(lifecycle).toEqual(["host.beginHandoff", "host.completeHandoff", "host.abortHandoff"]);
     client.dispose();
   });
 

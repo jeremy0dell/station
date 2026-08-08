@@ -104,19 +104,38 @@ export async function startStationHost(
     },
   });
 
+  // Clean-startup reap: stale park remains are unlinked before the socket
+  // opens, while every live parked bridge is left for negotiated adoption.
   const orphanDirectory = ptyBridgesDirectory(options.stateDir);
-  await reapOrphansAtStartup(orphanDirectory, logEvent);
+  let reap = { reaped: 0, parked: 0 };
+  try {
+    reap = await reapStaleOrphanBridges(orphanDirectory);
+  } catch (error) {
+    logEvent("host.orphan-reap-failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (reap.reaped > 0 || reap.parked > 0) {
+    logEvent("host.orphan-reap", { reaped: reap.reaped, parked: reap.parked });
+  }
 
-  const ptyTable = createPtyTable(
-    withHostPtyTableHooks(options.ptyTableOptions, {
-      orphanDirectory,
-      orphanTtlMs,
-      logEvent,
-      onPtyExit: (event) => {
-        void hostLifecycle.ptyExited(event);
-      },
-    }),
-  );
+  const configuredOnEvent = options.ptyTableOptions?.onEvent;
+  const configuredOnPtyExit = options.ptyTableOptions?.onPtyExit;
+  const ptyTable = createPtyTable({
+    ...options.ptyTableOptions,
+    onEvent: (event, attributes) => {
+      configuredOnEvent?.(event, attributes);
+      logEvent(event, attributes);
+    },
+    onPtyExit: (event) => {
+      configuredOnPtyExit?.(event);
+      void hostLifecycle.ptyExited(event);
+    },
+    orphanBridges: {
+      directory: orphanDirectory,
+      ttlMs: orphanTtlMs,
+    },
+  });
 
   const { promise: closed, resolve: resolveClosed } = Promise.withResolvers<void>();
   let closePromise: Promise<void> | undefined;
@@ -180,54 +199,6 @@ export async function startStationHost(
   };
 }
 
-async function reapOrphansAtStartup(
-  orphanDirectory: string,
-  logEvent: (message: string, attributes: Record<string, unknown>) => void,
-): Promise<void> {
-  // Clean-startup reap: stale park remains are unlinked before the socket
-  // opens, while every live parked bridge is left for negotiated adoption.
-  let reap = { reaped: 0, parked: 0 };
-  try {
-    reap = await reapStaleOrphanBridges(orphanDirectory);
-  } catch (error) {
-    logEvent("host.orphan-reap-failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return;
-  }
-  if (reap.reaped > 0 || reap.parked > 0) {
-    logEvent("host.orphan-reap", { reaped: reap.reaped, parked: reap.parked });
-  }
-}
-
-function withHostPtyTableHooks(
-  configured: PtyTableOptions | undefined,
-  hooks: {
-    orphanDirectory: string;
-    orphanTtlMs: number;
-    logEvent: (event: string, attributes: Record<string, unknown>) => void;
-    onPtyExit: NonNullable<PtyTableOptions["onPtyExit"]>;
-  },
-): PtyTableOptions {
-  const configuredOnEvent = configured?.onEvent;
-  const configuredOnPtyExit = configured?.onPtyExit;
-  return {
-    ...configured,
-    onEvent: (event, attributes) => {
-      configuredOnEvent?.(event, attributes);
-      hooks.logEvent(event, attributes);
-    },
-    onPtyExit: (event) => {
-      configuredOnPtyExit?.(event);
-      hooks.onPtyExit(event);
-    },
-    orphanBridges: {
-      directory: hooks.orphanDirectory,
-      ttlMs: hooks.orphanTtlMs,
-    },
-  };
-}
-
 function buildHostHandlers(input: {
   ptyTable: PtyTable;
   buildVersion: string;
@@ -261,6 +232,7 @@ function buildHostHandlers(input: {
       "host.completeHandoff": () => handoff.completeHandoff(),
       "host.abortHandoff": () => handoff.abortHandoff(),
       "host.adoptRegistry": (params) => {
+        handoff.assertCanAdopt();
         const { manifest } = HostAdoptRegistryParamsSchema.parse(params);
         return ptyTable.adoptRegistry(manifest);
       },

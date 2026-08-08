@@ -86,11 +86,11 @@ describe("runHostCommand", () => {
     expect(completeHandoff).not.toHaveBeenCalled();
   });
 
-  it("refuses handoff when the host already matches this build", async () => {
+  it("dry-run refuses when the host already matches this build", async () => {
     const fixture = await createTempState();
     const ensureHost = vi.fn();
     const result = await runHostCommand(
-      ["handoff"],
+      ["handoff", "--dry-run"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
@@ -116,11 +116,11 @@ describe("runHostCommand", () => {
     expect(ensureHost).not.toHaveBeenCalled();
   });
 
-  it("refuses handoff on protocol major mismatch without ensure", async () => {
+  it("dry-run refuses handoff on protocol major mismatch", async () => {
     const fixture = await createTempState();
     const ensureHost = vi.fn();
     const result = await runHostCommand(
-      ["handoff", "--fidelity", "processes"],
+      ["handoff", "--dry-run", "--fidelity", "processes"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
@@ -146,11 +146,11 @@ describe("runHostCommand", () => {
     expect(ensureHost).not.toHaveBeenCalled();
   });
 
-  it("refuses handoff when the host is idle", async () => {
+  it("dry-run refuses handoff when the host is idle", async () => {
     const fixture = await createTempState();
     const ensureHost = vi.fn();
     const result = await runHostCommand(
-      ["handoff"],
+      ["handoff", "--dry-run"],
       { config: fixture.config },
       {
         expectedBuildVersion: requestingBuild,
@@ -176,14 +176,17 @@ describe("runHostCommand", () => {
     expect(ensureHost).not.toHaveBeenCalled();
   });
 
-  it("live handoff opts into ensure with fidelity and reports completed", async () => {
+  it("live handoff opts into ensure and projects the adopt report", async () => {
     const fixture = await createTempState();
+    const dispose = vi.fn();
     const ensureHost = vi.fn(async () => ({
       status: "running" as const,
       socketPath: stationHostSocketPath(fixture.config),
+      ensuredBy: "handoff" as const,
+      handoffAdopt: { adopted: ["pty-1"], failed: [] },
       client: {
         list: async () => [{ ptyId: "pty-1", pid: 99, alive: true }],
-        dispose: () => undefined,
+        dispose,
       },
     }));
     const result = await runHostCommand(
@@ -219,6 +222,31 @@ describe("runHostCommand", () => {
       }),
       expect.anything(),
     );
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("projects ensure reuse as refused without claiming handoff", async () => {
+    const fixture = await createTempState();
+    const ensureHost = vi.fn(async () => ({
+      status: "running" as const,
+      socketPath: stationHostSocketPath(fixture.config),
+      ensuredBy: "reuse" as const,
+      client: { dispose: () => undefined },
+    }));
+    const result = await runHostCommand(
+      ["handoff"],
+      { config: fixture.config },
+      {
+        expectedBuildVersion: requestingBuild,
+        ensureHost: ensureHost as never,
+      },
+    );
+
+    expect(result).toMatchObject({
+      action: "handoff",
+      status: "refused",
+    });
+    expect(String((result as { message: string }).message)).toMatch(/unnecessary/i);
   });
 
   it("surfaces ensure failure as unavailable without claiming completion", async () => {
@@ -237,16 +265,6 @@ describe("runHostCommand", () => {
       {
         expectedBuildVersion: requestingBuild,
         ensureHost: ensureHost as never,
-        clientFactory: () =>
-          ({
-            health: async () => ({
-              ok: true,
-              protocolVersion: HOST_PROTOCOL_VERSION,
-              buildVersion: "older-build",
-            }),
-            list: async () => [{ ptyId: "pty-1", pid: 42, alive: true }],
-            dispose: () => undefined,
-          }) as never,
       },
     );
 

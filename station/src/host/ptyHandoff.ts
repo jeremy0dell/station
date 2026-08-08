@@ -12,6 +12,7 @@ import {
   bridgeControlSocketPath,
   readScreenSnapshot,
   readScrollbackExport,
+  waitForReleasedParkReady,
   writeScreenSnapshot,
   writeScrollbackExport,
 } from "./orphanBridges.js";
@@ -136,6 +137,37 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
     return { manifest, skipped };
   }
 
+  async function adoptRegistry(manifestInput: unknown): Promise<PtyAdoptionReport> {
+    const manifest = parseHandoffManifest(manifestInput);
+    const report: PtyAdoptionReport = { adopted: [], failed: [] };
+    for (const ptyId of Object.keys(manifest)) {
+      const handoffEntry = manifest[ptyId];
+      if (handoffEntry === undefined) {
+        continue;
+      }
+      const outcome = await adoptOneEntry({
+        ptyId,
+        handoffEntry,
+        entries,
+        adoptTerminal,
+        createSemanticTerminal,
+        maxScrollbackBytes,
+        emit,
+        activateAdoptedEntry,
+      });
+      if (outcome.kind === "adopted") {
+        report.adopted.push(ptyId);
+      } else {
+        report.failed.push({ ptyId, reason: outcome.reason });
+      }
+    }
+    emit("pty.handoff.adopt", {
+      adopted: report.adopted.length,
+      failed: report.failed.length,
+    });
+    return report;
+  }
+
   return {
     async exportRegistry(fidelity = "processes") {
       const { manifest } = await buildManifest(fidelity);
@@ -154,41 +186,23 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
         });
         return { manifest: {}, fidelity, released: [], skipped };
       }
-      const released = parkAndDropReleasedEntries(entries, Object.keys(manifest));
-      emit("pty.handoff.released", { count: released.length, fidelity });
-      return { manifest, fidelity, released, skipped };
+      const parked = parkAndDropReleasedEntries(entries, Object.keys(manifest));
+      try {
+        await ensureExpectedParksReady({
+          expectPark: parked.expectPark,
+          manifest,
+          emit,
+        });
+      } catch (error) {
+        // Ownership already left the table; restore before surfacing the failure.
+        await adoptRegistry(manifest);
+        throw error;
+      }
+      emit("pty.handoff.released", { count: parked.released.length, fidelity });
+      return { manifest, fidelity, released: parked.released, skipped };
     },
 
-    async adoptRegistry(manifestInput) {
-      const manifest = parseHandoffManifest(manifestInput);
-      const report: PtyAdoptionReport = { adopted: [], failed: [] };
-      for (const ptyId of Object.keys(manifest)) {
-        const handoffEntry = manifest[ptyId];
-        if (handoffEntry === undefined) {
-          continue;
-        }
-        const outcome = await adoptOneEntry({
-          ptyId,
-          handoffEntry,
-          entries,
-          adoptTerminal,
-          createSemanticTerminal,
-          maxScrollbackBytes,
-          emit,
-          activateAdoptedEntry,
-        });
-        if (outcome.kind === "adopted") {
-          report.adopted.push(ptyId);
-        } else {
-          report.failed.push({ ptyId, reason: outcome.reason });
-        }
-      }
-      emit("pty.handoff.adopt", {
-        adopted: report.adopted.length,
-        failed: report.failed.length,
-      });
-      return report;
-    },
+    adoptRegistry,
   };
 }
 
@@ -297,8 +311,9 @@ async function attachScreenExport(
 function parkAndDropReleasedEntries(
   entries: Map<string, PtyEntry>,
   ptyIds: string[],
-): string[] {
+): { released: string[]; expectPark: string[] } {
   const released: string[] = [];
+  const expectPark: string[] = [];
   for (const ptyId of ptyIds) {
     const entry = entries.get(ptyId);
     if (entry === undefined) {
@@ -308,12 +323,42 @@ function parkAndDropReleasedEntries(
       subscription.dispose();
     }
     entry.subscriptions.length = 0;
-    entry.terminal.releaseToOrphan?.();
+    const willPark = entry.terminal.releaseToOrphan?.() === true;
     entry.semantic.dispose();
     entries.delete(ptyId);
     released.push(ptyId);
+    if (willPark) {
+      expectPark.push(ptyId);
+    }
   }
-  return released;
+  return { released, expectPark };
+}
+
+async function ensureExpectedParksReady(input: {
+  expectPark: string[];
+  manifest: PtyHandoffManifest;
+  emit: Emit;
+}): Promise<void> {
+  for (const ptyId of input.expectPark) {
+    const controlSocket = input.manifest[ptyId]?.controlSocket;
+    if (controlSocket === undefined) {
+      throw new StationHostProviderError(
+        "HOST_HANDOFF_INVALID_STATE",
+        `Released terminal "${ptyId}" is missing a control socket in the handoff manifest.`,
+      );
+    }
+    const readiness = await waitForReleasedParkReady(controlSocket);
+    if (readiness === "ready") {
+      continue;
+    }
+    input.emit("pty.handoff.park-not-ready", { ptyId, readiness });
+    throw new StationHostProviderError(
+      "HOST_HANDOFF_INVALID_STATE",
+      readiness === "park-only"
+        ? `Released terminal "${ptyId}" wrote park state but never opened its control socket.`
+        : `Released terminal "${ptyId}" did not park in time for live handoff.`,
+    );
+  }
 }
 
 function parseHandoffManifest(manifestInput: unknown): PtyHandoffManifest {

@@ -294,6 +294,7 @@ describe("createPtyTable registry adoption", () => {
         bridgePid: 1_004,
         releaseToOrphan() {
           scripted.terminal.dispose();
+          return false;
         },
       }),
       createSemanticTerminal: () => ({
@@ -325,6 +326,7 @@ describe("createPtyTable registry adoption", () => {
         bridgePid: 1_001,
         releaseToOrphan() {
           released = true;
+          return false;
         },
         kill() {
           killed = true;
@@ -352,6 +354,7 @@ describe("createPtyTable registry adoption", () => {
         bridgePid: 1_002,
         releaseToOrphan() {
           scripted.terminal.dispose();
+          return false;
         },
       }),
       createSemanticTerminal: () => ({
@@ -394,6 +397,7 @@ describe("createPtyTable registry adoption", () => {
             bridgePid: 1_010,
             releaseToOrphan() {
               released = true;
+              return false;
             },
           };
         }
@@ -431,6 +435,7 @@ describe("createPtyTable registry adoption", () => {
         bridgePid: 1_003,
         releaseToOrphan() {
           scripted.terminal.dispose();
+          return false;
         },
       }),
       createSemanticTerminal: () => ({

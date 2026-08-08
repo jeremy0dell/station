@@ -44,8 +44,8 @@ export type HostHandoffResult = {
   status: "planned" | "completed" | "refused" | "unavailable";
   message: string;
   livePtyCount?: number;
+  /** From ensure's fail-closed adopt report when status is completed. */
   adopted?: string[];
-  failed?: Array<{ ptyId: string; reason: string }>;
 };
 
 export type HostCommandResult = HostStatusResult | HostHandoffResult;
@@ -58,7 +58,8 @@ export type HostCommandOptions = {
  * ADAPTER
  *
  * Drive Station host inspection and opt-in live handoff from the CLI without
- * routing through Observer application code.
+ * routing through Observer application code. Mutating handoff defers policy to
+ * `ensureStationHostRunning`; this layer only projects the ensure outcome.
  */
 export async function runHostCommand(
   args: readonly string[],
@@ -124,9 +125,6 @@ export function hostCommandSummary(result: HostCommandResult): string {
   if (result.adopted !== undefined) {
     lines.push(`adopted: ${result.adopted.length}`);
   }
-  if (result.failed !== undefined && result.failed.length > 0) {
-    lines.push(`failed: ${result.failed.map((item) => `${item.ptyId}:${item.reason}`).join(", ")}`);
-  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -181,60 +179,18 @@ async function runHostHandoff(input: {
   resolveHostCommand: () => readonly [string, ...string[]];
 }): Promise<HostHandoffResult> {
   const base = {
+    action: "handoff" as const,
     dryRun: input.dryRun,
     fidelity: input.fidelity,
     socketPath: input.socketPath,
   };
-  let livePtyCount = -1;
-  const client = input.clientFactory(input.socketPath, input.expectedBuildVersion);
-  try {
-    const health = await client.health();
-    const compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
-    if (compatibility.action === "refuse") {
-      return handoffResult(base, {
-        status: "refused",
-        message: "Host protocol is incompatible; live handoff is refused.",
-      });
-    }
-    if (compatibility.action === "reuse") {
-      return handoffResult(base, {
-        status: "refused",
-        message: "Host already matches this build; handoff is unnecessary.",
-      });
-    }
 
-    try {
-      livePtyCount = (await client.list()).length;
-    } catch {
-      // Older identity mismatch on list — treat as unknown/busy for planning.
-      livePtyCount = -1;
-    }
-
-    if (livePtyCount === 0) {
-      return handoffResult(base, {
-        status: "refused",
-        message: "Host is idle; use ordinary stop-if-idle replacement instead of handoff.",
-        livePtyCount: 0,
-      });
-    }
-
-    if (input.dryRun) {
-      return handoffResult(
-        { ...base, dryRun: true },
-        {
-          status: "planned",
-          message: `Would beginHandoff(fidelity=${input.fidelity}) → completeHandoff → spawn successor → adoptRegistry.`,
-          ...(livePtyCount < 0 ? {} : { livePtyCount }),
-        },
-      );
-    }
-  } catch (error) {
-    return handoffResult(base, {
-      status: "unavailable",
-      message: error instanceof Error ? error.message : String(error),
+  if (input.dryRun) {
+    return planHandoffDryRun({
+      base,
+      expectedBuildVersion: input.expectedBuildVersion,
+      clientFactory: input.clientFactory,
     });
-  } finally {
-    client.dispose();
   }
 
   try {
@@ -249,69 +205,112 @@ async function runHostHandoff(input: {
       { clientFactory: input.clientFactory },
     );
     if (ensured.status !== "running") {
-      return handoffResult(
-        { ...base, dryRun: false },
-        {
-          status: "unavailable",
-          message: ensured.error.message,
-          ...(livePtyCount < 0 ? {} : { livePtyCount }),
-        },
-      );
+      return {
+        ...base,
+        status: "unavailable",
+        message: ensured.error.message,
+      };
     }
     try {
-      const ptys = await ensured.client.list();
-      return handoffResult(
-        { ...base, dryRun: false },
-        {
+      if (ensured.ensuredBy === "handoff") {
+        const adopted = ensured.handoffAdopt?.adopted ?? [];
+        return {
+          ...base,
           status: "completed",
-          message: `Live handoff completed; successor serves ${ptys.length} terminal(s).`,
-          livePtyCount: ptys.length,
-          adopted: ptys.map((pty) => pty.ptyId),
-        },
-      );
+          message: `Live handoff completed; successor adopted ${adopted.length} terminal(s).`,
+          livePtyCount: adopted.length,
+          adopted,
+        };
+      }
+      if (ensured.ensuredBy === "reuse") {
+        return {
+          ...base,
+          status: "refused",
+          message: "Host already matches this build; handoff is unnecessary.",
+        };
+      }
+      if (ensured.ensuredBy === "idle-replace") {
+        return {
+          ...base,
+          status: "refused",
+          message: "Host is idle; ordinary stop-if-idle replacement ran instead of handoff.",
+          livePtyCount: 0,
+        };
+      }
+      return {
+        ...base,
+        status: "unavailable",
+        message: "No incumbent host was available for live handoff.",
+      };
     } finally {
       ensured.client.dispose();
     }
   } catch (error) {
-    return handoffResult(base, {
+    return {
+      ...base,
       status: "unavailable",
       message: error instanceof Error ? error.message : String(error),
-    });
+    };
   }
 }
 
-function handoffResult(
+async function planHandoffDryRun(input: {
   base: {
+    action: "handoff";
     dryRun: boolean;
     fidelity: HostHandoffFidelity;
     socketPath: string;
-  },
-  fields: {
-    status: HostHandoffResult["status"];
-    message: string;
-    livePtyCount?: number;
-    adopted?: string[];
-    failed?: Array<{ ptyId: string; reason: string }>;
-  },
-): HostHandoffResult {
-  const result: HostHandoffResult = {
-    action: "handoff",
-    dryRun: base.dryRun,
-    fidelity: base.fidelity,
-    socketPath: base.socketPath,
-    status: fields.status,
-    message: fields.message,
   };
-  if (fields.livePtyCount !== undefined) {
-    result.livePtyCount = fields.livePtyCount;
+  expectedBuildVersion: string;
+  clientFactory: (socketPath: string, expectedBuildVersion: string) => StationHostClient;
+}): Promise<HostHandoffResult> {
+  const client = input.clientFactory(input.base.socketPath, input.expectedBuildVersion);
+  try {
+    const health = await client.health();
+    const compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
+    if (compatibility.action === "refuse") {
+      return {
+        ...input.base,
+        status: "refused",
+        message: "Host protocol is incompatible; live handoff is refused.",
+      };
+    }
+    if (compatibility.action === "reuse") {
+      return {
+        ...input.base,
+        status: "refused",
+        message: "Host already matches this build; handoff is unnecessary.",
+      };
+    }
+    let livePtyCount = -1;
+    try {
+      livePtyCount = (await client.list()).length;
+    } catch {
+      livePtyCount = -1;
+    }
+    if (livePtyCount === 0) {
+      return {
+        ...input.base,
+        status: "refused",
+        message: "Host is idle; use ordinary stop-if-idle replacement instead of handoff.",
+        livePtyCount: 0,
+      };
+    }
+    return {
+      ...input.base,
+      status: "planned",
+      message: `Would beginHandoff(fidelity=${input.base.fidelity}) → completeHandoff → spawn successor → adoptRegistry.`,
+      ...(livePtyCount < 0 ? {} : { livePtyCount }),
+    };
+  } catch (error) {
+    return {
+      ...input.base,
+      status: "unavailable",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    client.dispose();
   }
-  if (fields.adopted !== undefined) {
-    result.adopted = fields.adopted;
-  }
-  if (fields.failed !== undefined) {
-    result.failed = fields.failed;
-  }
-  return result;
 }
 
 function resolveStationHostEntry(): string {

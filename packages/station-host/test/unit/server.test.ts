@@ -161,12 +161,14 @@ describe("serveHostConnection", () => {
       id: "abort",
       ok: true,
     });
+    // adoptRegistry is identity-bound, not a lifecycle exemption.
     client.send(hostRequest("adopt", "host.adoptRegistry", { manifest: {} }));
     expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
       id: "adopt",
-      ok: true,
+      ok: false,
+      error: { code: "HOST_CLIENT_IDENTITY_MISMATCH" },
     });
-    expect(calls).toEqual(["begin", "complete", "abort", "adopt"]);
+    expect(calls).toEqual(["begin", "complete", "abort"]);
     client.close();
   });
 

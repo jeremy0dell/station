@@ -11357,7 +11357,7 @@
       "declaration": "runHostCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code.",
+      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer only projects the ensure outcome.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",

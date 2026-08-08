@@ -69,7 +69,11 @@ function spawnSourceHost(input: {
       "--build-version",
       input.buildVersion,
     ],
-    { detached: true, stdio: ["ignore", "ignore", "ignore"] },
+    {
+      detached: true,
+      stdio: ["ignore", "ignore", "ignore"],
+      env: { ...process.env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1" },
+    },
   );
   child.unref();
   return child;
@@ -85,6 +89,7 @@ async function writePackagingTrampoline(stateDir: string): Promise<string> {
       `const hostEntry = ${JSON.stringify(HOST_ENTRY)};`,
       "const child = spawn(\"bun\", [hostEntry, ...process.argv.slice(2)], {",
       "  stdio: \"inherit\",",
+      "  env: { ...process.env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: \"1\" },",
       "});",
       "child.on(\"exit\", (code, signal) => {",
       "  if (code !== null) process.exit(code);",
@@ -159,6 +164,7 @@ async function handoffAcrossPackaging(input: {
   ], {
     detached: true,
     stdio: ["ignore", "ignore", "ignore"],
+    env: { ...process.env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1" },
   });
   hostB.unref();
 

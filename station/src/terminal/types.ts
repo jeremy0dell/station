@@ -108,7 +108,9 @@ export type StationTerminalProcess = {
   /**
    * Bridge-only negotiated handoff: close owner pipes without SIGTERM so the
    * bridge parks the PTY. Absent on transports that cannot park.
+   * Returns whether park artifacts (control socket / park.json) will appear —
+   * `false` is the explicit non-parking test seam; production bridges return true.
    */
-  releaseToOrphan?(): void;
+  releaseToOrphan?(): boolean;
   dispose(): void;
 };

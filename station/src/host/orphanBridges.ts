@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
@@ -121,6 +122,66 @@ export async function waitForParkedBridge(
     await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
   }
   return false;
+}
+
+export type ReleasedParkReadiness = "ready" | "park-only" | "timeout";
+
+/**
+ * Fail-closed readiness for a released bridge that promised park artifacts:
+ * park.json without a listening control socket (e.g. overlong sun_path) and
+ * total silence both refuse adoption rather than returning an unadoptable manifest.
+ */
+export async function waitForReleasedParkReady(
+  controlSocket: string,
+  options: { artifactTimeoutMs?: number; probeTimeoutMs?: number } = {},
+): Promise<ReleasedParkReadiness> {
+  const artifactTimeoutMs = options.artifactTimeoutMs ?? 3_000;
+  const probeTimeoutMs = options.probeTimeoutMs ?? 3_000;
+  const parkStatePath = parkStatePathForControlSocket(controlSocket);
+  const artifact = await waitForParkArtifact(controlSocket, parkStatePath, artifactTimeoutMs);
+  if (artifact === "none") {
+    return "timeout";
+  }
+  if (artifact === "park-only") {
+    return "park-only";
+  }
+  const ready = await waitForParkedBridge(controlSocket, { timeoutMs: probeTimeoutMs });
+  return ready ? "ready" : "timeout";
+}
+
+function parkStatePathForControlSocket(controlSocket: string): string {
+  return controlSocket.endsWith(SOCK_SUFFIX)
+    ? `${controlSocket.slice(0, -SOCK_SUFFIX.length)}${PARK_SUFFIX}`
+    : `${controlSocket}${PARK_SUFFIX}`;
+}
+
+async function waitForParkArtifact(
+  controlSocket: string,
+  parkStatePath: string,
+  timeoutMs: number,
+): Promise<"socket" | "park-only" | "none"> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(controlSocket)) {
+      return "socket";
+    }
+    if (existsSync(parkStatePath)) {
+      // Give listen() a brief chance after park.json is written.
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      if (existsSync(controlSocket)) {
+        return "socket";
+      }
+      return "park-only";
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+  }
+  if (existsSync(controlSocket)) {
+    return "socket";
+  }
+  if (existsSync(parkStatePath)) {
+    return "park-only";
+  }
+  return "none";
 }
 
 /** Connect-and-query liveness probe; any failure or silence reads as dead. */

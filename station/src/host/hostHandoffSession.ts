@@ -1,11 +1,17 @@
-import { existsSync } from "node:fs";
 import type { HostHandoffFidelity, PtyHandoffManifest } from "@station/contracts";
 import { StationHostProviderError } from "@station/host";
-import { waitForParkedBridge } from "./orphanBridges.js";
 import type { PtyTable } from "./ptyTable.js";
+
+type HandoffPhase =
+  | { kind: "serving" }
+  | { kind: "idle-draining"; forBuild: string }
+  | { kind: "handing-off"; forBuild: string; manifest: PtyHandoffManifest }
+  | { kind: "completed" };
 
 export type HostHandoffSession = {
   assertNotDraining(): void;
+  /** Successor adopt is identity-bound and only legal while still serving. */
+  assertCanAdopt(): void;
   beginIdleDrain(requestingBuildVersion: string): void;
   beginHandoff(
     requestingBuildVersion: string,
@@ -21,48 +27,54 @@ export type HostHandoffSession = {
 };
 
 /**
- * Drain / handoff ownership for one host process: idle stop-if-idle drain,
- * negotiated park readiness, and abort restore.
+ * Drain / handoff phase ownership for one host process: idle stop-if-idle drain,
+ * live handoff begin/complete/abort, and adopt gating. Park readiness lives in
+ * pty release, not here.
  */
 export function createHostHandoffSession(input: {
   ptyTable: PtyTable;
   buildVersion: string;
 }): HostHandoffSession {
   const { ptyTable, buildVersion } = input;
-  let drainingForBuild: string | undefined;
-  let handoffManifest: PtyHandoffManifest | undefined;
-
-  const assertNotDraining = (): void => {
-    if (drainingForBuild !== undefined) {
-      throw drainingSpawnBlocked(buildVersion, drainingForBuild);
-    }
-  };
-
-  const abortHandoff = async () => {
-    if (handoffManifest === undefined) {
-      throw handoffInvalidState("No handoff is in progress.");
-    }
-    const report = await ptyTable.adoptRegistry(handoffManifest);
-    handoffManifest = undefined;
-    drainingForBuild = undefined;
-    return report;
-  };
+  let phase: HandoffPhase = { kind: "serving" };
 
   return {
-    assertNotDraining,
+    assertNotDraining() {
+      if (phase.kind === "serving") {
+        return;
+      }
+      if (phase.kind === "completed") {
+        throw handoffInvalidState("The host has completed handoff and is stopping.");
+      }
+      const forBuild = phase.kind === "idle-draining" || phase.kind === "handing-off"
+        ? phase.forBuild
+        : buildVersion;
+      throw drainingSpawnBlocked(buildVersion, forBuild);
+    },
+    assertCanAdopt() {
+      if (phase.kind !== "serving") {
+        throw handoffInvalidState(
+          "Registry adoption is only allowed on a serving host that is not draining or handing off.",
+        );
+      }
+    },
     beginIdleDrain(requestingBuildVersion) {
-      if (handoffManifest !== undefined) {
-        throw handoffInvalidState("A live handoff is already in progress.");
+      if (phase.kind !== "serving") {
+        throw handoffInvalidState(
+          phase.kind === "handing-off" || phase.kind === "completed"
+            ? "A live handoff is already in progress."
+            : "The host is already draining or handing off.",
+        );
       }
       const livePtyCount = ptyTable.list().length;
       if (livePtyCount !== 0) {
         throw livePtyUpgradeBlocked(buildVersion, requestingBuildVersion, livePtyCount);
       }
       // Set before returning so no spawn can race the successful acknowledgement.
-      drainingForBuild = requestingBuildVersion;
+      phase = { kind: "idle-draining", forBuild: requestingBuildVersion };
     },
     async beginHandoff(requestingBuildVersion, fidelity) {
-      if (drainingForBuild !== undefined || handoffManifest !== undefined) {
+      if (phase.kind !== "serving") {
         throw handoffInvalidState("The host is already draining or handing off.");
       }
       if (ptyTable.list().length === 0) {
@@ -70,97 +82,55 @@ export function createHostHandoffSession(input: {
           "Live handoff requires at least one live terminal; use idle stop-if-idle replacement instead.",
         );
       }
-      drainingForBuild = requestingBuildVersion;
+      phase = { kind: "handing-off", forBuild: requestingBuildVersion, manifest: {} };
       try {
         const report = await ptyTable.releaseRegistryForHandoff(fidelity);
         if (report.released.length === 0) {
-          drainingForBuild = undefined;
+          phase = { kind: "serving" };
           throw handoffInvalidState(emptyReleaseMessage(report.skipped.length));
         }
-        handoffManifest = report.manifest;
-        await ensureReleasedParksReady({
-          released: report.released,
+        phase = {
+          kind: "handing-off",
+          forBuild: requestingBuildVersion,
           manifest: report.manifest,
-          abortHandoff,
-        });
+        };
         return report;
       } catch (error) {
-        if (handoffManifest === undefined) {
-          drainingForBuild = undefined;
+        if (phase.kind === "handing-off" && Object.keys(phase.manifest).length === 0) {
+          // Release refused or restored after park failure; resume serving.
+          phase = { kind: "serving" };
         }
         throw error;
       }
     },
     completeHandoff() {
-      if (handoffManifest === undefined) {
+      if (phase.kind !== "handing-off" || Object.keys(phase.manifest).length === 0) {
         throw handoffInvalidState("No handoff is in progress.");
       }
+      // Terminal phase: abort is refused; only process exit remains.
+      phase = { kind: "completed" };
       return { stopping: true as const };
     },
-    abortHandoff,
+    async abortHandoff() {
+      if (phase.kind === "completed") {
+        throw handoffInvalidState(
+          "Handoff already completed; parked bridges must be adopted by a successor host.",
+        );
+      }
+      if (phase.kind !== "handing-off" || Object.keys(phase.manifest).length === 0) {
+        throw handoffInvalidState("No handoff is in progress.");
+      }
+      const report = await ptyTable.adoptRegistry(phase.manifest);
+      phase = { kind: "serving" };
+      return report;
+    },
   };
-}
-
-async function ensureReleasedParksReady(input: {
-  released: string[];
-  manifest: PtyHandoffManifest;
-  abortHandoff: () => Promise<unknown>;
-}): Promise<void> {
-  // Real bridges write park.json and listen on the control socket. Scripted
-  // releases create neither. A park file without a socket is a hard failure
-  // (common when the unix socket path exceeds the OS sun_path limit).
-  for (const ptyId of input.released) {
-    const controlSocket = input.manifest[ptyId]?.controlSocket;
-    if (controlSocket === undefined) {
-      continue;
-    }
-    const readiness = await waitForReleasedPark(controlSocket);
-    if (readiness === "scripted-or-absent") {
-      continue;
-    }
-    if (readiness === "ready") {
-      continue;
-    }
-    await input.abortHandoff();
-    throw handoffInvalidState(parkFailureMessage(ptyId, readiness));
-  }
-}
-
-async function waitForReleasedPark(
-  controlSocket: string,
-): Promise<"ready" | "scripted-or-absent" | "park-only" | "probe-timeout"> {
-  const parkStatePath = parkStatePathForControlSocket(controlSocket);
-  const artifact = await waitForParkArtifact(controlSocket, parkStatePath, 500);
-  if (artifact === "none") {
-    return "scripted-or-absent";
-  }
-  if (artifact === "park-only") {
-    return "park-only";
-  }
-  const ready = await waitForParkedBridge(controlSocket, { timeoutMs: 3_000 });
-  return ready ? "ready" : "probe-timeout";
-}
-
-function parkStatePathForControlSocket(controlSocket: string): string {
-  return controlSocket.endsWith(".sock")
-    ? `${controlSocket.slice(0, -".sock".length)}.park.json`
-    : `${controlSocket}.park.json`;
 }
 
 function emptyReleaseMessage(skippedCount: number): string {
   return skippedCount > 0
     ? "Live handoff requires every live terminal to be bridge-backed and releasable."
     : "No bridge-backed terminals could be released for handoff.";
-}
-
-function parkFailureMessage(
-  ptyId: string,
-  readiness: "park-only" | "probe-timeout",
-): string {
-  if (readiness === "park-only") {
-    return `Released terminal "${ptyId}" wrote park state but never opened its control socket.`;
-  }
-  return `Released terminal "${ptyId}" did not park in time for live handoff.`;
 }
 
 export function livePtyUpgradeBlocked(
@@ -190,33 +160,4 @@ export function drainingSpawnBlocked(
 
 export function handoffInvalidState(message: string): StationHostProviderError {
   return new StationHostProviderError("HOST_HANDOFF_INVALID_STATE", message);
-}
-
-async function waitForParkArtifact(
-  controlSocket: string,
-  parkStatePath: string,
-  timeoutMs: number,
-): Promise<"socket" | "park-only" | "none"> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (existsSync(controlSocket)) {
-      return "socket";
-    }
-    if (existsSync(parkStatePath)) {
-      // Give listen() a brief chance after park.json is written.
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
-      if (existsSync(controlSocket)) {
-        return "socket";
-      }
-      return "park-only";
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, 20));
-  }
-  if (existsSync(controlSocket)) {
-    return "socket";
-  }
-  if (existsSync(parkStatePath)) {
-    return "park-only";
-  }
-  return "none";
 }

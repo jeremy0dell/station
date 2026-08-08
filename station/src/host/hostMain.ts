@@ -24,7 +24,14 @@ function parseArgs(argv: readonly string[]): {
       stateDir = argv[i + 1];
       i += 1;
     } else if (argv[i] === "--build-version") {
-      // Test-only A/B identity for upgrade e2es; production launchers omit this.
+      // Test-only A/B identity; require an explicit harness gate so production
+      // launchers cannot spoof opaque build identity via argv.
+      if (process.env.STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE !== "1") {
+        process.stderr.write(
+          "station-station-host --build-version requires STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE=1\n",
+        );
+        process.exit(2);
+      }
       buildVersion = argv[i + 1];
       i += 1;
     }

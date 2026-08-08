@@ -96,7 +96,7 @@ describe("ensureStationHostRunning", () => {
       },
       { clientFactory: () => fakeClient(), spawnHost },
     );
-    expect(handle.status).toBe("running");
+    expect(handle).toMatchObject({ status: "running", ensuredBy: "start" });
     expect(spawnHost).toHaveBeenCalledTimes(1);
     expect(spawnHost.mock.calls[0]?.[0]).toEqual({
       argv: ["bun", "/tmp/hostMain.ts", "--socket", expect.any(String), "--state-dir", tmpdir()],
@@ -152,7 +152,12 @@ describe("ensureStationHostRunning", () => {
         { clientFactory: () => client, spawnHost },
       );
 
-      expect(handle).toMatchObject({ status: "running", socketPath, client });
+      expect(handle).toMatchObject({
+        status: "running",
+        socketPath,
+        client,
+        ensuredBy: "reuse",
+      });
       expect(stopIfIdle).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
     } finally {
@@ -329,6 +334,77 @@ describe("ensureStationHostRunning", () => {
       });
       expect(stopIfIdle).not.toHaveBeenCalled();
       expect(beginHandoff).not.toHaveBeenCalled();
+      expect(spawnHost).not.toHaveBeenCalled();
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("does not abort after complete when socket release fails", async () => {
+    const socket = await liveSocket();
+    const { socketPath } = socket;
+    const abortHandoff = vi.fn(async () => ({ adopted: ["pty-1"], failed: [] }));
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    );
+    try {
+      const handle = await ensureStationHostRunning(
+        {
+          socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          expectedBuildVersion,
+          timeoutMs: 120,
+          handoff: { fidelity: "processes" },
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              stopIfIdle: async () => {
+                throw stationHostSafeError(
+                  "HOST_UPGRADE_BLOCKED",
+                  "Host build older-build owns 1 live terminal.",
+                );
+              },
+              beginHandoff: async () => ({
+                manifest: {
+                  "pty-1": {
+                    bridgeProtocolVersion: 1 as const,
+                    bridgePid: 4242,
+                    controlSocket: "/tmp/pty-1.sock",
+                    command: "/bin/sh",
+                    cols: 80,
+                    rows: 24,
+                    identity: {
+                      kind: "agent" as const,
+                      terminalTargetId: "native:wt-1",
+                      worktreeId: "wt-1",
+                      projectId: "proj-1",
+                      sessionId: "ses-1",
+                      worktreePath: "/repo/wt-1",
+                      harnessProvider: "claude",
+                    },
+                  },
+                },
+                fidelity: "processes" as const,
+                released: ["pty-1"],
+                skipped: [],
+              }),
+              completeHandoff: async () => ({ stopping: true as const }),
+              abortHandoff,
+            }),
+          spawnHost,
+        },
+      );
+
+      // complete committed but the incumbent socket never released.
+      expect(handle).toMatchObject({ status: "unavailable" });
+      expect(abortHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
     } finally {
       await socket.close();
@@ -614,11 +690,114 @@ describe("ensureStationHostRunning", () => {
         },
       );
 
-      expect(handle).toMatchObject({ status: "running", socketPath });
+      expect(handle).toMatchObject({
+        status: "running",
+        socketPath,
+        ensuredBy: "handoff",
+        handoffAdopt: { adopted: ["pty-1"], failed: [] },
+      });
       expect(beginHandoff).toHaveBeenCalledWith(expectedBuildVersion, "processes");
       expect(completeHandoff).toHaveBeenCalledOnce();
       expect(spawnHost).toHaveBeenCalledOnce();
       expect(adoptRegistry).toHaveBeenCalledWith(manifest);
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("opt-in handoff refuses when adopt reports any failed entry", async () => {
+    const socket = await liveSocket();
+    const { socketPath } = socket;
+    const manifest = {
+      "pty-1": {
+        bridgeProtocolVersion: 1 as const,
+        bridgePid: 4242,
+        controlSocket: "/tmp/pty-1.sock",
+        command: "/bin/sh",
+        cols: 80,
+        rows: 24,
+        identity: {
+          kind: "agent" as const,
+          terminalTargetId: "native:wt-1",
+          worktreeId: "wt-1",
+          projectId: "proj-1",
+          sessionId: "ses-1",
+          worktreePath: "/repo/wt-1",
+          harnessProvider: "claude",
+        },
+      },
+      "pty-2": {
+        bridgeProtocolVersion: 1 as const,
+        bridgePid: 4243,
+        controlSocket: "/tmp/pty-2.sock",
+        command: "/bin/sh",
+        cols: 80,
+        rows: 24,
+        identity: {
+          kind: "agent" as const,
+          terminalTargetId: "native:wt-2",
+          worktreeId: "wt-2",
+          projectId: "proj-1",
+          sessionId: "ses-2",
+          worktreePath: "/repo/wt-2",
+          harnessProvider: "claude",
+        },
+      },
+    };
+    let healthCalls = 0;
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    );
+    try {
+      const handle = await ensureStationHostRunning(
+        {
+          socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          expectedBuildVersion,
+          handoff: { fidelity: "processes" },
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => {
+                healthCalls += 1;
+                return {
+                  ok: true,
+                  protocolVersion: HOST_PROTOCOL_VERSION,
+                  buildVersion: healthCalls === 1 ? "older-build" : expectedBuildVersion,
+                };
+              },
+              stopIfIdle: async () => {
+                throw stationHostSafeError(
+                  "HOST_UPGRADE_BLOCKED",
+                  "Host build older-build owns 2 live terminals.",
+                );
+              },
+              beginHandoff: async () => ({
+                manifest,
+                fidelity: "processes" as const,
+                released: ["pty-1", "pty-2"],
+                skipped: [],
+              }),
+              completeHandoff: async () => {
+                await socket.close();
+                return { stopping: true as const };
+              },
+              adoptRegistry: async () => ({
+                adopted: ["pty-1"],
+                failed: [{ ptyId: "pty-2", reason: "adopt-failed" }],
+              }),
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: { code: "HOST_HANDOFF_MANIFEST_INVALID" },
+      });
+      expect(spawnHost).toHaveBeenCalledOnce();
     } finally {
       await socket.close();
     }

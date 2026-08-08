@@ -64,7 +64,11 @@ function spawnHost(input: {
       "--build-version",
       input.buildVersion,
     ],
-    { detached: true, stdio: ["ignore", "ignore", "ignore"] },
+    {
+      detached: true,
+      stdio: ["ignore", "ignore", "ignore"],
+      env: { ...process.env, STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE: "1" },
+    },
   );
   child.unref();
   return child;

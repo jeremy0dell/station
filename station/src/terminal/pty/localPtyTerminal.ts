@@ -277,12 +277,13 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
    * Negotiated park: end owner pipes without SIGTERM so the bridge enters
    * orphan mode. Must not call kill — SIGTERM is the intentional-dispose path.
    */
-  releaseToOrphan(): void {
+  releaseToOrphan(): boolean {
     if (this.#events.disposed || this.#events.exited) {
-      return;
+      return false;
     }
     this.#events.dispose();
     this.#bridge.stdin.end();
+    return true;
   }
 
   dispose(): void {

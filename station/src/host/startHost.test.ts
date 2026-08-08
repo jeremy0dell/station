@@ -562,6 +562,7 @@ describe("startStationHost", () => {
         released = true;
         scripted.helpers.isDisposed();
         scripted.terminal.dispose();
+        return false;
       },
       kill() {
         killed = true;
@@ -615,6 +616,46 @@ describe("startStationHost", () => {
     }
   });
 
+  it("refuses adoptRegistry while a handoff is in progress", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const terminal = {
+      ...scripted.terminal,
+      bridgePid: 9_012,
+      releaseToOrphan() {
+        return false;
+      },
+    };
+    const dir = await mkdtemp(join(tmpdir(), "station-host-adopt-gate-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: { createTerminal: () => terminal },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      const begun = await client.beginHandoff("host-b");
+      await expect(client.adoptRegistry(begun.manifest)).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      await client.abortHandoff();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("abortHandoff restores serving after beginHandoff", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const terminal = {
@@ -622,6 +663,7 @@ describe("startStationHost", () => {
       bridgePid: 9_002,
       releaseToOrphan() {
         scripted.terminal.dispose();
+        return false;
       },
     };
     const dir = await mkdtemp(join(tmpdir(), "station-host-abort-"));
@@ -707,6 +749,7 @@ describe("startStationHost", () => {
       bridgePid: 9_003,
       releaseToOrphan() {
         scripted.terminal.dispose();
+        return false;
       },
     };
     const dir = await mkdtemp(join(tmpdir(), "station-host-double-begin-"));
@@ -819,6 +862,7 @@ describe("startStationHost", () => {
       bridgePid: 9_004,
       releaseToOrphan() {
         scripted.terminal.dispose();
+        return false;
       },
     };
     const dir = await mkdtemp(join(tmpdir(), "station-host-stop-during-handoff-"));
@@ -911,6 +955,7 @@ describe("startStationHost", () => {
               releaseToOrphan() {
                 released = true;
                 scripted.terminal.dispose();
+                return false;
               },
             };
           }
