@@ -56,6 +56,12 @@ pnpm test:e2e:setup:guided
 pnpm test:e2e:setup:guided:all-shells
 ```
 
+Both entrypoints run under a disposable runtime owner that registers the
+supervised Vitest process group before launch, reaps it on completion or
+interruption, and recovers only an exact registered abandoned group on the
+next start; fixture cleanup remains defense in depth rather than the sole
+owner.
+
 The bridge isolates the child terminal and normalizes ANSI, OSC, cursor movement, and carriage
 redraws before assertions. Review changes to
 `apps/cli/test/fixtures/setup-guided-transcript.txt` as user-facing copy: regenerate it only from

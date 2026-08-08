@@ -217,6 +217,7 @@ def terminate(_signal, _frame):
 
 signal.signal(signal.SIGTERM, terminate)
 signal.signal(signal.SIGINT, terminate)
+signal.signal(signal.SIGHUP, terminate)
 last_raw = False
 stdin_open = True
 while True:

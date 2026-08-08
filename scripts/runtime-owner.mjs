@@ -1311,10 +1311,18 @@ function signalReason(signal) {
   return signal === "SIGHUP" ? "terminal-loss" : "signal";
 }
 
+const SIGNAL_NUMBERS = {
+  SIGHUP: 1,
+  SIGINT: 2,
+  SIGQUIT: 3,
+  SIGKILL: 9,
+  SIGALRM: 14,
+  SIGTERM: 15,
+};
+
 function signalExitCode(signal) {
-  if (signal === "SIGHUP") return 129;
-  if (signal === "SIGINT") return 130;
-  return 143;
+  const number = SIGNAL_NUMBERS[signal];
+  return number === undefined ? 143 : 128 + number;
 }
 
 function interruptedResult(runtimeId, uiRunId, signal) {
