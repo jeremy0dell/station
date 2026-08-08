@@ -175,7 +175,7 @@ describe("createTerminalBoundHarnessProvider", () => {
       schemaVersion: 1 as const,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.5",
+      version: "0.0.0-pre-alpha.5.1",
       buildIdentity: "a".repeat(64),
     };
 
@@ -205,6 +205,8 @@ describe("versionInfo", () => {
       {
         now: () => now,
         runner: async (input) => ({
+          command: input.command,
+          args: input.args ?? [],
           stdout: input.command === "npm" ? "1.4.0\n" : "test-cli 1.2.3 (build abc)\n",
           stderr: "",
           exitCode: 0,
@@ -226,7 +228,13 @@ describe("versionInfo", () => {
           if (input.command === "npm") {
             throw new Error("offline");
           }
-          return { stdout: "test-cli 1.2.3\n", stderr: "", exitCode: 0 };
+          return {
+            command: input.command,
+            args: input.args ?? [],
+            stdout: "test-cli 1.2.3\n",
+            stderr: "",
+            exitCode: 0,
+          };
         },
       },
     );
