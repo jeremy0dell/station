@@ -802,10 +802,25 @@ async function expectReviewedSetupTranscript(input: {
     .replaceAll(input.fixtureRoot, "<FIXTURE_ROOT>")
     .replaceAll(input.runtimeDir, "<RUNTIME_DIR>")
     .replaceAll(process.cwd(), "<CHECKOUT>");
+  const stableTranscript = dropTimingDependentProgressLines(transcript);
   if (process.env.STATION_UPDATE_SETUP_TRANSCRIPT === "1") {
-    await writeFile(reviewedTranscriptPath, transcript, "utf8");
+    await writeFile(reviewedTranscriptPath, stableTranscript, "utf8");
   }
-  expect(transcript).toBe(await readFile(reviewedTranscriptPath, "utf8"));
+  expect(stableTranscript).toBe(await readFile(reviewedTranscriptPath, "utf8"));
+}
+
+// Startup progress lines fire on elapsed-time timers (1.5s/5s), so whether they
+// appear in a recorded transcript depends on machine speed; verbatim copy is
+// covered by the guided unit tests instead.
+function dropTimingDependentProgressLines(transcript: string): string {
+  const lines = transcript
+    .split("\n")
+    .filter(
+      (line) =>
+        !line.startsWith("●  Starting STATION observer") &&
+        !line.startsWith("●  Still waiting for STATION observer"),
+    );
+  return lines.filter((line, index) => index === 0 || line !== lines[index - 1]).join("\n");
 }
 
 function shellRcPath(...pathArguments: [home: string, shell: SupportedShell]): string {

@@ -136,13 +136,7 @@ describe("guided setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: async (input) => {
           input.onStartupProgress?.("Starting STATION observer…");
