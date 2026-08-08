@@ -20,7 +20,7 @@ import {
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
 import {
   clearDashboardPersistentFilter,
@@ -32,7 +32,7 @@ import { openWidgetSettings } from "./widgetSettings.js";
 export const dashboardScreenBehavior = { dashboardHoverEnabled: true };
 
 export function handleDashboardKey(
-  state: TuiState,
+  state: DashboardState,
   key: TuiKey,
   context: TuiRuntimeContext,
 ): TuiTransition {
@@ -52,7 +52,7 @@ export function handleDashboardKey(
 }
 
 function handleDashboardAction(
-  state: TuiState,
+  state: DashboardState,
   action: TuiDashboardAction,
   context: TuiRuntimeContext,
   key: TuiKey,
@@ -153,7 +153,7 @@ function handleDashboardAction(
 
 /** Executes dashboard Add Project intent independently of the input modality. */
 export function handleDashboardAddProjectAction(
-  state: TuiState,
+  state: DashboardState,
   context: TuiRuntimeContext,
 ): TuiTransition {
   if (state.screen.name !== "dashboard") return { state };
@@ -164,13 +164,13 @@ export function handleDashboardAddProjectAction(
 
 /** Keeps stale first-project targets inert after the dashboard gains a project. */
 export function handleFirstProjectAddAction(
-  state: TuiState,
+  state: DashboardState,
   context: TuiRuntimeContext,
 ): TuiTransition {
   return hasNoProjects(state) ? handleDashboardAddProjectAction(state, context) : { state };
 }
 
-function hasNoProjects(state: TuiState): boolean {
+function hasNoProjects(state: DashboardState): boolean {
   return state.snapshot?.projects.length === 0;
 }
 
@@ -178,14 +178,14 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled dashboard binding: ${JSON.stringify(value)}`);
 }
 
-function exitDashboardRenderer(state: TuiState): TuiTransition {
+function exitDashboardRenderer(state: DashboardState): TuiTransition {
   return {
     state,
     operations: [{ type: "exitDashboardRenderer", exitCode: 0 }],
   };
 }
 
-function activateDashboardSlot(state: TuiState, key: TuiKey): TuiTransition {
+function activateDashboardSlot(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }
@@ -211,7 +211,7 @@ function mouseScrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
   return 0;
 }
 
-function openNewSession(state: TuiState): TuiTransition {
+function openNewSession(state: DashboardState): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }

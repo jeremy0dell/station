@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { PtyBridgeProtocolVersion } from "@station/contracts";
 import type {
   StationTerminalDisposable,
   StationTerminalExit,
@@ -22,12 +23,18 @@ import {
   STATION_CHILD_TERMINAL_ENV,
 } from "./childPtyEnvironment.js";
 import { StationTerminalSpawnError } from "./errors.js";
+import {
+  createJsonLineFeed,
+  parseBridgeLine,
+  type PtyBridgeStreamMessage,
+  toTerminalExit,
+} from "./ptyBridgeChannel.js";
 import { TerminalProcessEmitter } from "./terminalProcessEmitter.js";
 
+export const MIN_COLS = 2;
+export const MIN_ROWS = 1;
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
-const MIN_COLS = 2;
-const MIN_ROWS = 1;
 const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
 let nextTerminalSequence = 0;
 
@@ -35,20 +42,9 @@ type BridgeMessage =
   | {
       type: "ready";
       pid: number;
+      bridgePid?: number;
     }
-  | {
-      type: "data";
-      data: string;
-    }
-  | {
-      type: "exit";
-      exitCode: number;
-      signal?: number;
-    }
-  | {
-      type: "error";
-      message: string;
-    };
+  | PtyBridgeStreamMessage;
 
 // node-pty ships its macOS/Linux `spawn-helper` without the execute bit in the
 // bun-extracted layout, and a later `bun install` re-clears it. When it isn't
@@ -124,8 +120,11 @@ export function createLocalPtyTerminal(
   }
 
   ensureSpawnHelperExecutable();
-  const bridgeOptions = {
+  const bridgeOptions: Record<string, unknown> = {
     args,
+    // The bridge reports the owner's protocol version in its status reply, so
+    // the contract constant has no hardcoded twin inside the .cjs.
+    bridgeProtocol: PtyBridgeProtocolVersion,
     cols: size.cols,
     command,
     cwd,
@@ -133,6 +132,9 @@ export function createLocalPtyTerminal(
     name,
     rows: size.rows,
   };
+  if (options.orphan !== undefined) {
+    bridgeOptions.orphan = options.orphan;
+  }
 
   try {
     const bridge = spawn(resolveNodeCommand(), [
@@ -157,9 +159,17 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
 
   #bridge: ChildProcessWithoutNullStreams;
   #events = new TerminalProcessEmitter();
-  #stdoutBuffer = "";
   #pid: number;
+  #bridgePid: number | undefined;
   #size: StationTerminalSize;
+  #feed = createJsonLineFeed((line) => {
+    const message = parseBridgeLine<BridgeMessage>(line, (diagnostic) =>
+      this.#events.emitDiagnostic(diagnostic),
+    );
+    if (message !== undefined) {
+      this.handleBridgeMessage(message);
+    }
+  });
 
   constructor(
     id: string,
@@ -174,43 +184,39 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
     this.#pid = bridge.pid ?? 0;
 
     bridge.stdout.setEncoding("utf8");
-    bridge.stdout.on("data", (chunk: string) => {
-      this.handleBridgeOutput(chunk);
-    });
+    bridge.stdout.on("data", this.#feed);
     // Bridge stderr is Node diagnostics (warnings, crashes), not terminal
     // output: injected into the data stream it would render as screen content
     // and could corrupt VT parser state mid-escape-sequence.
     bridge.stderr.setEncoding("utf8");
     bridge.stderr.on("data", (chunk: string) => {
-      this.emitDiagnostic(chunk);
+      this.#events.emitDiagnostic(chunk);
     });
     // Writes raced against bridge death (EPIPE) surface here; without a
     // listener they are uncaught exceptions that crash Station.
     bridge.stdin.on("error", (error) => {
-      this.emitDiagnostic(`bridge stdin error: ${error.message}`);
+      this.#events.emitDiagnostic(`bridge stdin error: ${error.message}`);
     });
     bridge.on("error", (error) => {
-      this.emitExit({
-        exitCode: 1,
-      });
-      this.emitData(error.message);
+      this.#events.emitExit({ exitCode: 1 });
+      this.#events.emitData(error.message);
     });
     bridge.on("exit", (code, signal) => {
       // An abnormal bridge death (signal kill, code null) must not read as a
       // clean "exited 0" in the pane title.
       const signalNumber = signal === null ? undefined : signalToNumber(signal);
-      const event: StationTerminalExit = {
-        exitCode: code ?? (signalNumber !== undefined ? 128 + signalNumber : 1),
-      };
-      if (signalNumber !== undefined) {
-        event.signal = signalNumber;
-      }
-      this.emitExit(event);
+      this.#events.emitExit(
+        toTerminalExit(code ?? (signalNumber !== undefined ? 128 + signalNumber : 1), signalNumber),
+      );
     });
   }
 
   get pid(): number {
     return this.#pid;
+  }
+
+  get bridgePid(): number | undefined {
+    return this.#bridgePid;
   }
 
   get size(): StationTerminalSize {
@@ -230,7 +236,7 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   }
 
   write(data: string): void {
-    this.assertActive("write to terminal");
+    this.#events.assertActive("write to terminal");
     // After exit the bridge stdin pipe is dead; a keystroke or forwarded VT
     // query reply must drop silently instead of raising EPIPE.
     if (this.#events.exited) {
@@ -243,7 +249,7 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
   }
 
   resize(size: StationTerminalSize): void {
-    this.assertActive("resize terminal");
+    this.#events.assertActive("resize terminal");
     if (this.#events.exited) {
       return;
     }
@@ -283,71 +289,25 @@ class LocalPtyTerminalProcess implements StationTerminalProcess {
     }
   }
 
-  private handleBridgeOutput(chunk: string): void {
-    this.#stdoutBuffer += chunk;
-
-    while (true) {
-      const newlineIndex = this.#stdoutBuffer.indexOf("\n");
-      if (newlineIndex === -1) {
-        return;
-      }
-
-      const line = this.#stdoutBuffer.slice(0, newlineIndex);
-      this.#stdoutBuffer = this.#stdoutBuffer.slice(newlineIndex + 1);
-      let message: BridgeMessage;
-      try {
-        message = JSON.parse(line) as BridgeMessage;
-      } catch {
-        // One stray non-JSON line (dependency noise on the bridge's stdout)
-        // must not take the whole pipeline down.
-        this.emitDiagnostic(`unparseable bridge line: ${line.slice(0, 200)}`);
-        continue;
-      }
-      this.handleBridgeMessage(message);
-    }
-  }
-
   private handleBridgeMessage(message: BridgeMessage): void {
     switch (message.type) {
       case "ready":
         this.#pid = message.pid;
+        this.#bridgePid = message.bridgePid;
         return;
       case "data":
-        this.emitData(message.data);
+        this.#events.emitData(message.data);
         return;
       case "error":
-        this.emitDiagnostic(`bridge command error: ${message.message}`);
+        this.#events.emitDiagnostic(`bridge command error: ${message.message}`);
         return;
-      case "exit": {
-        const event: StationTerminalExit = {
-          exitCode: message.exitCode,
-        };
-        if (message.signal !== undefined) {
-          event.signal = message.signal;
-        }
-        this.emitExit(event);
-      }
+      case "exit":
+        this.#events.emitExit(toTerminalExit(message.exitCode, message.signal));
     }
-  }
-
-  private emitDiagnostic(message: string): void {
-    this.#events.emitDiagnostic(message);
-  }
-
-  private emitData(data: string): void {
-    this.#events.emitData(data);
-  }
-
-  private emitExit(event: StationTerminalExit): void {
-    this.#events.emitExit(event);
   }
 
   private sendBridgeCommand(command: object): void {
     this.#bridge.stdin.write(`${JSON.stringify(command)}\n`);
-  }
-
-  private assertActive(action: string): void {
-    this.#events.assertActive(action);
   }
 }
 
@@ -407,14 +367,19 @@ export function defaultShellArgs(): string[] {
   return ["-i"];
 }
 
-function normalizeSize(size: Partial<StationTerminalSize> | undefined): StationTerminalSize {
+/** Geometry floor shared with the adoption lane, which clamps bridge-reported sizes the same way. */
+export function normalizeSize(size: Partial<StationTerminalSize> | undefined): StationTerminalSize {
   return {
     cols: normalizeDimension(size?.cols, DEFAULT_COLS, MIN_COLS),
     rows: normalizeDimension(size?.rows, DEFAULT_ROWS, MIN_ROWS),
   };
 }
 
-function normalizeDimension(value: number | undefined, fallback: number, minimum: number): number {
+export function normalizeDimension(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+): number {
   if (value === undefined) {
     return fallback;
   }

@@ -29,6 +29,11 @@ import {
   type PtyTableOptions,
 } from "./ptyTable.js";
 import {
+  ptyBridgesDirectory,
+  reapStaleOrphanBridges,
+  resolveOrphanTtlMs,
+} from "./orphanBridges.js";
+import {
   type PtyImplementation,
   resolvePtyImplementation,
 } from "../terminal/pty/localPtyTerminal.js";
@@ -60,6 +65,7 @@ export async function startStationHost(
   const ptyImplementation =
     options.ptyImplementation ?? resolvePtyImplementation(process.env.STATION_PTY_IMPL);
   const buildVersion = stationBuildInfo().version;
+  const orphanTtlMs = resolveOrphanTtlMs(process.env.STATION_PTY_ORPHAN_TTL_MS);
   const logger =
     options.logger ??
     createJsonlLogger({
@@ -82,12 +88,28 @@ export async function startStationHost(
       ptyImplementation,
       protocolVersion: HOST_PROTOCOL_VERSION,
       buildVersion,
+      orphanTtlMs,
     },
   });
 
   const logEvent = (message: string, attributes: Record<string, unknown>): void => {
     void logger.log({ level: "info", message, attributes });
   };
+  // Clean-startup reap: stale park remains are unlinked before the socket
+  // opens, while every live parked bridge is left for negotiated adoption.
+  const orphanDirectory = ptyBridgesDirectory(options.stateDir);
+  let reap = { reaped: 0, parked: 0 };
+  try {
+    reap = await reapStaleOrphanBridges(orphanDirectory);
+  } catch (error) {
+    logEvent("host.orphan-reap-failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (reap.reaped > 0 || reap.parked > 0) {
+    logEvent("host.orphan-reap", { reaped: reap.reaped, parked: reap.parked });
+  }
+
   const configuredOnEvent = options.ptyTableOptions?.onEvent;
   const configuredOnPtyExit = options.ptyTableOptions?.onPtyExit;
   const ptyTable = createPtyTable({
@@ -99,6 +121,10 @@ export async function startStationHost(
     onPtyExit: (event) => {
       configuredOnPtyExit?.(event);
       void hostLifecycle.ptyExited(event);
+    },
+    orphanBridges: {
+      directory: orphanDirectory,
+      ttlMs: orphanTtlMs,
     },
   });
   const { promise: closed, resolve: resolveClosed } = Promise.withResolvers<void>();

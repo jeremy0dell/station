@@ -11,7 +11,7 @@ import { projectSettingsPickerScreenBehavior } from "./screens/projectSettingsPi
 import { removeWorktreeScreenBehavior } from "./screens/removeWorktree.js";
 import { renameSessionScreenBehavior } from "./screens/renameSession.js";
 import { widgetSettingsScreenBehavior } from "./screens/widgetSettings.js";
-import type { DashboardScreenView, TuiState } from "./types.js";
+import type { DashboardScreenView, DashboardState } from "./types.js";
 
 /**
  * Cross-screen behavior consumed uniformly by shared dashboard composition and input routing;
@@ -21,7 +21,7 @@ export type TuiScreenBehavior = {
   /** Whether dashboard content behind the active screen may advertise pointer interaction. */
   readonly dashboardHoverEnabled: boolean;
   /** Performs safe local cancellation and returns only state, never commands or operations. */
-  readonly clickAway?: (state: TuiState) => TuiState;
+  readonly clickAway?: (state: DashboardState) => DashboardState;
 };
 
 /** Exhaustively resolves shared behavior so every future screen makes an explicit decision. */

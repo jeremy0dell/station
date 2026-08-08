@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
+import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import { act } from "react";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import {

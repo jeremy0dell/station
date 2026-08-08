@@ -1,8 +1,12 @@
 import type { ProviderId } from "@station/contracts";
-import type { TuiViewState } from "@station/dashboard-core";
+import { describe, expect, it } from "vitest";
+import {
+  selectProjectGroups,
+  sessionForWorktreeRow,
+  sessionRowDisplayTitle,
+} from "../../../src/selectors/dashboardSessionRows.js";
 import {
   choiceValueByKey,
-  createInitialTuiState,
   isSelectionKey,
   keyChoices,
   SELECTION_KEYS,
@@ -10,11 +14,9 @@ import {
   selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
   selectProjectChooserChoices,
-  selectProjectGroups,
-  sessionForWorktreeRow,
-  sessionRowDisplayTitle,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/selectors/selectors.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import type { TuiViewState } from "../../../src/state/types.js";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI selectors", () => {

@@ -1,4 +1,4 @@
-import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core";
+import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core/selectors";
 import { providerHealthColor, useStationTheme } from "../../../theme/index.js";
 import { SheetChoiceLine } from "./parts.js";
 

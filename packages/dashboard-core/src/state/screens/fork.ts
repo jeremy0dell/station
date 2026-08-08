@@ -11,10 +11,13 @@ import { selectDashboardSessionRow } from "../../selectors/dashboardSessionRows.
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { DashboardScreenView, DashboardSnapshotView, TuiState } from "../types.js";
+import type { DashboardScreenView, DashboardSnapshotView, DashboardState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
-export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
+export type ForkDetailsScreen = Extract<
+  DashboardState["screen"],
+  { name: "fork"; step: "details" }
+>;
 type ForkScreenView = Extract<DashboardScreenView, { name: "fork" }>;
 type ForkDetailsScreenView = Extract<ForkScreenView, { step: "details" }>;
 
@@ -75,7 +78,7 @@ export function validateForkSessionCreate(
 
 const FOCUS_ORDER = ["name", "copyDirty", "submit"] as const;
 
-export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleForkKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "fork") {
     return { state };
   }
@@ -92,7 +95,7 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
 
 /** Applies a visible Fork details action after validating the active screen. */
 export function handleForkSessionAction(
-  state: TuiState,
+  state: DashboardState,
   actionId: ForkSessionActionId,
 ): TuiTransition {
   if (state.screen.name !== "fork" || state.screen.step !== "details") {
@@ -122,10 +125,10 @@ export type OpenForkDetailsOptions = {
 
 // The dashboard action resolver uses this pure transition to skip chooseSlot for context-menu entry.
 export function openForkDetailsForRow(
-  state: TuiState,
+  state: DashboardState,
   rowId: SessionId,
   options: OpenForkDetailsOptions = {},
-): TuiState {
+): DashboardState {
   if (state.screen.name !== "dashboard" && state.screen.name !== "fork") {
     return state;
   }
@@ -193,7 +196,11 @@ function availableForkBranch(
   return candidate;
 }
 
-function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScreen): TuiTransition {
+function handleDetailsKey(
+  state: DashboardState,
+  key: TuiKey,
+  screen: ForkDetailsScreen,
+): TuiTransition {
   if (key.escape === true) {
     return { state: backFromForkDetails(state) };
   }
@@ -240,7 +247,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
   return { state };
 }
 
-function backFromForkDetails(state: TuiState): TuiState {
+function backFromForkDetails(state: DashboardState): DashboardState {
   if (state.screen.name !== "fork" || state.screen.step !== "details") {
     return state;
   }
@@ -253,7 +260,7 @@ function backFromForkDetails(state: TuiState): TuiState {
   };
 }
 
-function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
+function submitFork(state: DashboardState, screen: ForkDetailsScreen): TuiTransition {
   if (state.snapshot === undefined) {
     return { state: { ...state, screen: { name: "dashboard" } } };
   }
@@ -289,7 +296,11 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
 }
 
 // The validation error rides on the spread and clears on the next submit, which re-validates.
-function rejected(state: TuiState, screen: ForkDetailsScreen, message: string): TuiTransition {
+function rejected(
+  state: DashboardState,
+  screen: ForkDetailsScreen,
+  message: string,
+): TuiTransition {
   return { state: { ...state, screen: { ...screen, validationError: message } } };
 }
 

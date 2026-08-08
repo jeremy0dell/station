@@ -15,10 +15,10 @@ import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
 import { selectionMiddleware } from "./selection/middleware.js";
 import { activeTuiToast, isTuiToastHiddenByScreen } from "./toasts.js";
-import type { TuiState } from "./types.js";
+import type { DashboardState } from "./types.js";
 
 export type TuiTransition = {
-  state: TuiState;
+  state: DashboardState;
   operations?: TuiOperation[];
   reconcileReason?: string;
 };
@@ -29,7 +29,7 @@ export type TuiRuntimeContext = {
 };
 
 export function handleTuiKey(
-  state: TuiState,
+  state: DashboardState,
   key: TuiKey,
   context: TuiRuntimeContext = { cwd: process.cwd(), homeDir: process.env.HOME ?? "" },
 ): TuiTransition {

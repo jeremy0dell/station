@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import {
   buildCreateSessionCommand,
   buildFocusCommand,
@@ -6,8 +7,7 @@ import {
   buildResumeAgentCommand,
   buildStartAgentCommand,
   cleanupForceRequired,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/state/commandBuilders.js";
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI command builders", () => {

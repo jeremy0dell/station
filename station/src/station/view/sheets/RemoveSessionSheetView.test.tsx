@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { TuiScreen } from "@station/dashboard-core";
+import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
@@ -14,7 +14,7 @@ import {
 } from "../../../theme/index.js";
 import { RemoveSessionSheetView } from "./RemoveSessionSheetView.js";
 
-type RemoveConfirmScreen = Extract<TuiScreen, { name: "removeWorktree"; step: "confirm" }>;
+type RemoveConfirmScreen = Extract<DashboardScreenView, { name: "removeWorktree"; step: "confirm" }>;
 
 const teardowns: Array<() => void> = [];
 afterEach(() => {

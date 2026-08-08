@@ -1,19 +1,21 @@
+import { describe, expect, it } from "vitest";
+import type { AddProjectActionId } from "../../../src/flows/addProject/actions.js";
+import { addProjectActions } from "../../../src/flows/addProject/actions.js";
 import {
-  type AddProjectActionId,
-  addProjectActions,
+  createNewSessionFlow,
+  newSessionIntentForAction,
+  transitionNewSessionFlow,
+} from "../../../src/flows/newSession.js";
+import { handleTuiAction } from "../../../src/state/actions.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import {
   applyAddProjectFolderReviewed,
   applyAddProjectFolderReviewFailed,
-  createInitialTuiState,
-  createNewSessionFlow,
-  handleTuiAction,
-  handleTuiKey,
-  newSessionIntentForAction,
   openAddProject,
-  openForkDetailsForRow,
-  openRemoveWorktreeConfirmForRow,
-  transitionNewSessionFlow,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/state/screens/addProjectScreen.js";
+import { openForkDetailsForRow } from "../../../src/state/screens/fork.js";
+import { openRemoveWorktreeConfirmForRow } from "../../../src/state/screens/removeWorktree.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
 import { createDashboardSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
 
 const context = { cwd: "/workspace", homeDir: "/home/example" };

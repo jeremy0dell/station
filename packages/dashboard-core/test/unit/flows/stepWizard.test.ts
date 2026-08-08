@@ -1,10 +1,10 @@
+import { describe, expect, it } from "vitest";
 import {
   backWizardStep,
   createStepWizardState,
   enterWizardStep,
   resetWizardStep,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/flows/stepWizard.js";
 
 describe("step wizard helpers", () => {
   it("tracks step history without owning domain state", () => {

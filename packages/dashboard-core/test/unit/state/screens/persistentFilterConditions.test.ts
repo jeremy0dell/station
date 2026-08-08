@@ -1,21 +1,19 @@
-import {
-  createInitialTuiState,
-  handleTuiKey,
-  type TuiKey,
-  type TuiState,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import type { TuiKey } from "../../../../src/state/keys.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const CONTEXT = { cwd: "/workspace", homeDir: "/home/example" };
 const RETURN = { input: "\r", return: true } as const;
 const TAB = { input: "i", ctrl: true } as const;
 
-function key(state: TuiState, input: TuiKey): TuiState {
+function key(state: DashboardState, input: TuiKey): DashboardState {
   return handleTuiKey(state, input, CONTEXT).state;
 }
 
-function openFilter(): TuiState {
+function openFilter(): DashboardState {
   return key(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), { input: "/" });
 }
 

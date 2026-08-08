@@ -8,11 +8,11 @@ import { isReturnKey } from "../keys.js";
 import { addPendingRenameSessionTitle } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 import { openRenameEditForRow } from "./sessionRows.js";
 
-type RenameSessionScreen = Extract<TuiState["screen"], { name: "renameSession" }>;
+type RenameSessionScreen = Extract<DashboardState["screen"], { name: "renameSession" }>;
 
 const renameSessionChooseSlotBehavior = { dashboardHoverEnabled: true };
 const renameSessionEditNameBehavior = {
@@ -30,7 +30,7 @@ export function renameSessionScreenBehavior(screen: RenameSessionScreen) {
   return assertNever(screen);
 }
 
-function handleChooseSlotKey(state: TuiState, key: TuiKey): TuiTransition {
+function handleChooseSlotKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (key.escape === true) {
     return {
       state: {
@@ -52,7 +52,7 @@ function handleChooseSlotKey(state: TuiState, key: TuiKey): TuiTransition {
   });
 }
 
-function handleEditNameKey(state: TuiState, key: TuiKey): TuiTransition {
+function handleEditNameKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "renameSession" || state.screen.step !== "editName") {
     return { state };
   }
@@ -82,7 +82,7 @@ function handleEditNameKey(state: TuiState, key: TuiKey): TuiTransition {
 }
 
 /** Submit the active rename editor through the path shared by Enter and semantic controls. */
-export function submitRenameSession(state: TuiState): TuiTransition {
+export function submitRenameSession(state: DashboardState): TuiTransition {
   if (state.screen.name !== "renameSession" || state.screen.step !== "editName") {
     return { state };
   }
@@ -150,7 +150,7 @@ export function submitRenameSession(state: TuiState): TuiTransition {
   };
 }
 
-export function handleRenameSessionKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleRenameSessionKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "renameSession") {
     return { state };
   }
@@ -162,7 +162,7 @@ export function handleRenameSessionKey(state: TuiState, key: TuiKey): TuiTransit
   return handleEditNameKey(state, key);
 }
 
-function backFromRenameEdit(state: TuiState): TuiState {
+function backFromRenameEdit(state: DashboardState): DashboardState {
   if (state.screen.name !== "renameSession" || state.screen.step !== "editName") {
     return state;
   }
@@ -176,13 +176,13 @@ function backFromRenameEdit(state: TuiState): TuiState {
 }
 
 function renameEditScreen(input: {
-  screen: Extract<TuiState["screen"], { name: "renameSession"; step: "editName" }>;
+  screen: Extract<DashboardState["screen"], { name: "renameSession"; step: "editName" }>;
   draftTitle: Extract<
-    TuiState["screen"],
+    DashboardState["screen"],
     { name: "renameSession"; step: "editName" }
   >["draftTitle"];
-}): Extract<TuiState["screen"], { name: "renameSession"; step: "editName" }> {
-  const screen: Extract<TuiState["screen"], { name: "renameSession"; step: "editName" }> = {
+}): Extract<DashboardState["screen"], { name: "renameSession"; step: "editName" }> {
+  const screen: Extract<DashboardState["screen"], { name: "renameSession"; step: "editName" }> = {
     name: "renameSession",
     step: "editName",
     rowId: input.screen.rowId,

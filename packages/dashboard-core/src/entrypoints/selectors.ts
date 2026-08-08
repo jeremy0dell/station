@@ -1,0 +1,126 @@
+/**
+ * Role entrypoint: dashboard selectors and view models.
+ *
+ * Pure projections from the readonly state view and canonical snapshot into
+ * rows, viewport, header/footer/filter models, and layout primitives. No
+ * mutation, lifecycle, or effects live here.
+ */
+
+export {
+  bottomSheetContentWidth,
+  bottomSheetFrameLayout,
+} from "../components/BottomSheetFrame/layout.js";
+
+export {
+  commandPromptLineForScreen,
+  commandPromptRows,
+  emptyProjectLabel,
+  FIRST_RUN_BODY_LABEL,
+  fleetCountsLabel,
+  headerStrip,
+  observerHeaderStatusForConnection,
+  projectHeaderLabelParts,
+  rowGridInputForViewportItem,
+  scrollIndicatorLabel,
+  snapshotLoadingLines,
+} from "../components/Dashboard/content.js";
+export type {
+  DashboardFilterConditionPanelAction,
+  DashboardFilterConditionPanelRow,
+} from "../components/Dashboard/filterConditionPanel.js";
+export { dashboardFilterConditionPanelModel } from "../components/Dashboard/filterConditionPanel.js";
+export type {
+  DashboardFilterFooterSegment,
+  DashboardFooterModel,
+} from "../components/Dashboard/footer.js";
+export { dashboardFooterModel } from "../components/Dashboard/footer.js";
+export type {
+  DashboardFilterHeaderModel,
+  DashboardFilterHeaderSegment,
+  DashboardTableHeaderModel,
+} from "../components/Dashboard/tableHeader.js";
+export {
+  dashboardPersistentFilterHeaderModel,
+  dashboardTableHeaderModel,
+} from "../components/Dashboard/tableHeader.js";
+export type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
+export {
+  clampEditableTextCursor,
+  createEditableTextInputState,
+} from "../components/EditableTextInput/editing.js";
+
+export {
+  helpPanelLayout,
+  helpPanelLines,
+} from "../components/HelpOverlay/helpPanel.js";
+
+export {
+  newSessionEditNameContent,
+  newSessionReviewContent,
+} from "../components/NewSessionBottomSheet/content.js";
+
+export { newSessionContentRowCount } from "../components/NewSessionBottomSheet/layout.js";
+
+export { projectSettingsPanelLayout } from "../components/ProjectSettingsPanel/layout.js";
+
+export { textMatchSegments } from "../components/TextMatch/segments.js";
+export type { ToastBorderColorName } from "../components/ToastOverlay/content.js";
+export {
+  toastBorderColor,
+  toastCopyText,
+  toastDetail,
+  toastTitle,
+} from "../components/ToastOverlay/content.js";
+
+export { toastOverlayLayout } from "../components/ToastOverlay/layout.js";
+export type { WidgetSettingsLine } from "../components/WidgetSettingsPanel/content.js";
+export {
+  widgetSettingsPanelLayout,
+  widgetSettingsPanelModel,
+} from "../components/WidgetSettingsPanel/content.js";
+export type {
+  RowColor,
+  RowGridLayout,
+  RowGridRowInput,
+  RowSegment,
+} from "../components/WorktreeRow/layout.js";
+export {
+  cellWidth,
+  layoutWorktreeRowGrid,
+  textSegment,
+  truncateCells,
+} from "../components/WorktreeRow/layout.js";
+
+export { isReadyToRead } from "../components/WorktreeRow/rowInput.js";
+
+export {
+  DASHBOARD_FILTER_CONDITION_KEYS,
+  dashboardPersistentFilterSummarySegments,
+} from "../selectors/dashboardFilterConditions.js";
+
+export type {
+  DashboardPersistentFilterProjection,
+  DashboardPersistentFilterProjectMatch,
+} from "../selectors/dashboardPersistentFilter.js";
+export type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
+export {
+  selectDashboardSessionRows,
+  sessionRowDisplayTitle,
+} from "../selectors/dashboardSessionRows.js";
+export type {
+  DashboardSessionOverflow,
+  DashboardViewportItem,
+} from "../selectors/dashboardViewport.js";
+export { selectDashboardViewport } from "../selectors/dashboardViewport.js";
+export type { FleetSummary } from "../selectors/fleetSummary.js";
+export { selectFleetSummary } from "../selectors/fleetSummary.js";
+export type {
+  KeyedChoice,
+  NewSessionHarnessOption,
+} from "../selectors/selectors.js";
+export {
+  selectNewSessionHarnessChoices,
+  selectNewSessionProjectChoices,
+  selectProjectChooserChoices,
+  selectProjectDefaultHarness,
+} from "../selectors/selectors.js";

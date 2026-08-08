@@ -1,6 +1,7 @@
 import { useTerminalDimensions } from "@opentui/react";
 import { useSyncExternalStore } from "react";
-import type { DashboardStateSource, DashboardStateView } from "@station/dashboard-core";
+import type { DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { DashboardStateView } from "@station/dashboard-core/state";
 import { buildContextMenuItems } from "./items.js";
 import { measureContextMenu, placeContextMenu } from "./placement.js";
 import { ContextMenuLayer } from "./ContextMenuLayer.js";

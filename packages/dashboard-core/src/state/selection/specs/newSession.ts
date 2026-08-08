@@ -8,7 +8,7 @@ import {
   selectNewSessionProject,
   selectNewSessionProjectChoices,
 } from "../../../selectors/selectors.js";
-import type { TuiState } from "../../types.js";
+import type { DashboardState } from "../../types.js";
 import { flatPickerSpec } from "../flatPicker.js";
 import { harnessPickerSpec } from "./harnessPicker.js";
 
@@ -67,7 +67,7 @@ export const newSessionPickAgentListSpec = harnessPickerSpec({
 });
 
 /** Seed the pick-step cursor to the current selection when entering it. */
-export function seedNewSessionPickerCursor(state: TuiState): TuiState {
+export function seedNewSessionPickerCursor(state: DashboardState): DashboardState {
   if (state.screen.name !== "newSession") {
     return state;
   }

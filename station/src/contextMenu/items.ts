@@ -1,11 +1,9 @@
 import { normalize } from "node:path";
 import type { Automation } from "../config/stationConfig.js";
 import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../state/types.js";
-import {
-  selectDashboardViewport,
-  isExternalAgentRemovalUnavailable,
-  type DashboardStateView,
-} from "@station/dashboard-core";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { isExternalAgentRemovalUnavailable } from "@station/dashboard-core/state";
+import type { DashboardStateView } from "@station/dashboard-core/state";
 import type {
   ContextMenuItem,
   ContextMenuItemAction,

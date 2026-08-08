@@ -7,7 +7,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import type { StationClientCommandCompletion } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets/types";
+import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets";
 import type { StationMouseEvent } from "../input/mouse.js";
 import { createStation, StationApp } from "./createStation.js";
 import { NO_OP_CLIPBOARD_EFFECTS } from "../copy/testing.js";

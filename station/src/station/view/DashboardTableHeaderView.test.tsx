@@ -2,11 +2,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
-import {
-  textSegment,
-  type DashboardTableHeaderModel,
-  type RowGridLayout,
-} from "@station/dashboard-core";
+import { textSegment } from "@station/dashboard-core/selectors";
+import type { DashboardTableHeaderModel, RowGridLayout } from "@station/dashboard-core/selectors";
 import type { StationMouseTarget } from "../input/stationMouse.js";
 import { DashboardTableHeaderView } from "./DashboardTableHeaderView.js";
 import { StationMouseProvider } from "./stationMouseContext.js";

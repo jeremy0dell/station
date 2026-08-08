@@ -1,12 +1,14 @@
-import {
-  type CreateManagedSessionRequest,
-  type DashboardCapabilities,
-  type DashboardExecutionHandle,
-  dashboardExecution,
-  type ForkManagedSessionRequest,
-  type OpenDashboardShellRequest,
-  type SessionActivationRequest,
-} from "../../src/index.js";
+import type { SessionActivationRequest } from "../../src/state/capabilities/activation.js";
+import type {
+  DashboardCapabilities,
+  DashboardExecutionHandle,
+} from "../../src/state/capabilities/execution.js";
+import { dashboardExecution } from "../../src/state/capabilities/execution.js";
+import type {
+  CreateManagedSessionRequest,
+  ForkManagedSessionRequest,
+} from "../../src/state/capabilities/managedSessions.js";
+import type { OpenDashboardShellRequest } from "../../src/state/capabilities/shell.js";
 
 export class FakeDashboardCapabilities implements DashboardCapabilities {
   readonly activationRequests: SessionActivationRequest[] = [];

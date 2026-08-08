@@ -1,12 +1,12 @@
+import { describe, expect, it } from "vitest";
 import {
-  createInitialTuiState,
   dashboardBindingHelp,
   deriveTuiInputMode,
-  handleTuiKey,
   isSlotKey,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
-import { matchDashboardBinding } from "../../../src/state/keymap.js";
+  matchDashboardBinding,
+} from "../../../src/state/keymap.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };

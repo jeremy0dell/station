@@ -1,13 +1,11 @@
-import {
-  createInitialTuiState,
-  handleTuiAction,
-  handleTuiKey,
-  openRemoveWorktreeConfirmForRow,
-  type TuiKey,
-  type TuiState,
-  type TuiTransition,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { handleTuiAction } from "../../../../src/state/actions.js";
+import type { TuiKey } from "../../../../src/state/keys.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
+import { openRemoveWorktreeConfirmForRow } from "../../../../src/state/screens/removeWorktree.js";
+import type { TuiTransition } from "../../../../src/state/transition.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const CTX = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
@@ -16,18 +14,18 @@ const LEFT: TuiKey = { input: "", leftArrow: true };
 const RIGHT: TuiKey = { input: "", rightArrow: true };
 const ESC: TuiKey = { input: "", escape: true };
 
-function openConfirm(): TuiState {
+function openConfirm(): DashboardState {
   return openRemoveWorktreeConfirmForRow(
     createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
     "ses_wt_web_idle",
   );
 }
 
-function step(state: TuiState, key: TuiKey): TuiTransition {
+function step(state: DashboardState, key: TuiKey): TuiTransition {
   return handleTuiKey(state, key, CTX);
 }
 
-function confirmScreen(state: TuiState) {
+function confirmScreen(state: DashboardState) {
   if (state.screen.name !== "removeWorktree" || state.screen.step !== "confirm") {
     throw new Error(`expected remove confirmation, got ${state.screen.name}`);
   }

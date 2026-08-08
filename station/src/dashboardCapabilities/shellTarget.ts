@@ -1,6 +1,6 @@
 import type { StationClientStateSource } from "@station/client";
 import type { ProjectView, WorktreeRow } from "@station/contracts";
-import type { ClientNotice, OpenDashboardShellRequest } from "@station/dashboard-core";
+import type { ClientNotice, OpenDashboardShellRequest } from "@station/dashboard-core/runtime";
 
 /** Shared stale-identity feedback for renderer shell adapters. */
 export const STALE_DASHBOARD_TARGET_NOTICE = {

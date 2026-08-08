@@ -1,9 +1,6 @@
 // OpenTUI port of apps/tui's RenameSessionBottomSheet.
-import {
-  bottomSheetContentWidth,
-  truncateCells,
-  type DashboardScreenView,
-} from "@station/dashboard-core";
+import { bottomSheetContentWidth, truncateCells } from "@station/dashboard-core/selectors";
+import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { toOpenTuiColor, useStationTheme } from "../../../theme/index.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";

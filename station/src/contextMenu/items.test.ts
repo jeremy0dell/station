@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createInitialTuiState } from "@station/dashboard-core";
+import { createInitialTuiState } from "@station/dashboard-core/state";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, type StationState } from "../state/types.js";
 import {

@@ -1,9 +1,9 @@
+import { describe, expect, it } from "vitest";
+import { addProjectActions } from "../../../../src/flows/addProject/actions.js";
 import {
-  addProjectActions,
   createAddProjectFlow,
   transitionAddProjectFlow,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../../src/flows/addProject/flow.js";
 
 describe("Add Project action descriptors", () => {
   it("owns stable order, labels, accelerators, and intent", () => {

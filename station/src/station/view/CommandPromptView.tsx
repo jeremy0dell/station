@@ -1,9 +1,7 @@
 // Legacy prompt renderer for existing chooser copy; persistent
 // filtering owns the dashboard header and never enters this absolute layer.
-import {
-  commandPromptLineForScreen,
-  type DashboardScreenView,
-} from "@station/dashboard-core";
+import { commandPromptLineForScreen } from "@station/dashboard-core/selectors";
+import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 
 export function CommandPromptView({ screen }: { screen: DashboardScreenView }) {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { type BaseRenderable, rgbToHex, TextRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { TuiScreen } from "@station/dashboard-core";
+import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { act } from "react";
 import {
   nativeStationTheme,
@@ -23,7 +23,7 @@ afterEach(async () => {
   });
 });
 
-type PersistentFilterScreen = Extract<TuiScreen, { name: "persistentFilter" }>;
+type PersistentFilterScreen = Extract<DashboardScreenView, { name: "persistentFilter" }>;
 
 type PersistentFilterConditionEditor = NonNullable<PersistentFilterScreen["conditionEditor"]>;
 

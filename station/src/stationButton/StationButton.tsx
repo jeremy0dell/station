@@ -1,7 +1,7 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import type { StationClientStateSource } from "@station/client";
 import type { TuiIslandConfig } from "@station/config";
-import type { DashboardStateSource } from "@station/dashboard-core";
+import type { DashboardStateSource } from "@station/dashboard-core/runtime";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { isAttentionDismissed } from "../state/attentionDismissal.js";

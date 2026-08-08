@@ -22,12 +22,7 @@ import { applySnapshotSourceState } from "./sourceBridge.js";
 import { ADD_PROJECT_DIRECTORY_POLL_INTERVAL_MS } from "./timing.js";
 import { addTuiToast, expireTuiToasts, refreshActiveTuiToastExpiry } from "./toasts.js";
 import { handleTuiKey, type TuiTransition } from "./transition.js";
-import type {
-  CreateInitialTuiStateOptions,
-  DashboardState,
-  DashboardStateView,
-  TuiState,
-} from "./types.js";
+import type { CreateInitialTuiStateOptions, DashboardState, DashboardStateView } from "./types.js";
 
 /**
  * Type-level readonly state source that preserves Zustand state and notification identity.
@@ -288,13 +283,13 @@ function attachAddProjectDirectoryPolling(
   };
 }
 
-function activeAddProjectDirectory(state: TuiState): string | undefined {
+function activeAddProjectDirectory(state: DashboardState): string | undefined {
   return state.screen.name === "addProject" && state.screen.flow.mode === "choose"
     ? state.screen.flow.currentPath
     : undefined;
 }
 
-function replaceDashboardFocusState(next: TuiState): DashboardState {
+function replaceDashboardFocusState(next: DashboardState): DashboardState {
   const replacement: DashboardState = { ...next };
   if (next.dashboardFocus === undefined) {
     delete replacement.dashboardFocus;

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../../../theme/index.js";
-import { createEditableTextInputState } from "@station/dashboard-core";
+import { createEditableTextInputState } from "@station/dashboard-core/selectors";
 import { act } from "react";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
 import { StationHoverProvider, StationMouseProvider } from "../stationMouseContext.js";

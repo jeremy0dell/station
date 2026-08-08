@@ -3,13 +3,9 @@
 // via client runtime (keeping store and runtime reducer synchronized).
 import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
-import {
-  createObserverActivationCapabilities,
-  createObserverManagedSessionCapabilities,
-  dashboardExecution,
-  selectDashboardViewport,
-  type DashboardCapabilities,
-} from "@station/dashboard-core";
+import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";

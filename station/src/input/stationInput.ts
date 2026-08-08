@@ -12,7 +12,7 @@ import {
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { dispatchStationKey } from "../station/input/stationActions.js";
 import type { StationClientStateSource } from "@station/client";
-import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import {
   routeKey,
   routeMouse,

@@ -1,14 +1,14 @@
+import { describe, expect, it } from "vitest";
 import {
-  createInitialTuiState,
-  type DashboardFilterCondition,
   dashboardFilterConditionFieldForKey,
   dashboardFilterConditionFieldKey,
   dashboardFilterConditionFieldLabel,
   dashboardPersistentFilterSummarySegments,
   normalizeDashboardFilterConditions,
   selectDashboardFilterConditionOptions,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/selectors/dashboardFilterConditions.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import type { DashboardFilterCondition } from "../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("dashboard filter conditions", () => {

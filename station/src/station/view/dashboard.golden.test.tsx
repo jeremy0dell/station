@@ -7,7 +7,7 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import type { ClientNotice, DashboardCapabilities } from "@station/dashboard-core";
+import type { ClientNotice, DashboardCapabilities } from "@station/dashboard-core/runtime";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {

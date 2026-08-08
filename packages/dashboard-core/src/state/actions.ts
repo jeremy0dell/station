@@ -50,9 +50,9 @@ import {
 import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
   DashboardFilterConditionField,
+  DashboardState,
   ProjectHeaderControl,
   ProjectSettingsItemId,
-  TuiState,
 } from "./types.js";
 
 /**
@@ -138,7 +138,7 @@ export type DashboardAction = TuiSemanticAction | DashboardStateAction;
 
 /** Resolves a dashboard action through the same pure transition model used by keyboard input. */
 export function handleTuiAction(
-  state: TuiState,
+  state: DashboardState,
   action: DashboardAction,
   context: TuiRuntimeContext,
 ): TuiTransition {
@@ -186,7 +186,10 @@ export function handleTuiAction(
   }
 }
 
-function handleDashboardStateAction(state: TuiState, action: DashboardStateAction): TuiTransition {
+function handleDashboardStateAction(
+  state: DashboardState,
+  action: DashboardStateAction,
+): TuiTransition {
   switch (action.type) {
     case "dashboard.scroll":
       return stateTransition(scrollDashboard(state, action.delta));
@@ -209,7 +212,7 @@ function handleDashboardStateAction(state: TuiState, action: DashboardStateActio
 }
 
 function handleDashboardScreenAction(
-  state: TuiState,
+  state: DashboardState,
   action: Extract<
     DashboardStateAction,
     | { type: "screen.clickAway" }
@@ -245,7 +248,7 @@ function handleDashboardScreenAction(
 }
 
 function handleDashboardWidgetAction(
-  state: TuiState,
+  state: DashboardState,
   action: Extract<DashboardStateAction, { type: `widgetSettings.${string}` }>,
 ): TuiTransition {
   switch (action.type) {
@@ -268,6 +271,6 @@ function assertNeverAction(action: never): never {
   throw new Error(`Unhandled dashboard action: ${JSON.stringify(action)}`);
 }
 
-function stateTransition(state: TuiState): TuiTransition {
+function stateTransition(state: DashboardState): TuiTransition {
   return { state };
 }

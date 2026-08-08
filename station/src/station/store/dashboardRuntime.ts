@@ -3,13 +3,9 @@
 // toggles; overlayRowFocus separately treats row focus as transient. Native
 // Station is always a persistent popup whose dismiss is executed by the router,
 // so onDismiss records that capability without owning the effect.
-import {
-  createDashboardRuntime,
-  type DashboardCapabilities,
-  type DashboardRuntime,
-  type TuiFolderService,
-} from "@station/dashboard-core";
-import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
+import { createDashboardRuntime } from "@station/dashboard-core/runtime";
+import type { DashboardCapabilities, DashboardRuntime, TuiFolderService } from "@station/dashboard-core/runtime";
+import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import type { StationClient } from "../../sources/types.js";
 
 export type StationDashboardRuntime = DashboardRuntime & {

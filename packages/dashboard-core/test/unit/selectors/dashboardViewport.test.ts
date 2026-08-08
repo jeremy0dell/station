@@ -1,10 +1,10 @@
+import { describe, expect, it } from "vitest";
+import { rowGridInputForViewportItem } from "../../../src/components/Dashboard/content.js";
 import {
-  createInitialTuiState,
-  rowGridInputForViewportItem,
   selectDashboardItems,
   selectDashboardViewport,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/selectors/dashboardViewport.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("dashboard viewport selector", () => {

@@ -1,15 +1,15 @@
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import { selectDashboardItems } from "../selectors/dashboardViewport.js";
-import type { TuiState } from "./types.js";
+import type { DashboardState } from "./types.js";
 
-export function scrollDashboard(state: TuiState, delta: number): TuiState {
+export function scrollDashboard(state: DashboardState, delta: number): DashboardState {
   return clampDashboardStateScroll({
     ...state,
     scrollOffset: state.scrollOffset + delta,
   });
 }
 
-export function clampDashboardStateScroll(state: TuiState): TuiState {
+export function clampDashboardStateScroll(state: DashboardState): DashboardState {
   const scrollOffset = clampedScrollOffsetForState(state);
   if (scrollOffset === state.scrollOffset) {
     return state;
@@ -20,7 +20,7 @@ export function clampDashboardStateScroll(state: TuiState): TuiState {
   };
 }
 
-function clampedScrollOffsetForState(state: TuiState): number {
+function clampedScrollOffsetForState(state: DashboardState): number {
   if (state.snapshot === undefined) {
     return 0;
   }
