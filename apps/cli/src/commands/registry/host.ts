@@ -57,9 +57,13 @@ async function runHostCliCommand(context: CliCommandRunContext) {
       (result.action === "handoff" &&
         (result.status === "refused" || result.status === "unavailable")) ||
       (result.action === "status" && result.probe !== "listening");
-    return { code: failed ? 1 : 0, output: hostCommandSummary(result) };
+    return {
+      code: failed ? 1 : 0,
+      output: hostCommandSummary(result),
+      outputFormat: "text",
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { code: 2, output: `${message}\n` };
+    return { code: 2, output: `${message}\n`, outputFormat: "text" };
   }
 }
