@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  assertOwnedDisposableRuntimeChild,
   DisposableRuntimeOwnerRecordSchema,
   RuntimeLifecycleEventSchema,
   runOwnedDisposableRuntime,
@@ -54,6 +55,36 @@ afterEach(async () => {
 });
 
 describe("disposable runtime ownership", () => {
+  it("corroborates an owned child against its active record and process group", async () => {
+    const root = await temporaryRoot();
+    const marker = join(root, "corroborated");
+    const childScript = join(root, "owned-child.mjs");
+    await writeFile(
+      childScript,
+      [
+        `import { writeFile } from "node:fs/promises";`,
+        `import { assertOwnedDisposableRuntimeChild } from ${JSON.stringify(new URL("../../scripts/runtime-owner.mjs", import.meta.url).href)};`,
+        `await assertOwnedDisposableRuntimeChild({ role: "native-hmr", stateDir: ${JSON.stringify(root)}, runtimeId: process.env.STATION_RUNTIME_OWNER_ID });`,
+        `await writeFile(${JSON.stringify(marker)}, "yes");`,
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+
+    const result = await runOwnedDisposableRuntime(
+      runtimeInput(root, [{ command: process.execPath, args: [childScript] }]),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(await readFile(marker, "utf8")).toBe("yes");
+    await expect(
+      assertOwnedDisposableRuntimeChild({
+        role: "native-hmr",
+        stateDir: root,
+        runtimeId: "run_11111111-1111-4111-8111-111111111111",
+      }),
+    ).rejects.toMatchObject({ code: "RUNTIME_OWNER_CHILD_UNCORROBORATED" });
+  });
+
   it("publishes lifecycle evidence and retires the exact record after normal exit", async () => {
     const root = await temporaryRoot();
 

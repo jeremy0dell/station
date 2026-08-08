@@ -1,5 +1,13 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -589,6 +597,16 @@ describe("binary smoke script", () => {
       expect(failedManifest.rounds[0].failure.message).toBe(
         "synthetic binary smoke evidence failure",
       );
+      expect(failedManifest.rounds[0].runtime.lifecycle).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message: "runtime.cleanup.completed",
+            attributes: expect.objectContaining({
+              memberCount: 0,
+            }),
+          }),
+        ]),
+      );
 
       const captureFailed = spawnSync(process.execPath, [scriptPath], {
         env: {
@@ -599,10 +617,8 @@ describe("binary smoke script", () => {
         encoding: "utf8",
       });
       expect(captureFailed.status).toBe(1);
-      expect(captureFailed.stderr).toContain("synthetic binary smoke evidence failure");
-      expect(captureFailed.stderr).toContain(
-        "Evidence capture failed: STATION_BINARY_SMOKE_EVIDENCE_DIR must be absolute",
-      );
+      expect(captureFailed.stderr).toContain("STATION_BINARY_SMOKE_EVIDENCE_DIR must be absolute");
+      expect(captureFailed.stderr).not.toContain("synthetic binary smoke evidence failure");
 
       const cleanupFailedEvidence = join(parent, "cleanup-failed-evidence");
       const cleanupFailed = spawnSync(process.execPath, [scriptPath], {
@@ -622,7 +638,7 @@ describe("binary smoke script", () => {
       const cleanupFailedManifest = JSON.parse(
         readFileSync(join(cleanupFailedEvidence, "manifest.json"), "utf8"),
       );
-      expect(cleanupFailedManifest.rounds[0].cleanup.status).toBe("incomplete");
+      expect(cleanupFailedManifest.rounds[0].cleanup.status).toBe("complete");
       expect(cleanupFailedManifest.warnings).toContain(
         "cleanup self-check: synthetic binary smoke cleanup failure",
       );
@@ -646,7 +662,7 @@ describe("binary smoke script", () => {
     } finally {
       rmSync(parent, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it("validates the focused handoff-stress flags before building artifacts", () => {
     const scriptPath = fileURLToPath(
@@ -686,6 +702,283 @@ describe("binary smoke script", () => {
     expect(excessiveRounds.status).toBe(1);
     expect(excessiveRounds.stderr).toContain("--rounds must be between 1 and 1000");
   });
+});
+
+describe("binary smoke runtime ownership", () => {
+  const scriptPath = fileURLToPath(
+    new URL("../../scripts/test-runners/run-binary-smoke.mjs", import.meta.url),
+  );
+
+  type OwnershipDescriptor = {
+    root: string;
+    ownerStateDir: string;
+    runId: string;
+    innerPid: number;
+    pids: { observer: number; stationHost: number; popupRenderer: number };
+  };
+
+  function startOwnershipRun(
+    descriptorPath: string,
+    options: {
+      evidenceDir?: string;
+      exitImmediately?: boolean;
+      replaceRoot?: boolean;
+      termResistant?: boolean;
+    } = {},
+  ) {
+    const child = spawn(process.execPath, [scriptPath], {
+      env: {
+        ...process.env,
+        STATION_BINARY_SMOKE_OWNERSHIP_TEST_DESCRIPTOR: descriptorPath,
+        ...(options.evidenceDir === undefined
+          ? {}
+          : { STATION_BINARY_SMOKE_EVIDENCE_DIR: options.evidenceDir }),
+        ...(options.exitImmediately
+          ? { STATION_BINARY_SMOKE_OWNERSHIP_TEST_EXIT_IMMEDIATELY: "1" }
+          : {}),
+        ...(options.replaceRoot ? { STATION_BINARY_SMOKE_OWNERSHIP_TEST_REPLACE_ROOT: "1" } : {}),
+        ...(options.termResistant
+          ? { STATION_BINARY_SMOKE_OWNERSHIP_TEST_TERM_RESISTANT: "1" }
+          : {}),
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    child.stderr?.setEncoding("utf8");
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => (stderr += chunk));
+    const exited = new Promise<void>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", () => resolve());
+    });
+    return { child, exited, stderr: () => stderr };
+  }
+
+  async function waitForDescriptor(path: string): Promise<OwnershipDescriptor> {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      if (existsSync(path)) {
+        try {
+          return JSON.parse(readFileSync(path, "utf8")) as OwnershipDescriptor;
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Timed out waiting for ownership descriptor ${path}`);
+  }
+
+  function processGroup(pid: number): number {
+    const result = spawnSync("/bin/ps", ["-p", String(pid), "-o", "pgid="], {
+      encoding: "utf8",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    return Number(result.stdout.trim());
+  }
+
+  async function expectProcessesGone(pids: number[]) {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (
+        pids.every((pid) => {
+          try {
+            process.kill(pid, 0);
+            return false;
+          } catch (error) {
+            return (error as NodeJS.ErrnoException).code === "ESRCH";
+          }
+        })
+      ) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Owned processes remained: ${pids.join(", ")}`);
+  }
+
+  function assertFinalEvidence(path: string, expectedStatus: "failed" | "cancelled") {
+    const manifest = JSON.parse(readFileSync(join(path, "manifest.json"), "utf8"));
+    expect(manifest.status).toBe(expectedStatus);
+    expect(manifest.runId).toMatch(/^run_/);
+    expect(manifest.rounds[0].cleanup).toEqual({
+      status: "complete",
+      observerExited: true,
+      hostExited: true,
+      socketRemoved: true,
+      pidfileRemoved: true,
+      hostSocketRemoved: true,
+      rootRemoved: true,
+    });
+    expect(
+      manifest.rounds[0].runtime.processes.every((entry: { exists: boolean }) => !entry.exists),
+    ).toBe(true);
+    return manifest;
+  }
+
+  it("refuses a caller-forged inner mode and an existing evidence destination before spawn", () => {
+    const parent = mkdtempSync(join(tmpdir(), "station-binary-owner-boundary-"));
+    try {
+      const descriptorPath = join(parent, "descriptor.json");
+      const forged = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_OWNED_CHILD: "1",
+          STATION_BINARY_SMOKE_OWNER_STATE_DIR: parent,
+          STATION_BINARY_SMOKE_OWNERSHIP_TEST_DESCRIPTOR: descriptorPath,
+          STATION_RUNTIME_OWNER_ID: "run_11111111-1111-4111-8111-111111111111",
+        },
+        encoding: "utf8",
+      });
+      expect(forged.status).toBe(1);
+      expect(forged.stderr).toContain("not corroborated by an active exact owner record");
+      expect(existsSync(descriptorPath)).toBe(false);
+
+      const evidencePath = join(parent, "existing-evidence");
+      writeFileSync(evidencePath, "caller-owned\n", { mode: 0o600 });
+      const existing = spawnSync(process.execPath, [scriptPath], {
+        env: {
+          ...process.env,
+          STATION_BINARY_SMOKE_EVIDENCE_DIR: evidencePath,
+          STATION_BINARY_SMOKE_OWNERSHIP_TEST_DESCRIPTOR: descriptorPath,
+          STATION_BINARY_SMOKE_OWNERSHIP_TEST_EXIT_IMMEDIATELY: "1",
+        },
+        encoding: "utf8",
+      });
+      expect(existing.status).toBe(1);
+      expect(existing.stderr).toContain("must not exist");
+      expect(readFileSync(evidencePath, "utf8")).toBe("caller-owned\n");
+      expect(existsSync(descriptorPath)).toBe(false);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("reaps the real outer topology for all signals, inner SIGKILL, and escalation", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "station-binary-owner-signals-"));
+    let activeRun: ReturnType<typeof startOwnershipRun> | undefined;
+    try {
+      const cases = [
+        { name: "int", signal: "SIGINT", status: 130, evidenceStatus: "cancelled" },
+        { name: "term", signal: "SIGTERM", status: 143, evidenceStatus: "cancelled" },
+        { name: "hup", signal: "SIGHUP", status: 129, evidenceStatus: "cancelled" },
+        { name: "inner-kill", signal: "INNER_SIGKILL", status: 137, evidenceStatus: "failed" },
+        {
+          name: "term-resistant",
+          signal: "SIGTERM",
+          status: 143,
+          evidenceStatus: "cancelled",
+          termResistant: true,
+        },
+      ] as const;
+      for (const testCase of cases) {
+        const descriptorPath = join(parent, `${testCase.name}.json`);
+        const evidenceDir = join(parent, `${testCase.name}-evidence`);
+        const run = startOwnershipRun(descriptorPath, {
+          evidenceDir,
+          termResistant: "termResistant" in testCase && testCase.termResistant,
+        });
+        activeRun = run;
+        const descriptor = await waitForDescriptor(descriptorPath);
+        const pids = [descriptor.innerPid, ...Object.values(descriptor.pids)];
+        expect(new Set(pids.map(processGroup)).size).toBe(1);
+        if (testCase.signal === "INNER_SIGKILL") process.kill(descriptor.innerPid, "SIGKILL");
+        else run.child.kill(testCase.signal);
+        await run.exited;
+        activeRun = undefined;
+        expect(run.child.exitCode, run.stderr()).toBe(testCase.status);
+        await expectProcessesGone(pids);
+        expect(existsSync(descriptor.root)).toBe(false);
+        expect(readdirSync(join(descriptor.ownerStateDir, "run/runtime-owners/v1"))).toEqual([]);
+        const manifest = assertFinalEvidence(evidenceDir, testCase.evidenceStatus);
+        const lifecycle = manifest.rounds[0].runtime.lifecycle;
+        expect(lifecycle.map((event: { message: string }) => event.message)).toEqual(
+          expect.arrayContaining(["runtime.cleanup.completed", "runtime.owner.retired"]),
+        );
+        if ("termResistant" in testCase && testCase.termResistant) {
+          expect(lifecycle).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                message: "runtime.cleanup.escalated",
+                attributes: expect.objectContaining({ signal: "SIGKILL" }),
+              }),
+            ]),
+          );
+        }
+      }
+    } finally {
+      if (activeRun?.child.exitCode === null && activeRun.child.signalCode === null) {
+        activeRun.child.kill("SIGTERM");
+        await activeRun.exited.catch(() => undefined);
+      }
+      rmSync(parent, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("records incomplete cleanup and preserves a replaced root", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "station-binary-owner-replaced-root-"));
+    const descriptorPath = join(parent, "descriptor.json");
+    const evidenceDir = join(parent, "evidence");
+    const run = startOwnershipRun(descriptorPath, {
+      evidenceDir,
+      exitImmediately: true,
+      replaceRoot: true,
+    });
+    try {
+      await run.exited;
+      expect(run.child.exitCode).toBe(1);
+      const descriptor = await waitForDescriptor(descriptorPath);
+      expect(readFileSync(join(descriptor.root, "replacement-sentinel"), "utf8")).toBe(
+        "preserve\n",
+      );
+      const manifest = JSON.parse(readFileSync(join(evidenceDir, "manifest.json"), "utf8"));
+      expect(manifest.rounds[0].cleanup).toMatchObject({
+        status: "incomplete",
+        rootRemoved: false,
+      });
+      expect(manifest.warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining("Refusing replaced deletion target")]),
+      );
+      rmSync(descriptor.root, { recursive: true, force: true });
+      rmSync(`${descriptor.root}-original`, { recursive: true, force: true });
+    } finally {
+      if (run.child.exitCode === null && run.child.signalCode === null) run.child.kill("SIGTERM");
+      await run.exited.catch(() => undefined);
+      rmSync(parent, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it("rescues launcher loss on the next ordinary invocation without a rescue variable", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "station-binary-owner-rescue-"));
+    const firstDescriptorPath = join(parent, "first.json");
+    const secondDescriptorPath = join(parent, "second.json");
+    const first = startOwnershipRun(firstDescriptorPath);
+    try {
+      const abandoned = await waitForDescriptor(firstDescriptorPath);
+      first.child.kill("SIGKILL");
+      await first.exited;
+      expect(first.child.signalCode).toBe("SIGKILL");
+
+      const second = startOwnershipRun(secondDescriptorPath, { exitImmediately: true });
+      await second.exited;
+      expect(second.child.exitCode, second.stderr()).toBe(0);
+      const replacement = await waitForDescriptor(secondDescriptorPath);
+      await expectProcessesGone([abandoned.innerPid, ...Object.values(abandoned.pids)]);
+      expect(existsSync(abandoned.root)).toBe(false);
+      expect(existsSync(replacement.root)).toBe(false);
+      expect(readdirSync(join(abandoned.ownerStateDir, "run/runtime-owners/v1"))).toEqual([]);
+      const lifecycle = readFileSync(join(abandoned.ownerStateDir, "logs/cli.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as { message: string });
+      expect(lifecycle.map((event) => event.message)).toEqual(
+        expect.arrayContaining(["runtime.orphan.detected", "runtime.orphan.recovered"]),
+      );
+    } finally {
+      if (first.child.exitCode === null && first.child.signalCode === null)
+        first.child.kill("SIGTERM");
+      await first.exited.catch(() => undefined);
+      rmSync(parent, { recursive: true, force: true });
+    }
+  }, 15_000);
 });
 
 describe("tui dev script", () => {
