@@ -32,7 +32,7 @@ export async function defaultSpawnObserver(
     published = true;
     const [command, ...args] = argv;
     child = spawn(command, args, {
-      detached: true,
+      detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
       env: environmentWithoutGitLocals(),
       stdio: ["ignore", bootLog.fd, bootLog.fd],
     });
