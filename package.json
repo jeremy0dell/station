@@ -1,6 +1,6 @@
 {
   "name": "station",
-  "version": "0.0.0-pre-alpha.4",
+  "version": "0.0.0-pre-alpha.5",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
@@ -60,7 +60,7 @@
     "test:diagnostics": "vitest run --config config/vitest/vitest.diagnostics.config.ts",
     "test:diagnostics:policy": "vitest run --config config/vitest/vitest.diagnostics.config.ts tests/diagnostics/ci-classification.test.ts tests/diagnostics/ci-workflow-policy.test.ts tests/diagnostics/release-readiness-docs.test.ts tests/diagnostics/vitest-machine-isolation-policy.test.ts",
     "test:e2e:setup": "vitest run --config config/vitest/vitest.setup-e2e.config.ts",
-    "test:e2e:setup:guided": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/setup-guided-feedback.test.ts tests/e2e/setup-guided-tty.test.ts tests/e2e/setup-guided-sandbox.test.ts",
+    "test:e2e:setup:guided": "node scripts/test-runners/run-setup-guided-e2e.mjs",
     "test:e2e:setup:guided:all-shells": "STATION_SETUP_E2E_ALL_SHELLS=true pnpm test:e2e:setup:guided",
     "test:e2e:setup:core": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/setup-core-flow.test.ts",
     "test:e2e:setup:sqlite": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/observer-sqlite-smoke.test.ts",
@@ -90,12 +90,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.4",
+    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "^24.12.4",
+    "@typescript/typescript6": "6.0.2",
     "d3": "^7.9.0",
     "knip": "^6.29.0",
     "lefthook": "^1.13.6",
     "turbo": "^2.9.15",
-    "typescript": "^5.9.3",
+    "typescript": "7.0.2",
     "vitest": "^3.2.4",
     "zod": "^4.1.12"
   }

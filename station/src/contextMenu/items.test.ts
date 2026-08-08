@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createInitialTuiState } from "@station/dashboard-core";
+import { createInitialTuiState } from "@station/dashboard-core/state";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, type StationState } from "../state/types.js";
 import {
@@ -47,7 +47,7 @@ describe("buildContextMenuItems", () => {
         label: "See diff (split right)",
         enabled: true,
         steps: [
-          { split: "right", anchor: "origin", command: "git diff | diffnav", run: "execute", focus: true },
+          { split: "right", anchor: "origin", command: "echo automation", run: "execute", focus: true },
         ],
       },
       {
@@ -355,7 +355,11 @@ describe("buildContextMenuItems", () => {
     const store = createStationStore();
     const stationState = {
       ...createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() }),
-      screen: { name: "search", value: "" } as const,
+      screen: {
+        name: "persistentFilter",
+        draft: { value: "", cursor: 0 },
+        draftConditions: [],
+      } as const,
     };
 
     expect(

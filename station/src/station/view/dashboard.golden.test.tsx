@@ -7,11 +7,7 @@ import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
-import {
-  type ClientNotice,
-  persistentFilterExperience,
-  type DashboardSearchExperience,
-} from "@station/dashboard-core";
+import type { ClientNotice, DashboardCapabilities } from "@station/dashboard-core/runtime";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
@@ -77,6 +73,27 @@ const WORKTREE_ERROR: ClientNotice = {
   diagnosticId: "diag_worktree_remove_456",
 };
 
+function pendingDashboardCapabilities(): DashboardCapabilities {
+  const execution = {
+    optimistic: "none" as const,
+    successDisposition: "remove-immediately" as const,
+    completion: new Promise<never>(() => {}),
+  };
+  return {
+    activation: { activate: () => execution },
+    managedSessions: {
+      create: () => execution,
+      fork: () => execution,
+      quickCreate: () => execution,
+    },
+    shell: { open: () => execution },
+    dismissal: {
+      dismissDashboard: () => execution,
+      exitRenderer: () => execution,
+    },
+  };
+}
+
 describe("dashboard golden frames", () => {
   const teardowns: Array<() => void> = [];
   afterEach(() => {
@@ -94,15 +111,13 @@ describe("dashboard golden frames", () => {
     hoverEnabled?: boolean;
     toast?: ClientNotice;
     theme?: StationTheme;
-    dashboardSearchExperience?: DashboardSearchExperience;
+    capabilities?: DashboardCapabilities;
   }): Promise<RenderedDashboard> {
     const { runtime: store } = makeStationTestRuntime({
       snapshot: input.snapshot ?? null,
       connection: input.connection,
       seedInitialSnapshot: false,
-      ...(input.dashboardSearchExperience === undefined
-        ? {}
-        : { dashboardSearchExperience: input.dashboardSearchExperience }),
+      ...(input.capabilities === undefined ? {} : { capabilities: input.capabilities }),
     });
     store.start();
     const dashboard = (
@@ -159,7 +174,6 @@ describe("dashboard golden frames", () => {
       width: 120,
       height: 40,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -205,7 +219,6 @@ describe("dashboard golden frames", () => {
       width: 80,
       height: 24,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -223,7 +236,6 @@ describe("dashboard golden frames", () => {
       width: 60,
       height: 16,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -256,7 +268,6 @@ describe("dashboard golden frames", () => {
       width: 80,
       height: 24,
       snapshot,
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -278,7 +289,6 @@ describe("dashboard golden frames", () => {
       width: 40,
       height: 12,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });
@@ -623,6 +633,7 @@ describe("dashboard golden frames", () => {
         height: 40,
         snapshot: manyProjectsSnapshot(),
         dispatchMouse: (target) => targets.push(target),
+        capabilities: pendingDashboardCapabilities(),
       });
       await act(async () => {
         setup.store.actions.dispatch({
@@ -875,7 +886,6 @@ describe("dashboard golden frames", () => {
       width: 120,
       height: 24,
       snapshot: manyProjectsSnapshot(),
-      dashboardSearchExperience: persistentFilterExperience,
     });
     await act(async () => {
       setup.store.actions.handleKey({ input: "/" });

@@ -1,6 +1,6 @@
 import type { KeyedChoice } from "../../selectors/selectors.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 /** Registry key: the list a screen registers under (usually its input mode). */
 export type ListId = string;
@@ -24,13 +24,13 @@ export type ListSpec<TId extends string> = {
   /** ↑↓ move a cursor and ↵ commits it. */
   cursor?: boolean;
   /** Gate for hybrid screens: when it returns false the middleware yields all keys. */
-  active?: (state: TuiState) => boolean;
+  active?: (state: DashboardState) => boolean;
   /** Full ordered cursor space. */
-  rows: (state: TuiState) => readonly ListRow<TId>[];
+  rows: (state: DashboardState) => readonly ListRow<TId>[];
   /** Viewport-relative slot accelerators; OMIT to opt a list out of slot-jump. */
-  slots?: (state: TuiState) => readonly KeyedChoice<TId>[];
+  slots?: (state: DashboardState) => readonly KeyedChoice<TId>[];
   /** The only screen-authored behavior; returns a full transition (commands/operations/toasts). */
-  commit: (state: TuiState, id: TId, via: CommitVia) => TuiTransition;
+  commit: (state: DashboardState, id: TId, via: CommitVia) => TuiTransition;
 };
 
 /**

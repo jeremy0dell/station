@@ -85,13 +85,7 @@ describe("guided setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: async (input) => {
           expect(fs.files[input.configPath]).toContain("projects = []");
@@ -198,13 +192,7 @@ describe("guided setup command", () => {
           }
           return baseRunner(input);
         },
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: async () => {
           activationCount += 1;
@@ -262,8 +250,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           join(packageRoot, "bin/stn"),
           join(packageRoot, "bin/stn-ingress"),
           join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
@@ -330,8 +317,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           join(packageRoot, "bin/stn"),
           join(packageRoot, "bin/stn-ingress"),
           join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
@@ -388,13 +374,7 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "opencode --version": "opencode 1.0.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: async ({ configPath: activatedPath }) => {
           activations.push(activatedPath);
@@ -465,8 +445,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           join(packageRoot, "bin/stn"),
           join(packageRoot, "bin/stn-ingress"),
           join(packageRoot, "integrations/terminal/tmux/bin/stn-popup"),
@@ -513,13 +492,7 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "pi --version": "pi 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: {
@@ -563,13 +536,7 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "wt -y config shell install zsh": "",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
@@ -627,13 +594,7 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({ confirms: [false, false, true, true, false] }),
@@ -685,13 +646,7 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         prompt: toSetupPromptAdapter({
           prompt: {
@@ -769,13 +724,7 @@ describe("guided setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: async () => {
           activations += 1;
@@ -861,8 +810,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -931,8 +879,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1074,13 +1021,7 @@ describe("guided setup command", () => {
           "codex --version": "codex 0.1.0\n",
           "opencode --version": "opencode 1.0.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: prompt({
@@ -1126,8 +1067,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1182,8 +1122,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1238,8 +1177,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1314,8 +1252,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1402,8 +1339,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           launcherCommand,
@@ -1467,8 +1403,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1532,8 +1467,7 @@ describe("guided setup command", () => {
           "/fake/bin/wt",
           "/fake/bin/tmux",
           "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           "/fake/bin/stn-tmux-popup",
@@ -1608,8 +1542,7 @@ describe("guided setup command", () => {
         "/fake/bin/wt",
         "/fake/bin/tmux",
         "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
+        "/fake/bin/hunk",
         "/fake/bin/stn",
         "/fake/bin/stn-ingress",
         "/fake/bin/stn-tmux-popup",
@@ -1698,13 +1631,7 @@ describe("guided setup command", () => {
             "tmux -V": "tmux 3.5a\n",
           })(input);
         },
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         // Accept the Codex install and the config write; decline the rest. Match on
@@ -1795,13 +1722,7 @@ describe("guided setup command", () => {
             "tmux -V": "tmux 3.5a\n",
           })(input);
         },
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         activateObserverConfig: noopActivateObserverConfig,
         prompt: {
@@ -1859,13 +1780,7 @@ describe("guided setup command", () => {
           "wt --version": "worktrunk 1.2.3\n",
           "tmux -V": "tmux 3.5a\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs,
         prompt: prompt({
           confirms: [false, false, false, false],
@@ -2023,7 +1938,7 @@ describe("guided setup command", () => {
         homeDir: join(root, "home"),
         env: { PATH: "/fake/bin" },
         platform: "darwin",
-        // CLT present (default probe) but Homebrew and diffnav are missing, so the
+        // CLT present (default probe) but Homebrew and Hunk are missing, so the
         // brew prompt fires; declining must surface the manual callout.
         runner: fakeRunner(calls, {
           "git rev-parse --show-toplevel": repo,
@@ -2085,8 +2000,8 @@ describe("guided setup command", () => {
     expect(output).toContain("It will ask before installing tools or updating configuration.");
     expect(output).toContain("Checking local tools and Station configuration...");
     expect(output).toContain("Required tools");
-    expect(output).toContain("Homebrew will install:\n- Install diffnav");
-    expect(output).toContain("Official formula ↗ (https://formulae.brew.sh/formula/diffnav)");
+    expect(output).toContain("Homebrew will install:\n- Install Hunk");
+    expect(output).toContain("Official formula ↗ (https://formulae.brew.sh/formula/hunk)");
     expect(output).not.toContain("Agent selection: unresolved");
     expect(output).not.toContain("STATION state directory");
     expect(output).not.toContain("MISSING");
@@ -2115,8 +2030,7 @@ describe("guided setup command", () => {
       worktrunk: "wt",
       tmux: "tmux",
       bun: "bun",
-      diffnav: "diffnav",
-      "git-delta": "delta",
+      hunk: "hunk",
     };
     const hasBrewPrefix = (input: ExternalCommandInput) =>
       input.env?.PATH?.includes("/opt/homebrew/bin") === true;
@@ -2181,7 +2095,7 @@ describe("guided setup command", () => {
           }
           throw Object.assign(new Error(`missing fake command: ${key}`), { code: "ENOENT" });
         },
-        // bun/diffnav/delta (and wt/tmux path resolution) live in the brew prefix and
+        // bun/Hunk (and wt/tmux path resolution) live in the brew prefix and
         // resolve only once their formula has been installed.
         access: async (path) => {
           const present =
@@ -2189,8 +2103,7 @@ describe("guided setup command", () => {
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
             (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
-            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
-            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+            (installed.has("hunk") && path === "/opt/homebrew/bin/hunk");
           if (!present) {
             throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
           }
@@ -2223,7 +2136,7 @@ describe("guided setup command", () => {
       output.indexOf("Already completed prerequisites"),
       output.indexOf("Will apply"),
     );
-    for (const label of ["Worktrunk / wt", "tmux", "Bun", "diffnav", "git-delta"]) {
+    for (const label of ["Worktrunk / wt", "tmux", "Bun", "Hunk"]) {
       expect(completedReview).toContain(`Install ${label}`);
     }
     expect(completedReview).not.toContain("Apply setup change");
@@ -2233,7 +2146,7 @@ describe("guided setup command", () => {
       calls
         .filter((call) => call.command === "brew" && call.args?.[0] === "install")
         .map((call) => call.args?.[1]),
-    ).toEqual(expect.arrayContaining(["worktrunk", "tmux", "bun", "diffnav", "git-delta"]));
+    ).toEqual(expect.arrayContaining(["worktrunk", "tmux", "bun", "hunk"]));
     expect(fs.files[configPath]).toContain("projects = []");
   });
 
@@ -2256,8 +2169,7 @@ describe("guided setup command", () => {
       worktrunk: "wt",
       tmux: "tmux",
       bun: "bun",
-      diffnav: "diffnav",
-      "git-delta": "delta",
+      hunk: "hunk",
     };
     const hasBrewPrefix = (input: ExternalCommandInput) =>
       input.env?.PATH?.includes("/opt/homebrew/bin") === true;
@@ -2328,8 +2240,7 @@ describe("guided setup command", () => {
             (installed.has("wt") && path === "/opt/homebrew/bin/wt") ||
             (installed.has("tmux") && path === "/opt/homebrew/bin/tmux") ||
             (installed.has("bun") && path === "/opt/homebrew/bin/bun") ||
-            (installed.has("diffnav") && path === "/opt/homebrew/bin/diffnav") ||
-            (installed.has("delta") && path === "/opt/homebrew/bin/delta");
+            (installed.has("hunk") && path === "/opt/homebrew/bin/hunk");
           if (!present) {
             throw Object.assign(new Error(`missing path: ${path}`), { code: "ENOENT" });
           }
@@ -2415,13 +2326,7 @@ function readySetupDeps(repo: string) {
       "brew --version": "Homebrew 4.0.0\n",
       "codex --version": "codex 0.1.0\n",
     }),
-    access: fakeAccess([
-      "/fake/bin/wt",
-      "/fake/bin/tmux",
-      "/fake/bin/bun",
-      "/fake/bin/diffnav",
-      "/fake/bin/delta",
-    ]),
+    access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
   };
 }
 

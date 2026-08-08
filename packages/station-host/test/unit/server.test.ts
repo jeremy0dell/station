@@ -2,11 +2,13 @@ import {
   createStationHostClient,
   HOST_PROTOCOL_VERSION,
   HostAttachAckSchema,
+  type HostClientIdentity,
   type HostFrame,
   type HostHandlers,
   HostResponseSchema,
   type HostServerLogger,
   HostSpawnParamsSchema,
+  hostClientShutdownNotification,
   hostRequest,
   serveHostConnection,
 } from "@station/host";
@@ -75,12 +77,21 @@ function controllableStream() {
   };
 }
 
+const TEST_CLIENT_IDENTITY: HostClientIdentity = {
+  protocolVersion: HOST_PROTOCOL_VERSION,
+  buildVersion: "test-build",
+  uiRunId: "ui_11111111-1111-4111-8111-111111111111",
+  rendererPid: 100,
+  clientKind: "native_renderer",
+  connectionId: "conn-one",
+};
+
 function delay(ms: number): Promise<"timeout"> {
   return new Promise((resolve) => setTimeout(() => resolve("timeout"), ms));
 }
 
 describe("serveHostConnection", () => {
-  it("rejects legacy operational requests without protocol and build identity", async () => {
+  it("rejects operational requests without correlation identity", async () => {
     const { client, server } = inMemoryNdjsonConnectionPair();
     void serveHostConnection(server, {
       hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
@@ -92,11 +103,76 @@ describe("serveHostConnection", () => {
       expect(HostResponseSchema.parse(message)).toMatchObject({
         id: "legacy",
         ok: false,
-        error: { code: "HOST_VERSION_INCOMPATIBLE" },
+        error: { code: "HOST_CLIENT_IDENTITY_MISMATCH" },
       });
       break;
     }
     client.close();
+  });
+
+  it("classifies build compatibility separately from correlation changes", async () => {
+    const identity = TEST_CLIENT_IDENTITY;
+    const { client, server } = inMemoryNdjsonConnectionPair();
+    void serveHostConnection(server, {
+      hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+      unary: { "host.list": () => ({ ptys: [] }) },
+    });
+    const responses = client.messages()[Symbol.asyncIterator]();
+
+    client.send(hostRequest("first", "host.list", undefined, identity));
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "first",
+      ok: true,
+    });
+    client.send(
+      hostRequest("changed", "host.list", undefined, {
+        ...identity,
+        uiRunId: "ui_22222222-2222-4222-8222-222222222222",
+      }),
+    );
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "changed",
+      ok: false,
+      error: { code: "HOST_CLIENT_IDENTITY_MISMATCH" },
+    });
+    client.send(
+      hostRequest("old-protocol", "host.list", undefined, {
+        ...identity,
+        protocolVersion: 5,
+      }),
+    );
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({
+      id: "old-protocol",
+      ok: false,
+      error: { code: "HOST_VERSION_INCOMPATIBLE" },
+    });
+    client.close();
+  });
+
+  it("does not answer the one-way client shutdown notification", async () => {
+    const { client, server } = inMemoryNdjsonConnectionPair();
+    const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];
+    void serveHostConnection(
+      server,
+      {
+        hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
+        unary: { "host.list": () => ({ ptys: [] }) },
+      },
+      { onLifecycle: (event) => lifecycle.push(event) },
+    );
+    const responses = client.messages()[Symbol.asyncIterator]();
+    client.send(hostRequest("bind", "host.list", undefined, TEST_CLIENT_IDENTITY));
+    expect(HostResponseSchema.parse((await responses.next()).value)).toMatchObject({ ok: true });
+
+    client.send(hostClientShutdownNotification(TEST_CLIENT_IDENTITY));
+    expect(await Promise.race([responses.next(), delay(10)])).toBe("timeout");
+    client.close();
+    await delay(0);
+    expect(lifecycle).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "host.client.detached", reason: "client_shutdown" }),
+      ]),
+    );
   });
 
   it("dispatches a registered unary method and returns its result", async () => {
@@ -165,9 +241,10 @@ describe("serveHostConnection", () => {
     client.dispose();
   });
 
-  it("acks the attach snapshot, streams live frames, and ends on host.detach", async () => {
+  it("acks the attach snapshot, streams live frames, and retains reasoned host.detach identity", async () => {
     const stream = controllableStream();
     const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
+    const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];
     const client = wire(
       {
         attach: () => ({
@@ -195,6 +272,7 @@ describe("serveHostConnection", () => {
       },
       {
         onEvent: (event, attributes) => events.push({ event, attributes }),
+        onLifecycle: (event) => lifecycle.push(event),
       },
     );
     const attachment = await client.attach("p1");
@@ -225,7 +303,36 @@ describe("serveHostConnection", () => {
 
     await attachment.detach();
     expect(await iterator.next()).toEqual({ done: true, value: undefined });
+    await delay(0);
+    expect(events).toContainEqual({ event: "agent.detach", attributes: { ptyId: "p1" } });
+    expect(lifecycle).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "host.client.attached",
+          connectionId: expect.stringMatching(/^conn_/),
+        }),
+        expect.objectContaining({
+          kind: "host.attachment.attached",
+          attachmentId: attachment.attachmentId,
+          ptyId: "p1",
+        }),
+        expect.objectContaining({
+          kind: "host.attachment.detached",
+          attachmentId: attachment.attachmentId,
+          reason: "explicit_detach",
+        }),
+      ]),
+    );
     client.dispose();
+    await delay(10);
+    expect(lifecycle).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "host.client.detached",
+          reason: "client_shutdown",
+        }),
+      ]),
+    );
   });
 
   it("strictly distinguishes raw, semantic, and control-only live-reset replay", () => {

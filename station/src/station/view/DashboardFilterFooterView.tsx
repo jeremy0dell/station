@@ -1,5 +1,5 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
-import type { DashboardFilterFooterSegment } from "@station/dashboard-core";
+import type { DashboardFilterFooterSegment } from "@station/dashboard-core/selectors";
 import {
   toOpenTuiColor,
   toOpenTuiOpaqueColor,

@@ -14,7 +14,7 @@ const paths = {
   hookSpoolDir: "/tmp/station/spool/hooks",
 };
 const buildVersion = `1.2.3+station.${"a".repeat(64)}`;
-const processToken = "a47ac10b-58cc-4372-a567-0e02b2c3d479";
+const processToken = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
 
 describe("observer spawn argv", () => {
   it("keeps the source entry prefix and observer flag order", () => {

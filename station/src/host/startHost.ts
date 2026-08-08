@@ -1,11 +1,19 @@
-import { componentLogPath, createJsonlLogger, type JsonlLogger } from "@station/observability";
+import { randomUUID } from "node:crypto";
+import {
+  componentLogPath,
+  createJsonlLogger,
+  createUiLifecycleRecorder,
+  type JsonlLogger,
+} from "@station/observability";
 import { listenUnixSocket } from "@station/protocol";
 import { stationBuildInfo } from "@station/runtime";
 import {
   HOST_PROTOCOL_VERSION,
   HostCloseParamsSchema,
   HostFocusParamsSchema,
+  type HostClientIdentity,
   type HostHandlers,
+  type HostPtyKind,
   HostResizeParamsSchema,
   HostSpawnParamsSchema,
   HostStopIfIdleParamsSchema,
@@ -13,7 +21,18 @@ import {
   StationHostProviderError,
   serveHostConnection,
 } from "@station/host";
-import { createPtyTable, type PtyTable, type PtyTableOptions } from "./ptyTable.js";
+import { createHostLifecycleWitness } from "./hostLifecycle.js";
+import {
+  createPtyTable,
+  type PtySpawnOutcome,
+  type PtyTable,
+  type PtyTableOptions,
+} from "./ptyTable.js";
+import {
+  ptyBridgesDirectory,
+  reapStaleOrphanBridges,
+  resolveOrphanTtlMs,
+} from "./orphanBridges.js";
 import {
   type PtyImplementation,
   resolvePtyImplementation,
@@ -37,8 +56,8 @@ export type StationHostInstance = {
 
 /**
  * The host owns PTYs independently of any client and answers
- * spawn/write/resize/list + health. Shutdown disposes (gracefully reaps) owned
- * PTYs — the orphan policy for an intentional `host stop`.
+ * spawn/write/resize/list + health. Typed PTY lifecycle is emitted directly at
+ * the table boundary, while shutdown disposes owned PTYs and flushes evidence.
  */
 export async function startStationHost(
   options: StartStationHostOptions,
@@ -46,12 +65,19 @@ export async function startStationHost(
   const ptyImplementation =
     options.ptyImplementation ?? resolvePtyImplementation(process.env.STATION_PTY_IMPL);
   const buildVersion = stationBuildInfo().version;
+  const orphanTtlMs = resolveOrphanTtlMs(process.env.STATION_PTY_ORPHAN_TTL_MS);
   const logger =
     options.logger ??
     createJsonlLogger({
       component: "station-host",
       path: componentLogPath(options.stateDir, "station-host"),
     });
+  const lifecycle = createUiLifecycleRecorder({
+    logger,
+    component: "station-host",
+    sourceId: `host_${process.pid}_${randomUUID()}`,
+  });
+  const hostLifecycle = createHostLifecycleWitness({ recorder: lifecycle });
 
   await logger.log({
     level: "info",
@@ -62,14 +88,45 @@ export async function startStationHost(
       ptyImplementation,
       protocolVersion: HOST_PROTOCOL_VERSION,
       buildVersion,
+      orphanTtlMs,
     },
   });
 
-  // Every lifecycle event -> station-host.jsonl as a tailable timeline. Redaction-safe: only ids/counts/codes, never PTY data/env.
   const logEvent = (message: string, attributes: Record<string, unknown>): void => {
     void logger.log({ level: "info", message, attributes });
   };
-  const ptyTable = createPtyTable({ ...options.ptyTableOptions, onEvent: logEvent });
+  // Clean-startup reap: stale park remains are unlinked before the socket
+  // opens, while every live parked bridge is left for negotiated adoption.
+  const orphanDirectory = ptyBridgesDirectory(options.stateDir);
+  let reap = { reaped: 0, parked: 0 };
+  try {
+    reap = await reapStaleOrphanBridges(orphanDirectory);
+  } catch (error) {
+    logEvent("host.orphan-reap-failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (reap.reaped > 0 || reap.parked > 0) {
+    logEvent("host.orphan-reap", { reaped: reap.reaped, parked: reap.parked });
+  }
+
+  const configuredOnEvent = options.ptyTableOptions?.onEvent;
+  const configuredOnPtyExit = options.ptyTableOptions?.onPtyExit;
+  const ptyTable = createPtyTable({
+    ...options.ptyTableOptions,
+    onEvent: (event, attributes) => {
+      configuredOnEvent?.(event, attributes);
+      logEvent(event, attributes);
+    },
+    onPtyExit: (event) => {
+      configuredOnPtyExit?.(event);
+      void hostLifecycle.ptyExited(event);
+    },
+    orphanBridges: {
+      directory: orphanDirectory,
+      ttlMs: orphanTtlMs,
+    },
+  });
   const { promise: closed, resolve: resolveClosed } = Promise.withResolvers<void>();
   let closePromise: Promise<void> | undefined;
 
@@ -84,6 +141,7 @@ export async function startStationHost(
         message: "host.stop",
         attributes: { socketPath: options.socketPath, pid: process.pid, reason },
       });
+      await hostLifecycle.flush();
     }
   }
   const closeHost = (reason: "requested" | "upgrade"): Promise<void> => {
@@ -93,7 +151,14 @@ export async function startStationHost(
     closePromise = shutdownHost(reason).finally(resolveClosed);
     return closePromise;
   };
-  const handlers = buildHostHandlers(ptyTable, buildVersion, closeHost);
+  const handlers = buildHostHandlers(
+    ptyTable,
+    buildVersion,
+    closeHost,
+    (client, outcome, ptyKind) => {
+      void hostLifecycle.ptySpawned(client, outcome, ptyKind);
+    },
+  );
 
   server = await listenUnixSocket({
     socketPath: options.socketPath,
@@ -107,6 +172,9 @@ export async function startStationHost(
           });
         },
         onEvent: logEvent,
+        onLifecycle: (event) => {
+          void hostLifecycle.record(event);
+        },
       }),
   });
 
@@ -121,6 +189,11 @@ function buildHostHandlers(
   ptyTable: PtyTable,
   buildVersion: string,
   closeHost: (reason: "requested" | "upgrade") => Promise<void>,
+  onPtySpawned: (
+    client: HostClientIdentity,
+    outcome: PtySpawnOutcome,
+    ptyKind: HostPtyKind,
+  ) => void,
 ): HostHandlers {
   let drainingForBuild: string | undefined;
   const stopHostIfIdle = (params: unknown) => {
@@ -133,11 +206,19 @@ function buildHostHandlers(
     drainingForBuild = requestingBuildVersion;
     return { stopping: true as const };
   };
-  const spawnPty = (params: unknown) => {
+  const spawnPty = (
+    params: unknown,
+    client: HostClientIdentity | undefined,
+  ) => {
     if (drainingForBuild !== undefined) {
       throw drainingSpawnBlocked(buildVersion, drainingForBuild);
     }
-    return ptyTable.spawn(HostSpawnParamsSchema.parse(params));
+    const parsed = HostSpawnParamsSchema.parse(params);
+    const outcome = ptyTable.spawn(parsed);
+    if (client !== undefined) {
+      onPtySpawned(client, outcome, parsed.kind);
+    }
+    return { ptyId: outcome.ptyId, pid: outcome.pid };
   };
 
   return {

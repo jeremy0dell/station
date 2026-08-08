@@ -12,8 +12,19 @@ target_dir="${station_root}/node_modules/@station"
 linked_packages=(client config contracts dashboard-core runtime protocol observability station-host)
 linked_apps=(cli observer)
 
+# dashboard-core publishes role entrypoints instead of a root barrel, so its
+# build-presence probe uses a role entrypoint rather than dist/index.js.
+function dist_entry_for_package() {
+  local package="$1"
+  if [[ "${package}" == "dashboard-core" ]]; then
+    echo "${repo_root}/packages/${package}/dist/entrypoints/runtime.js"
+  else
+    echo "${repo_root}/packages/${package}/dist/index.js"
+  fi
+}
+
 for package in "${linked_packages[@]}"; do
-  dist_entry="${repo_root}/packages/${package}/dist/index.js"
+  dist_entry="$(dist_entry_for_package "${package}")"
   if [[ ! -f "${dist_entry}" ]]; then
     cat >&2 <<EOF
 ${dist_entry} is missing.
@@ -61,7 +72,7 @@ done
 # the existence check above cannot tell yesterday's dist from today's.
 freshness=""
 for package in "${linked_packages[@]}"; do
-  dist_entry="${repo_root}/packages/${package}/dist/index.js"
+  dist_entry="$(dist_entry_for_package "${package}")"
   mtime="$(date -r "${dist_entry}" "+%Y-%m-%d %H:%M" 2>/dev/null || stat -c "%y" "${dist_entry}" 2>/dev/null | cut -c1-16)"
   freshness="${freshness}${package}@${mtime}  "
 done

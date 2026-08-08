@@ -16,7 +16,11 @@ Both entry points load `[tui].widgets` from the runtime config and render the sa
 configured-widget title chrome; widget settings update that shared config when a
 config path is available.
 
-Launch is driven by `apps/cli/src/commands/tui.ts`. A source checkout uses the Node CLI to launch the Bun renderer:
+Launch is driven by `apps/cli/src/commands/tui.ts`. The launcher mints one
+`uiRunId` per renderer child, records exact spawn/exit code/signal evidence in
+`logs/cli.jsonl`, and passes that identity to the renderer.
+A null child exit code is never interpreted as success. A source checkout uses
+the Node CLI to launch the Bun renderer:
 
 - Bare `stn` in a plain terminal launches the native workspace (Station owns its own panes).
 - Inside tmux, `stn` opens the interactive observer-backed dashboard in a
@@ -24,6 +28,34 @@ Launch is driven by `apps/cli/src/commands/tui.ts`. A source checkout uses the N
   shows that it runs in another terminal, dispatches no focus command, and
   keeps the popup open.
 - `stn tui --dev-fake-dashboard` previews the dashboard with mock data (`STATION_SOURCE=mock`).
+
+## Observer Build Admission
+
+Native Station, direct `stn tui --popup`, and public `stn popup` are
+command-capable UI launchers. After ordinary Observer singleton selection, each
+compares its complete caller selector with the selector reported by the accepted
+Observer. Launch proceeds only on exact string equality. The check occurs before
+startup or popup reconcile, renderer startup, tmux popup routing, Station Host,
+PTY, or layout effects. The mock dashboard remains Observer-free and bypasses
+this admission path.
+
+The popup dashboard is observer-backed, command-capable, and has no native
+Station panes. It still requires admission because its commands can produce work
+that native Station later hosts. Native Station directly operates Station Host.
+Host compatibility remains a separate protocol and display-build-version check;
+Observer immutable selectors do not create a three-process build cohort.
+
+A lower or otherwise different launcher reports both complete selectors:
+
+```text
+Station UI caller selector "<caller>" does not match accepted Observer selector "<observer>"; launch was refused before Station Host-producing work could mix builds. (TUI_OBSERVER_BUILD_MISMATCH)
+Hint: Use the matching Observer build "<observer>" to account for live terminals. When hosted work is empty, stop the incumbent Observer and retry, or use isolated Observer state.
+```
+
+Reopen Station with the matching Observer build first so live terminals can be
+accounted for. When hosted work is empty, stop the incumbent and retry the other
+build, or use a separate Observer state directory. Non-UI commands, hooks,
+ingress, and generic protocol clients retain normal higher-incumbent reuse.
 
 ## Nested Workspaces
 
@@ -64,12 +96,17 @@ replacement popup.
 When the private tmux devbox runs the dashboard under Bun `--hot`, the CLI
 parent and its IPC channel remain authoritative for the lifetime of
 `_station-ui`. A source reload synchronously releases the prior OpenTUI stdin
-owner, then unmounts the old React root, removes popup listeners, detaches the
-old source/dashboard runtime, stops the old Station client, and recreates those
-renderer resources inside the same Bun process. The renderer disposer
-deliberately does not disconnect the CLI-owned IPC channel. Source build identity is verified
-once per OS process so a harmless reload reuses the accepted identity; a new
-process still verifies the current checkout and outputs.
+owner, unmounts the old React root, and removes appearance listeners. It then
+closes the old dashboard effect scope, cancels subscriptions and timers,
+immediately disposes popup control so pending IPC rejects locally, drains all
+already-started dashboard work, stops the old Station client, and only then
+creates the replacement client/dashboard composition in the same Bun process.
+The process-global disposer is installed before replacement can begin and uses
+compare-and-delete so an older settlement cannot erase a newer HMR barrier. The
+renderer disposer deliberately does not disconnect the CLI-owned IPC channel.
+Source build identity is verified once per OS process so a harmless reload
+reuses the accepted identity; a new process still verifies the current checkout
+and outputs.
 
 ## Adaptive Embedded Appearance
 
@@ -96,11 +133,13 @@ with unrelated Station foreground roles.
 
 A valid embedded palette resolves one complete provider-neutral semantic theme.
 Terminal-default and indexed intent retain their observed snapshots. Weak ANSI
-roles are deterministically corrected toward the observed foreground so they
-remain readable on both the canvas and adaptive interaction fills;
-muted/border/interaction roles derive from foreground/background blends. The
-observed luminance and contrast determine dark/light behavior; OpenTUI's theme
-mode label does not.
+roles are deterministically repaired in OKLab by shifting lightness toward the
+observed foreground while holding hue and chroma, so they remain readable on
+both the canvas and adaptive interaction fills without washing out; surface and
+muted/border/interaction roles mix in OKLCH from foreground/background blends
+and keep a minimum separation from the canvas so layered surfaces stay
+distinguishable. The observed luminance and contrast determine dark/light
+behavior; OpenTUI's theme mode label does not.
 
 OpenTUI emits palette responses before `getPalette()` resolves and treats theme
 mode changes as cache invalidation followed by a palette refresh. Station treats
@@ -112,9 +151,31 @@ query can repopulate a cache already cleared by the event.
 The standalone renderer owns the controller beside its OpenTUI renderer. The
 controller starts from the complete built-in fallback, and palette I/O does not
 delay root rendering; normal exit, errors, and Bun HMR unmount the React root and
-dispose palette listeners before destroying OpenTUI. Live propagation of native
-pane VT palette state remains tracked by #417 and is not part of embedded
-appearance selection.
+dispose palette listeners before destroying OpenTUI.
+
+Native composition applies the resolved theme's `StationTerminalTheme`
+projection to the PTY registry before restored panes can create lazy screens.
+The registry is only the lifecycle fan-out point: it remembers the latest
+projection for future screens and updates existing screens without becoming an
+appearance authority or changing a PTY's process, environment, geometry,
+identity, or replay state. A compatible HMR composition retains its live PTYs
+and reapplies the current projection.
+
+`StationVtScreen` owns terminal-semantic color state. Updating its projection
+rebuilds the ANSI palette used when rows are projected, so default and ANSI
+indices 0-15 can repaint while the xterm buffer retains their original color
+intent. The fixed ANSI-256 tail at indices 16-255 and explicit RGB/truecolor
+cells remain stable. OSC 10/11 queries use the current default foreground and
+background; changing the projection itself never feeds or replays bytes and
+never sends an unsolicited reply to the child.
+
+`TerminalPane` and the active theme provider own UI paint presentation: the
+render-ready default foreground and `theme.pane.selection` flow directly to the
+custom terminal renderable. The native canvas continues to supply blank/default
+background cells through `theme.surfaces.canvas`, and the cursor remains inverse
+cell composition over the resolved cell/default colors. Native `auto` remains
+the exact opaque built-in Station appearance; user selection and native outer-
+palette observation remain deferred to #421.
 
 You can also run the renderer directly during development:
 
@@ -123,6 +184,45 @@ cd station
 bun run station                       # native workspace, live observer
 STATION_SOURCE=mock bun run station   # native workspace, deterministic fixtures
 bun run dashboard                     # interactive dashboard renderer without native panes
+```
+
+## Native UI Lifecycle Evidence
+
+The native renderer is an independent semantic witness in `logs/tui.jsonl`. It
+records startup/ready, typed welcome, workspace, Station-overlay, and context-menu
+transitions, shutdown intent (`ctrl_q` or cooperative TTY takeover), fatal
+errors normalized to the fixed content-free `TUI_FATAL` shape, and normal
+shutdown completion. Normal shutdown flushes this evidence before process exit;
+abrupt loss and exact process signals remain covered by the launcher. Ctrl-O is
+a surface transition inside one `uiRunId`, not a renderer restart. Direct
+development mints a valid run ID and preserves it across Bun HMR.
+
+Native Host clients carry the same typed run context with a fresh connection ID
+per socket and attachment ID per attach attempt. `station-host.jsonl` uses typed
+lifecycle records for client shutdown versus socket loss, attachment replacement,
+and independent PTY spawn/exit. The legacy `agent.attach`/`agent.detach` stream
+remains a frozen operational and replay-metrics vocabulary; it does not carry
+detach reasons. Idempotent PTY reuse keeps the original creator correlation and
+does not emit a second spawn event.
+
+Normal Ctrl-Q and cooperative TTY takeover close dashboard effect admission and
+await admitted dashboard work before stopping the shared client and completing
+process shutdown. Native HMR releases renderer/stdin ownership synchronously,
+retains compatible workspace state and PTYs, publishes a settlement-only cleanup
+barrier in a process-global slot, and starts the replacement composition after
+that barrier even when prior cleanup reports a failure. Only the standalone
+dashboard registers `process.on("exit")`; that path remains synchronous
+best-effort because the runtime cannot extend the event.
+
+This telemetry is local and content-free: it must not collect terminal output,
+prompts, key contents, foreground application names, environment variables,
+process lists, arbitrary cwd, or repository paths. Inspect it with bounded raw-event
+queries or the JSONL files:
+
+```bash
+stn debug logs "renderer." --component cli
+stn debug logs "ui." --component tui
+stn debug logs "host." --component station-host
 ```
 
 ## Native TTY Ownership
@@ -243,21 +343,26 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Render normalized contracts from `@station/contracts` and use `@station/protocol` through the Station service/source layer.
 - OpenTUI/React components should stay plain and readable. Runtime orchestration belongs in services or the dashboard runtime, not presentation components.
 - Selectors, screen transitions, command builders, event reducers, and fixtures should stay pure TypeScript. The render-framework-free dashboard logic lives in `@station/dashboard-core` and is consumed by the OpenTUI render layer.
-- Each renderer composition resolves one `StationTuiComposition` through `station/src/config/tuiConfig.ts` and passes that opaque composition into its `DashboardRuntime`. This is the only feature-decision boundary: reducers and render/input leaves must not select search behavior or inspect feature flags; legacy session and optimistic-row matching remains centralized in the pure dashboard search projection.
-- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is repeat-safe. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
+- Dashboard key/behavior is shared, not feature-gated: reducers and render/input leaves never select filter behavior or inspect feature flags; session and optimistic-row matching remains centralized in the pure persistent-filter projection.
+- Each renderer composition owns one `DashboardRuntime`: `state` exposes only Zustand-compatible `getState`, `getInitialState`, and `subscribe`; `actions` is the sole external dashboard mutation authority; `start` is one-shot/idempotent and `dispose` is asynchronous and repeat-safe. Disposal closes actions and effect admission immediately, detaches canonical-source and directory-polling subscriptions once, clears owned timers, blocks late async state writes, and returns one promise that drains all already-started bounded work with settled outcomes. Construction requires the composition's `StationClientStateSource`, convergence-safe `ObserverService`, and all four `DashboardCapabilities` groups: session activation, managed session execution, shell opening, and dashboard dismissal. Dashboard-core never creates fallback capabilities, a fallback client runtime, or an independent runtime snapshot. The private Zustand store and reducers use mutable `DashboardState`; neither that model nor `setState` crosses the dashboard-core boundary.
+- `@station/client` owns canonical in-process snapshot and connection truth. Its runtime-backed service commits snapshot loads and reconcile results to that same state source before resolving. Snapshot-only native and standalone consumers read `StationClientStateSource`; dashboard-core mirrors the exact snapshot identity only to combine it with screens, filter, focus, collapse, scrolling, widgets, optimistic rows, and toasts.
 - `DashboardStateSource` returns `DashboardStateView`, a recursively readonly type projection that includes snapshots, screens, local rows, widgets, arrays, maps, and sets. The projection preserves the store's exact object and notification identities: it performs no runtime copying, freezing, or proxying. Dashboard readers and Station consumers must accept the exported readonly view types rather than importing private mutable state models.
-- Presentation receives the readonly `DashboardStateSource` unless a rendered effect requires specific `DashboardActions`. Input and effect adapters receive state plus actions, while native and standalone composition roots alone own full runtime lifecycle. Config persistence receives only the state subscription and `pushToast` capability it needs.
-- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers or replacing runtime state. Hosted workspace creation temporarily crosses into dashboard state through the named `addPendingCreateSession`, `failPendingCreateSession`, and `removePendingCreateSession` actions; Station still owns failure-retention timers and expiry scheduling until that lifecycle moves behind the runtime facade.
+- Presentation receives the readonly `DashboardStateSource` for dashboard projection and the canonical client source where snapshot-only rendering requires it. Input adapters receive only their explicit dashboard state and action capabilities, while native and standalone composition roots alone own full runtime lifecycle and inject terminal-specific implementations of the four semantic capability groups. Config persistence receives only the dashboard subscription and `pushToast` capability it needs.
+- Native and standalone input adapters dispatch the closed dashboard action contract rather than importing reducers, replacing runtime state, or returning renderer-control intents. Dashboard-core invokes the injected semantic capability and owns optimistic rows, success/failure dispositions, notices, toasts, and expiry; capability implementations receive stable product requests and canonical client state, never dashboard state or mutation methods. Failed create rows retain the four-second `expiresAt` authority but share one runtime-owned timer targeting the earliest deadline; each firing removes every expired row and schedules the next deadline.
 - New Session and Fork Session expose **Name** as the editable product concept. New Session initially names itself after its generated branch; Fork Session uses `<source>-fork` while its hidden branch carries a collision-resistant token that changes on each fresh open, so an unobserved Git-ref collision is recoverable by retrying. Later name edits may contain spaces and punctuation and never mutate that hidden branch identity. Quick Session uses its generated branch as the default name.
 - Station service code may use `@station/runtime` (and the shared `@station/client`) for observer IO, subscriptions, command dispatch, timeout, retry, cancellation, and cleanup boundaries. Prefer Effect in boundary code when a single path must coordinate async iterators, cancellation/interruption, cleanup, retry/reconnect, timeouts, and typed error conversion. Keep that Effect usage behind Promise/AsyncIterable facades for React callers.
 - The UI may filter, group, sort, label, and decorate snapshot rows. It must not infer agent truth from provider-specific details.
 - Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
-  search, selection, and actions project those sessions and join `snapshot.rows` only for checkout
+  filtering, selection, and actions project those sessions and join `snapshot.rows` only for checkout
   metadata; bare worktrees remain inventory and do not appear in the primary session list.
 - `terminal.focusable` describes external dashboard control, not native Station
   interaction. Native row activation resolves an advertised managed attachment
   and creates or reveals the local pane without dispatching `terminal.focus`;
   no attachment leaves the overlay open with an actionable notice.
+- Dashboard row click, focused Enter, and `1-9/a-z` row jump are the explicit
+  authorization to relaunch a proven-exited managed pane. Pane clicks, pane
+  cycling, overlay close, PTY exit, reconcile, restore, and HMR never relaunch;
+  they may continue to expose the retained exit transcript.
 
 ## Surface Rules
 
@@ -278,12 +383,7 @@ reattach; pane borders and neighboring panes must remain unlinked.
 
 ## Persistent Dashboard Filter Preview
 
-`[feature_flags].dashboard_persistent_filter` selects the dashboard search experience once at
-renderer composition. With the flag off, `/`, the absolute legacy search prompt, and applied
-`searchQuery` behavior remain unchanged. Reducers, selectors, input routing, and views consume the
-selected experience or typed state; they do not read the flag.
-
-With the flag on, `/` opens a single-line editor in the complete table-header row. Its draft starts
+`/` opens a single-line editor in the complete table-header row. Its draft starts
 from the dashboard-local applied free text and structured conditions. Editing performs a
 deterministic, locale-neutral case-insensitive soft preview over the complete session and
 optimistic-row universe plus project labels. Folded match offsets map back to source text before
@@ -348,16 +448,16 @@ applied summary truncates as one line. Persistent filtering never uses the absol
 `CommandPromptView` overlay. Sheets, Help, snapshot replacement, and warm popup reopen preserve the
 applied filter; covered footer targets remain inert outside dashboard mode.
 
-| Verification | Flag off | Flag on |
-| --- | --- | --- |
-| `/` at wide and minimum width | Legacy absolute prompt; no live preview | Header editor; live highlights/dimming/global count; no wrapping |
-| Editing `Esc` | Cancels legacy draft | Restores the prior hard applied projection |
-| `Enter`, then dashboard `Esc` | Applies legacy `searchQuery` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
-| Zero matches | Legacy projection behavior | Amber, recoverable soft preview; applying yields an empty dashboard projection |
-| Hidden metadata only | Legacy search may retain the row | Ignores metadata that is not rendered in the dashboard |
-| Condition entry | Legacy Tab behavior | `Tab`, `S/P/A`, slots/arrows/Space, header back/close, bottom Done, and final `F` Apply share core transitions |
-| Applied footer pointer | No persistent controls | `/ edit` and `Esc clear` share the keyboard transitions |
-| `Q` from applied dashboard | Existing close/dismiss behavior | Same close/dismiss behavior while retaining free text and conditions |
+| Verification | Behavior |
+| --- | --- |
+| `/` at wide and minimum width | Header editor; live highlights/dimming/global count; no wrapping |
+| Editing `Esc` | Restores the prior hard applied projection |
+| `Enter`, then dashboard `Esc` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
+| Zero matches | Amber, recoverable soft preview; applying yields an empty dashboard projection |
+| Hidden metadata only | Ignores metadata that is not rendered in the dashboard |
+| Condition entry | `Tab`, `S/P/A`, slots/arrows/Space, header back/close, bottom Done, and final `F` Apply share core transitions |
+| Applied footer pointer | `/ edit` and `Esc clear` share the keyboard transitions |
+| `Q` from applied dashboard | Same close/dismiss behavior while retaining free text and conditions |
 
 ## Mouse Coverage Boundaries
 
@@ -365,13 +465,14 @@ OpenTUI `mockMouse` tests cover renderer composition, semantic hit targets, hove
 interception, and equivalence with keyboard transitions. They do not prove terminal mouse-mode
 negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 
-The fullscreen and tmux-popup dashboard routes primary-button clicks through a thin adapter.
-Workflow controls dispatch renderer-neutral actions through `DashboardActions.dispatch(...)`; direct hotkeys
-and focused Enter decode to the same pure intents before transitions or effects run. Dashboard-core
-owns action availability and resolution, while native Station and standalone/tmux
-retain their terminal-specific effects after shared resolution. Session rows are resolved by their
-exact current row ID before their visible slot key is dispatched, so
-observer-backed focus, start, resume, and picker behavior stays on the existing command path.
+Native Station and the fullscreen/tmux dashboard route normalized pointer targets through the same
+semantic router; the standalone adapter only consumes its URL-presentation outcome. Workflow controls
+dispatch renderer-neutral actions through `DashboardActions.dispatch(...)`; direct hotkeys
+and focused Enter decode to the same pure intents before transitions or capability execution. Dashboard-core
+owns action availability and resolution, while native Station and standalone/tmux inject their
+terminal-specific capabilities at composition. Session rows are resolved by their exact current row
+ID before dispatching one semantic activation action, so pointer, focused Enter, and slot keys share
+the same focus, start, resume, and managed-pane behavior.
 Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header
 segments dispatch one `dashboard.projectHeader.activate` action, so a click first focuses the exact
 segment and then follows the same activation path as focused Enter. Wheel events over child rows use
@@ -396,7 +497,7 @@ again when the pointer leaves; no focus glyph is added.
 
 Collapse moves focus from a hidden session or empty-project action to that project's header
 `primary` and clamps scrolling; expanding and moving Down reaches the first visible child again.
-Snapshot replacement and accepted search changes preserve stable focus identity, otherwise choose
+Snapshot replacement and accepted filter changes preserve stable focus identity, otherwise choose
 the next focusable item at the old position before the preceding item; resize preserves identity
 and scrolls it into view. The Default Agent picker retains its header focus beneath the screen, so
 Escape, click-away, unchanged selection, and a successful change return to `defaultAgent`; project
@@ -411,22 +512,22 @@ backs up one step, or clears nested state. Active-screen controls retain hover, 
 sheets continue swallowing inside input;
 non-primary buttons, mouse-up, and wheel input remain consumed without dismissing or reaching the
 dashboard. Remove, rename, and fork choose-row modes expose no click-away behavior so row clicks
-and hover keep selecting; search and the dashboard likewise remain unchanged. In native Station,
+and hover keep selecting; the filter and the dashboard likewise remain unchanged. In native Station,
 the inner screen receives the click before the outer popup backdrop, so one click closes only the
 topmost safe surface.
 
 Native and standalone rendering expose the same project actions. Header Quick Session and the
-empty-project button emit the same core quick-session intent, then resolve availability at their
-terminal-specific acceptance boundary: native Station hosts the session in a Station pane, while the
-standalone dashboard dispatches the configured terminal default. Pointer clicks use
+empty-project button emit the same core quick-session request through the injected managed-session
+capability: native Station hosts the session in a Station pane, while the standalone dashboard
+dispatches the configured terminal default. Pointer clicks use
 `dashboard.emptyProject.activate`; focused Enter routes through the same core activation helper.
 Blocked activation keeps Add Session focused while showing the existing error; stale targets are
-inert. Successful activation transfers focus to that project's header `quickSession` segment before
-an optimistic create row replaces the empty row. The agent-picker uses the shared
-project-default screen transition. Link cells use the same
-validated platform opener. The project-header shell control delegates only its
-terminal effect: native Station opens or focuses a Station pane, while a tmux
-popup sends a strict renderer-control request to its CLI parent. The tmux adapter
+inert. Accepted activation retains the bounded Add Session focus until an optimistic create row
+replaces the empty row. The agent-picker uses the shared project-default screen transition. Link
+cells use the same validated platform opener. The project-header shell control delegates through
+the injected shell capability. Both adapters resolve its stable identity through one canonical-client
+selector; native Station opens or focuses a Station pane, while a tmux popup sends a strict
+renderer-control request to its CLI parent. The tmux adapter
 opens or focuses one cwd-bound shell window in the exact invoking client session,
 then dismisses that popup claim. Its separate propagation-stopping cell prevents
 it from also collapsing the project.
@@ -459,8 +560,8 @@ semantic actions, use the shared bounded button treatment, and keep trailing she
 Fork Session renders Name and Copy through the same bounded field-control grammar as Create Session.
 Clicking Name focuses its editor, clicking Copy focuses and toggles it once, and the Fork button
 submits through a shared semantic action. Copy-focused Enter toggles rather than submitting; Enter
-on Name or Fork submits. Native Station intercepts only submit to host the fork in a managed pane,
-while standalone/tmux keeps the shared observer operation path.
+on Name or Fork submits. The managed-session capability hosts native forks in a Station pane and
+routes standalone/tmux forks through the shared Observer-backed implementation.
 
 Create Session review renders Project, Name, and Agent as compact field controls, followed by a
 compact Create button. Labels, bold yellow accelerators (`P`, `N`, `A`, and `C`), values, and inline
@@ -470,9 +571,10 @@ editor gives Name, Save, and Back independent semantic controls and hides the te
 action owns focus. Down moves from the Name field into the button row, Left/Right moves between Save
 and Back, and Up returns to Name; Left/Right remains text-cursor movement while Name owns focus.
 Selecting Name sets focus directly and never generates arrow input. Native pointer Create, focused Enter, and
-direct `C` pass through one semantic Create resolver and shared validation before producing the
-managed-pane effect; when validation disables Create, all three activation paths remain inert.
-Standalone creation applies the same action through its existing observer operation path.
+direct `C` pass through one semantic Create resolver and shared validation before invoking the
+managed-session capability; when validation disables Create, all three activation paths remain
+inert. Native composition hosts the result in a managed pane, while standalone composition uses its
+Observer-backed capability.
 
 All bottom-sheet text uses the shared non-selectable sheet text primitive. Dragging inside any sheet
 therefore remains pointer interaction and never starts OpenTUI terminal text selection.
@@ -506,7 +608,8 @@ The native workspace lives under `station/src/`; the shared, render-framework-fr
 - For managed Codex launches, the Station terminal provider selects a generic output-compatibility policy that both UI-owned fallback PTYs and Host-owned PTYs apply before replay storage and live delivery. It rewrites only the exact row-1 region scroll followed by its correlated cursor-and-erase repaint; both PTY boundaries remain provider-neutral, and manually starting Codex in an auxiliary shell remains outside this compatibility scope.
 - Host retains complete transformed output and ordered resize transitions within a 256 KiB replay budget, plus a bounded Unicode-11 headless xterm model from the first byte. Attach returns exact ordered raw replay while complete; after eviction it prefers xterm's serializer plus a small Station-specific mode supplement. Capture retries between xterm parser boundaries. If exact reconstruction is unavailable at a safe boundary, Host returns no history and supplies RIS-prefixed control VT restoring the captured application-key, paste, mouse, focus, wrapping, buffer, and Kitty modes; Station applies it before nudging geometry for a child repaint. Live output and resize remain ordered behind the same barrier.
 - Attachment-unavailable state is not process exit: version and exhausted-reconnect failures stop pane input and resize forwarding and show `attachment unavailable`, while only proven Host absence, an exited acknowledgement, or an exit frame reaches the pane-exit lifecycle. Lost historical replay fidelity keeps the pane attached and logs a typed degraded-snapshot diagnostic instead.
-- In `@station/dashboard-core`: `selectors/` for snapshot-to-view grouping/filtering, `state/commandBuilders.ts` for typed observer command construction, `state/screens/*` for pure screen-owned key transitions, `state/observerBridge.ts` and `state/operations/*` for command/operation flow, and `components/`/`widgets/` for shared layout/content logic.
+- A dashboard-authorized relaunch resolves Observer preparation and any advertised attachment for the exact prepared session before atomically replacing the exact exited registry entry. Failed preparation leaves the dead screen and pane tree intact; successful replacement preserves child panes and split anchors, starts an already-visible pane at its latest requested viewport, and lets a newly revealed tree report its current layout before spawning.
+- In `@station/dashboard-core`: `selectors/` owns snapshot-to-view grouping/filtering, `state/commandBuilders.ts` owns typed observer command construction, `state/screens/*` owns pure screen transitions, `state/sourceBridge.ts` mirrors canonical client state into dashboard projection, `state/runtimeEffectScope.ts` owns private effect admission, timers, and settlement, `state/capabilities/*` defines semantic renderer authority, `state/operations/*` executes scope-bound capability and Observer command flow, and `components/`/`widgets/` owns shared layout/content logic. The package surface is exactly four role entrypoints (`runtime`, `state`, `selectors`, `widgets`); [Dashboard Architecture](dashboard-architecture.md) documents the runtime shape, ownership table, and dependency direction.
 - The dashboard surface under `station/src/station/` may import only its linked dashboard-facing `@station/*` packages (`client`, `config`, `contracts`, `dashboard-core`, `runtime`). Other Station subsystems use only the additional packages named by the link script at their owned composition boundaries. Production Station source must never import `apps/tui`, `ink`, providers, or integrations (enforced by `station/src/station/importBoundaries.test.ts`).
 
 ## Testing

@@ -7,8 +7,8 @@ import {
   toastDetail,
   toastOverlayLayout,
   toastTitle,
-  type TuiToastEntry,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/selectors";
+import type { TuiToastEntry } from "@station/dashboard-core/state";
 import { useEffect, useState } from "react";
 import {
   toastBorderThemeColor,

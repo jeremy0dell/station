@@ -1,22 +1,17 @@
+import type { StationClientStateSource } from "@station/client";
 import { agentWorktreePaneId, STATION_OVERLAY_ID, type StationState } from "../../state/types.js";
+import { isAttentionDismissed, attentionKey } from "../../state/attentionDismissal.js";
 import { selectPaneRecord } from "../../state/selectors.js";
 import { createStationOverlayLayer } from "../../station/input/stationOverlayLayer.js";
 import { routeStationMouse } from "../../station/input/stationMouse.js";
 import { rowNeedsUser } from "../../stationButton/status.js";
-import {
-  selectDashboardSessionRows,
-  type DashboardActions,
-  type DashboardStateSource,
-} from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import { selectDashboardSessionRows } from "@station/dashboard-core/selectors";
 import { createKeymapStack, type KeymapLayer, type KeymapStack } from "./keymaps.js";
-import {
-  paneLaunchForkSessionOutcome,
-  paneLaunchManagedOutcome,
-  paneLaunchNewSessionOutcome,
-  paneOpenOutcome,
-  type MouseBindings,
-  type RouteOutcome,
-  type StationCommandId,
+import type {
+  MouseBindings,
+  RouteOutcome,
+  StationCommandId,
 } from "../router.js";
 import {
   isPrimaryMouseEvent,
@@ -29,6 +24,7 @@ import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
 
 type StationDashboardInput = {
   state: DashboardStateSource;
+  clientState: StationClientStateSource;
   actions: Pick<DashboardActions, "dismissToasts" | "dispatch" | "handleKey" | "pushToast">;
 };
 
@@ -148,30 +144,41 @@ const contextMenuLayer: KeymapLayer<RouteOutcome> = {
 
 /**
  * The island's ↵ jump (C6): active only while the mouse is over the island, a
- * session is asking for the user, and no overlay owns the screen — the narrow
- * window where the expanded attention card is showing "↵ or click to focus".
- * Everywhere else Enter falls through to terminal passthrough untouched.
+ * session is asking for the user (and the alert is not dismissed), and no
+ * overlay owns the screen — the narrow window where the expanded attention
+ * card is showing "↵ or click to focus". Everywhere else Enter falls through to
+ * terminal passthrough untouched.
  */
 function createStationButtonLayer(
-  dashboardState: DashboardStateSource,
+  clientState: StationClientStateSource,
 ): KeymapLayer<RouteOutcome> {
-  const attentionRow = () => {
-    const snapshot = dashboardState.getState().snapshot;
-    return snapshot === undefined
-      ? undefined
-      : selectDashboardSessionRows(snapshot).find((row) => rowNeedsUser(row.presentation));
+  const attentionRow = (state: StationState) => {
+    const snapshot = clientState.getState().snapshot;
+    if (snapshot === undefined) {
+      return undefined;
+    }
+    const now = Date.now();
+    return selectDashboardSessionRows(snapshot).find(
+      (row) =>
+        rowNeedsUser(row.presentation) &&
+        !isAttentionDismissed(
+          state.feedback.dismissedAttention,
+          attentionKey(row.session.id, row.worktree.id),
+          now,
+        ),
+    );
   };
   return {
     id: "station-button",
     isActive: (state) =>
       state.input.stationButtonHover &&
       state.input.activeOverlay === null &&
-      attentionRow() !== undefined,
+      attentionRow(state) !== undefined,
     bindings: [
       {
         keys: [C0.CarriageReturn],
         action: (state) => {
-          const row = attentionRow();
+          const row = attentionRow(state);
           if (row === undefined) {
             return { kind: "swallowed" };
           }
@@ -245,7 +252,7 @@ export function createStationKeymap(
     welcomeLayer,
   ];
   if (dashboardRuntime !== undefined) {
-    layers.push(createStationButtonLayer(dashboardRuntime.state));
+    layers.push(createStationButtonLayer(dashboardRuntime.clientState));
   }
   return createKeymapStack(layers);
 }
@@ -337,21 +344,6 @@ export function createStationMouseBindings(
         };
       }
       const outcome = routeStationMouse(target.target, event, dashboardRuntime);
-      if (outcome.kind === "close-overlay") {
-        return { kind: "overlay-close", overlayId: STATION_OVERLAY_ID };
-      }
-      if (outcome.kind === "open-pane") {
-        return paneOpenOutcome(outcome);
-      }
-      if (outcome.kind === "launch-managed") {
-        return paneLaunchManagedOutcome(outcome);
-      }
-      if (outcome.kind === "launch-new-session") {
-        return paneLaunchNewSessionOutcome(outcome);
-      }
-      if (outcome.kind === "launch-fork") {
-        return paneLaunchForkSessionOutcome(outcome);
-      }
       if (outcome.kind === "open-url") {
         return { kind: "open-url", url: outcome.url };
       }

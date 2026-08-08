@@ -1,4 +1,3 @@
-import type { TuiWidgetConfig } from "@station/config";
 import type {
   AgentState,
   ProjectId,
@@ -6,7 +5,7 @@ import type {
   SafeError,
   SessionId,
   StationSnapshot,
-  TerminalFocusOrigin,
+  TuiWidgetConfig,
   WorktreeId,
 } from "@station/contracts";
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
@@ -25,15 +24,6 @@ export type DashboardFocus =
   | { kind: "session"; sessionId: SessionId }
   | { kind: "projectHeader"; projectId: ProjectId; control: ProjectHeaderControl }
   | { kind: "emptyProjectAction"; projectId: ProjectId };
-
-export type TuiRuntimeState = {
-  persistentPopup: boolean;
-  canDismissPopup: boolean;
-  exitOnFocusSuccess: boolean;
-  canResolveFocusOrigin: boolean;
-  hasFocusSuccessCallback: boolean;
-  focusOrigin?: TerminalFocusOrigin;
-};
 
 export type DashboardFilterConditionField = "status" | "project" | "agent";
 
@@ -86,7 +76,6 @@ export type DashboardPersistentFilter = {
 };
 
 export type TuiViewState = {
-  searchQuery: string;
   /** Dashboard-local applied filter; absence means no persistent filter is applied. */
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds: ReadonlySet<string>;
@@ -111,7 +100,6 @@ export type DashboardState = TuiViewState & {
   screen: TuiScreen;
   toasts: TuiToastEntry[];
   observerConnectionStatus: TuiObserverConnectionStatus;
-  runtime: TuiRuntimeState;
   /**
    * Live top-row widget set, seeded from `[tui].widgets`. Widget-settings
    * edits land here first and are written back to config.toml when a config
@@ -121,10 +109,6 @@ export type DashboardState = TuiViewState & {
   /** False when no config.toml path exists to write widget edits back to. */
   widgetsPersisted: boolean;
 };
-
-/** Temporary private reducer/store alias retained while pure reducer naming is migrated. */
-// biome-ignore lint/plugin: retained compatibility boundary during the reducer naming migration
-export type TuiState = DashboardState;
 
 /** Recursively readonly public projection of the private dashboard store model. */
 export type DashboardStateView = ReadonlyDeep<DashboardState>;
@@ -154,7 +138,6 @@ export type TuiObserverConnectionStatus =
 export type TuiScreen =
   | { name: "dashboard" }
   | { name: "help" }
-  | { name: "search"; value: string }
   | {
       name: "persistentFilter";
       draft: EditableTextInputState;
@@ -223,7 +206,6 @@ export type ProjectSettingsItemId = "agent" | "remove";
 
 export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;
-  searchQuery?: string;
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds?: Iterable<string>;
   scrollOffset?: number;
@@ -232,5 +214,4 @@ export type CreateInitialTuiStateOptions = {
   dashboardFocus?: DashboardFocus;
   widgets?: readonly TuiWidgetConfig[];
   widgetsPersisted?: boolean;
-  runtime?: Partial<TuiRuntimeState>;
 };

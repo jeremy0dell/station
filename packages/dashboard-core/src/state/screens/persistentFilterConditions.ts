@@ -7,9 +7,9 @@ import {
 } from "../../selectors/dashboardFilterConditions.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
-import type { DashboardFilterConditionField, TuiState } from "../types.js";
+import type { DashboardFilterConditionField, DashboardState } from "../types.js";
 
-export function openPersistentFilterConditionEditor(state: TuiState): TuiState {
+export function openPersistentFilterConditionEditor(state: DashboardState): DashboardState {
   if (state.screen.name !== "persistentFilter" || state.screen.conditionEditor !== undefined) {
     return state;
   }
@@ -19,7 +19,10 @@ export function openPersistentFilterConditionEditor(state: TuiState): TuiState {
   };
 }
 
-export function handlePersistentFilterConditionKey(state: TuiState, key: TuiKey): TuiState {
+export function handlePersistentFilterConditionKey(
+  state: DashboardState,
+  key: TuiKey,
+): DashboardState {
   if (state.screen.name !== "persistentFilter" || state.screen.conditionEditor === undefined) {
     return state;
   }
@@ -73,9 +76,9 @@ export function handlePersistentFilterConditionKey(state: TuiState, key: TuiKey)
 }
 
 export function selectPersistentFilterConditionField(
-  state: TuiState,
+  state: DashboardState,
   field: DashboardFilterConditionField,
-): TuiState {
+): DashboardState {
   if (state.screen.name !== "persistentFilter" || state.screen.conditionEditor?.stage !== "field") {
     return state;
   }
@@ -105,10 +108,10 @@ export function selectPersistentFilterConditionField(
 }
 
 export function togglePersistentFilterConditionValue(
-  state: TuiState,
+  state: DashboardState,
   field: DashboardFilterConditionField,
   valueId: string,
-): TuiState {
+): DashboardState {
   if (
     state.screen.name !== "persistentFilter" ||
     state.screen.conditionEditor?.stage !== "values" ||
@@ -137,15 +140,15 @@ export function togglePersistentFilterConditionValue(
   };
 }
 
-export function backPersistentFilterConditionEditor(state: TuiState): TuiState {
+export function backPersistentFilterConditionEditor(state: DashboardState): DashboardState {
   return retainPersistentFilterConditionEditor(state);
 }
 
-export function donePersistentFilterConditionEditor(state: TuiState): TuiState {
+export function donePersistentFilterConditionEditor(state: DashboardState): DashboardState {
   return retainPersistentFilterConditionEditor(state);
 }
 
-export function cancelPersistentFilterConditionEditor(state: TuiState): TuiState {
+export function cancelPersistentFilterConditionEditor(state: DashboardState): DashboardState {
   if (state.screen.name !== "persistentFilter" || state.screen.conditionEditor === undefined) {
     return state;
   }
@@ -153,7 +156,7 @@ export function cancelPersistentFilterConditionEditor(state: TuiState): TuiState
   return { ...state, screen };
 }
 
-function movePersistentFilterConditionCursor(state: TuiState, delta: -1 | 1): TuiState {
+function movePersistentFilterConditionCursor(state: DashboardState, delta: -1 | 1): DashboardState {
   if (state.screen.name !== "persistentFilter" || state.screen.conditionEditor === undefined) {
     return state;
   }
@@ -169,7 +172,7 @@ function movePersistentFilterConditionCursor(state: TuiState, delta: -1 | 1): Tu
   };
 }
 
-function retainPersistentFilterConditionEditor(state: TuiState): TuiState {
+function retainPersistentFilterConditionEditor(state: DashboardState): DashboardState {
   if (
     state.screen.name !== "persistentFilter" ||
     state.screen.conditionEditor?.stage !== "values"

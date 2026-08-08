@@ -110,6 +110,15 @@ async function main() {
     "Pi extension bundle",
   );
 
+  // The OpenCode plugin body is a checked-in plain-JS file; embed it as a binary
+  // asset so compiled `stn hooks install opencode` renders the same body.
+  const openCodePluginBodyPath = join(outputDir, "..", "station-opencode-plugin-body.js");
+  await mkdir(dirname(openCodePluginBodyPath), { recursive: true });
+  await cp(
+    join(repoRoot, "integrations", "harness", "opencode", "pluginScriptBody.js"),
+    openCodePluginBodyPath,
+  );
+
   await mkdir(outputDir, { recursive: true });
   await checkedBuild(
     {

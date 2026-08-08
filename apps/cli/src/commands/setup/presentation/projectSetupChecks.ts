@@ -43,8 +43,15 @@ export function projectSetupOperationalChecks(facts: SetupFacts): readonly Setup
     worktrunkShellIntegrationCheck(facts),
     tmuxPopupBindingCheck(facts),
     worktrunkHooksCheck(facts),
-    diffnavCheck(facts),
-    gitDeltaCheck(facts),
+    toolCheck(
+      "diff-viewer",
+      setupMessageRef("label.diff-viewer"),
+      facts.diffViewer,
+      setupMessageRef("check.available", { label: "Hunk" }),
+      setupMessageRef("check.evidence", {
+        message: "Hunk is required for the STATION 'See diff' automation.",
+      }),
+    ),
     {
       id: "doctor",
       tier: "recommended",
@@ -378,30 +385,10 @@ function worktrunkAutomationDetails(facts: SetupFacts): SetupDisplayDetail[] {
   return details;
 }
 
-function diffnavCheck(facts: SetupFacts): SetupViewCheck {
-  return toolCheck(
-    "diffnav",
-    setupMessageRef("label.diffnav"),
-    facts.diffnav,
-    setupMessageRef("check.diffnav-ready"),
-    setupMessageRef("check.diffnav-missing"),
-  );
-}
-
-function gitDeltaCheck(facts: SetupFacts): SetupViewCheck {
-  return toolCheck(
-    "git-delta",
-    setupMessageRef("label.git-delta"),
-    facts.gitDelta,
-    setupMessageRef("check.git-delta-ready"),
-    setupMessageRef("check.git-delta-missing"),
-  );
-}
-
 function toolCheck(
   id: string,
   label: SetupViewCheck["label"],
-  fact: SetupFacts["diffnav"],
+  fact: SetupFacts["worktrunk"],
   ready: SetupViewCheck["explanation"],
   missing: SetupViewCheck["explanation"],
 ): SetupViewCheck {

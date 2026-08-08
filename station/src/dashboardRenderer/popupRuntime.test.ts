@@ -19,9 +19,13 @@ describe("createPopupRuntime", () => {
       transientChannel,
     );
 
-    expect(fullscreen.runtimeOptions).toEqual({});
+    expect(fullscreen).toMatchObject({
+      persistentPopup: false,
+      exitOnFocusSuccess: false,
+    });
     expect(fullscreenChannel.subscribeCount).toBe(0);
-    expect(transient.runtimeOptions).toEqual({
+    expect(transient).toMatchObject({
+      persistentPopup: false,
       exitOnFocusSuccess: true,
       focusOrigin: { provider: "fixture-terminal", clientId: "client-startup" },
     });
@@ -35,7 +39,7 @@ describe("createPopupRuntime", () => {
       missingControlLossCount += 1;
     });
     expect(missingControlLossCount).toBe(1);
-    expect(missing.runtimeOptions).toMatchObject({
+    expect(missing).toMatchObject({
       exitOnFocusSuccess: false,
       persistentPopup: true,
     });
@@ -79,18 +83,18 @@ describe("createPopupRuntime", () => {
       controlLossCount += 1;
     });
 
-    expect(runtime.runtimeOptions).toMatchObject({
+    expect(runtime).toMatchObject({
       exitOnFocusSuccess: false,
       persistentPopup: true,
     });
 
-    const dismiss = runtime.runtimeOptions.onDismiss?.();
+    const dismiss = runtime.dismissDashboard?.();
     const dismissRequest = requiredRequest(channel.requests.at(-1));
     expect(dismissRequest.type).toBe("dismiss");
     channel.respond(dismissedResponse(dismissRequest.requestId));
     await dismiss;
 
-    const targetPromise = runtime.runtimeOptions.resolveFocusTarget?.();
+    const targetPromise = runtime.resolveFocusTarget?.();
     const focusRequest = requiredRequest(channel.requests.at(-1));
     expect(focusRequest.type).toBe("resolve-focus-target");
     channel.respond({
@@ -119,7 +123,7 @@ describe("createPopupRuntime", () => {
   it("resolves a separately leased focus target for every request", async () => {
     const channel = new FakeRendererControlChannel();
     const runtime = createPopupRuntime(persistentPopupEnv(), channel);
-    const resolveFocusTarget = runtime.runtimeOptions.resolveFocusTarget;
+    const resolveFocusTarget = runtime.resolveFocusTarget;
 
     const first = resolveFocusTarget?.();
     const firstRequest = requiredRequest(channel.requests.at(-1));
@@ -151,8 +155,8 @@ describe("createPopupRuntime", () => {
     const channel = new FakeRendererControlChannel();
     const runtime = createPopupRuntime(persistentPopupEnv(), channel);
 
-    const first = runtime.runtimeOptions.onDismiss?.();
-    const second = runtime.runtimeOptions.onDismiss?.();
+    const first = runtime.dismissDashboard?.();
+    const second = runtime.dismissDashboard?.();
 
     expect(channel.requests).toHaveLength(1);
     channel.respond(dismissedResponse(requiredRequest(channel.requests[0]).requestId));
@@ -166,7 +170,7 @@ describe("createPopupRuntime", () => {
       controlLossCount += 1;
     });
 
-    const dismiss = runtime.runtimeOptions.onDismiss?.();
+    const dismiss = runtime.dismissDashboard?.();
     const request = requiredRequest(channel.requests.at(-1));
     channel.respond({
       protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,
@@ -209,7 +213,7 @@ describe("createPopupRuntime", () => {
       const runtime = createPopupRuntime(persistentPopupEnv(), channel, () => {
         controlLossCount += 1;
       });
-      const dismiss = runtime.runtimeOptions.onDismiss?.();
+      const dismiss = runtime.dismissDashboard?.();
       const request = requiredRequest(channel.requests.at(-1));
 
       channel.respond(responseFor(request));
@@ -231,7 +235,7 @@ describe("createPopupRuntime", () => {
       },
     );
     disconnectedChannel.disconnect();
-    const afterDisconnect = disconnected.runtimeOptions.resolveFocusTarget?.();
+    const afterDisconnect = disconnected.resolveFocusTarget?.();
 
     await expect(afterDisconnect).rejects.toMatchObject({
       code: "TUI_RENDERER_CONTROL_DISCONNECTED",
@@ -244,7 +248,7 @@ describe("createPopupRuntime", () => {
     const disposed = createPopupRuntime(persistentPopupEnv(), disposedChannel, () => {
       disposedControlLossCount += 1;
     });
-    const pendingDispose = disposed.runtimeOptions.onDismiss?.();
+    const pendingDispose = disposed.dismissDashboard?.();
 
     disposed.dispose();
 

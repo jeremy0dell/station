@@ -77,13 +77,7 @@ describe("CLI setup command", () => {
             "tmux -V": "tmux 3.5a\n",
             "codex --version": "codex 0.1.0\n",
           }),
-          access: fakeAccess([
-            "/fake/bin/wt",
-            "/fake/bin/tmux",
-            "/fake/bin/bun",
-            "/fake/bin/diffnav",
-            "/fake/bin/delta",
-          ]),
+          access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
           fs: readOnlyFs({}),
           now: () => new Date("2026-06-08T12:00:00.000Z"),
         },
@@ -171,7 +165,7 @@ describe("CLI setup command", () => {
       schemaVersion: 1 as const,
       launcher: join(root, "source", "bin", "stn-ingress"),
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.4",
+      version: "0.0.0-pre-alpha.5",
       buildIdentity: "a".repeat(64),
     };
     const current = {
@@ -478,8 +472,7 @@ describe("CLI setup command", () => {
         "/fake/bin/wt",
         "/fake/bin/tmux",
         "/fake/bin/bun",
-        "/fake/bin/diffnav",
-        "/fake/bin/delta",
+        "/fake/bin/hunk",
         stationLauncher,
         providerHookIngressLauncher,
         popupLauncher,
@@ -578,8 +571,7 @@ describe("CLI setup command", () => {
         access: fakeAccess([
           "/fake/bin/wt",
           tmuxCommand,
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
+          "/fake/bin/hunk",
           "/fake/bin/stn",
           "/fake/bin/stn-ingress",
           popupAlias,
@@ -624,13 +616,7 @@ describe("CLI setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs: readOnlyFs({}),
         writeStdout: (chunk) => {
           chunks.push(chunk);
@@ -667,13 +653,7 @@ describe("CLI setup command", () => {
             "brew --version": "Homebrew 4.0.0\n",
             "codex --version": "codex 0.1.0\n",
           }),
-          access: fakeAccess([
-            "/fake/bin/wt",
-            "/fake/bin/tmux",
-            "/fake/bin/bun",
-            "/fake/bin/diffnav",
-            "/fake/bin/delta",
-          ]),
+          access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
           fs,
           activateObserverConfig: async () => {
             activationCount += 1;
@@ -737,8 +717,7 @@ describe("CLI setup command", () => {
       "/usr/bin/lsof",
       "/fake/bin/tmux",
       "/fake/bin/bun",
-      "/fake/bin/diffnav",
-      "/fake/bin/delta",
+      "/fake/bin/hunk",
       "/fake/bin/stn",
       "/fake/bin/stn-ingress",
       "/fake/bin/stn-tmux-popup",
@@ -1180,13 +1159,7 @@ describe("CLI setup command", () => {
           "tmux -V": "tmux 3.5a\n",
           "codex --version": "codex 0.1.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         fs: readOnlyFs({ [configPath]: "schema_version = 1\n[defaults\n" }),
       },
     });
@@ -1212,13 +1185,7 @@ describe("CLI setup command", () => {
           "brew --version": "Homebrew 4.0.0\n",
           "pnpm --version": "8.15.0\n",
         }),
-        access: fakeAccess([
-          "/fake/bin/wt",
-          "/fake/bin/tmux",
-          "/fake/bin/bun",
-          "/fake/bin/diffnav",
-          "/fake/bin/delta",
-        ]),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/bun", "/fake/bin/hunk"]),
         writeStdout: (chunk) => {
           chunks.push(chunk);
         },
@@ -1318,12 +1285,8 @@ describe("CLI setup command", () => {
             available.add("/fake/bin/bun");
             return commandResult(input, "");
           }
-          if (key === "brew install diffnav") {
-            available.add("/fake/bin/diffnav");
-            return commandResult(input, "");
-          }
-          if (key === "brew install git-delta") {
-            available.add("/fake/bin/delta");
+          if (key === "brew install hunk") {
+            available.add("/fake/bin/hunk");
             return commandResult(input, "");
           }
           return fakeRunner([], {
@@ -1444,8 +1407,7 @@ function readySetupAccess(): (path: string) => Promise<void> {
     "/fake/bin/wt",
     "/fake/bin/tmux",
     "/fake/bin/bun",
-    "/fake/bin/diffnav",
-    "/fake/bin/delta",
+    "/fake/bin/hunk",
     "/fake/bin/stn",
     "/fake/bin/stn-ingress",
     "/fake/bin/stn-tmux-popup",

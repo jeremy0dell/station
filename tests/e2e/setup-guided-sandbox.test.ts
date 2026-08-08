@@ -1,10 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { access, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { setTimeout } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
+import { ObserverProcessIdentitySchema } from "../../packages/contracts/src/index.js";
 import { runGuidedPty } from "../support/setup-guided";
 
 const sandboxScript = "scripts/setup/setup-guided-sandbox.mjs";
+const cliPath = join(process.cwd(), "apps", "cli", "dist", "main.js");
+const multiProfileInputs = ["1,2", "select:1", "n", "n", "y", "y", "y", "n", "n"] as const;
 
 function prepareSandbox(profile: "first-run" | "multi" | "everything-missing"): string {
   const prepared = spawnSync(
@@ -19,21 +23,129 @@ function prepareSandbox(profile: "first-run" | "multi" | "everything-missing"): 
   return root;
 }
 
+function completeGuidedSetup(root: string) {
+  return runGuidedPty({
+    command: join(root, "run-setup"),
+    args: [],
+    cwd: process.cwd(),
+    env: process.env,
+    inputs: multiProfileInputs,
+    timeoutMs: 30_000,
+    rows: 24,
+    columns: 100,
+  });
+}
+
+async function startSandboxObserver(root: string): Promise<number> {
+  runSandboxObserverCommand(root, "start");
+  const socketPath = join(root, "runtime", "station", "observer.sock");
+  const identity = ObserverProcessIdentitySchema.parse(
+    JSON.parse(await readFile(`${socketPath}.pid`, "utf8")),
+  );
+  if (identity.socketPath !== socketPath || !processIsAlive(identity.pid)) {
+    throw new Error("Sandbox Observer did not publish a live identity for its configured socket.");
+  }
+  await access(socketPath);
+  return identity.pid;
+}
+
+function stopSandboxObserver(root: string): void {
+  runSandboxObserverCommand(root, "stop");
+}
+
+function runSandboxObserverCommand(root: string, action: "start" | "stop"): void {
+  const timeoutMs = action === "start" ? 20_000 : 3_000;
+  const result = spawnSync(
+    process.execPath,
+    [
+      cliPath,
+      "--config",
+      join(root, "home", ".config", "station", "config.toml"),
+      "observer",
+      action,
+      "--timeout-ms",
+      String(timeoutMs),
+    ],
+    {
+      cwd: join(root, "repo"),
+      env: sandboxEnvironment(root),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs + 5_000,
+    },
+  );
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `Sandbox observer ${action} exited ${String(result.status)}.\n${result.stdout}\n${result.stderr}`,
+    );
+  }
+}
+
+function sandboxEnvironment(root: string): NodeJS.ProcessEnv {
+  const home = join(root, "home");
+  const bin = join(root, "bin");
+  const runtime = join(root, "runtime");
+  return {
+    HOME: home,
+    PATH: `${bin}:${join(home, ".local", "bin")}:${dirname(process.execPath)}:/usr/bin:/bin`,
+    TMPDIR: join(root, "tmp"),
+    XDG_CACHE_HOME: join(home, ".cache"),
+    XDG_CONFIG_HOME: join(home, ".config"),
+    XDG_DATA_HOME: join(home, ".local", "share"),
+    XDG_RUNTIME_DIR: runtime,
+    XDG_STATE_HOME: join(root, "state"),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    SHELL: "/bin/zsh",
+    TERM: process.env.TERM ?? "xterm-256color",
+    COLORTERM: process.env.COLORTERM ?? "truecolor",
+    STATION_CONFIG_PATH: join(home, ".config", "station", "config.toml"),
+    STATION_OBSERVER_SOCKET_PATH: join(runtime, "station", "observer.sock"),
+    STATION_WORKTRUNK_BIN: join(bin, "wt"),
+    STATION_TMUX_BIN: join(bin, "tmux"),
+    STATION_CODEX_BIN: join(bin, "codex"),
+    STATION_CLAUDE_BIN: join(bin, "claude"),
+    STATION_CURSOR_AGENT_BIN: join(bin, "agent"),
+    STATION_OPENCODE_BIN: join(bin, "opencode"),
+    STATION_PI_BIN: join(bin, "pi"),
+    CODEX_HOME: join(home, ".codex"),
+    CLAUDE_CONFIG_DIR: join(home, ".claude"),
+    STATION_CURSOR_HOME: join(home, ".cursor"),
+    STATION_CURSOR_HOOKS_PATH: join(home, ".cursor", "hooks.json"),
+    OPENCODE_CONFIG_DIR: join(home, ".opencode"),
+    STATION_SETUP_SANDBOX_ROOT: root,
+    STATION_SETUP_SANDBOX_BIN: bin,
+    STATION_SETUP_SANDBOX_HELPER: join(bin, ".sandbox-command"),
+    STATION_SETUP_SANDBOX_LOG: join(root, "external-commands.log"),
+  };
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (processIsAlive(pid)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Observer PID ${String(pid)} remained alive after ${String(timeoutMs)} ms.`);
+    }
+    await setTimeout(25);
+  }
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 describe("manual guided setup sandbox", () => {
   it("completes the real guided flow using only disposable paths and shims", async () => {
     const root = prepareSandbox("multi");
 
     try {
-      const result = await runGuidedPty({
-        command: join(root, "run-setup"),
-        args: [],
-        cwd: process.cwd(),
-        env: process.env,
-        inputs: ["1,2", "select:1", "n", "n", "y", "y", "y", "n", "n"],
-        timeoutMs: 30_000,
-        rows: 24,
-        columns: 100,
-      });
+      const result = await completeGuidedSetup(root);
 
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
@@ -54,6 +166,55 @@ describe("manual guided setup sandbox", () => {
       }
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stops the active sandbox Observer after process-level interruption", async () => {
+    const root = prepareSandbox("multi");
+    const socketPath = join(root, "runtime", "station", "observer.sock");
+    const pidfilePath = `${socketPath}.pid`;
+    let observerPid: number | undefined;
+
+    try {
+      const completed = await completeGuidedSetup(root);
+      expect(completed.timedOut).toBe(false);
+      expect(completed.exitCode, `${completed.stdout}\n${completed.stderr}`).toBe(0);
+      await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+
+      observerPid = await startSandboxObserver(root);
+      const result = await runGuidedPty({
+        command: join(root, "run-setup"),
+        args: [],
+        cwd: process.cwd(),
+        env: process.env,
+        inputs: [],
+        sendSigtermOnFirstRawMode: true,
+        timeoutMs: 10_000,
+        rows: 24,
+        columns: 100,
+      });
+
+      expect(result.sigtermSent).toBe(true);
+      expect(result.answersSent).toBe(0);
+      expect(result.timedOut, `${result.stdout}\n${result.stderr}`).toBe(false);
+      expect(result.exitCode).not.toBeNull();
+      await waitForProcessExit(observerPid, 5_000);
+      expect(processIsAlive(observerPid)).toBe(false);
+      await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(pidfilePath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(
+        access(join(root, "runtime", "station", "observer.claim.sqlite")),
+      ).resolves.toBeUndefined();
+    } finally {
+      try {
+        if (observerPid !== undefined && processIsAlive(observerPid)) {
+          stopSandboxObserver(root);
+          await waitForProcessExit(observerPid, 5_000);
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     }
   });
 
@@ -87,9 +248,9 @@ describe("manual guided setup sandbox", () => {
       expect(opening).toContain("Checking local tools and Station configuration...");
       expect(opening).toContain("Required tools");
       expect(opening).toContain("Install Worktrunk");
-      expect(opening).toContain("Install git-delta");
-      expect(opening.match(/Official formula ↗/g)).toHaveLength(5);
-      for (const formula of ["worktrunk", "tmux", "bun", "diffnav", "git-delta"]) {
+      expect(opening).toContain("Install Hunk");
+      expect(opening.match(/Official formula ↗/g)).toHaveLength(4);
+      for (const formula of ["worktrunk", "tmux", "bun", "hunk"]) {
         expect(result.rawOutput).toContain(
           `\u001b]8;;https://formulae.brew.sh/formula/${formula}\u001b\\`,
         );

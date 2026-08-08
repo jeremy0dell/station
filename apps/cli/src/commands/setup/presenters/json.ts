@@ -19,6 +19,7 @@ import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "../checks/tmuxBinding.js";
+import { defaultDiffViewer } from "../defaultDiffViewer.js";
 
 type SetupHarnessSelection = {
   readonly source: CliSetupPlan["summary"]["selectionSource"];
@@ -145,8 +146,13 @@ function setupChecks(
     tmuxPopupBindingCheck(facts),
     worktrunkHooksCheck(facts),
     ...harnessTrackingChecks(plan, facts, harnessSelection),
-    diffnavCheck(facts),
-    gitDeltaCheck(facts),
+    dependencyCheck({
+      id: "diff-viewer",
+      label: "Hunk",
+      missingMessage:
+        facts.diffViewer.message ?? "Hunk is required for the STATION 'See diff' automation.",
+      dependency: facts.diffViewer,
+    }),
     {
       id: "doctor",
       tier: "recommended",
@@ -559,57 +565,6 @@ function dependencyCheck(input: {
   };
 }
 
-function diffnavCheck(facts: SetupFacts): CliSetupCheck {
-  const details: Record<string, string> = { command: facts.diffnav.command };
-  if (facts.diffnav.resolvedPath !== undefined) details.resolvedPath = facts.diffnav.resolvedPath;
-  if (facts.diffnav.status === "ok") {
-    return {
-      id: "diffnav",
-      tier: "required",
-      status: "ok",
-      label: "diffnav",
-      message: "diffnav is available for the STATION 'See diff (split right)' automation.",
-      details,
-    };
-  }
-  return {
-    id: "diffnav",
-    tier: "required",
-    status: "missing",
-    label: "diffnav",
-    message:
-      facts.diffnav.message ??
-      "diffnav is required for the STATION 'See diff (split right)' automation.",
-    details,
-  };
-}
-
-function gitDeltaCheck(facts: SetupFacts): CliSetupCheck {
-  const details: Record<string, string> = { command: facts.gitDelta.command };
-  if (facts.gitDelta.resolvedPath !== undefined) details.resolvedPath = facts.gitDelta.resolvedPath;
-  if (facts.gitDelta.status === "ok") {
-    return {
-      id: "git-delta",
-      tier: "required",
-      status: "ok",
-      label: "git-delta",
-      message:
-        "git-delta is available; diffnav renders the STATION 'See diff' automation through it.",
-      details,
-    };
-  }
-  return {
-    id: "git-delta",
-    tier: "required",
-    status: "missing",
-    label: "git-delta",
-    message:
-      facts.gitDelta.message ??
-      "git-delta is required; diffnav renders the STATION 'See diff' automation through it.",
-    details,
-  };
-}
-
 type GitCheckAssessment = Pick<CliSetupCheck, "status" | "message" | "details">;
 
 function gitCheck(facts: SetupFacts): CliSetupCheck {
@@ -956,10 +911,12 @@ function installToolPresentation(tool: Extract<SetupOperation, { kind: "install-
       return { id: "install-tmux", label: "tmux", formula: "tmux" };
     case "bun":
       return { id: "install-bun", label: "Bun", formula: "bun" };
-    case "diffnav":
-      return { id: "install-diffnav", label: "diffnav", formula: "diffnav" };
-    case "git-delta":
-      return { id: "install-git-delta", label: "git-delta", formula: "git-delta" };
+    case "diff-viewer":
+      return {
+        id: "install-diff-viewer",
+        label: defaultDiffViewer.displayName,
+        formula: defaultDiffViewer.formula,
+      };
     default:
       throw new Error(`Unsupported semantic setup tool: ${tool}`);
   }
@@ -1121,10 +1078,8 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
   if (facts.git.status === "missing") {
     return [facts.git.message];
   }
-  if (facts.diffnav.status === "missing" || facts.gitDelta.status === "missing") {
-    return [
-      "Install diffnav and git-delta (brew install diffnav git-delta), then run: stn setup check",
-    ];
+  if (facts.diffViewer.status === "missing") {
+    return ["Install Hunk (brew install hunk), then run: stn setup check"];
   }
   return ["Resolve the missing required setup items, then run: stn setup check"];
 }

@@ -1,13 +1,18 @@
-import type { StationClientConnectionState } from "@station/client";
+import type { StationClientConnectionState, StationClientStateSource } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import {
   createDashboardRuntime,
-  legacySearchExperience,
-  type DashboardRuntime,
-  type DashboardRuntimeOptions,
-  type DashboardSearchExperience,
-  type TuiFolderService,
-} from "@station/dashboard-core";
+  createObserverActivationCapabilities,
+  createObserverManagedSessionCapabilities,
+  dashboardExecution,
+ } from "@station/dashboard-core/runtime";
+import type {
+  DashboardCapabilities,
+  DashboardFocusTarget,
+  DashboardRuntime,
+  DashboardRuntimeOptions,
+  TuiFolderService,
+ } from "@station/dashboard-core/runtime";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
 import { FakeStationSource } from "./fakeStationSource.js";
 import { FakeTuiObserverService } from "./fakeObserverService.js";
@@ -20,12 +25,121 @@ export type MakeStationTestRuntimeOptions = {
   seedInitialSnapshot?: boolean | undefined;
   terminalRows?: number | undefined;
   initialState?: DashboardRuntimeOptions["initialState"];
+  capabilities?: DashboardCapabilities;
   folderService?: TuiFolderService | undefined;
-  dashboardSearchExperience?: DashboardSearchExperience | undefined;
 };
 
+export type StationTestDashboardRuntime = DashboardRuntime & {
+  clientState: StationClientStateSource;
+};
+
+export type CreateStationTestDashboardRuntimeOptions = Omit<
+  DashboardRuntimeOptions,
+  "source" | "capabilities"
+> & {
+  source?: StationClientStateSource;
+  initialSnapshot?: StationSnapshot;
+  capabilities?: DashboardCapabilities;
+  persistentPopup?: boolean;
+  focusOrigin?: import("@station/contracts").TerminalFocusOrigin;
+  resolveFocusTarget?: () => Promise<DashboardFocusTarget | undefined>;
+  onFocusSuccess?: () => Promise<void>;
+  onDismiss?: () => Promise<void>;
+  onExit?: (code: number) => void;
+  exitOnFocusSuccess?: boolean;
+};
+
+/** Dashboard test runtime with an explicit canonical source attached to the test facade. */
+export function createStationTestDashboardRuntime(
+  options: CreateStationTestDashboardRuntimeOptions,
+): StationTestDashboardRuntime {
+  const {
+    initialSnapshot,
+    capabilities,
+    persistentPopup,
+    focusOrigin,
+    resolveFocusTarget,
+    onFocusSuccess,
+    onDismiss,
+    onExit,
+    exitOnFocusSuccess,
+    ...runtimeOptions
+  } = options;
+  const clientState = options.source ?? new FakeStationSource(initialSnapshot);
+  const resolvedCapabilities =
+    capabilities ??
+    createStationTestCapabilities({
+      clientState,
+      service: options.service,
+      persistentPopup: persistentPopup === true,
+      ...(focusOrigin === undefined ? {} : { focusOrigin }),
+      ...(resolveFocusTarget === undefined ? {} : { resolveFocusTarget }),
+      ...(onFocusSuccess === undefined ? {} : { onFocusSuccess }),
+      ...(onDismiss === undefined ? {} : { onDismiss }),
+      ...(onExit === undefined ? {} : { onExit }),
+      exitOnFocusSuccess: exitOnFocusSuccess === true,
+    });
+  const runtime = createDashboardRuntime({
+    ...runtimeOptions,
+    source: clientState,
+    capabilities: resolvedCapabilities,
+  });
+  return { ...runtime, clientState };
+}
+
+function createStationTestCapabilities(options: {
+  clientState: StationClientStateSource;
+  service: DashboardRuntimeOptions["service"];
+  persistentPopup: boolean;
+  focusOrigin?: import("@station/contracts").TerminalFocusOrigin;
+  resolveFocusTarget?: () => Promise<DashboardFocusTarget | undefined>;
+  onFocusSuccess?: () => Promise<void>;
+  onDismiss?: () => Promise<void>;
+  onExit?: (code: number) => void;
+  exitOnFocusSuccess: boolean;
+}): DashboardCapabilities {
+  const activationOptions: Parameters<typeof createObserverActivationCapabilities>[0] = {
+    source: options.clientState,
+    service: options.service,
+    clientLabel: "Station test",
+    waitForFocusCompletion: options.persistentPopup || options.exitOnFocusSuccess,
+  };
+  if (options.focusOrigin !== undefined) activationOptions.focusOrigin = options.focusOrigin;
+  if (options.resolveFocusTarget !== undefined) {
+    activationOptions.resolveFocusTarget = options.resolveFocusTarget;
+  }
+  if (options.onFocusSuccess !== undefined) activationOptions.onFocusSuccess = options.onFocusSuccess;
+  const managedOptions: Parameters<typeof createObserverManagedSessionCapabilities>[0] = {
+    service: options.service,
+    clientLabel: "Station test",
+  };
+  if (options.focusOrigin !== undefined) managedOptions.focusOrigin = options.focusOrigin;
+  if (options.resolveFocusTarget !== undefined) {
+    managedOptions.resolveFocusTarget = options.resolveFocusTarget;
+  }
+  return {
+    activation: createObserverActivationCapabilities(activationOptions),
+    managedSessions: createObserverManagedSessionCapabilities(managedOptions),
+    shell: { open: () => dashboardExecution({ kind: "success" }) },
+    dismissal: {
+      dismissDashboard: () => {
+        const completion = options.onDismiss?.() ?? Promise.resolve();
+        return dashboardExecution(completion.then(() => ({ kind: "success" } as const)));
+      },
+      exitRenderer: ({ exitCode }) => {
+        if (options.persistentPopup && options.onDismiss !== undefined) {
+          return dashboardExecution(options.onDismiss().then(() => ({ kind: "success" } as const)));
+        }
+        options.onExit?.(exitCode);
+        return dashboardExecution({ kind: "success" });
+      },
+    },
+  };
+}
+
 export type StationTestRuntime = {
-  runtime: DashboardRuntime;
+  runtime: StationTestDashboardRuntime;
+  input: Pick<StationTestDashboardRuntime, "state" | "actions" | "clientState">;
   source: FakeStationSource;
   service: FakeTuiObserverService;
 };
@@ -38,23 +152,30 @@ export function makeStationTestRuntime(
 ): StationTestRuntime {
   const snapshot =
     options.snapshot === null ? undefined : (options.snapshot ?? manyProjectsSnapshot());
-  const source = new FakeStationSource(snapshot, options.connection);
+  const initialSourceSnapshot = options.seedInitialSnapshot === false ? undefined : snapshot;
+  const source = new FakeStationSource(initialSourceSnapshot, options.connection);
   const service = new FakeTuiObserverService(snapshot ?? manyProjectsSnapshot());
-  const runtime = createDashboardRuntime({
+  const runtime = createStationTestDashboardRuntime({
     source,
     service,
-    dashboardSearchExperience:
-      options.dashboardSearchExperience ?? legacySearchExperience,
-    ...(snapshot === undefined || options.seedInitialSnapshot === false
-      ? {}
-      : { initialSnapshot: snapshot }),
     persistentPopup: true,
     onDismiss: async () => {},
+    ...(options.capabilities === undefined ? {} : { capabilities: options.capabilities }),
     initialState: {
       ...(options.initialState ?? {}),
       ...(options.terminalRows === undefined ? {} : { terminalRows: options.terminalRows }),
     },
     ...(options.folderService === undefined ? {} : { folderService: options.folderService }),
   });
-  return { runtime, source, service };
+  if (snapshot !== undefined && options.seedInitialSnapshot === false) {
+    // Preserve loading-state fixtures: the source gains truth before start,
+    // while the dashboard projection first observes it during start().
+    source.setSnapshot(snapshot);
+  }
+  return {
+    runtime,
+    input: { state: runtime.state, actions: runtime.actions, clientState: source },
+    source,
+    service,
+  };
 }

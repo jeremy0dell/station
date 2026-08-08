@@ -509,19 +509,26 @@ export type ManagedTerminalLaunchProcessResult =
       outputCompatibility?: never;
     });
 
+export type ReleaseManagedTerminalTargetRequest = {
+  targetId: TerminalTargetId;
+  expectedSessionId: SessionId;
+};
+
 /**
  * DRIVEN PORT
  *
  * Owns the single managed terminal target used for an external Station launch.
  * Its capabilities state whether process ownership survives the launching client;
  * attachments expose only adapter-owned target identity, and at most one target
- * may exist per worktree.
+ * may exist per worktree. A local fallback may instead carry a provider-neutral
+ * output policy for the caller-owned process. Release forgets only the exact
+ * expected session binding and never terminates its process: `false` proves the
+ * binding was absent or superseded, while rejection leaves release uncertain.
  */
 export interface ManagedTerminalLifecycle extends TerminalProvider {
   launchProcess(request: TerminalLaunchProcessRequest): Promise<ManagedTerminalLaunchProcessResult>;
   attachmentForTarget(targetId: TerminalTargetId): Promise<ManagedTerminalAttachment | undefined>;
-  /** Forgets an abandoned or already-exited target without terminating its process. */
-  releaseTarget(targetId: TerminalTargetId): Promise<boolean>;
+  releaseTarget(request: ReleaseManagedTerminalTargetRequest): Promise<boolean>;
 }
 
 /** Best-effort version probe result; omit fields (or the method) when unknown. */

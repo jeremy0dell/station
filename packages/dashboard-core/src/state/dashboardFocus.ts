@@ -8,7 +8,7 @@ import {
 import { scrollDashboard } from "./dashboardScroll.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import type { TuiTransition } from "./transition.js";
-import type { DashboardFocus, ProjectHeaderControl, TuiState } from "./types.js";
+import type { DashboardFocus, DashboardState, ProjectHeaderControl } from "./types.js";
 
 type SessionItem = Extract<DashboardViewportItem, { type: "session" }>;
 type ProjectHeaderItem = Extract<DashboardViewportItem, { type: "projectHeader" }>;
@@ -23,7 +23,7 @@ const PROJECT_HEADER_CONTROLS: readonly ProjectHeaderControl[] = [
 ];
 
 /** Focuses the visible dashboard row for a canonical session identity. */
-export function focusDashboardSession(state: TuiState, sessionId: SessionId): TuiState {
+export function focusDashboardSession(state: DashboardState, sessionId: SessionId): DashboardState {
   if (state.snapshot === undefined) {
     return clearDashboardFocus(state);
   }
@@ -36,10 +36,10 @@ export function focusDashboardSession(state: TuiState, sessionId: SessionId): Tu
 
 /** Focuses one control on a currently visible project header. */
 export function focusDashboardProjectHeader(
-  state: TuiState,
+  state: DashboardState,
   projectId: ProjectId,
   control: ProjectHeaderControl,
-): TuiState {
+): DashboardState {
   if (state.snapshot === undefined) {
     return state;
   }
@@ -53,7 +53,10 @@ export function focusDashboardProjectHeader(
 }
 
 /** Focuses the stable action rendered for a currently empty project. */
-export function focusDashboardEmptyProjectAction(state: TuiState, projectId: ProjectId): TuiState {
+export function focusDashboardEmptyProjectAction(
+  state: DashboardState,
+  projectId: ProjectId,
+): DashboardState {
   if (state.snapshot === undefined) {
     return state;
   }
@@ -67,7 +70,7 @@ export function focusDashboardEmptyProjectAction(state: TuiState, projectId: Pro
 }
 
 /** Removes transient dashboard focus without disturbing other view state. */
-export function clearDashboardFocus(state: TuiState): TuiState {
+export function clearDashboardFocus(state: DashboardState): DashboardState {
   const cleared = { ...state };
   delete cleared.dashboardFocus;
   return cleared;
@@ -75,17 +78,17 @@ export function clearDashboardFocus(state: TuiState): TuiState {
 
 // Vertical dashboard traversal includes project headers and empty-project actions, while row
 // chooser traversal deliberately uses moveDashboardSessionFocus to remain session-only.
-export function moveDashboardFocus(state: TuiState, delta: -1 | 1): TuiState {
+export function moveDashboardFocus(state: DashboardState, delta: -1 | 1): DashboardState {
   return moveFocus(state, delta, "dashboard");
 }
 
 /** Moves remove/rename/fork choice focus across sessions without visiting headers. */
-export function moveDashboardSessionFocus(state: TuiState, delta: -1 | 1): TuiState {
+export function moveDashboardSessionFocus(state: DashboardState, delta: -1 | 1): DashboardState {
   return moveFocus(state, delta, "session");
 }
 
 /** Moves within a focused project header, clamping at both ends without wrapping. */
-export function moveDashboardFocusHorizontal(state: TuiState, delta: -1 | 1): TuiState {
+export function moveDashboardFocusHorizontal(state: DashboardState, delta: -1 | 1): DashboardState {
   const focus = state.dashboardFocus;
   if (focus?.kind !== "projectHeader" || state.snapshot === undefined) {
     return state;
@@ -104,7 +107,7 @@ export function moveDashboardFocusHorizontal(state: TuiState, delta: -1 | 1): Tu
   return focusItem(state, items, index, { ...focus, control });
 }
 
-export function focusNextNeedsMe(state: TuiState): TuiState {
+export function focusNextNeedsMe(state: DashboardState): DashboardState {
   if (state.snapshot === undefined) {
     return state;
   }
@@ -121,14 +124,14 @@ export function focusNextNeedsMe(state: TuiState): TuiState {
   return next === undefined ? state : focusItem(state, items, next);
 }
 
-export function activateFocusedDashboardRow(state: TuiState): TuiTransition {
+export function activateFocusedDashboardRow(state: DashboardState): TuiTransition {
   const row = focusedSelectableRow(state);
   return row === undefined ? { state } : activateDashboardRow(state, row);
 }
 
 /** Returns the focused visible project-header identity for activation. */
 export function focusedProjectHeaderControl(
-  state: TuiState,
+  state: DashboardState,
 ): Extract<DashboardFocus, { kind: "projectHeader" }> | undefined {
   const focus = state.dashboardFocus;
   if (focus?.kind !== "projectHeader" || state.snapshot === undefined) {
@@ -140,7 +143,7 @@ export function focusedProjectHeaderControl(
 
 /** Returns the focused empty-project action only while its row remains rendered. */
 export function focusedEmptyProjectAction(
-  state: TuiState,
+  state: DashboardState,
 ): Extract<DashboardFocus, { kind: "emptyProjectAction" }> | undefined {
   const focus = state.dashboardFocus;
   if (focus?.kind !== "emptyProjectAction" || state.snapshot === undefined) {
@@ -156,7 +159,7 @@ export function focusedEmptyProjectAction(
  * trio's ↵ resolves through this so it cannot act on a row the slot path and
  * dashboard activation both refuse.
  */
-export function focusedSelectableRow(state: TuiState): DashboardSessionRow | undefined {
+export function focusedSelectableRow(state: DashboardState): DashboardSessionRow | undefined {
   if (state.snapshot === undefined || state.dashboardFocus?.kind !== "session") {
     return undefined;
   }
@@ -177,7 +180,10 @@ export function focusedSelectableRow(state: TuiState): DashboardSessionRow | und
  * Preserves stable focus across dashboard list-shape changes, preferring a hidden child's
  * collapsed parent before falling forward or backward by rendered position.
  */
-export function reconcileDashboardFocus(previous: TuiState, next: TuiState): TuiState {
+export function reconcileDashboardFocus(
+  previous: DashboardState,
+  next: DashboardState,
+): DashboardState {
   if (next.snapshot === undefined) {
     return clearDashboardFocus(withClampedScroll(next, 0));
   }
@@ -211,7 +217,7 @@ export function reconcileDashboardFocus(previous: TuiState, next: TuiState): Tui
 }
 
 function collapsedParentHeaderIndex(
-  state: TuiState,
+  state: DashboardState,
   items: readonly DashboardViewportItem[],
   focus: DashboardFocus,
 ): number | undefined {
@@ -236,7 +242,11 @@ export function rowNeedsYou(row: DashboardSessionRow): boolean {
   return row.session.status.value === "needs_attention" || row.session.status.value === "stuck";
 }
 
-function moveFocus(state: TuiState, delta: -1 | 1, mode: "dashboard" | "session"): TuiState {
+function moveFocus(
+  state: DashboardState,
+  delta: -1 | 1,
+  mode: "dashboard" | "session",
+): DashboardState {
   if (state.snapshot === undefined) {
     return scrollDashboard(state, delta);
   }
@@ -294,7 +304,7 @@ function focusMatchesItem(focus: DashboardFocus, item: DashboardViewportItem): b
 // With no cursor yet (or a stale one), enter where the user is looking: the
 // first/last focusable item inside the current viewport.
 function enterFocusIndex(
-  state: TuiState,
+  state: DashboardState,
   items: readonly DashboardViewportItem[],
   focusable: readonly [number, ...number[]],
   delta: -1 | 1,
@@ -321,11 +331,11 @@ function lastFocusableIndex(indexes: readonly [number, ...number[]]): number {
 }
 
 function focusItem(
-  state: TuiState,
+  state: DashboardState,
   items: readonly DashboardViewportItem[],
   index: number,
   focus?: DashboardFocus,
-): TuiState {
+): DashboardState {
   const item = items[index];
   if (
     item === undefined ||
@@ -358,12 +368,15 @@ function focusForItem(item: FocusableItem): DashboardFocus {
   }
 }
 
-function withClampedScroll(state: TuiState, itemCount: number): TuiState {
+function withClampedScroll(state: DashboardState, itemCount: number): DashboardState {
   const { offset } = viewportWindow(state, itemCount);
   return offset === state.scrollOffset ? state : { ...state, scrollOffset: offset };
 }
 
-function viewportWindow(state: TuiState, itemCount: number): { bodyRows: number; offset: number } {
+function viewportWindow(
+  state: DashboardState,
+  itemCount: number,
+): { bodyRows: number; offset: number } {
   const bodyRows = dashboardBodyRows(state.terminalRows);
   return {
     bodyRows,

@@ -158,7 +158,7 @@ async function createSandbox(profile) {
   await writeFailureShim(bin, "gh", logPath);
 
   if (profile === "first-run" || profile === "multi") {
-    await installCommands(bin, helperPath, ["wt", "tmux", "diffnav", "delta", "bun"]);
+    await installCommands(bin, helperPath, ["wt", "tmux", "hunk", "bun"]);
   }
   if (profile === "multi" || profile === "missing-tools") {
     await installCommands(bin, helperPath, ["codex", "opencode"]);
@@ -260,8 +260,7 @@ case "$name" in
   opencode) [ "\${1:-}" = "--version" ] && echo "opencode 1.0.0"; exit 0 ;;
   pi) [ "\${1:-}" = "--version" ] && echo "pi 0.80.10"; exit 0 ;;
   bun) [ "\${1:-}" = "--version" ] && echo "1.3.14"; exit 0 ;;
-  diffnav) [ "\${1:-}" = "--version" ] && echo "diffnav 0.3.0"; exit 0 ;;
-  delta) [ "\${1:-}" = "--version" ] && echo "delta 0.18.2"; exit 0 ;;
+  hunk) [ "\${1:-}" = "--version" ] && echo "hunk 0.17.7"; exit 0 ;;
   stn|stn-ingress|stn-tmux-popup) exit 0 ;;
   *) echo "unsupported sandbox command: $name" >&2; exit 2 ;;
 esac
@@ -290,8 +289,7 @@ case " $* " in
   *homebrew/core/opencode*) command_name=opencode ;;
   *homebrew/core/pi-coding-agent*) command_name=pi ;;
   *worktrunk*) command_name=wt ;;
-  *git-delta*) command_name=delta ;;
-  *diffnav*) command_name=diffnav ;;
+  *hunk*) command_name=hunk ;;
   *tmux*) command_name=tmux ;;
   *bun*) command_name=bun ;;
   *) echo "unsupported sandbox brew package: $*" >&2; exit 2 ;;
@@ -434,9 +432,10 @@ async function writeRunScript(paths) {
   await writeExecutable(
     paths.runPath,
     `cleanup() {
+  # Cleanup receives EOF so it cannot compete with Clack for the controlling terminal.
   env -i \\
   ${assignments} \\
-  ${shellQuote(process.execPath)} ${shellQuote(paths.cliPath)} --config ${shellQuote(paths.configPath)} observer stop --timeout-ms 3000 >/dev/null 2>&1 || true
+  ${shellQuote(process.execPath)} ${shellQuote(paths.cliPath)} --config ${shellQuote(paths.configPath)} observer stop --timeout-ms 3000 </dev/null >/dev/null 2>&1 || true
 }
 trap cleanup EXIT HUP TERM
 cd ${shellQuote(paths.repo)}

@@ -1,13 +1,16 @@
 import type { TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export const projectDefaultAgentScreenBehavior = {
   dashboardHoverEnabled: false,
   clickAway: closeProjectDefaultAgent,
 };
 
-export function openProjectDefaultAgentPicker(state: TuiState, projectId: string): TuiState {
+export function openProjectDefaultAgentPicker(
+  state: DashboardState,
+  projectId: string,
+): DashboardState {
   if (state.snapshot === undefined) {
     return state;
   }
@@ -28,7 +31,7 @@ export function openProjectDefaultAgentPicker(state: TuiState, projectId: string
 
 // Selection keys (↑↓/↵/slot) are handled by the shared selectionMiddleware
 // before this reducer runs; only the bespoke esc-to-dashboard chord remains.
-export function handleProjectDefaultAgentKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleProjectDefaultAgentKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "projectDefaultAgent") {
     return { state };
   }
@@ -38,7 +41,7 @@ export function handleProjectDefaultAgentKey(state: TuiState, key: TuiKey): TuiT
   return { state };
 }
 
-export function closeProjectDefaultAgent(state: TuiState): TuiState {
+export function closeProjectDefaultAgent(state: DashboardState): DashboardState {
   // Preserve dashboardFocus beneath the picker so every safe return restores the exact header segment.
   return { ...state, screen: { name: "dashboard" } };
 }

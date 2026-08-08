@@ -301,8 +301,7 @@ export function normalizeSetupPlanningFacts(
       normalizeTool("worktrunk", facts.worktrunk.status === "ok", facts),
       normalizeTool("tmux", facts.tmux.status === "ok", facts),
       normalizeTool("bun", facts.bun.status === "ok", facts),
-      normalizeTool("diffnav", facts.diffnav.status === "ok", facts),
-      normalizeTool("git-delta", facts.gitDelta.status === "ok", facts),
+      normalizeTool("diff-viewer", facts.diffViewer.status === "ok", facts),
     ],
     runtimeUi: normalizeRuntimeUi(facts),
     git:

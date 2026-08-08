@@ -4,19 +4,15 @@
 // are interactive.
 import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
-import {
-  addProjectSelectedIndex,
-  persistentFilterExperience,
-  removeProjectConfirmPhrase,
-  selectDashboardViewport,
-  type DashboardRuntime,
-  type DashboardRuntimeOptions,
-} from "@station/dashboard-core";
-import { agentWorktreePaneId } from "../../state/types.js";
+import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
-import { makeStationTestRuntime } from "../test/support/makeStationTestRuntime.js";
-import { resolveKeyRowAgentTarget, resolveRowAgentTarget } from "./stationActions.js";
+import {
+  makeStationTestRuntime,
+  type StationTestDashboardRuntime,
+} from "../test/support/makeStationTestRuntime.js";
 import { routeStationMouse } from "./stationMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
@@ -64,7 +60,7 @@ const SCROLL_UP: StationMouseEvent = {
 function makeStore(
   snapshot?: StationSnapshot,
   initialState?: DashboardRuntimeOptions["initialState"],
-): DashboardRuntime {
+): StationTestDashboardRuntime {
   // Enough rows to keep the same visible window as before the pinned fleet bar +
   // column header, so the station-project rows stay slot-addressable.
   return makeStationTestRuntime({
@@ -134,27 +130,20 @@ function snapshotWithBareProject(projectId: string): StationSnapshot {
 }
 
 describe("routeStationMouse", () => {
-  it("launches the row's primary agent (managed) on a dashboard row click", () => {
+  it("dispatches row activation through the semantic capability path", () => {
     const store = makeStore();
     const worktreeId = "wt_station_idle";
     const rowId = `ses_${worktreeId}`;
 
     const outcome = routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, store);
 
-    expect(outcome).toEqual({
-      kind: "launch-managed",
-      rowId,
-      projectId: "station",
-      worktreeId,
-      paneId: agentWorktreePaneId(worktreeId),
-      cwd: rowPath(worktreeId),
-    });
+    expect(outcome).toEqual({ kind: "handled" });
     // The dashboard click no longer dispatches the start-or-focus slot key, so
     // no pending-start row is queued.
     expect(pendingStartIds(store)).toEqual([]);
   });
 
-  it("emits launch-managed regardless of harness (the observer resolves it)", () => {
+  it("keeps row activation semantic regardless of harness", () => {
     const store = makeStore(snapshotWithHarness("station", "ghost"));
 
     const outcome = routeStationMouse(
@@ -163,18 +152,21 @@ describe("routeStationMouse", () => {
       store,
     );
 
-    expect(outcome).toMatchObject({ kind: "launch-managed", worktreeId: "wt_station_idle" });
+    expect(outcome).toEqual({ kind: "handled" });
     // No local toast: harness resolution (and any failure) is the observer's job now.
     expect(store.state.getState().toasts).toEqual([]);
   });
 
-  it("treats a dashboard click on a stale row as an inert click with no toast", () => {
+  it("reports a dashboard click on a stale row", () => {
     const store = makeStore();
 
     const outcome = routeStationMouse({ kind: "row", rowId: "wt_nope" }, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.state.getState().toasts).toEqual([]);
+    expect(store.state.getState().toasts.at(-1)?.toast).toMatchObject({
+      kind: "info",
+      message: "That dashboard item is no longer available.",
+    });
   });
 
   it("chooses the clicked row in remove mode, same as the slot key", () => {
@@ -312,7 +304,7 @@ describe("routeStationMouse", () => {
     });
   });
 
-  it("launches a fork from the semantic submit action", () => {
+  it("dispatches fork submit through the semantic capability path", () => {
     const store = makeStore();
     const worktreeId = "wt_station_working";
     const rowId = `ses_${worktreeId}`;
@@ -326,18 +318,8 @@ describe("routeStationMouse", () => {
       store,
     );
 
-    expect(outcome.kind).toBe("launch-fork");
-    if (outcome.kind === "launch-fork") {
-      expect(outcome.projectId).toBe("station");
-      expect(outcome.sourceWorktreeId).toBe(worktreeId);
-      expect(outcome.copyDirty).toBe(true);
-      expect(outcome.title).toMatch(/-fork$/);
-      expect(outcome.branch).toContain("-fork-");
-      expect(outcome.title).not.toBe(outcome.branch);
-    }
-    // The submit is intercepted, not dispatched to the machine — the sheet stays open
-    // until the executor closes it, so the machine never ran the tmux session.fork.
-    expect(store.state.getState().screen).toMatchObject({ name: "fork", step: "details" });
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("keeps stale Fork actions inert", () => {
@@ -388,13 +370,12 @@ describe("routeStationMouse", () => {
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().screen).toEqual(before.screen);
-    expect(store.state.getState().searchQuery).toBe(before.searchQuery);
+    expect(store.state.getState().screen).toMatchObject({ name: "persistentFilter" });
   });
 
   it("edits and clears an applied filter from footer actions only in dashboard mode", () => {
     const store = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
       initialState: { persistentFilter: { query: "working" } },
     }).runtime;
 
@@ -434,11 +415,9 @@ describe("routeStationMouse", () => {
   it("routes condition building and final apply clicks through the same transitions as keys", () => {
     const clicked = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     const keyed = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     for (const store of [clicked, keyed]) {
       store.actions.handleKey({ input: "/" });
@@ -494,7 +473,6 @@ describe("routeStationMouse", () => {
   it("routes the top back and close controls independently", () => {
     const store = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "i", ctrl: true });
@@ -525,7 +503,6 @@ describe("routeStationMouse", () => {
   it("click-away discards only the active field's unretained changes", () => {
     const store = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     store.actions.handleKey({ input: "/" });
     store.actions.handleKey({ input: "draft" });
@@ -663,7 +640,10 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "", escape: true });
     store.actions.handleKey({ input: "/" });
     routeStationMouse({ kind: "sheetChoice", choiceKey: "1" }, LEFT_DOWN, store);
-    expect(store.state.getState().screen).toMatchObject({ name: "search", value: "" });
+    expect(store.state.getState().screen).toMatchObject({
+      name: "persistentFilter",
+      draft: { value: "", cursor: 0 },
+    });
   });
 
   it("treats right-click as inert at the STATION router layer", () => {
@@ -709,7 +689,7 @@ describe("routeStationMouse", () => {
     expect(routeStationMouse({ kind: "link", url }, LEFT_DOWN, store)).toEqual({ kind: "handled" });
   });
 
-  it("opens a shell pane for a row click at the worktree path", () => {
+  it("dispatches row shell through the semantic capability path", () => {
     const store = makeStore();
     // Derive cwd from the live snapshot, not a duplicated path literal, so the
     // assertion proves the resolver reads row.path (not some equivalent format).
@@ -718,13 +698,30 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       store,
     );
-    expect(outcome).toEqual({
-      kind: "open-pane",
-      paneId: "pane-wt-wt_station_idle",
-      cwd: rowPath("wt_station_idle"),
-      role: "shell",
-      worktreeId: "wt_station_idle",
+    expect(outcome).toEqual({ kind: "handled" });
+  });
+
+  it("resolves native shell targets from client truth when dashboard projection is stale", () => {
+    const fixture = makeStationTestRuntime({ terminalRows: 14 });
+    const canonical = manyProjectsSnapshot();
+    const canonicalPath = "/canonical/station/pty-buffer";
+    fixture.source.setSnapshot({
+      ...canonical,
+      rows: canonical.rows.map((row) =>
+        row.id === "wt_station_idle" ? { ...row, path: canonicalPath } : row,
+      ),
     });
+
+    const outcome = routeStationMouse(
+      { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      fixture.runtime,
+    );
+
+    expect(fixture.runtime.state.getState().snapshot?.rows.find(
+      (row) => row.id === "wt_station_idle",
+    )?.path).not.toBe(canonicalPath);
+    expect(outcome).toEqual({ kind: "handled" });
   });
 
   it("opens a shell pane for a project header click at the project root", () => {
@@ -734,12 +731,7 @@ describe("routeStationMouse", () => {
       LEFT_DOWN,
       store,
     );
-    expect(outcome).toEqual({
-      kind: "open-pane",
-      paneId: "pane-proj-station",
-      cwd: projectRoot("station"),
-      role: "shell",
-    });
+    expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
@@ -758,18 +750,12 @@ describe("routeStationMouse", () => {
     // row-click opens the primary agent, so keyboard drives the pending start.)
     store.actions.handleKey({ input: slotForRow(store, rowId) });
     const outcome = routeStationMouse({ kind: "openShellForRow", rowId }, LEFT_DOWN, store);
-    expect(outcome).toEqual({
-      kind: "open-pane",
-      paneId: `pane-wt-${worktreeId}`,
-      cwd: rowPath(worktreeId),
-      role: "shell",
-      worktreeId,
-    });
+    expect(outcome).toEqual({ kind: "handled" });
   });
 
   it("gates the open-shell affordance to dashboard mode", () => {
     const store = makeStore();
-    store.actions.handleKey({ input: "/" }); // enter search (non-dashboard) mode
+    store.actions.handleKey({ input: "/" }); // enter filter (non-dashboard) mode
 
     expect(
       routeStationMouse(
@@ -797,20 +783,14 @@ describe("routeStationMouse", () => {
     ).toEqual({ kind: "handled" });
   });
 
-  it("creates a session immediately via [+] quick-session affordance", () => {
+  it("dispatches [+] Quick Session through the semantic capability path", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
       { kind: "quickSessionForProject", projectId: "station" },
       LEFT_DOWN,
       store,
     );
-    expect(outcome.kind).toBe("launch-new-session");
-    if (outcome.kind === "launch-new-session") {
-      expect(outcome.projectId).toBe("station");
-      expect(outcome.harness).toBe("codex"); // project.defaults.harness
-      expect(outcome.branch).toMatch(/^station-[0-9a-f]+$/);
-      expect(outcome.title).toBe(outcome.branch);
-    }
+    expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
@@ -818,7 +798,7 @@ describe("routeStationMouse", () => {
     });
   });
 
-  it("routes the empty-project action to the native managed launch outcome", () => {
+  it("routes the empty-project action through semantic Quick Session", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
       { kind: "emptyProjectAction", projectId: "empty-project" },
@@ -826,15 +806,10 @@ describe("routeStationMouse", () => {
       store,
     );
 
-    expect(outcome).toMatchObject({
-      kind: "launch-new-session",
-      projectId: "empty-project",
-      harness: "codex",
-    });
+    expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
+      kind: "emptyProjectAction",
       projectId: "empty-project",
-      control: "quickSession",
     });
   });
 
@@ -900,7 +875,7 @@ describe("routeStationMouse", () => {
 
   it("gates quick-session and default-agent picker to dashboard mode", () => {
     const store = makeStore();
-    store.actions.handleKey({ input: "/" }); // enter search mode
+    store.actions.handleKey({ input: "/" }); // enter filter mode
 
     expect(
       routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
@@ -1037,59 +1012,17 @@ describe("routeStationMouse", () => {
   });
 });
 
-describe("resolveKeyRowAgentTarget", () => {
-  it("resolves a row's slot key to the exact launch its click resolves", () => {
-    // The keyboard "open" and the click are one path: the key resolves to the
-    // same target a click on that row resolves.
-    const store = makeStore();
-    const rowId = "ses_wt_station_idle";
-
-    expect(resolveKeyRowAgentTarget(store, slotForRow(store, rowId))).toEqual(
-      resolveRowAgentTarget(store, rowId),
-    );
-  });
-
-  it("does not launch outside dashboard mode (choose-slot keeps slot meaning)", () => {
-    // The same slot key that opens an agent in dashboard mode must instead
-    // select the row for removal here — so it defers to the machine, not launch.
-    const store = makeStore();
-    const slot = slotForRow(store, "ses_wt_station_idle");
-    store.actions.handleKey({ input: "X" }); // enter remove choose-slot mode
-
-    expect(resolveKeyRowAgentTarget(store, slot)).toEqual({ kind: "none" });
-  });
-});
-
-function pendingStartIds(store: DashboardRuntime): string[] {
+function pendingStartIds(store: StationTestDashboardRuntime): string[] {
   return store.state.getState().localRows.pendingStart.map((row) => row.localId);
 }
 
-// The fixture's worktree path / project root, read back from a fresh snapshot
-// (deterministic builder) so tests assert equivalence to the data the resolver
-// reads rather than duplicating the fixture's path format.
-function rowPath(rowId: string): string {
-  const path = manyProjectsSnapshot().rows.find((row) => row.id === rowId)?.path;
-  if (path === undefined) {
-    throw new Error(`no fixture row ${rowId}`);
-  }
-  return path;
-}
-
-function projectRoot(projectId: string): string {
-  const root = manyProjectsSnapshot().projects.find((project) => project.id === projectId)?.root;
-  if (root === undefined) {
-    throw new Error(`no fixture project ${projectId}`);
-  }
-  return root;
-}
-
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
   }
   // Mirrors the viewport selector the actions module uses; resolved through
-  // the store so the slot reflects current scroll/search state.
+  // the store so the slot reflects current scroll/filter state.
   const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
     (candidate) => candidate.value.id === rowId,
   );
@@ -1109,7 +1042,7 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe("routeStationMouse widget settings", () => {
-  function panelStore(): DashboardRuntime {
+  function panelStore(): StationTestDashboardRuntime {
     const store = makeStore(undefined, { widgets: [{ type: "time" }, { type: "moon" }] });
     store.actions.handleKey({ input: "W" });
     return store;
@@ -1255,7 +1188,7 @@ describe("routeStationMouse widget settings", () => {
     expect(store.state.getState().screen).toMatchObject({ name: "newSession", flow: { mode: "review" } });
   });
 
-  it("returns the native managed-launch outcome for direct Create", () => {
+  it("dispatches direct Create through the semantic capability path", () => {
     const store = makeStore();
     store.actions.handleKey({ input: "N" });
     store.actions.handleKey({ input: "", downArrow: true });
@@ -1265,11 +1198,8 @@ describe("routeStationMouse widget settings", () => {
       LEFT_DOWN,
       store,
     );
-    expect(outcome).toMatchObject({
-      kind: "launch-new-session",
-      projectId: "station",
-      harness: "codex",
-    });
+    expect(outcome).toEqual({ kind: "handled" });
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
   });
 
   it("keeps a stale unavailable Create target inert", () => {

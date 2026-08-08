@@ -5,12 +5,10 @@ import {
   resolveNewSessionProjectAvailability,
 } from "../../flows/newSession.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
-import { buildCreateSessionCommand } from "../commandBuilders.js";
 import { focusDashboardProjectHeader } from "../dashboardFocus.js";
-import { addPendingCreateSessionRow } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
-import type { DashboardStateView, TuiState } from "../types.js";
+import type { DashboardState, DashboardStateView } from "../types.js";
 
 export type QuickSessionIntent = {
   projectId: string;
@@ -49,10 +47,10 @@ export function resolveQuickSessionIntent(
 }
 
 /**
- * Resolves standalone Quick Session availability and builds its immediate operation.
- * Only an accepted operation moves focus to the header's Quick Session control.
+ * Resolves Quick Session availability and emits the same semantic operation for
+ * pointer, direct-key, and focused activation paths.
  */
-export function submitQuickSession(state: TuiState, projectId: string): TuiTransition {
+export function submitQuickSession(state: DashboardState, projectId: string): TuiTransition {
   const resolution = resolveQuickSessionIntent(state, projectId);
   if (resolution.kind === "missing") return { state };
   if (resolution.kind === "blocked") {
@@ -64,33 +62,16 @@ export function submitQuickSession(state: TuiState, projectId: string): TuiTrans
   if (project === undefined) return { state };
 
   const { title, branch, harnessProvider, token } = resolution;
-  const localId = `create:${project.id}:${token}`;
-  const command = buildCreateSessionCommand({ project, title, branch, harnessProvider });
-  if (command.type !== "session.create") {
-    return { state };
-  }
-
   return {
-    state: addPendingCreateSessionRow(
-      focusDashboardProjectHeader(state, project.id, "quickSession"),
-      {
-        localId,
-        projectId: project.id,
-        title,
-        branch,
-        harnessProvider,
-        createdAt: new Date().toISOString(),
-      },
-    ),
+    state: focusDashboardProjectHeader(state, project.id, "quickSession"),
     operations: [
       {
-        type: "createSession",
-        localId,
-        projectId: project.id,
+        type: "quickCreateManagedSession",
+        localId: `create:${project.id}:${token}`,
+        project,
         title,
-        branch,
-        harnessProvider,
-        command,
+        hiddenBranch: branch,
+        harness: harnessProvider,
       },
     ],
   };

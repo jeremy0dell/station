@@ -178,8 +178,7 @@ describe("setup plan projection", () => {
       ["tmux-popup-binding", "warning"],
       ["worktrunk-hooks", "ok"],
       ["harness-tracking:codex", "ok"],
-      ["diffnav", "ok"],
-      ["git-delta", "ok"],
+      ["diff-viewer", "ok"],
       ["doctor", "warning"],
     ]);
   });
@@ -263,7 +262,7 @@ describe("setup plan projection", () => {
       schemaVersion: 1 as const,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source" as const,
-      version: "0.0.0-pre-alpha.4",
+      version: "0.0.0-pre-alpha.5",
       buildIdentity: "a".repeat(64),
     };
     const current = {
@@ -483,35 +482,23 @@ describe("setup plan projection", () => {
     });
   });
 
-  it("plans required Homebrew installs for missing diffnav and git-delta", () => {
+  it("plans one required Homebrew install for a missing diff viewer", () => {
     const plan = buildSetupPlan(
       facts({
-        diffnav: { status: "missing", command: "diffnav", message: "diffnav missing." },
-        gitDelta: { status: "missing", command: "delta", message: "git-delta missing." },
+        diffViewer: { status: "missing", command: "hunk", message: "Hunk missing." },
       }),
     );
 
-    expect(plan.summary.requiredMissing).toBe(2);
-    // Both checks stay required+missing (guards a silent tier demotion to optional).
-    expect(plan.checks.find((check) => check.id === "diffnav")).toMatchObject({
+    expect(plan.summary.requiredMissing).toBe(1);
+    expect(plan.checks.find((check) => check.id === "diff-viewer")).toMatchObject({
       tier: "required",
       status: "missing",
     });
-    expect(plan.checks.find((check) => check.id === "git-delta")).toMatchObject({
-      tier: "required",
-      status: "missing",
-    });
-    expect(plan.actions.find((action) => action.id === "install-diffnav")).toMatchObject({
+    expect(plan.actions.find((action) => action.id === "install-diff-viewer")).toMatchObject({
       kind: "brew-install",
       tier: "required",
       selected: true,
-      command: ["brew", "install", "diffnav"],
-    });
-    expect(plan.actions.find((action) => action.id === "install-git-delta")).toMatchObject({
-      kind: "brew-install",
-      tier: "required",
-      selected: true,
-      command: ["brew", "install", "git-delta"],
+      command: ["brew", "install", "hunk"],
     });
   });
 
@@ -1405,15 +1392,10 @@ function facts(overrides: Partial<SetupFacts> = {}): SetupFacts {
       resolvedPath: "/tmp/bin/bun",
     },
     stationUi: { status: "installed" },
-    diffnav: {
+    diffViewer: {
       status: "ok",
-      command: "diffnav",
-      resolvedPath: "/tmp/bin/diffnav",
-    },
-    gitDelta: {
-      status: "ok",
-      command: "delta",
-      resolvedPath: "/tmp/bin/delta",
+      command: "hunk",
+      resolvedPath: "/tmp/bin/hunk",
     },
     brew: {
       status: "ok",

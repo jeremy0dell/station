@@ -1,4 +1,4 @@
-import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import { paneTreeIds } from "../paneTree.js";
 import type { StationStore } from "../store.js";
 import { STATION_OVERLAY_ID } from "../types.js";

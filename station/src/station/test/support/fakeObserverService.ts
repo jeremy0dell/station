@@ -5,7 +5,7 @@ import type {
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
 } from "@station/client";
-import type { StationClientCommandCompletion, ObserverService } from "@station/dashboard-core";
+import type { StationClientCommandCompletion, ObserverService } from "@station/dashboard-core/runtime";
 
 export class FakeTuiObserverService implements ObserverService {
   readonly dispatched: StationCommand[] = [];
@@ -104,7 +104,7 @@ export class FakeTuiObserverService implements ObserverService {
   }
 
   readonly preparedLaunches: AgentPrepareExternalLaunchParams[] = [];
-  readonly reportedExits: string[] = [];
+  readonly reportedExits: AgentReportExternalExitParams[] = [];
   nextPreparedLaunch: AgentPrepareExternalLaunchResult = {
     kind: "existing-session",
     sessionId: "ses_fake",
@@ -121,7 +121,7 @@ export class FakeTuiObserverService implements ObserverService {
   async reportExternalExit(
     params: AgentReportExternalExitParams,
   ): Promise<AgentReportExternalExitResult> {
-    this.reportedExits.push(params.terminalTargetId);
+    this.reportedExits.push(params);
     return { acknowledged: true, terminalTargetId: params.terminalTargetId };
   }
 

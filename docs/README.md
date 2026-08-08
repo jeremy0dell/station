@@ -7,7 +7,7 @@ can use it or help improve it.
 
 > [!IMPORTANT]
 > Station is experimental pre-alpha software. The current public version is
-> `v0.0.0-pre-alpha.4`. Native binaries support macOS 13+ and glibc 2.39+ Linux
+> `v0.0.0-pre-alpha.5`. Native binaries support macOS 13+ and glibc 2.39+ Linux
 > on arm64 and x64.
 
 ## Start Here
@@ -26,7 +26,7 @@ Choose the path that matches what you want to do:
 Install the current release:
 
 ```sh
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh | sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh | sh
 ```
 
 Then complete and verify setup:
@@ -73,6 +73,7 @@ only when that boundary is involved.
 - [Local development](local-development.md) — run isolated observer, TUI, and tmux development lanes.
 - [Architecture](architecture.md) — understand repository-wide boundaries and sources of truth.
 - [Observer architecture](observer-architecture.md) — work with Observer ports, adapters, flows, persistence, and dependency direction.
+- [Dashboard architecture](dashboard-architecture.md) — work with the dashboard runtime, role entrypoints, and state ownership.
 - [TUI development](tui.md) — change the OpenTUI workspace and its tests.
 - [Harness authoring](harness-authoring.md) — add or upgrade an agent harness integration.
 - [System dependencies](system-dependencies.md) — understand external tools and setup checks.

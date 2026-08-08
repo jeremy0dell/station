@@ -11,10 +11,10 @@ import { isReturnKey } from "../keys.js";
 import { addPendingRemoveWorktreeRow } from "../localRows.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
-import type { DashboardScreenView, DashboardSnapshotView, TuiState } from "../types.js";
+import type { DashboardScreenView, DashboardSnapshotView, DashboardState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
-type RemoveWorktreeScreen = Extract<TuiState["screen"], { name: "removeWorktree" }>;
+type RemoveWorktreeScreen = Extract<DashboardState["screen"], { name: "removeWorktree" }>;
 type RemoveWorktreeScreenView = Extract<DashboardScreenView, { name: "removeWorktree" }>;
 
 export type RemoveWorktreeActionId = "confirm.delete" | "confirm.keep";
@@ -36,7 +36,7 @@ export function removeWorktreeScreenBehavior(screen: RemoveWorktreeScreenView) {
   return assertNever(screen);
 }
 
-export function handleRemoveWorktreeKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleRemoveWorktreeKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "removeWorktree") {
     return { state };
   }
@@ -77,7 +77,10 @@ export function isExternalAgentRemovalUnavailable(
   );
 }
 
-export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: SessionId): TuiState {
+export function openRemoveWorktreeConfirmForRow(
+  state: DashboardState,
+  rowId: SessionId,
+): DashboardState {
   if (state.screen.name !== "dashboard" && state.screen.name !== "removeWorktree") {
     return state;
   }
@@ -113,7 +116,7 @@ export function openRemoveWorktreeConfirmForRow(state: TuiState, rowId: SessionI
   };
 }
 
-function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
+function handleConfirmKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "removeWorktree" || state.screen.step !== "confirm") {
     return { state };
   }
@@ -141,7 +144,7 @@ function handleConfirmKey(state: TuiState, key: TuiKey): TuiTransition {
 
 /** Applies a visible Remove confirmation action after validating the active screen. */
 export function handleRemoveWorktreeAction(
-  state: TuiState,
+  state: DashboardState,
   actionId: RemoveWorktreeActionId,
 ): TuiTransition {
   if (state.screen.name !== "removeWorktree" || state.screen.step !== "confirm") {
@@ -156,7 +159,7 @@ export function handleRemoveWorktreeAction(
 }
 
 function deleteRemoveWorktree(
-  state: TuiState,
+  state: DashboardState,
   screen: Extract<RemoveWorktreeScreen, { step: "confirm" }>,
 ): TuiTransition {
   const snapshot = state.snapshot;
@@ -249,7 +252,7 @@ function removeWorktreeForceRequired(
   );
 }
 
-function cancelRemoveWorktree(state: TuiState): TuiState {
+function cancelRemoveWorktree(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
 }
 

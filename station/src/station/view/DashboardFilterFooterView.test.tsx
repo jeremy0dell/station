@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { DashboardFilterFooterSegment } from "@station/dashboard-core";
+import type { DashboardFilterFooterSegment } from "@station/dashboard-core/selectors";
 import { act } from "react";
 import { nativeStationTheme, StationThemeProvider } from "../../theme/index.js";
 import type { StationMouseTarget } from "../input/stationMouse.js";

@@ -5,16 +5,14 @@
 // toast overlay, kind-specific expiry timers, and explicit error dismissal.
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand/react";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import { commandPromptRows, snapshotLoadingLines } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
-  commandPromptRows,
   isTuiToastHiddenByScreen,
   nextTuiToastExpiry,
-  snapshotLoadingLines,
   tuiScreenBehavior,
-  type DashboardActions,
-  type DashboardStateSource,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/state";
 import { ActiveScreenOverlayView } from "./ActiveScreenOverlayView.js";
 import { CommandPromptView } from "./CommandPromptView.js";
 import { DashboardFooterView } from "./DashboardFooterView.js";
@@ -43,7 +41,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
   const snapshot = useStore(state, (state) => state.snapshot);
   const loading = useStore(state, (state) => state.loading);
   const screen = useStore(state, (state) => state.screen);
-  const searchQuery = useStore(state, (state) => state.searchQuery);
   const persistentFilter = useStore(state, (state) => state.persistentFilter);
   const collapsedProjectIds = useStore(state, (state) => state.collapsedProjectIds);
   const scrollOffset = useStore(state, (state) => state.scrollOffset);
@@ -128,7 +125,6 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
         <DashboardView
           snapshot={snapshot}
           viewState={{
-            searchQuery,
             collapsedProjectIds,
             scrollOffset,
             terminalRows: rows,

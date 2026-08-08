@@ -1,11 +1,6 @@
-import {
-  addProjectActions,
-  addProjectRows,
-  addProjectSelectedIndexForFlow,
-  bottomSheetContentWidth,
-  type AddProjectFlowStateView,
-  type TuiSelectionState,
-} from "@station/dashboard-core";
+import { bottomSheetContentWidth } from "@station/dashboard-core/selectors";
+import { addProjectActions, addProjectRows, addProjectSelectedIndexForFlow } from "@station/dashboard-core/state";
+import type { AddProjectFlowStateView, TuiSelectionState } from "@station/dashboard-core/state";
 import { EditableTextInputView } from "../EditableTextInputView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import {

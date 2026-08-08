@@ -1,15 +1,15 @@
-import type { ProjectId, SafeError, SessionId } from "@station/contracts";
+import type { ProjectId, SessionId } from "@station/contracts";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
 import type { ClientNotice } from "../services/types.js";
 import { focusDashboardProjectHeader } from "./dashboardFocus.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
-import type { PendingCreateSessionRow } from "./localRows.js";
 import {
   activateEmptyProjectAction,
   activateProjectHeaderControl,
 } from "./projectHeaderActions.js";
+import { activateDashboardRowById, openDashboardRowShell } from "./rowActivation.js";
 import { tuiScreenBehavior } from "./screenBehavior.js";
 import { handleAddProjectAction, selectAddProjectRow } from "./screens/addProjectScreen.js";
 import { handleFirstProjectAddAction } from "./screens/dashboard.js";
@@ -47,34 +47,25 @@ import {
   widgetSettingsRemoveAt,
   widgetSettingsToggleAt,
 } from "./screens/widgetSettings.js";
-import type { TuiControlIntent, TuiRuntimeContext, TuiTransition } from "./transition.js";
+import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
   DashboardFilterConditionField,
+  DashboardState,
   ProjectHeaderControl,
   ProjectSettingsItemId,
-  TuiState,
 } from "./types.js";
 
-/** Result of a dashboard action, including any one-shot renderer-owned control intent. */
-export type DashboardActionResult = {
-  dismissPopup: boolean;
-  exitCode?: number;
-  controlIntent?: TuiControlIntent;
-};
-
 /**
- * The sole external mutation authority for dashboard state.
+ * The void-returning closed mutation and effect surface for dashboard consumers.
  *
- * Actions apply dashboard transitions and effects without exposing the private
- * Zustand store or a generic state setter.
+ * Semantic execution is fully owned by the runtime and its injected capabilities;
+ * callers cannot intercept renderer metadata or mutate optimistic rows directly.
  */
 export type DashboardActions = {
-  /** Applies a key transition and returns any one-shot renderer-owned control intent. */
-  handleKey(key: TuiKey): DashboardActionResult;
-  /** Resolves typed actions through the shared transition and effect path. */
-  dispatch(action: DashboardAction): DashboardActionResult;
-  /** Create a project session immediately with its configured default harness. */
-  createQuickSession(projectId: string): void;
+  /** Apply one translated key through the pure transition and runtime effect path. */
+  handleKey(key: TuiKey): void;
+  /** Resolve one typed action through the shared transition and runtime effect path. */
+  dispatch(action: DashboardAction): void;
   setTerminalRows(rows: number): void;
   /** Synchronize row focus from a canonical observer session identity. */
   focusDashboardSession(sessionId: SessionId): void;
@@ -85,12 +76,6 @@ export type DashboardActions = {
   dismissToasts(): void;
   expireToasts(nowMs?: number): void;
   refreshActiveToastExpiry(nowMs?: number): void;
-  /** Adds a pending hosted-create row until its workspace lifecycle resolves. */
-  addPendingCreateSession(row: PendingCreateSessionRow): void;
-  /** Moves a pending row to retained failure; the caller owns expiry and scheduled removal. */
-  failPendingCreateSession(localId: string, error: SafeError, expiresAt: number): void;
-  /** Removes a pending or retained-failure hosted-create row by local identity. */
-  removePendingCreateSession(localId: string): void;
 };
 
 export type PersistentFilterActionId = "persistentFilter.edit" | "persistentFilter.clear";
@@ -98,6 +83,8 @@ export type PersistentFilterActionId = "persistentFilter.edit" | "persistentFilt
 /** User-interaction subset of {@link DashboardAction}, shared by pointer and keyboard activation. */
 export type TuiSemanticAction =
   | { type: "dashboard.addProject" }
+  | { type: "dashboard.row.activate"; rowId: SessionId }
+  | { type: "dashboard.rowShell.open"; rowId: SessionId }
   | { type: PersistentFilterActionId }
   | {
       type: "persistentFilter.condition.selectField";
@@ -151,13 +138,17 @@ export type DashboardAction = TuiSemanticAction | DashboardStateAction;
 
 /** Resolves a dashboard action through the same pure transition model used by keyboard input. */
 export function handleTuiAction(
-  state: TuiState,
+  state: DashboardState,
   action: DashboardAction,
   context: TuiRuntimeContext,
 ): TuiTransition {
   switch (action.type) {
     case "dashboard.addProject":
       return handleFirstProjectAddAction(state, context);
+    case "dashboard.row.activate":
+      return activateDashboardRowById(state, action.rowId);
+    case "dashboard.rowShell.open":
+      return openDashboardRowShell(state, action.rowId);
     case "persistentFilter.edit":
       return openDashboardPersistentFilter(state);
     case "persistentFilter.clear":
@@ -195,7 +186,10 @@ export function handleTuiAction(
   }
 }
 
-function handleDashboardStateAction(state: TuiState, action: DashboardStateAction): TuiTransition {
+function handleDashboardStateAction(
+  state: DashboardState,
+  action: DashboardStateAction,
+): TuiTransition {
   switch (action.type) {
     case "dashboard.scroll":
       return stateTransition(scrollDashboard(state, action.delta));
@@ -218,7 +212,7 @@ function handleDashboardStateAction(state: TuiState, action: DashboardStateActio
 }
 
 function handleDashboardScreenAction(
-  state: TuiState,
+  state: DashboardState,
   action: Extract<
     DashboardStateAction,
     | { type: "screen.clickAway" }
@@ -254,7 +248,7 @@ function handleDashboardScreenAction(
 }
 
 function handleDashboardWidgetAction(
-  state: TuiState,
+  state: DashboardState,
   action: Extract<DashboardStateAction, { type: `widgetSettings.${string}` }>,
 ): TuiTransition {
   switch (action.type) {
@@ -277,6 +271,6 @@ function assertNeverAction(action: never): never {
   throw new Error(`Unhandled dashboard action: ${JSON.stringify(action)}`);
 }
 
-function stateTransition(state: TuiState): TuiTransition {
+function stateTransition(state: DashboardState): TuiTransition {
   return { state };
 }

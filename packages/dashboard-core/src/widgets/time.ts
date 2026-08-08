@@ -1,4 +1,4 @@
-import type { TuiTimeWidgetConfig } from "@station/config";
+import type { TuiTimeWidgetConfig } from "@station/contracts";
 
 export function formatTimeWidget(date: Date, config: TuiTimeWidgetConfig): string {
   const hours = date.getHours();

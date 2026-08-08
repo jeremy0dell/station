@@ -28,6 +28,7 @@ import {
   tmuxPopupBindingBlock,
   tmuxPopupBindingEndMarker,
 } from "../checks/tmuxBinding.js";
+import { defaultDiffViewer } from "../defaultDiffViewer.js";
 import type { SetupApplyFileSystem, SetupCommandDeps } from "../types.js";
 import { createSetupConfigAdapter } from "./config.js";
 import { createHarnessTrackingAdapter } from "./harnessTracking.js";
@@ -650,10 +651,8 @@ function toolFormula(tool: SetupToolInstallOperation["tool"]): string {
       return "tmux";
     case "bun":
       return "bun";
-    case "diffnav":
-      return "diffnav";
-    case "git-delta":
-      return "git-delta";
+    case "diff-viewer":
+      return defaultDiffViewer.formula;
     default:
       return assertNever(tool);
   }

@@ -5,17 +5,17 @@ import {
   sessionForWorktreeRow,
   sessionRowDisplayTitle,
 } from "../../selectors/dashboardSessionRows.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export type OpenRenameEditForRowOptions = {
   returnTo?: "dashboard";
 };
 
 export function openRenameEditForRow(
-  state: TuiState,
+  state: DashboardState,
   rowId: string,
   options: OpenRenameEditForRowOptions = {},
-): TuiState {
+): DashboardState {
   if (!canOpenRenameFromScreen(state)) {
     return state;
   }
@@ -24,7 +24,7 @@ export function openRenameEditForRow(
     return state;
   }
   const currentTitle = sessionRowDisplayTitle(resolved, state.localRows);
-  const screen: Extract<TuiState["screen"], { name: "renameSession"; step: "editName" }> = {
+  const screen: Extract<DashboardState["screen"], { name: "renameSession"; step: "editName" }> = {
     name: "renameSession",
     step: "editName",
     rowId: resolved.id,
@@ -38,14 +38,14 @@ export function openRenameEditForRow(
   return { ...state, screen };
 }
 
-function canOpenRenameFromScreen(state: TuiState): boolean {
+function canOpenRenameFromScreen(state: DashboardState): boolean {
   return (
     state.screen.name === "dashboard" ||
     (state.screen.name === "renameSession" && state.screen.step === "chooseSlot")
   );
 }
 
-function resolveCurrentRowSession(state: TuiState, rowId: string) {
+function resolveCurrentRowSession(state: DashboardState, rowId: string) {
   const snapshot = state.snapshot;
   if (snapshot === undefined) {
     return undefined;

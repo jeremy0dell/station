@@ -2,10 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
-import {
-  createInitialTuiState,
-  type DashboardStateSource,
-} from "@station/dashboard-core";
+import type { DashboardStateSource } from "@station/dashboard-core/runtime";
+import { createInitialTuiState } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
 import { createStationStore } from "../state/store.js";

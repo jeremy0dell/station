@@ -13,7 +13,6 @@ import { buildMouseReportSequence } from "./input/mouseReport.js";
 import { type MouseButtonName, MouseTracking } from "./protocol/mouse.js";
 import type { VtRow } from "./vt/rows.js";
 import type { MouseProtocol, StationVtScreen } from "./vt/screen.js";
-import { nativeStationTheme, stationColorSnapshotValue } from "../theme/index.js";
 import {
   type CellPoint,
   type CellSelection,
@@ -31,6 +30,10 @@ const MULTI_CLICK_MS = 400;
 
 export type TerminalScreenOptions = RenderableOptions<TerminalScreenRenderable> & {
   screen?: StationVtScreen | null;
+  /** UI-theme-owned default foreground used when a VT span keeps default-color intent. */
+  defaultForeground: `#${string}`;
+  /** UI-theme-owned selection background, already resolved to an opaque RGB snapshot. */
+  selectionBackground: `#${string}`;
   /**
    * Fires with the laid-out interior size in cells. This is the source of
    * truth for PTY and screen dimensions: border, padding, and surrounding
@@ -56,6 +59,8 @@ export class TerminalScreenRenderable extends Renderable {
   #onCopySelection: ((text: string) => void) | undefined;
   #onForwardInput: ((bytes: string) => void) | undefined;
   #now: () => number;
+  #defaultForeground: `#${string}`;
+  #selectionBackground: `#${string}`;
   #rows: VtRow[] = [];
   #rowsVersion = -1;
   // Self-managed selection (we don't use OpenTUI's selectable path so the
@@ -83,6 +88,8 @@ export class TerminalScreenRenderable extends Renderable {
     this.#onCopySelection = options.onCopySelection;
     this.#onForwardInput = options.onForwardInput;
     this.#now = options.now ?? Date.now;
+    this.#defaultForeground = options.defaultForeground;
+    this.#selectionBackground = options.selectionBackground;
     this.screen = options.screen ?? null;
   }
 
@@ -103,12 +110,10 @@ export class TerminalScreenRenderable extends Renderable {
     this.#resetSelection();
     this.#middleDown = null;
     if (value !== null) {
-      this.#unsubscribe = value.subscribe(() => {
-        // Output or a scroll changes what the selection's viewport cells show,
-        // so a settled selection's highlight/deferred copy would go stale. Drop
-        // it — but leave an in-progress drag (anchor set) to finish and copy on
-        // release.
-        if (this.#anchor === null) {
+      this.#unsubscribe = value.subscribe((invalidation) => {
+        // Output or a scroll changes what selected viewport cells show; repaint-only
+        // updates preserve the selection while rebuilding its color projection.
+        if (invalidation === "content" && this.#anchor === null) {
           this.#resetSelection();
         }
         this.requestRender();
@@ -127,6 +132,22 @@ export class TerminalScreenRenderable extends Renderable {
 
   set onForwardInput(handler: ((bytes: string) => void) | undefined) {
     this.#onForwardInput = handler;
+  }
+
+  set defaultForeground(value: `#${string}`) {
+    if (this.#defaultForeground === value) {
+      return;
+    }
+    this.#defaultForeground = value;
+    this.requestRender();
+  }
+
+  set selectionBackground(value: `#${string}`) {
+    if (this.#selectionBackground === value) {
+      return;
+    }
+    this.#selectionBackground = value;
+    this.requestRender();
   }
 
   protected override onLayoutResize(width: number, height: number): void {
@@ -456,8 +477,8 @@ export class TerminalScreenRenderable extends Renderable {
       this.#rowsVersion = version;
     }
 
-    const defaultFg = rgbaForHex(nativeStationTheme.terminal.defaultForeground.value);
-    const selectionBg = rgbaForHex(stationColorSnapshotValue(nativeStationTheme.pane.selection));
+    const defaultFg = rgbaForHex(this.#defaultForeground);
+    const selectionBg = rgbaForHex(this.#selectionBackground);
     // Order the selection once per frame, not once per row.
     const orderedSelection = this.#selection === null ? null : orderSelection(this.#selection);
     const rowLimit = Math.min(this.#rows.length, this.height);

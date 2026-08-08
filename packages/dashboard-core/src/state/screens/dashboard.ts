@@ -11,7 +11,6 @@ import {
   moveDashboardFocusHorizontal,
 } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
-import type { DashboardSearchExperience } from "../experiences/dashboardSearch.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
 import {
@@ -21,19 +20,21 @@ import {
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import { openAddProject } from "./addProjectScreen.js";
-import { clearDashboardPersistentFilter } from "./persistentFilter.js";
+import {
+  clearDashboardPersistentFilter,
+  openDashboardPersistentFilter,
+} from "./persistentFilter.js";
 import { openProjectSlotPicker } from "./projectSlotPicker.js";
 import { openWidgetSettings } from "./widgetSettings.js";
 
 export const dashboardScreenBehavior = { dashboardHoverEnabled: true };
 
 export function handleDashboardKey(
-  state: TuiState,
+  state: DashboardState,
   key: TuiKey,
   context: TuiRuntimeContext,
-  dashboardSearchExperience: DashboardSearchExperience,
 ): TuiTransition {
   const mouseScrollDelta = mouseScrollDeltaForKey(key);
   if (mouseScrollDelta !== 0) {
@@ -47,15 +48,14 @@ export function handleDashboardKey(
     return { state };
   }
 
-  return handleDashboardAction(state, binding.action, context, key, dashboardSearchExperience);
+  return handleDashboardAction(state, binding.action, context, key);
 }
 
 function handleDashboardAction(
-  state: TuiState,
+  state: DashboardState,
   action: TuiDashboardAction,
   context: TuiRuntimeContext,
   key: TuiKey,
-  dashboardSearchExperience: DashboardSearchExperience,
 ): TuiTransition {
   switch (action) {
     case "tui.focus.up":
@@ -99,17 +99,15 @@ function handleDashboardAction(
         },
       };
     case "tui.exit":
-      return exitOrDismissPopup(state);
+      return exitDashboardRenderer(state);
     case "tui.popup.dismiss": {
       if (state.persistentFilter !== undefined) {
         return clearDashboardPersistentFilter(state);
       }
-      return state.runtime.persistentPopup && state.runtime.canDismissPopup
-        ? { state, dismissPopup: true }
-        : { state };
+      return { state, operations: [{ type: "dismissDashboard" }] };
     }
-    case "tui.search.open":
-      return dashboardSearchExperience.open(state);
+    case "tui.filter.open":
+      return openDashboardPersistentFilter(state);
     case "tui.rename.open":
       return {
         state: {
@@ -155,7 +153,7 @@ function handleDashboardAction(
 
 /** Executes dashboard Add Project intent independently of the input modality. */
 export function handleDashboardAddProjectAction(
-  state: TuiState,
+  state: DashboardState,
   context: TuiRuntimeContext,
 ): TuiTransition {
   if (state.screen.name !== "dashboard") return { state };
@@ -166,13 +164,13 @@ export function handleDashboardAddProjectAction(
 
 /** Keeps stale first-project targets inert after the dashboard gains a project. */
 export function handleFirstProjectAddAction(
-  state: TuiState,
+  state: DashboardState,
   context: TuiRuntimeContext,
 ): TuiTransition {
   return hasNoProjects(state) ? handleDashboardAddProjectAction(state, context) : { state };
 }
 
-function hasNoProjects(state: TuiState): boolean {
+function hasNoProjects(state: DashboardState): boolean {
   return state.snapshot?.projects.length === 0;
 }
 
@@ -180,21 +178,14 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled dashboard binding: ${JSON.stringify(value)}`);
 }
 
-function exitOrDismissPopup(state: TuiState): TuiTransition {
-  if (state.runtime.persistentPopup && state.runtime.canDismissPopup) {
-    return {
-      state,
-      dismissPopup: true,
-    };
-  }
-
+function exitDashboardRenderer(state: DashboardState): TuiTransition {
   return {
     state,
-    exitCode: 0,
+    operations: [{ type: "exitDashboardRenderer", exitCode: 0 }],
   };
 }
 
-function activateDashboardSlot(state: TuiState, key: TuiKey): TuiTransition {
+function activateDashboardSlot(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }
@@ -220,7 +211,7 @@ function mouseScrollDeltaForKey(key: TuiKey): -1 | 0 | 1 {
   return 0;
 }
 
-function openNewSession(state: TuiState): TuiTransition {
+function openNewSession(state: DashboardState): TuiTransition {
   if (state.snapshot === undefined) {
     return { state };
   }

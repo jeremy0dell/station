@@ -11,6 +11,11 @@ import {
   RetentionPolicySchema,
   STATION_SCHEMA_VERSION,
   TraceContextSchema,
+  UiLifecycleEventSchema,
+  UiLifecycleSurfaceSchema,
+  UiRunContextSchema,
+  UiShutdownReasonSchema,
+  UiSurfaceChangeReasonSchema,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import type { ZodType } from "zod";
@@ -63,6 +68,61 @@ describe("diagnostics schemas", () => {
       ((await loadJson("doctor-report.json")) as { retention: unknown }).retention,
       "retention policy",
     );
+  });
+
+  it("parses strict cross-process UI lifecycle records", () => {
+    const rendererExit = {
+      timestamp: "2026-05-20T12:00:00.000Z",
+      component: "cli",
+      eventId: "launcher:2",
+      kind: "renderer.exited",
+      uiRunId: "ui_11111111-1111-4111-8111-111111111111",
+      source: { id: "launcher", sequence: 2, pid: 100 },
+      rendererPid: 101,
+      exitCode: null,
+      signal: "SIGTERM",
+    };
+    expect(UiLifecycleEventSchema.parse(rendererExit)).toEqual(rendererExit);
+    const { rendererPid: _rendererPid, ...pidlessRendererExit } = rendererExit;
+    expect(UiLifecycleEventSchema.safeParse(pidlessRendererExit).success).toBe(false);
+    expect(UiLifecycleEventSchema.safeParse({ ...rendererExit, signal: "TERM" }).success).toBe(
+      false,
+    );
+    expect(
+      UiLifecycleEventSchema.safeParse({ ...rendererExit, causalEventId: "event_unused" }).success,
+    ).toBe(false);
+    expect(UiShutdownReasonSchema.safeParse("signal").success).toBe(false);
+    expect(UiSurfaceChangeReasonSchema.safeParse("startup").success).toBe(false);
+    expect(UiLifecycleSurfaceSchema.parse("welcome")).toBe("welcome");
+    const hostDetach = {
+      timestamp: rendererExit.timestamp,
+      component: "station-host",
+      eventId: "host:3",
+      kind: "host.attachment.detached",
+      uiRunId: rendererExit.uiRunId,
+      source: { id: "host", sequence: 3, pid: 200 },
+      connectionId: "conn-1",
+      attachmentId: "att-1",
+      rendererPid: 101,
+      clientKind: "native_renderer",
+      ptyId: "pty-1",
+      reason: "client_shutdown",
+    };
+    expect(UiLifecycleEventSchema.parse(hostDetach)).toEqual(hostDetach);
+    expect(UiLifecycleEventSchema.safeParse({ ...hostDetach, reason: "unknown" }).success).toBe(
+      false,
+    );
+    expect(
+      UiRunContextSchema.parse({
+        uiRunId: rendererExit.uiRunId,
+        rendererPid: rendererExit.rendererPid,
+        clientKind: "native_renderer",
+      }),
+    ).toEqual({
+      uiRunId: rendererExit.uiRunId,
+      rendererPid: rendererExit.rendererPid,
+      clientKind: "native_renderer",
+    });
   });
 
   it("parses a minimal diagnostic snapshot with trace-aware command and event records", () => {
@@ -150,7 +210,7 @@ describe("diagnostics schemas", () => {
         schemaVersion: 1,
         launcher: "/checkout/station/bin/stn-ingress",
         runtimeKind: "source",
-        version: "0.0.0-pre-alpha.4",
+        version: "0.0.0-pre-alpha.5",
         buildIdentity: "a".repeat(64),
       },
     };

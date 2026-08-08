@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { DashboardRuntime } from "@station/dashboard-core";
+import type { DashboardRuntime } from "@station/dashboard-core/runtime";
 import { act } from "react";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";

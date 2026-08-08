@@ -1,5 +1,4 @@
 import type { AuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
-import type { ManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import type { PtyRegistry } from "../terminal/registry/ptyRegistry.js";
 import type { Automation } from "../config/stationConfig.js";
 import type { StationStore } from "../state/store.js";
@@ -12,9 +11,8 @@ import {
 } from "../state/types.js";
 import { sanitizePastedText } from "../station/input/sequenceToTuiKey.js";
 import { dispatchStationKey } from "../station/input/stationActions.js";
-import type { ObserverService } from "@station/client";
-import type { ProviderId } from "@station/contracts";
-import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core";
+import type { StationClientStateSource } from "@station/client";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import {
   routeKey,
   routeMouse,
@@ -33,20 +31,16 @@ import {
   providerSupportsModifiedEnterSoftNewline,
 } from "./runtime/sequenceNormalize.js";
 import { executeOutcome } from "./runtime/executeOutcome.js";
-import { createPaneEffects } from "./runtime/paneEffects.js";
-import { createManagedLaunch, type ManagedLaunchTarget } from "./runtime/managedLaunch.js";
+import { createPaneEffects, type PaneEffects } from "./runtime/paneEffects.js";
 
 type StationInputDashboard = {
+  /** Dashboard-local screen, focus, filter, optimistic-row, and toast projection. */
   state: DashboardStateSource;
+  /** Canonical Observer snapshot and connection state owned by the client runtime. */
+  clientState: StationClientStateSource;
   actions: Pick<
     DashboardActions,
-    | "addPendingCreateSession"
-    | "dismissToasts"
-    | "dispatch"
-    | "failPendingCreateSession"
-    | "handleKey"
-    | "pushToast"
-    | "removePendingCreateSession"
+    "dismissToasts" | "dispatch" | "handleKey" | "pushToast"
   >;
 };
 
@@ -99,35 +93,6 @@ export type StationInputEffects = {
    * attached agents only detach because observer owns their lifecycle.
    */
   closePane(paneId: PaneId): void;
-  /**
-   * Managed launches are fire-and-forget so input stays consumed while observer
-   * preparation and local spawn finish; failures surface as STATION toasts.
-   */
-  launchPrimaryAgent(paneId: PaneId, target: ManagedLaunchTarget): void;
-  /**
-   * Create a new worktree and host its primary agent in a Station pane (the New
-   * Session wizard's submit). Fire-and-forget like launchPrimaryAgent: it closes
-   * the wizard, creates the worktree, then runs the same managed launch a row
-   * click uses; failures surface as a STATION toast.
-   */
-  launchHostedNewSession(target: {
-    projectId: string;
-    title: string;
-    branch: string;
-    harness: ProviderId;
-  }): void;
-  /**
-   * Seed a worktree off a source's HEAD (worktree.fork) and host the inherited
-   * harness in a Station pane (the Fork details submit); fire-and-forget like
-   * launchHostedNewSession.
-   */
-  launchHostedForkSession(target: {
-    projectId: string;
-    sourceWorktreeId: string;
-    title: string;
-    branch: string;
-    copyDirty: boolean;
-  }): void;
   openExternalUrl(url: string): void;
 };
 
@@ -181,10 +146,8 @@ export type StationInputRuntimeOptions = {
    * Absent in tests/mock mode ⇒ aux shells are always local.
    */
   resolveAuxShellPlacement?: AuxShellPlacement;
-  /** Resolves opaque managed-agent attachments before any pane is created. */
-  managedTerminalAttacher?: ManagedTerminalAttacher;
-  /** Observer service for managed primary-agent launches; absent in mock mode. */
-  observerService?: ObserverService;
+  /** Prebuilt pane effects supplied by native composition after registry setup. */
+  paneEffects?: PaneEffects;
   openExternalUrl?: (url: string) => void;
   /** Configured automations surfaced in the pane context menu; default none. */
   automations?: readonly Automation[];
@@ -209,23 +172,18 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
   const mouseBindings = options.mouseBindings ?? createStationMouseBindings(options.dashboardRuntime);
   const registry = options.registry;
 
-  const paneEffects = createPaneEffects({
-    store: options.store,
-    dashboardState: options.dashboardRuntime?.state,
-    registry,
-    resolveAuxShellPlacement: options.resolveAuxShellPlacement,
-    autoCloseOverlay: options.autoCloseOverlayOnPaneOpen ?? false,
-    automations: options.automations ?? [],
-    writeToTerminal: options.writeToTerminal,
-    pasteToTerminal: options.pasteToTerminal,
-  });
-  const managed = createManagedLaunch({
-    store: options.store,
-    dashboardRuntime: options.dashboardRuntime,
-    observerService: options.observerService,
-    registry,
-    managedTerminalAttacher: options.managedTerminalAttacher,
-  });
+  const paneEffects =
+    options.paneEffects ??
+    createPaneEffects({
+      store: options.store,
+      clientState: options.dashboardRuntime?.clientState,
+      registry,
+      resolveAuxShellPlacement: options.resolveAuxShellPlacement,
+      autoCloseOverlay: options.autoCloseOverlayOnPaneOpen ?? false,
+      automations: options.automations ?? [],
+      writeToTerminal: options.writeToTerminal,
+      pasteToTerminal: options.pasteToTerminal,
+    });
 
   // Pane chords are `reserved`, so they pierce the context-menu catch-all; gate on that real modal
   // state so split/close/focus stay inert while a context menu owns the screen.
@@ -263,9 +221,6 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
     splitPane: paneEffects.splitPane,
     runAutomation: paneEffects.runAutomation,
     closePane: paneEffects.closePane,
-    launchPrimaryAgent: managed.launchPrimaryAgent,
-    launchHostedNewSession: managed.launchHostedNewSession,
-    launchHostedForkSession: managed.launchHostedForkSession,
     openExternalUrl: options.openExternalUrl ?? (() => {}),
   };
   if (options.dashboardRuntime !== undefined) {
@@ -278,7 +233,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
       const normalized = normalizeSequence(sequence, {
         preserveModifiedEnter: focusedPaneAcceptsModifiedEnter(state, registry, (providerId) =>
           providerSupportsModifiedEnterSoftNewline(
-            options.dashboardRuntime?.state.getState().snapshot,
+            options.dashboardRuntime?.clientState.getState().snapshot,
             providerId,
           ),
         ),
@@ -309,10 +264,7 @@ export function createStationInputRuntime(options: StationInputRuntimeOptions): 
         if (sanitized.length === 0) {
           return;
         }
-        const outcome = dispatchStationKey(options.dashboardRuntime, { input: sanitized });
-        if (outcome.kind === "close-overlay") {
-          executeOutcome({ kind: "overlay-close", overlayId: STATION_OVERLAY_ID }, effects);
-        }
+        dispatchStationKey(options.dashboardRuntime, { input: sanitized });
         return;
       }
       if (executeOutcome(routePaste(text, options.store.getState()), effects)) {

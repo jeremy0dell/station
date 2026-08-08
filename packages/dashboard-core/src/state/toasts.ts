@@ -1,8 +1,23 @@
 import type { ClientNotice } from "../services/types.js";
 import { toastExpiryMs } from "./timing.js";
-import type { DashboardScreenView, DashboardStateView, TuiState, TuiToastEntry } from "./types.js";
+import type {
+  DashboardScreenView,
+  DashboardState,
+  DashboardStateView,
+  TuiToastEntry,
+} from "./types.js";
 
-export function addTuiToast(state: TuiState, toast: ClientNotice, nowMs = Date.now()): TuiState {
+/** Standard feedback for a semantic dashboard identity absent from canonical state. */
+export const STALE_DASHBOARD_TARGET_NOTICE = {
+  kind: "info",
+  message: "That dashboard item is no longer available.",
+} as const satisfies ClientNotice;
+
+export function addTuiToast(
+  state: DashboardState,
+  toast: ClientNotice,
+  nowMs = Date.now(),
+): DashboardState {
   const current = expireTuiToasts(state, nowMs);
   const active = activeTuiToast(current);
 
@@ -24,17 +39,17 @@ export function addTuiToast(state: TuiState, toast: ClientNotice, nowMs = Date.n
 }
 
 export function addTuiToasts(
-  state: TuiState,
+  state: DashboardState,
   toasts: readonly ClientNotice[],
   nowMs = Date.now(),
-): TuiState {
+): DashboardState {
   if (toasts.length === 0) {
     return state;
   }
   return toasts.reduce((current, toast) => addTuiToast(current, toast, nowMs), state);
 }
 
-export function expireTuiToasts(state: TuiState, nowMs = Date.now()): TuiState {
+export function expireTuiToasts(state: DashboardState, nowMs = Date.now()): DashboardState {
   const toasts = state.toasts.filter(
     (entry) => entry.expiresAt === undefined || entry.expiresAt > nowMs,
   );
@@ -47,7 +62,10 @@ export function expireTuiToasts(state: TuiState, nowMs = Date.now()): TuiState {
   };
 }
 
-export function refreshActiveTuiToastExpiry(state: TuiState, nowMs = Date.now()): TuiState {
+export function refreshActiveTuiToastExpiry(
+  state: DashboardState,
+  nowMs = Date.now(),
+): DashboardState {
   const active = activeTuiToast(state);
   if (active === undefined || active.expiresAt === undefined) {
     return state;
@@ -73,7 +91,7 @@ export function activeTuiToast(
 }
 
 export function isTuiToastHiddenByScreen(screen: DashboardScreenView): boolean {
-  if (screen.name === "dashboard" || screen.name === "search") {
+  if (screen.name === "dashboard") {
     return false;
   }
   return screen.name !== "renameSession" || screen.step === "editName";

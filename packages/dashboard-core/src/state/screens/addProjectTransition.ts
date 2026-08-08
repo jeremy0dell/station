@@ -2,10 +2,10 @@ import { transitionAddProjectFlow } from "../../flows/addProject/flow.js";
 import type { AddProjectFlowAction, AddProjectFlowEffect } from "../../flows/addProject/types.js";
 import { reconcileAddProjectSelection } from "../selection/addProject.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export function applyAddProjectAction(
-  state: TuiState,
+  state: DashboardState,
   action: AddProjectFlowAction,
   parentPath?: (path: string) => string,
 ): TuiTransition {

@@ -5,8 +5,7 @@ import type { CliEnv } from "../../env.js";
 import { createSetupOperationAdapter } from "./adapters/operations.js";
 import { checkBrewDependency } from "./checks/brew.js";
 import { checkSetupBun } from "./checks/bun.js";
-import { checkSetupDiffnav } from "./checks/diffnav.js";
-import { checkSetupGitDelta } from "./checks/gitDelta.js";
+import { checkSetupDiffViewer } from "./checks/diffViewer.js";
 import type { SetupDependencyCheckOptions } from "./checks/system.js";
 import { checkSetupTmux } from "./checks/tmux.js";
 import { checkSetupToolchain, type ToolchainFact } from "./checks/toolchain.js";
@@ -39,8 +38,9 @@ export async function runSetupSystemCommand(
     if (!initial.compiled && initial.bun.status === "missing") {
       operations.push(systemInstallOperation("bun"));
     }
-    if (initial.diffnav.status === "missing") operations.push(systemInstallOperation("diffnav"));
-    if (initial.gitDelta.status === "missing") operations.push(systemInstallOperation("git-delta"));
+    if (initial.diffViewer.status === "missing") {
+      operations.push(systemInstallOperation("diff-viewer"));
+    }
     const executeOperation = createSetupOperationAdapter({ deps });
     // System prerequisites are ordered and fail-fast, so later installs never run after a required package failure.
     for (const operation of operations) {
@@ -77,8 +77,7 @@ type SystemFacts = {
   worktrunk: Awaited<ReturnType<typeof checkSetupWorktrunk>>;
   tmux: Awaited<ReturnType<typeof checkSetupTmux>>;
   bun: Awaited<ReturnType<typeof checkSetupBun>>;
-  diffnav: Awaited<ReturnType<typeof checkSetupDiffnav>>;
-  gitDelta: Awaited<ReturnType<typeof checkSetupGitDelta>>;
+  diffViewer: Awaited<ReturnType<typeof checkSetupDiffViewer>>;
   brew: Awaited<ReturnType<typeof checkBrewDependency>>;
   toolchain: Awaited<ReturnType<typeof checkSetupToolchain>>;
 };
@@ -91,14 +90,13 @@ async function collectSystemFacts(
   const env = deps.env ?? options.env;
   const compiled = deps.compiled ?? isCompiledBinary();
   const dependencyOptions = dependencyOptionsForCommand(deps, env);
-  const [worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain] = await Promise.all([
+  const [worktrunk, tmux, bun, diffViewer, brew, toolchain] = await Promise.all([
     checkSetupWorktrunk(dependencyOptions),
     checkSetupTmux(dependencyOptions),
     compiled
       ? Promise.resolve({ status: "ok" as const, command: "bun" })
       : checkSetupBun(dependencyOptions),
-    checkSetupDiffnav(dependencyOptions),
-    checkSetupGitDelta(dependencyOptions),
+    checkSetupDiffViewer(dependencyOptions),
     checkBrewDependency({
       ...(deps.runner === undefined ? {} : { runner: deps.runner }),
       ...(env === undefined ? {} : { env }),
@@ -112,7 +110,7 @@ async function collectSystemFacts(
       ...(deps.nodeVersion === undefined ? {} : { nodeVersion: deps.nodeVersion }),
     }),
   ]);
-  return { compiled, worktrunk, tmux, bun, diffnav, gitDelta, brew, toolchain };
+  return { compiled, worktrunk, tmux, bun, diffViewer, brew, toolchain };
 }
 
 function projectSystemView(
@@ -125,8 +123,7 @@ function projectSystemView(
     ...(facts.compiled
       ? []
       : [dependencySystemRow(facts.bun.status, setupMessageRef("label.bun"))]),
-    dependencySystemRow(facts.diffnav.status, setupMessageRef("label.diffnav")),
-    dependencySystemRow(facts.gitDelta.status, setupMessageRef("label.git-delta")),
+    dependencySystemRow(facts.diffViewer.status, setupMessageRef("label.diff-viewer")),
     {
       status: facts.brew.status === "ok" ? "ok" : facts.brew.status,
       label: setupMessageRef("label.homebrew"),
@@ -160,8 +157,7 @@ function systemReady(facts: SystemFacts): boolean {
     facts.worktrunk.status === "ok" &&
     facts.tmux.status === "ok" &&
     (facts.compiled || facts.bun.status === "ok") &&
-    facts.diffnav.status === "ok" &&
-    facts.gitDelta.status === "ok" &&
+    facts.diffViewer.status === "ok" &&
     facts.toolchain.node.status === "ok" &&
     facts.toolchain.pnpm.status === "ok"
   );
@@ -191,9 +187,7 @@ function systemToolInstallLabel(input: {
         ? setupMessageRef("label.tmux")
         : operation.tool === "bun"
           ? setupMessageRef("label.bun")
-          : operation.tool === "diffnav"
-            ? setupMessageRef("label.diffnav")
-            : setupMessageRef("label.git-delta");
+          : setupMessageRef("label.diff-viewer");
   return text(
     setupMessageRef("action.install-label", {
       label: resolveSetupMessage(label),

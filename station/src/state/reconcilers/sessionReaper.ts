@@ -18,6 +18,8 @@ export type SessionReaperDeps = {
    * as a mass removal.
    */
   observerInstanceId: () => string | undefined;
+  /** Proven-exited panes retain their transcript and tree after graph removal. */
+  hasProvenExit: (paneId: PaneId) => boolean;
   /**
    * Terminate a pane's PTY before its record is dropped. dispose() alone only
    * detaches an aux host PTY, leaving it reattachable; a no-op for the
@@ -32,10 +34,10 @@ export type SessionReaperDeps = {
  *
  * Owns the set of sessions seen live, re-baselined per observer instance. A
  * managed session reaches the snapshot only after its launch stamps the pane,
- * so a pane whose session has never appeared is mid-launch, not removed; only a
+ * so a pane whose session has never appeared is mid-launch, not removed. A
+ * proven-exited pane retains its transcript even after graph removal; every other
  * session seen live and now gone is reaped. An observer restart re-baselines the
- * set: the empty snapshot it serves before its startup reconcile must not read
- * as a mass removal that reaps every live agent pane.
+ * set so its empty pre-reconcile snapshot cannot reap every live agent pane.
  */
 export function createSessionReaper(deps: SessionReaperDeps): () => void {
   const seenSessionIds = new Set<string>();
@@ -61,7 +63,12 @@ export function createSessionReaper(deps: SessionReaperDeps): () => void {
       }
       if (liveSessionIds.has(sessionId)) {
         seenSessionIds.add(sessionId);
-      } else if (seenSessionIds.delete(sessionId)) {
+      } else if (seenSessionIds.has(sessionId)) {
+        if (deps.hasProvenExit(pane.id)) {
+          seenSessionIds.delete(sessionId);
+          continue;
+        }
+        seenSessionIds.delete(sessionId);
         for (const paneId of paneTreeIds(deps.store.getState().workspace.panes, pane.id)) {
           deps.killPane(paneId);
         }

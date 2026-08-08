@@ -8,6 +8,7 @@ import type {
   ProviderDoctorCheck,
   ProviderHealth,
   ProviderId,
+  ReleaseManagedTerminalTargetRequest,
   SessionId,
   TerminalCapabilities,
   TerminalIdentityBinding,
@@ -53,6 +54,7 @@ export type StationTerminalProviderOptions = {
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
  * mode supplies process lifecycle and opaque attachment identity. Native
  * presentation remains locally owned by Station and is never externally focusable.
+ * Deterministic targets are released only when their current Station session matches.
  */
 export class StationTerminalProvider implements ManagedTerminalLifecycle {
   readonly id: ProviderId = STATION_TERMINAL_PROVIDER_ID;
@@ -64,6 +66,8 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   // host.list). listTargets drops ONLY these when their process is gone; a UI-hosted
   // fallback target (host was unavailable at launch) is kept until releaseTarget.
   readonly #hostBackedTargets = new Set<string>();
+  #targetRevision = 0;
+  #listRequestSequence = 0;
 
   constructor(options: StationTerminalProviderOptions = {}) {
     this.#clock = options.clock ?? systemClock;
@@ -140,6 +144,9 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     if (this.#host === undefined) {
       return [...this.#targets.values()];
     }
+    this.#listRequestSequence += 1;
+    const requestSequence = this.#listRequestSequence;
+    const targetRevision = this.#targetRevision;
     let live: HostListEntry[];
     try {
       live = await this.#host.client().list();
@@ -147,6 +154,11 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       if (isStationHostCompatibilityError(error)) {
         throw error;
       }
+      return [...this.#targets.values()];
+    }
+    // A response cannot overwrite a target rebound, released, or host-backed
+    // after this request began; a newer list request also supersedes this view.
+    if (requestSequence !== this.#listRequestSequence || targetRevision !== this.#targetRevision) {
       return [...this.#targets.values()];
     }
     const aliveById = new Map<string, HostListEntry>();
@@ -205,6 +217,10 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     observation.focusable = false;
     observation.closeable = false;
     this.#targets.set(targetId, observation);
+    // Re-registration starts a new provisional generation; Host ownership must be
+    // proven again by this generation's spawn or a matching live Host entry.
+    this.#hostBackedTargets.delete(targetId);
+    this.#targetRevision += 1;
     return {
       target: binding,
       agentEndpointId: targetId,
@@ -230,14 +246,17 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     const handle = await this.#host.ensure();
     if (handle.status !== "running") {
       if (isStationHostCompatibilityError(handle.error)) {
-        await this.releaseTarget(request.terminalTarget.targetId);
+        this.#releaseLaunchTarget(request);
         throw handle.error;
       }
       return localLaunchResult(request);
     }
     try {
       await handle.client.spawn(buildSpawnParams(request));
-      this.#hostBackedTargets.add(request.terminalTarget.targetId);
+      if (this.#targetMatchesLaunch(request)) {
+        this.#hostBackedTargets.add(request.terminalTarget.targetId);
+        this.#targetRevision += 1;
+      }
       return {
         ...base,
         started: true,
@@ -248,7 +267,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       };
     } catch (error) {
       // A rejected host spawn must not leave the provisional target visible to reconcile.
-      await this.releaseTarget(request.terminalTarget.targetId);
+      this.#releaseLaunchTarget(request);
       throw error;
     }
   }
@@ -259,8 +278,13 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     if (this.#host === undefined) {
       return undefined;
     }
-    const entry = await this.#liveEntry(targetId);
-    if (entry === undefined) {
+    const expectedSessionId = this.#targets.get(targetId)?.sessionId;
+    const entry = await this.#liveEntry(targetId, expectedSessionId);
+    if (
+      entry === undefined ||
+      (expectedSessionId !== undefined &&
+        this.#targets.get(targetId)?.sessionId !== expectedSessionId)
+    ) {
       return undefined;
     }
     return { kind: "managed-terminal", terminalTargetId: targetId };
@@ -281,12 +305,44 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
    * Drop an abandoned or exited target so the next reconcile removes the session.
    * Host-backed liveness in `listTargets` is the other removal path.
    */
-  async releaseTarget(targetId: TerminalTargetId): Promise<boolean> {
-    this.#hostBackedTargets.delete(targetId);
-    return this.#targets.delete(targetId);
+  async releaseTarget(request: ReleaseManagedTerminalTargetRequest): Promise<boolean> {
+    const target = this.#targets.get(request.targetId);
+    if (target?.sessionId !== request.expectedSessionId) {
+      return false;
+    }
+    this.#hostBackedTargets.delete(request.targetId);
+    const released = this.#targets.delete(request.targetId);
+    if (released) {
+      this.#targetRevision += 1;
+    }
+    return released;
   }
 
-  async #liveEntry(targetId: TerminalTargetId): Promise<HostListEntry | undefined> {
+  #targetMatchesLaunch(request: TerminalLaunchProcessRequest): boolean {
+    const sessionId = request.terminalTarget.sessionId;
+    return (
+      sessionId !== undefined &&
+      this.#targets.get(request.terminalTarget.targetId)?.sessionId === sessionId
+    );
+  }
+
+  #releaseLaunchTarget(request: TerminalLaunchProcessRequest): boolean {
+    const sessionId = request.terminalTarget.sessionId;
+    if (sessionId === undefined || !this.#targetMatchesLaunch(request)) {
+      return false;
+    }
+    this.#hostBackedTargets.delete(request.terminalTarget.targetId);
+    const released = this.#targets.delete(request.terminalTarget.targetId);
+    if (released) {
+      this.#targetRevision += 1;
+    }
+    return released;
+  }
+
+  async #liveEntry(
+    targetId: TerminalTargetId,
+    expectedSessionId?: SessionId,
+  ): Promise<HostListEntry | undefined> {
     if (this.#host === undefined) {
       return undefined;
     }
@@ -300,7 +356,11 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       return undefined;
     }
     return live.find(
-      (entry) => entry.kind === "agent" && entry.terminalTargetId === targetId && entry.alive,
+      (entry) =>
+        entry.kind === "agent" &&
+        entry.terminalTargetId === targetId &&
+        entry.alive &&
+        (expectedSessionId === undefined || entry.sessionId === expectedSessionId),
     );
   }
 

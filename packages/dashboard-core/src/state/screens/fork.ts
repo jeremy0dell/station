@@ -8,14 +8,16 @@ import {
 } from "../../components/EditableTextInput/editing.js";
 import { createNewSessionNameToken } from "../../flows/newSession.js";
 import { selectDashboardSessionRow } from "../../selectors/dashboardSessionRows.js";
-import { buildForkSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
 import { isReturnKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { DashboardScreenView, DashboardSnapshotView, TuiState } from "../types.js";
+import type { DashboardScreenView, DashboardSnapshotView, DashboardState } from "../types.js";
 import { handleDashboardRowChoiceKey } from "./rowChoose.js";
 
-export type ForkDetailsScreen = Extract<TuiState["screen"], { name: "fork"; step: "details" }>;
+export type ForkDetailsScreen = Extract<
+  DashboardState["screen"],
+  { name: "fork"; step: "details" }
+>;
 type ForkScreenView = Extract<DashboardScreenView, { name: "fork" }>;
 type ForkDetailsScreenView = Extract<ForkScreenView, { step: "details" }>;
 
@@ -50,8 +52,7 @@ export type ForkSessionCreateValidation =
     }
   | { ok: false; message: string };
 
-// Single source of truth for fork submit validation, shared by the machine's
-// submitFork (inline error) and the native station submit resolver (intercept).
+// Single source of truth for fork submit validation across every input modality.
 export function validateForkSessionCreate(
   snapshot: DashboardSnapshotView,
   screen: ForkDetailsScreenView,
@@ -77,7 +78,7 @@ export function validateForkSessionCreate(
 
 const FOCUS_ORDER = ["name", "copyDirty", "submit"] as const;
 
-export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleForkKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "fork") {
     return { state };
   }
@@ -94,7 +95,7 @@ export function handleForkKey(state: TuiState, key: TuiKey): TuiTransition {
 
 /** Applies a visible Fork details action after validating the active screen. */
 export function handleForkSessionAction(
-  state: TuiState,
+  state: DashboardState,
   actionId: ForkSessionActionId,
 ): TuiTransition {
   if (state.screen.name !== "fork" || state.screen.step !== "details") {
@@ -124,10 +125,10 @@ export type OpenForkDetailsOptions = {
 
 // The dashboard action resolver uses this pure transition to skip chooseSlot for context-menu entry.
 export function openForkDetailsForRow(
-  state: TuiState,
+  state: DashboardState,
   rowId: SessionId,
   options: OpenForkDetailsOptions = {},
-): TuiState {
+): DashboardState {
   if (state.screen.name !== "dashboard" && state.screen.name !== "fork") {
     return state;
   }
@@ -195,7 +196,11 @@ function availableForkBranch(
   return candidate;
 }
 
-function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScreen): TuiTransition {
+function handleDetailsKey(
+  state: DashboardState,
+  key: TuiKey,
+  screen: ForkDetailsScreen,
+): TuiTransition {
   if (key.escape === true) {
     return { state: backFromForkDetails(state) };
   }
@@ -242,7 +247,7 @@ function handleDetailsKey(state: TuiState, key: TuiKey, screen: ForkDetailsScree
   return { state };
 }
 
-function backFromForkDetails(state: TuiState): TuiState {
+function backFromForkDetails(state: DashboardState): DashboardState {
   if (state.screen.name !== "fork" || state.screen.step !== "details") {
     return state;
   }
@@ -255,7 +260,7 @@ function backFromForkDetails(state: TuiState): TuiState {
   };
 }
 
-function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
+function submitFork(state: DashboardState, screen: ForkDetailsScreen): TuiTransition {
   if (state.snapshot === undefined) {
     return { state: { ...state, screen: { name: "dashboard" } } };
   }
@@ -265,37 +270,37 @@ function submitFork(state: TuiState, screen: ForkDetailsScreen): TuiTransition {
     return rejected(state, screen, validation.message);
   }
 
-  // Omit base + harness so the observer pins base to the source HEAD and inherits the
-  // source worktree's harness; copyDirty is passed explicitly from the toggle.
-  const command = buildForkSessionCommand({
-    project: validation.project,
-    sourceWorktreeId: validation.sourceWorktreeId,
-    title: validation.title,
-    branch: validation.branch,
-    copyDirty: validation.copyDirty,
-  });
-  if (command.type !== "session.fork") {
-    return { state };
-  }
+  const source = state.snapshot.rows.find(
+    (candidate) => candidate.id === validation.sourceWorktreeId,
+  );
+  const inheritedHarness =
+    source?.agent?.harness ?? source?.recovery?.provider ?? validation.project.defaults.harness;
 
+  // Close the pure screen before execution so Copy-focused Enter can only toggle,
+  // while every actual submit observes the dashboard before its capability starts.
   return {
     state: { ...state, screen: { name: "dashboard" } },
     operations: [
       {
-        type: "forkSession",
+        type: "forkManagedSession",
         localId: `fork:${validation.sourceWorktreeId}:${validation.branch}`,
-        projectId: screen.projectId,
+        project: validation.project,
         sourceWorktreeId: validation.sourceWorktreeId,
         title: validation.title,
-        branch: validation.branch,
-        command,
+        hiddenBranch: validation.branch,
+        copyDirty: validation.copyDirty,
+        ...(inheritedHarness === undefined ? {} : { inheritedHarness }),
       },
     ],
   };
 }
 
 // The validation error rides on the spread and clears on the next submit, which re-validates.
-function rejected(state: TuiState, screen: ForkDetailsScreen, message: string): TuiTransition {
+function rejected(
+  state: DashboardState,
+  screen: ForkDetailsScreen,
+  message: string,
+): TuiTransition {
   return { state: { ...state, screen: { ...screen, validationError: message } } };
 }
 

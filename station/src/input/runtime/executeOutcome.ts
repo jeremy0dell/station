@@ -1,7 +1,8 @@
 import { buildContextMenuItems, resolveContextMenuAction } from "../../contextMenu/items.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";
+import { attentionKeysFromSnapshot } from "../../stationButton/status.js";
 import type { RouteOutcome } from "../router.js";
-import type { OpenPaneSpawn, StationInputEffects } from "../stationInput.js";
+import type { StationInputEffects } from "../stationInput.js";
 
 /**
  * Applies a route outcome and reports whether the input was consumed.
@@ -32,6 +33,9 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
       // the overlay later lands on the workspace, not back on the intro. No-op
       // when the intro is not showing.
       effects.store.actions.dismissWelcomeIntro();
+      if (outcome.overlayId === STATION_OVERLAY_ID) {
+        dismissCurrentAttention(effects);
+      }
       effects.store.actions.openOverlay(outcome.overlayId);
       return true;
     case "welcome-dismiss":
@@ -54,48 +58,6 @@ export function executeOutcome(outcome: RouteOutcome, effects: StationInputEffec
       return true;
     case "context-menu-select":
       selectContextMenuItem(effects, outcome.itemIndex);
-      return true;
-    case "pane-open": {
-      // Explicit assignments keep command/args/worktreeId absent (not set to
-      // undefined) on the shell path — exactOptionalPropertyTypes.
-      const spawn: OpenPaneSpawn = { cwd: outcome.cwd, role: outcome.role };
-      if (outcome.command !== undefined) {
-        spawn.command = outcome.command;
-      }
-      if (outcome.args !== undefined) {
-        spawn.args = outcome.args;
-      }
-      if (outcome.worktreeId !== undefined) {
-        spawn.worktreeId = outcome.worktreeId;
-      }
-      effects.openPane(outcome.paneId, spawn);
-      return true;
-    }
-    case "pane-launch-managed":
-      // Fire-and-forget: the launch is async (it round-trips to the observer),
-      // but the input is consumed now so OpenTUI does not also act on the click.
-      effects.launchPrimaryAgent(outcome.paneId, {
-        projectId: outcome.projectId,
-        worktreeId: outcome.worktreeId,
-        cwd: outcome.cwd,
-      });
-      return true;
-    case "pane-launch-new-session":
-      effects.launchHostedNewSession({
-        projectId: outcome.projectId,
-        title: outcome.title,
-        branch: outcome.branch,
-        harness: outcome.harness,
-      });
-      return true;
-    case "pane-launch-fork":
-      effects.launchHostedForkSession({
-        projectId: outcome.projectId,
-        sourceWorktreeId: outcome.sourceWorktreeId,
-        title: outcome.title,
-        branch: outcome.branch,
-        copyDirty: outcome.copyDirty,
-      });
       return true;
     case "open-url":
       effects.openExternalUrl(outcome.url);
@@ -166,6 +128,7 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
           rowId: action.rowId,
           returnTo: "dashboard",
         });
+        dismissCurrentAttention(effects);
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
@@ -191,8 +154,15 @@ function selectContextMenuItem(effects: StationInputEffects, itemIndex: number |
           rowId: action.rowId,
           returnTo: "dashboard",
         });
+        dismissCurrentAttention(effects);
         effects.store.actions.openOverlay(STATION_OVERLAY_ID);
       }
       return;
   }
+}
+
+/** Quiet the island alert for every session currently asking for the user. */
+function dismissCurrentAttention(effects: StationInputEffects): void {
+  const snapshot = effects.dashboardRuntime?.state.getState().snapshot;
+  effects.store.actions.dismissAttentionKeys(attentionKeysFromSnapshot(snapshot));
 }

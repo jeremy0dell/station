@@ -1,7 +1,7 @@
 # Install Station
 
 Station is experimental pre-alpha software. The current public version is
-`v0.0.0-pre-alpha.4`.
+`v0.0.0-pre-alpha.5`.
 
 ## Binary Requirements
 
@@ -33,11 +33,11 @@ If you prefer an agent-led install, paste this prompt into a coding agent on the
 target machine:
 
 ```text
-Install experimental Station v0.0.0-pre-alpha.4 and validate setup on this machine.
+Install experimental Station v0.0.0-pre-alpha.5 and validate setup on this machine.
 
 Safety and scope:
 - Do not clone the repository or build from source. Use only
-  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh`.
+  `https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh`.
 - Install to `~/.local/bin` unless I approve another location. Do not edit any
   shell startup file. If the installer reports a PATH mismatch, do not assume
   an export persists across agent tool calls or reaches my Terminal. Use the
@@ -71,10 +71,10 @@ choices.
 From any directory, run:
 
 ```bash
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh | sh
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh | sh
 ```
 
-The released `install.sh` is stamped with `v0.0.0-pre-alpha.4`. With no
+The released `install.sh` is stamped with `v0.0.0-pre-alpha.5`. With no
 arguments it downloads only that tag's matching native archive and
 `SHA256SUMS` over unauthenticated HTTPS. The old `v0.7.1-rc.*` releases were
 internal previews, not predecessors in the public version line.
@@ -138,7 +138,7 @@ it separately.
 Pass an absolute or home-relative path through the exact installer:
 
 ```bash
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.4/install.sh | \
+curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh | \
   sh -s -- --install-dir "$HOME/bin"
 ```
 
@@ -173,7 +173,7 @@ inspects the current state before continuing. Native Homebrew and agent-installe
 live between explicit Station start and finish boundaries; no Clack prompt or spinner competes for
 the terminal.
 
-Setup checks or offers to install or upgrade Worktrunk, tmux, diffnav, and git-delta;
+Setup checks or offers to install or upgrade Worktrunk, tmux, and Hunk;
 requires a runnable supported agent CLI; writes a valid zero-project
 `~/.config/station/config.toml`; starts or restarts the Observer; and offers
 Worktrunk shell integration and the `Ctrl-b Space` tmux popup binding. Setup may replace tmux's
@@ -310,7 +310,7 @@ guarantee, and power loss can also leave old/new cross-filesystem `LICENSE`
 metadata. Inspect the absolute installed `stn --version` and both locks before
 retrying after a machine loss.
 
-The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, diffnav and git-delta for diff automation, and a supported agent CLI for agent sessions.
+The compiled binary launches the native TUI and Observer without Node.js, pnpm, Bun, `node_modules`, or a source checkout. External programs are installed separately and gate only the features that use them: Git and Worktrunk for managed worktrees, tmux for popup/provider behavior, Hunk for diff automation, and a supported agent CLI for agent sessions.
 
 Every public version carries its own exact-tag stamped installer asset.
 Published tags and assets are immutable; do not delete, move, or overwrite
@@ -327,7 +327,7 @@ stn setup
 stn
 ```
 
-`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, diffnav, git-delta), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. See [Development](development.md) for the current source workflow and test gates.
+`bootstrap.sh` runs `brew bundle` (Node 24, Bun, Worktrunk, tmux, Hunk), then `pnpm install`, `pnpm build`, the Bun UI install (`cd station && bun install && bun run link:station && bun run repair:node-pty`), and `pnpm station:link`. That final command uses pnpm 11's supported global-add path to expose `stn`, `stn-ingress`, and `stn-tmux-popup` while keeping them bound to the checkout. The Bun step matters: `station/` is a separate Bun workspace, not a pnpm-workspace member, so `pnpm install` never installs it — skip it and bare `stn` refuses to launch with an install hint (the underlying failure is "@opentui not found"). If you manage your own runtimes, the manual steps below are equivalent. See [Development](development.md) for the current source workflow and test gates.
 
 ## Development Requirements
 
@@ -337,7 +337,7 @@ For a complete source-development workflow, `stn setup check` exits 1 until thes
 - Worktrunk `wt` for core worktree setup
 - tmux for the reference terminal provider and popup path
 - Bun — source-checkout `stn` renders the TUI through `bun run`; compiled `stn` embeds the renderer
-- diffnav and git-delta for the "See diff (split right)" automation
+- Hunk for the "See diff (split right)" automation
 - One agent CLI: Claude Code, Codex, Cursor, OpenCode, or Pi
 
 `lsof` is a recommended recovery dependency rather than a launch prerequisite:
@@ -345,7 +345,7 @@ fresh startup works without it, while stale-socket recovery and Observer build
 handoff remain blocked until holder evidence is available.
 
 `bootstrap.sh`'s `brew bundle` installs the brew-available subset (Worktrunk,
-Bun, tmux, diffnav, git-delta, plus keg-only Node 24); Git / Command Line Tools
+Bun, tmux, Hunk, plus keg-only Node 24); Git / Command Line Tools
 are obtained separately, and guided `stn setup` can offer the supported agent
 CLIs described above.
 

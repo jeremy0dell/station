@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
+import type { UiShutdownReason } from "@station/contracts";
+import { createStationHostClient } from "@station/host";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
@@ -8,11 +10,13 @@ import { loadStationTuiConfig } from "./config/tuiConfig.js";
 import { createOpenTuiSelectionCopyHandler } from "./copy/openTuiSelection.js";
 import { createRuntimeClipboardEffects } from "./copy/runtimeClipboard.js";
 import { devRenderProfilePath } from "./host/devPaths.js";
+import { beginHotDisposal, waitForHotDisposal } from "./hmr/hotDisposalBarrier.js";
 import {
   getOrCreateStationHotRuntime,
   STATION_HOT_RUNTIME_VERSION,
   stationHotSlots,
 } from "./hmr/stationHotRuntime.js";
+import { invokeCleanup, settleCleanupSteps } from "./lifecycle/cleanup.js";
 import { createRenderProfiler, readRenderProfileEnabled } from "./profiling/renderProfiler.js";
 import {
   acquireStationTtyOwnership,
@@ -29,7 +33,11 @@ import { applyRestoreSeeds, planLayoutRestoreColdShells } from "./state/layout/r
 import { savedCwdExists } from "./state/layout/savedCwdExists.js";
 import { wireTerminalDiagnostics } from "./terminal/diagnostics.js";
 import { resolveAuxShellPlacement } from "./terminal/pty/auxShellPlacement.js";
-import { createHostAttachedTerminal } from "./terminal/pty/hostAttachedTerminal.js";
+import {
+  createHostAttachedTerminal,
+  type HostAttachedTerminalOptions,
+} from "./terminal/pty/hostAttachedTerminal.js";
+import { createStationHostManagedTerminalAttacher } from "./terminal/pty/managedTerminalAttacher.js";
 import { playStationAttentionSound } from "./sources/attentionSound.js";
 import { createStationClient } from "./sources/createStationClient.js";
 import { openExternalUrl } from "./openUrl.js";
@@ -38,6 +46,15 @@ import { resolveStationHostSocketPath } from "./sources/stationHostSocketPath.js
 import { resolveStationLayoutPath } from "./sources/stationLayoutPath.js";
 import { nativeStationTheme, StationThemeProvider } from "./theme/index.js";
 import type { PreparedPtyRuntime } from "./bin/packagedAssets.js";
+import {
+  createUiLifecycleWitness,
+  type UiLifecycleWitness,
+} from "./diagnostics/uiLifecycle.js";
+import { resolveUiRunContext } from "./diagnostics/uiRunContext.js";
+import {
+  observeUiSurfaceLifecycle,
+  selectUiLifecycleSurface,
+} from "./diagnostics/uiSurfaceLifecycle.js";
 
 export type RunStationMainOptions = {
   /** Compiled entrypoint seam: prepare embedded PTY assets after state-dir resolution. */
@@ -60,9 +77,10 @@ function readShellAutoCloseOverlay(value: string | undefined): boolean {
 }
 
 /**
- * Callable native OpenTUI process entry; standalone and HMR module startup invoke it once.
- * It acquires TTY ownership before other startup work and releases it only after
- * renderer shutdown; compiled startup may inject packaged PTY preparation.
+ * Callable native OpenTUI process entry and semantic lifecycle witness boundary.
+ * It acquires TTY ownership before other startup work, binds one validated run
+ * context into Host terminal factories, flushes shutdown evidence, and releases
+ * ownership only after renderer shutdown.
  */
 export async function runStationMain(options: RunStationMainOptions = {}): Promise<void> {
   const ownershipResult = await acquireStationTtyOwnership();
@@ -72,12 +90,18 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
     return;
   }
   const ttyOwnership = ownershipResult.kind === "owned" ? ownershipResult.ownership : undefined;
+  let uiLifecycle: UiLifecycleWitness | undefined;
   try {
-    const started = await startStationMain(options, ttyOwnership);
+    const started = await startStationMain(options, ttyOwnership, (created) => {
+      uiLifecycle = created;
+    });
     if (!started) {
       ttyOwnership?.release();
     }
   } catch (error) {
+    if (uiLifecycle !== undefined) {
+      await uiLifecycle.fatalShutdown(error);
+    }
     ttyOwnership?.release();
     throw error;
   }
@@ -86,8 +110,16 @@ export async function runStationMain(options: RunStationMainOptions = {}): Promi
 async function startStationMain(
   options: RunStationMainOptions,
   ttyOwnership: StationTtyOwnership | undefined,
+  onLifecycleCreated: (lifecycle: UiLifecycleWitness) => void,
 ): Promise<boolean> {
   const env = process.env;
+  const stationGlobalSlots = stationHotSlots();
+  // A prior renderer releases process-global stdin synchronously before dashboard settlement is awaited.
+  await invokeCleanup(() => stationGlobalSlots.__stationHotRenderer?.destroy()).catch(
+    reportNativeHotDisposalFailure,
+  );
+  await waitForHotDisposal(stationGlobalSlots);
+
   const stationClient = createStationClient(env, {
     onAttentionNeeded: () => {
       playStationAttentionSound();
@@ -100,7 +132,11 @@ async function startStationMain(
 
   const configsLoading = Promise.all([loadStationConfig({ env }), loadStationTuiConfig({ env })]);
 
-  const stationGlobalSlots = stationHotSlots();
+  const uiContext = resolveUiRunContext({
+    env,
+    slots: stationGlobalSlots,
+    clientKind: "native_renderer",
+  });
 
   // Resolve the layout snapshot path defensively: a missing HOME/XDG just disables
   // persistence (warn, keep running) rather than crashing the UI at boot.
@@ -128,12 +164,30 @@ async function startStationMain(
     console.error(`[station] persistent shells disabled: ${(error as Error).message}`);
   }
 
+  const createHostClient = (socketPath: string) =>
+    createStationHostClient({ socketPath, uiContext });
+  const createHostTerminal = (terminalOptions: HostAttachedTerminalOptions) =>
+    createHostAttachedTerminal({ ...terminalOptions, uiContext });
+  const auxShellPlacement =
+    hostSocketPath === undefined
+      ? undefined
+      : resolveAuxShellPlacement(hostSocketPath, createHostClient);
+  const managedTerminalAttacher =
+    hostSocketPath === undefined
+      ? undefined
+      : createStationHostManagedTerminalAttacher(hostSocketPath, {
+          listHost: (socketPath) => listLiveHostPtys(socketPath, { createClient: createHostClient }),
+          createTerminal: createHostTerminal,
+        });
+
   // Compatibility errors must escape before cold restore can drop warm panes or
   // layout persistence can rewrite the saved session.
   let liveHostPtys: Awaited<ReturnType<typeof listLiveHostPtys>>;
   try {
     liveHostPtys =
-      hostSocketPath === undefined ? undefined : await listLiveHostPtys(hostSocketPath);
+      hostSocketPath === undefined
+        ? undefined
+        : await listLiveHostPtys(hostSocketPath, { createClient: createHostClient });
   } catch (error) {
     const safeError = toSafeError(error, {
       tag: "TerminalProviderError",
@@ -160,7 +214,7 @@ async function startStationMain(
         cwdExists: savedCwdExists,
         listHost: async () => liveHostPtys,
         makeHostTerminal: (entry) => (options) =>
-          createHostAttachedTerminal({
+          createHostTerminal({
             hostSocketPath: socket,
             ptyId: entry.ptyId,
             size: { cols: options.size?.cols ?? 80, rows: options.size?.rows ?? 24 },
@@ -168,7 +222,7 @@ async function startStationMain(
             // closes the PTY; an agent reattach stays observer-owned (detach only).
             ...(entry.kind === "aux" ? { owned: true } : {}),
           }),
-        resolveAuxShellPlacement: resolveAuxShellPlacement(socket),
+        resolveAuxShellPlacement: resolveAuxShellPlacement(socket, createHostClient),
       });
     }
   }
@@ -185,16 +239,20 @@ async function startStationMain(
   if (tuiConfig.warning !== undefined) {
     console.error(`[station] ${tuiConfig.warning}`);
   }
+  const tuiLogger = createJsonlLogger({
+    component: "tui",
+    path: componentLogPath(stationConfig.stateDir, "tui"),
+  });
+  const uiLifecycle = createUiLifecycleWitness({ logger: tuiLogger, context: uiContext });
+  onLifecycleCreated(uiLifecycle);
+  await uiLifecycle.started();
   const ptyRuntime = await options.preparePtyRuntime?.(stationConfig.stateDir);
 
   // Corruption telemetry sink: detectors count regardless; with this wired they
   // also log to logs/tui.jsonl and write pane evidence dumps under
   // diagnostics/panes/.
   wireTerminalDiagnostics({
-    logger: createJsonlLogger({
-      component: "tui",
-      path: componentLogPath(stationConfig.stateDir, "tui"),
-    }),
+    logger: tuiLogger,
     dumpDir: join(stationConfig.stateDir, "diagnostics", "panes"),
   });
 
@@ -207,6 +265,7 @@ async function startStationMain(
     stationConfig.config,
     restorePlan?.workspace,
   );
+  stationRuntime.registry.updateTerminalTheme(nativeStationTheme.terminal);
   const { store } = stationRuntime;
   // Seed each restored pane's spawn cwd / host placement into the registry BEFORE the
   // reconciler runs its no-option ensure (which would otherwise capture
@@ -227,17 +286,34 @@ async function startStationMain(
 
   let rendererForInput: CliRenderer | undefined;
   let rootForShutdown: { unmount(): void } | undefined;
+  let stopSurfaceObservation: (() => void) | undefined;
   let shutdownStarted = false;
-  const finishProcessShutdown = (): void => {
+  const finishProcessShutdown = (reason: UiShutdownReason): void => {
     if (shutdownStarted) return;
     shutdownStarted = true;
+    stopSurfaceObservation?.();
     void (async () => {
-      rootForShutdown?.unmount();
-      rendererForInput?.destroy();
-      ptyRuntime?.dispose();
-      await stationClient.stop();
-      ttyOwnership?.release();
-      process.exit(0);
+      let exitCode = 0;
+      await uiLifecycle.shutdownRequested(reason);
+      try {
+        await settleCleanupSteps(
+          [
+            () => rootForShutdown?.unmount(),
+            () => rendererForInput?.destroy(),
+            () => ptyRuntime?.dispose(),
+            () => stationClient.stop(),
+          ],
+          "Native renderer shutdown cleanup failed.",
+        );
+        await uiLifecycle.shutdownCompleted(reason);
+      } catch (error) {
+        exitCode = 1;
+        await uiLifecycle.fatal(error);
+      } finally {
+        await uiLifecycle.flush();
+        ttyOwnership?.release();
+        process.exit(exitCode);
+      }
     })();
   };
   const station = createStation({
@@ -249,36 +325,38 @@ async function startStationMain(
     overlayWidthPercent: stationConfig.config.overlay_width_percent,
     overlayHeightPercent: stationConfig.config.overlay_height_percent,
     automations: stationConfig.config.automations,
-    ...tuiConfig.composition,
     clipboardEffects,
     openExternalUrl,
     ...(tuiConfig.config === undefined ? {} : { tuiConfig: tuiConfig.config }),
     ...(tuiConfig.configPath === undefined ? {} : { tuiConfigPath: tuiConfig.configPath }),
     shellAutoCloseOverlay: readShellAutoCloseOverlay(env.STATION_SHELL_AUTOCLOSE),
-    ...(hostSocketPath === undefined ? {} : { hostSocketPath }),
+    ...(auxShellPlacement === undefined ? {} : { resolveAuxShellPlacement: auxShellPlacement }),
+    ...(managedTerminalAttacher === undefined ? {} : { managedTerminalAttacher }),
     ...(layoutPath === undefined ? {} : { layout: { path: layoutPath } }),
     ...(ptyRuntime === undefined ? {} : { createTerminal: ptyRuntime.createTerminal }),
-    shutdown: finishProcessShutdown,
+    shutdown: () => finishProcessShutdown("ctrl_q"),
   });
-
-  // Under `bun --hot`, OpenTUI's stdin ownership is a process-global that outlives
-  // the reload and our dispose() may not run before the new createCliRenderer()
-  // below — which would then throw "stdin is already used". Destroy the prior
-  // renderer first (idempotent, frees stdin synchronously); stash on globalThis
-  // since module locals reset.
-  stationGlobalSlots.__stationHotRenderer?.destroy();
 
   if (ttyOwnership !== undefined && !currentStdinMatchesStationTty(ttyOwnership.identity)) {
     const error = stationTtyOwnershipUnavailableError();
     writeStartupError(error);
+    await uiLifecycle.fatalShutdown(error);
     await station.disposeForShutdown();
     ptyRuntime?.dispose();
     await stationClient.stop();
+    await uiLifecycle.flush();
     process.exitCode = 1;
     return false;
   }
   ttyOwnership?.setTakeoverHandler(() => {
-    void station.disposeForShutdown().then(finishProcessShutdown);
+    void (async () => {
+      try {
+        await station.disposeForShutdown();
+      } catch {
+        // The shutdown witness still owns the final fatal path after best-effort disposal.
+      }
+      finishProcessShutdown("tty_takeover");
+    })();
   });
 
   const copySelectedText = createOpenTuiSelectionCopyHandler(
@@ -321,19 +399,49 @@ async function startStationMain(
     ),
   );
 
+  await uiLifecycle.ready(selectUiLifecycleSurface(store.getState()));
+  stopSurfaceObservation = observeUiSurfaceLifecycle({ store, witness: uiLifecycle });
+
   if (import.meta.hot) {
     import.meta.hot.accept();
     import.meta.hot.dispose(() => {
-      station.disposeForHotReload();
-      root.unmount();
-      renderer.destroy();
-      // Don't clobber a newer reload's stashed renderer.
-      if (stationGlobalSlots.__stationHotRenderer === renderer) {
-        stationGlobalSlots.__stationHotRenderer = undefined;
-      }
+      beginHotDisposal(
+        stationGlobalSlots,
+        () =>
+          settleCleanupSteps(
+            [
+              // Renderer and stdin release cannot wait for asynchronous dashboard settlement.
+              () => stopSurfaceObservation?.(),
+              () => root.unmount(),
+              () => renderer.destroy(),
+              () => {
+                if (stationGlobalSlots.__stationHotRenderer === renderer) {
+                  delete stationGlobalSlots.__stationHotRenderer;
+                }
+              },
+              () => station.disposeForHotReload(),
+            ],
+            "Native Station HMR cleanup failed.",
+          ),
+        (error) => {
+          void uiLifecycle.fatal(error).catch(() => {
+            // HMR replacement ordering cannot depend on diagnostic persistence.
+          });
+        },
+      );
     });
   }
   return true;
+}
+
+function reportNativeHotDisposalFailure(error: unknown): void {
+  writeStartupError(
+    toSafeError(error, {
+      tag: "TuiLifecycleError",
+      code: "TUI_HMR_CLEANUP_FAILED",
+      message: "Native Station hot-reload cleanup failed.",
+    }),
+  );
 }
 
 function writeStartupError(error: { code: string; message: string; hint?: string }): void {

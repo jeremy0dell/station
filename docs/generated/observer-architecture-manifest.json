@@ -9500,13 +9500,13 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely."
+          "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its exact session target and discards only a seed whose target release is confirmed. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely."
         },
         {
           "name": "reportExternalExit",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Drop an externally-hosted target when the Station UI reports its PTY exited, so the next reconcile removes the session from both dashboards. Idempotent: an unknown target id is acknowledged without a reconcile."
+          "purpose": "Forgets only the exact managed target/session binding reported by Station. A missing expected session or superseded target fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`."
         }
       ],
       "imports": [
@@ -11353,6 +11353,43 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/popup.ts",
+      "declaration": "runPopupCommand",
+      "kind": "function",
+      "role": "COMPOSITION ROOT",
+      "purpose": "Owns Observer startup, exact-selector UI admission, popup reconcile, and tmux popup opening.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
+          "declaration": "requireMatchingStationUiObserverBuild",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/observerProcess.ts",
+          "declaration": "startObserver",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "integrations/terminal/tmux/src/popup/index.ts",
+          "declaration": "openTmuxPopup",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/protocol/src/client.ts",
+          "declaration": "createObserverClient",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/setup/adapters/config.ts",
       "declaration": "createSetupConfigAdapter",
       "kind": "function",
@@ -11603,12 +11640,27 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
+      "declaration": "requireMatchingStationUiObserverBuild",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Protects command-capable Station UI launch from delegating to a different-build Observer before renderer, reconcile, popup, or Host-producing effects.",
+      "dependencies": []
+    },
+    {
       "path": "apps/cli/src/commands/tui.ts",
       "declaration": "runTuiCommand",
       "kind": "function",
       "role": "COMPOSITION ROOT",
-      "purpose": "Owns Observer startup, resolved-config propagation, renderer process selection, and persistent popup control wiring.",
+      "purpose": "Owns one launcher-minted UI run identity per renderer child, Observer startup and exact-selector admission before renderer and reconcile effects, resolved-config propagation, exact child outcome evidence, renderer selection, and popup control wiring.",
       "dependencies": [
+        {
+          "path": "apps/cli/src/commands/stationUiBuildAdmission.ts",
+          "declaration": "requireMatchingStationUiObserverBuild",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
         {
           "path": "apps/cli/src/commands/tuiRendererControl.ts",
           "declaration": "attachTuiRendererControl",
@@ -12997,7 +13049,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its target and discards only the fresh session projection. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely.",
+      "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its exact session target and discards only a seed whose target release is confirmed. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
@@ -13013,7 +13065,7 @@
       "declaration": "reportExternalExit",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Drop an externally-hosted target when the Station UI reports its PTY exited, so the next reconcile removes the session from both dashboards. Idempotent: an unknown target id is acknowledged without a reconcile.",
+      "purpose": "Forgets only the exact managed target/session binding reported by Station. A missing expected session or superseded target fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`.",
       "dependencies": []
     },
     {
@@ -13606,6 +13658,38 @@
       "kind": "function",
       "role": "ADAPTER",
       "purpose": "Generates the OpenCode boundary that compacts events and delegates delivery to CLI ingress.",
+      "dependencies": [
+        {
+          "path": "integrations/harness/opencode/src/pluginScript.ts",
+          "declaration": "renderStationOpenCodePlugin",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "integrations/harness/opencode/src/pluginScript.ts",
+      "declaration": "renderStationOpenCodePlugin",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Renders the plugin body with install-time values JSON-encoded into the placeholder tokens, so the generated artifact stays valid standalone JS.",
+      "dependencies": [
+        {
+          "path": "integrations/harness/opencode/src/pluginScript.ts",
+          "declaration": "StationOpenCodePluginScriptInput",
+          "kind": "type",
+          "role": "ADAPTER",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "integrations/harness/opencode/src/pluginScript.ts",
+      "declaration": "StationOpenCodePluginScriptInput",
+      "kind": "type",
+      "role": "ADAPTER",
+      "purpose": "Renders the generated `station-agent-state.js` plugin body from `pluginScriptBody.js` with install-time values JSON-encoded into the `__STATION_*__` placeholder tokens.",
       "dependencies": []
     },
     {
@@ -13701,7 +13785,7 @@
       "declaration": "StationTerminalProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle and opaque attachment identity. Native presentation remains locally owned by Station and is never externally focusable.",
+      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle and opaque attachment identity. Native presentation remains locally owned by Station and is never externally focusable. Deterministic targets are released only when their current Station session matches.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -13765,7 +13849,7 @@
       "declaration": "createStationClientRuntime",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates an injected service or pinned Observer socket transport into one live client projection.",
+      "purpose": "Owns one canonical client projection and convergence-safe service over an injected or pinned Observer transport.",
       "dependencies": [
         {
           "path": "packages/client/src/observerService.ts",
@@ -13820,7 +13904,7 @@
       "declaration": "ManagedTerminalLifecycle",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree.",
+      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree. A local fallback may instead carry a provider-neutral output policy for the caller-owned process. Release forgets only the exact expected session binding and never terminates its process: `false` proves the binding was absent or superseded, while rejection leaves release uncertain.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",

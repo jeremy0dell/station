@@ -10,19 +10,17 @@ import {
   transitionNewSessionFlow,
   validateNewSessionCreate,
 } from "../../flows/newSession.js";
-import { buildCreateSessionCommand } from "../commandBuilders.js";
 import type { TuiKey } from "../keys.js";
-import { addPendingCreateSessionRow } from "../localRows.js";
 import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export const newSessionScreenBehavior = {
   dashboardHoverEnabled: false,
   clickAway: cancelNewSession,
 };
 
-export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleNewSessionKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "newSession") {
     return { state };
   }
@@ -52,7 +50,7 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
 }
 
 export function handleNewSessionAction(
-  state: TuiState,
+  state: DashboardState,
   actionId: NewSessionActionId,
 ): TuiTransition {
   if (state.screen.name !== "newSession") return { state };
@@ -60,7 +58,10 @@ export function handleNewSessionAction(
   return executeNewSessionIntent(state, newSessionIntentForAction(state.screen.flow, actionId));
 }
 
-function executeNewSessionIntent(state: TuiState, intent: NewSessionInputIntent): TuiTransition {
+function executeNewSessionIntent(
+  state: DashboardState,
+  intent: NewSessionInputIntent,
+): TuiTransition {
   if (intent.type === "none") return { state };
   if (intent.type === "submit") return submitNewSession(state);
   if (state.screen.name !== "newSession") return { state };
@@ -68,14 +69,17 @@ function executeNewSessionIntent(state: TuiState, intent: NewSessionInputIntent)
   return { state: applyNewSessionFlow(state, flow) };
 }
 
-function cancelNewSession(state: TuiState): TuiState {
+function cancelNewSession(state: DashboardState): DashboardState {
   if (state.screen.name !== "newSession") {
     return state;
   }
   return applyNewSessionAction(state, { type: "cancel" });
 }
 
-function applyNewSessionAction(state: TuiState, action: NewSessionFlowAction): TuiState {
+function applyNewSessionAction(
+  state: DashboardState,
+  action: NewSessionFlowAction,
+): DashboardState {
   if (state.screen.name !== "newSession") {
     return state;
   }
@@ -83,15 +87,15 @@ function applyNewSessionAction(state: TuiState, action: NewSessionFlowAction): T
 }
 
 function applyNewSessionFlow(
-  state: TuiState,
-  flow: Extract<TuiState["screen"], { name: "newSession" }>["flow"] | undefined,
-): TuiState {
+  state: DashboardState,
+  flow: Extract<DashboardState["screen"], { name: "newSession" }>["flow"] | undefined,
+): DashboardState {
   return flow === undefined
     ? { ...state, screen: { name: "dashboard" } }
     : seedNewSessionPickerCursor({ ...state, screen: { name: "newSession", flow } });
 }
 
-function submitNewSession(state: TuiState): TuiTransition {
+function submitNewSession(state: DashboardState): TuiTransition {
   if (state.screen.name !== "newSession" || state.snapshot === undefined) {
     return {
       state: {
@@ -104,43 +108,17 @@ function submitNewSession(state: TuiState): TuiTransition {
   const validation = validateNewSessionCreate(state.snapshot, state.screen.flow);
   if (!validation.ok) return { state };
 
-  const title = validation.title;
-  const branch = validation.branch;
-  const command = buildCreateSessionCommand({
-    project: validation.project,
-    title,
-    branch,
-    harnessProvider: validation.harnessProvider,
-  });
-  if (command.type !== "session.create") {
-    return { state };
-  }
-  const localId = `create:${validation.project.id}:${createNewSessionNameToken()}`;
-
+  // Close the pure screen before execution so every renderer observes the dashboard first.
   return {
-    state: addPendingCreateSessionRow(
-      {
-        ...state,
-        screen: { name: "dashboard" },
-      },
-      {
-        localId,
-        projectId: validation.project.id,
-        title,
-        branch,
-        harnessProvider: validation.harnessProvider,
-        createdAt: new Date().toISOString(),
-      },
-    ),
+    state: { ...state, screen: { name: "dashboard" } },
     operations: [
       {
-        type: "createSession",
-        localId,
-        projectId: validation.project.id,
-        title,
-        branch,
-        harnessProvider: validation.harnessProvider,
-        command,
+        type: "createManagedSession",
+        localId: `create:${validation.project.id}:${createNewSessionNameToken()}`,
+        project: validation.project,
+        title: validation.title,
+        hiddenBranch: validation.branch,
+        harness: validation.harnessProvider,
       },
     ],
   };

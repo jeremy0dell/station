@@ -1,22 +1,24 @@
 import type { StationSnapshot } from "@station/contracts";
-import type { DashboardFocus, ProjectHeaderControl, TuiState } from "@station/dashboard-core";
+import { describe, expect, it } from "vitest";
+import { selectDashboardItems } from "../../../src/selectors/dashboardViewport.js";
 import {
   clearDashboardFocus,
-  createDashboardRuntime,
-  createInitialTuiState,
   focusDashboardEmptyProjectAction,
   focusDashboardSession,
-  handleTuiKey,
-  persistentFilterExperience,
-  replaceSnapshot,
-  selectDashboardItems,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/state/dashboardFocus.js";
+import { createInitialTuiState, replaceSnapshot } from "../../../src/state/screen.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
+import type {
+  DashboardFocus,
+  DashboardState,
+  ProjectHeaderControl,
+} from "../../../src/state/types.js";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
   createZeroWorktreeSnapshot,
 } from "../../fixtures/snapshots.js";
+import { createTestDashboardRuntime } from "../../support/fakeClientStateSource.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 const DOWN = { input: "", downArrow: true } as const;
@@ -26,7 +28,7 @@ const RIGHT = { input: "", rightArrow: true } as const;
 const NEXT_NEEDS_ME = { input: "i", ctrl: true } as const;
 const RETURN = { input: "\r", return: true } as const;
 
-function state(options: Partial<Parameters<typeof createInitialTuiState>[0]> = {}): TuiState {
+function state(options: Partial<Parameters<typeof createInitialTuiState>[0]> = {}): DashboardState {
   return createInitialTuiState({ initialSnapshot: createDashboardSnapshot(), ...options });
 }
 
@@ -62,7 +64,7 @@ describe("dashboard focus", () => {
       "ses_wt_api_working",
     ],
   ])("clears focus for a %s without moving the viewport", (_label, update, sessionId) => {
-    const initial: TuiState = {
+    const initial: DashboardState = {
       ...state(),
       dashboardFocus: session("ses_wt_web_attention"),
       scrollOffset: 3,
@@ -76,16 +78,13 @@ describe("dashboard focus", () => {
     expect(focused.scrollOffset).toBe(3);
   });
 
-  it("clears synchronized session focus when search or collapse hides it", () => {
-    const searched = state({ searchQuery: "cache-refactor", scrollOffset: 2 });
-    expect("dashboardFocus" in focusDashboardSession(searched, "ses_wt_api_working")).toBe(false);
-
+  it("clears synchronized session focus when collapse hides it", () => {
     const collapsed = state({ collapsedProjectIds: ["api"], scrollOffset: 2 });
     expect("dashboardFocus" in focusDashboardSession(collapsed, "ses_wt_api_working")).toBe(false);
   });
 
   it("clears focus without changing the viewport and preserves store methods", () => {
-    const initial: TuiState = {
+    const initial: DashboardState = {
       ...state(),
       dashboardFocus: session("ses_wt_web_attention"),
       scrollOffset: 2,
@@ -95,7 +94,7 @@ describe("dashboard focus", () => {
     expect(cleared.scrollOffset).toBe(2);
 
     const snapshot = createDashboardSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: { terminalRows: 12 },
@@ -260,7 +259,7 @@ describe("dashboard focus", () => {
     expect(handleTuiKey(expanded, DOWN).state.dashboardFocus).toEqual(emptyAction("web"));
   });
 
-  it("preserves empty-action identity through accepted search and resize", () => {
+  it("preserves empty-action identity through an accepted filter and resize", () => {
     let current = focusDashboardEmptyProjectAction(
       createInitialTuiState({
         initialSnapshot: createZeroWorktreeSnapshot(),
@@ -269,12 +268,13 @@ describe("dashboard focus", () => {
       "api",
     );
     current = handleTuiKey(current, { input: "/" }).state;
-    current = handleTuiKey(current, { input: "no-match" }).state;
+    current = handleTuiKey(current, { input: "api" }).state;
     current = handleTuiKey(current, RETURN).state;
+    expect(current.persistentFilter).toEqual({ query: "api" });
     expect(current.dashboardFocus).toEqual(emptyAction("api"));
 
     const snapshot = createZeroWorktreeSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: {
@@ -345,8 +345,12 @@ describe("dashboard focus", () => {
 
   it("activates focused sessions and leaves missing focus inert", () => {
     const focused = state({ dashboardFocus: session("ses_wt_web_working") });
-    expect(handleTuiKey(focused, RETURN).commands).toEqual([
-      { type: "terminal.focus", payload: { sessionId: "ses_wt_web_working" } },
+    expect(handleTuiKey(focused, RETURN).operations).toEqual([
+      expect.objectContaining({
+        type: "activateSession",
+        sessionId: "ses_wt_web_working",
+        preferredObserverAction: "focus",
+      }),
     ]);
     const initial = state();
     expect(handleTuiKey(initial, RETURN).state).toBe(initial);
@@ -361,7 +365,7 @@ describe("dashboard focus", () => {
     expect(selectDashboardItems(snapshot, initial).some((item) => item.type === "session")).toBe(
       true,
     );
-    const pending: TuiState = {
+    const pending: DashboardState = {
       ...initial,
       localRows: {
         ...initial.localRows,
@@ -378,11 +382,10 @@ describe("dashboard focus", () => {
       },
     };
     const transition = handleTuiKey(pending, RETURN);
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toBeUndefined();
   });
 
-  it("reconciles an accepted search at the old visual position", () => {
+  it("reconciles an accepted filter at the old visual position", () => {
     let current = state({
       terminalRows: 40,
       dashboardFocus: session("ses_wt_web_idle"),
@@ -391,7 +394,7 @@ describe("dashboard focus", () => {
     current = handleTuiKey(current, { input: "queue-worker" }).state;
     current = handleTuiKey(current, RETURN).state;
 
-    expect(current.searchQuery).toBe("queue-worker");
+    expect(current.persistentFilter).toEqual({ query: "queue-worker" });
     expect(current.dashboardFocus).toEqual(session("ses_wt_api_working"));
   });
 
@@ -403,19 +406,9 @@ describe("dashboard focus", () => {
     });
     const snapshot = initial.snapshot as StationSnapshot;
     const initialIds = selectDashboardItems(snapshot, initial).map((item) => item.id);
-    const opened = handleTuiKey(
-      initial,
-      { input: "/" },
-      undefined,
-      persistentFilterExperience,
-    ).state;
-    const preview = handleTuiKey(
-      opened,
-      { input: "queue-worker" },
-      undefined,
-      persistentFilterExperience,
-    ).state;
-    const applied = handleTuiKey(preview, RETURN, undefined, persistentFilterExperience).state;
+    const opened = handleTuiKey(initial, { input: "/" }).state;
+    const preview = handleTuiKey(opened, { input: "queue-worker" }).state;
+    const applied = handleTuiKey(preview, RETURN).state;
 
     expect(selectDashboardItems(snapshot, preview, preview.screen).map((item) => item.id)).toEqual(
       initialIds,
@@ -437,12 +430,7 @@ describe("dashboard focus", () => {
       dashboardFocus: header("web", "primary"),
     });
 
-    const cleared = handleTuiKey(
-      filtered,
-      { input: "", escape: true },
-      undefined,
-      persistentFilterExperience,
-    ).state;
+    const cleared = handleTuiKey(filtered, { input: "", escape: true }).state;
 
     expect(cleared.collapsedProjectIds).toEqual(new Set(["web"]));
     expect(cleared.dashboardFocus).toEqual(header("web", "primary"));
@@ -451,16 +439,16 @@ describe("dashboard focus", () => {
     );
   });
 
-  it("keeps a focused header when accepted search hides only its sessions", () => {
+  it("keeps a focused header when the accepted filter retains its project", () => {
     let current = state({
       terminalRows: 40,
       dashboardFocus: header("web", "shell"),
     });
     current = handleTuiKey(current, { input: "/" }).state;
-    current = handleTuiKey(current, { input: "queue-worker" }).state;
+    current = handleTuiKey(current, { input: "web" }).state;
     current = handleTuiKey(current, RETURN).state;
 
-    expect(current.searchQuery).toBe("queue-worker");
+    expect(current.persistentFilter).toEqual({ query: "web" });
     expect(current.dashboardFocus).toEqual(header("web", "shell"));
   });
 
@@ -475,7 +463,7 @@ describe("dashboard focus", () => {
     expect(refreshed.dashboardFocus).toEqual(header("api", "defaultAgent"));
 
     const snapshot = createDashboardSnapshot();
-    const store = createDashboardRuntime({
+    const store = createTestDashboardRuntime({
       service: new FakeTuiObserverService(snapshot),
       initialSnapshot: snapshot,
       initialState: {

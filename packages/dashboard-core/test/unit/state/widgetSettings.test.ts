@@ -6,9 +6,9 @@ import {
   widgetSettingsRemoveAt,
   widgetSettingsRowLabel,
 } from "../../../src/state/screens/widgetSettings.js";
-import type { TuiState } from "../../../src/state/types.js";
+import type { DashboardState } from "../../../src/state/types.js";
 
-function panelState(): TuiState {
+function panelState(): DashboardState {
   return openWidgetSettings(
     createInitialTuiState({
       widgets: [{ type: "time" }, { type: "fleet", enabled: false }, { type: "moon" }],
@@ -16,7 +16,7 @@ function panelState(): TuiState {
   );
 }
 
-function screenOf(state: TuiState) {
+function screenOf(state: DashboardState) {
   if (state.screen.name !== "widgetSettings") {
     throw new Error("expected the widgetSettings screen");
   }

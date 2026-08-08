@@ -15,7 +15,7 @@ const socketIdentity: SocketIdentity = { ino: 10n, birthtimeNs: 20n };
 const keeperIdentity: ObserverProcessIdentity = {
   pid: 100,
   osStartTime: "keeper-start",
-  processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+  processToken: "00000000-0000-4000-8000-000000000001",
   version,
   socketPath,
 };
@@ -41,7 +41,7 @@ function processEntry(pid: number, startToken: string, startupTimeoutMs = 25) {
     executablePath,
     startToken,
     processToken:
-      pid === 100 ? keeperIdentity.processToken : "b47ac10b-58cc-4372-a567-0e02b2c3d479",
+      pid === 100 ? keeperIdentity.processToken : "00000000-0000-4000-8000-000000000002",
     buildVersion: version,
     socketPath,
     startupTimeoutMs,
@@ -284,7 +284,7 @@ describe("Observer duplicate cleanup use case", () => {
           processEntry(100, "keeper-start"),
           inspections === 1
             ? candidate
-            : { ...candidate, processToken: "c47ac10b-58cc-4372-a567-0e02b2c3d479" },
+            : { ...candidate, processToken: "00000000-0000-4000-8000-000000000003" },
         ];
       },
     };
@@ -614,8 +614,8 @@ describe("manual Observer reap", () => {
         {
           ...processEntry(200, "candidate-start"),
           processToken: changed
-            ? "c47ac10b-58cc-4372-a567-0e02b2c3d479"
-            : "b47ac10b-58cc-4372-a567-0e02b2c3d479",
+            ? "00000000-0000-4000-8000-000000000003"
+            : "00000000-0000-4000-8000-000000000002",
         },
       ],
       signal: (pid, signal) => {

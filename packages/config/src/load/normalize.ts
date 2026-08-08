@@ -113,7 +113,6 @@ function normalizeHarnessProviderConfig(value: unknown): unknown {
 
 function normalizeFeatureFlagsConfig(value: unknown): unknown {
   return normalizeObject(value, {
-    dashboard_persistent_filter: "dashboardPersistentFilter",
     session_resume_agent: "sessionResumeAgent",
     station_persistent_agents: "stationPersistentAgents",
   });

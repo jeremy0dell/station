@@ -1,4 +1,3 @@
-import type { DashboardRuntime } from "@station/dashboard-core";
 import type { Automation } from "../config/stationConfig.js";
 import {
   startWidgetConfigWrites,
@@ -11,6 +10,13 @@ import {
   DEFAULT_COPY_SINKS,
 } from "../copy/clipboard.js";
 import { createStationInputRuntime, type StationInputRuntime } from "../input/stationInput.js";
+import { createManagedLaunch } from "../input/runtime/managedLaunch.js";
+import { createPaneEffects, type PaneEffects } from "../input/runtime/paneEffects.js";
+import {
+  invokeCleanup,
+  settleCleanupPromises,
+  settleCleanupSteps,
+} from "../lifecycle/cleanup.js";
 import { buildLayoutSnapshot } from "../state/layout/layoutSnapshot.js";
 import {
   createLayoutWriter,
@@ -24,16 +30,19 @@ import { selectPaneRecord } from "../state/selectors.js";
 import type { StationStore } from "../state/store.js";
 import type { PaneId } from "../state/types.js";
 import type { StationClient } from "../sources/types.js";
-import { resolveAuxShellPlacement } from "../terminal/pty/auxShellPlacement.js";
-import { createStationHostManagedTerminalAttacher } from "../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import { createStationDashboardRuntime } from "../station/store/dashboardRuntime.js";
+import {
+  createStationDashboardRuntime,
+  type StationDashboardRuntime,
+} from "../station/store/dashboardRuntime.js";
+import { createDashboardCapabilities } from "./dashboardCapabilities.js";
 import type { CreateStationOptions, Station, StationAppProps } from "./types.js";
 
 /**
  * Wire Station's runtime — dashboard, registry, source reconcilers, layout
  * persistence, lifecycle, and input — and hand back the view props plus a
- * start/dispose surface. The renderer (main.tsx / tests) mounts <StationApp />.
+ * start/dispose surface. Host placement arrives as capabilities from renderer
+ * composition; this module never selects a concrete Host adapter.
  *
  * Reads as a sequence of steps; each is one extracted helper below.
  */
@@ -41,17 +50,40 @@ export function createStation(options: CreateStationOptions): Station {
   const { store, stationClient } = options;
   const automations = options.automations ?? [];
 
-  // The dashboard runtime and live-PTY registry everything else wires around. The
-  // config widget set seeds the runtime's live session copy; widget-settings
-  // edits are written back to config.toml when a config path exists.
-  const dashboardRuntime = createStationDashboardRuntime(stationClient, {
-    ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
-    ...(options.dashboardSearchExperience === undefined
-      ? {}
-      : { dashboardSearchExperience: options.dashboardSearchExperience }),
-    widgetsPersisted: options.tuiConfigPath !== undefined,
-  });
+  // Native composition establishes terminal authority before dashboard execution.
   const registry = setupRegistry(options, store, stationClient);
+  const paneEffects = createPaneEffects({
+    store,
+    clientState: stationClient.state,
+    registry,
+    resolveAuxShellPlacement: options.resolveAuxShellPlacement,
+    autoCloseOverlay: options.shellAutoCloseOverlay ?? false,
+    automations,
+    writeToTerminal: undefined,
+    pasteToTerminal: undefined,
+  });
+  const managedLaunch = createManagedLaunch({
+    store,
+    clientState: stationClient.state,
+    observerService: stationClient.service,
+    registry,
+    managedTerminalAttacher: options.managedTerminalAttacher,
+  });
+  const dashboardCapabilities = createDashboardCapabilities({
+    clientState: stationClient.state,
+    observerService: stationClient.service,
+    store,
+    paneEffects,
+    managedLaunch,
+  });
+  const dashboardRuntime = createStationDashboardRuntime(
+    stationClient,
+    dashboardCapabilities,
+    {
+      ...(options.tuiConfig?.widgets === undefined ? {} : { widgets: options.tuiConfig.widgets }),
+      widgetsPersisted: options.tuiConfigPath !== undefined,
+    },
+  );
 
   // Source → store/registry bridges, plus debounced disk layout (production only).
   const reconcilers = createReconcilers(store, registry, stationClient);
@@ -74,14 +106,15 @@ export function createStation(options: CreateStationOptions): Station {
     store,
     dashboardRuntime,
     registry,
-    observerService: stationClient.service,
+    paneEffects,
     automations,
     onShutdown: () => {
       if (shutdownStarted) {
         return;
       }
       shutdownStarted = true;
-      void lifecycle.disposeForShutdown().then(() => options.shutdown());
+      const finishShutdown = (): void => options.shutdown();
+      void lifecycle.disposeForShutdown().then(finishShutdown, finishShutdown);
     },
   });
 
@@ -102,7 +135,13 @@ export function createStation(options: CreateStationOptions): Station {
     stationInput,
     start: lifecycle.start,
     dispose: () => {
-      void lifecycle.disposeForShutdown();
+      void (async () => {
+        try {
+          await lifecycle.disposeForShutdown();
+        } catch {
+          // Legacy synchronous disposal is best-effort; explicit async methods surface settlement.
+        }
+      })();
     },
     disposeForShutdown: lifecycle.disposeForShutdown,
     disposeForHotReload: lifecycle.disposeForHotReload,
@@ -130,7 +169,10 @@ function setupRegistry(
       return;
     }
     void stationClient.service
-      .reportExternalExit({ terminalTargetId: identity.terminalTargetId })
+      .reportExternalExit({
+        terminalTargetId: identity.terminalTargetId,
+        expectedSessionId: identity.sessionId,
+      })
       .catch(() => {});
   };
   const registry =
@@ -172,6 +214,7 @@ function createReconcilers(
       const observer = stationClient.state.getState().snapshot?.observer;
       return observer === undefined ? undefined : `${observer.pid}:${observer.startedAt}`;
     },
+    hasProvenExit: (paneId) => registry.get(paneId)?.exited === true,
     killPane: (paneId) => registry.get(paneId)?.terminal?.kill(),
   });
   return { reconcile, reapRemovedSessions };
@@ -208,7 +251,7 @@ function createLayoutPersistence(
 function createLifecycle(deps: {
   store: StationStore;
   stationClient: StationClient;
-  dashboardRuntime: DashboardRuntime;
+  dashboardRuntime: StationDashboardRuntime;
   registry: PtyRegistry;
   reconcilers: Reconcilers;
   layoutWriter: LayoutWriter | undefined;
@@ -228,50 +271,86 @@ function createLifecycle(deps: {
   let detachSessionReconcile: (() => void) | undefined;
   let detachLayoutWriter: (() => void) | undefined;
   let widgetConfigWrites: WidgetConfigWrites | undefined;
-  let disposed = false;
-  let pendingWidgetWrites: Promise<void> | undefined;
+  let pendingDisposal: Promise<void> | undefined;
 
   const disposeInternal = (disposeTerminals: boolean): Promise<void> => {
-    if (disposed) {
-      return pendingWidgetWrites ?? Promise.resolve();
+    if (pendingDisposal !== undefined) {
+      return pendingDisposal;
     }
-    disposed = true;
-    // The reconciler must detach before the dashboard source so teardown cannot
-    // synchronize transient overlay focus into a disposing runtime.
-    detachOverlayRowFocus?.();
+
+    let resolveDisposal!: () => void;
+    let rejectDisposal!: (error: unknown) => void;
+    pendingDisposal = new Promise<void>((resolve, reject) => {
+      resolveDisposal = resolve;
+      rejectDisposal = reject;
+    });
+
+    const stopOverlayRowFocus = detachOverlayRowFocus;
     detachOverlayRowFocus = undefined;
-    dashboardRuntime.dispose();
-    detachReconcile?.();
+    const stopReconcile = detachReconcile;
     detachReconcile = undefined;
-    detachSessionReconcile?.();
+    const stopSessionReconcile = detachSessionReconcile;
     detachSessionReconcile = undefined;
-    detachLayoutWriter?.();
+    const stopLayoutWriter = detachLayoutWriter;
     detachLayoutWriter = undefined;
-    pendingWidgetWrites = widgetConfigWrites?.dispose() ?? Promise.resolve();
+    const pendingWidgetWrites = widgetConfigWrites;
     widgetConfigWrites = undefined;
-    // Real shutdown flushes pending layout synchronously (process.exit follows);
-    // an HMR teardown just drops the timer — the reused store/registry keep it.
-    if (disposeTerminals) {
-      layoutWriter?.flush();
-    } else {
-      layoutWriter?.dispose();
-    }
-    // Deliberately keep the registry's pane-exit handler: across an HMR reload Bun
-    // may run this dispose AFTER the next composition installed its handler, so
-    // clearing would strand managed-agent exits. The next composition reinstalls
-    // its own, and shutdown disposes the registry outright.
-    void stationClient.stop();
-    // React unmount work scheduled during shutdown can't flush before exit, so
-    // live PTYs are disposed imperatively.
-    if (disposeTerminals) {
-      registry.disposeAll();
-    }
-    return pendingWidgetWrites;
+
+    // The overlay reconciler must detach before dashboard disposal closes its source.
+    const overlay = invokeCleanup(() => stopOverlayRowFocus?.());
+    const dashboard = invokeCleanup(() => dashboardRuntime.dispose());
+    const reconcile = invokeCleanup(() => stopReconcile?.());
+    const sessionReconcile = invokeCleanup(() => stopSessionReconcile?.());
+    const layoutSubscription = invokeCleanup(() => stopLayoutWriter?.());
+    const widgets = invokeCleanup(() => pendingWidgetWrites?.dispose());
+    const layout = invokeCleanup(() => {
+      // Shutdown flushes synchronously; HMR drops the timer because its runtime is retained.
+      if (disposeTerminals) {
+        layoutWriter?.flush();
+      } else {
+        layoutWriter?.dispose();
+      }
+    });
+
+    // Deliberately keep the registry's pane-exit handler during HMR: an older
+    // disposer can run after the replacement installed the current handler.
+    const disposeTerminalAndClient = (): Promise<void> =>
+      settleCleanupSteps(
+        [
+          () => {
+            // React unmount work scheduled during shutdown cannot own live PTY cleanup.
+            if (disposeTerminals) {
+              registry.disposeAll();
+            }
+          },
+          // Accepted commands and launch phases settle before their client disappears.
+          () => stationClient.stop(),
+        ],
+        "Native terminal and client cleanup failed.",
+      );
+    const terminalAndClient = dashboard.then(
+      disposeTerminalAndClient,
+      disposeTerminalAndClient,
+    );
+    const settlement = settleCleanupPromises(
+      [
+        overlay,
+        dashboard,
+        reconcile,
+        sessionReconcile,
+        layoutSubscription,
+        widgets,
+        layout,
+        terminalAndClient,
+      ],
+      "Native Station cleanup failed.",
+    );
+    settlement.then(resolveDisposal, rejectDisposal);
+    return pendingDisposal;
   };
 
   return {
     start: (): void => {
-      disposed = false;
       // Seed the registry from the initial workspace and keep it reconciled.
       reconcilers.reconcile();
       detachReconcile = store.subscribe(reconcilers.reconcile);
@@ -300,52 +379,36 @@ function createLifecycle(deps: {
       stationClient.start();
     },
     disposeForShutdown: (): Promise<void> => disposeInternal(true),
-    disposeForHotReload: (): void => {
-      void disposeInternal(false);
-    },
+    disposeForHotReload: (): Promise<void> => disposeInternal(false),
   };
 }
 
-/** Build the input runtime; aux shell placement uses the host when a socket is set. */
+/** Build input from composition-supplied terminal capabilities without selecting a Host adapter. */
 function createInputRuntime(
   options: CreateStationOptions,
   deps: {
     store: StationStore;
-    dashboardRuntime: DashboardRuntime;
+    dashboardRuntime: StationDashboardRuntime;
     registry: PtyRegistry;
-    observerService: StationClient["service"];
+    paneEffects: PaneEffects;
     automations: readonly Automation[];
     onShutdown: () => void;
   },
 ): StationInputRuntime {
-  // Aux shells land in the persistent host when a socket is configured; the
-  // placement resolver still falls back to local per spawn when the daemon is down.
-  const auxShellPlacement =
-    options.hostSocketPath === undefined
-      ? undefined
-      : resolveAuxShellPlacement(options.hostSocketPath);
-  const managedTerminalAttacher =
-    options.managedTerminalAttacher ??
-    (options.hostSocketPath === undefined
-      ? undefined
-      : createStationHostManagedTerminalAttacher(options.hostSocketPath));
   const inputOptions: Parameters<typeof createStationInputRuntime>[0] = {
     store: deps.store,
     shutdown: deps.onShutdown,
-    dashboardRuntime: deps.dashboardRuntime,
+    dashboardRuntime: {
+      state: deps.dashboardRuntime.state,
+      actions: deps.dashboardRuntime.actions,
+      clientState: deps.dashboardRuntime.clientState,
+    },
     registry: deps.registry,
-    observerService: deps.observerService,
-    autoCloseOverlayOnPaneOpen: options.shellAutoCloseOverlay ?? false,
+    paneEffects: deps.paneEffects,
     automations: deps.automations,
   };
   if (options.openExternalUrl !== undefined) {
     inputOptions.openExternalUrl = options.openExternalUrl;
-  }
-  if (auxShellPlacement !== undefined) {
-    inputOptions.resolveAuxShellPlacement = auxShellPlacement;
-  }
-  if (managedTerminalAttacher !== undefined) {
-    inputOptions.managedTerminalAttacher = managedTerminalAttacher;
   }
   return createStationInputRuntime(inputOptions);
 }
@@ -356,7 +419,7 @@ function buildViewProps(
   deps: {
     store: StationStore;
     registry: PtyRegistry;
-    dashboardRuntime: DashboardRuntime;
+    dashboardRuntime: StationDashboardRuntime;
     dispatchMouse: StationInputRuntime["dispatchMouse"];
     onCopySelection: (text: string) => void;
     automations: readonly Automation[];
@@ -366,6 +429,7 @@ function buildViewProps(
     store: deps.store,
     registry: deps.registry,
     dashboardState: deps.dashboardRuntime.state,
+    clientState: deps.dashboardRuntime.clientState,
     dashboardActions: deps.dashboardRuntime.actions,
     dispatchMouse: deps.dispatchMouse,
     onCopySelection: deps.onCopySelection,

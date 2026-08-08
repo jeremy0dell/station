@@ -1,0 +1,88 @@
+import { expect, it } from "vitest";
+import type {
+  ClientNotice,
+  DashboardActions,
+  DashboardCapabilities,
+  DashboardExecutionHandle,
+  DashboardExecutionResult,
+  DashboardFocusTarget,
+  DashboardRuntime,
+  DashboardRuntimeOptions,
+  DashboardStateSource,
+  ObserverService,
+  OpenDashboardShellRequest,
+  StationClientCommandCompletion,
+  TuiFolderService,
+} from "../../src/entrypoints/runtime.js";
+import type {
+  DashboardFilterFooterSegment,
+  DashboardFilterHeaderModel,
+  DashboardFooterModel,
+  DashboardSessionRow,
+  DashboardTableHeaderModel,
+  DashboardViewportItem,
+  EditableTextInputState,
+  FleetSummary,
+  RowGridLayout,
+} from "../../src/entrypoints/selectors.js";
+import type {
+  AddProjectFlowStateView,
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardStateView,
+  NewSessionFlowStateView,
+  TuiInputMode,
+  TuiKey,
+  TuiSelectionState,
+  TuiSemanticAction,
+  TuiToastEntry,
+} from "../../src/entrypoints/state.js";
+import type {
+  TopRowWidgetRuntimeDeps,
+  TopRowWidgetView,
+  TuiConfig,
+  TuiWidgetConfig,
+} from "../../src/entrypoints/widgets.js";
+
+it("typechecks the role entrypoint contracts", () => {
+  expect(true).toBe(true);
+});
+
+export type EntrypointTypecheckWitness = [
+  DashboardRuntime,
+  DashboardRuntimeOptions,
+  DashboardStateSource,
+  DashboardActions,
+  DashboardCapabilities,
+  DashboardExecutionHandle,
+  DashboardExecutionResult,
+  DashboardFocusTarget,
+  OpenDashboardShellRequest,
+  ObserverService,
+  ClientNotice,
+  StationClientCommandCompletion,
+  TuiFolderService,
+  DashboardStateView,
+  DashboardScreenView,
+  DashboardSnapshotView,
+  TuiKey,
+  TuiInputMode,
+  TuiSemanticAction,
+  TuiSelectionState,
+  TuiToastEntry,
+  AddProjectFlowStateView,
+  NewSessionFlowStateView,
+  DashboardSessionRow,
+  DashboardViewportItem,
+  FleetSummary,
+  DashboardTableHeaderModel,
+  DashboardFooterModel,
+  DashboardFilterHeaderModel,
+  DashboardFilterFooterSegment,
+  RowGridLayout,
+  EditableTextInputState,
+  TopRowWidgetView,
+  TopRowWidgetRuntimeDeps,
+  TuiConfig,
+  TuiWidgetConfig,
+];

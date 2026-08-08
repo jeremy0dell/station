@@ -603,7 +603,7 @@ describe("CLI diagnostic commands", () => {
       code: 0,
       output: {
         query: "protocol",
-        components: ["observer", "cli", "tui"],
+        components: ["observer", "cli", "tui", "station-host"],
         matched: 1,
         causeAssessment: {
           status: "observed_failure",
@@ -636,6 +636,7 @@ describe("CLI diagnostic commands", () => {
     });
     const filesSearched = (result.output as { evidence: { filesSearched: string[] } }).evidence
       .filesSearched;
+    expect(filesSearched).toContain(join(fixture.stateDir, "logs", "station-host.jsonl"));
     expect(filesSearched).not.toContain(join(fixture.stateDir, "logs", "hooks.jsonl"));
   });
 

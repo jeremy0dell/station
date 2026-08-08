@@ -6,12 +6,13 @@ import {
   reconcileDashboardFocus,
 } from "./dashboardFocus.js";
 import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
+import { submitQuickSession } from "./screens/quickSession.js";
 import type { TuiTransition } from "./transition.js";
-import type { ProjectHeaderControl, TuiState } from "./types.js";
+import type { DashboardState, ProjectHeaderControl } from "./types.js";
 
 /** Activates one current project-header control after moving focus to that segment. */
 export function activateProjectHeaderControl(
-  state: TuiState,
+  state: DashboardState,
   projectId: ProjectId,
   actionId: ProjectHeaderControl,
 ): TuiTransition {
@@ -25,29 +26,30 @@ export function activateProjectHeaderControl(
     case "shell":
       return {
         state: focused,
-        controlIntent: { type: "projectShell.open", projectId },
+        operations: [{ type: "openDashboardShell", target: { kind: "project", projectId } }],
       };
     case "quickSession":
-      return {
-        state: focused,
-        controlIntent: { type: "quickSession.create", projectId },
-      };
+      return submitQuickSession(focused, projectId);
     case "defaultAgent":
       return { state: openProjectDefaultAgentPicker(focused, projectId) };
   }
 }
 
-/**
- * Focuses the rendered empty-project action and emits its Quick Session intent.
- * Renderer consumers alone resolve project availability and move accepted focus.
- */
-export function activateEmptyProjectAction(state: TuiState, projectId: ProjectId): TuiTransition {
+/** Focus the rendered empty-project action before the shared Quick Session transition. */
+export function activateEmptyProjectAction(
+  state: DashboardState,
+  projectId: ProjectId,
+): TuiTransition {
   if (state.screen.name !== "dashboard" || !hasVisibleEmptyProject(state, projectId)) {
     return { state };
   }
+  const transition = submitQuickSession(
+    focusDashboardEmptyProjectAction(state, projectId),
+    projectId,
+  );
   return {
-    state: focusDashboardEmptyProjectAction(state, projectId),
-    controlIntent: { type: "quickSession.create", projectId },
+    ...transition,
+    state: focusDashboardEmptyProjectAction(transition.state, projectId),
   };
 }
 
@@ -55,7 +57,10 @@ export function activateEmptyProjectAction(state: TuiState, projectId: ProjectId
  * Toggles one current project and normalizes focus/scroll for both header
  * activation and the existing C project picker.
  */
-export function toggleDashboardProjectCollapsed(state: TuiState, projectId: ProjectId): TuiState {
+export function toggleDashboardProjectCollapsed(
+  state: DashboardState,
+  projectId: ProjectId,
+): DashboardState {
   const project = state.snapshot?.projects.find((candidate) => candidate.id === projectId);
   if (project === undefined) {
     return state;
@@ -65,20 +70,20 @@ export function toggleDashboardProjectCollapsed(state: TuiState, projectId: Proj
   if (collapsing) {
     collapsedProjectIds.add(project.id);
   }
-  const next: TuiState = { ...state, collapsedProjectIds };
+  const next: DashboardState = { ...state, collapsedProjectIds };
   return reconcileDashboardFocus(state, next);
 }
 
-function hasVisibleProjectHeader(state: TuiState, projectId: ProjectId): boolean {
+function hasVisibleProjectHeader(state: DashboardState, projectId: ProjectId): boolean {
   return hasVisibleItem(state, projectId, "projectHeader");
 }
 
-function hasVisibleEmptyProject(state: TuiState, projectId: ProjectId): boolean {
+function hasVisibleEmptyProject(state: DashboardState, projectId: ProjectId): boolean {
   return hasVisibleItem(state, projectId, "emptyProject");
 }
 
 function hasVisibleItem(
-  state: TuiState,
+  state: DashboardState,
   projectId: ProjectId,
   type: "projectHeader" | "emptyProject",
 ): boolean {
