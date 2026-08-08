@@ -73,9 +73,10 @@ provider homes are checkout-local. See the copy-paste recipe in
   `pnpm build:binary -- --version <version>` when validating this path; a source
   `pnpm build` does not create the installed artifact ownership used by the
   binding.
-- `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
+- `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout. The foreground native-HMR owner registers a private disposable process group before Bun starts, reaps it on exit or interruption, and recovers an exact abandoned group on the next start. Observer, Station Host, and Host-owned PTYs remain outside that group.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` only to select a controlled development config. This selector retains ordinary CLI Observer startup and handoff behavior; it is not a safe real-state popup lane and should not target a live runtime that must remain undisturbed. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
-- `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
+- `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer. After isolated Observer and hook setup, it enters the same native-HMR owner as `station:ui-dev`, so UI cleanup does not stop the persistent devbox Observer, Host, or agent PTYs.
+- Native-HMR records live at `<state_dir>/run/runtime-owners/v1` in a `0700` directory with `0600` files. Do not delete an uncertain record: the next matching start revalidates owner PID/start identity and the exact disposable PGID before TERM, bounded wait, and any KILL escalation.
 - Before Observer startup, `station:devbox` creates or repairs only its checkout-keyed socket directory to mode `0700`. It refuses symlinks, non-directories, and directories owned by another user; it never repairs or replaces socket and claim files.
 - If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
 - `pnpm station:devbox tmux dev` builds the checkout, starts or safely reuses a checkout-keyed private tmux server and isolated live Observer, claims cleanup ownership, and attaches the invoking terminal. Inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`; `Ctrl-b d` detaches and cleans up the owned lane. Use `tmux start` plus `tmux attach` when automation needs a persistent lane that is stopped explicitly.
@@ -399,6 +400,10 @@ cd ..
 STATION_REAL_E2E=1 pnpm exec vitest run \
   --config config/vitest/vitest.real-e2e.config.ts \
   tests/e2e/real/real-native-tui-singleton.test.ts
+
+STATION_REAL_E2E=1 pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-hmr-lifecycle.test.ts
 
 pnpm build:binary -- --version 0.0.0-local
 STATION_REAL_E2E=1 \

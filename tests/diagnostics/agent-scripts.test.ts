@@ -796,6 +796,34 @@ describe("tui dev script", () => {
     expect(mouseReportingDisableSequence).toContain("\u001B[?1015l");
   });
 
+  it("routes both native HMR development commands through the shared owner", () => {
+    const rootPackageResult = packageScriptsSchema.safeParse(
+      JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")),
+    );
+    const stationPackageResult = packageScriptsSchema.safeParse(
+      JSON.parse(readFileSync(new URL("../../station/package.json", import.meta.url), "utf8")),
+    );
+    expect(rootPackageResult.success).toBe(true);
+    expect(stationPackageResult.success).toBe(true);
+    if (!rootPackageResult.success || !stationPackageResult.success) return;
+    const rootPackage = rootPackageResult.data;
+    const stationPackage = stationPackageResult.data;
+    const isolatedScript = readFileSync(
+      new URL("../../station/scripts/station-isolated.sh", import.meta.url),
+      "utf8",
+    );
+    const devboxScript = readFileSync(
+      new URL("../../scripts/station-devbox.mjs", import.meta.url),
+      "utf8",
+    );
+
+    expect(rootPackage.scripts?.["station:ui-dev"]).toBe("cd station && bun run dev");
+    expect(stationPackage.scripts?.dev).toBe("node ../scripts/native-hmr-runner.mjs");
+    expect(isolatedScript).toContain("exec bun run dev");
+    expect(devboxScript).toContain('run("bun", ["run", "station:isolated", "dev"]');
+    expect(stationPackage.scripts?.dev).not.toContain("bun --hot");
+  });
+
   it("keeps turbo build watch inputs from reacting to tests", () => {
     const turboConfigResult = turboConfigSchema.safeParse(
       JSON.parse(readFileSync(new URL("../../turbo.json", import.meta.url), "utf8")),
