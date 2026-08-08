@@ -2,13 +2,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import {
-  ADD_PROJECT_CHOOSE_LIST_ID,
-  createAddProjectFlow,
-  transitionAddProjectFlow,
-  type AddProjectFlowState,
-  type TuiSelectionState,
-} from "@station/dashboard-core";
+import { ADD_PROJECT_CHOOSE_LIST_ID, createAddProjectFlow, transitionAddProjectFlow } from "@station/dashboard-core/state";
+import type { TuiSelectionState } from "@station/dashboard-core/state";
 import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
@@ -25,7 +20,10 @@ afterEach(() => {
   for (const teardown of teardowns.splice(0)) teardown();
 });
 
-function reviewFlow(gitRoot: boolean): AddProjectFlowState {
+/** Flow state named through the public transition contract rather than the private mutable model. */
+type AddProjectSheetFlowState = Parameters<typeof transitionAddProjectFlow>[0];
+
+function reviewFlow(gitRoot: boolean): AddProjectSheetFlowState {
   const started = createAddProjectFlow({ cwd: "/workspace", homeDir: "/home/example" });
   const reviewed = transitionAddProjectFlow(started, {
     type: "folderReviewed",
@@ -41,7 +39,7 @@ function reviewFlow(gitRoot: boolean): AddProjectFlowState {
 }
 
 async function render(
-  flow: AddProjectFlowState,
+  flow: AddProjectSheetFlowState,
   width = 80,
   selection: TuiSelectionState = new Map(),
 ) {

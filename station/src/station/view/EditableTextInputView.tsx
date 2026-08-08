@@ -3,10 +3,8 @@
 // stays stable because the cursor cell is always one column wide).
 import type { ColorInput } from "@opentui/core";
 import { useEffect, useState } from "react";
-import {
-  clampEditableTextCursor,
-  type EditableTextInputState,
-} from "@station/dashboard-core";
+import { clampEditableTextCursor } from "@station/dashboard-core/selectors";
+import type { EditableTextInputState } from "@station/dashboard-core/selectors";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 
 export type EditableTextInputViewProps = EditableTextInputState & {

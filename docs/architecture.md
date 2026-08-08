@@ -34,6 +34,7 @@ The repo is organized around these boundaries:
 - `apps/observer` owns runtime correlation, reconciliation, command routing, provider health, persistence, hook ingestion, harness ingress queuing, diagnostics, and snapshot publication.
 - `apps/cli` owns the `stn` command surface: observer lifecycle, setup/doctor, reconcile/snapshot, hooks, debug trace, debug bundles, and terminal UI entrypoints.
 - `station/` owns the terminal UI (the OpenTUI renderer, package `@station/workspace`). It consumes observer snapshots/events through `@station/protocol` and must not call providers directly.
+- `packages/dashboard-core` owns the render-framework-free dashboard behavior shared by Station's native workspace and standalone dashboard renderer compositions: projection state, screens, actions, lifecycle, and role entrypoints (see [Dashboard Architecture](dashboard-architecture.md)).
 - `packages/contracts` owns shared application schemas and types, including `ObserverApi`, external-launch values, commands, events, snapshots, observations, provider ports, hooks, diagnostics, and safe errors.
 - `packages/protocol` owns the observer NDJSON transport: envelopes, method mapping, validation execution, client/server mechanics, and fail-closed Unix-socket probing and stale-owner evidence.
 - `packages/runtime` owns shared runtime boundary helpers for timeouts, retry, cancellation, external commands, typed error conversion, and atomic text replacement.

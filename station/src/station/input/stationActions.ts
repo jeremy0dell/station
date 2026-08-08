@@ -1,10 +1,6 @@
-import {
-  selectDashboardViewport,
-  type DashboardActions,
-  type DashboardStateSource,
-  type TuiKey,
-  type TuiSemanticAction,
-} from "@station/dashboard-core";
+import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import type { TuiKey, TuiSemanticAction } from "@station/dashboard-core/state";
 import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
 
 type DashboardKeyInput = {

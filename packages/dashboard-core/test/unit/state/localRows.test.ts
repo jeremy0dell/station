@@ -1,13 +1,13 @@
+import { describe, expect, it } from "vitest";
 import {
   addPendingCreateSessionRow,
   addPendingStartAgentRow,
   createEmptyTuiLocalRows,
-  createInitialTuiState,
   failPendingCreateSessionRow,
   pruneLocalRowsForSnapshot,
   removePendingStartAgentRow,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/state/localRows.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
 import { createCommandSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI local rows", () => {

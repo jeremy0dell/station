@@ -1,11 +1,7 @@
 // Maps the active screen to an absolute OpenTUI layer above the dashboard.
 // The dashboard never reflows for overlays.
-import {
-  tuiScreenBehavior,
-  type DashboardScreenView,
-  type DashboardSnapshotView,
-  type DashboardStateView,
-} from "@station/dashboard-core";
+import { tuiScreenBehavior } from "@station/dashboard-core/state";
+import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import type { ReactNode } from "react";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { AddProjectSheetView } from "./sheets/AddProjectSheetView.js";

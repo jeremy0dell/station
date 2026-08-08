@@ -1,4 +1,3 @@
-import type { TuiWidgetConfig } from "@station/config";
 import type {
   AgentState,
   ProjectId,
@@ -6,6 +5,7 @@ import type {
   SafeError,
   SessionId,
   StationSnapshot,
+  TuiWidgetConfig,
   WorktreeId,
 } from "@station/contracts";
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
@@ -109,10 +109,6 @@ export type DashboardState = TuiViewState & {
   /** False when no config.toml path exists to write widget edits back to. */
   widgetsPersisted: boolean;
 };
-
-/** Temporary private reducer/store alias retained while pure reducer naming is migrated. */
-// biome-ignore lint/plugin: retained compatibility boundary during the reducer naming migration
-export type TuiState = DashboardState;
 
 /** Recursively readonly public projection of the private dashboard store model. */
 export type DashboardStateView = ReadonlyDeep<DashboardState>;

@@ -1,13 +1,7 @@
 import type { ProviderId } from "@station/contracts";
-import {
-  bottomSheetContentWidth,
-  selectNewSessionHarnessChoices,
-  type DashboardScreenView,
-  type DashboardSnapshotView,
-  type DashboardStateView,
-  type KeyedChoice,
-  type NewSessionHarnessOption,
-} from "@station/dashboard-core";
+import { bottomSheetContentWidth, selectNewSessionHarnessChoices } from "@station/dashboard-core/selectors";
+import type { KeyedChoice, NewSessionHarnessOption } from "@station/dashboard-core/selectors";
+import type { DashboardScreenView, DashboardSnapshotView, DashboardStateView } from "@station/dashboard-core/state";
 import { AgentChoiceListView } from "./AgentChoiceListView.js";
 import { BottomSheetFrameView } from "./BottomSheetFrameView.js";
 import { SheetFooter, SheetLine } from "./parts.js";

@@ -1,8 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import type {
-  DashboardFilterHeaderModel,
-  DashboardFilterHeaderSegment,
-} from "@station/dashboard-core";
+import type { DashboardFilterHeaderModel, DashboardFilterHeaderSegment } from "@station/dashboard-core/selectors";
 import {
   toOpenTuiColor,
   toOpenTuiOpaqueColor,

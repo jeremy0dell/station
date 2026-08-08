@@ -1,18 +1,13 @@
-import {
-  createInitialTuiState,
-  cursorId,
-  deriveTuiInputMode,
-  flatPickerSpec,
-  handleTuiKey,
-  LIST_REGISTRY,
-  type ListRow,
-  type ListSpec,
-  moveCursor,
-  resolveListKey,
-  selectionMiddleware,
-  type TuiState,
-} from "@station/dashboard-core";
 import { afterEach, describe, expect, it } from "vitest";
+import { deriveTuiInputMode } from "../../../../src/state/keymap.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
+import { cursorId, moveCursor, resolveListKey } from "../../../../src/state/selection/engine.js";
+import { flatPickerSpec } from "../../../../src/state/selection/flatPicker.js";
+import { selectionMiddleware } from "../../../../src/state/selection/middleware.js";
+import { LIST_REGISTRY } from "../../../../src/state/selection/registry.js";
+import type { ListRow, ListSpec } from "../../../../src/state/selection/types.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
@@ -33,7 +28,7 @@ const probeSpec: ListSpec<string> = {
   commit: (state, id, via) => ({ state, reconcileReason: `commit:${id}:${via}` }),
 };
 
-function baseState(cursor?: string): TuiState {
+function baseState(cursor?: string): DashboardState {
   const state = createInitialTuiState();
   if (cursor === undefined) {
     return state;
@@ -162,7 +157,7 @@ describe("flatPickerSpec", () => {
 });
 
 describe("selectionMiddleware — inert with an empty registry", () => {
-  const modes: TuiState[] = [
+  const modes: DashboardState[] = [
     createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
     handleTuiKey(createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }), {
       input: "N",

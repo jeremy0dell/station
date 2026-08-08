@@ -1,15 +1,11 @@
 import { TextAttributes } from "@opentui/core";
 import { useStore } from "zustand/react";
 import stringWidth from "string-width";
-import {
-  headerStrip,
-  observerHeaderStatusForConnection,
-  selectFleetSummary,
-  tuiScreenBehavior,
-  type DashboardStateSource,
-} from "@station/dashboard-core";
-import { resolveTopRowWidgets } from "@station/dashboard-core/widgets/snapshotWidgets";
-import type { TopRowWidgetView } from "@station/dashboard-core/widgets/types";
+import type { DashboardStateSource } from "@station/dashboard-core/runtime";
+import { headerStrip, observerHeaderStatusForConnection, selectFleetSummary } from "@station/dashboard-core/selectors";
+import { tuiScreenBehavior } from "@station/dashboard-core/state";
+import { resolveTopRowWidgets } from "@station/dashboard-core/widgets";
+import type { TopRowWidgetView } from "@station/dashboard-core/widgets";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import {
   stationMouseProps,

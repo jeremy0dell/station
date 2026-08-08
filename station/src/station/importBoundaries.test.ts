@@ -41,7 +41,6 @@ const PRIVATE_DASHBOARD_STATE_TYPES = new Set([
   "NewSessionFlowState",
   "TuiLocalRows",
   "TuiScreen",
-  "TuiState",
   "TuiViewState",
 ]);
 const DASHBOARD_CORE_INTERNAL_PATHS = [
@@ -445,8 +444,8 @@ const RAW_DASHBOARD_STORE_MODULES = [] as const;
 const MUTABLE_STORE_REFERENCE_INVENTORY: Readonly<Record<string, number>> = {};
 const DIRECT_DASHBOARD_MUTATION_INVENTORY: DirectDashboardMutationInventory = {};
 const DASHBOARD_RUNTIME_IMPORT_INVENTORY = [
-  "app/types.ts: import DashboardRuntime from @station/dashboard-core",
-  "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core",
+  "app/types.ts: import DashboardRuntime from @station/dashboard-core/runtime",
+  "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core/runtime",
 ] as const;
 const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [] as const;
 
@@ -580,7 +579,11 @@ describe("station production boundaries", () => {
           internalImports.push(...referenceDescriptors(module, reference));
           continue;
         }
-        if (reference.specifier !== DASHBOARD_CORE_ROOT_IMPORT) continue;
+        if (
+          reference.specifier !== DASHBOARD_CORE_ROOT_IMPORT &&
+          reference.specifier !== "@station/dashboard-core/runtime"
+        )
+          continue;
         const runtimeNames = reference.importedNames.filter((name) => name === "DashboardRuntime");
         runtimeImports.push(...referenceDescriptors(module, reference, runtimeNames));
         const internalNames = reference.importedNames.filter((name) =>
@@ -591,6 +594,24 @@ describe("station production boundaries", () => {
     }
     expect(runtimeImports.sort()).toEqual([...DASHBOARD_RUNTIME_IMPORT_INVENTORY].sort());
     expect(internalImports.sort()).toEqual([...DASHBOARD_INTERNAL_IMPORT_INVENTORY].sort());
+  });
+
+  it("only reaches dashboard-core through role entrypoints", () => {
+    const violations: string[] = [];
+    for (const module of PRODUCTION_MODULES) {
+      for (const reference of moduleReferencesOf(module)) {
+        if (!reference.specifier.startsWith(DASHBOARD_CORE_ROOT_IMPORT)) continue;
+        const isRoleEntrypoint =
+          reference.specifier === "@station/dashboard-core/runtime" ||
+          reference.specifier === "@station/dashboard-core/state" ||
+          reference.specifier === "@station/dashboard-core/selectors" ||
+          reference.specifier === "@station/dashboard-core/widgets";
+        if (!isRoleEntrypoint) {
+          violations.push(...referenceDescriptors(module, reference));
+        }
+      }
+    }
+    expect(violations).toEqual([]);
   });
 });
 

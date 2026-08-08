@@ -1,11 +1,7 @@
 // OpenTUI port of apps/tui's HelpOverlay: centered box-drawn panel above the
 // dashboard (absolute + zIndex; the dashboard must never reflow for it).
 // Lines come from the shared panel generator over Station's visible help copy.
-import {
-  DASHBOARD_FILTER_CONDITION_KEYS,
-  helpPanelLayout,
-  helpPanelLines,
-} from "@station/dashboard-core";
+import { DASHBOARD_FILTER_CONDITION_KEYS, helpPanelLayout, helpPanelLines } from "@station/dashboard-core/selectors";
 import { toOpenTuiColor, toOpenTuiOpaqueColor, useStationTheme } from "../../theme/index.js";
 import { useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 

@@ -1,14 +1,14 @@
 import type { ClientNotice } from "@station/client";
+import { describe, expect, it } from "vitest";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import { toastExpiryMs } from "../../../src/state/timing.js";
 import {
   activeTuiToast,
   addTuiToast,
-  createInitialTuiState,
   expireTuiToasts,
   nextTuiToastExpiry,
   refreshActiveTuiToastExpiry,
-  toastExpiryMs,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/state/toasts.js";
 
 describe("TUI toast lifecycle state", () => {
   it("adds toast lifecycle metadata", () => {

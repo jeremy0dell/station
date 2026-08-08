@@ -353,10 +353,6 @@ importers:
       zustand:
         specifier: ^5.0.14
         version: 5.0.14
-    devDependencies:
-      '@station/config':
-        specifier: workspace:*
-        version: link:../config
 
   packages/harness-shared:
     dependencies:

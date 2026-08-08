@@ -1,4 +1,4 @@
-import type { DashboardActions } from "@station/dashboard-core";
+import type { DashboardActions } from "@station/dashboard-core/runtime";
 import type { KeymapLayer } from "../../input/keymap/keymaps.js";
 import type { RouteOutcome } from "../../input/router.js";
 import { STATION_OVERLAY_ID } from "../../state/types.js";

@@ -1,13 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import {
-  createObserverActivationCapabilities,
-  createObserverManagedSessionCapabilities,
-  dashboardExecution,
-  selectDashboardViewport,
-  type DashboardCapabilities,
-} from "@station/dashboard-core";
-import type { TuiFolderService } from "@station/dashboard-core";
-import type { DashboardRuntime } from "@station/dashboard-core";
+import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import type { TuiFolderService } from "@station/dashboard-core/runtime";
+import type { DashboardRuntime } from "@station/dashboard-core/runtime";
 import { waitFor } from "../../terminal/testing/waitFor.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";

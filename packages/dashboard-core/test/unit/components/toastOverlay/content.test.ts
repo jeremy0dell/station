@@ -1,5 +1,6 @@
-import { type TuiToastEntry, toastCopyText } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { toastCopyText } from "../../../../src/components/ToastOverlay/content.js";
+import type { TuiToastEntry } from "../../../../src/state/types.js";
 
 function entry(toast: TuiToastEntry["toast"]): TuiToastEntry {
   return {

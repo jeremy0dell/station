@@ -14,7 +14,7 @@ import {
   applyAddProjectSubmitFailed,
   applyAddProjectSubmitted,
 } from "../screens/addProjectScreen.js";
-import type { DashboardState, TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import { executeDashboardCommandError } from "./commandExecutionError.js";
 
 type ProjectPathOperationInput = {
@@ -126,7 +126,7 @@ export async function runAddProjectOperation(input: {
   }
 }
 
-function currentReviewedProject(state: TuiState):
+function currentReviewedProject(state: DashboardState):
   | {
       label: string;
       gitRoot?: string;

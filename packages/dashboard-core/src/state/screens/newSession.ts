@@ -13,14 +13,14 @@ import {
 import type { TuiKey } from "../keys.js";
 import { seedNewSessionPickerCursor } from "../selection/specs/newSession.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 export const newSessionScreenBehavior = {
   dashboardHoverEnabled: false,
   clickAway: cancelNewSession,
 };
 
-export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleNewSessionKey(state: DashboardState, key: TuiKey): TuiTransition {
   if (state.screen.name !== "newSession") {
     return { state };
   }
@@ -50,7 +50,7 @@ export function handleNewSessionKey(state: TuiState, key: TuiKey): TuiTransition
 }
 
 export function handleNewSessionAction(
-  state: TuiState,
+  state: DashboardState,
   actionId: NewSessionActionId,
 ): TuiTransition {
   if (state.screen.name !== "newSession") return { state };
@@ -58,7 +58,10 @@ export function handleNewSessionAction(
   return executeNewSessionIntent(state, newSessionIntentForAction(state.screen.flow, actionId));
 }
 
-function executeNewSessionIntent(state: TuiState, intent: NewSessionInputIntent): TuiTransition {
+function executeNewSessionIntent(
+  state: DashboardState,
+  intent: NewSessionInputIntent,
+): TuiTransition {
   if (intent.type === "none") return { state };
   if (intent.type === "submit") return submitNewSession(state);
   if (state.screen.name !== "newSession") return { state };
@@ -66,14 +69,17 @@ function executeNewSessionIntent(state: TuiState, intent: NewSessionInputIntent)
   return { state: applyNewSessionFlow(state, flow) };
 }
 
-function cancelNewSession(state: TuiState): TuiState {
+function cancelNewSession(state: DashboardState): DashboardState {
   if (state.screen.name !== "newSession") {
     return state;
   }
   return applyNewSessionAction(state, { type: "cancel" });
 }
 
-function applyNewSessionAction(state: TuiState, action: NewSessionFlowAction): TuiState {
+function applyNewSessionAction(
+  state: DashboardState,
+  action: NewSessionFlowAction,
+): DashboardState {
   if (state.screen.name !== "newSession") {
     return state;
   }
@@ -81,15 +87,15 @@ function applyNewSessionAction(state: TuiState, action: NewSessionFlowAction): T
 }
 
 function applyNewSessionFlow(
-  state: TuiState,
-  flow: Extract<TuiState["screen"], { name: "newSession" }>["flow"] | undefined,
-): TuiState {
+  state: DashboardState,
+  flow: Extract<DashboardState["screen"], { name: "newSession" }>["flow"] | undefined,
+): DashboardState {
   return flow === undefined
     ? { ...state, screen: { name: "dashboard" } }
     : seedNewSessionPickerCursor({ ...state, screen: { name: "newSession", flow } });
 }
 
-function submitNewSession(state: TuiState): TuiTransition {
+function submitNewSession(state: DashboardState): TuiTransition {
   if (state.screen.name !== "newSession" || state.snapshot === undefined) {
     return {
       state: {

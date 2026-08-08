@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import type { RowSegment } from "@station/dashboard-core";
+import type { RowSegment } from "@station/dashboard-core/selectors";
 import stringWidth from "string-width";
 import { rowColor, toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { useHoverPointer } from "../../useHoverPointer.js";

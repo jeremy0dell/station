@@ -1,6 +1,6 @@
 import type { TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import { resolveListKey } from "./engine.js";
 import { listSpecForState } from "./registry.js";
 
@@ -9,7 +9,7 @@ import { listSpecForState } from "./registry.js";
  * registered list (and active), resolves ↑↓/↵/slot; otherwise returns undefined
  * and the screen reducer keeps control of the key.
  */
-export function selectionMiddleware(state: TuiState, key: TuiKey): TuiTransition | undefined {
+export function selectionMiddleware(state: DashboardState, key: TuiKey): TuiTransition | undefined {
   const spec = listSpecForState(state);
   if (spec === undefined) {
     return undefined;
