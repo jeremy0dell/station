@@ -60,10 +60,10 @@ async function runHostCliCommand(context: CliCommandRunContext) {
     return {
       code: failed ? 1 : 0,
       output: hostCommandSummary(result),
-      outputFormat: "text",
+      outputFormat: "text" as const,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { code: 2, output: `${message}\n`, outputFormat: "text" };
+    return { code: 2, output: `${message}\n`, outputFormat: "text" as const };
   }
 }
