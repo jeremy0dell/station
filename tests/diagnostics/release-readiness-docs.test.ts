@@ -63,9 +63,9 @@ describe("release readiness docs", () => {
         "let your agent install and validate station",
       );
       expect(prompt).toContain(
-        "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh",
+        "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh",
       );
-      expect(prompt).toContain("v0.0.0-pre-alpha.5");
+      expect(prompt).toContain("v0.0.0-pre-alpha.5.1");
       expect(prompt).toContain("stn setup check --json");
       expect(prompt).toContain("stn doctor");
       expect(prompt).toContain("summary.requiredOk: true");
@@ -144,9 +144,9 @@ describe("release readiness docs", () => {
       ].map(read),
     );
     const packageJson = await readPackageManifest();
-    const exactVersion = "v0.0.0-pre-alpha.5";
+    const exactVersion = "v0.0.0-pre-alpha.5.1";
     const exactInstallerUrl =
-      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5/install.sh";
+      "https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh";
 
     for (const [path, document] of [
       ["README.md", readme],
@@ -187,7 +187,7 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("six assets");
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
-    expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.5");
+    expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.5.1");
     expect(development).toContain("v0.7.1-rc.8");
     expect(homebrew).toContain("Homebrew installation is not currently supported");
     expect(homebrew).toContain("This distribution policy is separate from first-run dependencies");
@@ -255,7 +255,7 @@ describe("release readiness docs", () => {
       expect(singleBinary).toContain(target);
     }
 
-    expect(packageJson.version).toBe("0.0.0-pre-alpha.5");
+    expect(packageJson.version).toBe("0.0.0-pre-alpha.5.1");
     expect(packageJson.scripts["smoke:install"]).toBe(
       "node scripts/test-runners/run-install-smoke.mjs",
     );
