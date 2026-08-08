@@ -1,4 +1,4 @@
-import type { TerminalOutputCompatibility } from "@station/contracts";
+import type { PtyHandoffIdentity, TerminalOutputCompatibility } from "@station/contracts";
 
 export type StationTerminalId = string;
 
@@ -12,6 +12,20 @@ export type StationTerminalExit = {
   signal?: number;
 };
 
+/**
+ * Orphan-mode placement for bridge-backed PTYs: when the owner pipe closes the
+ * bridge parks the PTY and serves its control socket until adopted or TTL-reaped.
+ * Bridge-only; in-process implementations ignore it.
+ */
+export type StationTerminalOrphanOptions = {
+  controlSocketPath: string;
+  parkStatePath: string;
+  ttlMs: number;
+  identity: PtyHandoffIdentity;
+  /** Parked-output budget; the owner passes its scrollback capacity so the backlog cannot outgrow what an adopter replays. */
+  parkMaxBytes?: number;
+};
+
 export type StationTerminalSpawnOptions = {
   id?: StationTerminalId;
   command?: string;
@@ -20,6 +34,7 @@ export type StationTerminalSpawnOptions = {
   env?: Readonly<Record<string, string | undefined>>;
   size?: Partial<StationTerminalSize>;
   outputCompatibility?: TerminalOutputCompatibility;
+  orphan?: StationTerminalOrphanOptions;
 };
 
 export type StationTerminalDisposable = {
@@ -50,6 +65,12 @@ export type StationTerminalProcess = {
   readonly id: StationTerminalId;
   readonly command: string;
   readonly pid: number;
+  /**
+   * The owning bridge process pid when the transport spawns a separate bridge;
+   * absent for in-process implementations. Handoff manifests track the bridge,
+   * not the PTY child, because the bridge is what survives owner death.
+   */
+  readonly bridgePid?: number | undefined;
   readonly size: StationTerminalSize;
   /**
    * The last ordered geometry barrier consumed from the backing PTY, when the

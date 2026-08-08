@@ -60,6 +60,10 @@ export type BunTerminalProcessOptions = {
   cttyHelperPath?: string;
 };
 
+// Orphan-mode parity gap: Bun spawns the PTY payload in-process, so a host
+// death takes the PTY with it and there is no bridge to park. Spawn options
+// carrying `orphan` are deliberately ignored on this lane; live handoff is a
+// bridge-implementation capability.
 export function createBunTerminalProcess(
   options: BunTerminalProcessOptions,
 ): BunTerminalProcess {
