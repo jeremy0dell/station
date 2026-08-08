@@ -179,6 +179,8 @@ run/runtime-owners/v1/
 
 `run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR and the supervised setup guided E2E lane. Binary smoke uses the same relative record path beneath private checkout-and-mode-keyed state in the OS temporary directory so an ordinary next start can find a prior random smoke root. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. Device-and-inode-pinned cleanup roots remain on the next record until exact deletion succeeds. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to persistent Observer, Station Host, or Host-owned PTYs.
 
+Use `pnpm station:runtime-inventory [-- --json]` to inspect registered disposable owners without changing them. The report distinguishes a live persistent Host/PTY cohort from a disposable launcher record, returns only keys and root classifications, and names unavailable or ambiguous evidence as a refusal. It never prints raw commands, environment, terminal contents, prompts, credentials, or absolute private paths; use its logical `logs/cli.jsonl` location with `stn debug logs "runtime." --component cli` for the correlated lifecycle evidence. For the checkout-local devbox, run `cd station && bun run station:isolated inventory`.
+
 `observer.sock.pid` is mode `0600` for the default socket and contains exactly:
 
 ```json

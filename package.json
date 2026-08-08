@@ -25,6 +25,7 @@
     "agent:cleanup:run": "node scripts/maintenance/agent-cleanup.mjs --run",
     "agent:reset": "node scripts/maintenance/agent-reset.mjs",
     "agent:reset:run": "node scripts/maintenance/agent-reset.mjs --yes",
+    "station:runtime-inventory": "node scripts/maintenance/runtime-inventory.mjs",
     "stn": "bin/stn",
     "station:reset": "node scripts/maintenance/station-reset.mjs",
     "station:reset:tmux-tui": "node scripts/maintenance/station-tmux-tui-reset.mjs",

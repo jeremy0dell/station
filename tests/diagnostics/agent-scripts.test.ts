@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -20,6 +22,11 @@ import {
   normalizeConfig,
   parseResetArgs,
 } from "../../scripts/maintenance/agent-reset.mjs";
+import {
+  buildRuntimeInventory,
+  formatRuntimeInventory,
+  parseRuntimeInventoryArgs,
+} from "../../scripts/maintenance/runtime-inventory.mjs";
 import {
   buildSessionMigrationPlan,
   parseSessionMigrationArgs,
@@ -111,6 +118,107 @@ const turboDryRunSchema = z.object({
     .optional(),
 });
 
+function runtimeOwnerProcess(pid = 999_999, osStartTime = "exited") {
+  return {
+    pid,
+    pgid: pid,
+    osStartTime,
+    processToken: "11111111-1111-4111-8111-111111111111",
+    executable: { path: process.execPath, device: "1", inode: "1" },
+    script: { path: process.execPath, device: "1", inode: "1" },
+  };
+}
+
+function runtimeOwnerRecord(root: string, overrides: Record<string, unknown> = {}) {
+  const runtimeId = "run_11111111-1111-4111-8111-111111111111";
+  const owner = runtimeOwnerProcess();
+  return {
+    schemaVersion: 1,
+    generation: 0,
+    runtimeId,
+    role: "native-hmr",
+    disposition: "disposable",
+    runtimeKey: "a".repeat(64),
+    launchKey: "b".repeat(64),
+    checkout: { root, key: "c".repeat(64), device: "1", inode: "1" },
+    recordRoot: join(root, "run", "runtime-owners", "v1"),
+    owner,
+    processGroup: owner,
+    correlation: { traceId: "trc_runtime_inventory", spanId: "spn_runtime_inventory" },
+    socketRoots: [join(root, "run")],
+    persistenceRoots: [root],
+    survivorPolicy: "preserve-persistent-station-runtime",
+    state: { phase: "running" },
+    createdAt: "2026-08-08T00:00:00.000Z",
+    updatedAt: "2026-08-08T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function writeRuntimeRecord(root: string, record: ReturnType<typeof runtimeOwnerRecord>) {
+  const directory = join(root, "run", "runtime-owners", "v1");
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  chmodSync(directory, 0o700);
+  writeFileSync(join(directory, `${record.runtimeId}.json`), `${JSON.stringify(record)}\n`, {
+    mode: 0o600,
+  });
+}
+
+function writeLifecycleEvent(root: string, record: ReturnType<typeof runtimeOwnerRecord>) {
+  const directory = join(root, "logs");
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    join(directory, "cli.jsonl"),
+    `${JSON.stringify({
+      timestamp: "2026-08-08T00:01:00.000Z",
+      level: "warn",
+      component: "cli",
+      message: "runtime.cleanup.refused",
+      traceId: record.correlation.traceId,
+      spanId: record.correlation.spanId,
+      attributes: {
+        runtimeId: record.runtimeId,
+        role: record.role,
+        disposition: record.disposition,
+        runtimeKey: record.runtimeKey,
+        checkoutKey: record.checkout.key,
+        socketRootsKey: "d".repeat(64),
+        persistenceRootsKey: "e".repeat(64),
+        survivorPolicy: record.survivorPolicy,
+        ownerPid: record.owner.pid,
+        ownerStartTime: record.owner.osStartTime,
+        groupLeaderPid: record.processGroup.pid,
+        pgid: record.processGroup.pgid,
+        groupStartTime: record.processGroup.osStartTime,
+        refusalCode: "RUNTIME_OWNER_OWNER_IDENTITY_AMBIGUOUS",
+      },
+    })}\n`,
+    { mode: 0o600 },
+  );
+}
+
+async function waitForRuntimeOwnerRecord(directory: string) {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const recordName = existsSync(directory)
+      ? readdirSync(directory).find((entry) => entry.endsWith(".json"))
+      : undefined;
+    if (recordName !== undefined) {
+      const record = JSON.parse(readFileSync(join(directory, recordName), "utf8")) as ReturnType<
+        typeof runtimeOwnerRecord
+      >;
+      if (record.processGroup !== undefined) return record;
+    }
+    if (Date.now() >= deadline)
+      throw new Error(`Timed out waiting for runtime owner record under: ${directory}`);
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+}
+
+async function waitForExit(child: ReturnType<typeof spawn>) {
+  await new Promise<void>((resolvePromise) => child.once("exit", () => resolvePromise()));
+}
+
 describe("agent cleanup/reset scripts", () => {
   it("defaults cleanup and reset to dry-run mode", () => {
     expect(parseCleanupArgs([])).toMatchObject({
@@ -178,6 +286,156 @@ managed_root = "~/.worktrees"`);
   it("checks managed roots without prefix false positives", () => {
     expect(isUnder("/tmp/station/.worktrees/branch", "/tmp/station/.worktrees")).toBe(true);
     expect(isUnder("/tmp/station/.worktrees-other/branch", "/tmp/station/.worktrees")).toBe(false);
+  });
+});
+
+describe("runtime inventory script", () => {
+  it("reads valid evidence without exposing roots or mutating records", async () => {
+    const root = mkdtempSync(join(tmpdir(), "station-runtime-inventory-"));
+    const secret = "do-not-print-this-private-root";
+    const record = runtimeOwnerRecord(root, {
+      socketRoots: [join(root, secret, "socket")],
+      persistenceRoots: [join(root, secret, "state")],
+    });
+    try {
+      writeRuntimeRecord(root, record);
+      writeLifecycleEvent(root, record);
+      const recordPath = join(root, "run", "runtime-owners", "v1", `${record.runtimeId}.json`);
+      const before = readFileSync(recordPath, "utf8");
+
+      const inventory = await buildRuntimeInventory({ stateDir: root });
+      const rendered = JSON.stringify(inventory);
+
+      expect(inventory).toMatchObject({
+        mode: "read-only",
+        ownerRecords: { state: "available", count: 1 },
+        runtimes: [
+          expect.objectContaining({
+            role: "native-hmr",
+            disposition: "disposable",
+            liveness: "exited",
+            lifecycle: expect.objectContaining({
+              event: "runtime.cleanup.refused",
+              traceId: record.correlation.traceId,
+              log: "logs/cli.jsonl",
+            }),
+          }),
+        ],
+      });
+      expect(rendered).not.toContain(root);
+      expect(rendered).not.toContain(secret);
+      expect(formatRuntimeInventory(inventory)).toContain("read-only");
+      expect(readFileSync(recordPath, "utf8")).toBe(before);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("flags stale, PID-reused, ambiguous, and missing ownership evidence", async () => {
+    const root = mkdtempSync(join(tmpdir(), "station-runtime-inventory-refusals-"));
+    try {
+      const reused = runtimeOwnerRecord(root, {
+        owner: runtimeOwnerProcess(process.pid, "not-this-process"),
+        processGroup: runtimeOwnerProcess(process.pid, "not-this-process"),
+      });
+      writeRuntimeRecord(root, reused);
+      const ownerDirectory = join(root, "run", "runtime-owners", "v1");
+      writeFileSync(
+        join(ownerDirectory, "run_22222222-2222-4222-8222-222222222222.json"),
+        "{bad\n",
+        {
+          mode: 0o600,
+        },
+      );
+      const inventory = await buildRuntimeInventory({ stateDir: root });
+
+      expect(inventory.runtimes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            state: "refused",
+            liveness: "refused",
+            refusalReasons: expect.arrayContaining(["owner-changed"]),
+          }),
+          expect.objectContaining({
+            state: "refused",
+            refusalCode: "RUNTIME_OWNER_RECORD_MALFORMED",
+          }),
+        ]),
+      );
+
+      writeFileSync(join(ownerDirectory, "unexpected"), "ambiguous\n", { mode: 0o600 });
+      expect(await buildRuntimeInventory({ stateDir: root })).toMatchObject({
+        ownerRecords: {
+          state: "refused",
+          refusalCode: "RUNTIME_OWNER_DIRECTORY_AMBIGUOUS",
+        },
+      });
+
+      const missing = await buildRuntimeInventory({ stateDir: join(root, "missing") });
+      expect(missing.ownerRecords).toMatchObject({ state: "missing", count: 0 });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("classifies active and owner-lost disposable groups without touching either", async () => {
+    const root = mkdtempSync(join(tmpdir(), "station-runtime-inventory-live-"));
+    const runner = join(root, "owner.mjs");
+    const recordDirectory = join(root, "run", "runtime-owners", "v1");
+    let owner: ReturnType<typeof spawn> | undefined;
+    let processGroup: number | undefined;
+    try {
+      writeFileSync(
+        runner,
+        [
+          `import { runOwnedDisposableRuntime } from ${JSON.stringify(new URL("../../scripts/runtime-owner.mjs", import.meta.url).href)};`,
+          `await runOwnedDisposableRuntime({ role: "native-hmr", checkoutRoot: ${JSON.stringify(process.cwd())}, stateDir: ${JSON.stringify(root)}, socketRoots: [${JSON.stringify(join(root, "run"))}], persistenceRoots: [${JSON.stringify(root)}], survivorPolicy: "preserve-persistent-station-runtime", terminalKey: "inventory-live", correlation: { traceId: "trc_inventory_live", spanId: "spn_inventory_live" }, launch: { cwd: ${JSON.stringify(process.cwd())}, steps: [{ command: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"] }] } });`,
+        ].join("\n"),
+        { mode: 0o600 },
+      );
+      owner = spawn(process.execPath, [runner], { stdio: "ignore" });
+      const record = await waitForRuntimeOwnerRecord(recordDirectory);
+      const recordPath = join(recordDirectory, `${record.runtimeId}.json`);
+      processGroup = record.processGroup.pgid;
+
+      const active = await buildRuntimeInventory({ stateDir: root });
+      expect(active.runtimes).toEqual(
+        expect.arrayContaining([expect.objectContaining({ liveness: "active" })]),
+      );
+      expect(owner.exitCode).toBeNull();
+
+      owner.kill("SIGKILL");
+      await waitForExit(owner);
+      owner = undefined;
+      const orphaned = await buildRuntimeInventory({ stateDir: root });
+      expect(orphaned.runtimes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ liveness: "orphaned", state: "inspectable" }),
+        ]),
+      );
+      expect(readFileSync(recordPath, "utf8")).toContain(record.runtimeId);
+    } finally {
+      if (owner?.exitCode === null && owner.signalCode === null) owner.kill("SIGKILL");
+      if (processGroup !== undefined) {
+        try {
+          process.kill(-processGroup, "SIGTERM");
+        } catch {
+          // The disposable fixture already exited.
+        }
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it("accepts only explicit read-only inventory arguments", () => {
+    expect(parseRuntimeInventoryArgs(["--json", "--state-dir", "/tmp/station-state"])).toEqual({
+      json: true,
+      stateDir: "/tmp/station-state",
+    });
+    expect(() => parseRuntimeInventoryArgs(["--run"])).toThrow("Unknown runtime inventory option");
+    expect(() => parseRuntimeInventoryArgs(["--state-dir", "relative"])).toThrow(
+      "requires an absolute path",
+    );
   });
 });
 
@@ -1121,6 +1379,9 @@ describe("tui dev script", () => {
     );
 
     expect(rootPackage.scripts?.["station:ui-dev"]).toBe("cd station && bun run dev");
+    expect(rootPackage.scripts?.["station:runtime-inventory"]).toBe(
+      "node scripts/maintenance/runtime-inventory.mjs",
+    );
     expect(stationPackage.scripts?.dev).toBe("node ../scripts/native-hmr-runner.mjs");
     expect(stationPackage.scripts?.["station:isolated"]).toBe("./scripts/station-isolated.sh");
     expect(stationPackage.scripts?.["station:isolated"]).not.toContain("link:station");
@@ -1130,6 +1391,8 @@ describe("tui dev script", () => {
     expect(nodePtyRepairScript).toMatch(/cd \\"\$\{root\}\\" && bun install --frozen-lockfile/u);
 
     const frozenInstall = isolatedScript.indexOf("bun install --frozen-lockfile");
+    expect(isolatedScript).toContain('if [ "$COMMAND" = "inventory" ]');
+    expect(isolatedScript.indexOf('if [ "$COMMAND" = "inventory" ]')).toBeLessThan(frozenInstall);
     expect(frozenInstall).toBeGreaterThan(isolatedScript.indexOf('if [ "$COMMAND" = "stop" ]'));
     expect(frozenInstall).toBeLessThan(isolatedScript.indexOf('mkdir -p "$DS/observer"'));
     expect(frozenInstall).toBeLessThan(isolatedScript.indexOf("observer start 2>&1"));

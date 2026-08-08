@@ -26,6 +26,7 @@ const KILL_CONFIRM_MS = 2_000;
 const STARTUP_LOCK_TIMEOUT_MS = 10_000;
 const HELPER_READY_TIMEOUT_MS = 5_000;
 const POLL_MS = 50;
+const LIFECYCLE_TAIL_BYTES = 1024 * 1024;
 const runtimeOwnerScriptPath = fileURLToPath(import.meta.url);
 
 const AbsolutePathSchema = z.string().min(1).refine(isAbsolute, "Expected an absolute path.");
@@ -234,6 +235,58 @@ export class RuntimeOwnerError extends Error {
 /** Return the durable private directory used to recover disposable script runtimes. */
 export function runtimeOwnerRecordDirectory(stateDir) {
   return join(resolve(stateDir), "run", OWNER_DIRECTORY_NAME, OWNER_DIRECTORY_VERSION);
+}
+
+/** Inspect disposable owner records without changing records, processes, or runtime roots. */
+export async function inspectDisposableRuntimeOwners(stateDir) {
+  const recordDirectory = runtimeOwnerRecordDirectory(stateDir);
+  let paths;
+  try {
+    await assertPrivateOwnerDirectory(recordDirectory);
+    paths = await listOwnerRecords(recordDirectory);
+  } catch (cause) {
+    if (cause?.code === "ENOENT") {
+      return { recordDirectory, state: "missing", records: [], lifecycle: [] };
+    }
+    return {
+      recordDirectory,
+      state: "refused",
+      records: [],
+      lifecycle: [],
+      refusalCode: runtimeOwnerErrorCode(cause),
+    };
+  }
+
+  const lifecycle = await readRuntimeLifecycleEvents(join(resolve(stateDir), "logs", "cli.jsonl"));
+  const records = [];
+  for (const path of paths) {
+    try {
+      const record = await readValidatedRecord(path);
+      const ownerIdentity = await inspectOwnerIdentity(record.owner);
+      const processGroup =
+        record.processGroup === undefined
+          ? { kind: "unstarted" }
+          : await inspectGroupIdentity(record.processGroup, record.runtimeId);
+      records.push({
+        record,
+        ownerIdentity,
+        processGroup,
+        lastEvent: lifecycle.events
+          .filter((event) => event.attributes.runtimeId === record.runtimeId)
+          .at(-1),
+      });
+    } catch (cause) {
+      records.push({ refusalCode: runtimeOwnerErrorCode(cause) });
+    }
+  }
+
+  return {
+    recordDirectory,
+    state: "available",
+    records,
+    lifecycle: lifecycle.events,
+    ...(lifecycle.refusalCode === undefined ? {} : { refusalCode: lifecycle.refusalCode }),
+  };
 }
 
 /** Verify that the current process belongs to the exact active runtime owner record. */
@@ -1124,6 +1177,63 @@ async function listOwnerRecords(directory) {
     paths.push(join(directory, entry.name));
   }
   return paths.sort();
+}
+
+async function assertPrivateOwnerDirectory(path) {
+  const metadata = await lstat(path);
+  if (
+    !metadata.isDirectory() ||
+    metadata.isSymbolicLink() ||
+    (metadata.mode & 0o777) !== 0o700 ||
+    (typeof process.geteuid === "function" && metadata.uid !== process.geteuid())
+  ) {
+    throw new RuntimeOwnerError(
+      "RUNTIME_OWNER_DIRECTORY_INSECURE",
+      "The runtime owner directory is not a private regular directory.",
+    );
+  }
+}
+
+async function readRuntimeLifecycleEvents(path) {
+  try {
+    const metadata = await lstat(path);
+    if (!metadata.isFile() || metadata.isSymbolicLink()) {
+      throw new RuntimeOwnerError(
+        "RUNTIME_OWNER_LIFECYCLE_INSECURE",
+        "The runtime lifecycle log is not a regular file.",
+      );
+    }
+    const handle = await open(path, "r");
+    try {
+      const length = Math.min(metadata.size, LIFECYCLE_TAIL_BYTES);
+      const buffer = Buffer.alloc(length);
+      await handle.read(buffer, 0, length, Math.max(0, metadata.size - length));
+      const lines = buffer
+        .toString("utf8")
+        .split("\n")
+        .slice(metadata.size > LIFECYCLE_TAIL_BYTES ? 1 : 0)
+        .filter((line) => line.length > 0);
+      return {
+        events: lines.flatMap((line) => {
+          try {
+            const parsed = RuntimeLifecycleEventSchema.safeParse(JSON.parse(line));
+            return parsed.success ? [parsed.data] : [];
+          } catch {
+            return [];
+          }
+        }),
+      };
+    } finally {
+      await handle.close();
+    }
+  } catch (cause) {
+    if (cause?.code === "ENOENT") return { events: [] };
+    return { events: [], refusalCode: runtimeOwnerErrorCode(cause) };
+  }
+}
+
+function runtimeOwnerErrorCode(cause) {
+  return cause instanceof RuntimeOwnerError ? cause.code : "RUNTIME_OWNER_EVIDENCE_UNAVAILABLE";
 }
 
 async function readValidatedRecord(path) {

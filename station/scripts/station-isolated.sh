@@ -26,6 +26,10 @@ if [ "$COMMAND" = "--hot" ]; then
   COMMAND="dev"
 fi
 
+if [ "$COMMAND" = "inventory" ]; then
+  exec node "$ROOT/scripts/maintenance/runtime-inventory.mjs" --state-dir "$DS/observer" "${@:2}"
+fi
+
 if [ ! -f "$CLI" ]; then
   echo "stn CLI is not built ($CLI missing). Run 'pnpm build' at the repo root first." >&2
   exit 1
@@ -43,7 +47,7 @@ if [ "$COMMAND" = "stop" ]; then
 fi
 
 if [ "$COMMAND" != "start" ] && [ "$COMMAND" != "dev" ]; then
-  echo "Usage: $0 [start|dev|--hot|stop]" >&2
+  echo "Usage: $0 [start|dev|--hot|stop|inventory]" >&2
   exit 1
 fi
 
