@@ -83,6 +83,8 @@ export type PtyHandoff = {
   adoptRegistry(manifest: unknown): Promise<PtyAdoptionReport>;
 };
 
+type Emit = (event: string, attributes: Record<string, unknown>) => void;
+
 /**
  * Live-PTY handoff between host generations: export captures every bridge-backed
  * entry as a manifest plus persisted scrollback, adoption rebinds parked bridges
@@ -100,22 +102,6 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
     activateAdoptedEntry,
   } = deps;
 
-  const failAdoption = (
-    report: PtyAdoptionReport,
-    ptyId: string,
-    reason: string,
-    error?: unknown,
-  ): void => {
-    report.failed.push({ ptyId, reason });
-    if (error !== undefined) {
-      emit("pty.handoff.adopt-failed", {
-        ptyId,
-        reason,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  };
-
   async function buildManifest(
     fidelity: HostHandoffFidelity,
     options: { requireRelease?: boolean } = {},
@@ -129,69 +115,18 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
       if (entry.exited) {
         continue;
       }
-      const bridgePid = entry.terminal.bridgePid;
-      if (bridgePid === undefined || orphanBridges === undefined) {
-        const reason = bridgePid === undefined ? "no-bridge-transport" : "orphan-mode-disabled";
-        skipped.push({ ptyId: entry.ptyId, reason });
-        emit("pty.handoff.export-skipped", { ptyId: entry.ptyId, reason });
+      const built = await tryBuildHandoffEntry({
+        entry,
+        fidelity,
+        orphanBridges,
+        requireRelease: options.requireRelease === true,
+        emit,
+      });
+      if (built.kind === "skipped") {
+        skipped.push({ ptyId: entry.ptyId, reason: built.reason });
         continue;
       }
-      // Export may snapshot bridge-backed rows; live park requires releaseToOrphan.
-      if (options.requireRelease === true && entry.terminal.releaseToOrphan === undefined) {
-        skipped.push({ ptyId: entry.ptyId, reason: "release-unsupported" });
-        emit("pty.handoff.export-skipped", {
-          ptyId: entry.ptyId,
-          reason: "release-unsupported",
-        });
-        continue;
-      }
-      const snapshot = entry.ring.snapshot();
-      const exportData: PtyScrollbackExport = {
-        initialCols: snapshot.initialCols,
-        initialRows: snapshot.initialRows,
-        complete: snapshot.complete,
-        events: snapshot.events,
-      };
-      const handoffEntry: PtyHandoffEntry = {
-        bridgeProtocolVersion: PtyBridgeProtocolVersion,
-        bridgePid,
-        controlSocket: bridgeControlSocketPath(orphanBridges.directory, entry.ptyId),
-        command: entry.command,
-        cols: entry.cols,
-        rows: entry.rows,
-        identity: { ...entry.identity },
-        ringComplete: snapshot.complete,
-      };
-      try {
-        handoffEntry.scrollbackRef = await writeScrollbackExport(
-          orphanBridges.directory,
-          entry.ptyId,
-          exportData,
-        );
-      } catch (error) {
-        // A scrollback write failure degrades adoption replay, not adoption itself.
-        emit("pty.handoff.scrollback-export-failed", {
-          ptyId: entry.ptyId,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-      if (fidelity === "screen") {
-        try {
-          const sequences = await entry.semantic.capture();
-          handoffEntry.screenSnapshotRef = await writeScreenSnapshot(
-            orphanBridges.directory,
-            entry.ptyId,
-            { cols: entry.cols, rows: entry.rows, sequences },
-          );
-        } catch (error) {
-          // Screen fidelity never blocks handoff; adopter falls back to replay.
-          emit("pty.handoff.screen-export-failed", {
-            ptyId: entry.ptyId,
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      manifest[entry.ptyId] = handoffEntry;
+      manifest[entry.ptyId] = built.entry;
     }
     emit("pty.handoff.export", {
       count: Object.keys(manifest).length,
@@ -219,120 +154,34 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
         });
         return { manifest: {}, fidelity, released: [], skipped };
       }
-      const released: string[] = [];
-      for (const ptyId of Object.keys(manifest)) {
-        const entry = entries.get(ptyId);
-        if (entry === undefined) {
-          continue;
-        }
-        for (const subscription of entry.subscriptions) {
-          subscription.dispose();
-        }
-        entry.subscriptions.length = 0;
-        entry.terminal.releaseToOrphan?.();
-        entry.semantic.dispose();
-        entries.delete(ptyId);
-        released.push(ptyId);
-      }
+      const released = parkAndDropReleasedEntries(entries, Object.keys(manifest));
       emit("pty.handoff.released", { count: released.length, fidelity });
       return { manifest, fidelity, released, skipped };
     },
 
     async adoptRegistry(manifestInput) {
-      let manifest: PtyHandoffManifest;
-      try {
-        manifest = PtyHandoffManifestSchema.parse(manifestInput);
-      } catch (error) {
-        throw new StationHostProviderError(
-          "HOST_HANDOFF_MANIFEST_INVALID",
-          "The PTY handoff manifest is invalid.",
-          { cause: error },
-        );
-      }
+      const manifest = parseHandoffManifest(manifestInput);
       const report: PtyAdoptionReport = { adopted: [], failed: [] };
       for (const ptyId of Object.keys(manifest)) {
         const handoffEntry = manifest[ptyId];
         if (handoffEntry === undefined) {
           continue;
         }
-        if (entries.has(ptyId)) {
-          failAdoption(report, ptyId, "duplicate-pty-id");
-          continue;
-        }
-        let terminal: PtyAdoptedTerminal;
-        try {
-          terminal = await adoptTerminal({
-            ptyId,
-            command: handoffEntry.command,
-            controlSocketPath: handoffEntry.controlSocket,
-            size: { cols: handoffEntry.cols, rows: handoffEntry.rows },
-          });
-        } catch (error) {
-          // Per-entry isolation: one unreachable bridge never blocks the rest.
-          failAdoption(report, ptyId, "adopt-failed", error);
-          continue;
-        }
-        const { cols, rows } = clampSize(handoffEntry.cols, handoffEntry.rows);
-        let ring: ScrollbackRing | undefined;
-        let importFailed = false;
-        if (handoffEntry.scrollbackRef !== undefined) {
-          const exportData = await readScrollbackExport(handoffEntry.scrollbackRef);
-          if (exportData !== undefined) {
-            ring = ScrollbackRing.restore(maxScrollbackBytes, exportData);
-          } else {
-            importFailed = true;
-            emit("pty.handoff.scrollback-import-failed", { ptyId });
-          }
-        }
-        if (ring === undefined) {
-          ring = new ScrollbackRing(maxScrollbackBytes, { cols, rows });
-        }
-        // Fail closed on any known gap — an evicted park backlog, an export
-        // that recorded truncation, or a scrollback ref that would not read:
-        // replay falls into semantic recovery, never a partial raw stream.
-        if (
-          terminal.parkedEvicted === true ||
-          handoffEntry.ringComplete === false ||
-          importFailed
-        ) {
-          ring.markEvicted();
-        }
-        let semantic: SemanticTerminalModel;
-        try {
-          semantic = createSemanticTerminal(cols, rows);
-        } catch (error) {
-          terminal.dispose();
-          failAdoption(report, ptyId, "semantic-init-failed", error);
-          continue;
-        }
-        if (handoffEntry.screenSnapshotRef !== undefined) {
-          const screen = await readScreenSnapshot(handoffEntry.screenSnapshotRef);
-          if (screen !== undefined) {
-            try {
-              for (const sequence of screen.sequences) {
-                semantic.write(sequence);
-              }
-            } catch (error) {
-              emit("pty.handoff.screen-import-failed", {
-                ptyId,
-                message: error instanceof Error ? error.message : String(error),
-              });
-            }
-          } else {
-            emit("pty.handoff.screen-import-failed", { ptyId, reason: "unreadable" });
-          }
-        }
-        activateAdoptedEntry({
+        const outcome = await adoptOneEntry({
           ptyId,
-          identity: { ...handoffEntry.identity },
-          command: handoffEntry.command,
-          terminal,
-          ring,
-          semantic,
-          cols,
-          rows,
+          handoffEntry,
+          entries,
+          adoptTerminal,
+          createSemanticTerminal,
+          maxScrollbackBytes,
+          emit,
+          activateAdoptedEntry,
         });
-        report.adopted.push(ptyId);
+        if (outcome.kind === "adopted") {
+          report.adopted.push(ptyId);
+        } else {
+          report.failed.push({ ptyId, reason: outcome.reason });
+        }
       }
       emit("pty.handoff.adopt", {
         adopted: report.adopted.length,
@@ -341,4 +190,284 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
       return report;
     },
   };
+}
+
+type BuildEntryResult =
+  | { kind: "entry"; entry: PtyHandoffEntry }
+  | { kind: "skipped"; reason: string };
+
+async function tryBuildHandoffEntry(input: {
+  entry: PtyEntry;
+  fidelity: HostHandoffFidelity;
+  orphanBridges: PtyTableOrphanOptions | undefined;
+  requireRelease: boolean;
+  emit: Emit;
+}): Promise<BuildEntryResult> {
+  const { entry, fidelity, orphanBridges, requireRelease, emit } = input;
+  const bridgePid = entry.terminal.bridgePid;
+  if (bridgePid === undefined || orphanBridges === undefined) {
+    const reason = bridgePid === undefined ? "no-bridge-transport" : "orphan-mode-disabled";
+    emit("pty.handoff.export-skipped", { ptyId: entry.ptyId, reason });
+    return { kind: "skipped", reason };
+  }
+  // Export may snapshot bridge-backed rows; live park requires releaseToOrphan.
+  if (requireRelease && entry.terminal.releaseToOrphan === undefined) {
+    emit("pty.handoff.export-skipped", {
+      ptyId: entry.ptyId,
+      reason: "release-unsupported",
+    });
+    return { kind: "skipped", reason: "release-unsupported" };
+  }
+
+  const snapshot = entry.ring.snapshot();
+  const handoffEntry: PtyHandoffEntry = {
+    bridgeProtocolVersion: PtyBridgeProtocolVersion,
+    bridgePid,
+    controlSocket: bridgeControlSocketPath(orphanBridges.directory, entry.ptyId),
+    command: entry.command,
+    cols: entry.cols,
+    rows: entry.rows,
+    identity: { ...entry.identity },
+    ringComplete: snapshot.complete,
+  };
+
+  await attachScrollbackExport(handoffEntry, {
+    directory: orphanBridges.directory,
+    ptyId: entry.ptyId,
+    exportData: {
+      initialCols: snapshot.initialCols,
+      initialRows: snapshot.initialRows,
+      complete: snapshot.complete,
+      events: snapshot.events,
+    },
+    emit,
+  });
+  if (fidelity === "screen") {
+    await attachScreenExport(handoffEntry, entry, orphanBridges.directory, emit);
+  }
+  return { kind: "entry", entry: handoffEntry };
+}
+
+async function attachScrollbackExport(
+  handoffEntry: PtyHandoffEntry,
+  input: {
+    directory: string;
+    ptyId: string;
+    exportData: PtyScrollbackExport;
+    emit: Emit;
+  },
+): Promise<void> {
+  try {
+    handoffEntry.scrollbackRef = await writeScrollbackExport(
+      input.directory,
+      input.ptyId,
+      input.exportData,
+    );
+  } catch (error) {
+    // A scrollback write failure degrades adoption replay, not adoption itself.
+    input.emit("pty.handoff.scrollback-export-failed", {
+      ptyId: input.ptyId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function attachScreenExport(
+  handoffEntry: PtyHandoffEntry,
+  entry: PtyEntry,
+  directory: string,
+  emit: Emit,
+): Promise<void> {
+  try {
+    const sequences = await entry.semantic.capture();
+    handoffEntry.screenSnapshotRef = await writeScreenSnapshot(directory, entry.ptyId, {
+      cols: entry.cols,
+      rows: entry.rows,
+      sequences,
+    });
+  } catch (error) {
+    // Screen fidelity never blocks handoff; adopter falls back to replay.
+    emit("pty.handoff.screen-export-failed", {
+      ptyId: entry.ptyId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function parkAndDropReleasedEntries(
+  entries: Map<string, PtyEntry>,
+  ptyIds: string[],
+): string[] {
+  const released: string[] = [];
+  for (const ptyId of ptyIds) {
+    const entry = entries.get(ptyId);
+    if (entry === undefined) {
+      continue;
+    }
+    for (const subscription of entry.subscriptions) {
+      subscription.dispose();
+    }
+    entry.subscriptions.length = 0;
+    entry.terminal.releaseToOrphan?.();
+    entry.semantic.dispose();
+    entries.delete(ptyId);
+    released.push(ptyId);
+  }
+  return released;
+}
+
+function parseHandoffManifest(manifestInput: unknown): PtyHandoffManifest {
+  try {
+    return PtyHandoffManifestSchema.parse(manifestInput);
+  } catch (error) {
+    throw new StationHostProviderError(
+      "HOST_HANDOFF_MANIFEST_INVALID",
+      "The PTY handoff manifest is invalid.",
+      { cause: error },
+    );
+  }
+}
+
+type AdoptOneResult = { kind: "adopted" } | { kind: "failed"; reason: string };
+
+async function adoptOneEntry(input: {
+  ptyId: string;
+  handoffEntry: PtyHandoffEntry;
+  entries: Map<string, PtyEntry>;
+  adoptTerminal: PtyTerminalAdopter;
+  createSemanticTerminal: (cols: number, rows: number) => SemanticTerminalModel;
+  maxScrollbackBytes: number;
+  emit: Emit;
+  activateAdoptedEntry: (init: AdoptedEntryInit) => void;
+}): Promise<AdoptOneResult> {
+  const { ptyId, handoffEntry, entries, emit } = input;
+  if (entries.has(ptyId)) {
+    return { kind: "failed", reason: "duplicate-pty-id" };
+  }
+
+  let terminal: PtyAdoptedTerminal;
+  try {
+    terminal = await input.adoptTerminal({
+      ptyId,
+      command: handoffEntry.command,
+      controlSocketPath: handoffEntry.controlSocket,
+      size: { cols: handoffEntry.cols, rows: handoffEntry.rows },
+    });
+  } catch (error) {
+    // Per-entry isolation: one unreachable bridge never blocks the rest.
+    failAdoptionEmit(emit, ptyId, "adopt-failed", error);
+    return { kind: "failed", reason: "adopt-failed" };
+  }
+
+  const { cols, rows } = clampSize(handoffEntry.cols, handoffEntry.rows);
+  const ring = await restoreAdoptionRing({
+    ptyId,
+    handoffEntry,
+    terminal,
+    cols,
+    rows,
+    maxScrollbackBytes: input.maxScrollbackBytes,
+    emit,
+  });
+
+  let semantic: SemanticTerminalModel;
+  try {
+    semantic = input.createSemanticTerminal(cols, rows);
+  } catch (error) {
+    terminal.dispose();
+    failAdoptionEmit(emit, ptyId, "semantic-init-failed", error);
+    return { kind: "failed", reason: "semantic-init-failed" };
+  }
+
+  await seedScreenSnapshot(semantic, ptyId, handoffEntry.screenSnapshotRef, emit);
+  input.activateAdoptedEntry({
+    ptyId,
+    identity: { ...handoffEntry.identity },
+    command: handoffEntry.command,
+    terminal,
+    ring,
+    semantic,
+    cols,
+    rows,
+  });
+  return { kind: "adopted" };
+}
+
+async function restoreAdoptionRing(input: {
+  ptyId: string;
+  handoffEntry: PtyHandoffEntry;
+  terminal: PtyAdoptedTerminal;
+  cols: number;
+  rows: number;
+  maxScrollbackBytes: number;
+  emit: Emit;
+}): Promise<ScrollbackRing> {
+  let ring: ScrollbackRing | undefined;
+  let importFailed = false;
+  if (input.handoffEntry.scrollbackRef !== undefined) {
+    const exportData = await readScrollbackExport(input.handoffEntry.scrollbackRef);
+    if (exportData !== undefined) {
+      ring = ScrollbackRing.restore(input.maxScrollbackBytes, exportData);
+    } else {
+      importFailed = true;
+      input.emit("pty.handoff.scrollback-import-failed", { ptyId: input.ptyId });
+    }
+  }
+  if (ring === undefined) {
+    ring = new ScrollbackRing(input.maxScrollbackBytes, {
+      cols: input.cols,
+      rows: input.rows,
+    });
+  }
+  // Fail closed on any known gap — an evicted park backlog, an export
+  // that recorded truncation, or a scrollback ref that would not read:
+  // replay falls into semantic recovery, never a partial raw stream.
+  if (
+    input.terminal.parkedEvicted === true ||
+    input.handoffEntry.ringComplete === false ||
+    importFailed
+  ) {
+    ring.markEvicted();
+  }
+  return ring;
+}
+
+/** Best-effort screen restore; failures degrade to scrollback replay. */
+async function seedScreenSnapshot(
+  semantic: SemanticTerminalModel,
+  ptyId: string,
+  screenSnapshotRef: string | undefined,
+  emit: Emit,
+): Promise<void> {
+  if (screenSnapshotRef === undefined) {
+    return;
+  }
+  const screen = await readScreenSnapshot(screenSnapshotRef);
+  if (screen === undefined) {
+    emit("pty.handoff.screen-import-failed", { ptyId, reason: "unreadable" });
+    return;
+  }
+  try {
+    for (const sequence of screen.sequences) {
+      semantic.write(sequence);
+    }
+  } catch (error) {
+    emit("pty.handoff.screen-import-failed", {
+      ptyId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function failAdoptionEmit(
+  emit: Emit,
+  ptyId: string,
+  reason: string,
+  error: unknown,
+): void {
+  emit("pty.handoff.adopt-failed", {
+    ptyId,
+    reason,
+    message: error instanceof Error ? error.message : String(error),
+  });
 }

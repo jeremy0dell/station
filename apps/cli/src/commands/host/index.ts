@@ -180,30 +180,27 @@ async function runHostHandoff(input: {
   ensureHost: typeof ensureStationHostRunning;
   resolveHostCommand: () => readonly [string, ...string[]];
 }): Promise<HostHandoffResult> {
+  const base = {
+    dryRun: input.dryRun,
+    fidelity: input.fidelity,
+    socketPath: input.socketPath,
+  };
   let livePtyCount = -1;
   const client = input.clientFactory(input.socketPath, input.expectedBuildVersion);
   try {
     const health = await client.health();
     const compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
     if (compatibility.action === "refuse") {
-      return {
-        action: "handoff",
-        dryRun: input.dryRun,
-        fidelity: input.fidelity,
-        socketPath: input.socketPath,
+      return handoffResult(base, {
         status: "refused",
         message: "Host protocol is incompatible; live handoff is refused.",
-      };
+      });
     }
     if (compatibility.action === "reuse") {
-      return {
-        action: "handoff",
-        dryRun: input.dryRun,
-        fidelity: input.fidelity,
-        socketPath: input.socketPath,
+      return handoffResult(base, {
         status: "refused",
         message: "Host already matches this build; handoff is unnecessary.",
-      };
+      });
     }
 
     try {
@@ -214,37 +211,28 @@ async function runHostHandoff(input: {
     }
 
     if (livePtyCount === 0) {
-      return {
-        action: "handoff",
-        dryRun: input.dryRun,
-        fidelity: input.fidelity,
-        socketPath: input.socketPath,
+      return handoffResult(base, {
         status: "refused",
         message: "Host is idle; use ordinary stop-if-idle replacement instead of handoff.",
         livePtyCount: 0,
-      };
+      });
     }
 
     if (input.dryRun) {
-      return {
-        action: "handoff",
-        dryRun: true,
-        fidelity: input.fidelity,
-        socketPath: input.socketPath,
-        status: "planned",
-        message: `Would beginHandoff(fidelity=${input.fidelity}) → completeHandoff → spawn successor → adoptRegistry.`,
-        ...(livePtyCount < 0 ? {} : { livePtyCount }),
-      };
+      return handoffResult(
+        { ...base, dryRun: true },
+        {
+          status: "planned",
+          message: `Would beginHandoff(fidelity=${input.fidelity}) → completeHandoff → spawn successor → adoptRegistry.`,
+          ...(livePtyCount < 0 ? {} : { livePtyCount }),
+        },
+      );
     }
   } catch (error) {
-    return {
-      action: "handoff",
-      dryRun: input.dryRun,
-      fidelity: input.fidelity,
-      socketPath: input.socketPath,
+    return handoffResult(base, {
       status: "unavailable",
       message: error instanceof Error ? error.message : String(error),
-    };
+    });
   } finally {
     client.dispose();
   }
@@ -261,41 +249,69 @@ async function runHostHandoff(input: {
       { clientFactory: input.clientFactory },
     );
     if (ensured.status !== "running") {
-      return {
-        action: "handoff",
-        dryRun: false,
-        fidelity: input.fidelity,
-        socketPath: input.socketPath,
-        status: "unavailable",
-        message: ensured.error.message,
-        ...(livePtyCount < 0 ? {} : { livePtyCount }),
-      };
+      return handoffResult(
+        { ...base, dryRun: false },
+        {
+          status: "unavailable",
+          message: ensured.error.message,
+          ...(livePtyCount < 0 ? {} : { livePtyCount }),
+        },
+      );
     }
     try {
       const ptys = await ensured.client.list();
-      return {
-        action: "handoff",
-        dryRun: false,
-        fidelity: input.fidelity,
-        socketPath: input.socketPath,
-        status: "completed",
-        message: `Live handoff completed; successor serves ${ptys.length} terminal(s).`,
-        livePtyCount: ptys.length,
-        adopted: ptys.map((pty) => pty.ptyId),
-      };
+      return handoffResult(
+        { ...base, dryRun: false },
+        {
+          status: "completed",
+          message: `Live handoff completed; successor serves ${ptys.length} terminal(s).`,
+          livePtyCount: ptys.length,
+          adopted: ptys.map((pty) => pty.ptyId),
+        },
+      );
     } finally {
       ensured.client.dispose();
     }
   } catch (error) {
-    return {
-      action: "handoff",
-      dryRun: input.dryRun,
-      fidelity: input.fidelity,
-      socketPath: input.socketPath,
+    return handoffResult(base, {
       status: "unavailable",
       message: error instanceof Error ? error.message : String(error),
-    };
+    });
   }
+}
+
+function handoffResult(
+  base: {
+    dryRun: boolean;
+    fidelity: HostHandoffFidelity;
+    socketPath: string;
+  },
+  fields: {
+    status: HostHandoffResult["status"];
+    message: string;
+    livePtyCount?: number;
+    adopted?: string[];
+    failed?: Array<{ ptyId: string; reason: string }>;
+  },
+): HostHandoffResult {
+  const result: HostHandoffResult = {
+    action: "handoff",
+    dryRun: base.dryRun,
+    fidelity: base.fidelity,
+    socketPath: base.socketPath,
+    status: fields.status,
+    message: fields.message,
+  };
+  if (fields.livePtyCount !== undefined) {
+    result.livePtyCount = fields.livePtyCount;
+  }
+  if (fields.adopted !== undefined) {
+    result.adopted = fields.adopted;
+  }
+  if (fields.failed !== undefined) {
+    result.failed = fields.failed;
+  }
+  return result;
 }
 
 function resolveStationHostEntry(): string {

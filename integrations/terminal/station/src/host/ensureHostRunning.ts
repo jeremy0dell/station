@@ -168,19 +168,10 @@ export async function ensureStationHostRunning(
       return { status: "unavailable", socketPath, error: ready.error };
     }
     if (handoffManifest !== undefined) {
-      try {
-        await client.adoptRegistry(handoffManifest);
-      } catch (error) {
+      const adopted = await adoptHandoffManifest(client, handoffManifest);
+      if (!adopted.ok) {
         disposeOwned();
-        return {
-          status: "unavailable",
-          socketPath,
-          error: stationHostErrorFromUnknown(error, {
-            code: "HOST_HANDOFF_MANIFEST_INVALID",
-            message: "Successor host could not adopt the handoff manifest.",
-            hint: "Parked bridges remain under the state dir until TTL reap or a retry.",
-          }),
-        };
+        return { status: "unavailable", socketPath, error: adopted.error };
       }
     }
     return { status: "running", socketPath, client };
@@ -242,34 +233,14 @@ async function negotiateIncumbentHost(input: {
     await waitForSocketRelease(input.socketPath, input.timeoutMs);
     return { outcome: "start" };
   } catch (error) {
-    const blocked =
-      isStationHostCompatibilityError(error) && error.code === "HOST_UPGRADE_BLOCKED"
-        ? error
-        : undefined;
-    if (blocked !== undefined && input.handoff !== undefined) {
-      try {
-        const begun = await input.client.beginHandoff(
-          input.expectedBuildVersion,
-          input.handoff.fidelity,
-        );
-        await input.client.completeHandoff();
-        await waitForSocketRelease(input.socketPath, input.timeoutMs);
-        return { outcome: "start-with-handoff", manifest: begun.manifest };
-      } catch (handoffError) {
-        try {
-          await input.client.abortHandoff();
-        } catch {
-          // Abort is best-effort when begin never committed or complete already ran.
-        }
-        return {
-          outcome: "unavailable",
-          error: stationHostErrorFromUnknown(handoffError, {
-            code: "HOST_VERSION_INCOMPATIBLE",
-            message: "Station host live handoff could not be completed safely.",
-            hint: "The existing host and terminals were preserved when possible. Retry, or reopen with the running build.",
-          }),
-        };
-      }
+    if (isUpgradeBlocked(error) && input.handoff !== undefined) {
+      return tryLiveHandoff({
+        client: input.client,
+        expectedBuildVersion: input.expectedBuildVersion,
+        fidelity: input.handoff.fidelity,
+        socketPath: input.socketPath,
+        timeoutMs: input.timeoutMs,
+      });
     }
     return {
       outcome: "unavailable",
@@ -284,6 +255,59 @@ async function negotiateIncumbentHost(input: {
           ),
     };
   }
+}
+
+async function tryLiveHandoff(input: {
+  client: StationHostClient;
+  expectedBuildVersion: string;
+  fidelity: HostHandoffFidelity;
+  socketPath: string;
+  timeoutMs: number;
+}): Promise<IncumbentHostDecision> {
+  try {
+    const begun = await input.client.beginHandoff(input.expectedBuildVersion, input.fidelity);
+    await input.client.completeHandoff();
+    await waitForSocketRelease(input.socketPath, input.timeoutMs);
+    return { outcome: "start-with-handoff", manifest: begun.manifest };
+  } catch (handoffError) {
+    // Abort is best-effort when begin never committed or complete already ran.
+    try {
+      await input.client.abortHandoff();
+    } catch {
+      // ignore
+    }
+    return {
+      outcome: "unavailable",
+      error: stationHostErrorFromUnknown(handoffError, {
+        code: "HOST_VERSION_INCOMPATIBLE",
+        message: "Station host live handoff could not be completed safely.",
+        hint: "The existing host and terminals were preserved when possible. Retry, or reopen with the running build.",
+      }),
+    };
+  }
+}
+
+async function adoptHandoffManifest(
+  client: StationHostClient,
+  manifest: PtyHandoffManifest,
+): Promise<{ ok: true } | { ok: false; error: SafeError }> {
+  try {
+    await client.adoptRegistry(manifest);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: stationHostErrorFromUnknown(error, {
+        code: "HOST_HANDOFF_MANIFEST_INVALID",
+        message: "Successor host could not adopt the handoff manifest.",
+        hint: "Parked bridges remain under the state dir until TTL reap or a retry.",
+      }),
+    };
+  }
+}
+
+function isUpgradeBlocked(error: unknown): boolean {
+  return isStationHostCompatibilityError(error) && error.code === "HOST_UPGRADE_BLOCKED";
 }
 
 function inaccessibleHostSocketError(socketPath: string): SafeError {
