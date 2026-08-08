@@ -115,6 +115,24 @@ describe("Cursor hook event parsing", () => {
       station_terminal_target_id: "tmux:station:@1:%2",
     });
 
+    const observations = normalizeCursorRawEvent(
+      {
+        provider: "cursor",
+        observedAt: now,
+        event: compaction.payload,
+      },
+      context(),
+    );
+
+    expect(observations[0]).toMatchObject({
+      rawEventType: "stop",
+      status: {
+        value: "idle",
+        confidence: "high",
+      },
+      turn: { kind: "turn_completed" },
+    });
+
     const report = cursorProviderHookPayloadToHarnessEventReport({
       reportId: "report_cursor_1",
       observedAt: now,
@@ -135,6 +153,7 @@ describe("Cursor hook event parsing", () => {
         value: "idle",
         confidence: "high",
       },
+      turn: { kind: "turn_completed" },
       correlation: {
         harnessRunId: "cursor:tmux:station:@1:%2",
         projectId: "web",
@@ -182,6 +201,26 @@ describe("Cursor hook event parsing", () => {
         cursorStopStatus: "error",
       },
     });
+    expect(observations[0]).not.toHaveProperty("turn");
+
+    const report = cursorProviderHookPayloadToHarnessEventReport({
+      reportId: "report_cursor_error",
+      observedAt: now,
+      payload: {
+        hook_event_name: "stop",
+        status: "error",
+        session_id: "cursor_session_123",
+        workspace_roots: ["/tmp/station/web/task"],
+      },
+    });
+    expect(report).toMatchObject({
+      eventType: "stop",
+      status: {
+        value: "needs_attention",
+        confidence: "high",
+      },
+    });
+    expect(report).not.toHaveProperty("turn");
   });
 
   it("maps aborted Cursor stops to medium-confidence idle", () => {
@@ -210,6 +249,26 @@ describe("Cursor hook event parsing", () => {
         cursorStopStatus: "aborted",
       },
     });
+    expect(observations[0]).not.toHaveProperty("turn");
+
+    const report = cursorProviderHookPayloadToHarnessEventReport({
+      reportId: "report_cursor_aborted",
+      observedAt: now,
+      payload: {
+        hook_event_name: "stop",
+        status: "aborted",
+        session_id: "cursor_session_123",
+        workspace_roots: ["/tmp/station/web/task"],
+      },
+    });
+    expect(report).toMatchObject({
+      eventType: "stop",
+      status: {
+        value: "idle",
+        confidence: "medium",
+      },
+    });
+    expect(report).not.toHaveProperty("turn");
   });
 
   it("leaves unmatched hook events uncorrelated", () => {
