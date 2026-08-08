@@ -5,6 +5,7 @@ import { debugCliCommand } from "./commands/registry/debug.js";
 import { doctorCliCommand } from "./commands/registry/doctor.js";
 import { eventHooksCliCommand } from "./commands/registry/eventHooks.js";
 import { hooksCliCommand } from "./commands/registry/hooks.js";
+import { hostCliCommand } from "./commands/registry/host.js";
 import { notifyCliCommand } from "./commands/registry/notify.js";
 import { observeCliCommand } from "./commands/registry/observe.js";
 import { observerCliCommand } from "./commands/registry/observer.js";
@@ -44,6 +45,7 @@ export const cliCommandRegistry: CliCommandNode = {
     doctorCliCommand,
     eventHooksCliCommand,
     hooksCliCommand,
+    hostCliCommand,
     notifyCliCommand,
     observeCliCommand,
     observerCliCommand,

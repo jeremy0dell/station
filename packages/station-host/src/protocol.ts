@@ -1,4 +1,6 @@
 import {
+  HostHandoffFidelitySchema,
+  PtyHandoffManifestSchema,
   SafeErrorSchema,
   TerminalOutputCompatibilitySchema,
   UiLifecycleDetachReasonSchema,
@@ -162,7 +164,13 @@ export type HostCompatibility =
   | { action: "replace"; runningBuildVersion: string }
   | { action: "refuse"; reason: "protocol-mismatch" | "legacy-health" };
 
-/** Classify opaque build versions without inferring SemVer compatibility. */
+/**
+ * POLICY
+ *
+ * Decide host reuse, idle replace eligibility, or refuse from opaque health
+ * without inferring SemVer compatibility. Live handoff is only considered when
+ * this returns `replace`; protocol mismatch stays a visible refuse.
+ */
 export function classifyHostCompatibility(
   health: HostHealthResult,
   expectedBuildVersion: string,
@@ -184,6 +192,59 @@ export const HostStopIfIdleParamsSchema = z
   .strict();
 export const HostStopIfIdleResultSchema = z.object({ stopping: z.literal(true) }).strict();
 export type HostStopIfIdleResult = z.infer<typeof HostStopIfIdleResultSchema>;
+
+export const HostBeginHandoffParamsSchema = z
+  .object({
+    requestingBuildVersion: z.string().min(1),
+    fidelity: HostHandoffFidelitySchema.default("processes"),
+  })
+  .strict();
+export type HostBeginHandoffParams = z.infer<typeof HostBeginHandoffParamsSchema>;
+
+export const HostBeginHandoffResultSchema = z
+  .object({
+    manifest: PtyHandoffManifestSchema,
+    fidelity: HostHandoffFidelitySchema,
+    released: z.array(z.string().min(1)),
+    skipped: z.array(
+      z
+        .object({
+          ptyId: z.string().min(1),
+          reason: z.string().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type HostBeginHandoffResult = z.infer<typeof HostBeginHandoffResultSchema>;
+
+export const HostCompleteHandoffResultSchema = z.object({ stopping: z.literal(true) }).strict();
+export type HostCompleteHandoffResult = z.infer<typeof HostCompleteHandoffResultSchema>;
+
+export const HostAbortHandoffResultSchema = z
+  .object({
+    adopted: z.array(z.string().min(1)),
+    failed: z.array(
+      z
+        .object({
+          ptyId: z.string().min(1),
+          reason: z.string().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type HostAbortHandoffResult = z.infer<typeof HostAbortHandoffResultSchema>;
+
+export const HostAdoptRegistryParamsSchema = z
+  .object({
+    manifest: PtyHandoffManifestSchema,
+  })
+  .strict();
+export type HostAdoptRegistryParams = z.infer<typeof HostAdoptRegistryParamsSchema>;
+
+export const HostAdoptRegistryResultSchema = HostAbortHandoffResultSchema;
+export type HostAdoptRegistryResult = z.infer<typeof HostAdoptRegistryResultSchema>;
 
 export const HostAttachParamsSchema = z
   .object({ ptyId: idSchema, attachmentId: idSchema })

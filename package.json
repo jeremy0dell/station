@@ -65,6 +65,7 @@
     "test:e2e:setup:core": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/setup-core-flow.test.ts",
     "test:e2e:setup:sqlite": "vitest run --config config/vitest/vitest.setup-e2e.config.ts tests/e2e/observer-sqlite-smoke.test.ts",
     "test:e2e:observer": "vitest run --config config/vitest/vitest.e2e.config.ts tests/e2e/observer-lifecycle.test.ts tests/e2e/session-migration.test.ts",
+    "test:e2e:host-upgrade": "pnpm --dir station test:host:upgrade",
     "test:e2e": "vitest run --config config/vitest/vitest.e2e.config.ts",
     "test:e2e:real": "vitest run --config config/vitest/vitest.real-e2e.config.ts",
     "test:e2e:real:local": "node scripts/test-runners/run-real-e2e.mjs",
@@ -83,7 +84,7 @@
     "smoke:release": "node scripts/test-runners/run-release-smoke.mjs",
     "test:env:docker": "node scripts/test-runners/run-setup-container.mjs",
     "test:ci:fast": "pnpm build && pnpm test:unit && pnpm test:contracts && pnpm test:diagnostics && pnpm test:agent:scripted",
-    "test:ci:station": "pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty && pnpm --dir station test:pty:bun",
+    "test:ci:station": "pnpm --dir station typecheck && pnpm --dir station test && pnpm --dir station test:pty && pnpm --dir station test:pty:bun && pnpm test:e2e:host-upgrade",
     "test:ci:binary": "pnpm build:binary -- --version 0.0.0-local && pnpm smoke:binary -- --expected-version 0.0.0-local",
     "test:all": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:unit && pnpm test:contracts && pnpm test:integration && pnpm test:diagnostics && pnpm test:agent:scripted && pnpm test:e2e:setup && pnpm test:e2e:observer && pnpm smoke:install",
     "test:pre-push": "pnpm lint"

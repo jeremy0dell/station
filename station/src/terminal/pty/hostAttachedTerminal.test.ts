@@ -125,6 +125,25 @@ function ack(overrides: AckOverrides = {}): HostAttachAck {
   };
 }
 
+
+const unusedHandoffClientMethods = {
+  beginHandoff: async () => ({
+    manifest: {},
+    fidelity: "processes" as const,
+    released: [] as string[],
+    skipped: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+  completeHandoff: async () => ({ stopping: true as const }),
+  abortHandoff: async () => ({
+    adopted: [] as string[],
+    failed: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+  adoptRegistry: async () => ({
+    adopted: [] as string[],
+    failed: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+};
+
 function clientForAttach(
   attach: StationHostClient["attach"],
   dispose: () => void = () => {},
@@ -134,6 +153,7 @@ function clientForAttach(
     dispose,
     health: async () => ({ ok: true, protocolVersion: 1 }),
     stopIfIdle: async () => ({ stopping: true }),
+    ...unusedHandoffClientMethods,
     spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
     write: async () => undefined,
     resize: async () => undefined,
@@ -481,6 +501,7 @@ function trackingClientFactory(attachment: HostAttachment, tracking: Tracking) {
       dispose: () => {},
       health: async () => ({ ok: true, protocolVersion: 1 }),
       stopIfIdle: async () => ({ stopping: true }),
+      ...unusedHandoffClientMethods,
       spawn: async (params: unknown) => {
         tracking.spawns.push(params);
         return { ptyId: tracking.spawnPtyId, pid: 4242 };
@@ -940,6 +961,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -983,6 +1005,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -1027,6 +1050,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -1070,6 +1094,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -1214,6 +1239,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             dispose: () => {},
             health: async () => ({ ok: true, protocolVersion: 1 }),
             stopIfIdle: async () => ({ stopping: true }),
+            ...unusedHandoffClientMethods,
             spawn: async () => ({ ptyId: "pty-gone", pid: 1 }),
             write: async () => undefined,
             resize: async () => undefined,
@@ -1251,6 +1277,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async (params: unknown) => {
             await gate;
             tracking.spawns.push(params);

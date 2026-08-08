@@ -139,7 +139,13 @@ async function handleMessage(
     return;
   }
   const request = parsed.data;
-  const lifecycleRequest = request.method === "host.health" || request.method === "host.stopIfIdle";
+  // adoptRegistry is identity-bound: only cross-build negotiation methods are exempt.
+  const lifecycleRequest =
+    request.method === "host.health" ||
+    request.method === "host.stopIfIdle" ||
+    request.method === "host.beginHandoff" ||
+    request.method === "host.completeHandoff" ||
+    request.method === "host.abortHandoff";
   if (!lifecycleRequest) {
     const binding = bindClientIdentity(request.client, handlers.hostIdentity, state, logger);
     if (!binding.ok) {

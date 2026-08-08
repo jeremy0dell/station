@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { UiRunContext } from "@station/contracts";
+import type { HostHandoffFidelity, PtyHandoffManifest, UiRunContext } from "@station/contracts";
 import { connectUnixSocket, type NdjsonConnection } from "@station/protocol";
 import { stationBuildInfo } from "@station/runtime";
 import type { z } from "zod";
@@ -10,11 +10,19 @@ import {
 } from "./errors.js";
 import {
   HOST_PROTOCOL_VERSION,
+  type HostAbortHandoffResult,
+  HostAbortHandoffResultSchema,
+  type HostAdoptRegistryResult,
+  HostAdoptRegistryResultSchema,
   type HostAttachAck,
   HostAttachAckSchema,
+  type HostBeginHandoffResult,
+  HostBeginHandoffResultSchema,
   type HostClientIdentity,
   HostClientIdentitySchema,
   HostCloseResultSchema,
+  type HostCompleteHandoffResult,
+  HostCompleteHandoffResultSchema,
   type HostFrame,
   HostFrameSchema,
   type HostHealthResult,
@@ -63,6 +71,17 @@ export type StationHostClient = {
   health(): Promise<HostHealthResult>;
   /** Lifecycle-only request; intentionally available before compatibility is established. */
   stopIfIdle(requestingBuildVersion: string): Promise<HostStopIfIdleResult>;
+  /** Lifecycle-only negotiated live handoff begin; parks bridges and returns the manifest. */
+  beginHandoff(
+    requestingBuildVersion: string,
+    fidelity?: HostHandoffFidelity,
+  ): Promise<HostBeginHandoffResult>;
+  /** Lifecycle-only: release the socket and exit without disposing parked bridges. */
+  completeHandoff(): Promise<HostCompleteHandoffResult>;
+  /** Lifecycle-only: re-adopt parked bridges and resume normal serving. */
+  abortHandoff(): Promise<HostAbortHandoffResult>;
+  /** Lifecycle-only: adopt a parked manifest on a successor host. */
+  adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAdoptRegistryResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
   write(ptyId: string, data: string): Promise<void>;
   resize(ptyId: string, cols: number, rows: number): Promise<void>;
@@ -304,6 +323,18 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     health: () => rawRequest("host.health", undefined, HostHealthResultSchema),
     stopIfIdle: (requestingBuildVersion) =>
       rawRequest("host.stopIfIdle", { requestingBuildVersion }, HostStopIfIdleResultSchema),
+    beginHandoff: (requestingBuildVersion, fidelity = "processes") =>
+      rawRequest(
+        "host.beginHandoff",
+        { requestingBuildVersion, fidelity },
+        HostBeginHandoffResultSchema,
+      ),
+    completeHandoff: () =>
+      rawRequest("host.completeHandoff", undefined, HostCompleteHandoffResultSchema),
+    abortHandoff: () => rawRequest("host.abortHandoff", undefined, HostAbortHandoffResultSchema),
+    // Successor adopt requires matching build identity; not a lifecycle exemption.
+    adoptRegistry: (manifest) =>
+      request("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     write: async (ptyId, data) => {
       await request("host.write", { ptyId, data }, HostOkResultSchema);

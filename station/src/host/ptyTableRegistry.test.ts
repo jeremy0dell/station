@@ -283,4 +283,176 @@ describe("createPtyTable registry adoption", () => {
     await waitFor(() => !table.has("pty-5"), 2_000);
     table.disposeAll();
   });
+
+  it("processes fidelity never writes a screen snapshot ref", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-processes-only-"));
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const table = createPtyTable({
+      orphanBridges: { directory },
+      createTerminal: () => ({
+        ...scripted.terminal,
+        bridgePid: 1_004,
+        releaseToOrphan() {
+          scripted.terminal.dispose();
+          return false;
+        },
+      }),
+      createSemanticTerminal: () => ({
+        write: () => undefined,
+        resize: () => undefined,
+        capture: async () => {
+          throw new Error("should not capture for processes fidelity");
+        },
+        dispose: () => undefined,
+      }),
+    });
+    const { ptyId } = table.spawn(baseParams);
+    const report = await table.releaseRegistryForHandoff("processes");
+    expect(report.fidelity).toEqual("processes");
+    expect(report.manifest[ptyId]?.screenSnapshotRef).toBeUndefined();
+    expect(report.manifest[ptyId]?.scrollbackRef).toBeDefined();
+    table.disposeAll();
+  });
+
+  it("releaseRegistryForHandoff parks via releaseToOrphan without kill", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-release-"));
+    let released = false;
+    let killed = false;
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const table = createPtyTable({
+      orphanBridges: { directory },
+      createTerminal: () => ({
+        ...scripted.terminal,
+        bridgePid: 1_001,
+        releaseToOrphan() {
+          released = true;
+          return false;
+        },
+        kill() {
+          killed = true;
+          scripted.terminal.kill();
+        },
+      }),
+    });
+    const { ptyId } = table.spawn(baseParams);
+    const report = await table.releaseRegistryForHandoff("processes");
+    expect(report.released).toEqual([ptyId]);
+    expect(report.manifest[ptyId]?.bridgePid).toEqual(1_001);
+    expect(released).toEqual(true);
+    expect(killed).toEqual(false);
+    expect(table.list()).toEqual([]);
+    table.disposeAll();
+  });
+
+  it("screen fidelity writes a snapshot ref when capture succeeds", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-screen-ok-"));
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const table = createPtyTable({
+      orphanBridges: { directory },
+      createTerminal: () => ({
+        ...scripted.terminal,
+        bridgePid: 1_002,
+        releaseToOrphan() {
+          scripted.terminal.dispose();
+          return false;
+        },
+      }),
+      createSemanticTerminal: () => ({
+        write: () => undefined,
+        resize: () => undefined,
+        capture: async () => ["\x1bcrestored"],
+        dispose: () => undefined,
+      }),
+    });
+    const { ptyId } = table.spawn(baseParams);
+    const report = await table.releaseRegistryForHandoff("screen");
+    expect(report.fidelity).toEqual("screen");
+    expect(report.manifest[ptyId]?.screenSnapshotRef).toEqual(
+      join(directory, `${ptyId}.screen.json`),
+    );
+    const screen = JSON.parse(
+      await readFile(String(report.manifest[ptyId]?.screenSnapshotRef), "utf8"),
+    );
+    expect(screen.sequences).toEqual(["\x1bcrestored"]);
+    table.disposeAll();
+  });
+
+  it("refuses release when any live terminal cannot be parked", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-partial-refuse-"));
+    const events: string[] = [];
+    let released = false;
+    const bridge = createScriptedTerminal({ cols: 80, rows: 24 });
+    const local = createScriptedTerminal({ cols: 80, rows: 24 });
+    let next = 0;
+    const table = createPtyTable({
+      orphanBridges: { directory },
+      onEvent: (event) => {
+        events.push(event);
+      },
+      createTerminal: () => {
+        next += 1;
+        if (next === 1) {
+          return {
+            ...bridge.terminal,
+            bridgePid: 1_010,
+            releaseToOrphan() {
+              released = true;
+              return false;
+            },
+          };
+        }
+        return local.terminal;
+      },
+    });
+    table.spawn(baseParams);
+    table.spawn({
+      ...baseParams,
+      terminalTargetId: "native:wt-2",
+      worktreeId: "wt-2",
+      sessionId: "ses-2",
+      kind: "aux",
+    });
+    const report = await table.releaseRegistryForHandoff("processes");
+    expect(report.released).toEqual([]);
+    expect(report.skipped).toEqual([{ ptyId: "pty-2", reason: "no-bridge-transport" }]);
+    expect(released).toEqual(false);
+    expect(table.list()).toHaveLength(2);
+    expect(events).toContain("pty.handoff.refused-partial");
+    table.disposeAll();
+  });
+
+  it("screen fidelity degrades when capture fails and still releases parks", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-screen-degrade-"));
+    const events: string[] = [];
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const table = createPtyTable({
+      orphanBridges: { directory },
+      onEvent: (event) => {
+        events.push(event);
+      },
+      createTerminal: () => ({
+        ...scripted.terminal,
+        bridgePid: 1_003,
+        releaseToOrphan() {
+          scripted.terminal.dispose();
+          return false;
+        },
+      }),
+      createSemanticTerminal: () => ({
+        write: () => undefined,
+        resize: () => undefined,
+        capture: async () => {
+          throw new Error("capture unavailable");
+        },
+        dispose: () => undefined,
+      }),
+    });
+    const { ptyId } = table.spawn(baseParams);
+    const report = await table.releaseRegistryForHandoff("screen");
+    expect(report.released).toEqual([ptyId]);
+    expect(report.manifest[ptyId]?.screenSnapshotRef).toBeUndefined();
+    expect(report.manifest[ptyId]?.scrollbackRef).toBeDefined();
+    expect(events).toContain("pty.handoff.screen-export-failed");
+    table.disposeAll();
+  });
 });

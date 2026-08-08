@@ -5,6 +5,24 @@ import { join } from "node:path";
 import type { HostAttachment, HostFrame, StationHostClient } from "@station/host";
 import { resolveAuxShellPlacement } from "./auxShellPlacement.js";
 
+const unusedHandoffClientMethods = {
+  beginHandoff: async () => ({
+    manifest: {},
+    fidelity: "processes" as const,
+    released: [] as string[],
+    skipped: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+  completeHandoff: async () => ({ stopping: true as const }),
+  abortHandoff: async () => ({
+    adopted: [] as string[],
+    failed: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+  adoptRegistry: async () => ({
+    adopted: [] as string[],
+    failed: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+};
+
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function tempSocketPath(): { dir: string; path: string } {
@@ -50,6 +68,7 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     dispose: () => undefined,
     health: async () => ({ ok: true, protocolVersion: 1 }),
     stopIfIdle: async () => ({ stopping: true }),
+    ...unusedHandoffClientMethods,
     write: async () => undefined,
     resize: async () => undefined,
     list: async () => [],

@@ -58,6 +58,43 @@ async function runFakeRouter(
       case "host.stopIfIdle":
         server.send(hostSuccess(request.id, { stopping: true }));
         break;
+      case "host.beginHandoff":
+        server.send(
+          hostSuccess(request.id, {
+            manifest: {
+              "pty-1": {
+                bridgeProtocolVersion: 1,
+                bridgePid: 9,
+                controlSocket: "/tmp/pty-1.sock",
+                command: "/bin/sh",
+                cols: 80,
+                rows: 24,
+                identity: {
+                  kind: "agent",
+                  terminalTargetId: "native:wt-1",
+                  worktreeId: "wt-1",
+                  projectId: "proj-1",
+                  sessionId: "ses-1",
+                  worktreePath: "/repo/wt-1",
+                  harnessProvider: "claude",
+                },
+              },
+            },
+            fidelity: "processes",
+            released: ["pty-1"],
+            skipped: [],
+          }),
+        );
+        break;
+      case "host.completeHandoff":
+        server.send(hostSuccess(request.id, { stopping: true }));
+        break;
+      case "host.abortHandoff":
+        server.send(hostSuccess(request.id, { adopted: ["pty-1"], failed: [] }));
+        break;
+      case "host.adoptRegistry":
+        server.send(hostSuccess(request.id, { adopted: ["pty-1"], failed: [] }));
+        break;
       case "host.spawn":
         server.send(hostSuccess(request.id, { ptyId: "pty-1", pid: 4242 }));
         break;
@@ -298,11 +335,19 @@ describe("createStationHostClient", () => {
   it("gates operational calls while leaving lifecycle inspection available", async () => {
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
     let spawnRequests = 0;
+    const lifecycle: string[] = [];
     startFakeRouter(server, {
       buildVersion: "old-build",
       onRequest: (method) => {
         if (method === "host.spawn") {
           spawnRequests += 1;
+        }
+        if (
+          method === "host.beginHandoff" ||
+          method === "host.completeHandoff" ||
+          method === "host.abortHandoff"
+        ) {
+          lifecycle.push(method);
         }
       },
     });
@@ -314,6 +359,14 @@ describe("createStationHostClient", () => {
 
     await expect(client.health()).resolves.toMatchObject({ buildVersion: "old-build" });
     await expect(client.stopIfIdle("new-build")).resolves.toEqual({ stopping: true });
+    const begun = await client.beginHandoff("new-build", "processes");
+    expect(begun.released).toEqual(["pty-1"]);
+    await expect(client.completeHandoff()).resolves.toEqual({ stopping: true });
+    await expect(client.abortHandoff()).resolves.toEqual({ adopted: ["pty-1"], failed: [] });
+    // adoptRegistry is identity-bound and requires a reusable successor build.
+    await expect(client.adoptRegistry(begun.manifest)).rejects.toMatchObject({
+      code: "HOST_VERSION_INCOMPATIBLE",
+    });
     await expect(
       client.spawn({
         terminalTargetId: "native:wt-1",
@@ -330,6 +383,7 @@ describe("createStationHostClient", () => {
       }),
     ).rejects.toMatchObject({ code: "HOST_VERSION_INCOMPATIBLE" });
     expect(spawnRequests).toBe(0);
+    expect(lifecycle).toEqual(["host.beginHandoff", "host.completeHandoff", "host.abortHandoff"]);
     client.dispose();
   });
 

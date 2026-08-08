@@ -1,4 +1,5 @@
 import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { HostCommandDeps } from "./commands/host/index.js";
 import type { NotifyCommandDeps } from "./commands/notify.js";
 import type { ObserveCommandDeps } from "./commands/observe/index.js";
 import type { PopupCommandDeps } from "./commands/popup.js";
@@ -17,6 +18,7 @@ export type CliRunOptions = {
   stdin?: string;
   env?: CliEnv;
   observerDeps?: ObserverProcessDeps;
+  hostDeps?: HostCommandDeps;
   popupDeps?: PopupCommandDeps;
   tuiDeps?: TuiCommandDeps;
   notifyDeps?: NotifyCommandDeps;

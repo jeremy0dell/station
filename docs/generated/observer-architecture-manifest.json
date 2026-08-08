@@ -11353,6 +11353,29 @@
       ]
     },
     {
+      "path": "apps/cli/src/commands/host/index.ts",
+      "declaration": "runHostCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Drive Station host inspection and opt-in live handoff from the CLI without routing through Observer application code. Mutating handoff defers policy to `ensureStationHostRunning`; this layer only projects the ensure outcome.",
+      "dependencies": [
+        {
+          "path": "packages/protocol/src/transport.ts",
+          "declaration": "probeUnixSocket",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/protocol.ts",
+          "declaration": "classifyHostCompatibility",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/commands/popup.ts",
       "declaration": "runPopupCommand",
       "kind": "function",
@@ -13769,13 +13792,20 @@
       "declaration": "ensureStationHostRunning",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement.",
+      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",
           "declaration": "probeUnixSocket",
           "kind": "function",
           "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/station-host/src/protocol.ts",
+          "declaration": "classifyHostCompatibility",
+          "kind": "function",
+          "role": "POLICY",
           "edgeKind": "runtime"
         }
       ]
@@ -14235,6 +14265,14 @@
       "kind": "function",
       "role": "POLICY",
       "purpose": "Advances intent editing, staged preparation, complete apply, and cancellation from normalized evidence and typed outcomes without I/O.",
+      "dependencies": []
+    },
+    {
+      "path": "packages/station-host/src/protocol.ts",
+      "declaration": "classifyHostCompatibility",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Decide host reuse, idle replace eligibility, or refuse from opaque health without inferring SemVer compatibility. Live handoff is only considered when this returns `replace`; protocol mismatch stays a visible refuse.",
       "dependencies": []
     }
   ]

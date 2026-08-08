@@ -9,7 +9,7 @@ import {
   type HostSpawnResult,
   StationHostProviderError,
 } from "@station/host";
-import type { PtyHandoffManifest } from "@station/contracts";
+import type { HostHandoffFidelity, PtyHandoffManifest } from "@station/contracts";
 import { adoptLocalPtyBridge } from "../terminal/pty/ptyBridgeAdoption.js";
 import { createLocalPtyTerminal } from "../terminal/pty/localPtyTerminal.js";
 import type {
@@ -27,6 +27,7 @@ import { clampSize, type PtyEntry, type PtyEntryInit } from "./ptyEntry.js";
 import {
   createPtyHandoff,
   type PtyAdoptionReport,
+  type PtyHandoffReleaseReport,
   type PtyTableOrphanOptions,
   type PtyTerminalAdopter,
 } from "./ptyHandoff.js";
@@ -42,6 +43,7 @@ import {
 export type {
   PtyAdoptedTerminal,
   PtyAdoptionTarget,
+  PtyHandoffReleaseReport,
   PtyTableOrphanOptions,
   PtyTerminalAdopter,
 } from "./ptyHandoff.js";
@@ -106,7 +108,12 @@ export type PtyTable = {
    * scrollback ring beside its parked bridge so an adopter can restore replay.
    * Non-bridge transports are skipped with an event, never failed.
    */
-  exportRegistry(): Promise<PtyHandoffManifest>;
+  exportRegistry(fidelity?: HostHandoffFidelity): Promise<PtyHandoffManifest>;
+  /**
+   * Export then park each bridge without SIGTERM and drop local ownership so a
+   * negotiated completeHandoff can exit without disposeAll.
+   */
+  releaseRegistryForHandoff(fidelity: HostHandoffFidelity): Promise<PtyHandoffReleaseReport>;
   /**
    * ADAPTER
    *
@@ -566,8 +573,12 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       return entries.has(ptyId);
     },
 
-    exportRegistry() {
-      return handoff.exportRegistry();
+    exportRegistry(fidelity) {
+      return handoff.exportRegistry(fidelity);
+    },
+
+    releaseRegistryForHandoff(fidelity) {
+      return handoff.releaseRegistryForHandoff(fidelity);
     },
 
     adoptRegistry(manifest) {
