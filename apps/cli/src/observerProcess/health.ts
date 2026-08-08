@@ -103,7 +103,10 @@ export function observerHandoffPendingError(
   };
 }
 
-function formatObserverBuild(buildVersion: string | undefined): string {
+/**
+ * Renders a build version with its identity marker, naming legacy and invalid identities explicitly.
+ */
+export function formatObserverBuild(buildVersion: string | undefined): string {
   if (buildVersion === undefined) return "unknown (legacy identity)";
   const parsed = parseStationObserverBuildVersion(buildVersion);
   if (parsed.buildIdentity === undefined && hasStationObserverBuildIdentityMarker(buildVersion)) {

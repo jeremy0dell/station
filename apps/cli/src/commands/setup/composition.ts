@@ -66,6 +66,7 @@ export type CreateSetupCompositionOptions = {
  * COMPOSITION ROOT
  *
  * Wires one CLI invocation's semantic session, inspection and operation adapters, Clack input, and independent text and JSON presentation.
+ * The lazily created operation adapter routes Observer startup progress through the guided prompt adapter's logInfo.
  */
 export function createSetupComposition(options: CreateSetupCompositionOptions): SetupComposition {
   const inspection = createSetupInspectionAdapter({
@@ -75,6 +76,7 @@ export function createSetupComposition(options: CreateSetupCompositionOptions): 
     noBrew: options.noBrew,
     planConfigWrite: options.planConfigWrite,
   });
+  const guided = options.deps.prompt ?? createClackSetupPresenter();
   let executor: SetupOperationExecutor | undefined;
   const executeOperation: SetupOperationExecutor = async (operation) => {
     const snapshot = inspection.current();
@@ -93,6 +95,7 @@ export function createSetupComposition(options: CreateSetupCompositionOptions): 
     executor ??= createSetupOperationAdapter({
       facts: () => inspection.current()?.facts,
       deps: inspection.currentDeps,
+      observerStartupProgress: (message) => guided.logInfo(message),
     });
     return executor(operation);
   };
@@ -119,7 +122,6 @@ export function createSetupComposition(options: CreateSetupCompositionOptions): 
     inspection,
     snapshot: inspection.current,
   };
-  const guided = options.deps.prompt ?? createClackSetupPresenter();
   const json = createJsonSetupPresenter();
   const text = setupPresenter(options.deps);
   return {

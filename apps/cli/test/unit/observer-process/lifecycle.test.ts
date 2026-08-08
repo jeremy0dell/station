@@ -171,6 +171,9 @@ describe("CLI observer process lifecycle", () => {
         hint: expect.stringMatching(/^Run station debug trace trc_/),
       },
     });
+    if (result.status === "running") {
+      throw new Error("Expected an unhealthy startup result.");
+    }
     expect(result.error?.message).not.toContain("internal-frame");
 
     const logs = await readFile(join(fixture.stateDir, "logs", "cli.jsonl"), "utf8");
@@ -708,6 +711,52 @@ describe("CLI observer process lifecycle", () => {
     });
     expect(stops).toBe(0);
     expect(spawns).toBe(1);
+  });
+
+  it("annotates a failed restart replacement with the incumbent build identity", async () => {
+    const fixture = await createTempState();
+    let stops = 0;
+    let spawns = 0;
+
+    const result = await restartObserver(
+      { config: fixture.config, timeoutMs: 500 },
+      {
+        buildVersion: exactTwoBuildVersion,
+        spawnObserver: async (): Promise<ChildProcessLike> => {
+          spawns += 1;
+          throw new Error("boot aborted: socket claim refused");
+        },
+        clientFactory: () =>
+          ({
+            health: async () => ({
+              schemaVersion: "0.9.0",
+              status: "healthy",
+              pid: 1234,
+              startedAt: now,
+              version: exactOneBuildVersion,
+              socketPath: fixture.socketPath,
+            }),
+            stop: async () => {
+              stops += 1;
+              return { schemaVersion: "0.9.0", stopped: true, at: now };
+            },
+          }) as never,
+      },
+    );
+
+    expect(stops).toBe(0);
+    expect(spawns).toBe(1);
+    expect(result).toMatchObject({
+      status: "unhealthy",
+      error: { code: "OBSERVER_START_FAILED" },
+    });
+    if (result.status === "running") {
+      throw new Error("Expected an unhealthy restart result.");
+    }
+    expect(result.error?.hint).toContain(
+      "Restart was replacing incumbent 1.0.0 (build aaaaaaaaaaaa) (pid 1234).",
+    );
+    expect(result.error?.hint).toContain("Startup failure: boot aborted: socket claim refused");
   });
 
   it("spawns a higher build and ignores the lower incumbent until its child is healthy", async () => {

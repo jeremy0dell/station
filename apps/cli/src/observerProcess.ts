@@ -15,7 +15,11 @@ import {
   stationObserverBuildVersion,
   systemClock,
 } from "@station/runtime";
-import { classifyObserverHealth, observerHandoffRefusedError } from "./observerProcess/health.js";
+import {
+  classifyObserverHealth,
+  formatObserverBuild,
+  observerHandoffRefusedError,
+} from "./observerProcess/health.js";
 import { startObserverProcess } from "./observerProcess/startup.js";
 import type {
   ObserverProcessDeps,
@@ -286,12 +290,14 @@ function hasLegacyObserverBuildIdentity(health: ObserverHealth): boolean {
  * ADAPTER
  *
  * Translates a CLI restart request while preserving a newer winning Observer build.
+ * A failed replacement annotates the error hint with the incumbent build identity it tried to replace.
  */
 export async function restartObserver(
   options: ObserverProcessOptions = {},
   deps: ObserverProcessDeps = {},
 ): Promise<ObserverStatus> {
   const status = await getObserverStatus(options, deps);
+  const incumbentHealth = status.status === "running" ? status.health : undefined;
   if (status.status === "running") {
     const buildVersion = deps.buildVersion ?? stationObserverBuildVersion();
     const classification = classifyObserverHealth(status.health, buildVersion);
@@ -324,7 +330,24 @@ export async function restartObserver(
     }
   }
   if (status.status === "unhealthy") return status;
-  return startObserver({ ...options, paths: status.paths }, deps);
+  const started = await startObserver({ ...options, paths: status.paths }, deps);
+  if (
+    started.status === "unhealthy" &&
+    started.error !== undefined &&
+    incumbentHealth !== undefined
+  ) {
+    return {
+      ...started,
+      error: annotateReplacedIncumbent(started.error, incumbentHealth),
+    };
+  }
+  return started;
+}
+
+function annotateReplacedIncumbent(error: SafeError, incumbent: ObserverHealth): SafeError {
+  const context = `Restart was replacing incumbent ${formatObserverBuild(incumbent.version)} (pid ${incumbent.pid ?? "unknown"}).`;
+  const hint = error.hint === undefined ? context : `${error.hint}\n${context}`;
+  return { ...error, hint };
 }
 
 export function observerStatusErrorMessage(
