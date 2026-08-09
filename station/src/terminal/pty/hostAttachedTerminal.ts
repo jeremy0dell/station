@@ -84,6 +84,17 @@ type AttachAttemptOutcome =
 
 type AttachmentPreparationState = { replayed: boolean };
 
+type PendingWrite = { data: string };
+
+type AttachmentMutationState = {
+  opened: HostAttachment;
+  generation: number;
+  geometryDirty: boolean;
+  repaintPending: boolean;
+  controlLost: boolean;
+  running: Promise<void> | undefined;
+};
+
 type ReconnectPreparationOutcome =
   | { kind: "stop" }
   | { kind: "exhausted" }
@@ -121,12 +132,12 @@ export type HostAttachedTerminalOptions = {
 };
 
 /**
- * Host-attached `StationTerminalProcess`: attach, replay, then stream live
- * data and geometry frames. Degraded reconstruction replays the Host's
- * mode-restoring, cursor-anchoring reset data before requesting repaint and
- * keeps I/O live; proven PTY loss emits exit, while compatibility failures emit
- * unavailable. Every reconnect retains the same complete PTY identity proof
- * while receiving a fresh attachment-attempt identity. `dispose()` only detaches.
+ * Host-attached `StationTerminalProcess`: attach as controller or viewer, replay,
+ * then stream live data and Host-confirmed geometry. User input reclaims control
+ * when needed, synchronizes the latest renderer geometry before the buffered
+ * write, and retries normal revocation races. Reconnect replaces the capability
+ * generation, degraded replay nudges remain controller-only, and `dispose()` only
+ * detaches.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -157,8 +168,9 @@ export function createHostAttachedTerminal(
     (size: StationTerminalSize) => void | Promise<void>
   >();
   const pendingData: string[] = [];
-  const pendingWrites: string[] = [];
-  let attachment: HostAttachment | undefined;
+  const pendingWrites: PendingWrite[] = [];
+  let mutationState: AttachmentMutationState | undefined;
+  let attachmentGeneration = 0;
   let size = options.size;
   // The size the host PTY last CONFIRMED applying (not the size we asked for);
   // a persistent gap between this and `size` is geometry divergence.
@@ -228,7 +240,8 @@ export function createHostAttachedTerminal(
   const emitUnavailable = (event: StationTerminalUnavailable): void => {
     unavailable = true;
     lastUnavailable = event;
-    attachment = undefined;
+    mutationState = undefined;
+    attachmentGeneration += 1;
     ackedSize = undefined;
     pendingWrites.length = 0;
     for (const listener of unavailableListeners) {
@@ -280,20 +293,6 @@ export function createHostAttachedTerminal(
         }
       }),
     );
-  };
-
-  // Request a Host resize; the ordered stream barrier, not this RPC response,
-  // confirms when subsequent data belongs to the new geometry.
-  const applyHostResize = (target: StationTerminalSize): void => {
-    const opened = attachment;
-    if (opened === undefined) {
-      return;
-    }
-    opened
-      .resize(target.cols, target.rows)
-      .catch((error) => {
-        emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
-      });
   };
 
   // First attachment replays the initial snapshot; reconnects clear and repaint
@@ -351,76 +350,148 @@ export function createHostAttachedTerminal(
     // the geometry nudge below asks the child to repaint instead.
   };
 
+  const isCurrentMutationState = (state: AttachmentMutationState): boolean =>
+    !disposed && mutationState === state && attachmentGeneration === state.generation;
+
+  const isControlRevoked = (error: unknown): boolean =>
+    toSafeError(error, HOST_DATA_PLANE_FALLBACK).code === "HOST_CONTROL_REVOKED";
+
   const synchronizeAttachmentGeometry = async (
+    state: AttachmentMutationState,
+  ): Promise<void> => {
+    while (isCurrentMutationState(state)) {
+      const target = { cols: size.cols, rows: size.rows };
+      await state.opened.resize(target.cols, target.rows);
+      if (!isCurrentMutationState(state)) {
+        return;
+      }
+      if (size.cols !== target.cols || size.rows !== target.rows) {
+        continue;
+      }
+
+      const requiresNudge =
+        state.repaintPending &&
+        state.opened.ack.cols === target.cols &&
+        state.opened.ack.rows === target.rows;
+      if (requiresNudge) {
+        // Shrinking clamps alternate-buffer bottom-row cursors, so nudge upward before restoring.
+        await state.opened.resize(target.cols, target.rows + 1);
+        if (!isCurrentMutationState(state)) {
+          return;
+        }
+        const restore = { cols: size.cols, rows: size.rows };
+        await state.opened.resize(restore.cols, restore.rows);
+        if (!isCurrentMutationState(state)) {
+          return;
+        }
+        state.repaintPending = false;
+        if (size.cols !== restore.cols || size.rows !== restore.rows) {
+          continue;
+        }
+      } else {
+        state.repaintPending = false;
+      }
+
+      state.geometryDirty = false;
+      if (size.cols === target.cols && size.rows === target.rows) {
+        return;
+      }
+      state.geometryDirty = true;
+    }
+  };
+
+  const drainMutationPump = async (state: AttachmentMutationState): Promise<void> => {
+    while (isCurrentMutationState(state)) {
+      if (state.controlLost || state.opened.controlState.role !== "controller") {
+        if (pendingWrites.length === 0) {
+          return;
+        }
+        await state.opened.claimControl();
+        if (!isCurrentMutationState(state)) {
+          return;
+        }
+        state.controlLost = false;
+        state.geometryDirty = true;
+      }
+
+      try {
+        if (state.geometryDirty) {
+          await synchronizeAttachmentGeometry(state);
+          if (!isCurrentMutationState(state)) {
+            return;
+          }
+        }
+
+        const pending = pendingWrites[0];
+        if (pending === undefined) {
+          return;
+        }
+        // Geometry and any replay repaint nudge must settle before the first buffered input.
+        await state.opened.write(pending.data);
+        // A successful response is the write acknowledgement even if reconnect invalidated this generation.
+        if (pendingWrites[0] === pending) {
+          pendingWrites.shift();
+        }
+        if (!isCurrentMutationState(state)) {
+          return;
+        }
+      } catch (error) {
+        if (!isControlRevoked(error) || !isCurrentMutationState(state)) {
+          throw error;
+        }
+        state.controlLost = true;
+        state.geometryDirty = true;
+        if (pendingWrites.length === 0) {
+          return;
+        }
+      }
+    }
+  };
+
+  const runMutationPump = (state: AttachmentMutationState): Promise<void> => {
+    if (state.running !== undefined) {
+      return state.running;
+    }
+    const running = drainMutationPump(state).finally(() => {
+      if (state.running === running) {
+        state.running = undefined;
+      }
+    });
+    state.running = running;
+    return running;
+  };
+
+  const scheduleMutationPump = (state: AttachmentMutationState): void => {
+    void runMutationPump(state).catch((error) => {
+      if (isCurrentMutationState(state) && !isControlRevoked(error)) {
+        emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
+      }
+    });
+  };
+
+  const beginMutationGeneration = (
     opened: HostAttachment,
     isReconnect: boolean,
-  ): Promise<StationTerminalSize> => {
-    // Snapshot each target before awaiting so the returned acknowledgement always
-    // describes geometry the host actually applied, not a newer pane assertion.
-    const attachTarget = { cols: size.cols, rows: size.rows };
-    await opened.resize(attachTarget.cols, attachTarget.rows);
-    if (disposed) {
-      return attachTarget;
-    }
-    // A same-size TIOCSWINSZ emits no SIGWINCH, so stale same-size frames need a
-    // temporary row change whenever replay or reconnect requires a child repaint.
-    const sizeUnchanged = size.cols === attachTarget.cols && size.rows === attachTarget.rows;
-    const requiresChildRepaint =
-      isReconnect ||
-      opened.ack.replay.kind === "live-reset-recovery" ||
-      opened.ack.replay.events.some((event) => event.type === "data");
-    if (
-      sizeUnchanged &&
-      requiresChildRepaint &&
-      opened.ack.cols === attachTarget.cols &&
-      opened.ack.rows === attachTarget.rows
-    ) {
-      // Shrinking clamps alternate-buffer bottom-row cursors, so nudge upward before restoring.
-      const nudgeTarget = {
-        cols: attachTarget.cols,
-        rows: attachTarget.rows + 1,
-      };
-      await opened.resize(nudgeTarget.cols, nudgeTarget.rows);
-      if (disposed) {
-        return nudgeTarget;
-      }
-      const restoreTarget = { cols: size.cols, rows: size.rows };
-      await opened.resize(restoreTarget.cols, restoreTarget.rows);
-      return restoreTarget;
-    }
-    // Publication compares this exact sent size with the latest pane assertion,
-    // catching changes during geometry synchronization or the buffered-write drain.
-    return attachTarget;
-  };
-
-  const drainPendingWrites = async (opened: HostAttachment): Promise<void> => {
-    // Shift only after a successful write so reconnect retries the failed head
-    // without duplicating writes that the prior attachment already accepted.
-    while (!disposed && pendingWrites.length > 0) {
-      const data = pendingWrites[0];
-      if (data === undefined) {
-        break;
-      }
-      await opened.write(data);
-      pendingWrites.shift();
-    }
-  };
-
-  const publishPreparedAttachment = (
-    opened: HostAttachment,
-    attachSentSize: StationTerminalSize,
-  ): void => {
-    // Publishing after the drain keeps later writes behind every buffered write.
-    attachment = opened;
-    if (size.cols !== attachSentSize.cols || size.rows !== attachSentSize.rows) {
-      // A resize arrived during attach; resize() no-op'd then, so send it now.
-      applyHostResize(size);
-      return;
-    }
+  ): AttachmentMutationState => {
+    attachmentGeneration += 1;
+    const state: AttachmentMutationState = {
+      opened,
+      generation: attachmentGeneration,
+      geometryDirty: opened.controlState.role === "controller" || pendingWrites.length > 0,
+      repaintPending:
+        isReconnect ||
+        opened.ack.replay.kind === "live-reset-recovery" ||
+        opened.ack.replay.events.some((event) => event.type === "data"),
+      controlLost: false,
+      running: undefined,
+    };
+    mutationState = state;
+    return state;
   };
 
   const consumeAttachmentFrames = async (
     iterator: AsyncIterator<HostFrame>,
+    state: AttachmentMutationState,
   ): Promise<AttachmentStreamOutcome> => {
     for (;;) {
       const next = await iterator.next();
@@ -448,6 +519,13 @@ export function createHostAttachedTerminal(
           };
         case "focus":
           // Focus is best-effort host metadata with no terminal-output meaning.
+          break;
+        case "control-revoked":
+          state.controlLost = true;
+          state.geometryDirty = true;
+          if (pendingWrites.length > 0 && isCurrentMutationState(state)) {
+            scheduleMutationPump(state);
+          }
           break;
         default:
           return unreachableAttachmentState(frame);
@@ -494,15 +572,11 @@ export function createHostAttachedTerminal(
     }
     // Failures after replay must clear before replaying the next ring snapshot.
     state.replayed = true;
-    const attachSentSize = await synchronizeAttachmentGeometry(opened, isReconnect);
-    if (disposed) {
+    const mutations = beginMutationGeneration(opened, isReconnect);
+    await runMutationPump(mutations);
+    if (!isCurrentMutationState(mutations)) {
       return false;
     }
-    await drainPendingWrites(opened);
-    if (disposed) {
-      return false;
-    }
-    publishPreparedAttachment(opened, attachSentSize);
     return true;
   };
 
@@ -545,7 +619,11 @@ export function createHostAttachedTerminal(
       }
       connectedAt = now();
       const iterator = opened.frames[Symbol.asyncIterator]();
-      const stream = await consumeAttachmentFrames(iterator);
+      const mutations = mutationState;
+      if (mutations === undefined || mutations.opened !== opened) {
+        return { kind: "complete" };
+      }
+      const stream = await consumeAttachmentFrames(iterator, mutations);
       if (stream.kind === "exited") {
         emitExit(stream.exit);
         return { kind: "complete" };
@@ -561,8 +639,13 @@ export function createHostAttachedTerminal(
     connectedAt: number | undefined,
   ): Promise<ReconnectPreparationOutcome> => {
     // Clear the published write path and confirmed geometry before reconnecting.
-    attachment = undefined;
     ackedSize = undefined;
+    const previousMutations = mutationState;
+    mutationState = undefined;
+    attachmentGeneration += 1;
+    if (previousMutations?.running !== undefined) {
+      await previousMutations.running.catch(() => undefined);
+    }
     if (disposed || closeRequested) {
       return { kind: "stop" };
     }
@@ -736,23 +819,26 @@ export function createHostAttachedTerminal(
       if (disposed || exited || unavailable) {
         return;
       }
-      if (attachment === undefined) {
-        pendingWrites.push(data);
-        return;
+      pendingWrites.push({ data });
+      const state = mutationState;
+      if (state !== undefined) {
+        scheduleMutationPump(state);
       }
-      // Surface a failed write as a diagnostic rather than dropping it silently.
-      attachment.write(data).catch((error) => {
-        emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
-      });
     },
     resize(next) {
-      size = next;
+      size = { cols: next.cols, rows: next.rows };
       if (unavailable) {
         return;
       }
-      // Requested via applyHostResize and confirmed by the ordered stream frame;
-      // a no-op while detached, then re-sent once attachment is published.
-      applyHostResize(next);
+      const state = mutationState;
+      if (
+        state !== undefined &&
+        !state.controlLost &&
+        state.opened.controlState.role === "controller"
+      ) {
+        state.geometryDirty = true;
+        scheduleMutationPump(state);
+      }
     },
     get ackedSize() {
       return ackedSize;
@@ -775,6 +861,8 @@ export function createHostAttachedTerminal(
         return;
       }
       disposed = true;
+      mutationState = undefined;
+      attachmentGeneration += 1;
       dataListeners.clear();
       exitListeners.clear();
       diagnosticListeners.clear();

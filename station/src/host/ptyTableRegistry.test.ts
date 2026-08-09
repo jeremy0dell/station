@@ -144,9 +144,10 @@ describe("createPtyTable registry adoption", () => {
       ptyInstanceId: "instance-pty-3",
     });
 
-    table.write("pty-3", "forwarded\n");
+    const controller = await table.attach(table.list()[0]!, "att-registry", "controller");
+    controller.write(controller.controlState, "forwarded\n");
     expect(scripted.helpers.writes).toEqual(["forwarded\n"]);
-    table.resize("pty-3", 101, 31);
+    controller.resize(controller.controlState, 101, 31);
     expect(scripted.helpers.resizes).toEqual([{ cols: 101, rows: 31 }]);
 
     // Adoption replays data into the ring exactly like spawn.

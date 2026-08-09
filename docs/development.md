@@ -518,6 +518,20 @@ capabilities while requiring persistent Host spawns to fail closed on tmux
 provenance. Both lanes are part of hosted `standard-ci` and remain available as focused local
 commands.
 
+The isolated two-renderer controller regression requires both PTY prerequisites,
+then starts a fresh Host for each `bridge` and `bun` implementation without using
+the configured Station runtime:
+
+```bash
+pnpm --dir station repair:node-pty
+pnpm --dir station build:ctty-helper
+pnpm test:e2e:real:local tests/e2e/real/real-native-tui-pty-control.test.ts
+```
+
+It attaches differently sized `hostAttachedTerminal` renderers to one real child
+and verifies shared output, geometry-before-input takeover, viewer resize
+suppression, and later resize noise from the revoked renderer.
+
 To daily-drive the Bun implementation in the isolated devbox, return to the
 repo root and start a fresh host with the selector in its environment:
 

@@ -1,6 +1,7 @@
 import {
   type HostAttachAck,
   type HostAttachment,
+  type HostControlState,
   type HostFrame,
   type HostPtyAttachExpectation,
   type StationHostClient,
@@ -52,6 +53,7 @@ function deferred<T>() {
 }
 
 type ControllableAttachmentBehavior = {
+  claimControl?: () => Promise<HostControlState | undefined>;
   write?: (data: string) => Promise<void>;
   resize?: (cols: number, rows: number) => Promise<void>;
 };
@@ -65,6 +67,12 @@ function controllableAttachment(
   let ended = false;
   const writes: string[] = [];
   const resizes: Array<{ cols: number; rows: number }> = [];
+  let claims = 0;
+  let controlState = {
+    attachmentId: ack.attachmentId,
+    controlEpoch: ack.controlEpoch,
+    role: ack.role,
+  };
   let detached = false;
   const drain = () => {
     while (waiters.length > 0 && (queue.length > 0 || ended)) {
@@ -75,8 +83,11 @@ function controllableAttachment(
     }
   };
   const attachment: HostAttachment = {
-    attachmentId: "att-test",
+    attachmentId: ack.attachmentId,
     ack,
+    get controlState() {
+      return controlState;
+    },
     frames: {
       [Symbol.asyncIterator]: () => ({
         next: () =>
@@ -92,6 +103,20 @@ function controllableAttachment(
           return Promise.resolve({ done: true as const, value: undefined });
         },
       }),
+    },
+    claimControl: async () => {
+      claims += 1;
+      const claimed = await behavior.claimControl?.();
+      if (claimed !== undefined) {
+        controlState = claimed;
+      } else if (controlState.role !== "controller") {
+        controlState = {
+          ...controlState,
+          controlEpoch: controlState.controlEpoch + 1,
+          role: "controller",
+        };
+      }
+      return controlState;
     },
     write: async (data) => {
       writes.push(data);
@@ -110,6 +135,13 @@ function controllableAttachment(
   return {
     attachment,
     push: (frame: HostFrame) => {
+      if (frame.type === "control-revoked") {
+        controlState = {
+          attachmentId: frame.attachmentId,
+          controlEpoch: frame.controlEpoch,
+          role: frame.role,
+        };
+      }
       queue.push(frame);
       drain();
     },
@@ -118,7 +150,7 @@ function controllableAttachment(
       ended = true;
       drain();
     },
-    state: { writes, resizes, isDetached: () => detached },
+    state: { writes, resizes, claims: () => claims, isDetached: () => detached },
   };
 }
 
@@ -133,6 +165,9 @@ function ack(overrides: AckOverrides = {}): HostAttachAck {
   const rows = fields.rows ?? 24;
   return {
     subscribed: fields.subscribed ?? true,
+    attachmentId: fields.attachmentId ?? "att-test",
+    controlEpoch: fields.controlEpoch ?? 1,
+    role: fields.role ?? "controller",
     kind: fields.kind ?? PTY_IDENTITY.kind,
     terminalTargetId: fields.terminalTargetId ?? PTY_REF.terminalTargetId,
     worktreeId: fields.worktreeId ?? PTY_IDENTITY.worktreeId,
@@ -185,8 +220,6 @@ function clientForAttach(
     stopIfIdle: async () => ({ stopping: true }),
     ...unusedHandoffClientMethods,
     spawn: async () => ({ ...PTY_REF, pid: 4242 }),
-    write: async () => undefined,
-    resize: async () => undefined,
     list: async () => [],
     focus: async () => undefined,
     close: async () => ({ closed: true }),
@@ -284,6 +317,69 @@ describe("createHostAttachedTerminal", () => {
     await flush();
     expect(ctrl.state.writes).toEqual(["pre"]);
     expect(ctrl.state.resizes).toEqual([{ cols: 100, rows: 30 }]);
+  });
+
+  it("keeps viewer resize local until input reclaims control and applies geometry first", async () => {
+    const mutations: string[] = [];
+    const ctrl = controllableAttachment(ack({ role: "viewer", controlEpoch: 1 }), {
+      claimControl: async () => {
+        mutations.push("claim");
+        return { attachmentId: "att-test", controlEpoch: 2, role: "controller" };
+      },
+      resize: async (cols, rows) => {
+        mutations.push(`resize:${cols}x${rows}`);
+      },
+      write: async (data) => {
+        mutations.push(`write:${data}`);
+      },
+    });
+    const { terminal } = terminalFor(ctrl.attachment);
+
+    await flush();
+    terminal.resize({ cols: 100, rows: 30 });
+    terminal.resize({ cols: 120, rows: 40 });
+    await flush();
+    expect(mutations).toEqual([]);
+
+    terminal.write("interactive");
+    await flush();
+    expect(mutations).toEqual(["claim", "resize:120x40", "write:interactive"]);
+  });
+
+  it("reclaims and retries the unsent write after a racing control rejection", async () => {
+    let firstWrite = true;
+    const mutations: string[] = [];
+    const ctrl = controllableAttachment(ack(), {
+      claimControl: async () => {
+        mutations.push("claim");
+        return { attachmentId: "att-test", controlEpoch: 2, role: "controller" };
+      },
+      resize: async (cols, rows) => {
+        mutations.push(`resize:${cols}x${rows}`);
+      },
+      write: async (data) => {
+        mutations.push(`write:${data}`);
+        if (firstWrite) {
+          firstWrite = false;
+          throw new StationHostProviderError("HOST_CONTROL_REVOKED", "lost race");
+        }
+      },
+    });
+    const { terminal } = terminalFor(ctrl.attachment);
+    await flush();
+    mutations.length = 0;
+
+    terminal.write("retry-me");
+    await flush();
+    await flush();
+
+    expect(mutations).toEqual([
+      "write:retry-me",
+      "claim",
+      "resize:80x24",
+      "write:retry-me",
+    ]);
+    expect(ctrl.state.claims()).toBe(1);
   });
 
   it("does not acknowledge requested geometry until its ordered resize frame is consumed", async () => {
@@ -536,8 +632,6 @@ function trackingClientFactory(attachment: HostAttachment, tracking: Tracking) {
         tracking.spawns.push(params);
         return { ...ptyRef(tracking.spawnPtyId), pid: 4242 };
       },
-      write: async () => undefined,
-      resize: async () => undefined,
       list: async () => [],
       focus: async () => undefined,
       close: async (ptyId: string) => {
@@ -707,14 +801,14 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
   it("rejects resize confirmation from an attachment after its stream drops", async () => {
     const oldResize = deferred<void>();
     const reconnectWait = deferred<void>();
-    const first = controllableAttachment(ack(), {
+    const first = controllableAttachment(ack({ attachmentId: "att-old" }), {
       resize: async (cols, rows) => {
         if (cols === 100 && rows === 30) {
           await oldResize.promise;
         }
       },
     });
-    const second = controllableAttachment(ack());
+    const second = controllableAttachment(ack({ attachmentId: "att-new" }));
     let clientCreations = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
@@ -750,14 +844,14 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
   });
 
   it("retries the failed buffered-write head without duplicating successful writes", async () => {
-    const first = controllableAttachment(ack(), {
+    const first = controllableAttachment(ack({ attachmentId: "att-old" }), {
       write: async (data) => {
         if (data === "second") {
           throw new Error("write transport dropped");
         }
       },
     });
-    const second = controllableAttachment(ack());
+    const second = controllableAttachment(ack({ attachmentId: "att-new" }));
     let clientCreations = 0;
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
@@ -993,8 +1087,6 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
-          write: async () => undefined,
-          resize: async () => undefined,
           list: async () => [],
           focus: async () => undefined,
           close: async () => ({ closed: true }),
@@ -1037,8 +1129,6 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
-          write: async () => undefined,
-          resize: async () => undefined,
           list: async () => [],
           focus: async () => undefined,
           close: async () => ({ closed: true }),
@@ -1082,8 +1172,6 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
-          write: async () => undefined,
-          resize: async () => undefined,
           list: async () => [],
           focus: async () => undefined,
           close: async () => ({ closed: true }),
@@ -1126,8 +1214,6 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
           spawn: async () => ({ ...PTY_REF, pid: 4242 }),
-          write: async () => undefined,
-          resize: async () => undefined,
           list: async () => [],
           focus: async () => undefined,
           close: async () => ({ closed: true }),
@@ -1276,8 +1362,6 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             stopIfIdle: async () => ({ stopping: true }),
             ...unusedHandoffClientMethods,
             spawn: async () => ({ ...ptyRef("pty-gone"), pid: 1 }),
-            write: async () => undefined,
-            resize: async () => undefined,
             list: async () => [],
             focus: async () => undefined,
             close: async () => ({ closed: true }),
@@ -1318,8 +1402,6 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             tracking.spawns.push(params);
             return { ...ptyRef(tracking.spawnPtyId), pid: 1 };
           },
-          write: async () => undefined,
-          resize: async () => undefined,
           list: async () => [],
           focus: async () => undefined,
           close: async (ptyId: string) => {

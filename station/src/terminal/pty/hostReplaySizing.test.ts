@@ -166,7 +166,7 @@ async function waitForReplayKind(
   const deadline = Date.now() + 5_000;
   let replayKind = "";
   while (Date.now() < deadline) {
-    const attachment = await control.attach(ptyRef);
+    const attachment = await control.attach(ptyRef, "viewer");
     replayKind = attachment.ack.replay.kind;
     await attachment.frames[Symbol.asyncIterator]().return?.();
     if (replayKind === expected) return replayKind;

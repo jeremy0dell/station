@@ -212,7 +212,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     scripted.helpers.emitData("abcdefghijkl");
 
     const expectation = attachExpectation(spawned, { harnessProvider: "opencode" });
-    const captured = await control.attach(expectation);
+    const captured = await control.attach(expectation, "viewer");
     expect(captured.ack.replay.kind).toBe("semantic-truncation-recovery");
     const replay = captured.ack.replay.events
       .flatMap((event) => (event.type === "data" ? [event.data] : []))

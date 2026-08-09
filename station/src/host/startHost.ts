@@ -16,10 +16,8 @@ import {
   type HostClientIdentity,
   type HostHandlers,
   type HostPtyKind,
-  HostResizeParamsSchema,
   HostSpawnParamsSchema,
   HostStopIfIdleParamsSchema,
-  HostWriteParamsSchema,
   serveHostConnection,
 } from "@station/host";
 import { createHostHandoffSession } from "./hostHandoffSession.js";
@@ -65,8 +63,10 @@ type CloseReason = "requested" | "upgrade" | "handoff";
 
 /**
  * The host owns PTYs independently of any client and answers
- * spawn/write/resize/list + health. Typed PTY lifecycle is emitted directly at
- * the table boundary, while shutdown disposes owned PTYs and flushes evidence.
+ * spawn/list + health. Attachment-scoped mutation is resolved by the server's
+ * connection registry and enforced by the PTY table before reaching a child.
+ * Typed PTY lifecycle is emitted directly at the table boundary, while shutdown
+ * disposes owned PTYs and flushes evidence.
  */
 export async function startStationHost(
   options: StartStationHostOptions,
@@ -249,16 +249,6 @@ function buildHostHandlers(input: {
           pid: outcome.pid,
         };
       },
-      "host.write": (params) => {
-        const { ptyId, data } = HostWriteParamsSchema.parse(params);
-        ptyTable.write(ptyId, data);
-        return { ok: true as const };
-      },
-      "host.resize": (params) => {
-        const { ptyId, cols, rows } = HostResizeParamsSchema.parse(params);
-        ptyTable.resize(ptyId, cols, rows);
-        return { ok: true as const };
-      },
       "host.list": () => {
         handoff.assertNotDraining();
         return { ptys: ptyTable.list() };
@@ -274,9 +264,9 @@ function buildHostHandlers(input: {
         return { closed: ptyTable.close(ptyId) };
       },
     },
-    attach: (params) => {
+    attach: (params, registration) => {
       handoff.assertNotDraining();
-      return ptyTable.attach(params);
+      return ptyTable.attach(params, registration.attachmentId, params.intent);
     },
     // Draining is set before the ack, and close starts only after it is written, excluding spawn and response-loss races.
     afterUnaryResponseSent: (method) => {
