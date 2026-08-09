@@ -419,15 +419,7 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
       ["list", "--format=json"],
-      [
-        "-C",
-        "/tmp/station/web/feature",
-        "remove",
-        "--force",
-        "--force-delete",
-        "--foreground",
-        "--format=json",
-      ],
+      ["-C", "/tmp/station/web/feature", "remove", "--force", "--force-delete", "--format=json"],
     ]);
   });
 
@@ -503,16 +495,7 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["list", "--format=json"],
       ["list", "--format=json"],
-      [
-        "-C",
-        linkedPath,
-        "remove",
-        "--no-hooks",
-        "--force",
-        "--no-delete-branch",
-        "--foreground",
-        "--format=json",
-      ],
+      ["-C", linkedPath, "remove", "--no-hooks", "--force", "--no-delete-branch", "--format=json"],
     ]);
   });
 
@@ -749,7 +732,7 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--no-hooks", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
       ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--foreground", "--format=json"],
+      ["-C", "/tmp/station/web/feature", "remove", "--no-hooks", "--format=json"],
     ]);
   });
 
@@ -788,7 +771,7 @@ describe("WorktrunkProvider", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["switch", "--yes", "--create", "feature", "--base", "main", "--no-cd", "--format=json"],
       ["list", "--format=json"],
-      ["-C", "/tmp/station/web/feature", "remove", "--yes", "--foreground", "--format=json"],
+      ["-C", "/tmp/station/web/feature", "remove", "--yes", "--format=json"],
     ]);
   });
 
@@ -1364,6 +1347,56 @@ describe("WorktrunkProvider", () => {
       tag: "WorktreeProviderError",
       code: "WORKTRUNK_TIMEOUT",
     });
+    expect(aborted).toBe(true);
+  });
+
+  it("aborts a hung Worktrunk remove and maps it to WORKTRUNK_TIMEOUT", async () => {
+    let aborted = false;
+    let removeArgs: string[] | undefined;
+    const provider = testProvider({
+      command: "wt",
+      timeoutMs: 5,
+      clock: { now: () => new Date(now) },
+      runner: async (input) => {
+        if (input.command === "wt" && input.args?.includes("remove")) {
+          removeArgs = input.args;
+          return new Promise((_, reject) => {
+            const abort = () => {
+              aborted = true;
+              reject(
+                Object.assign(new Error("aborted"), { name: "AbortError", code: "ABORT_ERR" }),
+              );
+            };
+            if (input.signal?.aborted === true) {
+              abort();
+            } else {
+              input.signal?.addEventListener("abort", abort, { once: true });
+            }
+          });
+        }
+        return result(
+          input,
+          JSON.stringify([{ path: "/tmp/station/web/feature", branch: "feature" }]),
+        );
+      },
+    });
+
+    const [selected] = await provider.listWorktrees(project);
+    expect(selected).toBeDefined();
+    if (selected === undefined) throw new Error("Expected the worktree to be listed.");
+
+    await expect(
+      provider.removeWorktree({
+        worktreeId: selected.id,
+        expectedPath: selected.path,
+        expectedBranch: selected.branch,
+        expectedRegistrationIdentity: `git-registration:${selected.path}`,
+      }),
+    ).rejects.toMatchObject({
+      tag: "WorktreeProviderError",
+      code: "WORKTRUNK_TIMEOUT",
+    });
+    expect(removeArgs).toEqual(["-C", "/tmp/station/web/feature", "remove", "--format=json"]);
     expect(aborted).toBe(true);
   });
 
