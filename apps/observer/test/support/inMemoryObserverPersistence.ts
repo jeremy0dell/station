@@ -44,6 +44,7 @@ import {
   providerObservationExpiresAt,
   providerObservationRetentionDays,
 } from "../../src/persistence/retention.js";
+import * as sessionGroupStore from "../../src/persistence/sessionGroups.js";
 import {
   sessionHarnessExecutionEqual,
   sessionTurnReadinessEqual,
@@ -104,6 +105,7 @@ type InMemoryObserverPersistenceState = {
   terminalTargets: Map<string, TerminalTargetObservation>;
   harnessRuns: Map<string, HarnessRunObservation>;
   sessions: Map<string, PersistedSession>;
+  sessionGroups: sessionGroupStore.SessionGroupPersistenceState;
   worktreeDisplayTitles: Map<string, PersistedWorktreeDisplayTitle>;
   sessionHarnessExecutions: Map<string, PersistedSessionHarnessExecution>;
   recoveryHandles: Map<string, SessionRecoveryHandle>;
@@ -594,6 +596,75 @@ export function createInMemoryObserverPersistence(
     deleteSessionTurnReadiness: (input) =>
       transaction((draft) => deleteSessionTurnReadiness(draft, input)),
 
+    listSessionGroups: () =>
+      transaction((draft) => sessionGroupStore.listSessionGroups(draft.sessionGroups)),
+
+    createSessionGroup: (input) =>
+      transaction((draft) =>
+        applySessionGroupMutation(
+          draft,
+          sessionGroupStore.createSessionGroup(draft.sessionGroups, {
+            ...input,
+            createdAt: input.createdAt ?? now(),
+          }),
+        ),
+      ),
+
+    renameSessionGroup: (input) =>
+      transaction((draft) =>
+        applySessionGroupMutation(
+          draft,
+          sessionGroupStore.renameSessionGroup(draft.sessionGroups, {
+            ...input,
+            updatedAt: input.updatedAt ?? now(),
+          }),
+        ),
+      ),
+
+    updateSessionGroupMembership: (input) =>
+      transaction((draft) =>
+        applySessionGroupMutation(
+          draft,
+          sessionGroupStore.updateSessionGroupMembership(draft.sessionGroups, {
+            ...input,
+            updatedAt: input.updatedAt ?? now(),
+          }),
+        ),
+      ),
+
+    reparentSessionGroup: (input) =>
+      transaction((draft) =>
+        applySessionGroupMutation(
+          draft,
+          sessionGroupStore.reparentSessionGroup(draft.sessionGroups, {
+            ...input,
+            updatedAt: input.updatedAt ?? now(),
+          }),
+        ),
+      ),
+
+    deleteSessionGroup: (input) =>
+      transaction((draft) =>
+        applySessionGroupMutation(
+          draft,
+          sessionGroupStore.deleteSessionGroup(draft.sessionGroups, {
+            ...input,
+            updatedAt: input.updatedAt ?? now(),
+          }),
+        ),
+      ),
+
+    pruneSessionGroupMemberships: (input) =>
+      transaction((draft) =>
+        applySessionGroupMutation(
+          draft,
+          sessionGroupStore.pruneSessionGroupMemberships(draft.sessionGroups, {
+            ...input,
+            updatedAt: input.updatedAt ?? now(),
+          }),
+        ),
+      ),
+
     upsertWorktreeMetadataCurrent: (input) =>
       transaction((draft) => {
         const updatedAt = input.updatedAt ?? now();
@@ -652,12 +723,21 @@ function emptyState(): InMemoryObserverPersistenceState {
     terminalTargets: new Map(),
     harnessRuns: new Map(),
     sessions: new Map(),
+    sessionGroups: sessionGroupStore.emptySessionGroupState(),
     worktreeDisplayTitles: new Map(),
     sessionHarnessExecutions: new Map(),
     recoveryHandles: new Map(),
     turnReadiness: new Map(),
     worktreeMetadata: new Map(),
   };
+}
+
+function applySessionGroupMutation(
+  state: InMemoryObserverPersistenceState,
+  mutation: sessionGroupStore.SessionGroupMutation,
+) {
+  state.sessionGroups = mutation.state;
+  return mutation.result;
 }
 
 function worktreeDisplayTitleKey(projectId: string, worktreeId: string): string {

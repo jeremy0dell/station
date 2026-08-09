@@ -56,9 +56,10 @@ No single layer owns all truth.
 - Harness providers are authoritative for agent launch, discovery, event ingestion, status signals, and provider-native recovery artifacts they can prove.
 - A sealed session-rescue archive becomes temporary cutover authority only after the exact source sessions have stopped and every recovery-critical asset has been captured and hashed; a live-source archive remains evidence, not launch authority.
 - Repository providers are authoritative only for code-host metadata they fetch or cache through their integration boundary.
-- Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.
+- Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, project-local Session Group definitions and exclusive membership, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.
 - Observer snapshots are the normalized current graph exposed to clients. `rows` is configured
-  worktree inventory; `sessions` is canonical session membership. `WorktreeRow.title` is the
+  worktree inventory; `sessions` is canonical session membership; and `sessionGroups` is the
+  normalized project-local organizational projection. `WorktreeRow.title` is the
   display authority, while `SessionView.title` is its lifecycle projection. Session and activity
   counts derive from `sessions`, while worktree counts derive from `rows`.
 - JSONL logs and debug bundles are diagnostic evidence, not runtime truth.

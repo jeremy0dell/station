@@ -49,6 +49,7 @@ import {
   RepositoryPullRequestRequestSchema,
   RepositoryRemoteSchema,
   SafeErrorSchema,
+  SessionGroupViewSchema,
   SessionMigrationJournalEntrySchema,
   SessionMigrationLockSchema,
   SessionMigrationSealSchema,
@@ -161,7 +162,7 @@ describe("contract schemas", () => {
   });
 
   it("exports the shared schema version used by snapshot fixtures", async () => {
-    expect(STATION_SCHEMA_VERSION).toBe("0.9.0");
+    expect(STATION_SCHEMA_VERSION).toBe("0.10.0");
 
     const snapshots = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
       string,
@@ -170,6 +171,81 @@ describe("contract schemas", () => {
 
     for (const [name, snapshot] of Object.entries(snapshots)) {
       expect(snapshot.schemaVersion, name).toBe(STATION_SCHEMA_VERSION);
+    }
+  });
+
+  it("strictly validates Session Groups and snapshot graph relationships", async () => {
+    const group = {
+      id: "group_active",
+      projectId: "web",
+      name: "  Active work  ",
+      sessionIds: ["ses_web_idle"],
+      version: 1,
+      createdAt: "2026-05-20T11:00:00.000Z",
+      updatedAt: "2026-05-20T12:00:00.000Z",
+    };
+    expect(SessionGroupViewSchema.parse(group)).toMatchObject({ name: "Active work" });
+
+    const invalidGroups = [
+      { ...group, id: "   " },
+      { ...group, name: "   " },
+      { ...group, sessionIds: ["ses_web_idle", "ses_web_idle"] },
+      { ...group, version: 0 },
+      { ...group, createdAt: "invalid" },
+      {
+        ...group,
+        createdAt: "2026-05-20T13:00:00.000Z",
+        updatedAt: "2026-05-20T12:00:00.000Z",
+      },
+      { ...group, parentGroupId: "   " },
+      { ...group, extra: true },
+    ];
+    for (const [index, invalid] of invalidGroups.entries()) {
+      expectFails(SessionGroupViewSchema, invalid, `invalid Group ${index}`);
+    }
+
+    const scenarios = (await loadJson("snapshots/snapshot-scenarios.json")) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const base = scenarios.idleAgent;
+    if (base === undefined) throw new Error("idleAgent fixture is required.");
+    const snapshot = { ...base, sessionGroups: [group] };
+    expectParses(StationSnapshotSchema, snapshot, "snapshot with a membered Group");
+    expectParses(
+      StationSnapshotSchema,
+      {
+        ...base,
+        sessionGroups: [
+          { ...group, sessionIds: [] },
+          { ...group, id: "group_child", sessionIds: [], parentGroupId: group.id },
+        ],
+      },
+      "snapshot with empty and parented Groups",
+    );
+
+    const invalidGraphs = [
+      { ...base, sessionGroups: undefined },
+      { ...base, sessionGroups: [group, { ...group }] },
+      { ...base, sessionGroups: [{ ...group, projectId: "missing" }] },
+      { ...base, sessionGroups: [{ ...group, sessionIds: ["missing"] }] },
+      {
+        ...base,
+        sessionGroups: [group, { ...group, id: "group_other", sessionIds: group.sessionIds }],
+      },
+      { ...base, sessionGroups: [{ ...group, parentGroupId: "missing" }] },
+      { ...base, sessionGroups: [{ ...group, parentGroupId: group.id }] },
+      {
+        ...base,
+        sessionGroups: [
+          { ...group, id: "group_a", sessionIds: [], parentGroupId: "group_b" },
+          { ...group, id: "group_b", sessionIds: [], parentGroupId: "group_a" },
+        ],
+      },
+      { ...base, schemaVersion: "0.9.0", sessionGroups: [] },
+    ];
+    for (const [index, invalid] of invalidGraphs.entries()) {
+      expectFails(StationSnapshotSchema, invalid, `invalid Group graph ${index}`);
     }
   });
 
@@ -580,6 +656,7 @@ describe("contract schemas", () => {
         projects: [],
         rows: [],
         sessions: [],
+        sessionGroups: [],
         counts: {
           projects: 0,
           sessions: 0,
@@ -805,6 +882,7 @@ describe("contract schemas", () => {
       projects: [],
       rows: [row],
       sessions: [],
+      sessionGroups: [],
       counts: {
         projects: 0,
         sessions: 0,

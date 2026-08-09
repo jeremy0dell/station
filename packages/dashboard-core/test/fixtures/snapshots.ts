@@ -141,6 +141,7 @@ export function createNoProjectsSnapshot(): StationSnapshot {
     projects: [],
     rows: [],
     sessions: [],
+    sessionGroups: [],
     counts: {
       projects: 0,
       sessions: 0,
@@ -235,6 +236,7 @@ function snapshotFromRows(rows: WorktreeRow[]): StationSnapshot {
     projects,
     rows,
     sessions,
+    sessionGroups: [],
     counts: {
       projects: projects.length,
       ...counts,

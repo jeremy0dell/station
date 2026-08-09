@@ -15,6 +15,8 @@ import {
 } from "./observations.js";
 import type { ObserverPersistenceBundle, PersistenceHealthSource } from "./ports.js";
 import { providerObservationRetentionDays } from "./retention.js";
+import * as sessionGroupSqlite from "./sessionGroupSqlite.js";
+import * as sessionGroupStore from "./sessionGroups.js";
 import * as sessionHarnessDerivedState from "./sessionHarnessDerivedState.js";
 import * as sessionHarnessExecutionStore from "./sessionHarnessExecutions.js";
 import * as sessionRecoveryHandleStore from "./sessionRecoveryHandles.js";
@@ -46,6 +48,19 @@ export function createSqliteObserverPersistence(
   const now = () => toIsoTimestamp(clock.now());
   const transaction = <T>(task: (database: SqlDatabase) => T): Promise<T> =>
     Effect.runPromise(runSqliteTransactionEffect(options.sqlite, task));
+  const sessionGroupMutation = (
+    mutate: (
+      state: sessionGroupStore.SessionGroupPersistenceState,
+    ) => sessionGroupStore.SessionGroupMutation,
+  ) =>
+    transaction((database) => {
+      const before = sessionGroupSqlite.readSessionGroupState(database);
+      const mutation = mutate(before);
+      if (mutation.changed) {
+        sessionGroupSqlite.writeSessionGroupState(database, before, mutation.state);
+      }
+      return mutation.result;
+    });
 
   return {
     health: () => options.sqlite.health(),
@@ -271,6 +286,59 @@ export function createSqliteObserverPersistence(
       }),
 
     listSessions: () => transaction(correlationStore.listSessions),
+
+    listSessionGroups: () =>
+      transaction((database) =>
+        sessionGroupStore.listSessionGroups(sessionGroupSqlite.readSessionGroupState(database)),
+      ),
+
+    createSessionGroup: (input) =>
+      sessionGroupMutation((state) =>
+        sessionGroupStore.createSessionGroup(state, {
+          ...input,
+          createdAt: input.createdAt ?? now(),
+        }),
+      ),
+
+    renameSessionGroup: (input) =>
+      sessionGroupMutation((state) =>
+        sessionGroupStore.renameSessionGroup(state, {
+          ...input,
+          updatedAt: input.updatedAt ?? now(),
+        }),
+      ),
+
+    updateSessionGroupMembership: (input) =>
+      sessionGroupMutation((state) =>
+        sessionGroupStore.updateSessionGroupMembership(state, {
+          ...input,
+          updatedAt: input.updatedAt ?? now(),
+        }),
+      ),
+
+    reparentSessionGroup: (input) =>
+      sessionGroupMutation((state) =>
+        sessionGroupStore.reparentSessionGroup(state, {
+          ...input,
+          updatedAt: input.updatedAt ?? now(),
+        }),
+      ),
+
+    deleteSessionGroup: (input) =>
+      sessionGroupMutation((state) =>
+        sessionGroupStore.deleteSessionGroup(state, {
+          ...input,
+          updatedAt: input.updatedAt ?? now(),
+        }),
+      ),
+
+    pruneSessionGroupMemberships: (input) =>
+      sessionGroupMutation((state) =>
+        sessionGroupStore.pruneSessionGroupMemberships(state, {
+          ...input,
+          updatedAt: input.updatedAt ?? now(),
+        }),
+      ),
 
     listWorktreeDisplayTitles: () =>
       transaction(worktreeDisplayTitleStore.listWorktreeDisplayTitles),

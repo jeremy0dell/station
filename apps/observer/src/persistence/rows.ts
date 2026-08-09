@@ -1,7 +1,8 @@
-import type { StationCommand } from "@station/contracts";
+import type { SessionGroupView, StationCommand } from "@station/contracts";
 import {
   ErrorEnvelopeSchema,
   SafeErrorSchema,
+  SessionGroupViewSchema,
   StationCommandSchema,
   StationEventSchema,
 } from "@station/contracts";
@@ -81,6 +82,30 @@ export type SqliteSessionRow = {
   lifecycle: "open" | "ended" | null;
   last_seen_at: string;
 };
+
+export type SqliteSessionGroupRow = {
+  id: string;
+  project_id: string;
+  name: string;
+  parent_group_id: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  session_ids_json: string;
+};
+
+export function sessionGroupFromRow(row: SqliteSessionGroupRow): SessionGroupView {
+  return SessionGroupViewSchema.parse({
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    sessionIds: parseJson(row.session_ids_json),
+    ...(row.parent_group_id === null ? {} : { parentGroupId: row.parent_group_id }),
+    version: row.version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
 
 export function commandFromRow(row: SqliteCommandRow): PersistedCommand {
   const command = StationCommandSchema.parse(parseJson(row.payload_json));

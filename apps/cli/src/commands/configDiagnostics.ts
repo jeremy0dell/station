@@ -165,6 +165,7 @@ function emptySnapshot(now: string): StationSnapshot {
     projects: [],
     rows: [],
     sessions: [],
+    sessionGroups: [],
     counts: {
       projects: 0,
       sessions: 0,

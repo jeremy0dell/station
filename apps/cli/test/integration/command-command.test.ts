@@ -229,9 +229,9 @@ describe("CLI command dispatch/get", () => {
             ({
               health: async () =>
                 spawned
-                  ? { schemaVersion: "0.9.0", status: "healthy" }
+                  ? { schemaVersion: "0.10.0", status: "healthy" }
                   : {
-                      schemaVersion: "0.9.0",
+                      schemaVersion: "0.10.0",
                       status: "healthy",
                       pid: 1234,
                       startedAt: now,
@@ -263,7 +263,7 @@ function runningObserverDeps(options: {
     clientFactory: (socketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.9.0",
+          schemaVersion: "0.10.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,

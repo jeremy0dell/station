@@ -24,6 +24,110 @@ observerPersistenceContract("SQLite", ({ clock, idFactory }) => {
 });
 
 describe("SQLite-only Observer persistence behavior", () => {
+  it("upgrades a version-16 database and preserves Groups across reopen", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "station-session-groups-v16-"));
+    const path = join(directory, "observer.sqlite");
+    const legacyDatabase = openSqlDatabase(path);
+    try {
+      for (const migration of migrations.filter(({ version }) => version <= 16)) {
+        legacyDatabase.exec(migration.sql);
+        legacyDatabase
+          .prepare("INSERT INTO observer_migrations (version, name, applied_at) VALUES (?, ?, ?)")
+          .run(migration.version, migration.name, now);
+      }
+      legacyDatabase
+        .prepare(
+          "INSERT OR REPLACE INTO observer_meta (key, value) VALUES ('schema_version', '16')",
+        )
+        .run();
+    } finally {
+      legacyDatabase.close();
+    }
+
+    const upgraded = openObserverSqlite({ path, clock: { now: () => new Date(now) } });
+    try {
+      expect(upgraded.health().schemaVersion).toBe(17);
+      const persistence = createSqliteObserverPersistence({ sqlite: upgraded });
+      await persistence.createSessionGroup({
+        id: "group_durable",
+        projectId: "web",
+        name: "Durable",
+        initialMembers: [{ sessionId: "ses_durable", projectId: "web", expectedGroupId: null }],
+        createdAt: now,
+      });
+    } finally {
+      upgraded.close();
+    }
+
+    const reopened = openObserverSqlite({ path });
+    try {
+      const persistence = createSqliteObserverPersistence({ sqlite: reopened });
+      await expect(persistence.listSessionGroups()).resolves.toEqual([
+        expect.objectContaining({
+          id: "group_durable",
+          sessionIds: ["ses_durable"],
+          version: 1,
+        }),
+      ]);
+    } finally {
+      reopened.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rolls back a trigger-rejected membership reassignment", async () => {
+    const sqlite = openObserverSqlite();
+    try {
+      const persistence = createSqliteObserverPersistence({ sqlite });
+      await persistence.createSessionGroup({
+        id: "group_source",
+        projectId: "web",
+        name: "Source",
+        initialMembers: [{ sessionId: "ses_atomic", projectId: "web", expectedGroupId: null }],
+        createdAt: now,
+      });
+      await persistence.createSessionGroup({
+        id: "group_target",
+        projectId: "web",
+        name: "Target",
+        createdAt: now,
+      });
+      sqlite.database.exec(`
+        CREATE TRIGGER reject_group_target_membership
+        BEFORE INSERT ON session_group_memberships
+        WHEN NEW.group_id = 'group_target'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced Group membership failure');
+        END;
+      `);
+
+      await expect(
+        persistence.updateSessionGroupMembership({
+          id: "group_target",
+          expectedVersion: 1,
+          add: [
+            {
+              sessionId: "ses_atomic",
+              projectId: "web",
+              expectedGroupId: "group_source",
+            },
+          ],
+          updatedAt: "2026-05-20T12:01:00.000Z",
+        }),
+      ).rejects.toBeDefined();
+      await expect(persistence.listSessionGroups()).resolves.toEqual([
+        expect.objectContaining({
+          id: "group_source",
+          sessionIds: ["ses_atomic"],
+          version: 1,
+        }),
+        expect.objectContaining({ id: "group_target", sessionIds: [], version: 1 }),
+      ]);
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("migrates historical session lifecycle without treating legacy NULL as open", async () => {
     const directory = await mkdtemp(join(tmpdir(), "station-session-lifecycle-"));
     const path = join(directory, "observer.sqlite");
@@ -372,6 +476,7 @@ describe("SQLite-only Observer persistence behavior", () => {
         [14, "native_binding_ingress_claims"],
         [15, "drop_recovery_breadcrumbs"],
         [16, "worktree_display_titles"],
+        [17, "session_groups"],
       ]);
       await expect(persistence.listSessions()).resolves.toEqual([
         expect.objectContaining({
@@ -395,7 +500,7 @@ describe("SQLite-only Observer persistence behavior", () => {
     }
   });
 
-  it("exposes healthy SQLite status in addition to the seven application ports", () => {
+  it("exposes healthy SQLite status in addition to the eight application ports", () => {
     const sqlite = openObserverSqlite({ clock: { now: () => new Date(now) } });
     try {
       const persistence = createSqliteObserverPersistence({

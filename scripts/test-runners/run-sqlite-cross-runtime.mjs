@@ -9,10 +9,12 @@ const probePath = join(repoRoot, "scripts", "test-runners", "sqlite-runtime-prob
 const tempRoot = mkdtempSync(join(tmpdir(), "station-sqlite-cross-runtime-"));
 
 try {
-  runProbe("node", "create", join(tempRoot, "node-created.sqlite"), "created-by-node");
-  runProbe("bun", "read", join(tempRoot, "node-created.sqlite"), "created-by-node");
-  runProbe("bun", "create", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
-  runProbe("node", "read", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
+  runProbe("node", "seed-v16", join(tempRoot, "node-created.sqlite"), "created-by-node");
+  runProbe("bun", "upgrade-write", join(tempRoot, "node-created.sqlite"), "created-by-node");
+  runProbe("node", "read", join(tempRoot, "node-created.sqlite"), "created-by-node");
+  runProbe("bun", "seed-v16", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
+  runProbe("node", "upgrade-write", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
+  runProbe("bun", "read", join(tempRoot, "bun-created.sqlite"), "created-by-bun");
   console.log("Cross-runtime SQLite compatibility passed for Node and Bun.");
 } finally {
   rmSync(tempRoot, { recursive: true, force: true });

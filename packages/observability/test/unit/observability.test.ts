@@ -262,17 +262,17 @@ describe("observability helpers", () => {
 
 function minimalSnapshot(): DiagnosticSnapshot {
   return {
-    schemaVersion: "0.9.0",
+    schemaVersion: "0.10.0",
     collectedAt: now,
     observerHealth: {
-      schemaVersion: "0.9.0",
+      schemaVersion: "0.10.0",
       status: "healthy",
       pid: 1234,
       startedAt: now,
       version: "0.0.0",
     },
     snapshot: {
-      schemaVersion: "0.9.0",
+      schemaVersion: "0.10.0",
       generatedAt: now,
       observer: {
         pid: 1234,
@@ -284,6 +284,7 @@ function minimalSnapshot(): DiagnosticSnapshot {
       projects: [],
       rows: [],
       sessions: [],
+      sessionGroups: [],
       counts: {
         projects: 0,
         sessions: 0,

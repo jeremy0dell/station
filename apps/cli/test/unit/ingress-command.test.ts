@@ -51,7 +51,7 @@ describe("provider hook ingress command", () => {
             ingestProviderHookEvent: async (event: ProviderHookEvent) => {
               if (!running) throw new Error("offline");
               return {
-                schemaVersion: "0.9.0",
+                schemaVersion: "0.10.0",
                 hookId: event.hookId ?? "hook_final_command",
                 provider: event.provider,
                 event: event.event,
@@ -121,7 +121,7 @@ describe("provider hook ingress command", () => {
             ingestProviderHookEvent: async (event: ProviderHookEvent) => {
               if (!(await fileExists(argvPath))) throw new Error("offline");
               return {
-                schemaVersion: "0.9.0",
+                schemaVersion: "0.10.0",
                 hookId: event.hookId ?? "hook_child_timeout",
                 provider: event.provider,
                 event: event.event,
@@ -172,7 +172,7 @@ describe("provider hook ingress command", () => {
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
             observedPayload = event.payload;
             return {
-              schemaVersion: "0.9.0",
+              schemaVersion: "0.10.0",
               hookId: event.hookId ?? "hook_worktrunk_1",
               provider: event.provider,
               event: event.event,
@@ -227,7 +227,7 @@ describe("provider hook ingress command", () => {
         writeSpool: async ({ spoolDir, event, error, clock }) => {
           observedSpoolDir = spoolDir;
           return {
-            schemaVersion: "0.9.0",
+            schemaVersion: "0.10.0",
             hookId: event.hookId ?? "hook_worktrunk_config_only",
             provider: event.provider,
             event: event.event,
@@ -291,7 +291,7 @@ describe("provider hook ingress command", () => {
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
             observedEvent = event;
             return {
-              schemaVersion: "0.9.0",
+              schemaVersion: "0.10.0",
               hookId: event.hookId ?? "hook_1",
               provider: event.provider,
               event: event.event,
@@ -355,7 +355,7 @@ describe("provider hook ingress command", () => {
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
             observedEvent = event;
             return {
-              schemaVersion: "0.9.0",
+              schemaVersion: "0.10.0",
               hookId: event.hookId ?? "hook_1",
               provider: event.provider,
               event: event.event,
@@ -415,7 +415,7 @@ describe("provider hook ingress command", () => {
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
             observedEvent = event;
             return {
-              schemaVersion: "0.9.0",
+              schemaVersion: "0.10.0",
               hookId: event.hookId ?? "hook_1",
               provider: event.provider,
               event: event.event,
@@ -481,7 +481,7 @@ describe("provider hook ingress command", () => {
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => {
             observedEvent = event;
             return {
-              schemaVersion: "0.9.0",
+              schemaVersion: "0.10.0",
               hookId: event.hookId ?? "hook_opencode_1",
               provider: event.provider,
               event: event.event,
@@ -493,7 +493,7 @@ describe("provider hook ingress command", () => {
           };
           return {
             health: async () => ({
-              schemaVersion: "0.9.0",
+              schemaVersion: "0.10.0",
               status: "healthy",
               pid: 12345,
               startedAt: now,
@@ -549,7 +549,7 @@ describe("provider hook ingress command", () => {
             health: async () => {
               healthCalls += 1;
               return {
-                schemaVersion: "0.9.0",
+                schemaVersion: "0.10.0",
                 status: "healthy",
                 pid: 12345,
                 startedAt: now,
@@ -563,7 +563,7 @@ describe("provider hook ingress command", () => {
             ): Promise<ProviderHookReceipt> => {
               deliveryCalls += 1;
               return {
-                schemaVersion: "0.9.0",
+                schemaVersion: "0.10.0",
                 hookId: event.hookId ?? "hook_pi_invalid",
                 provider: event.provider,
                 event: event.event,
@@ -632,7 +632,7 @@ describe("provider hook ingress command", () => {
             observedBuildVersion = options.expectedBuildVersion;
           }
           const ingest = async (event: ProviderHookEvent): Promise<ProviderHookReceipt> => ({
-            schemaVersion: "0.9.0",
+            schemaVersion: "0.10.0",
             hookId: event.hookId ?? "hook_timeout_1",
             provider: event.provider,
             event: event.event,
@@ -800,7 +800,7 @@ function stationEnv(): Record<string, string> {
 
 function healthyObserver(paths: { socketPath: string; stateDir: string }): ObserverHealth {
   return {
-    schemaVersion: "0.9.0",
+    schemaVersion: "0.10.0",
     status: "healthy",
     pid: 12345,
     startedAt: now,
