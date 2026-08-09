@@ -224,6 +224,53 @@ describe("Station app composition", () => {
     expect(frame).toContain("NYC · 72°");
   });
 
+  it("resynchronizes clock and weather after terminal focus and overlay reopen", async () => {
+    let now = new Date(2026, 7, 8, 23, 48);
+    let temperature = 75;
+    let weatherCalls = 0;
+    const station = await renderComposedStation({
+      tuiConfig: {
+        widgets: [
+          { type: "time", timeFormat: "24h" },
+          { type: "weather", city: "New York, NY", label: "NYC" },
+        ],
+      },
+      topRowWidgetDeps: {
+        now: () => now,
+        weatherClient: {
+          getCurrentWeather: async () => {
+            weatherCalls += 1;
+            return { temperature, weatherCode: 0, isDay: true };
+          },
+        },
+      },
+    });
+
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => overlayVisible(station));
+    expect(
+      await waitForFrame(station, (frame) => frame.includes("23:48") && frame.includes("NYC · 75°")),
+    ).toContain("NYC · 75°");
+
+    now = new Date(2026, 7, 9, 12, 6);
+    temperature = 92;
+    station.setup.renderer.emit("focus");
+    expect(
+      await waitForFrame(station, (frame) => frame.includes("12:06") && frame.includes("NYC · 92°")),
+    ).toContain("NYC · 92°");
+
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => !overlayVisible(station));
+    now = new Date(2026, 7, 9, 13, 7);
+    temperature = 89;
+    station.setup.mockInput.pressKey("o", { ctrl: true });
+    await waitFor(() => overlayVisible(station));
+    expect(
+      await waitForFrame(station, (frame) => frame.includes("13:07") && frame.includes("NYC · 89°")),
+    ).toContain("NYC · 89°");
+    expect(weatherCalls).toBe(3);
+  });
+
   it("closes STATION on click-away without writing mouse bytes to the pane underneath", async () => {
     const station = await renderComposedStation();
     const screen = station.composition.registry.get(MAIN_PANE_ID)?.screen;
