@@ -17,6 +17,19 @@ describe("resolveSetupMessage", () => {
     expect(resolveSetupMessage(ref, "graphical")).toBe("Core setup complete.");
   });
 
+  it("interpolates setup-managed formulas into recovery copy", () => {
+    expect(
+      resolveSetupMessage(
+        setupMessageRef("next.install-bun", { formula: "canonical-bun-formula" }),
+      ),
+    ).toBe("Install Bun (brew install canonical-bun-formula).");
+    expect(
+      resolveSetupMessage(
+        setupMessageRef("next.install-diff-viewer", { formula: "canonical-hunk-formula" }),
+      ),
+    ).toBe("Install Hunk (brew install canonical-hunk-formula).");
+  });
+
   it("rejects unknown ids and missing interpolation arguments at runtime", () => {
     expect(() =>
       resolveSetupMessage({ id: "unknown.message" } as unknown as SetupMessageRef),

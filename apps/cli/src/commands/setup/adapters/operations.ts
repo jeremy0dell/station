@@ -18,7 +18,6 @@ import {
   type SetupPackageInstallerCommit,
   type SetupPackageInstallOperation,
   type SetupTmuxPopupOperation,
-  type SetupToolInstallOperation,
   type SetupWorktrunkTrackingOperation,
 } from "@station/setup-core";
 import { runWorktrunkHooksCommand } from "../../providerHookAdapters.js";
@@ -28,7 +27,7 @@ import {
   tmuxPopupBindingBlock,
   tmuxPopupBindingEndMarker,
 } from "../checks/tmuxBinding.js";
-import { defaultDiffViewer } from "../defaultDiffViewer.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupApplyFileSystem, SetupCommandDeps } from "../types.js";
 import { createSetupConfigAdapter } from "./config.js";
 import { createHarnessTrackingAdapter } from "./harnessTracking.js";
@@ -153,7 +152,7 @@ function packageInstallCommand(
 ): readonly string[] {
   switch (operation.kind) {
     case "install-tool":
-      return ["brew", "install", toolFormula(operation.tool)];
+      return ["brew", "install", SETUP_TOOL_DEFINITIONS[operation.tool].formula];
     case "install-harness": {
       const currentFacts = requireFacts(facts);
       return harnessInstallCommand({
@@ -641,21 +640,6 @@ function ensureTrailingNewline(value: string): string {
 function requireFacts(facts: SetupFacts | undefined): SetupFacts {
   if (facts === undefined) throw new Error("This setup operation requires collected setup facts.");
   return facts;
-}
-
-function toolFormula(tool: SetupToolInstallOperation["tool"]): string {
-  switch (tool) {
-    case "worktrunk":
-      return "worktrunk";
-    case "tmux":
-      return "tmux";
-    case "bun":
-      return "bun";
-    case "diff-viewer":
-      return defaultDiffViewer.formula;
-    default:
-      return assertNever(tool);
-  }
 }
 
 function unexpectedOperationFallback(operation: SetupOperation): {

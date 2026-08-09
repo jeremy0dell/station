@@ -47,7 +47,7 @@ export function StationApp({
   const welcomeCanContinue = useStoreValue(store, selectWelcomeCanContinue);
   // The live session widget set: seeded from config, edited by the panel.
   const widgets = useStore(dashboardState, (state) => state.widgets);
-  const topRowWidgets = useTopRowWidgets(widgets, topRowWidgetDeps);
+  const topRowWidgets = useTopRowWidgets(widgets, topRowWidgetDeps, overlayVisible);
 
   return (
     <box

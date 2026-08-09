@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type {
   SetupHarnessInstallOperation,
   SetupPackageInstallOperation,
+  SetupToolInstallOperation,
   SupportedHarnessId,
 } from "@station/setup-core";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,8 +20,9 @@ describe("setup package installation adapter", () => {
     );
   });
 
-  it("uses official Homebrew packages for every supported macOS agent except Cursor", async () => {
+  it("uses canonical installers for setup tools and supported macOS agents", async () => {
     const commands = new Map<SupportedHarnessId, readonly string[]>();
+    const toolCommands: string[] = [];
     let activeHarness: SupportedHarnessId | undefined;
     const execute = createSetupOperationAdapter({
       facts: packageFacts({ brewAvailable: true, macos: true }),
@@ -28,6 +30,8 @@ describe("setup package installation adapter", () => {
         runner: async (input) => {
           if (activeHarness !== undefined) {
             commands.set(activeHarness, [input.command, ...(input.args ?? [])]);
+          } else {
+            toolCommands.push([input.command, ...(input.args ?? [])].join(" "));
           }
           return {
             command: input.command,
@@ -40,11 +44,27 @@ describe("setup package installation adapter", () => {
       },
     });
 
+    const tools: SetupToolInstallOperation["tool"][] = ["worktrunk", "tmux", "bun", "diff-viewer"];
+    for (const tool of tools) {
+      await execute({
+        id: `install:${tool}`,
+        kind: "install-tool",
+        tier: "required",
+        selected: true,
+        tool,
+      });
+    }
     for (const harnessId of harnessInstallOrder) {
       activeHarness = harnessId;
       await execute(harnessInstallOperation(harnessId));
     }
 
+    expect(toolCommands).toEqual([
+      "brew install worktrunk",
+      "brew install tmux",
+      "brew install bun",
+      "brew install hunk",
+    ]);
     expect(Object.fromEntries(commands)).toMatchObject({
       codex: ["brew", "install", "--cask", "homebrew/cask/codex"],
       opencode: ["brew", "install", "homebrew/core/opencode"],

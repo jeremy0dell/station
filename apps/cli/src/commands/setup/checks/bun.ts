@@ -1,13 +1,14 @@
 import { type ResolveExecutablePathOptions, resolveExecutablePath } from "@station/runtime";
 import type { SetupDependencyFact } from "../adapters/inspectionTypes.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import { setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";
 
-export const defaultBunCommand = "bun";
+const bunDefinition = SETUP_TOOL_DEFINITIONS.bun;
 
-export function bunInstallHint(command = defaultBunCommand): string {
+export function bunInstallHint(command = bunDefinition.command): string {
   return [
-    "Install Bun with brew install bun to run the STATION terminal UI.",
+    `Install ${bunDefinition.displayName} with brew install ${bunDefinition.formula} to run the STATION terminal UI.`,
     `Bare stn launches the dashboard through ${command} run.`,
   ].join(" ");
 }
@@ -21,7 +22,7 @@ export async function checkSetupBun(
   options: SetupDependencyCheckOptions = {},
 ): Promise<SetupDependencyFact> {
   const env = setupEnv(options.env);
-  const command = defaultBunCommand;
+  const command = bunDefinition.command;
   // Mirror tui.ts and doctor's rendererRuntimeCheck: a STATION_DASHBOARD_COMMAND
   // override replaces `bun run`, so Bun is not required to launch the dashboard and
   // must not block core setup (else doctor reports healthy while setup check exits 1).

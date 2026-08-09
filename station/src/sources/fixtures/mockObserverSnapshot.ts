@@ -1,4 +1,4 @@
-import type { StationSnapshot } from "@station/contracts";
+import { type StationSnapshot, worktreeDisplayForAgentState } from "@station/contracts";
 
 const fixtureNow = "2026-06-11T12:00:00.000Z";
 
@@ -125,9 +125,7 @@ export const mockObserverSnapshot = {
         updatedAt: fixtureNow,
       },
       display: {
-        statusLabel: "working",
-        sortPriority: 30,
-        alert: false,
+        ...worktreeDisplayForAgentState("working"),
         reason: "Harness reported active generation.",
       },
     },
@@ -166,9 +164,7 @@ export const mockObserverSnapshot = {
         updatedAt: fixtureNow,
       },
       display: {
-        statusLabel: "idle",
-        sortPriority: 40,
-        alert: false,
+        ...worktreeDisplayForAgentState("idle"),
         reason: "Harness reported the turn completed.",
       },
     },
@@ -187,9 +183,7 @@ export const mockObserverSnapshot = {
         behind: 1,
       },
       display: {
-        statusLabel: "no agent",
-        sortPriority: 70,
-        alert: false,
+        ...worktreeDisplayForAgentState(undefined),
         reason: "No harness run is associated with this worktree.",
       },
     },

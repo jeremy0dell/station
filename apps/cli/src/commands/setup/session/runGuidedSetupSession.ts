@@ -7,16 +7,15 @@ import {
   type SetupOperationOutcome,
   type SetupOperationProgress,
   type SetupSessionState,
-  type SetupToolInstallOperation,
   type SupportedHarnessId,
 } from "@station/setup-core";
-import { type SetupMessageRef, setupMessageRef } from "@station/setup-messages";
+import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type { SetupComposition, SetupSessionProjection } from "../composition.js";
-import { defaultDiffViewer } from "../defaultDiffViewer.js";
 import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
 import { formatSetupCommand } from "../presenters/text.js";
+import { SETUP_TOOL_DEFINITIONS, setupToolDefinitions } from "../toolDefinitions.js";
 import type {
   SetupCommandOptions,
   SetupCommandResult,
@@ -35,20 +34,6 @@ type GuidedHarnessSelection =
   | { readonly kind: "selected"; readonly harnessIds: SupportedHarnessId[] }
   | { readonly kind: "cancelled" }
   | { readonly kind: "blocked" };
-
-const homebrewFormulaUrls = {
-  worktrunk: "https://formulae.brew.sh/formula/worktrunk",
-  tmux: "https://formulae.brew.sh/formula/tmux",
-  bun: "https://formulae.brew.sh/formula/bun",
-  [defaultDiffViewer.id]: defaultDiffViewer.formulaUrl,
-} satisfies Record<SetupToolInstallOperation["tool"], string>;
-
-const setupToolLabelRefs = {
-  worktrunk: setupMessageRef("label.worktrunk"),
-  tmux: setupMessageRef("label.tmux"),
-  bun: setupMessageRef("label.bun"),
-  [defaultDiffViewer.id]: setupMessageRef("label.diff-viewer"),
-} satisfies Record<SetupToolInstallOperation["tool"], SetupMessageRef>;
 
 /**
  * ADAPTER
@@ -610,12 +595,7 @@ function unavailableRequiredHarnesses(
 }
 
 function coreToolsNeedHomebrew(facts: SetupFacts): boolean {
-  return (
-    facts.worktrunk.status !== "ok" ||
-    facts.tmux.status !== "ok" ||
-    facts.bun.status !== "ok" ||
-    facts.diffViewer.status !== "ok"
-  );
+  return setupToolDefinitions.some(({ factKey }) => facts[factKey].status !== "ok");
 }
 
 function shouldOfferHomebrew(facts: SetupFacts): boolean {
@@ -750,9 +730,10 @@ function operationLabel(composition: SetupComposition, operation: SetupOperation
     if (action !== undefined) return composition.text.text(action.label);
   }
   if (operation.kind === "install-tool") {
+    const definition = SETUP_TOOL_DEFINITIONS[operation.tool];
     return composition.text.text(
       setupMessageRef("action.install-label", {
-        label: setupToolLabel(composition.text, operation.tool),
+        label: composition.text.text(definition.label),
       }),
     );
   }
@@ -781,13 +762,6 @@ function operationLabel(composition: SetupComposition, operation: SetupOperation
     );
   }
   return composition.text.text(setupMessageRef("label.setup-operation"));
-}
-
-function setupToolLabel(
-  presenter: TextSetupPresenter,
-  tool: SetupToolInstallOperation["tool"],
-): string {
-  return presenter.text(setupToolLabelRefs[tool]);
 }
 
 function harnessLabel(facts: SetupFacts | undefined, harnessId: SupportedHarnessId): string {
@@ -866,7 +840,10 @@ function renderRequiredToolsReview(
       action === undefined ? operationLabel(composition, operation) : presenter.text(action.label);
     const sourceLabel = presenter.text(setupMessageRef("guided.required-tool-source"));
     const source = presenter.detail(
-      presenter.link({ label: sourceLabel, url: homebrewFormulaUrls[operation.tool] }),
+      presenter.link({
+        label: sourceLabel,
+        url: SETUP_TOOL_DEFINITIONS[operation.tool].formulaUrl,
+      }),
     );
     return [`- ${description}  ${source}`];
   });

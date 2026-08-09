@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isNeedsAttentionEvent } from "./attentionEvents.js";
+import { isStationAttentionEvent } from "./attentionEvents.js";
 
 const agent = {
   harness: "codex",
@@ -9,10 +9,10 @@ const agent = {
   updatedAt: "2026-07-02T00:00:00.000Z",
 } as const;
 
-describe("isNeedsAttentionEvent", () => {
+describe("isStationAttentionEvent", () => {
   it("matches needs_attention events carrying a typed attention kind", () => {
     expect(
-      isNeedsAttentionEvent({
+      isStationAttentionEvent({
         type: "worktree.agentStateChanged",
         worktreeId: "wt_1",
         agent: { ...agent, attention: "question" },
@@ -22,7 +22,7 @@ describe("isNeedsAttentionEvent", () => {
 
   it("matches needs_attention events without a typed attention kind", () => {
     expect(
-      isNeedsAttentionEvent({
+      isStationAttentionEvent({
         type: "worktree.agentStateChanged",
         worktreeId: "wt_1",
         agent,
@@ -30,9 +30,19 @@ describe("isNeedsAttentionEvent", () => {
     ).toBe(true);
   });
 
-  it("ignores non-attention states", () => {
+  it("matches every canonical alert state", () => {
     expect(
-      isNeedsAttentionEvent({
+      isStationAttentionEvent({
+        type: "worktree.agentStateChanged",
+        worktreeId: "wt_1",
+        agent: { ...agent, state: "stuck" },
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores non-alert states", () => {
+    expect(
+      isStationAttentionEvent({
         type: "worktree.agentStateChanged",
         worktreeId: "wt_1",
         agent: { ...agent, state: "working", attention: "question" },

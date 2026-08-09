@@ -19,7 +19,7 @@ import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "../checks/tmuxBinding.js";
-import { defaultDiffViewer } from "../defaultDiffViewer.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 
 type SetupHarnessSelection = {
   readonly source: CliSetupPlan["summary"]["selectionSource"];
@@ -114,26 +114,23 @@ function setupChecks(
     socketEvidenceCheck(facts),
     ...(facts.compiled ? [] : xcodeChecks(facts)),
     dependencyCheck({
-      id: "worktrunk",
-      label: "Worktrunk / wt",
+      definition: SETUP_TOOL_DEFINITIONS.worktrunk,
+      facts,
       missingMessage: facts.worktrunk.message ?? "Worktrunk is required for core worktree setup.",
-      dependency: facts.worktrunk,
     }),
     dependencyCheck({
-      id: "tmux",
-      label: "tmux",
+      definition: SETUP_TOOL_DEFINITIONS.tmux,
+      facts,
       missingMessage: facts.tmux.message ?? "tmux is required for the reference terminal workflow.",
-      dependency: facts.tmux,
     }),
     ...(facts.compiled
       ? []
       : [
           dependencyCheck({
-            id: "bun",
-            label: "Bun",
+            definition: SETUP_TOOL_DEFINITIONS.bun,
+            facts,
             missingMessage:
               facts.bun.message ?? "Bun is required to run the STATION terminal UI (bare stn).",
-            dependency: facts.bun,
           }),
         ]),
     gitCheck(facts),
@@ -147,11 +144,10 @@ function setupChecks(
     worktrunkHooksCheck(facts),
     ...harnessTrackingChecks(plan, facts, harnessSelection),
     dependencyCheck({
-      id: "diff-viewer",
-      label: "Hunk",
+      definition: SETUP_TOOL_DEFINITIONS["diff-viewer"],
+      facts,
       missingMessage:
         facts.diffViewer.message ?? "Hunk is required for the STATION 'See diff' automation.",
-      dependency: facts.diffViewer,
     }),
     {
       id: "doctor",
@@ -544,23 +540,25 @@ function xcodeChecks(facts: SetupFacts): CliSetupCheck[] {
 }
 
 function dependencyCheck(input: {
-  id: string;
-  label: string;
+  definition: (typeof SETUP_TOOL_DEFINITIONS)[keyof typeof SETUP_TOOL_DEFINITIONS];
+  facts: SetupFacts;
   missingMessage: string;
-  dependency: SetupFacts["worktrunk"];
 }): CliSetupCheck {
-  const details: Record<string, string> = { command: input.dependency.command };
-  if (input.dependency.version !== undefined) details.version = input.dependency.version;
-  if (input.dependency.resolvedPath !== undefined) {
-    details.resolvedPath = input.dependency.resolvedPath;
+  const dependency = input.facts[input.definition.factKey];
+  const details: Record<string, string> = { command: dependency.command };
+  if (dependency.version !== undefined) details.version = dependency.version;
+  if (dependency.resolvedPath !== undefined) {
+    details.resolvedPath = dependency.resolvedPath;
   }
   return {
-    id: input.id,
+    id: input.definition.id,
     tier: "required",
-    status: input.dependency.status === "ok" ? "ok" : "missing",
-    label: input.label,
+    status: dependency.status === "ok" ? "ok" : "missing",
+    label: input.definition.availabilityName,
     message:
-      input.dependency.status === "ok" ? `${input.label} is available.` : input.missingMessage,
+      dependency.status === "ok"
+        ? `${input.definition.availabilityName} is available.`
+        : input.missingMessage,
     details,
   };
 }
@@ -791,12 +789,12 @@ function setupActions(
   for (const operation of operations) {
     switch (operation.kind) {
       case "install-tool": {
-        const presentation = installToolPresentation(operation.tool);
+        const definition = SETUP_TOOL_DEFINITIONS[operation.tool];
         actions.push(
           installAction(
-            presentation.id,
-            presentation.label,
-            presentation.formula,
+            `install-${definition.id}`,
+            definition.displayName,
+            definition.formula,
             facts.brew,
             operation.selected,
           ),
@@ -897,29 +895,6 @@ function setupActions(
     );
   }
   return actions;
-}
-
-function installToolPresentation(tool: Extract<SetupOperation, { kind: "install-tool" }>["tool"]): {
-  id: string;
-  label: string;
-  formula: string;
-} {
-  switch (tool) {
-    case "worktrunk":
-      return { id: "install-worktrunk", label: "Worktrunk", formula: "worktrunk" };
-    case "tmux":
-      return { id: "install-tmux", label: "tmux", formula: "tmux" };
-    case "bun":
-      return { id: "install-bun", label: "Bun", formula: "bun" };
-    case "diff-viewer":
-      return {
-        id: "install-diff-viewer",
-        label: defaultDiffViewer.displayName,
-        formula: defaultDiffViewer.formula,
-      };
-    default:
-      throw new Error(`Unsupported semantic setup tool: ${tool}`);
-  }
 }
 
 function persistedTmuxPopupAction(facts: SetupFacts, selected: boolean): CliSetupAction {
@@ -1073,13 +1048,19 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
     return ["Install tmux, then run: stn setup check"];
   }
   if (facts.bun.status === "missing") {
-    return ["Install Bun (brew install bun), then run: stn setup check"];
+    const definition = SETUP_TOOL_DEFINITIONS.bun;
+    return [
+      `Install ${definition.displayName} (brew install ${definition.formula}), then run: stn setup check`,
+    ];
   }
   if (facts.git.status === "missing") {
     return [facts.git.message];
   }
   if (facts.diffViewer.status === "missing") {
-    return ["Install Hunk (brew install hunk), then run: stn setup check"];
+    const definition = SETUP_TOOL_DEFINITIONS["diff-viewer"];
+    return [
+      `Install ${definition.displayName} (brew install ${definition.formula}), then run: stn setup check`,
+    ];
   }
   return ["Resolve the missing required setup items, then run: stn setup check"];
 }

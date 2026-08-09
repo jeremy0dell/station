@@ -14,13 +14,30 @@ import type { SetupCommandDeps } from "../../src/commands/setup/types.js";
 
 describe("setup inspection adapter", () => {
   it("normalizes machine facts without exposing config source or provider payloads to core", () => {
-    const planning = normalizeSetupPlanningFacts(facts(), selection(), {
-      operation: "update",
-      path: "/tmp/config.toml",
-      before: "private TOML",
-      content: "private TOML",
-    });
+    const input = facts();
+    const planning = normalizeSetupPlanningFacts(
+      {
+        ...input,
+        worktrunk: { status: "missing", command: "wt", message: "missing Worktrunk" },
+        tmux: { status: "ok", command: "tmux" },
+        bun: { status: "missing", command: "bun", message: "missing Bun" },
+        diffViewer: { status: "ok", command: "hunk" },
+      },
+      selection(),
+      {
+        operation: "update",
+        path: "/tmp/config.toml",
+        before: "private TOML",
+        content: "private TOML",
+      },
+    );
 
+    expect(planning.tools).toEqual([
+      { id: "worktrunk", available: false, installerAvailable: true },
+      { id: "tmux", available: true, installerAvailable: true },
+      { id: "bun", available: false, installerAvailable: true },
+      { id: "diff-viewer", available: true, installerAvailable: true },
+    ]);
     expect(planning.config).toEqual({ state: "valid", write: "update", diagnostics: [] });
     expect(planning.homebrew).toBe("available");
     expect(planning.installableHarnessIds).toEqual(["codex"]);

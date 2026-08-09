@@ -290,7 +290,7 @@ type BuildWorktreeRowInput = {
 function buildWorktreeRow(input: BuildWorktreeRowInput): WorktreeRow {
   const display = worktreeDisplayForAgentState(input.harnessRun?.status.value);
   const warning = warningFor(input.harnessRun, input.terminal, display.warning === true);
-  const reason = displayReason(input.harnessRun, warning);
+  const reason = displayReason(input.harnessRun, display.alert || warning);
   const worktree: WorktreeRow["worktree"] = {
     state: input.worktree.state,
     source: input.worktree.source,
@@ -791,16 +791,12 @@ function compareHarnessRuns(left: ObserverHarnessRun, right: ObserverHarnessRun)
 
 function displayReason(
   harnessRun: ObserverHarnessRun | undefined,
-  warning: boolean,
+  includeReason: boolean,
 ): string | undefined {
   if (harnessRun === undefined) {
     return "No harness run is associated with this worktree.";
   }
-  if (
-    harnessRun.status.value === "needs_attention" ||
-    harnessRun.status.value === "stuck" ||
-    warning
-  ) {
+  if (includeReason) {
     return harnessRun.status.reason;
   }
   return undefined;

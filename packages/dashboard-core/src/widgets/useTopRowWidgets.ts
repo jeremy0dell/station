@@ -42,6 +42,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
   return function useTopRowWidgets(
     widgets: DashboardStateView["widgets"],
     deps: TopRowWidgetRuntimeDeps = {},
+    refreshKey?: unknown,
   ): TopRowWidgetView[] {
     const now = deps.now ?? defaultNow;
     const [currentMinute, setCurrentMinute] = hooks.useState(() => now());
@@ -80,11 +81,13 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
       [activeWidgets],
     );
 
+    // Terminal focus or surface activation re-arms both cadences after system sleep.
     hooks.useEffect(() => {
       if (!needsClock) {
         return;
       }
 
+      setCurrentMinute(now());
       let interval: ReturnType<typeof setInterval> | undefined;
       const timeout = setTimeout(() => {
         setCurrentMinute(now());
@@ -99,7 +102,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
           clearInterval(interval);
         }
       };
-    }, [needsClock, now]);
+    }, [needsClock, now, refreshKey]);
 
     hooks.useEffect(() => {
       if (weatherEntries.length === 0) {
@@ -145,7 +148,7 @@ export function createUseTopRowWidgets(hooks: TopRowWidgetHookRuntime) {
           clearInterval(interval);
         }
       };
-    }, [weatherEntries, weatherClient, now, setWeatherText]);
+    }, [weatherEntries, weatherClient, now, refreshKey, setWeatherText]);
 
     return hooks.useMemo(
       () =>

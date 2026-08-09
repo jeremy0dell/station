@@ -2,7 +2,7 @@ import type { SetupConfigMutationPlan } from "@station/config";
 import type { SetupOperation, SetupToolInstallOperation } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
-import { defaultDiffViewer } from "../defaultDiffViewer.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupPresentationHarnessSelection, SetupViewAction } from "./setupViewTypes.js";
 
 export function projectSetupActions(input: {
@@ -196,40 +196,22 @@ function projectInstallToolAction(input: {
   readonly facts: SetupFacts;
 }): SetupViewAction {
   const { operation, facts } = input;
-  const presentation = toolPresentation(operation.tool);
+  const definition = SETUP_TOOL_DEFINITIONS[operation.tool];
   const installerAvailable = facts.brew.status === "ok";
   return {
-    id: `install-${operation.tool}`,
+    id: `install-${definition.id}`,
     operationId: operation.id,
     kind: operation.kind,
     tier: "required",
     selected: operation.selected,
-    label: setupMessageRef("action.install-label", { label: presentation.label }),
+    label: setupMessageRef("action.install-label", { label: definition.displayName }),
     explanation: installerAvailable
-      ? setupMessageRef("action.install-homebrew", { label: presentation.label })
+      ? setupMessageRef("action.install-homebrew", { label: definition.displayName })
       : setupMessageRef("action.install-manually", {
-          label: presentation.label,
-          formula: presentation.formula,
+          label: definition.displayName,
+          formula: definition.formula,
         }),
   };
-}
-
-function toolPresentation(tool: SetupToolInstallOperation["tool"]): {
-  readonly label: string;
-  readonly formula: string;
-} {
-  switch (tool) {
-    case "worktrunk":
-      return { label: "Worktrunk", formula: "worktrunk" };
-    case "tmux":
-      return { label: "tmux", formula: "tmux" };
-    case "bun":
-      return { label: "Bun", formula: "bun" };
-    case "diff-viewer":
-      return { label: defaultDiffViewer.displayName, formula: defaultDiffViewer.formula };
-    default:
-      return assertNeverTool(tool);
-  }
 }
 
 function projectConfigWriteActions(input: {
@@ -285,10 +267,6 @@ function projectConfigWriteActions(input: {
 
 function assertNeverOperation(operation: never): never {
   throw new Error(`Unsupported setup operation: ${String(operation)}`);
-}
-
-function assertNeverTool(tool: never): never {
-  throw new Error(`Unsupported setup tool: ${String(tool)}`);
 }
 
 function assertNeverHarness(harness: never): never {
