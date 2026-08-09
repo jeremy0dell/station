@@ -1,7 +1,7 @@
 // Render layer for the dashboard: one <text> per line, sized by the shared
 // viewport selector. Mouse targets report through the station mouse context;
 // hover is component-local and color-only so golden frames stay layout-stable.
-import { TextAttributes, type ColorInput } from "@opentui/core";
+import { TextAttributes } from "@opentui/core";
 import {
   dashboardTableHeaderModel,
   fleetCountsLabel,
@@ -23,6 +23,7 @@ import {
 import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
+import { FLEET_STATUS_ORDER, STATION_STATUS_UI } from "../statusUi.js";
 import { toOpenTuiColor, useStationTheme } from "../../theme/index.js";
 import { useStationHoverState, useStationMouse, stationMouseProps } from "./stationMouseContext.js";
 
@@ -108,38 +109,20 @@ function FleetBar({
   columns: number;
 }) {
   const theme = useStationTheme();
-  const parts: { glyph: string; color: ColorInput; label: string; animate?: boolean }[] = [
-    { glyph: "●", color: toOpenTuiColor(theme.status.success), label: `${summary.ready} ready` },
-    {
-      glyph: "⠿",
-      color: toOpenTuiColor(theme.status.working),
-      label: `${summary.working} working`,
-      animate: summary.working > 0,
-    },
-    {
-      glyph: "!",
-      color: toOpenTuiColor(theme.status.danger),
-      label: `${summary.needsYou} needs you`,
-    },
-  ];
-  if (summary.unknown > 0) {
-    parts.push({
-      glyph: "?",
-      color: toOpenTuiColor(theme.status.warning),
-      label: `${summary.unknown} unknown`,
-    });
-  }
-  if (summary.exited > 0) {
-    parts.push({
-      glyph: "x",
-      color: toOpenTuiColor(theme.status.neutral),
-      label: `${summary.exited} exited`,
-    });
-  }
-  parts.push({
-    glyph: "○",
-    color: toOpenTuiColor(theme.status.neutral),
-    label: `${summary.idle} idle`,
+  const parts = FLEET_STATUS_ORDER.flatMap((status) => {
+    const visual = STATION_STATUS_UI[status];
+    const count = summary[status];
+    if (visual.fleet === "hidden" || (visual.fleet === "nonzero" && count === 0)) {
+      return [];
+    }
+    return [
+      {
+        glyph: visual.glyph,
+        color: toOpenTuiColor(theme.status[visual.tone]),
+        label: `${count} ${visual.label}`,
+        animate: visual.animate && count > 0,
+      },
+    ];
   });
   const lanesWidth =
     "FLEET".length + parts.reduce((total, part) => total + 3 + 1 + part.label.length, 0);
