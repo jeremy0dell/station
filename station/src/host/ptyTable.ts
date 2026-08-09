@@ -95,7 +95,8 @@ export type PtyTable = {
    * Register the live sink before capturing raw history or semantic state, so
    * output after the capture boundary is queued exactly once as live frames.
    * Ordered resize barriers preserve geometry; classified exact-capture failure
-   * retains the sink and returns mode-restoring control VT with no history.
+   * retains the sink and returns mode-restoring, cursor-anchoring control VT
+   * with no history.
    */
   attach(ptyId: string): Promise<HostAttachmentSource>;
   /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */

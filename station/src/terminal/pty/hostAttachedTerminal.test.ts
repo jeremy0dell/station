@@ -384,7 +384,7 @@ describe("createHostAttachedTerminal", () => {
 
     expect(ctrl.state.resizes).toEqual([
       { cols: 80, rows: 24 },
-      { cols: 80, rows: 23 },
+      { cols: 80, rows: 25 },
       { cols: 80, rows: 24 },
       { cols: 100, rows: 30 },
     ]);
@@ -831,7 +831,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
 
   it("replays Host reset data verbatim before geometry recovery and keeps I/O live", async () => {
     resetTerminalDiagnosticsForTest();
-    const resetData = "\x1bc\x1b[?1h\x1b[?2004h\x1b[=5u";
+    const resetData = "\x1bc\x1b[?1h\x1b[?2004h\x1b[=5u\x1b[20;1H";
     const ctrl = controllableAttachment(
       ack({
         replay: {
@@ -872,7 +872,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
       await flush();
       expect(ctrl.state.resizes).toEqual([
         { cols: 80, rows: 24 },
-        { cols: 80, rows: 23 },
+        { cols: 80, rows: 25 },
         { cols: 80, rows: 24 },
       ]);
       expect(diagnostics).toContain(
@@ -1070,10 +1070,10 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     await new Promise((resolve) => setTimeout(resolve, 400));
 
     expect(exits).toEqual([]);
-    // Reconnect flapped the rows (24 -> 23 -> 24) to force a repaint.
+    // Reconnect flapped the rows (24 -> 25 -> 24) to force a repaint.
     expect(second.state.resizes).toEqual([
       { cols: 80, rows: 24 },
-      { cols: 80, rows: 23 },
+      { cols: 80, rows: 25 },
       { cols: 80, rows: 24 },
     ]);
   });
