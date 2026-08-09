@@ -13,8 +13,12 @@ import { nonEmptyStringSchema } from "./shared.js";
  * exports as durable files, so both shapes parse here with strict schemas.
  */
 
-export const PtyBridgeProtocolVersion = 1;
+export const PtyBridgeProtocolVersion = 2;
 export const PtyBridgeProtocolVersionSchema = z.literal(PtyBridgeProtocolVersion);
+
+/** Opaque identity generated once for one PTY lifetime and preserved across Host ownership changes. */
+export const PtyInstanceIdSchema = nonEmptyStringSchema;
+export type PtyInstanceId = z.infer<typeof PtyInstanceIdSchema>;
 
 export const PtyHandoffKindSchema = z.enum(["agent", "aux"]);
 export type PtyHandoffKind = z.infer<typeof PtyHandoffKindSchema>;
@@ -49,6 +53,8 @@ export const PtyHandoffEntrySchema = z
     command: nonEmptyStringSchema,
     cols: z.number().int().positive(),
     rows: z.number().int().positive(),
+    /** Immutable PTY-lifetime identity preserved by negotiated and crash adoption. */
+    ptyInstanceId: PtyInstanceIdSchema,
     identity: PtyHandoffIdentitySchema,
     scrollbackRef: nonEmptyStringSchema.optional(),
     ringComplete: z.boolean().optional(),
@@ -58,8 +64,22 @@ export const PtyHandoffEntrySchema = z
   .strict();
 export type PtyHandoffEntry = z.infer<typeof PtyHandoffEntrySchema>;
 
-/** ptyId → entry; every field an adopter needs to rebind a parked bridge. */
-export const PtyHandoffManifestSchema = z.record(nonEmptyStringSchema, PtyHandoffEntrySchema);
+/** ptyId to entry; every field an adopter needs to rebind a parked bridge. */
+export const PtyHandoffManifestSchema = z
+  .record(nonEmptyStringSchema, PtyHandoffEntrySchema)
+  .superRefine((manifest, context) => {
+    const targets = new Set<string>();
+    for (const [ptyId, entry] of Object.entries(manifest)) {
+      if (targets.has(entry.identity.terminalTargetId)) {
+        context.addIssue({
+          code: "custom",
+          path: [ptyId, "identity", "terminalTargetId"],
+          message: "A handoff manifest cannot contain duplicate terminal targets.",
+        });
+      }
+      targets.add(entry.identity.terminalTargetId);
+    }
+  });
 export type PtyHandoffManifest = z.infer<typeof PtyHandoffManifestSchema>;
 
 /** Serialized semantic restore sequences captured at handoff time. */
@@ -78,13 +98,15 @@ export type PtyScreenSnapshot = z.infer<typeof PtyScreenSnapshotSchema>;
  */
 export const PtyBridgeParkStateSchema = z
   .object({
-    v: z.literal(1),
+    v: z.literal(2),
     bridgePid: z.number().int().positive(),
     pid: z.number().int().positive(),
     controlSocket: nonEmptyStringSchema,
     command: nonEmptyStringSchema,
     cols: z.number().int().positive(),
     rows: z.number().int().positive(),
+    /** Immutable PTY-lifetime identity echoed by the parked bridge. */
+    ptyInstanceId: PtyInstanceIdSchema,
     identity: PtyHandoffIdentitySchema,
     orphanedAtMs: z.number().int().nonnegative(),
     ttlMs: z.number().int().positive(),
@@ -95,6 +117,40 @@ export const PtyBridgeParkStateSchema = z
   })
   .strict();
 export type PtyBridgeParkState = z.infer<typeof PtyBridgeParkStateSchema>;
+
+/** Strict ownership request accepted by a parked PTY bridge. */
+export const PtyBridgeAdoptCommandSchema = z
+  .object({
+    type: z.literal("adopt"),
+    ptyInstanceId: PtyInstanceIdSchema,
+  })
+  .strict();
+export type PtyBridgeAdoptCommand = z.infer<typeof PtyBridgeAdoptCommandSchema>;
+
+/** Strict bridge control status; ownership changes only after its PTY instance is verified. */
+export const PtyBridgeStatusSchema = z
+  .object({
+    type: z.literal("status"),
+    bridgeProtocol: PtyBridgeProtocolVersionSchema,
+    ptyInstanceId: PtyInstanceIdSchema,
+    pid: z.number().int().positive(),
+    bridgePid: z.number().int().positive(),
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+    adopted: z.boolean(),
+    exited: z.boolean(),
+    parkedEvicted: z.boolean(),
+    exitCode: z.number().int().optional(),
+    signal: z.number().int().optional(),
+  })
+  .strict();
+export type PtyBridgeStatus = z.infer<typeof PtyBridgeStatusSchema>;
+
+/** Strict successful ownership acknowledgement; parked probe statuses remain valid separately. */
+export const PtyBridgeAdoptionAckSchema = PtyBridgeStatusSchema.extend({
+  adopted: z.literal(true),
+}).strict();
+export type PtyBridgeAdoptionAck = z.infer<typeof PtyBridgeAdoptionAckSchema>;
 
 export const PtyScrollbackDataEventSchema = z
   .object({ type: z.literal("data"), data: z.string() })

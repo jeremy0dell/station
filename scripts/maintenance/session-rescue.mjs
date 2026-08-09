@@ -405,7 +405,7 @@ async function saveSessionRescue(options) {
         await writePrivateJson(join(options.outputPath, "host", "ptys.json"), hostPtys);
         for (const pty of hostPtys) {
           try {
-            const attachment = await hostClient.attach(pty.ptyId);
+            const attachment = await hostClient.attach(pty);
             try {
               await writePrivateJson(
                 join(options.outputPath, "host", "replay", `${safeSegment(pty.ptyId)}.json`),

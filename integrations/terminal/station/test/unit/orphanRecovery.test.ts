@@ -113,7 +113,12 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
     completeHandoff: async () => ({ stopping: true }),
     abortHandoff: async () => ({ adopted: [], failed: [] }),
     adoptRegistry: async () => ({ adopted: [], failed: [] }),
-    spawn: async () => ({ ptyId: "unused", pid: 1 }),
+    spawn: async () => ({
+      terminalTargetId: "native:unused",
+      ptyId: "unused",
+      ptyInstanceId: "instance-unused",
+      pid: 1,
+    }),
     write: async () => undefined,
     resize: async () => undefined,
     list: async () => [],
@@ -129,13 +134,14 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
 
 function parkRecord(controlSocket: string): PtyBridgeParkState {
   return {
-    v: 1,
+    v: 2,
     bridgePid: 12,
     pid: 34,
     controlSocket,
     command: "codex",
     cols: 100,
     rows: 30,
+    ptyInstanceId: "instance-pty-1",
     identity: {
       kind: "agent",
       terminalTargetId: "native:wt_feature",

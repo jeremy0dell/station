@@ -1,7 +1,10 @@
 import {
   HostHandoffFidelitySchema,
+  PtyBridgeAdoptCommandSchema,
+  PtyBridgeAdoptionAckSchema,
   PtyBridgeParkStateSchema,
   PtyBridgeProtocolVersion,
+  PtyBridgeStatusSchema,
   PtyHandoffEntrySchema,
   PtyHandoffIdentitySchema,
   PtyHandoffManifestSchema,
@@ -31,6 +34,7 @@ function entry(overrides: Record<string, unknown> = {}) {
     command: "/bin/zsh",
     cols: 80,
     rows: 24,
+    ptyInstanceId: "ptyi-1",
     identity: identity(),
     ...overrides,
   };
@@ -57,6 +61,8 @@ describe("pty handoff manifest schema", () => {
       "pty-1": entry(),
       "pty-2": entry({
         bridgePid: 4243,
+        ptyInstanceId: "ptyi-2",
+        identity: identity({ terminalTargetId: "native:wt-2" }),
         scrollbackRef: "/state/run/pty-bridges/pty-2.scrollback.json",
         ringComplete: true,
         screenSnapshotRef: "/state/run/pty-bridges/pty-2.screen.json",
@@ -92,19 +98,21 @@ describe("pty handoff manifest schema", () => {
     expect(() =>
       PtyHandoffManifestSchema.parse({ "pty-1": entry({ identity: undefined }) }),
     ).toThrow();
+    expect(() => PtyHandoffManifestSchema.parse({ "pty-1": entry(), "pty-2": entry() })).toThrow();
   });
 });
 
 describe("pty bridge park state schema", () => {
   it("parses a live park state and an exited park state", () => {
     const live = PtyBridgeParkStateSchema.parse({
-      v: 1,
+      v: 2,
       bridgePid: 4242,
       pid: 4343,
       controlSocket: "/state/run/pty-bridges/pty-1.sock",
       command: "/bin/zsh",
       cols: 80,
       rows: 24,
+      ptyInstanceId: "ptyi-1",
       identity: identity(),
       orphanedAtMs: 1_000,
       ttlMs: 86_400_000,
@@ -124,13 +132,14 @@ describe("pty bridge park state schema", () => {
   it("rejects malformed park states fail-closed", () => {
     expect(() =>
       PtyBridgeParkStateSchema.parse({
-        v: 2,
+        v: 1,
         bridgePid: 4242,
         pid: 4343,
         controlSocket: "/x.sock",
         command: "/bin/zsh",
         cols: 80,
         rows: 24,
+        ptyInstanceId: "ptyi-1",
         identity: identity(),
         orphanedAtMs: 1,
         ttlMs: 1,
@@ -138,7 +147,37 @@ describe("pty bridge park state schema", () => {
         exited: false,
       }),
     ).toThrow();
-    expect(() => PtyBridgeParkStateSchema.parse({ v: 1 })).toThrow();
+    expect(() => PtyBridgeParkStateSchema.parse({ v: 2 })).toThrow();
+  });
+
+  it("strictly parses bridge status with the same PTY instance", () => {
+    const status = {
+      type: "status",
+      bridgeProtocol: PtyBridgeProtocolVersion,
+      ptyInstanceId: "ptyi-1",
+      pid: 4343,
+      bridgePid: 4242,
+      cols: 80,
+      rows: 24,
+      adopted: false,
+      exited: false,
+      parkedEvicted: false,
+    };
+    expect(PtyBridgeStatusSchema.parse(status)).toEqual(status);
+    expect(() => PtyBridgeStatusSchema.parse({ ...status, extra: true })).toThrow();
+    expect(PtyBridgeStatusSchema.parse({ ...status, adopted: false }).adopted).toBe(false);
+    expect(PtyBridgeAdoptionAckSchema.parse({ ...status, adopted: true }).adopted).toBe(true);
+    expect(() => PtyBridgeAdoptionAckSchema.parse(status)).toThrow();
+    expect(() =>
+      PtyBridgeAdoptionAckSchema.parse({ ...status, adopted: true, extra: true }),
+    ).toThrow();
+  });
+
+  it("strictly parses bridge adoption commands", () => {
+    const command = { type: "adopt", ptyInstanceId: "ptyi-1" };
+    expect(PtyBridgeAdoptCommandSchema.parse(command)).toEqual(command);
+    expect(() => PtyBridgeAdoptCommandSchema.parse({ type: "adopt" })).toThrow();
+    expect(() => PtyBridgeAdoptCommandSchema.parse({ ...command, extra: true })).toThrow();
   });
 });
 

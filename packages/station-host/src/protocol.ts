@@ -1,6 +1,7 @@
 import {
   HostHandoffFidelitySchema,
   PtyHandoffManifestSchema,
+  PtyInstanceIdSchema,
   SafeErrorSchema,
   TerminalOutputCompatibilitySchema,
   UiLifecycleDetachReasonSchema,
@@ -12,7 +13,7 @@ import { z } from "zod";
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 6;
+export const HOST_PROTOCOL_VERSION = 7;
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
@@ -98,9 +99,9 @@ export const HostPtyKindSchema = z.enum(["agent", "aux"]);
 export type HostPtyKind = z.infer<typeof HostPtyKindSchema>;
 
 /**
- * Launch metadata echoed by `host.list`, not agent state; the provider uses it
- * to rebuild terminal observations after restart. `kind` defaults to `agent` for
- * old entries, with no protocol bump because host and clients ship together.
+ * Immutable launch identity supplied at spawn and echoed by list and attach
+ * acknowledgement. `HostSpawnResult` returns the canonical reference, not this
+ * identity; `kind` defaults only at the spawn input boundary.
  */
 export const HostPtyIdentitySchema = z
   .object({
@@ -115,6 +116,43 @@ export const HostPtyIdentitySchema = z
   .strict();
 export type HostPtyIdentity = z.infer<typeof HostPtyIdentitySchema>;
 
+const HostPtyWireIdentitySchema = HostPtyIdentitySchema.extend({
+  kind: HostPtyKindSchema,
+}).strict();
+
+/** Canonical reference to one immutable Host PTY lifetime. */
+export const HostPtyRefSchema = z
+  .object({
+    terminalTargetId: idSchema,
+    ptyId: idSchema,
+    ptyInstanceId: PtyInstanceIdSchema,
+  })
+  .strict();
+export type HostPtyRef = z.infer<typeof HostPtyRefSchema>;
+
+/** Client-held attachment proof joining one canonical PTY reference to its immutable spawn identity. */
+export type HostPtyAttachExpectation = HostPtyIdentity & HostPtyRef;
+
+export function isSameHostPtyIdentity(left: HostPtyIdentity, right: HostPtyIdentity): boolean {
+  return (
+    left.kind === right.kind &&
+    left.terminalTargetId === right.terminalTargetId &&
+    left.worktreeId === right.worktreeId &&
+    left.projectId === right.projectId &&
+    left.sessionId === right.sessionId &&
+    left.worktreePath === right.worktreePath &&
+    left.harnessProvider === right.harnessProvider
+  );
+}
+
+export function isSameHostPtyRef(left: HostPtyRef, right: HostPtyRef): boolean {
+  return (
+    left.terminalTargetId === right.terminalTargetId &&
+    left.ptyId === right.ptyId &&
+    left.ptyInstanceId === right.ptyInstanceId
+  );
+}
+
 export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
   command: z.string().min(1),
   args: z.array(z.string()),
@@ -126,7 +164,8 @@ export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
 }).strict();
 export type HostSpawnParams = z.infer<typeof HostSpawnParamsSchema>;
 
-export const HostSpawnResultSchema = z.object({ ptyId: idSchema, pid: z.number().int() }).strict();
+/** Spawn returns the canonical reference callers combine with the supplied identity for attach. */
+export const HostSpawnResultSchema = HostPtyRefSchema.extend({ pid: z.number().int() }).strict();
 export type HostSpawnResult = z.infer<typeof HostSpawnResultSchema>;
 
 export const HostWriteParamsSchema = z.object({ ptyId: idSchema, data: z.string() }).strict();
@@ -134,8 +173,10 @@ export const HostResizeParamsSchema = z
   .object({ ptyId: idSchema, cols: z.number().int(), rows: z.number().int() })
   .strict();
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
-export const HostListEntrySchema = HostPtyIdentitySchema.extend({
+/** Live inventory entry whose reference and immutable identity derive from one table entry. */
+export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
   ptyId: idSchema,
+  ptyInstanceId: PtyInstanceIdSchema,
   pid: z.number().int(),
   alive: z.boolean(),
   cols: z.number().int(),
@@ -246,9 +287,8 @@ export type HostAdoptRegistryParams = z.infer<typeof HostAdoptRegistryParamsSche
 export const HostAdoptRegistryResultSchema = HostAbortHandoffResultSchema;
 export type HostAdoptRegistryResult = z.infer<typeof HostAdoptRegistryResultSchema>;
 
-export const HostAttachParamsSchema = z
-  .object({ ptyId: idSchema, attachmentId: idSchema })
-  .strict();
+/** Exact PTY-lifetime reference plus per-attempt lifecycle correlation. */
+export const HostAttachParamsSchema = HostPtyRefSchema.extend({ attachmentId: idSchema }).strict();
 export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;
 
 export const HostReplayDataEventSchema = z
@@ -300,15 +340,15 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 /**
- * Attach acknowledgement captured atomically with the live listener. Raw replay
+ * Attach acknowledgement captured atomically with the live listener and echoing
+ * the exact PTY reference plus immutable identity. Raw replay
  * preserves production geometry; exact semantic and control-only reset recovery
  * both begin at the Host's current geometry, with reset recovery anchored before
  * the client geometry nudge.
  */
-export const HostAttachAckSchema = z
-  .object({
+export const HostAttachAckSchema = HostPtyWireIdentitySchema.merge(HostPtyRefSchema)
+  .extend({
     subscribed: z.literal(true),
-    ptyId: idSchema,
     pid: z.number().int(),
     cols: z.number().int(),
     rows: z.number().int(),

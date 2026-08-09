@@ -1,4 +1,4 @@
-import type { HostListEntry } from "@station/host";
+import { type HostListEntry, StationHostProviderError } from "@station/host";
 import type { StationTerminalProcess, StationTerminalSpawnOptions } from "../../terminal/types.js";
 import type { PaneId } from "../types.js";
 import type { StationLayoutSnapshot } from "./layoutSnapshot.js";
@@ -30,23 +30,45 @@ export type BootRestoreDeps = {
 } & RestoreCwdOptions;
 
 /**
- * Single boot fork: one pre-seed `host.list` decides warm reattach vs cold shell
- * respawn. Warm agent identity is seated on the restored record here.
+ * Single boot fork: one pre-seed `host.list` is checked for unique live targets
+ * before warm reattach. Invalid inventory never degrades into a cold respawn.
  */
 export async function buildBootRestorePlan(
   snapshot: StationLayoutSnapshot,
   deps: BootRestoreDeps,
 ): Promise<LayoutRestorePlan> {
   const live = deps.listHost === undefined ? undefined : await deps.listHost();
-  if (live === undefined || live.length === 0) {
+  if (live === undefined) {
+    return planLayoutRestoreColdShells(snapshot, deps);
+  }
+  const liveByTarget = checkedLiveTargetIndex(live);
+  if (liveByTarget.size === 0) {
     return planLayoutRestoreColdShells(snapshot, deps);
   }
   return planLayoutRestoreWarm(snapshot, {
-    liveByTarget: new Map(live.map((entry) => [entry.terminalTargetId, entry])),
+    liveByTarget,
     makeHostTerminal: deps.makeHostTerminal,
     ...(deps.resolveAuxShellPlacement === undefined
       ? {}
       : { resolveAuxShellPlacement: deps.resolveAuxShellPlacement }),
     ...(deps.cwdExists === undefined ? {} : { cwdExists: deps.cwdExists }),
   });
+}
+
+/** Build the unique alive-target index consumed by warm restore. */
+function checkedLiveTargetIndex(live: readonly HostListEntry[]): ReadonlyMap<string, HostListEntry> {
+  const index = new Map<string, HostListEntry>();
+  for (const entry of live) {
+    if (!entry.alive) {
+      continue;
+    }
+    if (index.has(entry.terminalTargetId)) {
+      throw new StationHostProviderError(
+        "HOST_TARGET_CONFLICT",
+        `Multiple live Host PTYs claim target "${entry.terminalTargetId}".`,
+      );
+    }
+    index.set(entry.terminalTargetId, entry);
+  }
+  return index;
 }

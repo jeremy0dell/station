@@ -27,13 +27,16 @@ export type PtyTableOrphanOptions = {
 
 export type PtyAdoptionTarget = {
   ptyId: string;
+  /** Exact PTY lifetime the parked bridge must prove before yielding ownership. */
+  ptyInstanceId: string;
   command: string;
   controlSocketPath: string;
   size: StationTerminalSize;
 };
 
-/** An adopted terminal plus the park-backlog completeness flag, when the transport reports one. */
-export type PtyAdoptedTerminal = StationTerminalProcess & {
+/** Adopted bridge ownership that can be surrendered without killing the PTY when setup fails. */
+export type PtyAdoptedTerminal = Omit<StationTerminalProcess, "releaseToOrphan"> & {
+  releaseToOrphan(): boolean;
   readonly parkedEvicted?: boolean | undefined;
 };
 
@@ -47,6 +50,7 @@ export type PtyAdoptionReport = {
 /** The per-lane pieces adoption assembles before the table activates the entry. */
 export type AdoptedEntryInit = {
   ptyId: string;
+  ptyInstanceId: string;
   identity: HostPtyIdentity;
   command: string;
   terminal: PtyAdoptedTerminal;
@@ -57,14 +61,17 @@ export type AdoptedEntryInit = {
 };
 
 export type PtyHandoffDeps = {
-  entries: Map<string, PtyEntry>;
+  entriesByPtyId: Map<string, PtyEntry>;
+  entriesByTarget: Map<string, PtyEntry>;
   orphanBridges: PtyTableOrphanOptions | undefined;
   adoptTerminal: PtyTerminalAdopter;
   createSemanticTerminal: (cols: number, rows: number) => SemanticTerminalModel;
   maxScrollbackBytes: number;
   emit: (event: string, attributes: Record<string, unknown>) => void;
-  /** Table-side activation: register, emit the adoption event, wire subscriptions. */
+  /** Transactionally reserve both indexes, emit adoption, and install lifecycle subscriptions. */
   activateAdoptedEntry: (init: AdoptedEntryInit) => void;
+  /** Table-owned atomic removal from both PTY-id and terminal-target indexes. */
+  deactivateEntry: (entry: PtyEntry) => void;
 };
 
 export type PtyHandoffReleaseReport = {
@@ -94,13 +101,15 @@ type Emit = (event: string, attributes: Record<string, unknown>) => void;
  */
 export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
   const {
-    entries,
+    entriesByPtyId,
+    entriesByTarget,
     orphanBridges,
     adoptTerminal,
     createSemanticTerminal,
     maxScrollbackBytes,
     emit,
     activateAdoptedEntry,
+    deactivateEntry,
   } = deps;
 
   async function buildManifest(
@@ -112,7 +121,7 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
   }> {
     const manifest: PtyHandoffManifest = {};
     const skipped: Array<{ ptyId: string; reason: string }> = [];
-    for (const entry of entries.values()) {
+    for (const entry of entriesByPtyId.values()) {
       if (entry.exited) {
         continue;
       }
@@ -139,6 +148,7 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
 
   async function adoptRegistry(manifestInput: unknown): Promise<PtyAdoptionReport> {
     const manifest = parseHandoffManifest(manifestInput);
+    preflightAdoption(manifest, entriesByPtyId, entriesByTarget);
     const report: PtyAdoptionReport = { adopted: [], failed: [] };
     for (const ptyId of Object.keys(manifest)) {
       const handoffEntry = manifest[ptyId];
@@ -148,7 +158,6 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
       const outcome = await adoptOneEntry({
         ptyId,
         handoffEntry,
-        entries,
         adoptTerminal,
         createSemanticTerminal,
         maxScrollbackBytes,
@@ -186,7 +195,11 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
         });
         return { manifest: {}, fidelity, released: [], skipped };
       }
-      const parked = parkAndDropReleasedEntries(entries, Object.keys(manifest));
+      const parked = parkAndDropReleasedEntries(
+        entriesByPtyId,
+        Object.keys(manifest),
+        deactivateEntry,
+      );
       try {
         await ensureExpectedParksReady({
           expectPark: parked.expectPark,
@@ -241,6 +254,7 @@ async function tryBuildHandoffEntry(input: {
     command: entry.command,
     cols: entry.cols,
     rows: entry.rows,
+    ptyInstanceId: entry.ptyInstanceId,
     identity: { ...entry.identity },
     ringComplete: snapshot.complete,
   };
@@ -309,13 +323,14 @@ async function attachScreenExport(
 }
 
 function parkAndDropReleasedEntries(
-  entries: Map<string, PtyEntry>,
+  entriesByPtyId: Map<string, PtyEntry>,
   ptyIds: string[],
+  deactivateEntry: (entry: PtyEntry) => void,
 ): { released: string[]; expectPark: string[] } {
   const released: string[] = [];
   const expectPark: string[] = [];
   for (const ptyId of ptyIds) {
-    const entry = entries.get(ptyId);
+    const entry = entriesByPtyId.get(ptyId);
     if (entry === undefined) {
       continue;
     }
@@ -325,7 +340,7 @@ function parkAndDropReleasedEntries(
     entry.subscriptions.length = 0;
     const willPark = entry.terminal.releaseToOrphan?.() === true;
     entry.semantic.dispose();
-    entries.delete(ptyId);
+    deactivateEntry(entry);
     released.push(ptyId);
     if (willPark) {
       expectPark.push(ptyId);
@@ -373,27 +388,47 @@ function parseHandoffManifest(manifestInput: unknown): PtyHandoffManifest {
   }
 }
 
+function preflightAdoption(
+  manifest: PtyHandoffManifest,
+  entriesByPtyId: ReadonlyMap<string, PtyEntry>,
+  entriesByTarget: ReadonlyMap<string, PtyEntry>,
+): void {
+  for (const [ptyId, entry] of Object.entries(manifest)) {
+    if (
+      entriesByPtyId.has(ptyId) ||
+      entriesByTarget.has(entry.identity.terminalTargetId)
+    ) {
+      throw new StationHostProviderError(
+        "HOST_TARGET_CONFLICT",
+        "A handoff entry conflicts with a live Host PTY id or terminal target.",
+      );
+    }
+  }
+}
+
 type AdoptOneResult = { kind: "adopted" } | { kind: "failed"; reason: string };
+type AdoptionFailureReason =
+  | "ring-restore-failed"
+  | "semantic-init-failed"
+  | "screen-seed-failed"
+  | "activation-failed";
 
 async function adoptOneEntry(input: {
   ptyId: string;
   handoffEntry: PtyHandoffEntry;
-  entries: Map<string, PtyEntry>;
   adoptTerminal: PtyTerminalAdopter;
   createSemanticTerminal: (cols: number, rows: number) => SemanticTerminalModel;
   maxScrollbackBytes: number;
   emit: Emit;
   activateAdoptedEntry: (init: AdoptedEntryInit) => void;
 }): Promise<AdoptOneResult> {
-  const { ptyId, handoffEntry, entries, emit } = input;
-  if (entries.has(ptyId)) {
-    return { kind: "failed", reason: "duplicate-pty-id" };
-  }
+  const { ptyId, handoffEntry, emit } = input;
 
   let terminal: PtyAdoptedTerminal;
   try {
     terminal = await input.adoptTerminal({
       ptyId,
+      ptyInstanceId: handoffEntry.ptyInstanceId,
       command: handoffEntry.command,
       controlSocketPath: handoffEntry.controlSocket,
       size: { cols: handoffEntry.cols, rows: handoffEntry.rows },
@@ -405,36 +440,44 @@ async function adoptOneEntry(input: {
   }
 
   const { cols, rows } = clampSize(handoffEntry.cols, handoffEntry.rows);
-  const ring = await restoreAdoptionRing({
-    ptyId,
-    handoffEntry,
-    terminal,
-    cols,
-    rows,
-    maxScrollbackBytes: input.maxScrollbackBytes,
-    emit,
-  });
-
-  let semantic: SemanticTerminalModel;
+  let phase: AdoptionFailureReason = "ring-restore-failed";
+  let semantic: SemanticTerminalModel | undefined;
   try {
+    const ring = await restoreAdoptionRing({
+      ptyId,
+      handoffEntry,
+      terminal,
+      cols,
+      rows,
+      maxScrollbackBytes: input.maxScrollbackBytes,
+      emit,
+    });
+    phase = "semantic-init-failed";
     semantic = input.createSemanticTerminal(cols, rows);
+    phase = "screen-seed-failed";
+    await seedScreenSnapshot(semantic, ptyId, handoffEntry.screenSnapshotRef, emit);
+    phase = "activation-failed";
+    input.activateAdoptedEntry({
+      ptyId,
+      ptyInstanceId: handoffEntry.ptyInstanceId,
+      identity: { ...handoffEntry.identity },
+      command: handoffEntry.command,
+      terminal,
+      ring,
+      semantic,
+      cols,
+      rows,
+    });
   } catch (error) {
-    terminal.dispose();
-    failAdoptionEmit(emit, ptyId, "semantic-init-failed", error);
-    return { kind: "failed", reason: "semantic-init-failed" };
+    semantic?.dispose();
+    try {
+      terminal.releaseToOrphan();
+    } catch (releaseError) {
+      failAdoptionEmit(emit, ptyId, "orphan-release-failed", releaseError);
+    }
+    failAdoptionEmit(emit, ptyId, phase, error);
+    return { kind: "failed", reason: phase };
   }
-
-  await seedScreenSnapshot(semantic, ptyId, handoffEntry.screenSnapshotRef, emit);
-  input.activateAdoptedEntry({
-    ptyId,
-    identity: { ...handoffEntry.identity },
-    command: handoffEntry.command,
-    terminal,
-    ring,
-    semantic,
-    cols,
-    rows,
-  });
   return { kind: "adopted" };
 }
 
@@ -477,7 +520,7 @@ async function restoreAdoptionRing(input: {
   return ring;
 }
 
-/** Best-effort screen restore; failures degrade to scrollback replay. */
+/** An unreadable snapshot degrades to replay; applying a decoded snapshot must succeed atomically. */
 async function seedScreenSnapshot(
   semantic: SemanticTerminalModel,
   ptyId: string,
@@ -492,15 +535,8 @@ async function seedScreenSnapshot(
     emit("pty.handoff.screen-import-failed", { ptyId, reason: "unreadable" });
     return;
   }
-  try {
-    for (const sequence of screen.sequences) {
-      semantic.write(sequence);
-    }
-  } catch (error) {
-    emit("pty.handoff.screen-import-failed", {
-      ptyId,
-      message: error instanceof Error ? error.message : String(error),
-    });
+  for (const sequence of screen.sequences) {
+    semantic.write(sequence);
   }
 }
 

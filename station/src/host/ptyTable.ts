@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type HostAttachAck,
   type HostAttachmentSource,
@@ -5,8 +6,10 @@ import {
   type HostFrame,
   type HostListEntry,
   type HostPtyIdentity,
+  type HostPtyRef,
   type HostSpawnParams,
   type HostSpawnResult,
+  isSameHostPtyIdentity,
   StationHostProviderError,
 } from "@station/host";
 import type { HostHandoffFidelity, PtyHandoffManifest } from "@station/contracts";
@@ -86,6 +89,7 @@ export type PtySnapshot = {
 };
 
 export type PtyTable = {
+  /** Reuse only identical targets; failed activation frees both indexes and disposes new resources. */
   spawn(params: HostSpawnParams): PtySpawnOutcome;
   write(ptyId: string, data: string): void;
   resize(ptyId: string, cols: number, rows: number): void;
@@ -98,7 +102,7 @@ export type PtyTable = {
    * retains the sink and returns mode-restoring, cursor-anchoring control VT
    * with no history.
    */
-  attach(ptyId: string): Promise<HostAttachmentSource>;
+  attach(ptyRef: HostPtyRef): Promise<HostAttachmentSource>;
   /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */
   close(ptyId: string): boolean;
   /** Best-effort focus: broadcast a focus frame to attached clients. */
@@ -118,9 +122,9 @@ export type PtyTable = {
   /**
    * ADAPTER
    *
-   * Rebind the parked bridges named by a validated manifest as live entries so
-   * this host serves them without respawning; per-entry failures are reported,
-   * never thrown, and an invalid manifest fails closed.
+   * Rebind validated parked bridges transactionally. Each failed entry is
+   * re-parked without killing its process, later entries continue, and no
+   * failed PTY id or target remains visible; invalid manifests fail closed.
    */
   adoptRegistry(manifest: unknown): Promise<PtyAdoptionReport>;
   disposeAll(): void;
@@ -136,7 +140,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
   const orphanBridges = options.orphanBridges;
   const adoptTerminal: PtyTerminalAdopter =
     options.adoptTerminal ?? ((target) => adoptLocalPtyBridge({ id: target.ptyId, ...target }));
-  const entries = new Map<string, PtyEntry>();
+  const entriesByPtyId = new Map<string, PtyEntry>();
+  const entriesByTarget = new Map<string, PtyEntry>();
   let sequence = 0;
 
   function identityOf(params: HostSpawnParams): HostPtyIdentity {
@@ -184,10 +189,17 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     }
   }
 
-  // Broadcast a terminal exit, release the terminal's resources, and DROP the
-  // entry. Used by natural exit, guarded close, and shutdown — so the host never
-  // accumulates dead entries (each retaining its scrollback ring) and a re-spawn
-  // for a worktree never finds a stale exited entry under the same target id.
+  function deactivateEntry(entry: PtyEntry): void {
+    // PTY-id and target indexes must be removed together so neither can identify a replaced lifetime.
+    if (entriesByPtyId.get(entry.ptyId) === entry) {
+      entriesByPtyId.delete(entry.ptyId);
+    }
+    if (entriesByTarget.get(entry.identity.terminalTargetId) === entry) {
+      entriesByTarget.delete(entry.identity.terminalTargetId);
+    }
+  }
+
+  // Broadcast a terminal exit, release the terminal's resources, and drop the entry.
   function reap(entry: PtyEntry, exitFrame: HostExitFrame, reason: string): void {
     publishOutput(entry, entry.outputCompatibility.flush());
     entry.exited = true;
@@ -196,9 +208,10 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     for (const subscription of entry.subscriptions) {
       subscription.dispose();
     }
+    entry.subscriptions.length = 0;
     entry.terminal.dispose();
     entry.semantic.dispose();
-    entries.delete(entry.ptyId);
+    deactivateEntry(entry);
     const exitEvent: PtyExitEvent = {
       ptyId: entry.ptyId,
       ptyKind: entry.identity.kind,
@@ -217,7 +230,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
   }
 
   function requireEntry(ptyId: string): PtyEntry {
-    const entry = entries.get(ptyId);
+    const entry = entriesByPtyId.get(ptyId);
     if (entry === undefined) {
       throw new StationHostProviderError("HOST_PTY_NOT_FOUND", `No host PTY "${ptyId}".`);
     }
@@ -249,24 +262,35 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     };
   }
 
-  // Retained data/exit may replay synchronously during subscription, so the
-  // entry and its lifecycle event must exist before a replay can reap it.
   function activateEntry(entry: PtyEntry, event: "agent.spawn" | "agent.adopted"): void {
-    entries.set(entry.ptyId, entry);
+    if (
+      entriesByPtyId.has(entry.ptyId) ||
+      entriesByTarget.has(entry.identity.terminalTargetId)
+    ) {
+      throw new StationHostProviderError(
+        "HOST_TARGET_CONFLICT",
+        "A live Host PTY already owns this PTY id or terminal target.",
+      );
+    }
+    entriesByPtyId.set(entry.ptyId, entry);
+    entriesByTarget.set(entry.identity.terminalTargetId, entry);
     advanceSequencePast(entry.ptyId);
-    emit(event, {
-      ptyId: entry.ptyId,
-      worktreeId: entry.identity.worktreeId,
-      sessionId: entry.identity.sessionId,
-      terminalTargetId: entry.identity.terminalTargetId,
-    });
-    entry.subscriptions.push(
-      entry.terminal.onData((data) => {
+    try {
+      emit(event, {
+        ptyId: entry.ptyId,
+        worktreeId: entry.identity.worktreeId,
+        sessionId: entry.identity.sessionId,
+        terminalTargetId: entry.identity.terminalTargetId,
+      });
+      const dataSubscription = entry.terminal.onData((data) => {
         transformAndPublish(entry, data);
-      }),
-    );
-    entry.subscriptions.push(
-      entry.terminal.onExit((exitEvent) => {
+      });
+      if (entry.exited) {
+        dataSubscription.dispose();
+      } else {
+        entry.subscriptions.push(dataSubscription);
+      }
+      const exitSubscription = entry.terminal.onExit((exitEvent) => {
         reap(
           entry,
           {
@@ -277,12 +301,26 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           },
           "exit",
         );
-      }),
-    );
+      });
+      if (entry.exited) {
+        exitSubscription.dispose();
+      } else {
+        entry.subscriptions.push(exitSubscription);
+      }
+    } catch (error) {
+      for (const subscription of entry.subscriptions) {
+        subscription.dispose();
+      }
+      entry.subscriptions.length = 0;
+      // Retained exit replay can fail mid-subscription, so rollback both indexes together.
+      deactivateEntry(entry);
+      throw error;
+    }
   }
 
   const handoff = createPtyHandoff({
-    entries,
+    entriesByPtyId,
+    entriesByTarget,
     orphanBridges,
     adoptTerminal,
     createSemanticTerminal,
@@ -299,27 +337,31 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         "agent.adopted",
       );
     },
+    deactivateEntry,
   });
 
   return {
     spawn(params) {
-      // Idempotency is session-qualified: deterministic target ids are reused
-      // across generations, but a newer session must never attach to the old PTY.
-      for (const existing of entries.values()) {
-        if (!existing.exited && existing.identity.terminalTargetId === params.terminalTargetId) {
-          if (existing.identity.sessionId === params.sessionId) {
-            return { ptyId: existing.ptyId, pid: existing.terminal.pid, created: false };
-          }
-          throw new StationHostProviderError(
-            "HOST_TARGET_SESSION_CONFLICT",
-            "A live host PTY already owns this terminal target for another session.",
-            { worktreeId: params.worktreeId, sessionId: params.sessionId },
-          );
+      const identity = identityOf(params);
+      const existing = entriesByTarget.get(params.terminalTargetId);
+      if (existing !== undefined && !existing.exited) {
+        if (isSameHostPtyIdentity(existing.identity, identity)) {
+          return {
+            terminalTargetId: existing.identity.terminalTargetId,
+            ptyId: existing.ptyId,
+            ptyInstanceId: existing.ptyInstanceId,
+            pid: existing.terminal.pid,
+            created: false,
+          };
         }
+        throw new StationHostProviderError(
+          "HOST_TARGET_CONFLICT",
+          "A live Host PTY already owns this terminal target with a different immutable identity.",
+          { worktreeId: params.worktreeId, sessionId: params.sessionId },
+        );
       }
 
       const { cols, rows } = clampSize(params.cols, params.rows);
-      const identity = identityOf(params);
       const env: Record<string, string | undefined> = {
         ...params.env,
         // A Host may inherit styling controls from a headless provider hook, so only launch-request values are authoritative for its PTYs.
@@ -333,6 +375,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       // control socket and park state after it.
       sequence += 1;
       const ptyId = `pty-${sequence}`;
+      const ptyInstanceId = `ptyi_${randomUUID()}`;
       const spawnOptions: StationTerminalSpawnOptions = {
         id: ptyId,
         command: params.command,
@@ -346,6 +389,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           controlSocketPath: bridgeControlSocketPath(orphanBridges.directory, ptyId),
           parkStatePath: bridgeParkStatePath(orphanBridges.directory, ptyId),
           ttlMs: orphanBridges.ttlMs ?? DEFAULT_ORPHAN_TTL_MS,
+          ptyInstanceId,
           identity,
           parkMaxBytes: maxScrollbackBytes,
         };
@@ -378,6 +422,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       }
       const entry = buildPtyEntry({
         ptyId,
+        ptyInstanceId,
         identity,
         command: params.command,
         terminal,
@@ -387,10 +432,26 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         cols,
         rows,
       });
-      activateEntry(entry, "agent.spawn");
+      try {
+        activateEntry(entry, "agent.spawn");
+      } catch (error) {
+        semantic.dispose();
+        terminal.dispose();
+        throw new StationHostProviderError(
+          "HOST_SPAWN_FAILED",
+          "Could not activate the host PTY.",
+          { cause: error, worktreeId: params.worktreeId, sessionId: params.sessionId },
+        );
+      }
 
       // pid stabilizes to PTY's child once bridge reports ready; host.list is authoritative.
-      return { ptyId: entry.ptyId, pid: terminal.pid, created: true };
+      return {
+        terminalTargetId: entry.identity.terminalTargetId,
+        ptyId: entry.ptyId,
+        ptyInstanceId: entry.ptyInstanceId,
+        pid: terminal.pid,
+        created: true,
+      };
     },
 
     write(ptyId, data) {
@@ -420,10 +481,11 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
     list() {
       const list: HostListEntry[] = [];
-      for (const entry of entries.values()) {
+      for (const entry of entriesByPtyId.values()) {
         list.push({
           ...entry.identity,
           ptyId: entry.ptyId,
+          ptyInstanceId: entry.ptyInstanceId,
           pid: entry.terminal.pid,
           alive: !entry.exited,
           cols: entry.cols,
@@ -448,16 +510,29 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       };
     },
 
-    async attach(ptyId) {
-      const entry = entries.get(ptyId);
-      if (entry === undefined) {
+    async attach(ptyRef) {
+      const byPtyId = entriesByPtyId.get(ptyRef.ptyId);
+      const byTarget = entriesByTarget.get(ptyRef.terminalTargetId);
+      if (byPtyId === undefined && byTarget === undefined) {
         // Attach-specific code: the agent the client expected is gone. A
         // first-class diagnosable failure, never a silent fall-through to respawn.
         throw new StationHostProviderError(
           "HOST_ATTACH_GONE",
-          `No host PTY "${ptyId}" to attach to.`,
+          `No host PTY "${ptyRef.ptyId}" to attach to.`,
         );
       }
+      if (
+        byPtyId === undefined ||
+        byTarget === undefined ||
+        byPtyId !== byTarget ||
+        byPtyId.ptyInstanceId !== ptyRef.ptyInstanceId
+      ) {
+        throw new StationHostProviderError(
+          "HOST_ATTACHMENT_MISMATCH",
+          "The requested Host PTY reference no longer identifies one live PTY lifetime.",
+        );
+      }
+      const entry = byPtyId;
       let sink: ((frame: HostFrame) => void) | undefined;
       const stream = createFrameStream(() => {
         if (sink !== undefined) {
@@ -500,20 +575,20 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           captureDurationMs = performance.now() - captureStartedAt;
         } catch (error) {
           captureDurationMs = performance.now() - captureStartedAt;
-          if (entry.exited || !entries.has(ptyId)) {
+          if (entry.exited || !entriesByPtyId.has(ptyRef.ptyId)) {
             if (sink !== undefined) {
               entry.sinks.delete(sink);
             }
             stream.end();
             throw new StationHostProviderError(
               "HOST_ATTACH_GONE",
-              `Host PTY "${ptyId}" exited while its snapshot was captured.`,
+              `Host PTY "${ptyRef.ptyId}" exited while its snapshot was captured.`,
               { cause: error },
             );
           }
           if (error instanceof TerminalSnapshotUnavailableError) {
             const failure = terminalSnapshotFailure(error);
-            emit("pty.snapshot.degraded", { ptyId, ...failure });
+            emit("pty.snapshot.degraded", { ptyId: ptyRef.ptyId, ...failure });
             replay = {
               kind: "live-reset-recovery",
               initialCols: recorded.cols,
@@ -530,8 +605,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
             throw new StationHostProviderError(
               pending ? "HOST_SNAPSHOT_PENDING" : "HOST_SNAPSHOT_FAILED",
               pending
-                ? `Host PTY "${ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`
-                : `Could not capture terminal state for host PTY "${ptyId}".`,
+                ? `Host PTY "${ptyRef.ptyId}" ended between terminal parser boundaries; retrying may succeed after more output.`
+                : `Could not capture terminal state for host PTY "${ptyRef.ptyId}".`,
               { cause: error },
             );
           }
@@ -539,7 +614,9 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       }
       const ack: HostAttachAck = {
         subscribed: true,
+        ...entry.identity,
         ptyId: entry.ptyId,
+        ptyInstanceId: entry.ptyInstanceId,
         pid: recorded.pid,
         cols: recorded.cols,
         rows: recorded.rows,
@@ -550,7 +627,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     close(ptyId) {
-      const entry = entries.get(ptyId);
+      const entry = entriesByPtyId.get(ptyId);
       if (entry === undefined) {
         return false;
       }
@@ -559,7 +636,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     focus(ptyId) {
-      const entry = entries.get(ptyId);
+      const entry = entriesByPtyId.get(ptyId);
       if (entry === undefined) {
         return false;
       }
@@ -571,7 +648,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     },
 
     has(ptyId) {
-      return entries.has(ptyId);
+      return entriesByPtyId.has(ptyId);
     },
 
     exportRegistry(fidelity) {
@@ -589,7 +666,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     disposeAll() {
       // Reap each (broadcast exit → attached streams end → dispose → drop) so a
       // shutdown never leaves a client's frame iterator hanging.
-      for (const entry of [...entries.values()]) {
+      for (const entry of [...entriesByPtyId.values()]) {
         reap(entry, { type: "exit", ptyId: entry.ptyId, exitCode: 0 }, "host-stop");
       }
     },

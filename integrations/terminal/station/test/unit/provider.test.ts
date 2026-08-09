@@ -256,7 +256,12 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
       buildVersion: expectedBuildVersion,
     }),
     stopIfIdle: async () => ({ stopping: true }),
-    spawn: async () => ({ ptyId: "pty-1", pid: 99 }),
+    spawn: async () => ({
+      terminalTargetId: stationTargetId(worktree.id),
+      ptyId: "pty-1",
+      ptyInstanceId: "instance-pty-1",
+      pid: 99,
+    }),
     write: async () => undefined,
     resize: async () => undefined,
     list: async () => [],
@@ -274,6 +279,7 @@ function liveEntry(overrides: Partial<HostListEntry> = {}): HostListEntry {
   return {
     kind: "agent",
     ptyId: "pty-1",
+    ptyInstanceId: "instance-pty-1",
     terminalTargetId: stationTargetId(worktree.id),
     worktreeId: worktree.id,
     projectId: project.id,

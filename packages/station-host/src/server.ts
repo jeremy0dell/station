@@ -18,6 +18,7 @@ import {
   HostRequestSchema,
   hostFailure,
   hostSuccess,
+  isSameHostPtyRef,
 } from "./protocol.js";
 
 /** A single attachment produced after Host's asynchronous replay-capture barrier. */
@@ -30,7 +31,7 @@ export type HostAttachmentSource = {
 
 /**
  * Method handlers the Bun host supplies. Unary handlers return a JSON result;
- * `attach` returns an ack plus a live frame stream (sync or async). All are
+ * `attach` validates one exact PTY lifetime and returns its ack plus live frames. All are
  * optional so the host can grow its surface increment by increment — a missing
  * method answers with a classified `HOST_BAD_REQUEST` rather than crashing.
  */
@@ -290,6 +291,13 @@ async function runAttach(
   try {
     params = HostAttachParamsSchema.parse(rawParams);
     attachment = await handlers.attach(params, state.client);
+    if (!isSameHostPtyRef(params, attachment.ack)) {
+      await attachment.frames[Symbol.asyncIterator]().return?.();
+      throw stationHostSafeError(
+        "HOST_ATTACHMENT_MISMATCH",
+        "Host attach handler acknowledged a different PTY reference than requested.",
+      );
+    }
   } catch (error) {
     const safeError = stationHostErrorFromUnknown(error, {
       code: "HOST_ATTACH_GONE",

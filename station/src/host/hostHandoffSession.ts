@@ -6,12 +6,11 @@ type HandoffPhase =
   | { kind: "serving" }
   | { kind: "idle-draining"; forBuild: string }
   | { kind: "handing-off"; forBuild: string; manifest: PtyHandoffManifest }
+  | { kind: "adopting" }
   | { kind: "completed" };
 
 export type HostHandoffSession = {
   assertNotDraining(): void;
-  /** Successor adopt is identity-bound and only legal while still serving. */
-  assertCanAdopt(): void;
   beginIdleDrain(requestingBuildVersion: string): void;
   beginHandoff(
     requestingBuildVersion: string,
@@ -24,6 +23,8 @@ export type HostHandoffSession = {
   }>;
   completeHandoff(): { stopping: true };
   abortHandoff(): Promise<Awaited<ReturnType<PtyTable["adoptRegistry"]>>>;
+  /** Exclude spawn, list, and attach until the successor registry transition is complete. */
+  adoptRegistry(manifest: PtyHandoffManifest): Promise<Awaited<ReturnType<PtyTable["adoptRegistry"]>>>;
 };
 
 /**
@@ -46,17 +47,13 @@ export function createHostHandoffSession(input: {
       if (phase.kind === "completed") {
         throw handoffInvalidState("The host has completed handoff and is stopping.");
       }
+      if (phase.kind === "adopting") {
+        throw handoffInvalidState("The host is adopting a PTY registry.");
+      }
       const forBuild = phase.kind === "idle-draining" || phase.kind === "handing-off"
         ? phase.forBuild
         : buildVersion;
       throw drainingSpawnBlocked(buildVersion, forBuild);
-    },
-    assertCanAdopt() {
-      if (phase.kind !== "serving") {
-        throw handoffInvalidState(
-          "Registry adoption is only allowed on a serving host that is not draining or handing off.",
-        );
-      }
     },
     beginIdleDrain(requestingBuildVersion) {
       if (phase.kind !== "serving") {
@@ -123,6 +120,19 @@ export function createHostHandoffSession(input: {
       const report = await ptyTable.adoptRegistry(phase.manifest);
       phase = { kind: "serving" };
       return report;
+    },
+    async adoptRegistry(manifest) {
+      if (phase.kind !== "serving") {
+        throw handoffInvalidState(
+          "Registry adoption is only allowed on a serving host that is not draining or handing off.",
+        );
+      }
+      phase = { kind: "adopting" };
+      try {
+        return await ptyTable.adoptRegistry(manifest);
+      } finally {
+        phase = { kind: "serving" };
+      }
     },
   };
 }
