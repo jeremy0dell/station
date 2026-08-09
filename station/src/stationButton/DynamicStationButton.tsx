@@ -14,6 +14,7 @@ import {
   type StationColor,
 } from "../theme/index.js";
 import { Throbber } from "../station/view/Throbber.js";
+import { STATION_STATUS_UI } from "../station/statusUi.js";
 import { type StationButtonStateColors, stationButtonColors, tweenStationColor } from "./colors.js";
 import type { ProjectRollupEntry, ProjectRollupStatus } from "./status.js";
 import {
@@ -397,21 +398,17 @@ function ExpandedBase(props: {
 
 function RollupGlyph({ status }: { status: ProjectRollupStatus }): ReactNode {
   const theme = useStationTheme();
-  if (status === "working") {
+  const visual = STATION_STATUS_UI[status];
+  const color = toOpenTuiColor(theme.status[visual.tone]);
+  if (visual.animate) {
     return (
       <text>
-        <Throbber variant="braille" fg={toOpenTuiColor(theme.status.working)} />
+        <Throbber variant="braille" fg={color} />
         <span> </span>
       </text>
     );
   }
-  const mark =
-    status === "needsYou"
-      ? { glyph: "!", color: theme.status.danger }
-      : status === "ready"
-        ? { glyph: "●", color: theme.status.success }
-        : { glyph: "○", color: theme.status.neutral };
-  return <text fg={toOpenTuiColor(mark.color)}>{`${mark.glyph} `}</text>;
+  return <text fg={color}>{`${visual.glyph} `}</text>;
 }
 
 function ExpandedRollup(props: {

@@ -1,4 +1,4 @@
-import type { SessionId } from "@station/contracts";
+import { type SessionId, worktreeDisplayForAgentState } from "@station/contracts";
 import { pendingRenameTitles } from "../state/localRows.js";
 import type { DashboardSnapshotView, DashboardViewState } from "../state/types.js";
 
@@ -166,48 +166,7 @@ function sourceAgentMatchesSession(
 }
 
 function sessionDisplay(session: DashboardSessionView): DashboardWorktreeRowView["display"] {
-  const value = session.status.value;
-  const display: Mutable<DashboardWorktreeRowView["display"]> = {
-    statusLabel: sessionStatusLabel(value),
-    sortPriority: sessionStatusPriority(value),
-    alert: value === "needs_attention" || value === "stuck",
-    reason: session.status.reason,
-  };
-  if (value === "stuck") display.warning = true;
+  const display = worktreeDisplayForAgentState(session.status.value);
+  display.reason = session.status.reason;
   return display;
-}
-
-function sessionStatusLabel(
-  value: DashboardSessionView["status"]["value"],
-): DashboardWorktreeRowView["display"]["statusLabel"] {
-  if (value === "needs_attention") return "needs attention";
-  if (value === "none") return "no agent";
-  return value;
-}
-
-function sessionStatusPriority(value: DashboardSessionView["status"]["value"]): number {
-  switch (value) {
-    case "needs_attention":
-      return 10;
-    case "stuck":
-      return 20;
-    case "working":
-      return 30;
-    case "starting":
-      return 35;
-    case "idle":
-      return 40;
-    case "unknown":
-      return 50;
-    case "exited":
-      return 60;
-    case "none":
-      return 70;
-    default:
-      return assertNever(value);
-  }
-}
-
-function assertNever(_value: never): never {
-  throw new Error("Unhandled session status.");
 }

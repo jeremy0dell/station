@@ -7,9 +7,10 @@ import {
   type StationEvent,
   type StationSnapshot,
   type WorktreeRow,
+  worktreeDisplayForAgentState,
 } from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
-import { countsForSnapshot, statusPolicy } from "./statusPolicy.js";
+import { countsForSnapshot } from "./snapshotCounts.js";
 
 type WorktreeAgent = NonNullable<WorktreeRow["agent"]>;
 type CorrelatedBy = "harnessRunId" | "sessionId" | "worktreeId";
@@ -300,16 +301,8 @@ function projectRow(row: WorktreeRow, agent: WorktreeAgent, status: ObservedStat
 }
 
 function displayForStatus(status: ObservedStatus): WorktreeRow["display"] {
-  const policy = statusPolicy[status.value];
-  const display: WorktreeRow["display"] = {
-    statusLabel: policy.label,
-    sortPriority: policy.priority,
-    alert: policy.alert,
-  };
-  if (policy.warning) {
-    display.warning = true;
-  }
-  if (status.value === "needs_attention" || status.value === "stuck" || policy.warning) {
+  const display = worktreeDisplayForAgentState(status.value);
+  if (display.alert || display.warning === true) {
     display.reason = status.reason;
   }
   return display;

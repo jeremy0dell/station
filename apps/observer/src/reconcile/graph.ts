@@ -18,11 +18,16 @@ import type {
   WorktreeRecoveryAction,
   WorktreeRow,
 } from "@station/contracts";
-import { STATION_SCHEMA_VERSION, worktreeHasLiveAgent } from "@station/contracts";
+import {
+  AGENT_STATUS,
+  STATION_SCHEMA_VERSION,
+  worktreeDisplayForAgentState,
+  worktreeHasLiveAgent,
+} from "@station/contracts";
 import { pathIsSameOrInside } from "@station/runtime";
 import { harnessRunCanActivateSession, terminalCanActivateSession } from "../sessionActivation.js";
 import type { ObserverHarnessRun } from "./harnessEventStatus.js";
-import { countsForSnapshot, statusPolicy } from "./statusPolicy.js";
+import { countsForSnapshot } from "./snapshotCounts.js";
 
 export type ObserverGraphInput = {
   generatedAt: string;
@@ -282,9 +287,8 @@ type BuildWorktreeRowInput = {
 };
 
 function buildWorktreeRow(input: BuildWorktreeRowInput): WorktreeRow {
-  const state = input.harnessRun?.status.value ?? "no_agent";
-  const policy = statusPolicy[state];
-  const warning = warningFor(input.harnessRun, input.terminal, policy.warning);
+  const display = worktreeDisplayForAgentState(input.harnessRun?.status.value);
+  const warning = warningFor(input.harnessRun, input.terminal, display.warning === true);
   const reason = displayReason(input.harnessRun, warning);
   const worktree: WorktreeRow["worktree"] = {
     state: input.worktree.state,
@@ -301,11 +305,6 @@ function buildWorktreeRow(input: BuildWorktreeRowInput): WorktreeRow {
   if (input.worktree.remote !== undefined) worktree.remote = input.worktree.remote;
   if (input.worktree.headSha !== undefined) worktree.headSha = input.worktree.headSha;
 
-  const display: WorktreeRow["display"] = {
-    statusLabel: policy.label,
-    sortPriority: policy.priority,
-    alert: policy.alert,
-  };
   if (warning) display.warning = true;
   if (reason !== undefined) display.reason = reason;
 
@@ -782,7 +781,7 @@ function compareObservations(
 
 function compareHarnessRuns(left: ObserverHarnessRun, right: ObserverHarnessRun): number {
   return (
-    statusPolicy[left.status.value].priority - statusPolicy[right.status.value].priority ||
+    AGENT_STATUS[left.status.value].priority - AGENT_STATUS[right.status.value].priority ||
     confidenceRank[right.status.confidence] - confidenceRank[left.status.confidence] ||
     Date.parse(right.status.updatedAt) - Date.parse(left.status.updatedAt) ||
     left.run.id.localeCompare(right.run.id)

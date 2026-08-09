@@ -91,7 +91,7 @@ export {
   truncateCells,
 } from "../components/WorktreeRow/layout.js";
 
-export { isReadyToRead } from "../components/WorktreeRow/rowInput.js";
+export { isReadyToRead } from "../selectors/agentStatus.js";
 
 export {
   DASHBOARD_FILTER_CONDITION_KEYS,

@@ -1,4 +1,5 @@
-import type { WorktreeRow } from "@station/contracts";
+import type { AgentState, WorktreeRow } from "@station/contracts";
+import { isReadyToRead } from "../../selectors/agentStatus.js";
 import { type TextMatchRange, textMatchSegments } from "../TextMatch/segments.js";
 import {
   type RowColor,
@@ -24,6 +25,21 @@ export type WorktreeRowPresentation = {
   activity: string;
 };
 
+type AgentVisual = { marker: RowMarker; tone: RowColor };
+
+const AGENT_VISUALS: Record<AgentState, AgentVisual> = {
+  needs_attention: { marker: { kind: "text", text: "!" }, tone: "red" },
+  stuck: { marker: { kind: "text", text: "!" }, tone: "red" },
+  working: { marker: { kind: "throbber", variant: "braille" }, tone: "blue" },
+  starting: { marker: { kind: "text", text: "+" }, tone: "gray" },
+  idle: { marker: { kind: "text", text: "○" }, tone: "gray" },
+  unknown: { marker: { kind: "text", text: "?" }, tone: "yellow" },
+  exited: { marker: { kind: "text", text: "x" }, tone: "gray" },
+  none: { marker: { kind: "text", text: "-" }, tone: "gray" },
+};
+
+const READY_TO_READ_VISUAL: AgentVisual = { marker: { kind: "text", text: "●" }, tone: "green" };
+
 export function worktreeRowGridInput({
   id,
   row,
@@ -43,15 +59,13 @@ export function worktreeRowGridInput({
   textHighlights?: WorktreeRowTextHighlights | undefined;
   dimmed?: true | undefined;
 }): RowGridRowInput {
-  const marker = statusMarker(row);
+  const visual = agentVisual(row);
   const visibleFields = presentation ?? worktreeRowVisibleFields(row, title);
   const activity = activityCellForRow(row);
-  const ready = isReadyToRead(row);
-  const state = row.agent?.state ?? "none";
   const input: Parameters<typeof worktreeStyleRowGridInput>[0] = {
     id: id ?? row.id,
     slot,
-    marker,
+    marker: visual.marker,
     title: visibleFields.title,
     agent: visibleFields.agent,
     activity: visibleFields.activity,
@@ -69,7 +83,7 @@ export function worktreeRowGridInput({
   }
   // Tone colors the glyph + status label only — the session name must stay
   // foreground in every state (D12/D13).
-  const tone = rowStatusTone(row, ready, state);
+  const tone = visual.tone;
   if (tone === "gray") {
     input.activityColor = "gray";
     input.agentColor = "gray";
@@ -257,33 +271,12 @@ function activityCellForRow(row: WorktreeRow): {
   };
 }
 
-// Keep the branch order in sync with statusMarker's ladder.
-function rowStatusTone(
-  row: WorktreeRow,
-  ready: boolean,
-  state: string,
-): "red" | "yellow" | "green" | "blue" | "gray" {
-  if (row.display.alert) return "red";
-  if (state === "working") return "blue";
-  if (ready) return "green";
-  if (state === "unknown") return "yellow";
-  return "gray";
+function agentVisual(row: WorktreeRow): AgentVisual {
+  return isReadyToRead(row) ? READY_TO_READ_VISUAL : AGENT_VISUALS[row.agent?.state ?? "none"];
 }
 
 export function statusMarker(row: WorktreeRow): RowMarker {
-  const state = row.agent?.state ?? "none";
-  if (state === "needs_attention" || state === "stuck") return { kind: "text", text: "!" };
-  if (state === "working") return { kind: "throbber", variant: "braille" };
-  if (isReadyToRead(row)) return { kind: "text", text: "●" };
-  if (state === "idle") return { kind: "text", text: "○" };
-  if (state === "starting") return { kind: "text", text: "+" };
-  if (state === "unknown") return { kind: "text", text: "?" };
-  if (state === "exited") return { kind: "text", text: "x" };
-  return { kind: "text", text: "-" };
-}
-
-export function isReadyToRead(row: WorktreeRow): boolean {
-  return row.agent?.state === "idle" && row.agent.turnReadiness?.state === "ready_to_read";
+  return agentVisual(row).marker;
 }
 
 type MetadataSegment = {

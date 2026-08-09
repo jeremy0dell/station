@@ -7,10 +7,10 @@ import {
  } from "@station/dashboard-core/selectors";
 import type { DashboardSessionRow } from "@station/dashboard-core/selectors";
 import type { DashboardStateView } from "@station/dashboard-core/state";
+import { STATION_STATUS_UI, type ProjectRollupStatus } from "../station/statusUi.js";
 import { attentionKey } from "../state/attentionDismissal.js";
 
-/** Worst agent status across a project's sessions, calmest last. */
-export type ProjectRollupStatus = "needsYou" | "working" | "ready" | "idle";
+export type { ProjectRollupStatus } from "../station/statusUi.js";
 
 export type ProjectRollupEntry = {
   projectId: string;
@@ -47,7 +47,7 @@ const EMPTY_STATUS: StationButtonStatus = {
 
 /** The row is asking for the user (needs-attention or stuck) — the island's alert predicate. */
 export function rowNeedsUser(row: DashboardSessionRow["presentation"]): boolean {
-  return row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck";
+  return row.display.alert;
 }
 
 /** The attention keys of every session currently asking for the user. */
@@ -93,16 +93,9 @@ export function selectStationButtonStatus(
   return status;
 }
 
-const ROLLUP_SEVERITY: Record<ProjectRollupStatus, number> = {
-  needsYou: 3,
-  working: 2,
-  ready: 1,
-  idle: 0,
-};
-
 function rowRollupStatus(row: DashboardSessionRow): ProjectRollupStatus {
   const state = row.session.status.value;
-  if (state === "needs_attention" || state === "stuck") {
+  if (row.presentation.display.alert) {
     return "needsYou";
   }
   if (state === "working") {
@@ -127,7 +120,10 @@ function rollupProjects(rows: readonly DashboardSessionRow[]): readonly ProjectR
         name: row.worktree.projectLabel,
         status,
       });
-    } else if (ROLLUP_SEVERITY[status] > ROLLUP_SEVERITY[existing.status]) {
+    } else if (
+      STATION_STATUS_UI[status].projectPriority >
+      STATION_STATUS_UI[existing.status].projectPriority
+    ) {
       existing.status = status;
     }
   }

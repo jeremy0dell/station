@@ -1,3 +1,4 @@
+export * from "./agentStatus.js";
 export * from "./commands.js";
 export * from "./diagnostics.js";
 export * from "./errors.js";

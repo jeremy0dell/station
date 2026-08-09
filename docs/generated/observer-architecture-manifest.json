@@ -8800,10 +8800,10 @@
           "bindings": ["ObserverHarnessRun"]
         },
         {
-          "specifier": "./statusPolicy.js",
-          "resolvedPath": "apps/observer/src/reconcile/statusPolicy.ts",
+          "specifier": "./snapshotCounts.js",
+          "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
           "edgeKind": "runtime",
-          "bindings": ["countsForSnapshot", "statusPolicy"]
+          "bindings": ["countsForSnapshot"]
         },
         {
           "specifier": "../sessionActivation.js",
@@ -8815,7 +8815,12 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["STATION_SCHEMA_VERSION", "worktreeHasLiveAgent"]
+          "bindings": [
+            "AGENT_STATUS",
+            "STATION_SCHEMA_VERSION",
+            "worktreeDisplayForAgentState",
+            "worktreeHasLiveAgent"
+          ]
         },
         {
           "specifier": "@station/contracts",
@@ -9080,19 +9085,13 @@
       ]
     },
     {
-      "path": "apps/observer/src/reconcile/statusPolicy.ts",
+      "path": "apps/observer/src/reconcile/snapshotCounts.ts",
       "exports": [
         {
           "name": "countsForSnapshot",
           "kind": "function",
           "role": "POLICY",
           "purpose": "Derives session and activity totals from canonical sessions while retaining worktree inventory."
-        },
-        {
-          "name": "statusPolicy",
-          "kind": "const",
-          "role": null,
-          "purpose": null
         }
       ],
       "imports": [
@@ -9100,7 +9099,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["AgentState", "ProjectView", "SessionView", "WorktreeRow"]
+          "bindings": ["ProjectView", "SessionView", "WorktreeRow"]
         }
       ]
     },
@@ -9134,16 +9133,16 @@
       ],
       "imports": [
         {
-          "specifier": "./statusPolicy.js",
-          "resolvedPath": "apps/observer/src/reconcile/statusPolicy.ts",
+          "specifier": "./snapshotCounts.js",
+          "resolvedPath": "apps/observer/src/reconcile/snapshotCounts.ts",
           "edgeKind": "runtime",
-          "bindings": ["countsForSnapshot", "statusPolicy"]
+          "bindings": ["countsForSnapshot"]
         },
         {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
-          "bindings": ["harnessRunIdForTerminalTarget"]
+          "bindings": ["harnessRunIdForTerminalTarget", "worktreeDisplayForAgentState"]
         },
         {
           "specifier": "@station/contracts",
@@ -12962,9 +12961,16 @@
       "purpose": "Correlates provider observations with canonical worktree title input and durable session records. Branch names remain only the defensive title fallback when persistence is unavailable.",
       "dependencies": [
         {
-          "path": "apps/observer/src/reconcile/statusPolicy.ts",
+          "path": "apps/observer/src/reconcile/snapshotCounts.ts",
           "declaration": "countsForSnapshot",
           "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "packages/contracts/src/agentStatus.ts",
+          "declaration": "AGENT_STATUS",
+          "kind": "const",
           "role": "POLICY",
           "edgeKind": "runtime"
         }
@@ -13064,7 +13070,7 @@
       ]
     },
     {
-      "path": "apps/observer/src/reconcile/statusPolicy.ts",
+      "path": "apps/observer/src/reconcile/snapshotCounts.ts",
       "declaration": "countsForSnapshot",
       "kind": "function",
       "role": "POLICY",
@@ -13079,7 +13085,7 @@
       "purpose": "Projects native-authorized harness status onto one current row and session.",
       "dependencies": [
         {
-          "path": "apps/observer/src/reconcile/statusPolicy.ts",
+          "path": "apps/observer/src/reconcile/snapshotCounts.ts",
           "declaration": "countsForSnapshot",
           "kind": "function",
           "role": "POLICY",
@@ -14098,6 +14104,14 @@
           "edgeKind": "runtime"
         }
       ]
+    },
+    {
+      "path": "packages/contracts/src/agentStatus.ts",
+      "declaration": "AGENT_STATUS",
+      "kind": "const",
+      "role": "POLICY",
+      "purpose": "Owns canonical agent display semantics; readiness and view rollups remain consumer-derived.",
+      "dependencies": []
     },
     {
       "path": "packages/contracts/src/observer.ts",

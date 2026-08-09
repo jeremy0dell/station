@@ -9,6 +9,17 @@ import { createInitialTuiState } from "../../../src/state/screen.js";
 import type { TuiViewState } from "../../../src/state/types.js";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
 
+const STATUS_DISPLAYS = {
+  needs_attention: { statusLabel: "needs attention", sortPriority: 10, alert: true },
+  stuck: { statusLabel: "stuck", sortPriority: 20, alert: true, warning: true },
+  working: { statusLabel: "working", sortPriority: 30, alert: false },
+  starting: { statusLabel: "starting", sortPriority: 35, alert: false },
+  idle: { statusLabel: "idle", sortPriority: 40, alert: false },
+  unknown: { statusLabel: "unknown", sortPriority: 50, alert: false },
+  exited: { statusLabel: "exited", sortPriority: 60, alert: false },
+  none: { statusLabel: "no agent", sortPriority: 70, alert: false },
+} as const;
+
 describe("dashboard session rows", () => {
   it("projects canonical sessions instead of bare worktrees", () => {
     const snapshot = createDashboardSnapshot();
@@ -25,6 +36,34 @@ describe("dashboard session rows", () => {
         state: "needs_attention",
       },
     });
+  });
+
+  it("projects every session state with its contextual reason", () => {
+    const base = createDashboardSnapshot();
+    const sourceRow = base.rows[0];
+    const sourceSession = base.sessions[0];
+    if (sourceRow === undefined || sourceSession === undefined) {
+      throw new Error("missing fixture session");
+    }
+
+    for (const [state, expectedDisplay] of Object.entries(STATUS_DISPLAYS)) {
+      const reason = `Context for ${state}.`;
+      const snapshot = {
+        ...base,
+        rows: [sourceRow],
+        sessions: [
+          {
+            ...sourceSession,
+            status: { ...sourceSession.status, value: state, reason },
+          },
+        ],
+      } as typeof base;
+
+      expect(selectDashboardSessionRows(snapshot)[0]?.presentation.display).toEqual({
+        ...expectedDisplay,
+        reason,
+      });
+    }
   });
 
   it("owns project grouping, ordering, and stored collapse", () => {

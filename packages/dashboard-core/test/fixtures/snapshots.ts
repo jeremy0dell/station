@@ -6,6 +6,7 @@ import {
   STATION_SCHEMA_VERSION,
   type StationSnapshot,
   type WorktreeRow,
+  worktreeDisplayForAgentState,
 } from "@station/contracts";
 
 export const fixtureNow = "2026-05-20T12:00:00.000Z";
@@ -162,7 +163,11 @@ export function row(input: {
   state: NonNullable<WorktreeRow["agent"]>["state"] | "none";
   dirty?: boolean;
 }): WorktreeRow {
-  const display = displayForState(input.state);
+  const display = worktreeDisplayForAgentState(input.state);
+  display.reason =
+    input.state === "none"
+      ? "No harness run is associated with this worktree."
+      : reasonForState(input.state);
   const built: WorktreeRow = {
     id: input.id,
     projectId: input.projectId,
@@ -323,50 +328,6 @@ function retainedSessionForRow(candidate: WorktreeRow): SessionView {
     },
     title: candidate.branch,
     tags: [],
-  };
-}
-
-function displayForState(
-  state: NonNullable<WorktreeRow["agent"]>["state"] | "none",
-): WorktreeRow["display"] {
-  if (state === "needs_attention") {
-    return {
-      statusLabel: "needs attention",
-      sortPriority: 10,
-      alert: true,
-      reason: reasonForState(state),
-    };
-  }
-  if (state === "stuck") {
-    return { statusLabel: "stuck", sortPriority: 20, alert: true, reason: reasonForState(state) };
-  }
-  if (state === "working") {
-    return {
-      statusLabel: "working",
-      sortPriority: 30,
-      alert: false,
-      reason: reasonForState(state),
-    };
-  }
-  if (state === "idle") {
-    return { statusLabel: "idle", sortPriority: 40, alert: false, reason: reasonForState(state) };
-  }
-  if (state === "unknown") {
-    return {
-      statusLabel: "unknown",
-      sortPriority: 50,
-      alert: false,
-      reason: reasonForState(state),
-    };
-  }
-  if (state === "exited") {
-    return { statusLabel: "exited", sortPriority: 60, alert: false, reason: reasonForState(state) };
-  }
-  return {
-    statusLabel: "no agent",
-    sortPriority: 70,
-    alert: false,
-    reason: "No harness run is associated with this worktree.",
   };
 }
 
