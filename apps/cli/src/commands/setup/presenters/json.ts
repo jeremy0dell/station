@@ -953,7 +953,7 @@ function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessI
     harness,
     "--yes",
   ];
-  if (SETUP_HARNESS_DEFINITIONS[harness].trackingNeedsIngressLauncher) {
+  if (SETUP_HARNESS_DEFINITIONS[harness].providerHook?.supportsHookBin === true) {
     command.push("--hook-bin", setupLauncherExecutable(facts.launchers.ingress));
   }
   return command;

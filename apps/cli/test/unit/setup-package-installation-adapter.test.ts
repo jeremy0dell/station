@@ -10,6 +10,7 @@ import type {
 import { afterEach, describe, expect, it } from "vitest";
 import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
 import { createSetupOperationAdapter } from "../../src/commands/setup/adapters/operations.js";
+import { resolveSetupHarnessInstallation } from "../../src/commands/setup/harnessInstallation.js";
 
 describe("setup package installation adapter", () => {
   const tempRoots: string[] = [];
@@ -72,6 +73,26 @@ describe("setup package installation adapter", () => {
       claude: ["brew", "install", "--cask", "homebrew/cask/claude-code"],
     });
     expect(commands.get("cursor")?.join(" ")).toContain("https://cursor.com/install");
+  });
+
+  it("pairs each installer decision with its presentation message", () => {
+    expect(
+      harnessInstallOrder.map((harnessId) => {
+        const installation = resolveSetupHarnessInstallation({
+          harnessId,
+          brewAvailable: true,
+          homeDir: "/tmp/home",
+          macos: true,
+        });
+        return [harnessId, installation.message.id];
+      }),
+    ).toEqual([
+      ["codex", "installer.codex-brew"],
+      ["cursor", "installer.cursor-script"],
+      ["opencode", "installer.opencode-brew"],
+      ["pi", "installer.pi-brew"],
+      ["claude", "installer.claude-brew"],
+    ]);
   });
 
   it("executes every fallback unattended without touching the user's shell files", async () => {

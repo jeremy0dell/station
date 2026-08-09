@@ -35,15 +35,19 @@ async function checkHarness(
   options: CheckHarnessesOptions,
 ): Promise<SetupHarnessFact> {
   const configuredCommand = options.configuredCommands?.[definition.id];
-  const environmentCommand = env[definition.envKey];
-  const command = configuredCommand ?? environmentCommand ?? definition.command;
+  const environmentCommand = env[definition.commandEnvVar];
+  const command = configuredCommand ?? environmentCommand ?? definition.commandFallback;
   const defaultCommandHomeDir =
     options.configuredHarnesses?.includes(definition.id) !== true &&
     configuredCommand === undefined &&
     environmentCommand === undefined
       ? options.homeDir
       : undefined;
-  for (const candidate of harnessCommandCandidates(definition.id, command, defaultCommandHomeDir)) {
+  for (const candidate of harnessCommandCandidates(
+    command,
+    defaultCommandHomeDir,
+    definition.additionalUserCommandDirectories,
+  )) {
     try {
       const input: ExternalCommandInput = {
         command: candidate,
@@ -85,14 +89,16 @@ function parseHarnessVersion(output: string): string | undefined {
 }
 
 function harnessCommandCandidates(
-  id: SupportedHarnessId,
   command: string,
   homeDir: string | undefined,
+  additionalUserCommandDirectories: readonly string[] | undefined,
 ): string[] {
   if (command.includes("/") || homeDir === undefined) {
     return [command];
   }
   const candidates = [command, `${homeDir}/.local/bin/${command}`];
-  if (id === "opencode") candidates.push(`${homeDir}/.opencode/bin/${command}`);
+  for (const directory of additionalUserCommandDirectories ?? []) {
+    candidates.push(`${homeDir}/${directory}/${command}`);
+  }
   return candidates;
 }

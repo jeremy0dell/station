@@ -53,11 +53,18 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: true,
 };
 
-const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> = {
+export const codexHarnessProviderDefinition = {
   id: "codex",
   displayName: "Codex",
   commandEnvVar: "STATION_CODEX_BIN",
   commandFallback: "codex",
+} as const satisfies Pick<
+  TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions>,
+  "id" | "displayName" | "commandEnvVar" | "commandFallback"
+>;
+
+const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> = {
+  ...codexHarnessProviderDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.codex].resume.
@@ -87,7 +94,11 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
 };
 
 function command(options: CodexHarnessProviderOptions): string {
-  return harnessCommand(options, "STATION_CODEX_BIN", "codex");
+  return harnessCommand(
+    options,
+    codexHarnessProviderDefinition.commandEnvVar,
+    codexHarnessProviderDefinition.commandFallback,
+  );
 }
 
 function buildLaunch(

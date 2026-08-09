@@ -187,7 +187,7 @@ function relevantHarnessTrackingIds(input: {
 }
 
 function harnessSupportsSetupHooks(harnessId: SupportedHarnessId): boolean {
-  return SETUP_HARNESS_DEFINITIONS[harnessId].tracking === "external";
+  return SETUP_HARNESS_DEFINITIONS[harnessId].providerHook !== undefined;
 }
 
 async function probeHarnessTrackingFact(

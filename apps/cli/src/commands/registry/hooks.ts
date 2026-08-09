@@ -15,8 +15,9 @@ import {
   runOpenCodeHooksCommand,
   runWorktrunkHooksCommand,
 } from "../providerHookAdapters.js";
+import { providerHookDefinitions } from "../providerHookDefinitions.js";
 
-const hookTargets = ["worktrunk", "claude", "codex", "cursor", "opencode", "event"] as const;
+const hookTargets = [...providerHookDefinitions.map(({ id }) => id), "event"];
 const hookActions = ["plan", "install", "uninstall", "doctor"] as const;
 
 export const hooksCliCommand: CliCommandNode = {

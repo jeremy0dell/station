@@ -55,11 +55,18 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: false,
 };
 
-const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions> = {
+export const claudeHarnessProviderDefinition = {
   id: "claude",
   displayName: "Claude Code",
   commandEnvVar: "STATION_CLAUDE_BIN",
   commandFallback: "claude",
+} as const satisfies Pick<
+  TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>,
+  "id" | "displayName" | "commandEnvVar" | "commandFallback"
+>;
+
+const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions> = {
+  ...claudeHarnessProviderDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.claude].resume.
@@ -88,7 +95,11 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
 };
 
 function command(options: ClaudeHarnessProviderOptions): string {
-  return harnessCommand(options, "STATION_CLAUDE_BIN", "claude");
+  return harnessCommand(
+    options,
+    claudeHarnessProviderDefinition.commandEnvVar,
+    claudeHarnessProviderDefinition.commandFallback,
+  );
 }
 
 function hookPathOptions(

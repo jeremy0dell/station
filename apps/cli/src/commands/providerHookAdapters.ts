@@ -50,6 +50,7 @@ import {
   type WorktrunkHookPlanOptions,
 } from "@station/worktrunk";
 import { createWorktrunkHookExpectation } from "../worktrunkHookExpectation.js";
+import { PROVIDER_HOOK_DEFINITIONS } from "./providerHookDefinitions.js";
 import {
   buildCommonHookOptions,
   createProviderHooksRunner,
@@ -142,7 +143,7 @@ export function runClaudeHooksCommand(
       },
       isEnabled: isClaudeEnabled,
     },
-    { providerConfigFlag: "--claude-settings", supportsHookScript: true, supportsHookBin: true },
+    PROVIDER_HOOK_DEFINITIONS.claude,
   );
   return runner(args, options) as Promise<ClaudeHooksCommandResult>;
 }
@@ -181,7 +182,7 @@ export function runCodexHooksCommand(
       },
       isEnabled: isCodexEnabled,
     },
-    { providerConfigFlag: "--codex-config", supportsHookScript: true, supportsHookBin: true },
+    PROVIDER_HOOK_DEFINITIONS.codex,
   );
   return runner(args, options) as Promise<CodexHooksCommandResult>;
 }
@@ -220,7 +221,7 @@ export function runCursorHooksCommand(
       },
       isEnabled: isCursorEnabled,
     },
-    { providerConfigFlag: "--cursor-hooks", supportsHookScript: true, supportsHookBin: true },
+    PROVIDER_HOOK_DEFINITIONS.cursor,
   );
   return runner(args, options) as Promise<CursorHooksCommandResult>;
 }
@@ -256,12 +257,7 @@ export function runOpenCodeHooksCommand(
       },
       isEnabled: isOpenCodeEnabled,
     },
-    {
-      providerConfigFlag: "--opencode-config-dir",
-      supportsHookScript: true,
-      supportsHookBin: false,
-      hookScriptFlag: "--plugin-path",
-    },
+    PROVIDER_HOOK_DEFINITIONS.opencode,
   );
   return runner(args, options) as Promise<OpenCodeHooksCommandResult>;
 }
@@ -308,7 +304,7 @@ export function runWorktrunkHooksCommand(
       },
       isEnabled: isWorktrunkEnabled,
     },
-    { providerConfigFlag: "--worktrunk-config", supportsHookScript: false, supportsHookBin: true },
+    PROVIDER_HOOK_DEFINITIONS.worktrunk,
   );
   return runner(args, options) as Promise<WorktrunkHooksCommandResult>;
 }

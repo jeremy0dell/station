@@ -45,11 +45,18 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: false,
 };
 
-const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions> = {
+export const cursorHarnessProviderDefinition = {
   id: "cursor",
   displayName: "Cursor",
   commandEnvVar: "STATION_CURSOR_AGENT_BIN",
   commandFallback: "agent",
+} as const satisfies Pick<
+  TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>,
+  "id" | "displayName" | "commandEnvVar" | "commandFallback"
+>;
+
+const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions> = {
+  ...cursorHarnessProviderDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.cursor].resume.
@@ -77,7 +84,11 @@ const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>
 };
 
 function command(options: CursorHarnessProviderOptions): string {
-  return harnessCommand(options, "STATION_CURSOR_AGENT_BIN", "agent");
+  return harnessCommand(
+    options,
+    cursorHarnessProviderDefinition.commandEnvVar,
+    cursorHarnessProviderDefinition.commandFallback,
+  );
 }
 
 function buildLaunch(

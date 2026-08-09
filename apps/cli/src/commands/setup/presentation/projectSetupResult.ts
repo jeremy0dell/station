@@ -185,7 +185,7 @@ function harnessTrackingCommand(input: {
     harnessId,
     "--yes",
   ];
-  if (SETUP_HARNESS_DEFINITIONS[harnessId].trackingNeedsIngressLauncher) {
+  if (SETUP_HARNESS_DEFINITIONS[harnessId].providerHook?.supportsHookBin === true) {
     command.push("--hook-bin", setupLauncherExecutable(facts.launchers.ingress));
   }
   return command;

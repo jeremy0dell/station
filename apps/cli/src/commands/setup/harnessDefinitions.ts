@@ -1,14 +1,24 @@
-import { cliSetupHarnessIds } from "@station/contracts";
+import { claudeHarnessProviderDefinition } from "@station/claude";
+import { codexHarnessProviderDefinition } from "@station/codex";
+import { cursorHarnessProviderDefinition } from "@station/cursor";
+import { openCodeHarnessProviderDefinition } from "@station/opencode";
+import { piHarnessProviderDefinition } from "@station/pi";
 import type { SupportedHarnessId } from "@station/setup-core";
+import { PROVIDER_HOOK_DEFINITIONS } from "../providerHookDefinitions.js";
+
+type ProviderHookDefinition =
+  (typeof PROVIDER_HOOK_DEFINITIONS)[keyof typeof PROVIDER_HOOK_DEFINITIONS];
+type HarnessProviderHookDefinition = Exclude<ProviderHookDefinition, { readonly id: "worktrunk" }>;
 
 export type SetupHarnessDefinition = {
   readonly id: SupportedHarnessId;
+  readonly displayName: string;
+  readonly commandEnvVar: string;
+  readonly commandFallback: string;
   readonly label: string;
-  readonly envKey: string;
-  readonly command: string;
   readonly guidedRank: number;
-  readonly tracking: "external" | "none";
-  readonly trackingNeedsIngressLauncher: boolean;
+  readonly additionalUserCommandDirectories?: readonly string[];
+  readonly providerHook?: HarnessProviderHookDefinition;
 };
 
 type SetupHarnessDefinitionMap = {
@@ -18,57 +28,40 @@ type SetupHarnessDefinitionMap = {
 };
 
 /**
- * Canonical CLI metadata for setup-managed harnesses; semantic order follows the shared contract,
- * while selection and provider behavior remain outside this table.
+ * Canonical CLI setup policy for setup-managed harnesses; provider identity and command metadata
+ * stay provider-owned, while declaration order preserves setup fact and presentation order.
  */
-export const SETUP_HARNESS_DEFINITIONS = {
+export const SETUP_HARNESS_DEFINITIONS: SetupHarnessDefinitionMap = {
   codex: {
-    id: "codex",
-    label: "Codex",
-    envKey: "STATION_CODEX_BIN",
-    command: "codex",
+    ...codexHarnessProviderDefinition,
+    label: codexHarnessProviderDefinition.displayName,
     guidedRank: 1,
-    tracking: "external",
-    trackingNeedsIngressLauncher: true,
+    providerHook: PROVIDER_HOOK_DEFINITIONS.codex,
   },
   cursor: {
-    id: "cursor",
+    ...cursorHarnessProviderDefinition,
     label: "Cursor Agent",
-    envKey: "STATION_CURSOR_AGENT_BIN",
-    command: "agent",
     guidedRank: 2,
-    tracking: "external",
-    trackingNeedsIngressLauncher: true,
+    providerHook: PROVIDER_HOOK_DEFINITIONS.cursor,
   },
   opencode: {
-    id: "opencode",
-    label: "OpenCode",
-    envKey: "STATION_OPENCODE_BIN",
-    command: "opencode",
+    ...openCodeHarnessProviderDefinition,
+    label: openCodeHarnessProviderDefinition.displayName,
     guidedRank: 3,
-    tracking: "external",
-    trackingNeedsIngressLauncher: false,
+    additionalUserCommandDirectories: [".opencode/bin"],
+    providerHook: PROVIDER_HOOK_DEFINITIONS.opencode,
   },
   pi: {
-    id: "pi",
-    label: "Pi",
-    envKey: "STATION_PI_BIN",
-    command: "pi",
+    ...piHarnessProviderDefinition,
+    label: piHarnessProviderDefinition.displayName,
     guidedRank: 4,
-    tracking: "none",
-    trackingNeedsIngressLauncher: false,
   },
   claude: {
-    id: "claude",
-    label: "Claude Code",
-    envKey: "STATION_CLAUDE_BIN",
-    command: "claude",
+    ...claudeHarnessProviderDefinition,
+    label: claudeHarnessProviderDefinition.displayName,
     guidedRank: 0,
-    tracking: "external",
-    trackingNeedsIngressLauncher: true,
+    providerHook: PROVIDER_HOOK_DEFINITIONS.claude,
   },
-} as const satisfies SetupHarnessDefinitionMap;
+};
 
-export const setupHarnessDefinitions = cliSetupHarnessIds.map(
-  (harnessId) => SETUP_HARNESS_DEFINITIONS[harnessId],
-);
+export const setupHarnessDefinitions = Object.values(SETUP_HARNESS_DEFINITIONS);

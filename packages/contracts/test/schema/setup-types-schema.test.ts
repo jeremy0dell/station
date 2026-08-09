@@ -4,7 +4,6 @@ import {
   CliSetupHarnessIdSchema,
   CliSetupPlanSchema,
   CliSetupSummarySchema,
-  cliSetupHarnessIds,
 } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -176,9 +175,12 @@ describe("CLI setup schemas", () => {
   });
 
   it("pins the canonical setup-managed harness vocabulary", () => {
-    const expected = ["codex", "cursor", "opencode", "pi", "claude"];
-
-    expect(cliSetupHarnessIds).toEqual(expected);
-    expect(CliSetupHarnessIdSchema.options).toEqual(expected);
+    expect(CliSetupHarnessIdSchema.options).toEqual([
+      "codex",
+      "cursor",
+      "opencode",
+      "pi",
+      "claude",
+    ]);
   });
 });

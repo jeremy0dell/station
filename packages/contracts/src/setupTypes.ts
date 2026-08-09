@@ -1,10 +1,8 @@
 import { z } from "zod";
 
-export const cliSetupHarnessIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
+export const CliSetupHarnessIdSchema = z.enum(["codex", "cursor", "opencode", "pi", "claude"]);
 
-export type CliSetupHarnessId = (typeof cliSetupHarnessIds)[number];
-
-export const CliSetupHarnessIdSchema = z.enum(cliSetupHarnessIds);
+export type CliSetupHarnessId = z.infer<typeof CliSetupHarnessIdSchema>;
 
 export const CliSetupCheckSchema = z
   .object({
