@@ -6,10 +6,10 @@ import type {
   ProjectView,
   ProviderHealth,
   SessionView,
-  WorktreeRow,
   StationSnapshot,
+  WorktreeRow,
 } from "@station/contracts";
-import { STATION_SCHEMA_VERSION } from "@station/contracts";
+import { STATION_SCHEMA_VERSION, worktreeDisplayForAgentState } from "@station/contracts";
 import { mockObserverSnapshot } from "../../sources/fixtures/mockObserverSnapshot.js";
 
 export const SCENARIO_NOW = "2026-06-12T12:00:00.000Z";
@@ -258,6 +258,11 @@ type ScenarioRowInput = {
 };
 
 function scenarioRow(input: ScenarioRowInput): WorktreeRow {
+  const display = worktreeDisplayForAgentState(input.state);
+  display.reason =
+    input.state === "none"
+      ? "No harness run is associated with this worktree."
+      : reasonForState(input.state);
   const built: WorktreeRow = {
     id: input.id,
     projectId: input.project.id,
@@ -295,7 +300,7 @@ function scenarioRow(input: ScenarioRowInput): WorktreeRow {
           }),
       ...(input.checks === undefined ? {} : { checks: scenarioChecks(input.checks) }),
     },
-    display: displayForState(input.state),
+    display,
   };
 
   if (input.state !== "none") {
@@ -506,32 +511,6 @@ function retainedSessionForRow(candidate: WorktreeRow): SessionView {
     title: candidate.branch,
     tags: [],
   };
-}
-
-function displayForState(state: AgentScenarioState): WorktreeRow["display"] {
-  switch (state) {
-    case "needs_attention":
-      return { statusLabel: "needs attention", sortPriority: 10, alert: true, reason: reasonForState(state) };
-    case "stuck":
-      return { statusLabel: "stuck", sortPriority: 20, alert: true, reason: reasonForState(state) };
-    case "working":
-      return { statusLabel: "working", sortPriority: 30, alert: false, reason: reasonForState(state) };
-    case "starting":
-      return { statusLabel: "starting", sortPriority: 35, alert: false, reason: reasonForState(state) };
-    case "idle":
-      return { statusLabel: "idle", sortPriority: 40, alert: false, reason: reasonForState(state) };
-    case "unknown":
-      return { statusLabel: "unknown", sortPriority: 50, alert: false, reason: reasonForState(state) };
-    case "exited":
-      return { statusLabel: "exited", sortPriority: 60, alert: false, reason: reasonForState(state) };
-    case "none":
-      return {
-        statusLabel: "no agent",
-        sortPriority: 70,
-        alert: false,
-        reason: "No harness run is associated with this worktree.",
-      };
-  }
 }
 
 function reasonForState(state: Exclude<AgentScenarioState, "none">): string {

@@ -6,7 +6,11 @@ import {
   attentionAndFailuresSnapshot,
   manyProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
-import { selectStationButtonStatus, stationButtonStatusEqual } from "./status.js";
+import {
+  rowNeedsUser,
+  selectStationButtonStatus,
+  stationButtonStatusEqual,
+} from "./status.js";
 
 function statusFor(snapshot?: StationSnapshot, options?: { projectRollup?: boolean }) {
   return selectStationButtonStatus(snapshot, createInitialTuiState().localRows, options);
@@ -53,6 +57,19 @@ describe("selectStationButtonStatus", () => {
     expect(status.attentionSessionId).toBe(flagged[0]?.session.id);
     expect(status.attentionWorktreeId).toBe(flagged[0]?.worktree.id);
     expect(typeof status.sessionName).toBe("string");
+  });
+
+  it("uses the projected display alert as the needs-user predicate", () => {
+    const presentation = selectDashboardSessionRows(attentionAndFailuresSnapshot())[0]?.presentation;
+    if (presentation === undefined) throw new Error("expected an attention presentation");
+    const alerted = {
+      ...presentation,
+      display: { ...presentation.display, statusLabel: "working" as const, alert: true },
+    };
+    const calm = { ...presentation, display: { ...presentation.display, alert: false } };
+
+    expect(rowNeedsUser(alerted)).toBe(true);
+    expect(rowNeedsUser(calm)).toBe(false);
   });
 
   it("uses canonical fleet truth with dashboard-local optimistic title decoration", () => {

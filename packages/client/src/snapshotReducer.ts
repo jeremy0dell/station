@@ -1,4 +1,5 @@
 import type { SessionView, StationEvent, StationSnapshot, WorktreeRow } from "@station/contracts";
+import { worktreeDisplayForAgentState } from "@station/contracts";
 import { safeErrorToNotice } from "./errors.js";
 import type { ApplyStationEventResult } from "./types.js";
 
@@ -29,7 +30,7 @@ export function applyStationEvent(
   if (event.type === "worktree.agentStateChanged") {
     return withSnapshot(snapshot, {
       rows: snapshot.rows.map((row) =>
-        row.id === event.worktreeId ? mergeRowPatch(row, rowPatchForAgentState(event.agent)) : row,
+        row.id === event.worktreeId ? rowForAgentState(row, event.agent) : row,
       ),
     });
   }
@@ -148,77 +149,20 @@ function mergeRowPatch(row: WorktreeRow, patch: OptionalPatch<WorktreeRow>): Wor
   return next;
 }
 
-function rowPatchForAgentState(agent: WorktreeRow["agent"]): OptionalPatch<WorktreeRow> {
+function rowForAgentState(row: WorktreeRow, agent: WorktreeRow["agent"]): WorktreeRow {
+  const display = worktreeDisplayForAgentState(agent?.state);
   if (agent === undefined) {
-    return {
-      agent,
-      display: {
-        statusLabel: "no agent",
-        sortPriority: 70,
-        alert: false,
-        reason: "No harness run is associated with this worktree.",
-      },
-    };
+    display.reason = "No harness run is associated with this worktree.";
+  } else if (display.alert || display.warning === true) {
+    display.reason = agent.reason;
   }
-
-  const display = displayForAgent(agent);
-  return {
-    agent,
-    display,
-  };
-}
-
-function displayForAgent(agent: NonNullable<WorktreeRow["agent"]>): WorktreeRow["display"] {
-  if (agent.state === "needs_attention") {
-    return {
-      statusLabel: "needs attention",
-      sortPriority: 10,
-      alert: true,
-      reason: agent.reason,
-    };
+  const next = { ...row, display };
+  if (agent === undefined) {
+    delete next.agent;
+  } else {
+    next.agent = agent;
   }
-  if (agent.state === "stuck") {
-    return {
-      statusLabel: "stuck",
-      sortPriority: 20,
-      alert: true,
-      warning: true,
-      reason: agent.reason,
-    };
-  }
-  if (agent.state === "working") {
-    return {
-      statusLabel: "working",
-      sortPriority: 30,
-      alert: false,
-    };
-  }
-  if (agent.state === "starting") {
-    return {
-      statusLabel: "starting",
-      sortPriority: 35,
-      alert: false,
-    };
-  }
-  if (agent.state === "idle") {
-    return {
-      statusLabel: "idle",
-      sortPriority: 40,
-      alert: false,
-    };
-  }
-  if (agent.state === "exited") {
-    return {
-      statusLabel: "exited",
-      sortPriority: 60,
-      alert: false,
-    };
-  }
-  return {
-    statusLabel: "unknown",
-    sortPriority: 50,
-    alert: false,
-  };
+  return next;
 }
 
 function mergeSessionPatch(session: SessionView, patch: OptionalPatch<SessionView>): SessionView {

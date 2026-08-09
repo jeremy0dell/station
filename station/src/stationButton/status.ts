@@ -47,7 +47,7 @@ const EMPTY_STATUS: StationButtonStatus = {
 
 /** The row is asking for the user (needs-attention or stuck) — the island's alert predicate. */
 export function rowNeedsUser(row: DashboardSessionRow["presentation"]): boolean {
-  return row.display.statusLabel === "needs attention" || row.display.statusLabel === "stuck";
+  return row.display.alert;
 }
 
 /** The attention keys of every session currently asking for the user. */
@@ -102,7 +102,7 @@ const ROLLUP_SEVERITY: Record<ProjectRollupStatus, number> = {
 
 function rowRollupStatus(row: DashboardSessionRow): ProjectRollupStatus {
   const state = row.session.status.value;
-  if (state === "needs_attention" || state === "stuck") {
+  if (row.presentation.display.alert) {
     return "needsYou";
   }
   if (state === "working") {

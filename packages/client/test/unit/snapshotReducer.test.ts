@@ -1,5 +1,5 @@
 import { applyStationEvent } from "@station/client";
-import type { StationEvent } from "@station/contracts";
+import type { AgentState, StationEvent, WorktreeRow } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { createCommandSnapshot, fixtureNow, row } from "../support/snapshots.js";
 
@@ -26,6 +26,32 @@ describe("client snapshot reducer", () => {
     expect(result.needsSnapshotRefresh).toBe(false);
     expect(result.snapshot.rows[0]?.display.statusLabel).toBe("working");
     expect(result.snapshot.rows[0]?.title).toBe("Durable workspace");
+  });
+
+  it("retains partial display merge behavior for ordinary worktree updates", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const source = snapshot.rows[0];
+    if (source === undefined) throw new Error("Expected an idle fixture row.");
+    snapshot.rows[0] = {
+      ...source,
+      display: { ...source.display, warning: true, reason: "Retained context." },
+    };
+
+    const result = applyStationEvent(snapshot, {
+      type: "worktree.updated",
+      worktreeId: source.id,
+      patch: {
+        display: { statusLabel: "working", sortPriority: 30, alert: false },
+      },
+    });
+
+    expect(result.snapshot.rows[0]?.display).toEqual({
+      statusLabel: "working",
+      sortPriority: 30,
+      alert: false,
+      warning: true,
+      reason: "Retained context.",
+    });
   });
 
   it("applies direct title patches without dropping row state", () => {
@@ -173,29 +199,84 @@ describe("client snapshot reducer", () => {
     expect(updated.needsSnapshotRefresh).toBe(true);
   });
 
-  it("updates row display from live agent state events", () => {
+  it.each([
+    ["needs_attention", "Codex requested permission.", false],
+    ["stuck", "Codex stopped making progress.", true],
+  ] as const)("projects %s display from live agent state events", (state, reason, warning) => {
     const snapshot = createCommandSnapshot("idle");
     const result = applyStationEvent(snapshot, {
       type: "worktree.agentStateChanged",
       worktreeId: "wt_web_idle",
-      agent: {
-        harness: "codex",
-        state: "needs_attention",
-        runId: "run_wt_web_idle",
-        sessionId: "ses_wt_web_idle",
-        confidence: "high",
-        reason: "Codex requested permission.",
-        updatedAt: fixtureNow,
-      },
+      agent: agentForState(state, reason),
     });
 
     expect(result.needsSnapshotRefresh).toBe(false);
-    expect(result.snapshot.rows[0]?.agent?.state).toBe("needs_attention");
-    expect(result.snapshot.rows[0]?.display).toMatchObject({
-      statusLabel: "needs attention",
+    expect(result.snapshot.rows[0]?.agent?.state).toBe(state);
+    expect(result.snapshot.rows[0]?.display).toEqual({
+      statusLabel: state === "stuck" ? "stuck" : "needs attention",
+      sortPriority: state === "stuck" ? 20 : 10,
       alert: true,
-      reason: "Codex requested permission.",
+      ...(warning ? { warning: true } : {}),
+      reason,
     });
+  });
+
+  it.each([
+    ["stuck", "working"],
+    ["needs_attention", "idle"],
+  ] as const)("atomically clears stale display fields on %s to %s", (from, to) => {
+    const snapshot = createCommandSnapshot("idle");
+    const source = snapshot.rows[0];
+    if (source === undefined) throw new Error("Expected an idle fixture row.");
+    snapshot.rows[0] = {
+      ...source,
+      agent: agentForState(from, "Stale reason."),
+      display: {
+        statusLabel: from === "stuck" ? "stuck" : "needs attention",
+        sortPriority: from === "stuck" ? 20 : 10,
+        alert: true,
+        warning: true,
+        reason: "Stale reason.",
+      },
+    };
+
+    const result = applyStationEvent(snapshot, {
+      type: "worktree.agentStateChanged",
+      worktreeId: source.id,
+      agent: agentForState(to, "Calm reason."),
+    });
+
+    expect(result.snapshot.rows[0]?.display).toEqual(
+      to === "working"
+        ? { statusLabel: "working", sortPriority: 30, alert: false }
+        : { statusLabel: "idle", sortPriority: 40, alert: false },
+    );
+  });
+
+  it("distinguishes explicit none from an absent agent", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const explicitNone = applyStationEvent(snapshot, {
+      type: "worktree.agentStateChanged",
+      worktreeId: "wt_web_idle",
+      agent: agentForState("none", "No active run."),
+    });
+    const absent = applyStationEvent(snapshot, {
+      type: "worktree.agentStateChanged",
+      worktreeId: "wt_web_idle",
+    });
+
+    expect(explicitNone.snapshot.rows[0]?.display).toEqual({
+      statusLabel: "no agent",
+      sortPriority: 70,
+      alert: false,
+    });
+    expect(absent.snapshot.rows[0]?.display).toEqual({
+      statusLabel: "no agent",
+      sortPriority: 70,
+      alert: false,
+      reason: "No harness run is associated with this worktree.",
+    });
+    expect(absent.snapshot.rows[0]?.agent).toBeUndefined();
   });
 
   it("turns command failures into safe diagnostic notices", () => {
@@ -245,3 +326,15 @@ describe("client snapshot reducer", () => {
     expect(provider.needsSnapshotRefresh).toBe(true);
   });
 });
+
+function agentForState(state: AgentState, reason: string): NonNullable<WorktreeRow["agent"]> {
+  return {
+    harness: "codex",
+    state,
+    runId: "run_wt_web_idle",
+    sessionId: "ses_wt_web_idle",
+    confidence: "high",
+    reason,
+    updatedAt: fixtureNow,
+  };
+}
