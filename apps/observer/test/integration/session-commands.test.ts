@@ -1329,6 +1329,7 @@ describe("session command vertical slice", () => {
         projectId: "web",
         worktreeId: worktree.id,
         expectedPath: worktree.path,
+        title: "Imported recovery title",
         handle: {
           id: "rec_import_recovery",
           provider: "fake-harness",
@@ -1347,6 +1348,16 @@ describe("session command vertical slice", () => {
     await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
       status: "succeeded",
     });
+    expect(fixture.core.getSnapshot().rows).toEqual([
+      expect.objectContaining({
+        id: worktree.id,
+        title: "Imported recovery title",
+        branch: worktree.branch,
+        path: worktree.path,
+      }),
+    ]);
+    expect(fixture.core.getSnapshot().rows[0]).not.toHaveProperty("agent");
+    expect(fixture.core.getSnapshot().sessions).toEqual([]);
     const conflict = await fixture.queue.dispatch({
       type: "session.importRecoveryHandle",
       payload: {
@@ -1430,6 +1441,7 @@ describe("session command vertical slice", () => {
     const fixture = createFixture({
       terminalIntentRunner,
       featureFlags: { sessionResumeAgent: true },
+      managedTerminal: persistentManagedTerminal(),
       worktree: new FakeWorktreeProvider({
         now,
         worktrees: [
@@ -1469,18 +1481,35 @@ describe("session command vertical slice", () => {
       subject: { kind: "session", sessionId: "ses_previous" },
       endedAt: now,
     });
-    const handle = await fixture.persistence.upsertSessionRecoveryHandle({
-      id: "report_resume",
-      provider: "fake-harness",
-      projectId: "web",
-      worktreeId: "wt_web_resume",
-      sessionId: "ses_previous",
-      target: { kind: "native-session", id: "native_session_123" },
-      cwd: "/tmp/station/web/resume",
-      observedAt: now,
-      lastSeenAt: now,
+    await fixture.core.reconcile("pre-import-resume");
+    const importReceipt = await fixture.queue.dispatch({
+      type: "session.importRecoveryHandle",
+      payload: {
+        projectId: "web",
+        worktreeId: "wt_web_resume",
+        expectedPath: "/tmp/station/web/resume",
+        title: "Recovered custom title",
+        handle: {
+          id: "report_resume",
+          provider: "fake-harness",
+          projectId: "web",
+          worktreeId: "wt_web_resume",
+          sessionId: "ses_previous",
+          target: { kind: "native-session", id: "native_session_123" },
+          cwd: "/tmp/station/web/resume",
+          observedAt: now,
+          lastSeenAt: now,
+        },
+      },
     });
-    await fixture.core.reconcile("pre-resume");
+    await fixture.queue.drain();
+    await expect(fixture.persistence.getCommand(importReceipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    const [handle] = await fixture.persistence.listSessionRecoveryHandles({
+      worktreeId: "wt_web_resume",
+    });
+    if (handle === undefined) throw new Error("Expected imported recovery handle.");
 
     expect(fixture.core.getSnapshot().rows[0]?.recovery).toMatchObject({
       kind: "agent-resume",
@@ -1488,6 +1517,12 @@ describe("session command vertical slice", () => {
       provider: "fake-harness",
       targetKind: "native-session",
       sessionId: "ses_previous",
+    });
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      id: "wt_web_resume",
+      title: "Recovered custom title",
+      branch: "resume",
+      path: "/tmp/station/web/resume",
     });
 
     const receipt = await fixture.queue.dispatch({
@@ -1530,8 +1565,17 @@ describe("session command vertical slice", () => {
       (await fixture.persistence.listSessions()).find((session) => session.id === "ses_previous"),
     ).not.toHaveProperty("endedAt");
     expect(fixture.core.getSnapshot().sessions).toEqual([
-      expect.objectContaining({ id: "ses_previous", origin: "station" }),
+      expect.objectContaining({
+        id: "ses_previous",
+        title: "Recovered custom title",
+        origin: "station",
+      }),
     ]);
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      title: "Recovered custom title",
+      branch: "resume",
+      path: "/tmp/station/web/resume",
+    });
     fixture.sqlite.close();
   });
 
@@ -1549,19 +1593,38 @@ describe("session command vertical slice", () => {
       terminal,
       harness: unavailableHarness(),
       featureFlags: { sessionResumeAgent: true },
+      managedTerminal: persistentManagedTerminal(),
       sessionIds: ["ses_should_not_exist"],
     });
-    const handle = await fixture.persistence.upsertSessionRecoveryHandle({
-      id: "report_resume_gate",
-      provider: "fake-harness",
-      projectId: "web",
-      worktreeId: existing.id,
-      target: { kind: "native-session", id: "native_resume_gate" },
-      cwd: existing.path,
-      observedAt: now,
-      lastSeenAt: now,
+    await fixture.core.reconcile("pre-import-resume-gate");
+    const importReceipt = await fixture.queue.dispatch({
+      type: "session.importRecoveryHandle",
+      payload: {
+        projectId: "web",
+        worktreeId: existing.id,
+        expectedPath: existing.path,
+        title: "Retryable recovered title",
+        handle: {
+          id: "report_resume_gate",
+          provider: "fake-harness",
+          projectId: "web",
+          worktreeId: existing.id,
+          sessionId: "ses_resume_gate",
+          target: { kind: "native-session", id: "native_resume_gate" },
+          cwd: existing.path,
+          observedAt: now,
+          lastSeenAt: now,
+        },
+      },
     });
-    await fixture.core.reconcile("pre-resume-preflight");
+    await fixture.queue.drain();
+    await expect(fixture.persistence.getCommand(importReceipt.commandId)).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    const [handle] = await fixture.persistence.listSessionRecoveryHandles({
+      worktreeId: existing.id,
+    });
+    if (handle === undefined) throw new Error("Expected imported recovery handle.");
     const titlesBefore = await fixture.persistence.listWorktreeDisplayTitles();
 
     const receipt = await fixture.queue.dispatch({
@@ -1583,6 +1646,19 @@ describe("session command vertical slice", () => {
     expect(terminal.snapshot()).toMatchObject({ targets: [], launches: [] });
     await expect(fixture.persistence.listSessions()).resolves.toEqual([]);
     await expect(fixture.persistence.listWorktreeDisplayTitles()).resolves.toEqual(titlesBefore);
+    expect(fixture.core.getSnapshot().rows[0]).toMatchObject({
+      title: "Retryable recovered title",
+      branch: existing.branch,
+      path: existing.path,
+      recovery: {
+        handleId: handle.id,
+        provider: "fake-harness",
+        targetKind: "native-session",
+      },
+    });
+    await expect(
+      fixture.persistence.listSessionRecoveryHandles({ worktreeId: existing.id }),
+    ).resolves.toEqual([handle]);
     fixture.sqlite.close();
   });
 

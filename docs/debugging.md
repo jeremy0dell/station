@@ -275,10 +275,12 @@ pnpm station:sessions:migrate -- \
 ```
 
 The plan is read-only: it uses `snapshot --require-running`, checks the exact
-source Observer and Host census, verifies target worktree and Host identities,
-refuses live target sessions on providers being migrated, checks provider-file
-conflicts, and prints a SHA-256 digest. It never starts an Observer or
-edits configuration. Apply must bind confirmation to that evidence:
+source Observer and Host census, requires each source row title to match its
+session projection, verifies target worktree and Host identities, records the
+target's current canonical title, refuses live target sessions on providers
+being migrated, requires canonical-title import readiness, checks provider-file
+conflicts, and prints a SHA-256 digest over that evidence. It never starts an
+Observer or edits configuration. Apply must bind confirmation to that evidence:
 
 ```bash
 pnpm station:sessions:migrate -- \
@@ -289,13 +291,15 @@ pnpm station:sessions:migrate -- \
 ```
 
 Apply intentionally has downtime. It closes only the planned source sessions
-without force, proves the source Host owns no live PTY, captures stable final
-provider state into a hash-inventoried private directory, and stops the pinned source
-Observer before importing handles through the recorded
-`session.importRecoveryHandle` command. It then resumes each target and verifies
-its exact Host PTY and provider-native identity. Source and target agents never
-run concurrently, target TOML is never edited, target SQLite is never opened by
-the maintenance script, and an entire devbox is never stopped as a side effect.
+without force only after revalidating the source and target titles, proves the
+source Host owns no live PTY, captures stable final provider state into a
+hash-inventoried private directory, and stops the pinned source Observer before
+atomically importing each canonical title and handle through the recorded
+`session.importRecoveryHandle` command. It then resumes each target without a
+post-launch rename and verifies both title projections, its exact Host PTY, and
+provider-native identity. Source and target agents never run concurrently,
+target TOML is never edited, target SQLite is never opened by the maintenance
+script, and an entire devbox is never stopped as a side effect.
 
 Only one apply process may own a digest at a time; a stale owner-private lock is
 reclaimed only after its recorded process is gone. `SIGINT`, `SIGTERM`, and
@@ -306,7 +310,9 @@ of source sessions running; rerun with the same digest so the journal closes the
 remaining sessions. After `source-sealed`, source agents remain stopped and the
 sealed directory is authoritative; the same retry accepts already-resumed exact
 target sessions and continues from sealed evidence instead of rerunning live
-source planning checks.
+source planning checks. A journal created by the former resume-then-rename flow
+may issue one idempotent rename repair for an already-resumed target; new
+journals import the canonical title before resume and do not use that repair.
 
 Codex and OpenCode migration accept each provider's shared source database, an
 absent target database, or a byte-identical target database. They refuse instead

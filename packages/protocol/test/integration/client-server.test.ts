@@ -47,6 +47,7 @@ describe("protocol client/server", () => {
     });
     await expect(client.getSessionRecoveryReadiness()).resolves.toEqual({
       resumeEnabled: true,
+      canonicalTitleImport: true,
       managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
       harnesses: [],
     });

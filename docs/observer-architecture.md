@@ -182,7 +182,7 @@ ownership even where current ownership is still a deviation.
 
 | Conversation | Direction | Application seam | Actor or adapter | Rule and current status |
 | --- | --- | --- | --- | --- |
-| Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. Recovery readiness is a read-only query over loaded feature policy and injected provider capabilities. |
+| Observer operations | Driving | `ObserverApi` | NDJSON/Unix-socket server, direct tests | Conforming application-owned driving port; protocol adapts transport messages while direct tests can invoke it without transport. Recovery readiness is a read-only query over loaded feature policy, canonical-title import support, and injected provider capabilities. |
 | Observer reap | Driving | `ObserverReap` | CLI observer-reap adapter, direct tests | Observer-owned local-process operation; dry-run and explicit force share one selection and revalidation use case while CLI composition supplies boundary evidence. |
 | Recorded mutations | Driving | `StationCommand`, `dispatch`, command handlers | CLI, Station client, protocol client | Commands persist acceptance and completion; the production handler map is compile-time exhaustive over the command union. |
 | Provider hook delivery | Driving | provider hook ingress | `stn-ingress`, protocol method, offline spool, provider hook adapters | Raw input is validated once and provider vocabulary is normalized at the adapter boundary. |
@@ -388,20 +388,27 @@ trace-correlated diagnostic evidence.
 
 Session migration is an exclusive cutover, not a blue/green launch. Its
 read-only plan pins source and target Observer identities, compares the complete
-source Host PTY census, verifies target worktree identity, queries live recovery
-readiness, and binds confirmation to a digest. Apply closes only those exact
-source sessions without force and requires the source Host to reach zero live
-PTYs before final provider artifacts are sealed.
+source Host PTY census, requires each canonical source row title to match its
+session projection, verifies target worktree identity, records the target's
+current canonical title, queries live recovery readiness, and binds all of that
+evidence to a digest. Apply revalidates both sides' titles and requires explicit
+canonical-title import support before it closes any source session. It closes
+only those exact source sessions without force and requires the source Host to
+reach zero live PTYs before final provider artifacts are sealed.
 
 The sealed private directory becomes temporary authority after source
 quiescence. Provider integrations locate exact native artifacts; target file
 collisions require byte-identical content. Recovery handles enter target
 Observer memory only through the recorded `session.importRecoveryHandle`
-command, while the maintenance process treats the target database as opaque.
-Each target launch rechecks that the source Observer remains stopped and verifies
-the resulting Host PTY, worktree, provider, session, and native identity before
-completion. An append-only owner-private journal makes interruption retryable;
-it never authorizes concurrent source and target agents.
+command, which atomically installs the sealed source title and recovery handle
+before reconcile can expose the idle row for resume; the maintenance process
+treats the target database as opaque. Each target launch rechecks that the source
+Observer remains stopped and verifies the resulting Host PTY, worktree, provider,
+Station session, canonical row and session titles, and provider-native identity
+before completion. An append-only owner-private journal makes interruption
+retryable; journals created under the former resume-then-rename ordering retain
+an idempotent rename repair. The journal never authorizes concurrent source and
+target agents.
 
 ### Reconciliation
 
@@ -682,7 +689,8 @@ when it changes several tables:
 - `SessionStore` owns explicit session lifecycle, canonical worktree-scoped title authority,
   synchronized per-session title projections, durable provider-native execution bindings,
   recovery handles, turn readiness, and purpose-specific remembered-harness lookup. Rename,
-  fresh-session seeding, and confirmed worktree retirement keep their multi-table changes atomic.
+  fresh-session seeding, confirmed worktree retirement, and canonical-title/recovery import keep
+  their multi-table changes atomic.
 - `WorktreeMetadataStore` owns current change, pull-request, and check metadata
   plus its expiry.
 

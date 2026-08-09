@@ -1016,6 +1016,55 @@ describe("contract schemas", () => {
     expectParses(
       StationCommandSchema,
       {
+        type: "session.importRecoveryHandle",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          expectedPath: "/tmp/station/web/feature",
+          title: "  Recovered workspace  ",
+          handle: {
+            id: "rec_web_feature",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_web_feature",
+            sessionId: "ses_web_feature",
+            target: { kind: "native-session", id: "thread-web-feature" },
+            cwd: "/tmp/station/web/feature",
+            observedAt: "2026-07-29T12:00:00.000Z",
+            lastSeenAt: "2026-07-29T12:00:00.000Z",
+          },
+        },
+      },
+      "recovery import with canonical title",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "session.importRecoveryHandle",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          expectedPath: "/tmp/station/web/feature",
+          title: "   ",
+          handle: {
+            id: "rec_web_feature",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_web_feature",
+            sessionId: "ses_web_feature",
+            target: { kind: "native-session", id: "thread-web-feature" },
+            cwd: "/tmp/station/web/feature",
+            observedAt: "2026-07-29T12:00:00.000Z",
+            lastSeenAt: "2026-07-29T12:00:00.000Z",
+          },
+        },
+      },
+      "recovery import with blank canonical title",
+    );
+
+    expectParses(
+      StationCommandSchema,
+      {
         type: "worktree.create",
         payload: { projectId: "web", branch: "feature/agent", launchHarness: "codex" },
       },
@@ -1720,6 +1769,13 @@ describe("contract schemas", () => {
         status: "complete",
         digest: "a".repeat(64),
         sealedRoot: "/tmp/session-migration/sealed",
+        titleEvidence: [
+          {
+            sessionId: "ses_1",
+            sourceTitle: "Recovered workspace",
+            targetTitle: "feature/recovery",
+          },
+        ],
       },
       "session migration journal entry",
     );
@@ -1764,6 +1820,7 @@ describe("contract schemas", () => {
       SessionRecoveryReadinessSchema,
       {
         resumeEnabled: true,
+        canonicalTitleImport: true,
         managedTerminal: {
           provider: "native",
           canLaunchProcessPersistently: true,
@@ -1776,6 +1833,16 @@ describe("contract schemas", () => {
       SessionRecoveryReadinessSchema,
       { resumeEnabled: true, harnesses: [], providerData: {} },
       "session recovery readiness with unknown fields",
+    );
+    expectParses(
+      SessionRecoveryReadinessSchema,
+      { resumeEnabled: true, harnesses: [] },
+      "older session recovery readiness without canonical title import",
+    );
+    expectFails(
+      SessionRecoveryReadinessSchema,
+      { resumeEnabled: true, canonicalTitleImport: false, harnesses: [] },
+      "session recovery readiness with false canonical title import",
     );
   });
 

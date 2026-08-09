@@ -1486,7 +1486,7 @@
           "name": "createSessionImportRecoveryHandleHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership."
+          "purpose": "Atomically imports one verified provider-native recovery identity and optional canonical title into an idle target before reconcile can expose it for resume."
         },
         {
           "name": "CreateSessionImportRecoveryHandleHandlerOptions",
@@ -1554,6 +1554,12 @@
           "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "../../utils/time.js",
+          "resolvedPath": "apps/observer/src/utils/time.ts",
+          "edgeKind": "runtime",
+          "bindings": ["nowIso"]
         },
         {
           "specifier": "@station/contracts",
@@ -5185,7 +5191,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7189,7 +7195,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile."
         },
         {
           "name": "SessionTurnReadinessMutation",
@@ -7493,7 +7499,7 @@
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness."
+          "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile."
         },
         {
           "name": "WorktreeMetadataStore",
@@ -12405,8 +12411,16 @@
       "declaration": "createSessionImportRecoveryHandleHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Imports one verified provider-native recovery identity into an idle target worktree after revalidating launch capability and existing durable ownership.",
-      "dependencies": []
+      "purpose": "Atomically imports one verified provider-native recovery identity and optional canonical title into an idle target before reconcile can expose it for resume.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/session/rename.ts",
@@ -12777,7 +12791,7 @@
       "declaration": "SessionStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness.",
+      "purpose": "Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical worktree-scoped title authority, synchronized session projections, recovery, and readiness. Canonical-title handoff and recovery import commit atomically before recovery can reconcile.",
       "dependencies": []
     },
     {

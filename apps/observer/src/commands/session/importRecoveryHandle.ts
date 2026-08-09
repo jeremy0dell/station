@@ -12,6 +12,7 @@ import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
+import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
 import type { CommandHandler } from "../queue.js";
 import { reconcileAndPublish } from "../reconcile.js";
@@ -35,8 +36,8 @@ export type CreateSessionImportRecoveryHandleHandlerOptions = {
 /**
  * USE CASE
  *
- * Imports one verified provider-native recovery identity into an idle target
- * worktree after revalidating launch capability and existing durable ownership.
+ * Atomically imports one verified provider-native recovery identity and optional
+ * canonical title into an idle target before reconcile can expose it for resume.
  */
 export function createSessionImportRecoveryHandleHandler(
   options: CreateSessionImportRecoveryHandleHandlerOptions,
@@ -74,7 +75,12 @@ export function createSessionImportRecoveryHandleHandler(
       provider: payload.handle.provider,
     });
     assertNoRecoveryIdentityConflict(existing, payload.handle);
-    await options.persistence.upsertSessionRecoveryHandle(payload.handle);
+    const importInput: Parameters<SessionStore["importSessionRecoveryHandle"]>[0] = {
+      handle: payload.handle,
+      importedAt: nowIso(options.clock),
+    };
+    if (payload.title !== undefined) importInput.title = payload.title;
+    await options.persistence.importSessionRecoveryHandle(importInput);
     throwIfAborted(context.signal);
 
     await reconcileAndPublish({

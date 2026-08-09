@@ -129,6 +129,7 @@ export const ImportRecoveryHandlePayloadSchema = z
     worktreeId: WorktreeIdSchema,
     expectedPath: nonEmptyStringSchema,
     expectedRegistrationIdentity: nonEmptyStringSchema.optional(),
+    title: userFacingTitleSchema.optional(),
     handle: SessionRecoveryHandleSchema,
   })
   .strict();

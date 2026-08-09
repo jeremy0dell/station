@@ -28,6 +28,10 @@ import {
   parseRuntimeInventoryArgs,
 } from "../../scripts/maintenance/runtime-inventory.mjs";
 import {
+  assertSourceTitlesMatchPlan,
+  assertTargetReadiness,
+  assertTargetTitlesConverged,
+  assertTargetTitlesMatchPlan,
   buildSessionMigrationPlan,
   parseSessionMigrationArgs,
 } from "../../scripts/maintenance/session-migrate.mjs";
@@ -497,6 +501,8 @@ describe("session migration script", () => {
     expect(source.indexOf("await quiesceSource")).toBeLessThan(
       source.indexOf('type: "session.importRecoveryHandle"'),
     );
+    expect(source).toContain("title: item.title");
+    expect(source.match(/type: "session\.rename"/gu)).toHaveLength(1);
     expect(source.lastIndexOf("await verifySealedProviderState")).toBeLessThan(
       source.indexOf('phase = "staging-target"'),
     );
@@ -514,11 +520,15 @@ describe("session migration script", () => {
       observedAt: "2026-07-29T12:00:00.000Z",
       lastSeenAt: "2026-07-29T12:00:00.000Z",
     };
-    const row = {
+    const sourceRow = {
       id: "wt_station_feature",
       projectId: "station",
       path: "/worktrees/feature",
-      title: "Feature",
+      title: "PR #365 · session rescue",
+    };
+    const targetRow = {
+      ...sourceRow,
+      title: "feature-branch",
     };
     const plan = buildSessionMigrationPlan(
       [
@@ -526,34 +536,120 @@ describe("session migration script", () => {
           sessionId: "ses_feature",
           provider: "codex",
           projectId: "station",
-          worktreeId: row.id,
+          worktreeId: sourceRow.id,
           exactHandleIds: [handle.id],
           candidateHandleIds: [],
         },
       ],
       [handle],
       {
-        rows: [row],
+        rows: [sourceRow],
         sessions: [
           {
             id: "ses_feature",
             title: "PR #365 · session rescue",
             projectId: "station",
-            worktreeId: row.id,
+            worktreeId: sourceRow.id,
           },
         ],
       },
-      { rows: [row], sessions: [] },
+      { rows: [targetRow], sessions: [] },
     );
 
     expect(plan).toEqual([
       expect.objectContaining({
         sessionId: "ses_feature",
         title: "PR #365 · session rescue",
+        targetTitle: "feature-branch",
         worktreePath: "/worktrees/feature",
         handle,
       }),
     ]);
+  });
+
+  it("rejects inconsistent or changed migration title authority", () => {
+    const handle = {
+      id: "rec_title",
+      provider: "codex",
+      projectId: "station",
+      worktreeId: "wt_title",
+      sessionId: "ses_title",
+      target: { kind: "native-session" as const, id: "thread-title" },
+      cwd: "/worktrees/title",
+    };
+    const coverage = [
+      {
+        sessionId: "ses_title",
+        provider: "codex",
+        projectId: "station",
+        worktreeId: "wt_title",
+        exactHandleIds: [handle.id],
+        candidateHandleIds: [],
+      },
+    ];
+    const sourceRow = {
+      id: "wt_title",
+      projectId: "station",
+      path: "/worktrees/title",
+      title: "Canonical title",
+    };
+    const sourceSession = {
+      id: "ses_title",
+      title: "Canonical title",
+      projectId: "station",
+      worktreeId: "wt_title",
+    };
+    const targetRow = { ...sourceRow, title: "Target title" };
+
+    expect(() =>
+      buildSessionMigrationPlan(
+        coverage,
+        [handle],
+        { rows: [sourceRow], sessions: [{ ...sourceSession, title: "Stale projection" }] },
+        { rows: [targetRow], sessions: [] },
+      ),
+    ).toThrow("archived row and session titles differ");
+
+    const plan = buildSessionMigrationPlan(
+      coverage,
+      [handle],
+      { rows: [sourceRow], sessions: [sourceSession] },
+      { rows: [targetRow], sessions: [] },
+    );
+    expect(() =>
+      assertSourceTitlesMatchPlan(
+        { rows: [{ ...sourceRow, title: "Changed source" }], sessions: [sourceSession] },
+        plan,
+      ),
+    ).toThrow("Source title changed after migration planning");
+    expect(() =>
+      assertTargetTitlesMatchPlan(
+        { rows: [{ ...targetRow, title: "Changed target" }], sessions: [] },
+        plan,
+      ),
+    ).toThrow("Target title changed after migration planning");
+    expect(() =>
+      assertTargetTitlesConverged(
+        {
+          rows: [{ ...targetRow, title: "Canonical title" }],
+          sessions: [{ ...sourceSession, title: "Wrong projection" }],
+        },
+        plan,
+      ),
+    ).toThrow("Target titles did not converge");
+  });
+
+  it("requires canonical title import readiness before migration", () => {
+    const plan = [{ provider: "codex" }];
+    const readiness = {
+      resumeEnabled: true,
+      managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
+      harnesses: [{ provider: "codex", canResume: true }],
+    };
+    expect(() => assertTargetReadiness(readiness, plan)).toThrow("canonical recovery-title import");
+    expect(() =>
+      assertTargetReadiness({ ...readiness, canonicalTitleImport: true }, plan),
+    ).not.toThrow();
   });
 
   it("refuses migration when the target worktree already owns a session", () => {
@@ -582,6 +678,7 @@ describe("session migration script", () => {
       id: "wt_station_feature",
       projectId: "station",
       path: "/worktrees/feature",
+      title: "Source",
     };
     const source = {
       rows: [row],
