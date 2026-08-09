@@ -124,8 +124,8 @@ export type SetupMessageArguments = {
   "action.config-blocked-label": undefined;
   "next.install-worktrunk": undefined;
   "next.install-tmux": undefined;
-  "next.install-bun": undefined;
-  "next.install-diff-viewer": undefined;
+  "next.install-bun": { formula: string };
+  "next.install-diff-viewer": { formula: string };
   "next.resolve-required": undefined;
   "progress.start": { label: string };
   "progress.complete": { label: string };

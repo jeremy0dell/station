@@ -1048,13 +1048,19 @@ function nextSteps(requiredMissing: number, facts: SetupFacts): string[] {
     return ["Install tmux, then run: stn setup check"];
   }
   if (facts.bun.status === "missing") {
-    return ["Install Bun (brew install bun), then run: stn setup check"];
+    const definition = SETUP_TOOL_DEFINITIONS.bun;
+    return [
+      `Install ${definition.displayName} (brew install ${definition.formula}), then run: stn setup check`,
+    ];
   }
   if (facts.git.status === "missing") {
     return [facts.git.message];
   }
   if (facts.diffViewer.status === "missing") {
-    return ["Install Hunk (brew install hunk), then run: stn setup check"];
+    const definition = SETUP_TOOL_DEFINITIONS["diff-viewer"];
+    return [
+      `Install ${definition.displayName} (brew install ${definition.formula}), then run: stn setup check`,
+    ];
   }
   return ["Resolve the missing required setup items, then run: stn setup check"];
 }

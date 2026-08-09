@@ -15,7 +15,7 @@ import type { SetupComposition, SetupSessionProjection } from "../composition.js
 import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
 import { formatSetupCommand } from "../presenters/text.js";
-import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
+import { SETUP_TOOL_DEFINITIONS, setupToolDefinitions } from "../toolDefinitions.js";
 import type {
   SetupCommandOptions,
   SetupCommandResult,
@@ -595,12 +595,7 @@ function unavailableRequiredHarnesses(
 }
 
 function coreToolsNeedHomebrew(facts: SetupFacts): boolean {
-  return (
-    facts.worktrunk.status !== "ok" ||
-    facts.tmux.status !== "ok" ||
-    facts.bun.status !== "ok" ||
-    facts.diffViewer.status !== "ok"
-  );
+  return setupToolDefinitions.some(({ factKey }) => facts[factKey].status !== "ok");
 }
 
 function shouldOfferHomebrew(facts: SetupFacts): boolean {

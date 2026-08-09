@@ -416,11 +416,12 @@ describe("setup plan projection", () => {
   });
 
   it("plans a Homebrew install for missing Bun", () => {
-    const plan = buildSetupPlan(
+    const built = buildSetupPlans(
       facts({
         bun: { status: "missing", command: "bun", message: "Bun missing." },
       }),
     );
+    const plan = built.jsonPlan;
 
     expect(plan.summary.requiredMissing).toBe(1);
     expect(plan.actions.find((action) => action.id === "install-bun")).toMatchObject({
@@ -429,6 +430,13 @@ describe("setup plan projection", () => {
       selected: true,
       command: ["brew", "install", "bun"],
     });
+    expect(plan.nextSteps).toEqual(["Install Bun (brew install bun), then run: stn setup check"]);
+    const recovery = built.presentationView.recovery.find(
+      (instruction) => instruction.kind === "instruction",
+    );
+    expect(
+      recovery?.kind === "instruction" ? resolveSetupMessage(recovery.message) : undefined,
+    ).toBe("Install Bun (brew install bun).");
   });
 
   it("keeps compiled launch ready without source Bun or Station UI rows", () => {
@@ -483,11 +491,12 @@ describe("setup plan projection", () => {
   });
 
   it("plans one required Homebrew install for a missing diff viewer", () => {
-    const plan = buildSetupPlan(
+    const built = buildSetupPlans(
       facts({
         diffViewer: { status: "missing", command: "hunk", message: "Hunk missing." },
       }),
     );
+    const plan = built.jsonPlan;
 
     expect(plan.summary.requiredMissing).toBe(1);
     expect(plan.checks.find((check) => check.id === "diff-viewer")).toMatchObject({
@@ -500,6 +509,13 @@ describe("setup plan projection", () => {
       selected: true,
       command: ["brew", "install", "hunk"],
     });
+    expect(plan.nextSteps).toEqual(["Install Hunk (brew install hunk), then run: stn setup check"]);
+    const recovery = built.presentationView.recovery.find(
+      (instruction) => instruction.kind === "instruction",
+    );
+    expect(
+      recovery?.kind === "instruction" ? resolveSetupMessage(recovery.message) : undefined,
+    ).toBe("Install Hunk (brew install hunk).");
   });
 
   it("blocks config writes when no harness is available", () => {

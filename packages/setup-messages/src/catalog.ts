@@ -224,9 +224,9 @@ export const setupMessageCatalog = {
   "action.config-blocked-label": { terminal: "Update STATION config" },
   "next.install-worktrunk": { terminal: "Install Worktrunk." },
   "next.install-tmux": { terminal: "Install tmux." },
-  "next.install-bun": { terminal: "Install Bun (brew install bun)." },
+  "next.install-bun": { terminal: "Install Bun (brew install {formula})." },
   "next.install-diff-viewer": {
-    terminal: "Install Hunk (brew install hunk).",
+    terminal: "Install Hunk (brew install {formula}).",
   },
   "next.resolve-required": { terminal: "Resolve the missing required setup items." },
   "progress.start": { terminal: "Applying: {label}" },
