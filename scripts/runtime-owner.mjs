@@ -11,10 +11,12 @@ import {
   readFile,
   realpath,
   rename,
+  rm,
   stat,
   unlink,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
@@ -31,6 +33,8 @@ const runtimeOwnerScriptPath = fileURLToPath(import.meta.url);
 
 const AbsolutePathSchema = z.string().min(1).refine(isAbsolute, "Expected an absolute path.");
 const ProcessStartIdentitySchema = z.string().min(1);
+/** Strict public identifier for one registered disposable runtime. */
+export const DisposableRuntimeIdSchema = z.string().regex(/^run_[0-9a-f-]{36}$/i);
 const RuntimeRoleSchema = z.enum(["native-hmr", "setup-guided-e2e", "binary-smoke"]);
 const UiRunIdSchema = z.string().regex(/^ui_[0-9a-f-]{36}$/i);
 const CorrelationSchema = z
@@ -74,6 +78,7 @@ const ShutdownReasonSchema = z.enum([
   "signal",
   "terminal-loss",
   "orphan-recovery",
+  "operator-prune",
 ]);
 const RuntimeStateSchema = z
   .object({
@@ -88,7 +93,7 @@ export const DisposableRuntimeOwnerRecordSchema = z
   .object({
     schemaVersion: z.literal(SCHEMA_VERSION),
     generation: z.number().int().nonnegative(),
-    runtimeId: z.string().regex(/^run_[0-9a-f-]{36}$/i),
+    runtimeId: DisposableRuntimeIdSchema,
     role: RuntimeRoleSchema,
     disposition: z.literal("disposable"),
     runtimeKey: z.string().regex(/^[0-9a-f]{64}$/),
@@ -141,6 +146,7 @@ const RuntimeLifecycleEventNameSchema = z.enum([
   "runtime.orphan.detected",
   "runtime.orphan.recovered",
   "runtime.owner.retired",
+  "runtime.prune.applied",
 ]);
 
 export const RuntimeLifecycleEventSchema = z
@@ -153,7 +159,7 @@ export const RuntimeLifecycleEventSchema = z
     spanId: z.string().min(1),
     attributes: z
       .object({
-        runtimeId: z.string().regex(/^run_[0-9a-f-]{36}$/i),
+        runtimeId: DisposableRuntimeIdSchema,
         role: RuntimeRoleSchema,
         disposition: z.literal("disposable"),
         runtimeKey: z.string().regex(/^[0-9a-f]{64}$/),
@@ -172,6 +178,11 @@ export const RuntimeLifecycleEventSchema = z
         durationMs: z.number().int().nonnegative().optional(),
         memberCount: z.number().int().nonnegative().optional(),
         refusalCode: z.string().min(1).optional(),
+        planDigest: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/)
+          .optional(),
+        pruneAction: z.enum(["terminate-and-retire", "retire-record"]).optional(),
       })
       .strict(),
   })
@@ -220,15 +231,32 @@ const OwnedRuntimeChildInputSchema = z
   .object({
     role: RuntimeRoleSchema,
     stateDir: AbsolutePathSchema,
-    runtimeId: z.string().regex(/^run_[0-9a-f-]{36}$/i),
+    runtimeId: DisposableRuntimeIdSchema,
   })
   .strict();
+const ExactRuntimePruneInputSchema = z
+  .object({
+    stateDir: AbsolutePathSchema,
+    runtimeId: DisposableRuntimeIdSchema,
+    planDigest: z.string().regex(/^[0-9a-f]{64}$/),
+    record: DisposableRuntimeOwnerRecordSchema,
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (input.runtimeId !== input.record.runtimeId) {
+      context.addIssue({ code: "custom", message: "Prune runtime identities do not match." });
+    }
+    if (runtimeOwnerRecordDirectory(input.stateDir) !== input.record.recordRoot) {
+      context.addIssue({ code: "custom", message: "Prune owner directories do not match." });
+    }
+  });
 
 export class RuntimeOwnerError extends Error {
   constructor(code, message, options = {}) {
     super(message, options);
     this.name = "RuntimeOwnerError";
     this.code = code;
+    if (options.exitCode !== undefined) this.exitCode = options.exitCode;
   }
 }
 
@@ -237,7 +265,7 @@ export function runtimeOwnerRecordDirectory(stateDir) {
   return join(resolve(stateDir), "run", OWNER_DIRECTORY_NAME, OWNER_DIRECTORY_VERSION);
 }
 
-/** Inspect disposable owner records without changing records, processes, or runtime roots. */
+/** Build shared read-only owner evidence for runtime inventory and verified prune planning. */
 export async function inspectDisposableRuntimeOwners(stateDir) {
   const recordDirectory = runtimeOwnerRecordDirectory(stateDir);
   let paths;
@@ -276,7 +304,10 @@ export async function inspectDisposableRuntimeOwners(stateDir) {
           .at(-1),
       });
     } catch (cause) {
-      records.push({ refusalCode: runtimeOwnerErrorCode(cause) });
+      records.push({
+        runtimeId: basename(path, ".json"),
+        refusalCode: runtimeOwnerErrorCode(cause),
+      });
     }
   }
 
@@ -287,6 +318,14 @@ export async function inspectDisposableRuntimeOwners(stateDir) {
     lifecycle: lifecycle.events,
     ...(lifecycle.refusalCode === undefined ? {} : { refusalCode: lifecycle.refusalCode }),
   };
+}
+
+/** Read current PID, process-group, and OS-start evidence without authorizing a signal. */
+export function inspectRuntimeProcessIdentity(pid) {
+  const osStartTime = processStartIdentity(pid);
+  const pgid = processGroupId(pid);
+  if (osStartTime === undefined || pgid === undefined) return { state: "unavailable", pid };
+  return { state: "available", pid, pgid, osStartTime };
 }
 
 /** Verify that the current process belongs to the exact active runtime owner record. */
@@ -513,6 +552,175 @@ export async function runOwnedDisposableRuntime(rawInput) {
   }
 }
 
+/**
+ * Apply one digest-bound prune while reusing the runtime lock and exact group cleanup.
+ * The caller must revalidate redacted plan and protected-runtime evidence at each callback.
+ */
+export async function applyVerifiedDisposableRuntimePrune(rawInput, revalidate) {
+  assertSupportedPlatform();
+  const input = ExactRuntimePruneInputSchema.parse(rawInput);
+  const ownerStartTime = processStartIdentity(process.pid);
+  if (ownerStartTime === undefined) {
+    throw new RuntimeOwnerError(
+      "RUNTIME_OWNER_IDENTITY_UNAVAILABLE",
+      "Could not establish the runtime prune owner's OS start identity.",
+    );
+  }
+
+  const emitter = createLifecycleEmitter(join(input.stateDir, "logs", "cli.jsonl"));
+  const signals = createSignalWaiter();
+  const lifecycleExtra = { planDigest: input.planDigest };
+  let lock;
+  let record = input.record;
+
+  try {
+    lock = await acquireRuntimeLock(
+      {
+        recordDirectory: record.recordRoot,
+        runtimeKey: record.runtimeKey,
+        owner: { osStartTime: ownerStartTime },
+      },
+      signals,
+    );
+    if (signals.signal !== undefined) throw pruneInterrupted(signals.signal);
+
+    record = await readExactCurrentRecord(record);
+    let processGroup = await inspectPruneCandidate(record);
+    await revalidate({ stage: "before-mutation", record, processGroup });
+    if (signals.signal !== undefined) throw pruneInterrupted(signals.signal);
+
+    // Bind the first record mutation to evidence refreshed after the potentially slow probes.
+    record = await readExactCurrentRecord(record);
+    processGroup = await inspectPruneCandidate(record);
+    const action = processGroup.kind === "exact" ? "terminate-and-retire" : "retire-record";
+    if (signals.signal !== undefined) throw pruneInterrupted(signals.signal);
+
+    if (processGroup.kind === "exact") {
+      record = await requestRecordShutdown(
+        record,
+        emitter,
+        "operator-prune",
+        undefined,
+        lifecycleExtra,
+      );
+      const cleanup = await cleanupRecordedGroup(record, emitter, {
+        retire: false,
+        lifecycleExtra,
+        revalidate: async (context) => {
+          await revalidate(context);
+          if (signals.signal !== undefined) throw pruneInterrupted(signals.signal);
+        },
+      });
+      if (!cleanup.completed) {
+        if (cleanup.code === "RUNTIME_PRUNE_INTERRUPTED" && signals.signal !== undefined) {
+          throw pruneInterrupted(signals.signal);
+        }
+        throw new RuntimeOwnerError(
+          cleanup.code,
+          "Verified runtime prune cleanup was refused or failed.",
+        );
+      }
+      record = cleanup.record;
+    }
+
+    if (signals.signal !== undefined && action === "retire-record") {
+      throw pruneInterrupted(signals.signal);
+    }
+    await revalidate({
+      stage: "before-root-cleanup",
+      record,
+      processGroup: { kind: "absent", members: [] },
+    });
+    record = await readExactCurrentRecord(record);
+    try {
+      await removePruneCleanupRoots(record);
+    } catch (cause) {
+      const refusalCode =
+        cause instanceof RuntimeOwnerError ? cause.code : "RUNTIME_PRUNE_ROOT_CLEANUP_FAILED";
+      if (record.processGroup !== undefined) {
+        try {
+          record = await setRecordState(record, {
+            phase: "cleanup-failed",
+            reason: "operator-prune",
+            refusalCode,
+          });
+        } catch {
+          // Retain the last exact record when failure-state publication itself is uncertain.
+        }
+      }
+      await emitLifecycle(emitter, record, "runtime.cleanup.failed", "error", {
+        ...lifecycleExtra,
+        refusalCode,
+      });
+      throw cause;
+    }
+
+    if (record.processGroup === undefined) {
+      await retireRecord(record);
+    } else {
+      record = await setRecordState(record, {
+        phase: "retiring",
+        reason: "operator-prune",
+      });
+      await retireRecord(record);
+    }
+    await emitLifecycle(emitter, record, "runtime.owner.retired", "info", lifecycleExtra);
+
+    await releaseRuntimeLock(lock);
+    lock = undefined;
+    await emitLifecycle(emitter, record, "runtime.prune.applied", "info", {
+      ...lifecycleExtra,
+      pruneAction: action,
+    });
+    return {
+      applied: true,
+      runtimeId: record.runtimeId,
+      planDigest: input.planDigest,
+      action,
+      ...(signals.signal === undefined
+        ? { exitCode: 0 }
+        : { exitCode: signalExitCode(signals.signal), signal: signals.signal }),
+    };
+  } finally {
+    signals.dispose();
+    if (lock !== undefined) await releaseRuntimeLock(lock).catch(() => {});
+  }
+}
+
+async function inspectPruneCandidate(record) {
+  const ownerIdentity = await inspectOwnerIdentity(record.owner);
+  if (ownerIdentity === "exact") {
+    throw new RuntimeOwnerError(
+      "RUNTIME_PRUNE_OWNER_ACTIVE",
+      "The selected disposable runtime owner is still active.",
+    );
+  }
+  if (ownerIdentity !== "absent") {
+    throw new RuntimeOwnerError(
+      "RUNTIME_PRUNE_OWNER_AMBIGUOUS",
+      "The selected disposable runtime owner identity is unavailable or changed.",
+    );
+  }
+
+  const processGroup =
+    record.processGroup === undefined
+      ? { kind: "unstarted", members: [] }
+      : await inspectGroupIdentity(record.processGroup, record.runtimeId);
+  if (!["exact", "absent", "unstarted"].includes(processGroup.kind)) {
+    throw new RuntimeOwnerError(
+      "RUNTIME_PRUNE_GROUP_AMBIGUOUS",
+      "The selected disposable process group is unavailable or changed.",
+    );
+  }
+  return processGroup;
+}
+
+function pruneInterrupted(signal) {
+  return new RuntimeOwnerError("RUNTIME_PRUNE_INTERRUPTED", "Runtime pruning was interrupted.", {
+    exitCode: signalExitCode(signal),
+  });
+}
+
 async function createRuntimeContext(input) {
   const checkoutRoot = await realpath(input.checkoutRoot);
   const checkoutStat = await stat(checkoutRoot);
@@ -628,7 +836,7 @@ async function setRecordState(record, state, processGroup = record.processGroup)
   return next;
 }
 
-async function requestRecordShutdown(record, emitter, reason, signal) {
+async function requestRecordShutdown(record, emitter, reason, signal, lifecycleExtra = {}) {
   const state = {
     phase: "shutdown-requested",
     reason,
@@ -638,6 +846,7 @@ async function requestRecordShutdown(record, emitter, reason, signal) {
   await emitLifecycle(emitter, next, "runtime.shutdown.requested", "info", {
     reason,
     ...(signal === undefined ? {} : { signal }),
+    ...lifecycleExtra,
   });
   return next;
 }
@@ -717,8 +926,9 @@ async function captureHelperIdentity(pid, runtimeId, processToken) {
   return identity;
 }
 
-async function cleanupRecordedGroup(initialRecord, emitter) {
+async function cleanupRecordedGroup(initialRecord, emitter, options = {}) {
   const startedAt = Date.now();
+  const lifecycleExtra = options.lifecycleExtra ?? {};
   let record = initialRecord;
   try {
     record = await setRecordState(record, {
@@ -729,30 +939,34 @@ async function cleanupRecordedGroup(initialRecord, emitter) {
     await emitLifecycle(emitter, record, "runtime.cleanup.started", "info", {
       ...(record.state.reason === undefined ? {} : { reason: record.state.reason }),
       ...(record.state.signal === undefined ? {} : { signal: record.state.signal }),
+      ...lifecycleExtra,
     });
     const identity = await inspectGroupIdentity(record.processGroup, record.runtimeId);
     if (identity.kind === "absent") {
-      return completeCleanup(record, emitter, startedAt, 0);
+      return completeCleanup(record, emitter, startedAt, 0, options);
     }
     if (identity.kind !== "exact") {
-      return refuseCleanup(record, emitter, startedAt, identity.code);
+      return refuseCleanup(record, emitter, startedAt, identity.code, lifecycleExtra);
     }
+    await options.revalidate?.({ stage: "before-term", record, processGroup: identity });
     signalGroup(record.processGroup.pgid, "SIGTERM");
     let members = await waitForGroupExit(record.processGroup.pgid, TERM_GRACE_MS);
     if (members.length === 0) {
-      return completeCleanup(record, emitter, startedAt, 0);
+      return completeCleanup(record, emitter, startedAt, 0, options);
     }
 
     // Escalation uses fresh record and leader evidence so stale ownership can never authorize KILL.
     record = await readExactCurrentRecord(record);
     const revalidated = await inspectGroupIdentity(record.processGroup, record.runtimeId);
     if (revalidated.kind !== "exact") {
-      return refuseCleanup(record, emitter, startedAt, revalidated.code);
+      return refuseCleanup(record, emitter, startedAt, revalidated.code, lifecycleExtra);
     }
+    await options.revalidate?.({ stage: "before-kill", record, processGroup: revalidated });
     await emitLifecycle(emitter, record, "runtime.cleanup.escalated", "warn", {
       signal: "SIGKILL",
       memberCount: members.length,
       durationMs: Date.now() - startedAt,
+      ...lifecycleExtra,
     });
     signalGroup(record.processGroup.pgid, "SIGKILL");
     members = await waitForGroupExit(record.processGroup.pgid, KILL_CONFIRM_MS);
@@ -766,11 +980,15 @@ async function cleanupRecordedGroup(initialRecord, emitter) {
         durationMs: Date.now() - startedAt,
         memberCount: members.length,
         refusalCode: "group-survived-sigkill",
+        ...lifecycleExtra,
       });
       return { completed: false, code: "RUNTIME_OWNER_GROUP_SURVIVED" };
     }
-    return completeCleanup(record, emitter, startedAt, 0);
+    return completeCleanup(record, emitter, startedAt, 0, options);
   } catch (cause) {
+    if (cause instanceof RuntimeOwnerError && cause.code.startsWith("RUNTIME_PRUNE_")) {
+      return refuseCleanup(record, emitter, startedAt, cause.code, lifecycleExtra);
+    }
     try {
       record = await setRecordState(record, {
         phase: "cleanup-failed",
@@ -780,6 +998,7 @@ async function cleanupRecordedGroup(initialRecord, emitter) {
       await emitLifecycle(emitter, record, "runtime.cleanup.failed", "error", {
         durationMs: Date.now() - startedAt,
         refusalCode: "cleanup-evidence-unavailable",
+        ...lifecycleExtra,
       });
     } catch {
       // Retaining the last strict record is safer than replacing uncertain ownership evidence.
@@ -791,11 +1010,13 @@ async function cleanupRecordedGroup(initialRecord, emitter) {
   }
 }
 
-async function completeCleanup(record, emitter, startedAt, memberCount) {
+async function completeCleanup(record, emitter, startedAt, memberCount, options = {}) {
   await emitLifecycle(emitter, record, "runtime.cleanup.completed", "info", {
     durationMs: Date.now() - startedAt,
     memberCount,
+    ...(options.lifecycleExtra ?? {}),
   });
+  if (options.retire === false) return { completed: true, record };
   const retiring = await setRecordState(record, {
     phase: "retiring",
     ...(record.state.reason === undefined ? {} : { reason: record.state.reason }),
@@ -805,7 +1026,7 @@ async function completeCleanup(record, emitter, startedAt, memberCount) {
   return { completed: true };
 }
 
-async function refuseCleanup(record, emitter, startedAt, refusalCode) {
+async function refuseCleanup(record, emitter, startedAt, refusalCode, lifecycleExtra = {}) {
   let refused = record;
   try {
     refused = await setRecordState(record, {
@@ -819,8 +1040,12 @@ async function refuseCleanup(record, emitter, startedAt, refusalCode) {
   await emitLifecycle(emitter, refused, "runtime.cleanup.refused", "warn", {
     durationMs: Date.now() - startedAt,
     refusalCode,
+    ...lifecycleExtra,
   });
-  return { completed: false, code: "RUNTIME_OWNER_CLEANUP_REFUSED" };
+  return {
+    completed: false,
+    code: refusalCode.startsWith("RUNTIME_PRUNE_") ? refusalCode : "RUNTIME_OWNER_CLEANUP_REFUSED",
+  };
 }
 
 async function recoverMatchingOrphans(context, emitter) {
@@ -1392,6 +1617,83 @@ async function fileIdentity(path) {
     device: String(metadata.dev),
     inode: String(metadata.ino),
   };
+}
+
+async function removePruneCleanupRoots(record) {
+  const cleanupRoots = [...(record.cleanupRoots ?? [])].sort(
+    (left, right) => right.path.length - left.path.length,
+  );
+  if (cleanupRoots.length === 0) return;
+  if (record.role !== "binary-smoke") {
+    throw new RuntimeOwnerError(
+      "RUNTIME_PRUNE_CLEANUP_ROOT_REFUSED",
+      "Only binary-smoke runtimes may register recursive prune roots.",
+    );
+  }
+
+  const processGroup =
+    record.processGroup === undefined
+      ? { kind: "unstarted" }
+      : await inspectGroupIdentity(record.processGroup, record.runtimeId);
+  if (processGroup.kind !== "absent" && processGroup.kind !== "unstarted") {
+    throw new RuntimeOwnerError(
+      "RUNTIME_PRUNE_GROUP_SURVIVED",
+      "A disposable process group still exists before root cleanup.",
+    );
+  }
+
+  const temporaryRoot = await realpath(tmpdir());
+  for (const expected of cleanupRoots) {
+    const relativeToTemp = relative(temporaryRoot, expected.path);
+    if (
+      relativeToTemp.length === 0 ||
+      relativeToTemp.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+      relativeToTemp === ".." ||
+      isAbsolute(relativeToTemp) ||
+      pathContains(expected.path, record.checkout.root) ||
+      pathContains(expected.path, record.recordRoot)
+    ) {
+      throw new RuntimeOwnerError(
+        "RUNTIME_PRUNE_CLEANUP_ROOT_REFUSED",
+        "A registered cleanup root is outside the disposable temporary-runtime boundary.",
+      );
+    }
+
+    let metadata;
+    try {
+      metadata = await lstat(expected.path);
+    } catch (cause) {
+      if (cause?.code === "ENOENT" && record.state.reason === "operator-prune") continue;
+      throw cause;
+    }
+    const actual = await fileIdentity(expected.path);
+    if (
+      !metadata.isDirectory() ||
+      metadata.isSymbolicLink() ||
+      !fileIdentityMatches(actual, expected)
+    ) {
+      throw new RuntimeOwnerError(
+        "RUNTIME_PRUNE_CLEANUP_ROOT_CHANGED",
+        "A registered cleanup root changed before deletion.",
+      );
+    }
+    await rm(expected.path, { recursive: true });
+    try {
+      await lstat(expected.path);
+    } catch (cause) {
+      if (cause?.code === "ENOENT") continue;
+      throw cause;
+    }
+    throw new RuntimeOwnerError(
+      "RUNTIME_PRUNE_CLEANUP_ROOT_SURVIVED",
+      "A registered cleanup root survived deletion.",
+    );
+  }
+}
+
+function pathContains(root, candidate) {
+  const value = relative(root, candidate);
+  return value.length === 0 || (!value.startsWith("..") && !isAbsolute(value));
 }
 
 function createLifecycleEmitter(logPath) {

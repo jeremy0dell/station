@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { inspectDisposableRuntimeOwners } from "../runtime-owner.mjs";
+import { z } from "zod";
+import {
+  inspectDisposableRuntimeOwners,
+  inspectRuntimeProcessIdentity,
+} from "../runtime-owner.mjs";
 
 const lifecycleLog = "logs/cli.jsonl";
 
@@ -50,10 +55,11 @@ export function parseRuntimeInventoryArgs(args) {
 }
 
 export async function buildRuntimeInventory(options = {}) {
-  const stateDir = options.stateDir ?? (await resolveDefaultStateDir());
+  const stateDir = options.stateDir ?? (await resolveRuntimeStateDir());
   const owners = await inspectDisposableRuntimeOwners(stateDir);
   const runtimeRecords = owners.records.filter((entry) => entry.record !== undefined);
-  const host = await inspectRegisteredHostPtys(runtimeRecords);
+  const hostEvidence = await inspectRegisteredRuntimeHosts(runtimeRecords);
+  const host = projectRuntimeHosts(hostEvidence);
   return {
     mode: "read-only",
     ownerRecords: {
@@ -143,7 +149,8 @@ function projectRoots(roots) {
   return { count: roots.length, key: hashValues(roots) };
 }
 
-async function inspectRegisteredHostPtys(records) {
+/** Inspect every registered Host socket and live PTY without changing runtime state. */
+export async function inspectRegisteredRuntimeHosts(records) {
   const socketPaths = [
     ...new Set(
       records.flatMap(({ record }) =>
@@ -151,19 +158,58 @@ async function inspectRegisteredHostPtys(records) {
       ),
     ),
   ];
-  if (socketPaths.length === 0)
-    return { state: "unavailable", refusalCode: "HOST_SOCKET_UNREGISTERED" };
-  let createStationHostClient;
-  try {
-    ({ createStationHostClient } = await import("../../packages/station-host/dist/index.js"));
-  } catch {
-    return { state: "unavailable", refusalCode: "HOST_CLIENT_UNAVAILABLE" };
+  if (socketPaths.length === 0) {
+    return { state: "unavailable", hosts: [], refusalCode: "HOST_SOCKET_UNREGISTERED" };
   }
-  let refusalCode = "HOST_UNREACHABLE";
+  const hosts = [];
   for (const socketPath of socketPaths) {
+    let metadata;
+    try {
+      metadata = await lstat(socketPath);
+    } catch (cause) {
+      const error = ErrorCodeSchema.safeParse(cause);
+      if (error.success && error.data.code === "ENOENT") {
+        hosts.push({ socketPath, state: "absent" });
+        continue;
+      }
+      hosts.push({ socketPath, state: "refused", refusalCode: "HOST_SOCKET_UNAVAILABLE" });
+      continue;
+    }
+    if (!metadata.isSocket() || metadata.isSymbolicLink()) {
+      hosts.push({ socketPath, state: "refused", refusalCode: "HOST_SOCKET_INSECURE" });
+      continue;
+    }
+
+    let holders;
+    try {
+      const protocol = await import("../../packages/protocol/dist/index.js");
+      holders = protocol.readUnixSocketHolderPids(socketPath);
+    } catch {
+      hosts.push({ socketPath, state: "refused", refusalCode: "HOST_HOLDER_UNAVAILABLE" });
+      continue;
+    }
+    if (holders.length === 0) {
+      hosts.push({
+        socketPath,
+        state: "stale",
+        socketIdentity: `${metadata.dev}:${metadata.ino}`,
+      });
+      continue;
+    }
+    if (holders.length !== 1) {
+      hosts.push({ socketPath, state: "refused", refusalCode: "HOST_HOLDER_AMBIGUOUS" });
+      continue;
+    }
+    const holder = inspectRuntimeProcessIdentity(holders[0]);
+    if (holder.state !== "available") {
+      hosts.push({ socketPath, state: "refused", refusalCode: "HOST_HOLDER_UNAVAILABLE" });
+      continue;
+    }
+
     let probe;
     let client;
     try {
+      const { createStationHostClient } = await import("../../packages/station-host/dist/index.js");
       probe = createStationHostClient({
         socketPath,
         timeoutMs: 1_000,
@@ -176,27 +222,58 @@ async function inspectRegisteredHostPtys(records) {
         expectedBuildVersion: health.buildVersion,
       });
       const ptys = await client.list();
-      return { state: "available", livePtyCount: ptys.filter((pty) => pty.alive).length };
+      const livePtys = ptys
+        .filter((pty) => pty.alive)
+        .map((pty) => inspectRuntimeProcessIdentity(pty.pid));
+      if (livePtys.some((identity) => identity.state !== "available")) {
+        hosts.push({ socketPath, state: "refused", refusalCode: "HOST_PTY_UNAVAILABLE" });
+        continue;
+      }
+      hosts.push({
+        socketPath,
+        state: "available",
+        socketIdentity: `${metadata.dev}:${metadata.ino}`,
+        holder,
+        livePtys,
+      });
     } catch (cause) {
-      refusalCode = hostRefusalCode(cause);
+      hosts.push({ socketPath, state: "refused", refusalCode: hostRefusalCode(cause) });
     } finally {
       probe?.dispose();
       client?.dispose();
     }
   }
-  return { state: "unavailable", refusalCode };
+  const refused = hosts.find((host) => host.state === "refused");
+  return {
+    state: refused === undefined ? "available" : "refused",
+    hosts,
+    ...(refused?.refusalCode === undefined ? {} : { refusalCode: refused.refusalCode }),
+  };
 }
+
+const ErrorCodeSchema = z.object({ code: z.string() }).loose();
 
 function hostRefusalCode(cause) {
-  return cause !== null &&
-    typeof cause === "object" &&
-    "code" in cause &&
-    typeof cause.code === "string"
-    ? cause.code
-    : "HOST_UNREACHABLE";
+  const parsed = ErrorCodeSchema.safeParse(cause);
+  return parsed.success ? parsed.data.code : "HOST_UNREACHABLE";
 }
 
-async function resolveDefaultStateDir() {
+function projectRuntimeHosts(evidence) {
+  if (evidence.state === "unavailable") {
+    return { state: "unavailable", refusalCode: evidence.refusalCode };
+  }
+  if (evidence.state === "refused") {
+    return { state: "unavailable", refusalCode: evidence.refusalCode };
+  }
+  const available = evidence.hosts.filter((host) => host.state === "available");
+  if (available.length === 0) return { state: "unavailable", refusalCode: "HOST_UNREACHABLE" };
+  return {
+    state: "available",
+    livePtyCount: available.reduce((count, host) => count + host.livePtys.length, 0),
+  };
+}
+
+export async function resolveRuntimeStateDir() {
   try {
     const configModule = await import("../../packages/config/dist/index.js");
     const loaded = await configModule.loadConfig();

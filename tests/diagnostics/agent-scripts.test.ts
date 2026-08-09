@@ -1479,6 +1479,9 @@ describe("tui dev script", () => {
     expect(rootPackage.scripts?.["station:runtime-inventory"]).toBe(
       "node scripts/maintenance/runtime-inventory.mjs",
     );
+    expect(rootPackage.scripts?.["station:runtime-prune"]).toBe(
+      "node scripts/maintenance/runtime-prune.mjs",
+    );
     expect(stationPackage.scripts?.dev).toBe("node ../scripts/native-hmr-runner.mjs");
     expect(stationPackage.scripts?.["station:isolated"]).toBe("./scripts/station-isolated.sh");
     expect(stationPackage.scripts?.["station:isolated"]).not.toContain("link:station");
@@ -1490,6 +1493,8 @@ describe("tui dev script", () => {
     const frozenInstall = isolatedScript.indexOf("bun install --frozen-lockfile");
     expect(isolatedScript).toContain('if [ "$COMMAND" = "inventory" ]');
     expect(isolatedScript.indexOf('if [ "$COMMAND" = "inventory" ]')).toBeLessThan(frozenInstall);
+    expect(isolatedScript).toContain('if [ "$COMMAND" = "prune" ]');
+    expect(isolatedScript.indexOf('if [ "$COMMAND" = "prune" ]')).toBeLessThan(frozenInstall);
     expect(frozenInstall).toBeGreaterThan(isolatedScript.indexOf('if [ "$COMMAND" = "stop" ]'));
     expect(frozenInstall).toBeLessThan(isolatedScript.indexOf('mkdir -p "$DS/observer"'));
     expect(frozenInstall).toBeLessThan(isolatedScript.indexOf("observer start 2>&1"));
