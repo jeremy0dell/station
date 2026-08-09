@@ -1,15 +1,13 @@
-import {
-  type ExternalCommandRunner,
-  type RuntimeSafeError,
-  runExternalCommand,
-  safeErrorFromUnknown,
-} from "@station/runtime";
+import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
 import { z } from "zod";
+import { updateErrorFromUnknown } from "./updateError.js";
 
 const repository = "jeremy0dell/station";
 const apiBaseUrl = `https://api.github.com/repos/${repository}/releases`;
 const downloadBaseUrl = `https://github.com/${repository}/releases/download`;
 const apiResponseMaxBytes = 4 * 1024 * 1024;
+const releasesPerPage = 100;
+const maximumReleasePages = 10;
 const githubEnvironment = [
   "GH_TOKEN",
   "GITHUB_TOKEN",
@@ -23,16 +21,11 @@ const releaseTagPattern =
   /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u;
 const ReleaseTimestampSchema = z.string().datetime({ offset: true });
 
-export const nativeBinaryTargets = [
-  "darwin-arm64",
-  "darwin-x64",
-  "linux-arm64",
-  "linux-x64",
-] as const;
+const nativeBinaryTargets = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"] as const;
 
 export type NativeBinaryTarget = (typeof nativeBinaryTargets)[number];
 
-export type NativeReleaseAsset = {
+type NativeReleaseAsset = {
   name: string;
   url: string;
 };
@@ -49,16 +42,17 @@ export type NativeBinaryRelease = {
   };
 };
 
-export type NativeReleaseResolution = {
+type NativeReleaseResolution = {
   current: NativeBinaryRelease;
   latest: NativeBinaryRelease;
 };
 
+/** Resolves the installed release and newest usable Station native release. */
 export interface NativeReleaseDiscovery {
   resolve(input: { currentTag: string; signal?: AbortSignal }): Promise<NativeReleaseResolution>;
 }
 
-export type GithubNativeReleaseDiscoveryDeps = {
+type GithubNativeReleaseDiscoveryDeps = {
   commandRunner?: ExternalCommandRunner;
 };
 
@@ -82,27 +76,29 @@ const GithubReleaseSchema = z
 
 type GithubRelease = z.infer<typeof GithubReleaseSchema>;
 
+/** Creates strict, bounded GitHub release discovery for the installer-binary channel. */
 export function createGithubNativeReleaseDiscovery(
   deps: GithubNativeReleaseDiscoveryDeps = {},
 ): NativeReleaseDiscovery {
   const commandRunner = deps.commandRunner;
   return {
     async resolve(input) {
+      const fetchOptions: { commandRunner?: ExternalCommandRunner; signal?: AbortSignal } = {};
+      if (commandRunner !== undefined) fetchOptions.commandRunner = commandRunner;
+      if (input.signal !== undefined) fetchOptions.signal = input.signal;
+
       let currentBody: string;
-      let releasesBody: string;
+      let firstPageBody: string;
       try {
-        [currentBody, releasesBody] = await Promise.all([
-          fetchGithubJson(`${apiBaseUrl}/tags/${encodeURIComponent(input.currentTag)}`, {
-            ...(commandRunner === undefined ? {} : { commandRunner }),
-            ...(input.signal === undefined ? {} : { signal: input.signal }),
-          }),
-          fetchGithubJson(`${apiBaseUrl}?per_page=100`, {
-            ...(commandRunner === undefined ? {} : { commandRunner }),
-            ...(input.signal === undefined ? {} : { signal: input.signal }),
-          }),
+        [currentBody, firstPageBody] = await Promise.all([
+          fetchGithubJson(
+            `${apiBaseUrl}/tags/${encodeURIComponent(input.currentTag)}`,
+            fetchOptions,
+          ),
+          fetchGithubJson(releasePageUrl(1), fetchOptions),
         ]);
       } catch (error) {
-        throw updateFailure(error, {
+        throw updateErrorFromUnknown(error, {
           code: "UPDATE_RELEASE_DISCOVERY_FAILED",
           message: "Could not read Station release metadata.",
           hint: "Check the network connection and retry the update.",
@@ -110,13 +106,41 @@ export function createGithubNativeReleaseDiscovery(
       }
 
       const current = parseCurrentRelease(currentBody, input.currentTag);
-      const latest = selectLatestCompleteRelease(releasesBody);
-      return { current, latest };
+      const releases: GithubRelease[] = [];
+      let page = 1;
+      let pageBody = firstPageBody;
+      while (true) {
+        const pageValues = parseReleasePage(pageBody, page);
+        for (const value of pageValues) {
+          const candidate = GithubReleaseSchema.safeParse(value);
+          if (candidate.success && isCompletePublishedRelease(candidate.data)) {
+            releases.push(candidate.data);
+          }
+        }
+        if (pageValues.length < releasesPerPage) break;
+        if (page === maximumReleasePages) {
+          throw releaseInvalid(
+            `Station release discovery exceeded ${maximumReleasePages * releasesPerPage} releases.`,
+          );
+        }
+        page += 1;
+        try {
+          pageBody = await fetchGithubJson(releasePageUrl(page), fetchOptions);
+        } catch (error) {
+          throw updateErrorFromUnknown(error, {
+            code: "UPDATE_RELEASE_DISCOVERY_FAILED",
+            message: `Could not read Station release metadata page ${page}.`,
+            hint: "Check the network connection and retry the update.",
+          });
+        }
+      }
+
+      return { current, latest: selectLatestCompleteRelease(releases) };
     },
   };
 }
 
-export function nativeReleaseAssets(tag: string): NativeBinaryRelease["assets"] {
+function nativeReleaseAssets(tag: string): NativeBinaryRelease["assets"] {
   const version = releaseVersion(tag);
   const baseUrl = `${downloadBaseUrl}/${encodeURIComponent(tag)}`;
   const archive = Object.fromEntries(
@@ -157,34 +181,33 @@ export function isCanonicalNativeRelease(release: NativeBinaryRelease): boolean 
 }
 
 function parseCurrentRelease(body: string, expectedTag: string): NativeBinaryRelease {
-  const value = parseJson(body);
-  const parsed = GithubReleaseSchema.safeParse(value);
+  const parsed = GithubReleaseSchema.safeParse(parseJson(body));
   if (!parsed.success) {
     throw releaseInvalid(
       "The installed Station version does not resolve to valid release metadata.",
     );
   }
-  if (parsed.data.tag_name !== expectedTag || parsed.data.draft || !parsed.data.immutable) {
+  if (parsed.data.tag_name !== expectedTag || !isCompletePublishedRelease(parsed.data)) {
     throw releaseInvalid(
-      `Installed Station version '${expectedTag}' is not a published immutable release.`,
+      `Installed Station version '${expectedTag}' is not a complete published immutable release.`,
     );
   }
   return nativeRelease(parsed.data);
 }
 
-function selectLatestCompleteRelease(body: string): NativeBinaryRelease {
-  const value = parseJson(body);
-  const list = z.array(z.unknown()).max(100).safeParse(value);
-  if (!list.success) {
-    throw releaseInvalid("The Station release list has an invalid shape.");
+function parseReleasePage(body: string, page: number): unknown[] {
+  const parsed = z.array(z.unknown()).max(releasesPerPage).safeParse(parseJson(body));
+  if (!parsed.success) {
+    throw releaseInvalid(`Station release metadata page ${page} has an invalid shape.`);
   }
+  return parsed.data;
+}
 
+function selectLatestCompleteRelease(releases: readonly GithubRelease[]): NativeBinaryRelease {
   let selected: GithubRelease | undefined;
-  for (const candidateValue of list.data) {
-    const candidate = GithubReleaseSchema.safeParse(candidateValue);
-    if (!candidate.success || !isCompletePublishedRelease(candidate.data)) continue;
-    if (selected === undefined || compareReleasePublication(candidate.data, selected) > 0) {
-      selected = candidate.data;
+  for (const release of releases) {
+    if (selected === undefined || compareReleasePublication(release, selected) > 0) {
+      selected = release;
     }
   }
   if (selected === undefined) {
@@ -240,6 +263,7 @@ async function fetchGithubJson(
   const input = {
     command: "curl",
     args: [
+      "--disable",
       "--fail",
       "--silent",
       "--show-error",
@@ -265,11 +289,15 @@ async function fetchGithubJson(
   return (await runExternalCommand(input, options.commandRunner)).stdout;
 }
 
+function releasePageUrl(page: number): string {
+  return `${apiBaseUrl}?per_page=${releasesPerPage}&page=${page}`;
+}
+
 function parseJson(body: string): unknown {
   try {
     return JSON.parse(body);
   } catch (error) {
-    throw updateFailure(error, {
+    throw updateErrorFromUnknown(error, {
       code: "UPDATE_RELEASE_INVALID",
       message: "Station release metadata is not valid JSON.",
     });
@@ -284,34 +312,10 @@ function hasInvalidNumericPrerelease(prerelease: string | undefined): boolean {
   );
 }
 
-function releaseInvalid(message: string): RuntimeSafeError {
-  return {
-    tag: "UpdateError",
+function releaseInvalid(message: string) {
+  return updateErrorFromUnknown(undefined, {
     code: "UPDATE_RELEASE_INVALID",
     message,
     hint: "Wait for a complete Station release or install an exact known-good release manually.",
-  };
-}
-
-function updateFailure(
-  error: unknown,
-  fallback: { code: string; message: string; hint?: string },
-): RuntimeSafeError {
-  const cause = safeErrorFromUnknown(error, {
-    tag: "UpdateError",
-    code: fallback.code,
-    message: fallback.message,
-    ...(fallback.hint === undefined ? {} : { hint: fallback.hint }),
   });
-  return {
-    tag: "UpdateError",
-    code: fallback.code,
-    message: fallback.message,
-    ...(cause.hint === undefined && fallback.hint === undefined
-      ? {}
-      : { hint: cause.hint ?? fallback.hint }),
-    ...(cause.diagnosticDetails === undefined
-      ? {}
-      : { diagnosticDetails: cause.diagnosticDetails }),
-  };
 }

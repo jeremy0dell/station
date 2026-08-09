@@ -57,6 +57,50 @@ export function isSafeError(value: unknown): value is RuntimeSafeError {
   return RuntimeSafeErrorSchema.safeParse(value).success;
 }
 
+/**
+ * Normalizes raw, nested, and already-shaped cancellation failures without changing an
+ * existing SafeError cancellation code or diagnostic evidence.
+ */
+export function normalizeCancellationError(error: unknown): RuntimeSafeError | undefined {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+
+  while (current !== null && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    if (isSafeError(current)) {
+      if (
+        current.tag === "CancellationError" ||
+        current.code === "ABORT_ERR" ||
+        current.code === "EXTERNAL_COMMAND_ABORTED"
+      ) {
+        return safeErrorFromUnknown(current, {
+          tag: "CancellationError",
+          code: "ABORT_ERR",
+          message: "Operation was cancelled.",
+        });
+      }
+    } else {
+      const name = runtimeErrorProperty(current, "name");
+      const code = runtimeErrorProperty(current, "code");
+      if (
+        name === "AbortError" ||
+        name === "CancellationError" ||
+        code === "ABORT_ERR" ||
+        code === "EXTERNAL_COMMAND_ABORTED"
+      ) {
+        return {
+          tag: "CancellationError",
+          code: code === "EXTERNAL_COMMAND_ABORTED" ? code : "ABORT_ERR",
+          message: "Operation was cancelled.",
+        };
+      }
+    }
+    current = runtimeErrorProperty(current, "cause");
+  }
+
+  return undefined;
+}
+
 export function safeErrorFromUnknown(
   error: unknown,
   fallback: RuntimeSafeErrorFallback,

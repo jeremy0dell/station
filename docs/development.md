@@ -447,7 +447,9 @@ gates after each reviewed cleanup slice.
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
 public `curl` downloads and authenticated draft responses in temporary homes,
-including startup-file
+including first-argument `--disable` isolation, receipt creation and inode
+preservation, strict expected-installation parsing, binary/launcher/receipt
+identity races, startup-file
 non-interaction, safely evaluated minimal-PATH guidance, physical launcher
 resolution, and normalized-colon preflight coverage. It is deterministic, does
 not download a real release, and does not read or modify real shell startup
@@ -455,7 +457,12 @@ files. The path-selected installer CI job runs it once. On a heavily contended l
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
 The release workflow builds and smokes the compiled binary on all four native
-targets, then installs each actual draft asset with real platform utilities.
+targets, then installs each actual draft asset with real platform utilities and
+requires the exact receipt. The focused
+`apps/cli/test/integration/installer-binary-update.test.ts` fixture invokes the
+real `scripts/install.sh` against fake exact-tag assets to prove atomic binary
+replacement, physical `--version` execution, stable launchers and receipt, and
+invocation-boundary race refusal.
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under

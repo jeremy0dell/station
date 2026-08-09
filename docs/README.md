@@ -26,7 +26,7 @@ Choose the path that matches what you want to do:
 Install the current release:
 
 ```sh
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh | sh
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh | sh
 ```
 
 Then complete and verify setup:
