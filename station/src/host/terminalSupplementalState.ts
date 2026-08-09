@@ -23,10 +23,11 @@ import { MouseTrackingDecMode } from "../terminal/protocol/mouse.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
 import {
   isUnsupportedBlankXtermAttribute,
-  isUnsupportedXtermCellAttribute,
   isUnsupportedXtermAttribute,
   type PinnedXtermAttributes,
   type PinnedXtermCellAttributes,
+  type UnsupportedXtermCellAttributeDetail,
+  unsupportedXtermCellAttributeDetail,
   xtermAttributeSgr,
   xtermBackgroundKey,
   xtermBackgroundSgr,
@@ -85,14 +86,12 @@ export type TerminalSnapshotUnsupportedStateDetail =
   | "cell-attributes"
   | "current-attributes"
   | "custom-tabs"
-  | "wrap-pending-cell";
+  | "wrap-pending-cell"
+  | UnsupportedXtermCellAttributeDetail;
 
 /** Exactness failure carrying only a stable, content-free diagnostic detail. */
 export class TerminalSnapshotUnsupportedStateError extends Error {
-  constructor(
-    readonly detail: TerminalSnapshotUnsupportedStateDetail,
-    message: string,
-  ) {
+  constructor(readonly detail: TerminalSnapshotUnsupportedStateDetail, message: string) {
     super(message);
   }
 }
@@ -558,40 +557,43 @@ export class TerminalSupplementalState {
     }
     for (const bufferType of buffers) {
       this.#assertDefaultTabs(bufferType);
-      const buffer = this.#buffer(bufferType);
-      const reusable = buffer.getNullCell();
-      for (let row = 0; row < buffer.length; row += 1) {
-        const line = buffer.getLine(row);
-        if (
-          line?.isWrapped &&
-          !hasNaturallySerializableWrap(buffer.getLine(row - 1), line)
-        ) {
-          throw new TerminalSnapshotUnsupportedStateError(
-            "nonserializable-wrap",
-            `Cannot restore a non-serializable wrapped ${bufferType} line at row ${row + 1}.`,
-          );
-        }
-        for (let column = 0; column < this.terminal.cols; column += 1) {
-          const cell = line?.getCell(column, reusable) as
-            | PinnedXtermCellAttributes
-            | undefined;
-          if (
-            cell !== undefined &&
-            (isUnsupportedXtermCellAttribute(cell) || isUnsupportedBlankXtermAttribute(cell))
-          ) {
-            throw new TerminalSnapshotUnsupportedStateError(
-              "cell-attributes",
-              `Cannot restore unsupported ${bufferType} attributes at row ${row + 1}, column ${column + 1}.`,
-            );
-          }
-        }
-      }
+      this.#assertSerializableBuffer(bufferType);
     }
     if (isUnsupportedXtermAttribute(pinned._core._inputHandler._curAttrData)) {
       throw new TerminalSnapshotUnsupportedStateError(
         "current-attributes",
         "Cannot restore unsupported current terminal attributes.",
       );
+    }
+  }
+
+  #assertSerializableBuffer(bufferType: BufferType): void {
+    const buffer = this.#buffer(bufferType);
+    const reusable = buffer.getNullCell();
+    for (let row = 0; row < buffer.length; row += 1) {
+      const line = buffer.getLine(row);
+      if (line?.isWrapped && !hasNaturallySerializableWrap(buffer.getLine(row - 1), line)) {
+        throw new TerminalSnapshotUnsupportedStateError(
+          "nonserializable-wrap",
+          `Cannot restore a non-serializable wrapped ${bufferType} line at row ${row + 1}.`,
+        );
+      }
+      if (line === undefined) continue;
+
+      for (let column = 0; column < this.terminal.cols; column += 1) {
+        const cell = line.getCell(column, reusable) as PinnedXtermCellAttributes | undefined;
+        if (cell === undefined) continue;
+
+        const detail =
+          unsupportedXtermCellAttributeDetail(cell) ??
+          (isUnsupportedBlankXtermAttribute(cell) ? "cell-attributes" : undefined);
+        if (detail === undefined) continue;
+
+        throw new TerminalSnapshotUnsupportedStateError(
+          detail,
+          `Cannot restore unsupported ${bufferType} attributes at row ${row + 1}, column ${column + 1}.`,
+        );
+      }
     }
   }
 
