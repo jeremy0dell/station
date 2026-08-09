@@ -47,6 +47,7 @@ export async function loadParkedOrphanManifest(stateDir: string): Promise<PtyHan
         command: park.command,
         cols: park.cols,
         rows: park.rows,
+        ptyInstanceId: park.ptyInstanceId,
         identity: park.identity,
       });
     } catch (error) {

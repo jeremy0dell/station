@@ -18,6 +18,8 @@ export function clampSize(cols: number, rows: number): StationTerminalSize {
 
 export type PtyEntry = {
   ptyId: string;
+  /** Opaque identity retained unchanged for this entry's complete PTY lifetime. */
+  ptyInstanceId: string;
   identity: HostPtyIdentity;
   command: string;
   terminal: StationTerminalProcess;
@@ -36,6 +38,7 @@ export type PtyEntry = {
 /** Everything activation needs beyond what spawn/adoption build per lane. */
 export type PtyEntryInit = {
   ptyId: string;
+  ptyInstanceId: string;
   identity: HostPtyIdentity;
   command: string;
   terminal: StationTerminalProcess;

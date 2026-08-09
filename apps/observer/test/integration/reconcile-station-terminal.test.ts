@@ -383,7 +383,12 @@ function fakeHostClient(over: Partial<StationHostClient> = {}): StationHostClien
       buildVersion: stationBuildInfo().version,
     }),
     stopIfIdle: async () => ({ stopping: true }),
-    spawn: async () => ({ ptyId: "pty-1", pid: 99 }),
+    spawn: async () => ({
+      terminalTargetId: "native:wt-1",
+      ptyId: "pty-1",
+      ptyInstanceId: "instance-pty-1",
+      pid: 99,
+    }),
     write: async () => undefined,
     resize: async () => undefined,
     list: async () => [] as HostListEntry[],
@@ -472,6 +477,7 @@ function hostListEntry(input: {
   return {
     kind: "agent",
     ptyId: input.ptyId,
+    ptyInstanceId: `instance-${input.ptyId}`,
     terminalTargetId: stationTargetId(input.worktree.id),
     worktreeId: input.worktree.id,
     projectId: input.worktree.projectId,

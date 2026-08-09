@@ -19,6 +19,7 @@ function agentEntry(): HostListEntry {
   return {
     kind: "agent",
     ptyId: "pty-1",
+    ptyInstanceId: "instance-1",
     terminalTargetId: "native:wt-42",
     worktreeId: "wt-42",
     projectId: "proj-1",
@@ -58,5 +59,14 @@ describe("buildBootRestorePlan (warm-vs-cold fork)", () => {
       terminalTargetId: "native:wt-42",
       harnessProvider: "claude",
     });
+  });
+
+  it("rejects duplicate live targets instead of cold-restoring or overwriting", async () => {
+    await expect(
+      buildBootRestorePlan(snapshot(), {
+        listHost: async () => [agentEntry(), { ...agentEntry(), ptyId: "pty-2" }],
+        makeHostTerminal,
+      }),
+    ).rejects.toMatchObject({ code: "HOST_TARGET_CONFLICT" });
   });
 });

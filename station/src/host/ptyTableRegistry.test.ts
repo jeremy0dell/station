@@ -27,12 +27,13 @@ const baseParams: HostSpawnParams = {
 
 function handoffEntry(ptyId: string, overrides: Partial<PtyHandoffEntry> = {}): PtyHandoffEntry {
   return {
-    bridgeProtocolVersion: 1,
+    bridgeProtocolVersion: 2,
     bridgePid: 4242,
     controlSocket: `/state/run/pty-bridges/${ptyId}.sock`,
     command: "claude",
     cols: 80,
     rows: 24,
+    ptyInstanceId: `instance-${ptyId}`,
     identity: {
       kind: "agent",
       terminalTargetId: "native:wt-1",
@@ -64,7 +65,7 @@ describe("createPtyTable registry export", () => {
         return created.terminal;
       },
     });
-    const { ptyId } = table.spawn(baseParams);
+    const { ptyId, ptyInstanceId } = table.spawn(baseParams);
     spawned[0]?.scripted.helpers.emitData("exported-output");
 
     const manifest = await table.exportRegistry();
@@ -73,6 +74,7 @@ describe("createPtyTable registry export", () => {
     expect(entry?.bridgePid).toEqual(999);
     expect(entry?.controlSocket).toEqual(join(directory, `${ptyId}.sock`));
     expect(entry?.identity.terminalTargetId).toEqual("native:wt-1");
+    expect(entry?.ptyInstanceId).toEqual(ptyInstanceId);
     expect(entry?.ringComplete).toEqual(true);
     const scrollback = JSON.parse(await readFile(String(entry?.scrollbackRef), "utf8"));
     expect(scrollback.events.some((event: { type: string; data?: string }) =>
@@ -103,7 +105,7 @@ describe("createPtyTable registry export", () => {
 });
 
 describe("createPtyTable registry adoption", () => {
-  function adopterPool(terminals: Map<string, PtyAdoptedTerminal>) {
+  function adopterPool<T extends StationTerminalProcess>(terminals: Map<string, T>) {
     const adoptedTargets: PtyAdoptionTarget[] = [];
     return {
       adoptedTargets,
@@ -113,7 +115,10 @@ describe("createPtyTable registry adoption", () => {
         if (terminal === undefined) {
           throw new Error(`no scripted terminal for ${target.ptyId}`);
         }
-        return terminal;
+        return {
+          ...terminal,
+          releaseToOrphan: terminal.releaseToOrphan ?? (() => false),
+        };
       },
     };
   }
@@ -127,10 +132,16 @@ describe("createPtyTable registry adoption", () => {
     expect(report).toEqual({ adopted: ["pty-3"], failed: [] });
     expect(table.list()[0]).toMatchObject({
       ptyId: "pty-3",
+      ptyInstanceId: "instance-pty-3",
       alive: true,
       terminalTargetId: "native:wt-1",
       cols: 80,
       rows: 24,
+    });
+    expect(pool.adoptedTargets).toHaveLength(1);
+    expect(pool.adoptedTargets[0]).toMatchObject({
+      ptyId: "pty-3",
+      ptyInstanceId: "instance-pty-3",
     });
 
     table.write("pty-3", "forwarded\n");
@@ -158,12 +169,129 @@ describe("createPtyTable registry adoption", () => {
 
     const report = await table.adoptRegistry({
       "pty-1": handoffEntry("pty-1"),
-      "pty-2": handoffEntry("pty-2"),
+      "pty-2": handoffEntry("pty-2", {
+        identity: { ...handoffEntry("pty-2").identity, terminalTargetId: "native:wt-2" },
+      }),
     });
     expect(report.adopted).toEqual(["pty-2"]);
     expect(report.failed).toEqual([{ ptyId: "pty-1", reason: "adopt-failed" }]);
     expect(table.has("pty-1")).toEqual(false);
     expect(table.has("pty-2")).toEqual(true);
+    table.disposeAll();
+  });
+
+  it("re-parks semantic initialization failures and continues later entries", async () => {
+    const failed = createScriptedTerminal({ cols: 80, rows: 24 });
+    const good = createScriptedTerminal({ cols: 80, rows: 24 });
+    let releases = 0;
+    let semanticAttempts = 0;
+    const pool = adopterPool(
+      new Map<string, StationTerminalProcess>([
+        [
+          "pty-1",
+          {
+            ...failed.terminal,
+            releaseToOrphan() {
+              releases += 1;
+              return true;
+            },
+          },
+        ],
+        ["pty-2", good.terminal],
+      ]),
+    );
+    const table = createPtyTable({
+      adoptTerminal: pool.adoptTerminal,
+      createSemanticTerminal: () => {
+        semanticAttempts += 1;
+        if (semanticAttempts === 1) {
+          throw new Error("semantic init failed");
+        }
+        return {
+          write() {},
+          resize() {},
+          capture: async () => [],
+          dispose() {},
+        };
+      },
+    });
+
+    const report = await table.adoptRegistry({
+      "pty-1": handoffEntry("pty-1"),
+      "pty-2": handoffEntry("pty-2", {
+        identity: { ...handoffEntry("pty-2").identity, terminalTargetId: "native:wt-2" },
+      }),
+    });
+
+    expect(report).toEqual({
+      adopted: ["pty-2"],
+      failed: [{ ptyId: "pty-1", reason: "semantic-init-failed" }],
+    });
+    expect(table.list().map(({ ptyId }) => ptyId)).toEqual(["pty-2"]);
+    expect(releases).toBe(1);
+    expect(failed.helpers.isDisposed()).toBe(false);
+    table.disposeAll();
+  });
+
+  it("rolls back adopted subscriptions, re-parks, and continues later entries", async () => {
+    const failed = createScriptedTerminal({ cols: 80, rows: 24 });
+    const good = createScriptedTerminal({ cols: 80, rows: 24 });
+    let releases = 0;
+    let semanticDisposals = 0;
+    let exitSubscriptionAttempts = 0;
+    const pool = adopterPool(
+      new Map<string, StationTerminalProcess>([
+        [
+          "pty-1",
+          {
+            ...failed.terminal,
+            onExit(listener) {
+              exitSubscriptionAttempts += 1;
+              if (exitSubscriptionAttempts === 1) {
+                throw new Error("exit subscription failed");
+              }
+              return failed.terminal.onExit(listener);
+            },
+            releaseToOrphan() {
+              releases += 1;
+              return true;
+            },
+          },
+        ],
+        ["pty-2", good.terminal],
+      ]),
+    );
+    const table = createPtyTable({
+      adoptTerminal: pool.adoptTerminal,
+      createSemanticTerminal: () => ({
+        write() {},
+        resize() {},
+        capture: async () => [],
+        dispose() {
+          semanticDisposals += 1;
+        },
+      }),
+    });
+
+    const report = await table.adoptRegistry({
+      "pty-1": handoffEntry("pty-1"),
+      "pty-2": handoffEntry("pty-2", {
+        identity: { ...handoffEntry("pty-2").identity, terminalTargetId: "native:wt-2" },
+      }),
+    });
+
+    expect(report).toEqual({
+      adopted: ["pty-2"],
+      failed: [{ ptyId: "pty-1", reason: "activation-failed" }],
+    });
+    expect(table.list().map(({ ptyId }) => ptyId)).toEqual(["pty-2"]);
+    expect(releases).toBe(1);
+    expect(failed.helpers.isDisposed()).toBe(false);
+    expect(semanticDisposals).toBe(1);
+
+    const retried = await table.adoptRegistry({ "pty-1": handoffEntry("pty-1") });
+    expect(retried).toEqual({ adopted: ["pty-1"], failed: [] });
+    expect(table.list().map(({ ptyId }) => ptyId).sort()).toEqual(["pty-1", "pty-2"]);
     table.disposeAll();
   });
 
@@ -176,11 +304,26 @@ describe("createPtyTable registry adoption", () => {
     });
     table.spawn(baseParams);
 
-    const report = await table.adoptRegistry({ "pty-1": handoffEntry("pty-1") });
-    expect(report).toEqual({
-      adopted: [],
-      failed: [{ ptyId: "pty-1", reason: "duplicate-pty-id" }],
+    await expect(
+      table.adoptRegistry({ "pty-1": handoffEntry("pty-1") }),
+    ).rejects.toMatchObject({ code: "HOST_TARGET_CONFLICT" });
+    expect(pool.adoptedTargets).toEqual([]);
+    table.disposeAll();
+  });
+
+  it("refuses to shadow a live target before invoking the adopter", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const pool = adopterPool(new Map([["pty-9", scripted.terminal]]));
+    const table = createPtyTable({
+      adoptTerminal: pool.adoptTerminal,
+      createTerminal: () => bridgeScripted().terminal,
     });
+    table.spawn(baseParams);
+
+    await expect(
+      table.adoptRegistry({ "pty-9": handoffEntry("pty-9") }),
+    ).rejects.toMatchObject({ code: "HOST_TARGET_CONFLICT" });
+    expect(pool.adoptedTargets).toEqual([]);
     table.disposeAll();
   });
 
@@ -201,7 +344,12 @@ describe("createPtyTable registry adoption", () => {
   it("marks replay incomplete when the parked backlog evicted output", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const pool = adopterPool(
-      new Map<string, PtyAdoptedTerminal>([["pty-1", { ...scripted.terminal, parkedEvicted: true }]]),
+      new Map<string, PtyAdoptedTerminal>([
+        [
+          "pty-1",
+          { ...scripted.terminal, parkedEvicted: true, releaseToOrphan: () => false },
+        ],
+      ]),
     );
     const table = createPtyTable({ adoptTerminal: pool.adoptTerminal });
     await table.adoptRegistry({ "pty-1": handoffEntry("pty-1") });

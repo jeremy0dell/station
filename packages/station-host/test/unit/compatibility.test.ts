@@ -8,11 +8,11 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("classifyHostCompatibility", () => {
-  it("treats the version 5 request shape as incompatible with version 6", () => {
-    expect(HOST_PROTOCOL_VERSION).toBe(6);
+  it("treats the version 6 request shape as incompatible with version 7", () => {
+    expect(HOST_PROTOCOL_VERSION).toBe(7);
     expect(
       classifyHostCompatibility(
-        { ok: true, protocolVersion: 5, buildVersion: "build-current" },
+        { ok: true, protocolVersion: 6, buildVersion: "build-current" },
         "build-current",
       ),
     ).toEqual({ action: "refuse", reason: "protocol-mismatch" });

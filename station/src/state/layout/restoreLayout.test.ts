@@ -98,6 +98,7 @@ function hostEntry(overrides: Partial<HostListEntry>): HostListEntry {
   return {
     kind: "agent",
     ptyId: "pty-x",
+    ptyInstanceId: "instance-x",
     terminalTargetId: "native:wt-42",
     worktreeId: "wt-42",
     projectId: "proj-1",

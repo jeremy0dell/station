@@ -2,6 +2,7 @@ import {
   type HostAttachAck,
   type HostAttachment,
   type HostFrame,
+  type HostPtyAttachExpectation,
   type StationHostClient,
   StationHostProviderError,
 } from "@station/host";
@@ -19,6 +20,28 @@ import type {
 import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+const PTY_REF = {
+  terminalTargetId: "native:wt-1",
+  ptyId: "pty-1",
+  ptyInstanceId: "instance-1",
+};
+const PTY_IDENTITY = {
+  kind: "agent" as const,
+  terminalTargetId: PTY_REF.terminalTargetId,
+  worktreeId: "wt-1",
+  projectId: "proj-1",
+  sessionId: "ses-1",
+  worktreePath: "/repo/wt-1",
+  harnessProvider: "claude",
+};
+const PTY_EXPECTATION = { ...PTY_IDENTITY, ...PTY_REF };
+const ptyRef = (ptyId: string): HostPtyAttachExpectation => ({
+  ...PTY_IDENTITY,
+  terminalTargetId: `native:${ptyId}`,
+  ptyId,
+  ptyInstanceId: `instance-${ptyId}`,
+});
 
 function deferred<T>() {
   let resolve: (value: T | PromiseLike<T>) => void = () => {};
@@ -109,13 +132,20 @@ function ack(overrides: AckOverrides = {}): HostAttachAck {
   const cols = fields.cols ?? 80;
   const rows = fields.rows ?? 24;
   return {
-    subscribed: true,
-    ptyId: "pty-1",
-    pid: 4242,
+    subscribed: fields.subscribed ?? true,
+    kind: fields.kind ?? PTY_IDENTITY.kind,
+    terminalTargetId: fields.terminalTargetId ?? PTY_REF.terminalTargetId,
+    worktreeId: fields.worktreeId ?? PTY_IDENTITY.worktreeId,
+    projectId: fields.projectId ?? PTY_IDENTITY.projectId,
+    sessionId: fields.sessionId ?? PTY_IDENTITY.sessionId,
+    worktreePath: fields.worktreePath ?? PTY_IDENTITY.worktreePath,
+    harnessProvider: fields.harnessProvider ?? PTY_IDENTITY.harnessProvider,
+    ptyId: fields.ptyId ?? PTY_REF.ptyId,
+    ptyInstanceId: fields.ptyInstanceId ?? PTY_REF.ptyInstanceId,
+    pid: fields.pid ?? 4242,
     cols,
     rows,
-    exited: false,
-    ...fields,
+    exited: fields.exited ?? false,
     replay: replay ?? {
       kind: "raw-complete",
       initialCols: cols,
@@ -154,7 +184,7 @@ function clientForAttach(
     health: async () => ({ ok: true, protocolVersion: 1 }),
     stopIfIdle: async () => ({ stopping: true }),
     ...unusedHandoffClientMethods,
-    spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+    spawn: async () => ({ ...PTY_REF, pid: 4242 }),
     write: async () => undefined,
     resize: async () => undefined,
     list: async () => [],
@@ -170,7 +200,7 @@ function terminalFor(
   let clientDisposed = false;
   const terminal = createHostAttachedTerminal({
     hostSocketPath: "/tmp/unused.sock",
-    ptyId: "pty-1",
+    ptyRef: PTY_EXPECTATION,
     size,
     clientFactory: () =>
       clientForAttach(async () => attachment, () => {
@@ -420,7 +450,7 @@ describe("createHostAttachedTerminal", () => {
     let clientDisposed = false;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         clientForAttach(async () => pendingAttach.promise, () => {
@@ -466,7 +496,7 @@ describe("createHostAttachedTerminal", () => {
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         clientForAttach(async () => {
@@ -504,7 +534,7 @@ function trackingClientFactory(attachment: HostAttachment, tracking: Tracking) {
       ...unusedHandoffClientMethods,
       spawn: async (params: unknown) => {
         tracking.spawns.push(params);
-        return { ptyId: tracking.spawnPtyId, pid: 4242 };
+        return { ...ptyRef(tracking.spawnPtyId), pid: 4242 };
       },
       write: async () => undefined,
       resize: async () => undefined,
@@ -573,7 +603,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     const tracking: Tracking = { spawns: [], closes: [], spawnPtyId: "unused" };
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-reattach",
+      ptyRef: ptyRef("pty-reattach"),
       owned: true,
       size: { cols: 80, rows: 24 },
       clientFactory: trackingClientFactory(ctrl.attachment, tracking),
@@ -592,7 +622,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
       let closerDisposed = false;
       const terminal = createHostAttachedTerminal({
         hostSocketPath: "/tmp/x.sock",
-        ptyId: "pty-close-failure",
+        ptyRef: ptyRef("pty-close-failure"),
         owned: true,
         size: { cols: 80, rows: 24 },
         clientFactory: () => {
@@ -628,7 +658,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     const tracking: Tracking = { spawns: [], closes: [], spawnPtyId: "unused" };
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-agent",
+      ptyRef: ptyRef("pty-agent"),
       size: { cols: 80, rows: 24 },
       clientFactory: trackingClientFactory(ctrl.attachment, tracking),
     });
@@ -688,7 +718,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let clientCreations = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -732,7 +762,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -768,7 +798,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let clientCreations = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -807,7 +837,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let clientCreations = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -902,7 +932,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         clientCreations += 1;
@@ -945,7 +975,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -962,7 +992,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
-          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          spawn: async () => ({ ...PTY_REF, pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
           list: async () => [],
@@ -994,7 +1024,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -1006,7 +1036,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
-          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          spawn: async () => ({ ...PTY_REF, pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
           list: async () => [],
@@ -1039,7 +1069,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -1051,7 +1081,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
-          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          spawn: async () => ({ ...PTY_REF, pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
           list: async () => [],
@@ -1083,7 +1113,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -1095,7 +1125,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
           ...unusedHandoffClientMethods,
-          spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
+          spawn: async () => ({ ...PTY_REF, pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
           list: async () => [],
@@ -1127,16 +1157,18 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     // pane (the exact failure finding 2.2 set out to prevent).
     let clock = 0;
     let attachCalls = 0;
+    const attachedRefs: HostPtyAttachExpectation[] = [];
     let current = controllableAttachment(ack());
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-1",
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       now: () => clock,
       clientFactory: () =>
-        clientForAttach(async () => {
+        clientForAttach(async (ref) => {
           attachCalls += 1;
+          attachedRefs.push({ ...ref });
           current = controllableAttachment(ack());
           return current.attachment;
         }),
@@ -1157,6 +1189,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     }
     expect(exits).toEqual([]); // never killed despite > MAX_ATTACH_ATTEMPTS drops
     expect(attachCalls).toBe(9); // it kept redialing each time
+    expect(attachedRefs).toEqual(Array.from({ length: 9 }, () => PTY_EXPECTATION));
     // The fresh-budget reset computes its preserved 125 ms delay from attempt -1.
     expect(sleeps).toEqual(Array.from({ length: 8 }, () => 125));
     terminal.dispose();
@@ -1167,7 +1200,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     const opened = controllableAttachment(ack());
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-pending",
+      ptyRef: ptyRef("pty-pending"),
       size: { cols: 80, rows: 24 },
       sleep: async () => undefined,
       clientFactory: () =>
@@ -1196,7 +1229,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyId: "pty-pending",
+      ptyRef: ptyRef("pty-pending"),
       size: { cols: 80, rows: 24 },
       sleep: async () => undefined,
       clientFactory: () =>
@@ -1218,6 +1251,8 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
 
   for (const code of [
     "HOST_ATTACH_GONE",
+    "HOST_ATTACHMENT_MISMATCH",
+    "HOST_TARGET_CONFLICT",
     "HOST_SNAPSHOT_FAILED",
     "HOST_VERSION_INCOMPATIBLE",
     "HOST_CLIENT_IDENTITY_MISMATCH",
@@ -1228,7 +1263,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
       let attachCalls = 0;
       const terminal = createHostAttachedTerminal({
         hostSocketPath: "/tmp/x.sock",
-        ptyId: "pty-gone",
+        ptyRef: ptyRef("pty-gone"),
         size: { cols: 80, rows: 24 },
         clientFactory: () =>
           ({
@@ -1240,7 +1275,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             health: async () => ({ ok: true, protocolVersion: 1 }),
             stopIfIdle: async () => ({ stopping: true }),
             ...unusedHandoffClientMethods,
-            spawn: async () => ({ ptyId: "pty-gone", pid: 1 }),
+            spawn: async () => ({ ...ptyRef("pty-gone"), pid: 1 }),
             write: async () => undefined,
             resize: async () => undefined,
             list: async () => [],
@@ -1281,7 +1316,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           spawn: async (params: unknown) => {
             await gate;
             tracking.spawns.push(params);
-            return { ptyId: tracking.spawnPtyId, pid: 1 };
+            return { ...ptyRef(tracking.spawnPtyId), pid: 1 };
           },
           write: async () => undefined,
           resize: async () => undefined,

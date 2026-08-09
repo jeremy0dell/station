@@ -732,13 +732,17 @@ async function runBinarySmoke() {
       () => undefined,
     );
 
-    const spawned = await hostClient.spawn({
+    const ptyIdentity = {
       terminalTargetId: "native:binary-smoke",
       worktreeId: "binary-smoke",
       projectId: "binary-smoke",
       sessionId: "ses_binary_smoke",
       worktreePath: root,
       harnessProvider: "scripted",
+      kind: "agent",
+    };
+    const spawned = await hostClient.spawn({
+      ...ptyIdentity,
       command: "/bin/sh",
       args: [
         "-c",
@@ -750,7 +754,7 @@ async function runBinarySmoke() {
       cols: 80,
       rows: 24,
     });
-    const attachment = await hostClient.attach(spawned.ptyId);
+    const attachment = await hostClient.attach({ ...ptyIdentity, ...spawned });
     if (!ptyOnly) {
       const lowerBuild = orderedSameVersionBuilds?.[0];
       const higherBuild = orderedSameVersionBuilds?.[1];
@@ -1805,13 +1809,17 @@ async function executeStressRound(context) {
     expectedBuildVersion: context.expectedVersion,
   });
   await waitForHost(context.hostClient, hostDiagnostics);
-  context.spawnedPty = await context.hostClient.spawn({
+  const ptyIdentity = {
     terminalTargetId: `native:binary-handoff-stress-${context.round}`,
     worktreeId: `binary-handoff-stress-${context.round}`,
     projectId: "binary-handoff-stress",
     sessionId: `ses_binary_handoff_stress_${context.round}`,
     worktreePath: context.roundRoot,
     harnessProvider: "scripted",
+    kind: "agent",
+  };
+  context.spawnedPty = await context.hostClient.spawn({
+    ...ptyIdentity,
     command: "/bin/sh",
     args: [
       "-c",
@@ -1823,7 +1831,7 @@ async function executeStressRound(context) {
     cols: 80,
     rows: 24,
   });
-  context.attachment = await context.hostClient.attach(context.spawnedPty.ptyId);
+  context.attachment = await context.hostClient.attach({ ...ptyIdentity, ...context.spawnedPty });
   mark("hostPtyReadyMs");
 
   const higherStartup = await runObserverStart(

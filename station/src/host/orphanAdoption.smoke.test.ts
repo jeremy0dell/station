@@ -81,6 +81,7 @@ if (SMOKE) {
       expect(healthy).toEqual(true);
 
       let originalPid = 0;
+      let ptyInstanceId = "";
       const ptyId = "pty-1";
       try {
         const spawned = await control.spawn({
@@ -97,6 +98,7 @@ if (SMOKE) {
           rows: 24,
         });
         expect(spawned.ptyId).toEqual(ptyId);
+        ptyInstanceId = spawned.ptyInstanceId;
         // host.list reports the PTY's child pid once the bridge is ready;
         // until then it carries the bridge pid the spawn result returned.
         await waitForAsync(async () => {
@@ -121,6 +123,7 @@ if (SMOKE) {
       expect(park).toBeDefined();
       expect(park?.pid).toEqual(originalPid);
       expect(park?.exited).toEqual(false);
+      expect(park?.ptyInstanceId).toEqual(ptyInstanceId);
 
       const entry: PtyHandoffEntry = {
         bridgeProtocolVersion: PtyBridgeProtocolVersion,
@@ -129,6 +132,7 @@ if (SMOKE) {
         command: park?.command ?? "/bin/sh",
         cols: park?.cols ?? 80,
         rows: park?.rows ?? 24,
+        ptyInstanceId: park?.ptyInstanceId ?? "missing-instance",
         identity: park?.identity ?? {
           kind: "agent",
           terminalTargetId: "native:kill9",
@@ -150,6 +154,7 @@ if (SMOKE) {
         // The adopted entry is the SAME process that survived the kill.
         const listed = table.list()[0];
         expect(listed?.pid).toEqual(originalPid);
+        expect(listed?.ptyInstanceId).toEqual(ptyInstanceId);
         expect(listed?.alive).toEqual(true);
         expect(listed?.terminalTargetId).toEqual("native:kill9");
 

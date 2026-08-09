@@ -216,7 +216,7 @@ async function startStationMain(
         makeHostTerminal: (entry) => (options) =>
           createHostTerminal({
             hostSocketPath: socket,
-            ptyId: entry.ptyId,
+            ptyRef: entry,
             size: { cols: options.size?.cols ?? 80, rows: options.size?.rows ?? 24 },
             // Reattaching an aux PTY keeps Station's ownership, so closing the pane
             // closes the PTY; an agent reattach stays observer-owned (detach only).

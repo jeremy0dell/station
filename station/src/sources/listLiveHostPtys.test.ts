@@ -22,6 +22,7 @@ function entry(): HostListEntry {
   return {
     kind: "aux",
     ptyId: "pty-1",
+    ptyInstanceId: "instance-1",
     terminalTargetId: "aux:pane-split-0",
     worktreeId: "aux",
     projectId: "aux",

@@ -11,6 +11,7 @@ import { PtyBridgeProtocolVersion } from "@station/contracts";
 import { adoptLocalPtyBridge } from "./ptyBridgeAdoption.js";
 
 const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
+const PTY_INSTANCE_ID = "instance-1";
 
 const gated = (): boolean => {
   if (Bun.env.STATION_PTY_SMOKE !== "1") {
@@ -51,6 +52,7 @@ async function spawnOrphanBridge(
     controlSocketPath: join(dir, "pty-1.sock"),
     parkStatePath: join(dir, "pty-1.park.json"),
     ttlMs,
+    ptyInstanceId: PTY_INSTANCE_ID,
     identity: {
       kind: "agent",
       terminalTargetId: "native:wt-orphan",
@@ -180,7 +182,7 @@ function send(socket: net.Socket, command: object): void {
 async function adoptRaw(socketPath: string): Promise<{ socket: net.Socket; reader: LineCollector }> {
   const socket = await connectControl(socketPath);
   const reader = readLines(socket);
-  send(socket, { type: "adopt" });
+  send(socket, { type: "adopt", ptyInstanceId: PTY_INSTANCE_ID });
   await reader.waitForLine((line) => line.includes('"status"'));
   return { socket, reader };
 }
@@ -280,6 +282,7 @@ describe("localPtyBridge orphan mode", () => {
           controlSocketPath,
           parkStatePath,
           ttlMs: 60_000,
+          ptyInstanceId: PTY_INSTANCE_ID,
           identity: {
             kind: "agent",
             terminalTargetId: "native:wt-owner",
@@ -316,6 +319,7 @@ describe("localPtyBridge orphan mode", () => {
 
       const terminal = await adoptLocalPtyBridge({
         id: "pty-1",
+        ptyInstanceId: PTY_INSTANCE_ID,
         command: "/bin/sh",
         controlSocketPath,
         size: { cols: 80, rows: 24 },
@@ -374,6 +378,48 @@ describe("localPtyBridge orphan mode", () => {
     }
   });
 
+  it("releaseToOrphan re-parks the same child for a later adoption", async () => {
+    if (gated()) return;
+    const spawned = await spawnOrphanBridge("/bin/sh", ["-c", "sleep 30"]);
+    try {
+      await waitForReady(spawned);
+      await park(spawned);
+      const first = await adoptLocalPtyBridge({
+        id: "pty-1",
+        ptyInstanceId: PTY_INSTANCE_ID,
+        command: "/bin/sh",
+        controlSocketPath: spawned.controlSocketPath,
+        size: { cols: 80, rows: 24 },
+      });
+      const childPid = first.pid;
+
+      expect(first.releaseToOrphan()).toBe(true);
+      await waitForAsync(async () => {
+        const probe = await connectControl(spawned.controlSocketPath);
+        const reader = readLines(probe);
+        send(probe, { type: "exit-status" });
+        const line = await reader.waitForLine((candidate) => candidate.includes('"status"'));
+        probe.destroy();
+        return JSON.parse(line).adopted === false;
+      });
+
+      const second = await adoptLocalPtyBridge({
+        id: "pty-1",
+        ptyInstanceId: PTY_INSTANCE_ID,
+        command: "/bin/sh",
+        controlSocketPath: spawned.controlSocketPath,
+        size: { cols: 80, rows: 24 },
+      });
+      expect(second.pid).toBe(childPid);
+      expect(processAlive(childPid)).toBe(true);
+      second.kill();
+      second.dispose();
+      await waitFor(() => !existsSync(spawned.controlSocketPath), 5_000);
+    } finally {
+      await cleanup(spawned);
+    }
+  });
+
   it("refuses a second adopter while the bridge is owned", async () => {
     if (gated()) return;
     const spawned = await spawnOrphanBridge("/bin/sh", ["-c", "sleep 30"]);
@@ -383,7 +429,7 @@ describe("localPtyBridge orphan mode", () => {
       const first = await adoptRaw(spawned.controlSocketPath);
       const second = await connectControl(spawned.controlSocketPath);
       const secondReader = readLines(second);
-      send(second, { type: "adopt" });
+      send(second, { type: "adopt", ptyInstanceId: PTY_INSTANCE_ID });
       const errorLine = await secondReader.waitForLine((line) => line.includes("ALREADY_ADOPTED"));
       expect(JSON.parse(errorLine).type).toEqual("error");
       second.destroy();
@@ -392,6 +438,122 @@ describe("localPtyBridge orphan mode", () => {
       await waitFor(() => !existsSync(spawned.controlSocketPath), 5_000);
     } finally {
       await cleanup(spawned);
+    }
+  });
+
+  it("leaves the bridge parked when an adopter names the wrong PTY instance", async () => {
+    if (gated()) return;
+    const spawned = await spawnOrphanBridge("/bin/sh", ["-c", "sleep 30"]);
+    try {
+      await waitForReady(spawned);
+      await park(spawned);
+
+      const wrong = await connectControl(spawned.controlSocketPath);
+      const wrongReader = readLines(wrong);
+      send(wrong, { type: "adopt", ptyInstanceId: "instance-wrong" });
+      const errorLine = await wrongReader.waitForLine((line) =>
+        line.includes("PTY_INSTANCE_MISMATCH"),
+      );
+      expect(JSON.parse(errorLine)).toMatchObject({
+        type: "error",
+        code: "PTY_INSTANCE_MISMATCH",
+      });
+      wrong.destroy();
+
+      const correct = await adoptRaw(spawned.controlSocketPath);
+      send(correct.socket, { type: "kill" });
+      correct.socket.destroy();
+      await waitFor(() => !existsSync(spawned.controlSocketPath), 5_000);
+    } finally {
+      await cleanup(spawned);
+    }
+  });
+
+  it("leaves the bridge parked after missing or extra adoption fields", async () => {
+    if (gated()) return;
+    const spawned = await spawnOrphanBridge("/bin/sh", ["-c", "sleep 30"]);
+    try {
+      await waitForReady(spawned);
+      await park(spawned);
+
+      for (const command of [
+        { type: "adopt" },
+        { type: "adopt", ptyInstanceId: PTY_INSTANCE_ID, extra: true },
+      ]) {
+        const socket = await connectControl(spawned.controlSocketPath);
+        const reader = readLines(socket);
+        send(socket, command);
+        const error = JSON.parse(
+          await reader.waitForLine((line) => line.includes("INVALID_ADOPT_COMMAND")),
+        );
+        expect(error).toMatchObject({ type: "error", code: "INVALID_ADOPT_COMMAND" });
+        socket.destroy();
+
+        const probe = await connectControl(spawned.controlSocketPath);
+        const probeReader = readLines(probe);
+        send(probe, { type: "exit-status" });
+        const status = JSON.parse(
+          await probeReader.waitForLine((line) => line.includes('"status"')),
+        );
+        expect(status.adopted).toBe(false);
+        probe.destroy();
+      }
+
+      const correct = await adoptRaw(spawned.controlSocketPath);
+      send(correct.socket, { type: "kill" });
+      correct.socket.destroy();
+    } finally {
+      await cleanup(spawned);
+    }
+  });
+
+  it("rejects unsuccessful or malformed adoption acknowledgements", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-invalid-adoption-ack-"));
+    const socketPath = join(dir, "bridge.sock");
+    const baseStatus = {
+      type: "status",
+      bridgeProtocol: PtyBridgeProtocolVersion,
+      ptyInstanceId: PTY_INSTANCE_ID,
+      pid: 123,
+      bridgePid: 456,
+      cols: 80,
+      rows: 24,
+      adopted: true,
+      exited: false,
+      parkedEvicted: false,
+    };
+    const replies: unknown[] = [
+      { ...baseStatus, adopted: false },
+      { ...baseStatus, bridgeProtocol: PtyBridgeProtocolVersion + 1 },
+      { ...baseStatus, ptyInstanceId: "wrong-instance" },
+      { ...baseStatus, extra: true },
+      { type: "status" },
+    ];
+    const server = net.createServer((socket) => {
+      socket.once("data", () => {
+        socket.end(`${JSON.stringify(replies.shift())}\n`);
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        let rejected = false;
+        try {
+          await adoptLocalPtyBridge({
+            id: "pty-1",
+            ptyInstanceId: PTY_INSTANCE_ID,
+            command: "/bin/sh",
+            controlSocketPath: socketPath,
+            size: { cols: 80, rows: 24 },
+          });
+        } catch {
+          rejected = true;
+        }
+        expect(rejected).toBe(true);
+      }
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
@@ -442,6 +604,7 @@ describe("localPtyBridge orphan mode", () => {
 
       const terminal = await adoptLocalPtyBridge({
         id: "pty-1",
+        ptyInstanceId: PTY_INSTANCE_ID,
         command: "/bin/sh",
         controlSocketPath: spawned.controlSocketPath,
         size: { cols: 80, rows: 24 },
@@ -494,7 +657,7 @@ describe("localPtyBridge orphan mode", () => {
       await waitForReady(spawned);
       await park(spawned);
       const { socket, reader } = await adoptRaw(spawned.controlSocketPath);
-      send(socket, { type: "adopt" });
+      send(socket, { type: "adopt", ptyInstanceId: PTY_INSTANCE_ID });
       await waitForAsync(
         async () => reader.lines.filter((line) => line.includes('"status"')).length >= 2,
         5_000,
