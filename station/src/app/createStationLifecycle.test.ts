@@ -9,6 +9,47 @@ import { waitFor } from "../terminal/testing/waitFor.js";
 import { createStation } from "./createStation.js";
 
 describe("native Station lifecycle", () => {
+  it("reports the exact managed binding generation when a primary agent exits", async () => {
+    const snapshot = manyProjectsSnapshot();
+    const source = new FakeStationSource(snapshot);
+    const observerService = new FakeTuiObserverService(snapshot);
+    const scripted = createScriptedTerminal();
+    const store = createStationStore();
+    const composition = createStation({
+      store,
+      clipboardEffects: NO_OP_CLIPBOARD_EFFECTS,
+      stationClient: {
+        state: source,
+        service: observerService,
+        start: () => source.start(),
+        stop: () => source.stop(),
+      },
+      shutdown: () => {},
+      createTerminal: () => scripted.terminal,
+    });
+    const paneId = "pane-managed-exit";
+    store.actions.createPane(paneId, { role: "primary-agent" });
+    store.actions.setPrimaryAgent(paneId, {
+      sessionId: "ses_managed",
+      terminalTargetId: "native:wt_managed",
+      terminalBindingToken: "binding_1",
+      harnessProvider: "codex",
+    });
+    composition.registry.ensure(paneId, { cwd: "/tmp" });
+    composition.registry.resize(paneId, { cols: 80, rows: 24 });
+
+    scripted.helpers.emitExit({ exitCode: 0 });
+    await waitFor(() => observerService.reportedExits.length === 1);
+
+    expect(observerService.reportedExits).toEqual([
+      {
+        terminalTargetId: "native:wt_managed",
+        expectedSessionId: "ses_managed",
+        expectedBindingToken: "binding_1",
+      },
+    ]);
+  });
+
   it("attempts later cleanup after failure and handles Ctrl-Q fire-and-forget rejection", async () => {
     const snapshot = manyProjectsSnapshot();
     const source = new FakeStationSource(snapshot);

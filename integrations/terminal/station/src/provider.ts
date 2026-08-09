@@ -1,5 +1,7 @@
 import type {
+  ManagedOpenWorkspaceResult,
   ManagedTerminalAttachment,
+  ManagedTerminalLaunchProcessRequest,
   ManagedTerminalLaunchProcessResult,
   ManagedTerminalLifecycle,
   OpenWorkspaceRequest,
@@ -48,13 +50,20 @@ export type StationTerminalProviderOptions = {
   host?: StationHostController;
 };
 
+type PreviousTargetBinding = {
+  observation: TerminalTargetObservation;
+  bindingToken?: string | undefined;
+  hostBacked: boolean;
+};
+
 /**
  * ADAPTER
  *
  * Station terminal provider: UI-hosted mode is a registration shim; host-backed
  * mode supplies process lifecycle and opaque attachment identity. Native
  * presentation remains locally owned by Station and is never externally focusable.
- * Deterministic targets are released only when their current Station session matches.
+ * Deterministic targets are released only when their current Station session and,
+ * for managed launch attempts, opaque binding generation match.
  */
 export class StationTerminalProvider implements ManagedTerminalLifecycle {
   readonly id: ProviderId = STATION_TERMINAL_PROVIDER_ID;
@@ -66,8 +75,12 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   // host.list). listTargets drops ONLY these when their process is gone; a UI-hosted
   // fallback target (host was unavailable at launch) is kept until releaseTarget.
   readonly #hostBackedTargets = new Set<string>();
+  readonly #bindingTokens = new Map<TerminalTargetId, string>();
+  readonly #previousBindings = new Map<TerminalTargetId, PreviousTargetBinding[]>();
+  #pendingOrphanRecovery: Promise<boolean> | undefined;
   #targetRevision = 0;
   #listRequestSequence = 0;
+  #bindingSequence = 0;
 
   constructor(options: StationTerminalProviderOptions = {}) {
     this.#clock = options.clock ?? systemClock;
@@ -147,11 +160,22 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     this.#listRequestSequence += 1;
     const requestSequence = this.#listRequestSequence;
     const targetRevision = this.#targetRevision;
+    let orphanRecovery = this.#pendingOrphanRecovery;
+    if (orphanRecovery === undefined) {
+      orphanRecovery = this.#host.recoverOrphanedTargets().finally(() => {
+        this.#pendingOrphanRecovery = undefined;
+      });
+      this.#pendingOrphanRecovery = orphanRecovery;
+    }
+    const recoveredOrphans = await orphanRecovery;
     let live: HostListEntry[];
     try {
       live = await this.#host.client().list();
     } catch (error) {
       if (isStationHostCompatibilityError(error)) {
+        throw error;
+      }
+      if (recoveredOrphans) {
         throw error;
       }
       return [...this.#targets.values()];
@@ -174,7 +198,12 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       aliveById.set(entry.terminalTargetId, entry);
     }
     for (const [targetId, entry] of aliveById) {
-      this.#targets.set(targetId as TerminalTargetId, this.#rebuildObservation(entry));
+      const typedTargetId = targetId as TerminalTargetId;
+      if (this.#targets.get(typedTargetId)?.sessionId !== entry.sessionId) {
+        this.#bindingTokens.delete(typedTargetId);
+        this.#previousBindings.delete(typedTargetId);
+      }
+      this.#targets.set(typedTargetId, this.#rebuildObservation(entry));
       this.#hostBackedTargets.add(targetId); // live in host.list ⇒ host-backed
     }
     for (const targetId of [...this.#targets.keys()]) {
@@ -183,6 +212,8 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
       if (this.#hostBackedTargets.has(targetId) && !aliveById.has(targetId)) {
         this.#targets.delete(targetId);
         this.#hostBackedTargets.delete(targetId);
+        this.#bindingTokens.delete(targetId);
+        this.#previousBindings.delete(targetId);
       }
     }
     return [...this.#targets.values()];
@@ -194,6 +225,17 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
    * target per worktree: re-opening upserts by the deterministic id.
    */
   async openWorkspace(request: OpenWorkspaceRequest): Promise<OpenWorkspaceResult> {
+    const opened = this.#registerWorkspace(request);
+    this.#previousBindings.delete(opened.target.targetId);
+    return opened;
+  }
+
+  /** Opens one provisional managed-launch binding that exact failure cleanup can roll back. */
+  async openManagedWorkspace(request: OpenWorkspaceRequest): Promise<ManagedOpenWorkspaceResult> {
+    return this.#registerWorkspace(request);
+  }
+
+  #registerWorkspace(request: OpenWorkspaceRequest): ManagedOpenWorkspaceResult {
     const targetId = stationTargetId(request.worktree.id);
     const binding: TerminalIdentityBinding = {
       provider: this.id,
@@ -216,7 +258,21 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     });
     observation.focusable = false;
     observation.closeable = false;
+    const previous = this.#targets.get(targetId);
+    if (previous !== undefined) {
+      const stack = this.#previousBindings.get(targetId) ?? [];
+      stack.push({
+        observation: previous,
+        bindingToken: this.#bindingTokens.get(targetId),
+        hostBacked: this.#hostBackedTargets.has(targetId),
+      });
+      this.#previousBindings.set(targetId, stack);
+    } else {
+      this.#previousBindings.delete(targetId);
+    }
+    const bindingToken = `binding_${++this.#bindingSequence}`;
     this.#targets.set(targetId, observation);
+    this.#bindingTokens.set(targetId, bindingToken);
     // Re-registration starts a new provisional generation; Host ownership must be
     // proven again by this generation's spawn or a matching live Host entry.
     this.#hostBackedTargets.delete(targetId);
@@ -224,6 +280,7 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
     return {
       target: binding,
       agentEndpointId: targetId,
+      bindingToken,
     };
   }
 
@@ -236,40 +293,53 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
   async launchProcess(
     request: TerminalLaunchProcessRequest,
   ): Promise<ManagedTerminalLaunchProcessResult> {
+    const bindingToken = this.#bindingTokens.get(request.terminalTarget.targetId);
+    if (bindingToken === undefined) {
+      this.#throwLaunchBindingSuperseded(request);
+    }
+    const managedRequest: ManagedTerminalLaunchProcessRequest = { ...request, bindingToken };
+    try {
+      return await this.launchManagedProcess(managedRequest);
+    } catch (error) {
+      await this.#releaseLaunchTarget(managedRequest);
+      throw error;
+    }
+  }
+
+  async launchManagedProcess(
+    request: ManagedTerminalLaunchProcessRequest,
+  ): Promise<ManagedTerminalLaunchProcessResult> {
     const base = {
       terminalTargetId: request.terminalTarget.targetId,
       agentEndpointId: request.agentEndpointId,
     };
+    this.#assertLaunchBindingCurrent(request);
     if (this.#host === undefined) {
+      this.#commitLaunchBinding(request);
       return localLaunchResult(request);
     }
     const handle = await this.#host.ensure();
     if (handle.status !== "running") {
       if (isStationHostCompatibilityError(handle.error)) {
-        this.#releaseLaunchTarget(request);
         throw handle.error;
       }
+      this.#commitLaunchBinding(request);
       return localLaunchResult(request);
     }
-    try {
-      await handle.client.spawn(buildSpawnParams(request));
-      if (this.#targetMatchesLaunch(request)) {
-        this.#hostBackedTargets.add(request.terminalTarget.targetId);
-        this.#targetRevision += 1;
-      }
-      return {
-        ...base,
-        started: true,
-        attachment: {
-          kind: "managed-terminal",
-          terminalTargetId: request.terminalTarget.targetId,
-        },
-      };
-    } catch (error) {
-      // A rejected host spawn must not leave the provisional target visible to reconcile.
-      this.#releaseLaunchTarget(request);
-      throw error;
+    await handle.client.spawn(buildSpawnParams(request));
+    if (this.#targetMatchesLaunch(request)) {
+      this.#hostBackedTargets.add(request.terminalTarget.targetId);
+      this.#targetRevision += 1;
     }
+    this.#commitLaunchBinding(request);
+    return {
+      ...base,
+      started: true,
+      attachment: {
+        kind: "managed-terminal",
+        terminalTargetId: request.terminalTarget.targetId,
+      },
+    };
   }
 
   async attachmentForTarget(
@@ -307,36 +377,81 @@ export class StationTerminalProvider implements ManagedTerminalLifecycle {
    */
   async releaseTarget(request: ReleaseManagedTerminalTargetRequest): Promise<boolean> {
     const target = this.#targets.get(request.targetId);
-    if (target?.sessionId !== request.expectedSessionId) {
+    if (
+      target?.sessionId !== request.expectedSessionId ||
+      (request.expectedBindingToken !== undefined &&
+        this.#bindingTokens.get(request.targetId) !== request.expectedBindingToken)
+    ) {
       return false;
     }
     this.#hostBackedTargets.delete(request.targetId);
-    const released = this.#targets.delete(request.targetId);
-    if (released) {
-      this.#targetRevision += 1;
+    this.#bindingTokens.delete(request.targetId);
+    const previous = this.#previousBindings.get(request.targetId)?.pop();
+    if (previous === undefined) {
+      this.#targets.delete(request.targetId);
+      this.#previousBindings.delete(request.targetId);
+    } else {
+      this.#targets.set(request.targetId, previous.observation);
+      if (previous.bindingToken !== undefined) {
+        this.#bindingTokens.set(request.targetId, previous.bindingToken);
+      }
+      if (previous.hostBacked) {
+        this.#hostBackedTargets.add(request.targetId);
+      }
+      if (this.#previousBindings.get(request.targetId)?.length === 0) {
+        this.#previousBindings.delete(request.targetId);
+      }
     }
-    return released;
+    this.#targetRevision += 1;
+    return true;
   }
 
-  #targetMatchesLaunch(request: TerminalLaunchProcessRequest): boolean {
+  #targetMatchesLaunch(request: ManagedTerminalLaunchProcessRequest): boolean {
     const sessionId = request.terminalTarget.sessionId;
     return (
       sessionId !== undefined &&
-      this.#targets.get(request.terminalTarget.targetId)?.sessionId === sessionId
+      this.#targets.get(request.terminalTarget.targetId)?.sessionId === sessionId &&
+      this.#bindingTokens.get(request.terminalTarget.targetId) === request.bindingToken
     );
   }
 
-  #releaseLaunchTarget(request: TerminalLaunchProcessRequest): boolean {
+  #assertLaunchBindingCurrent(request: ManagedTerminalLaunchProcessRequest): void {
+    if (this.#targetMatchesLaunch(request)) {
+      return;
+    }
+    this.#throwLaunchBindingSuperseded(request);
+  }
+
+  #throwLaunchBindingSuperseded(request: TerminalLaunchProcessRequest): never {
+    throw new StationTerminalProviderError(
+      "TERMINAL_TARGET_SUPERSEDED",
+      "The managed terminal binding was superseded before launch.",
+      {
+        worktreeId: request.worktree.id,
+        ...(request.terminalTarget.sessionId === undefined
+          ? {}
+          : { sessionId: request.terminalTarget.sessionId }),
+      },
+    );
+  }
+
+  #commitLaunchBinding(request: ManagedTerminalLaunchProcessRequest): void {
+    if (!this.#targetMatchesLaunch(request)) {
+      return;
+    }
+    this.#previousBindings.delete(request.terminalTarget.targetId);
+  }
+
+  async #releaseLaunchTarget(request: ManagedTerminalLaunchProcessRequest): Promise<boolean> {
     const sessionId = request.terminalTarget.sessionId;
     if (sessionId === undefined || !this.#targetMatchesLaunch(request)) {
       return false;
     }
-    this.#hostBackedTargets.delete(request.terminalTarget.targetId);
-    const released = this.#targets.delete(request.terminalTarget.targetId);
-    if (released) {
-      this.#targetRevision += 1;
-    }
-    return released;
+    return this.releaseTarget({
+      targetId: request.terminalTarget.targetId,
+      expectedSessionId: sessionId,
+      expectedBindingToken: request.bindingToken,
+    });
   }
 
   async #liveEntry(
@@ -433,7 +548,7 @@ function targetIdWorktree(targetId: string): string | undefined {
   return targetId.startsWith(prefix) ? targetId.slice(prefix.length) : undefined;
 }
 
-function buildSpawnParams(request: TerminalLaunchProcessRequest): HostSpawnParamsInput {
+function buildSpawnParams(request: ManagedTerminalLaunchProcessRequest): HostSpawnParamsInput {
   const binding = request.terminalTarget;
   const sessionId = binding.sessionId;
   if (sessionId === undefined) {
@@ -466,18 +581,18 @@ function buildSpawnParams(request: TerminalLaunchProcessRequest): HostSpawnParam
   return params;
 }
 
-function harnessProviderForLaunch(request: TerminalLaunchProcessRequest): ProviderId {
+function harnessProviderForLaunch(request: ManagedTerminalLaunchProcessRequest): ProviderId {
   return request.terminalTarget.harnessBinding?.harnessProvider ?? request.launchPlan.provider;
 }
 
 function outputCompatibilityForLaunch(
-  request: TerminalLaunchProcessRequest,
+  request: ManagedTerminalLaunchProcessRequest,
 ): TerminalOutputCompatibility | undefined {
   return harnessProviderForLaunch(request) === "codex" ? "top-region-scrollback" : undefined;
 }
 
 function localLaunchResult(
-  request: TerminalLaunchProcessRequest,
+  request: ManagedTerminalLaunchProcessRequest,
 ): Extract<ManagedTerminalLaunchProcessResult, { started: false }> {
   const result: Extract<ManagedTerminalLaunchProcessResult, { started: false }> = {
     terminalTargetId: request.terminalTarget.targetId,

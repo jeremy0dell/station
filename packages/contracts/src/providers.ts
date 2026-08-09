@@ -509,9 +509,20 @@ export type ManagedTerminalLaunchProcessResult =
       outputCompatibility?: never;
     });
 
+export type ManagedOpenWorkspaceResult = OpenWorkspaceResult & {
+  /** Opaque authority for committing or rolling back this exact opened binding. */
+  bindingToken: string;
+};
+
+export type ManagedTerminalLaunchProcessRequest = TerminalLaunchProcessRequest & {
+  bindingToken: string;
+};
+
 export type ReleaseManagedTerminalTargetRequest = {
   targetId: TerminalTargetId;
   expectedSessionId: SessionId;
+  /** When present, release only the exact openWorkspace generation. */
+  expectedBindingToken?: string | undefined;
 };
 
 /**
@@ -521,12 +532,17 @@ export type ReleaseManagedTerminalTargetRequest = {
  * Its capabilities state whether process ownership survives the launching client;
  * attachments expose only adapter-owned target identity, and at most one target
  * may exist per worktree. A local fallback may instead carry a provider-neutral
- * output policy for the caller-owned process. Release forgets only the exact
- * expected session binding and never terminates its process: `false` proves the
- * binding was absent or superseded, while rejection leaves release uncertain.
+ * output policy for the caller-owned process. `openManagedWorkspace` returns opaque
+ * binding authority so launch and cleanup cannot mutate a superseding same-session attempt.
+ * Release never terminates a process: `false` proves the qualified binding was
+ * absent or superseded, while rejection leaves release uncertain.
  */
 export interface ManagedTerminalLifecycle extends TerminalProvider {
-  launchProcess(request: TerminalLaunchProcessRequest): Promise<ManagedTerminalLaunchProcessResult>;
+  /** Opens a provisional binding whose token qualifies its launch and rollback. */
+  openManagedWorkspace(request: OpenWorkspaceRequest): Promise<ManagedOpenWorkspaceResult>;
+  launchManagedProcess(
+    request: ManagedTerminalLaunchProcessRequest,
+  ): Promise<ManagedTerminalLaunchProcessResult>;
   attachmentForTarget(targetId: TerminalTargetId): Promise<ManagedTerminalAttachment | undefined>;
   releaseTarget(request: ReleaseManagedTerminalTargetRequest): Promise<boolean>;
 }

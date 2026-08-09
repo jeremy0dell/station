@@ -302,6 +302,9 @@ async function resolvePreparedLaunch(
     identity: {
       sessionId: prepared.sessionId,
       terminalTargetId: prepared.terminalTargetId,
+      ...(prepared.terminalBindingToken === undefined
+        ? {}
+        : { terminalBindingToken: prepared.terminalBindingToken }),
       harnessProvider: prepared.launchPlan.provider,
     },
   };
@@ -455,6 +458,7 @@ function agentIdentityEquals(left: AgentIdentity | undefined, right: AgentIdenti
   return (
     left?.sessionId === right.sessionId &&
     left.terminalTargetId === right.terminalTargetId &&
+    left.terminalBindingToken === right.terminalBindingToken &&
     left.harnessProvider === right.harnessProvider
   );
 }
@@ -472,6 +476,9 @@ async function releaseUnplacedLocalLaunch(
     await service.reportExternalExit({
       terminalTargetId: prepared.terminalTargetId,
       expectedSessionId: prepared.sessionId,
+      ...(prepared.terminalBindingToken === undefined
+        ? {}
+        : { expectedBindingToken: prepared.terminalBindingToken }),
     });
     return undefined;
   } catch (error: unknown) {

@@ -320,7 +320,7 @@ async function tryLiveHandoff(input: {
   }
 }
 
-async function adoptHandoffManifest(
+export async function adoptHandoffManifest(
   client: StationHostClient,
   manifest: PtyHandoffManifest,
 ): Promise<{ ok: true; report: StationHostHandoffAdoptReport } | { ok: false; error: SafeError }> {

@@ -1,20 +1,23 @@
 import type {
   AgentState,
+  BuildHarnessLaunchRequest,
   HarnessHooksStatus,
+  HarnessLaunchPlan,
+  ManagedOpenWorkspaceResult,
   ManagedTerminalAttachment,
+  ManagedTerminalLaunchProcessRequest,
   ManagedTerminalLaunchProcessResult,
   ManagedTerminalLifecycle,
   OpenWorkspaceRequest,
-  OpenWorkspaceResult,
   ProviderHealth,
   ProviderId,
   ProviderProjectConfig,
   ReleaseManagedTerminalTargetRequest,
   SafeError,
+  SessionRecoveryHandle,
   StationSnapshot,
   TerminalAttachment,
   TerminalCapabilities,
-  TerminalLaunchProcessRequest,
   TerminalTargetId,
   TerminalTargetObservation,
   WorktreeRow,
@@ -30,6 +33,10 @@ import type { SessionStore } from "../../src/persistence/index";
 import { ProviderRegistry } from "../../src/providers/registry";
 import type { ObserverCore } from "../../src/reconcile/core";
 import { prepareExternalLaunch, reportExternalExit } from "../../src/runtime/externalLaunch";
+import {
+  createWorktreeMutationCoordinator,
+  type WorktreeMutationCoordinator,
+} from "../../src/worktreeMutationCoordinator";
 import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
 
 const now = "2026-05-21T12:00:00.000Z";
@@ -44,6 +51,7 @@ type FakeManagedTerminalOptions = {
   outputCompatibility?: "top-region-scrollback";
   launchFailure?: SafeError;
   releaseFailure?: SafeError;
+  releaseResult?: boolean;
 };
 
 /** Deliberately differs from the Station adapter in both provider id and target format. */
@@ -58,6 +66,9 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
   readonly #outputCompatibility: "top-region-scrollback" | undefined;
   readonly #launchFailure: SafeError | undefined;
   readonly #releaseFailure: SafeError | undefined;
+  readonly #releaseResult: boolean;
+  readonly #bindingTokens = new Map<TerminalTargetId, string>();
+  #bindingSequence = 0;
 
   constructor(options: FakeManagedTerminalOptions = {}) {
     this.#terminal = new FakeTerminalProvider({
@@ -70,6 +81,7 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
     this.#outputCompatibility = options.outputCompatibility;
     this.#launchFailure = options.launchFailure;
     this.#releaseFailure = options.releaseFailure;
+    this.#releaseResult = options.releaseResult ?? true;
   }
 
   capabilities(): TerminalCapabilities {
@@ -84,7 +96,11 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
     return this.#terminal.listTargets();
   }
 
-  async openWorkspace(request: OpenWorkspaceRequest): Promise<OpenWorkspaceResult> {
+  async openWorkspace(request: OpenWorkspaceRequest): Promise<ManagedOpenWorkspaceResult> {
+    return this.openManagedWorkspace(request);
+  }
+
+  async openManagedWorkspace(request: OpenWorkspaceRequest): Promise<ManagedOpenWorkspaceResult> {
     const targetId = managedTargetId(request.worktree.id);
     const target = createFakeTerminalTarget({
       id: targetId,
@@ -107,6 +123,8 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
     } else {
       this.#targets[existingIndex] = target;
     }
+    const bindingToken = `binding_${++this.#bindingSequence}`;
+    this.#bindingTokens.set(targetId, bindingToken);
     return {
       target: {
         provider: this.id,
@@ -123,11 +141,12 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
         reason: "Fake managed terminal registered a target.",
       },
       agentEndpointId: targetId,
+      bindingToken,
     };
   }
 
-  async launchProcess(
-    request: TerminalLaunchProcessRequest,
+  async launchManagedProcess(
+    request: ManagedTerminalLaunchProcessRequest,
   ): Promise<ManagedTerminalLaunchProcessResult> {
     if (this.#launchFailure !== undefined) {
       throw this.#launchFailure;
@@ -162,13 +181,21 @@ class FakeManagedTerminalLifecycle implements ManagedTerminalLifecycle {
     if (this.#releaseFailure !== undefined) {
       throw this.#releaseFailure;
     }
+    if (!this.#releaseResult) {
+      return false;
+    }
     const index = this.#targets.findIndex(
-      (target) => target.id === request.targetId && target.sessionId === request.expectedSessionId,
+      (target) =>
+        target.id === request.targetId &&
+        target.sessionId === request.expectedSessionId &&
+        (request.expectedBindingToken === undefined ||
+          this.#bindingTokens.get(request.targetId) === request.expectedBindingToken),
     );
     if (index < 0) {
       return false;
     }
     this.#targets.splice(index, 1);
+    this.#bindingTokens.delete(request.targetId);
     return true;
   }
 
@@ -241,12 +268,69 @@ function row(
   return base;
 }
 
-function snapshotWith(rows: WorktreeRow[]): StationSnapshot {
-  return { rows } as unknown as StationSnapshot;
+function retainedSession(
+  overrides: Partial<StationSnapshot["sessions"][number]> = {},
+): StationSnapshot["sessions"][number] {
+  return {
+    id: "ses_recoverable",
+    origin: "station",
+    projectId: "web",
+    worktreeId: "wt_web_feature",
+    createdAt: now,
+    updatedAt: now,
+    harness: {
+      provider: "fake-harness",
+      mode: "interactive",
+      capabilities: {
+        canLaunch: true,
+        canDiscoverRuns: true,
+        canEmitEvents: true,
+        canClassifyStatus: true,
+        canReceivePrompt: false,
+        canResume: true,
+        canStop: true,
+        canRunNonInteractive: true,
+        canExposeApprovalState: true,
+        supportsModifiedEnterSoftNewline: false,
+      },
+    },
+    status: {
+      value: "none",
+      confidence: "low",
+      reason: "No harness run is currently observed for this Station session.",
+      source: "reconcile",
+      updatedAt: now,
+    },
+    title: "Readable login task",
+    tags: [],
+    ...overrides,
+  };
 }
 
-function fakeCore(rows: WorktreeRow[]): ObserverCore {
-  const snapshot = snapshotWith(rows);
+function recoveryHandle(overrides: Partial<SessionRecoveryHandle> = {}): SessionRecoveryHandle {
+  return {
+    id: "rec_recoverable",
+    provider: "fake-harness",
+    projectId: "web",
+    worktreeId: "wt_web_feature",
+    sessionId: "ses_recoverable",
+    target: { kind: "native-session", id: "native_recoverable" },
+    cwd: "/tmp/station/web/feature",
+    observedAt: now,
+    lastSeenAt: now,
+    ...overrides,
+  };
+}
+
+function snapshotWith(
+  rows: WorktreeRow[],
+  sessions: StationSnapshot["sessions"] = [],
+): StationSnapshot {
+  return { rows, sessions } as unknown as StationSnapshot;
+}
+
+function fakeCore(rows: WorktreeRow[], sessions: StationSnapshot["sessions"] = []): ObserverCore {
+  const snapshot = snapshotWith(rows, sessions);
   return {
     getProjects: () => [project],
     getSnapshot: () => snapshot,
@@ -308,6 +392,15 @@ class HookableHarness extends FakeHarnessProvider {
   }
 }
 
+class CapturingHarness extends FakeHarnessProvider {
+  readonly requests: BuildHarnessLaunchRequest[] = [];
+
+  override async buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan> {
+    this.requests.push(request);
+    return super.buildLaunch(request);
+  }
+}
+
 type Harnesses = ConstructorParameters<typeof ProviderRegistry>[0]["harnesses"];
 
 function registryWith(
@@ -331,12 +424,19 @@ function deps(
   persistence: SessionStore = createInMemoryObserverPersistence({
     clock: { now: () => new Date(now) },
   }),
+  options: {
+    sessions?: StationSnapshot["sessions"];
+    sessionResumeAgentEnabled?: boolean;
+    worktreeMutations?: WorktreeMutationCoordinator;
+  } = {},
 ) {
   return {
-    core: fakeCore(rows),
+    core: fakeCore(rows, options.sessions),
     providers: registryWith(managedTerminal, harnesses),
     persistence,
     clock: { now: () => new Date(now) },
+    sessionResumeAgentEnabled: options.sessionResumeAgentEnabled ?? false,
+    worktreeMutations: options.worktreeMutations ?? createWorktreeMutationCoordinator(),
   };
 }
 
@@ -631,6 +731,289 @@ describe("prepareExternalLaunch", () => {
     expect(await station.listTargets()).toEqual([]);
   });
 
+  it("recovers the exact canonical Station session through typed provider resume options", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.seedSession({
+      sessionId: "ses_recoverable",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "Readable login task",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await persistence.renameSession({
+      sessionId: "ses_recoverable",
+      title: "Canonical recovered title",
+      renamedAt: now,
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });
+    const station = new FakeManagedTerminalLifecycle();
+
+    const result = await prepareExternalLaunch(
+      deps([row()], station, [harness], persistence, {
+        sessions: [retainedSession({ title: "Canonical recovered title" })],
+        sessionResumeAgentEnabled: true,
+      }),
+      { ...prepareParams, title: "Ignored fresh title" },
+    );
+
+    expect(result).toMatchObject({
+      reconcile: true,
+      outcome: {
+        kind: "prepared",
+        sessionId: "ses_recoverable",
+        terminalTargetId: managedTargetId("wt_web_feature"),
+      },
+    });
+    expect(harness.requests).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_recoverable",
+        resume: {
+          target: { kind: "native-session", id: "native_recoverable" },
+          previousSessionId: "ses_recoverable",
+          recoveryHandleId: persistedHandle.id,
+        },
+      }),
+    ]);
+    await expect(persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({ id: "ses_recoverable", title: "Canonical recovered title" }),
+    ]);
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
+  });
+
+  it("returns an adopted Host target before recovery or its feature gate", async () => {
+    const attachment: ManagedTerminalAttachment = {
+      kind: "managed-terminal",
+      terminalTargetId: managedTargetId("wt_web_feature"),
+    };
+    const station = new FakeManagedTerminalLifecycle({ started: true, attachment });
+    station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_recoverable" });
+    const harness = new HookableHarness(false);
+
+    const result = await prepareExternalLaunch(
+      deps(
+        [row({ agentSessionId: "ses_recoverable", agentState: "unknown", terminalState: "stale" })],
+        station,
+        [harness],
+        fakePersistence,
+        { sessions: [retainedSession()] },
+      ),
+      prepareParams,
+    );
+
+    expect(result).toEqual({
+      outcome: {
+        kind: "existing-session",
+        sessionId: "ses_recoverable",
+        harnessProvider: "fake-harness",
+        attachment,
+      },
+      reconcile: false,
+    });
+    expect(harness.healthCalls).toBe(0);
+    expect(harness.hooksCalls).toBe(0);
+  });
+
+  it("fails an interrupted canonical session when automatic resume is disabled", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const persistence = trackingPersistence();
+
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, undefined, persistence.store, {
+          sessions: [retainedSession()],
+        }),
+        prepareParams,
+      ),
+    ).rejects.toMatchObject({
+      tag: "CommandValidationError",
+      code: "SESSION_RESUME_DISABLED",
+      sessionId: "ses_recoverable",
+    });
+    expect(await station.listTargets()).toEqual([]);
+    expect(persistence.seeded).toEqual([]);
+  });
+
+  it("fails recovery validation before terminal mutation", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, undefined, undefined, {
+          sessions: [retainedSession()],
+          sessionResumeAgentEnabled: true,
+        }),
+        prepareParams,
+      ),
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_NOT_FOUND" });
+    expect(await station.listTargets()).toEqual([]);
+  });
+
+  it("starts fresh for an explicitly ended session without consuming its old handle", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.seedSession({
+      sessionId: "ses_recoverable",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "Readable login task",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await persistence.markSessionsEnded({
+      subject: { kind: "session", sessionId: "ses_recoverable" },
+      endedAt: now,
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });
+    const station = new FakeManagedTerminalLifecycle();
+
+    const result = await prepareExternalLaunch(
+      deps(
+        [row({ agentSessionId: "ses_recoverable", agentState: "exited" })],
+        station,
+        [harness],
+        persistence,
+        { sessionResumeAgentEnabled: true },
+      ),
+      prepareParams,
+    );
+
+    expect(result.outcome.kind).toBe("prepared");
+    if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
+    expect(result.outcome.sessionId).not.toBe("ses_recoverable");
+    expect(harness.requests[0]).not.toHaveProperty("resume");
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
+  });
+
+  it("rechecks canonical membership after session close wins the worktree mutation lane", async () => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const harness = new CapturingHarness({ id: "fake-harness", now: () => new Date(now) });
+    const station = new FakeManagedTerminalLifecycle();
+    const worktreeMutations = createWorktreeMutationCoordinator();
+    let snapshot = snapshotWith([row()], [retainedSession()]);
+    const core = {
+      ...fakeCore([row()], [retainedSession()]),
+      getSnapshot: () => snapshot,
+    } as ObserverCore;
+    let closeStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      closeStarted = resolve;
+    });
+    let finishClose!: () => void;
+    const closeGate = new Promise<void>((resolve) => {
+      finishClose = resolve;
+    });
+    const close = worktreeMutations.run("web", "wt_web_feature", async () => {
+      closeStarted();
+      await closeGate;
+      snapshot = snapshotWith([row()], []);
+    });
+    await started;
+    const launchDeps = deps([row()], station, [harness], persistence, {
+      sessions: [retainedSession()],
+      sessionResumeAgentEnabled: true,
+      worktreeMutations,
+    });
+    launchDeps.core = core;
+    const launch = prepareExternalLaunch(launchDeps, prepareParams);
+
+    finishClose();
+    await close;
+    const result = await launch;
+
+    expect(result.outcome).toMatchObject({ kind: "prepared" });
+    if (result.outcome.kind !== "prepared") throw new Error("expected prepared");
+    expect(result.outcome.sessionId).not.toBe("ses_recoverable");
+    expect(harness.requests[0]).not.toHaveProperty("resume");
+  });
+
+  it.each([
+    "harness build",
+    "managed process launch",
+  ] as const)("preserves retained session state when recovered %s fails", async (failureStage) => {
+    const persistence = createInMemoryObserverPersistence({
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.seedSession({
+      sessionId: "ses_recoverable",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "Readable login task",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await persistence.renameSession({
+      sessionId: "ses_recoverable",
+      title: "Canonical recovered title",
+      renamedAt: now,
+    });
+    await persistence.upsertSessionTurnReadiness({
+      sessionId: "ses_recoverable",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      token: "ready_recoverable",
+      completedAt: now,
+    });
+    const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
+    const failure: SafeError =
+      failureStage === "harness build"
+        ? {
+            tag: "HarnessProviderError",
+            code: "HARNESS_BUILD_LAUNCH_FAILED",
+            message: "build failed",
+          }
+        : {
+            tag: "TerminalProviderError",
+            code: "MANAGED_LAUNCH_FAILED",
+            message: "launch failed",
+          };
+    const harness = new FakeHarnessProvider({
+      id: "fake-harness",
+      now: () => new Date(now),
+      ...(failureStage === "harness build" ? { failures: { buildLaunch: failure } } : {}),
+    });
+    const station = new FakeManagedTerminalLifecycle(
+      failureStage === "managed process launch" ? { launchFailure: failure } : {},
+    );
+
+    await expect(
+      prepareExternalLaunch(
+        deps([row()], station, [harness], persistence, {
+          sessions: [retainedSession({ title: "Canonical recovered title" })],
+          sessionResumeAgentEnabled: true,
+        }),
+        prepareParams,
+      ),
+    ).rejects.toEqual(failure);
+
+    expect(station.released).toEqual([
+      {
+        targetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: "ses_recoverable",
+        expectedBindingToken: "binding_1",
+      },
+    ]);
+    expect(await station.listTargets()).toEqual([]);
+    await expect(persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({
+        id: "ses_recoverable",
+        lifecycle: "open",
+        title: "Canonical recovered title",
+      }),
+    ]);
+    await expect(persistence.listSessionTurnReadiness()).resolves.toEqual([
+      expect.objectContaining({ sessionId: "ses_recoverable", token: "ready_recoverable" }),
+    ]);
+    await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
+  });
+
   it("rejects when the managed terminal lifecycle is not registered", async () => {
     const registry = new ProviderRegistry({
       worktree: new FakeWorktreeProvider({ id: "fake-worktree" }),
@@ -644,6 +1027,7 @@ describe("prepareExternalLaunch", () => {
           providers: registry,
           persistence: fakePersistence,
           clock: { now: () => new Date(now) },
+          worktreeMutations: createWorktreeMutationCoordinator(),
         },
         prepareParams,
       ),
@@ -666,6 +1050,7 @@ describe("prepareExternalLaunch", () => {
           providers: registry,
           persistence: fakePersistence,
           clock: { now: () => new Date(now) },
+          worktreeMutations: createWorktreeMutationCoordinator(),
         },
         prepareParams,
       ),
@@ -697,6 +1082,7 @@ describe("prepareExternalLaunch", () => {
           providers: registryWith(station),
           persistence: fakePersistence,
           clock: { now: () => new Date(now) },
+          worktreeMutations: createWorktreeMutationCoordinator(),
         },
         { projectId: "other", worktreeId: "wt_web_feature" },
       ),
@@ -733,6 +1119,7 @@ describe("prepareExternalLaunch", () => {
       {
         targetId: managedTargetId("wt_web_feature"),
         expectedSessionId: expect.stringMatching(/^ses_/),
+        expectedBindingToken: "binding_1",
       },
     ]);
   });
@@ -754,6 +1141,7 @@ describe("prepareExternalLaunch", () => {
       {
         targetId: managedTargetId("wt_web_feature"),
         expectedSessionId: expect.stringMatching(/^ses_/),
+        expectedBindingToken: "binding_1",
       },
     ]);
     expect(await station.listTargets()).toEqual([]);
@@ -791,6 +1179,33 @@ describe("prepareExternalLaunch", () => {
       {
         targetId: managedTargetId("wt_web_feature"),
         expectedSessionId: persistence.seeded[0]?.sessionId,
+        expectedBindingToken: "binding_1",
+      },
+    ]);
+    expect(persistence.discarded).toEqual([]);
+    expect(await station.listTargets()).toHaveLength(1);
+  });
+
+  it("preserves the failed seed when exact target release is refused", async () => {
+    const station = new FakeManagedTerminalLifecycle({
+      launchFailure: {
+        tag: "TerminalProviderError",
+        code: "MANAGED_LAUNCH_FAILED",
+        message: "launch failed",
+      },
+      releaseResult: false,
+    });
+    const persistence = trackingPersistence();
+
+    await expect(
+      prepareExternalLaunch(deps([row()], station, undefined, persistence.store), prepareParams),
+    ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
+
+    expect(station.released).toEqual([
+      {
+        targetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: persistence.seeded[0]?.sessionId,
+        expectedBindingToken: "binding_1",
       },
     ]);
     expect(persistence.discarded).toEqual([]);
@@ -808,12 +1223,19 @@ describe("reportExternalExit", () => {
     const exit = await reportExternalExit(deps([row()], station), {
       terminalTargetId: targetId,
       expectedSessionId: prepared.outcome.sessionId,
+      expectedBindingToken: prepared.outcome.terminalBindingToken,
     });
     expect(exit).toEqual({
       outcome: { acknowledged: true, terminalTargetId: targetId },
       reconcile: true,
     });
-    expect(station.released).toEqual([{ targetId, expectedSessionId: prepared.outcome.sessionId }]);
+    expect(station.released).toEqual([
+      {
+        targetId,
+        expectedSessionId: prepared.outcome.sessionId,
+        expectedBindingToken: prepared.outcome.terminalBindingToken,
+      },
+    ]);
     expect(await station.listTargets()).toEqual([]);
 
     await expect(
@@ -853,7 +1275,7 @@ describe("reportExternalExit", () => {
   it("does not let a delayed old-session exit release its replacement", async () => {
     const station = new FakeManagedTerminalLifecycle();
     station.seedTarget({ worktreeId: "wt_web_feature", sessionId: "ses_old" });
-    await station.openWorkspace({
+    await station.openManagedWorkspace({
       project,
       worktree: {
         id: "wt_web_feature",
@@ -883,6 +1305,52 @@ describe("reportExternalExit", () => {
       reconcile: false,
     });
     expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_replacement" }]);
+  });
+
+  it("does not let a stale same-session exit release a newer binding generation", async () => {
+    const station = new FakeManagedTerminalLifecycle();
+    const observedWorktree = {
+      id: "wt_web_feature",
+      provider: "fake-worktree",
+      projectId: "web",
+      branch: "feature/login",
+      path: "/tmp/station/web/feature",
+      state: "exists" as const,
+      source: "worktrunk" as const,
+      observedAt: now,
+    };
+    const first = await station.openManagedWorkspace({
+      project,
+      worktree: observedWorktree,
+      harness: "fake-harness",
+      layout: "agent-shell",
+      sessionId: "ses_recoverable",
+    });
+    const replacement = await station.openManagedWorkspace({
+      project,
+      worktree: observedWorktree,
+      harness: "fake-harness",
+      layout: "agent-shell",
+      sessionId: "ses_recoverable",
+    });
+
+    const staleExit = await reportExternalExit(deps([row()], station), {
+      terminalTargetId: managedTargetId("wt_web_feature"),
+      expectedSessionId: "ses_recoverable",
+      expectedBindingToken: first.bindingToken,
+    });
+
+    expect(staleExit.reconcile).toBe(false);
+    expect(staleExit.outcome.acknowledged).toBe(false);
+    expect(station.released).toEqual([
+      {
+        targetId: managedTargetId("wt_web_feature"),
+        expectedSessionId: "ses_recoverable",
+        expectedBindingToken: first.bindingToken,
+      },
+    ]);
+    expect(replacement.bindingToken).not.toBe(first.bindingToken);
+    expect(await station.listTargets()).toMatchObject([{ sessionId: "ses_recoverable" }]);
   });
 
   it("fails closed when no managed lifecycle is registered", async () => {
@@ -999,7 +1467,7 @@ describe("prepareExternalLaunch managed attachments", () => {
     });
   });
 
-  it("does not attach a replacement target from a different session", async () => {
+  it("prefers an attachable replacement target over stale snapshot identity", async () => {
     const station = new FakeManagedTerminalLifecycle({
       attachment: {
         kind: "managed-terminal",
@@ -1013,8 +1481,12 @@ describe("prepareExternalLaunch managed attachments", () => {
     ).resolves.toEqual({
       outcome: {
         kind: "existing-session",
-        sessionId: "ses_live",
+        sessionId: "ses_replacement",
         harnessProvider: "fake-harness",
+        attachment: {
+          kind: "managed-terminal",
+          terminalTargetId: managedTargetId("wt_web_feature"),
+        },
       },
       reconcile: false,
     });
