@@ -47,7 +47,8 @@ export type StationTerminalReplayEvent =
 
 /**
  * Raw history, exact restoration, or Host mode-restoring degraded data handed
- * over with its production geometry; Host reset data remains one local event.
+ * over with its production geometry. Degraded data establishes an active-buffer
+ * cursor anchor before repaint; Host reset data remains one local event.
  */
 export type StationTerminalReplay = {
   initialSize: StationTerminalSize;

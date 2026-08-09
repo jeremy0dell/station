@@ -269,7 +269,8 @@ export type HostReplayEvent = z.infer<typeof HostReplayEventSchema>;
 /**
  * Verbatim history, exact semantic restoration, or a control-only degraded
  * reset captured at the Host's semantic boundary. Live reset never carries
- * historical events, and its reset data must begin with RIS.
+ * historical events, begins with RIS, and establishes a valid active-buffer
+ * cursor anchor before the client requests repaint.
  */
 export const HostReplaySchema = z.discriminatedUnion("kind", [
   z
@@ -301,7 +302,8 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
 /**
  * Attach acknowledgement captured atomically with the live listener. Raw replay
  * preserves production geometry; exact semantic and control-only reset recovery
- * both begin at the Host's current geometry before the client geometry nudge.
+ * both begin at the Host's current geometry, with reset recovery anchored before
+ * the client geometry nudge.
  */
 export const HostAttachAckSchema = z
   .object({
