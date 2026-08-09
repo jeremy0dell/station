@@ -151,6 +151,7 @@ describe("diagnostics schemas", () => {
           projects: [],
           rows: [],
           sessions: [],
+          sessionGroups: [],
           counts: {
             projects: 0,
             sessions: 0,

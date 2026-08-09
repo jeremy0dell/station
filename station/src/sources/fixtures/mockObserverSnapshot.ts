@@ -16,7 +16,7 @@ const harnessCapabilities = {
 };
 
 export const mockObserverSnapshot = {
-  schemaVersion: "0.9.0",
+  schemaVersion: "0.10.0",
   generatedAt: fixtureNow,
   observer: {
     pid: 4242,
@@ -264,6 +264,7 @@ export const mockObserverSnapshot = {
       tags: ["codex", "tmux"],
     },
   ],
+  sessionGroups: [],
   counts: {
     projects: 1,
     sessions: 2,

@@ -14,6 +14,7 @@ import { sessionHarnessExecutionsMigration } from "./013_session_harness_executi
 import { nativeBindingIngressClaimsMigration } from "./014_native_binding_ingress_claims.js";
 import { dropRecoveryBreadcrumbsMigration } from "./015_drop_recovery_breadcrumbs.js";
 import { worktreeDisplayTitlesMigration } from "./016_worktree_display_titles.js";
+import { sessionGroupsMigration } from "./017_session_groups.js";
 
 /** @knipignore Retains the historical migration type import surface. */
 export type { ObserverSqliteMigration } from "./migration.js";
@@ -35,6 +36,7 @@ export const migrations = [
   nativeBindingIngressClaimsMigration,
   dropRecoveryBreadcrumbsMigration,
   worktreeDisplayTitlesMigration,
+  sessionGroupsMigration,
 ] as const;
 
 export const latestSchemaVersion = migrations[migrations.length - 1]?.version ?? 0;

@@ -1,6 +1,6 @@
 {
   "noProjects": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -22,10 +22,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "multipleProjects": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -110,10 +111,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "zeroWorktreeProject": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -161,10 +163,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "noAgentWorktree": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -234,10 +237,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "idleAgent": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -365,10 +369,11 @@
       "unknown": 0,
       "sessions": 1
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "workingAgent": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -453,10 +458,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "needsAttentionAgent": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -540,10 +546,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "stuckAgent": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -628,10 +635,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "exitedAgent": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -713,10 +721,11 @@
       "unknown": 0,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "unknownLowConfidence": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -800,10 +809,11 @@
       "unknown": 1,
       "sessions": 0
     },
-    "alerts": []
+    "alerts": [],
+    "sessionGroups": []
   },
   "orphanedTerminalTarget": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -835,10 +845,11 @@
         "reason": "Terminal target has no matching configured project or worktree.",
         "observedAt": "2026-05-20T12:00:00.000Z"
       }
-    ]
+    ],
+    "sessionGroups": []
   },
   "providerFailure": {
-    "schemaVersion": "0.9.0",
+    "schemaVersion": "0.10.0",
     "generatedAt": "2026-05-20T12:00:00.000Z",
     "observer": {
       "pid": 4242,
@@ -920,6 +931,7 @@
         "provider": "worktrunk",
         "createdAt": "2026-05-20T12:00:00.000Z"
       }
-    ]
+    ],
+    "sessionGroups": []
   }
 }

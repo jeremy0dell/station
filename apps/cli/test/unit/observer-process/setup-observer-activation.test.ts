@@ -24,7 +24,7 @@ restartObserverSpy.mockImplementation(async () => ({
     stateDir: "unused",
   },
   health: {
-    schemaVersion: "0.9.0",
+    schemaVersion: "0.10.0",
     status: "healthy",
     pid: 1234,
     startedAt: now,

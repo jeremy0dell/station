@@ -122,6 +122,7 @@ function snapshotFromRows(rows: WorktreeRow[]): StationSnapshot {
     projects,
     rows,
     sessions,
+    sessionGroups: [],
     counts: {
       projects: projects.length,
       ...counts,

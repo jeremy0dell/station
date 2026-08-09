@@ -10,6 +10,9 @@ import type {
   ProviderId,
   ProviderProjectConfig,
   SafeError,
+  SessionGroupId,
+  SessionGroupView,
+  SessionId,
   SessionRecoveryHandle,
   StationCommand,
   StationEvent,
@@ -19,6 +22,22 @@ import type {
   WorktreeObservation,
   WorktreePullRequest,
 } from "@station/contracts";
+
+export type SessionGroupMemberExpectation = {
+  sessionId: SessionId;
+  projectId: string;
+  expectedGroupId: SessionGroupId | null;
+};
+
+export type SessionGroupStoreConflictReason =
+  | "already_exists"
+  | "not_found"
+  | "stale_version"
+  | "unexpected_assignment";
+
+export type SessionGroupStoreResult =
+  | { ok: true; groups: SessionGroupView[] }
+  | { ok: false; reason: SessionGroupStoreConflictReason };
 
 export type PersistedCommandStatus = "accepted" | "started" | "succeeded" | "failed";
 

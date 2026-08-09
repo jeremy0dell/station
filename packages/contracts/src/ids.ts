@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { nonEmptyStringSchema } from "./shared.js";
 
-export const STATION_SCHEMA_VERSION = "0.9.0" as const;
+export const STATION_SCHEMA_VERSION = "0.10.0" as const;
 
 const timestampSchema = z.string().datetime({ offset: true });
 declare const stationIdKind: unique symbol;
@@ -19,6 +19,10 @@ export const SchemaVersionSchema = z.literal(STATION_SCHEMA_VERSION);
 export const ProjectIdSchema = idSchema<"ProjectId">();
 export const WorktreeIdSchema = idSchema<"WorktreeId">();
 export const SessionIdSchema = idSchema<"SessionId">();
+export const SessionGroupIdSchema = z.string().trim().min(1) as z.ZodType<
+  StationId<"SessionGroupId">,
+  string
+>;
 export const TerminalTargetIdSchema = idSchema<"TerminalTargetId">();
 export const HarnessRunIdSchema = idSchema<"HarnessRunId">();
 export const CommandIdSchema = idSchema<"CommandId">();
@@ -28,6 +32,7 @@ export const TimestampSchema = timestampSchema;
 export type ProjectId = z.infer<typeof ProjectIdSchema>;
 export type WorktreeId = z.infer<typeof WorktreeIdSchema>;
 export type SessionId = z.infer<typeof SessionIdSchema>;
+export type SessionGroupId = z.infer<typeof SessionGroupIdSchema>;
 export type TerminalTargetId = z.infer<typeof TerminalTargetIdSchema>;
 export type HarnessRunId = z.infer<typeof HarnessRunIdSchema>;
 export type CommandId = z.infer<typeof CommandIdSchema>;

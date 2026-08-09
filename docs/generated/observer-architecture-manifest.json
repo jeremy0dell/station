@@ -5191,6 +5191,30 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupMemberExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations."
+        },
+        {
+          "name": "SessionGroupStoreConflictReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupStoreResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionHarnessDerivedStateRepair",
           "kind": "type",
           "role": null,
@@ -6480,6 +6504,25 @@
       ]
     },
     {
+      "path": "apps/observer/src/migrations/017_session_groups.ts",
+      "exports": [
+        {
+          "name": "sessionGroupsMigration",
+          "kind": "const",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./migration.js",
+          "resolvedPath": "apps/observer/src/migrations/migration.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverSqliteMigration"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/migrations/index.ts",
       "exports": [
         {
@@ -6597,6 +6640,12 @@
           "resolvedPath": "apps/observer/src/migrations/016_worktree_display_titles.ts",
           "edgeKind": "runtime",
           "bindings": ["worktreeDisplayTitlesMigration"]
+        },
+        {
+          "specifier": "./017_session_groups.js",
+          "resolvedPath": "apps/observer/src/migrations/017_session_groups.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionGroupsMigration"]
         },
         {
           "specifier": "./migration.js",
@@ -7195,6 +7244,30 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupMemberExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations."
+        },
+        {
+          "name": "SessionGroupStoreConflictReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupStoreResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionHarnessDerivedStateRepair",
           "kind": "type",
           "role": null,
@@ -7511,6 +7584,12 @@
           "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize."
         },
         {
+          "name": "SessionGroupStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations."
+        },
+        {
           "name": "SessionStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
@@ -7549,6 +7628,8 @@
             "ProviderObservationKind",
             "ProviderObservationsIngressDedupeResult",
             "RecordProviderObservationInput",
+            "SessionGroupMemberExpectation",
+            "SessionGroupStoreResult",
             "SessionHarnessDerivedStateRepair",
             "SessionTurnReadinessMutation",
             "WorktreeMetadataCurrentKind",
@@ -7565,6 +7646,8 @@
             "ObserverHealth",
             "ProviderId",
             "SafeError",
+            "SessionGroupId",
+            "SessionGroupView",
             "SessionRecoveryHandle",
             "StationCommand",
             "StationEvent"
@@ -7674,6 +7757,12 @@
           "purpose": null
         },
         {
+          "name": "sessionGroupFromRow",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SqliteCommandErrorRow",
           "kind": "type",
           "role": null,
@@ -7693,6 +7782,12 @@
         },
         {
           "name": "SqliteProviderObservationRow",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SqliteSessionGroupRow",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -7751,6 +7846,7 @@
           "bindings": [
             "ErrorEnvelopeSchema",
             "SafeErrorSchema",
+            "SessionGroupViewSchema",
             "StationCommandSchema",
             "StationEventSchema"
           ]
@@ -7759,7 +7855,147 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["StationCommand"]
+          "bindings": ["SessionGroupView", "StationCommand"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/persistence/sessionGroups.ts",
+      "exports": [
+        {
+          "name": "cloneSessionGroupState",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "createSessionGroup",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "deleteSessionGroup",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "emptySessionGroupState",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "listSessionGroups",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "pruneSessionGroupMemberships",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "renameSessionGroup",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "reparentSessionGroup",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupMutation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupPersistenceState",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "updateSessionGroupMembership",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./types.js",
+          "resolvedPath": "apps/observer/src/persistence/types.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionGroupMemberExpectation", "SessionGroupStoreResult"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["SessionGroupViewSchema"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionGroupId", "SessionGroupView"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/persistence/sessionGroupSqlite.ts",
+      "exports": [
+        {
+          "name": "readSessionGroupState",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "writeSessionGroupState",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./rows.js",
+          "resolvedPath": "apps/observer/src/persistence/rows.ts",
+          "edgeKind": "runtime",
+          "bindings": ["sessionGroupFromRow"]
+        },
+        {
+          "specifier": "./rows.js",
+          "resolvedPath": "apps/observer/src/persistence/rows.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SqliteSessionGroupRow"]
+        },
+        {
+          "specifier": "./sessionGroups.js",
+          "resolvedPath": "apps/observer/src/persistence/sessionGroups.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionGroupPersistenceState"]
+        },
+        {
+          "specifier": "../sqlite/driver.js",
+          "resolvedPath": "apps/observer/src/sqlite/driver.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SqlDatabase"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionGroupId", "SessionGroupView"]
         }
       ]
     },
@@ -8020,6 +8256,18 @@
           "resolvedPath": "apps/observer/src/persistence/retention.ts",
           "edgeKind": "runtime",
           "bindings": ["providerObservationRetentionDays"]
+        },
+        {
+          "specifier": "./sessionGroups.js",
+          "resolvedPath": "apps/observer/src/persistence/sessionGroups.ts",
+          "edgeKind": "runtime",
+          "bindings": ["* as sessionGroupStore"]
+        },
+        {
+          "specifier": "./sessionGroupSqlite.js",
+          "resolvedPath": "apps/observer/src/persistence/sessionGroupSqlite.ts",
+          "edgeKind": "runtime",
+          "bindings": ["* as sessionGroupSqlite"]
         },
         {
           "specifier": "./sessionHarnessDerivedState.js",
@@ -8290,6 +8538,24 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupMemberExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupStoreConflictReason",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupStoreResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionHarnessDerivedStateRepair",
           "kind": "type",
           "role": null,
@@ -8337,6 +8603,9 @@
             "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
+            "SessionGroupId",
+            "SessionGroupView",
+            "SessionId",
             "SessionRecoveryHandle",
             "StationCommand",
             "StationEvent",
@@ -12911,6 +13180,14 @@
       "kind": "interface",
       "role": "DRIVEN PORT",
       "purpose": "Persists the Observer's correlated reconcile projection as one atomic capability. Missing canonical worktree titles initialize insert-only before session projections synchronize.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/persistence/ports.ts",
+      "declaration": "SessionGroupStore",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations.",
       "dependencies": []
     },
     {

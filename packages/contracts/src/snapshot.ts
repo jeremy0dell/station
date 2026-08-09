@@ -5,6 +5,7 @@ import {
   ProjectIdSchema,
   ProviderIdSchema,
   SchemaVersionSchema,
+  SessionGroupIdSchema,
   SessionIdSchema,
   TerminalTargetIdSchema,
   TimestampSchema,
@@ -193,6 +194,37 @@ export const SessionViewSchema = z
 
 export type SessionView = z.infer<typeof SessionViewSchema>;
 
+export const SessionGroupViewSchema = z
+  .object({
+    id: SessionGroupIdSchema,
+    projectId: ProjectIdSchema,
+    name: z.string().trim().min(1),
+    sessionIds: z.array(SessionIdSchema),
+    parentGroupId: SessionGroupIdSchema.optional(),
+    version: z.number().int().positive(),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+  })
+  .strict()
+  .superRefine((group, context) => {
+    if (new Set(group.sessionIds).size !== group.sessionIds.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Group session ids must be unique.",
+        path: ["sessionIds"],
+      });
+    }
+    if (Date.parse(group.updatedAt) < Date.parse(group.createdAt)) {
+      context.addIssue({
+        code: "custom",
+        message: "Group updatedAt must not precede createdAt.",
+        path: ["updatedAt"],
+      });
+    }
+  });
+
+export type SessionGroupView = z.infer<typeof SessionGroupViewSchema>;
+
 export const StationAlertSchema = z
   .object({
     id: nonEmptyStringSchema,
@@ -258,6 +290,7 @@ export const StationSnapshotSchema = z
     projects: z.array(ProjectViewSchema),
     rows: z.array(WorktreeRowSchema),
     sessions: z.array(SessionViewSchema),
+    sessionGroups: z.array(SessionGroupViewSchema),
     counts: z
       .object({
         projects: z.number().int().nonnegative(),
@@ -274,6 +307,99 @@ export const StationSnapshotSchema = z
     featureFlags: ClientFeatureFlagsSchema.optional(),
     orphans: z.array(OrphanedRuntimeStateSchema).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((snapshot, context) => {
+    // Individual schemas validate records; this pass protects relationships across the snapshot graph.
+    const projectIds = new Set(snapshot.projects.map((project) => project.id));
+    const sessions = new Map(snapshot.sessions.map((session) => [session.id, session]));
+    const groups = new Map<string, SessionGroupView>();
+    const assignedSessions = new Map<string, string>();
+
+    for (const [index, group] of snapshot.sessionGroups.entries()) {
+      if (groups.has(group.id)) {
+        context.addIssue({
+          code: "custom",
+          message: "Group ids must be unique.",
+          path: ["sessionGroups", index, "id"],
+        });
+      } else {
+        groups.set(group.id, group);
+      }
+      if (!projectIds.has(group.projectId)) {
+        context.addIssue({
+          code: "custom",
+          message: "Group project must exist in the snapshot.",
+          path: ["sessionGroups", index, "projectId"],
+        });
+      }
+      for (const [memberIndex, sessionId] of group.sessionIds.entries()) {
+        const session = sessions.get(sessionId);
+        if (session === undefined) {
+          context.addIssue({
+            code: "custom",
+            message: "Group member must reference a snapshot session.",
+            path: ["sessionGroups", index, "sessionIds", memberIndex],
+          });
+        } else if (session.projectId !== group.projectId) {
+          context.addIssue({
+            code: "custom",
+            message: "Group member must belong to the Group project.",
+            path: ["sessionGroups", index, "sessionIds", memberIndex],
+          });
+        }
+        const assignedGroupId = assignedSessions.get(sessionId);
+        if (assignedGroupId !== undefined && assignedGroupId !== group.id) {
+          context.addIssue({
+            code: "custom",
+            message: "A session may belong to only one Group.",
+            path: ["sessionGroups", index, "sessionIds", memberIndex],
+          });
+        } else {
+          assignedSessions.set(sessionId, group.id);
+        }
+      }
+    }
+
+    for (const [index, group] of snapshot.sessionGroups.entries()) {
+      if (group.parentGroupId === undefined) continue;
+      const parent = groups.get(group.parentGroupId);
+      if (parent === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "Group parent must exist in the snapshot.",
+          path: ["sessionGroups", index, "parentGroupId"],
+        });
+      } else if (parent.id === group.id) {
+        context.addIssue({
+          code: "custom",
+          message: "A Group cannot parent itself.",
+          path: ["sessionGroups", index, "parentGroupId"],
+        });
+      } else if (parent.projectId !== group.projectId) {
+        context.addIssue({
+          code: "custom",
+          message: "Group parent must belong to the same project.",
+          path: ["sessionGroups", index, "parentGroupId"],
+        });
+      }
+    }
+
+    for (const [index, group] of snapshot.sessionGroups.entries()) {
+      const visited = new Set([group.id]);
+      let parentId = group.parentGroupId;
+      while (parentId !== undefined) {
+        if (visited.has(parentId)) {
+          context.addIssue({
+            code: "custom",
+            message: "Group parents must not form a cycle.",
+            path: ["sessionGroups", index, "parentGroupId"],
+          });
+          break;
+        }
+        visited.add(parentId);
+        parentId = groups.get(parentId)?.parentGroupId;
+      }
+    }
+  });
 
 export type StationSnapshot = z.infer<typeof StationSnapshotSchema>;

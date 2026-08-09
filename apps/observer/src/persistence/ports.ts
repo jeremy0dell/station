@@ -4,6 +4,8 @@ import type {
   ObserverHealth,
   ProviderId,
   SafeError,
+  SessionGroupId,
+  SessionGroupView,
   SessionRecoveryHandle,
   StationCommand,
   StationEvent,
@@ -29,6 +31,8 @@ import type {
   ProviderObservationKind,
   ProviderObservationsIngressDedupeResult,
   RecordProviderObservationInput,
+  SessionGroupMemberExpectation,
+  SessionGroupStoreResult,
   SessionHarnessDerivedStateRepair,
   SessionTurnReadinessMutation,
   WorktreeMetadataCurrentKind,
@@ -214,6 +218,51 @@ export interface SessionStore {
 /**
  * DRIVEN PORT
  *
+ * Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations.
+ */
+export interface SessionGroupStore {
+  listSessionGroups(): Promise<SessionGroupView[]>;
+  createSessionGroup(input: {
+    id: SessionGroupId;
+    projectId: string;
+    name: string;
+    initialMembers?: SessionGroupMemberExpectation[];
+    parentGroupId?: SessionGroupId;
+    createdAt?: string;
+  }): Promise<SessionGroupStoreResult>;
+  renameSessionGroup(input: {
+    id: SessionGroupId;
+    expectedVersion: number;
+    name: string;
+    updatedAt?: string;
+  }): Promise<SessionGroupStoreResult>;
+  updateSessionGroupMembership(input: {
+    id: SessionGroupId;
+    expectedVersion: number;
+    add?: SessionGroupMemberExpectation[];
+    remove?: SessionGroupMemberExpectation[];
+    updatedAt?: string;
+  }): Promise<SessionGroupStoreResult>;
+  reparentSessionGroup(input: {
+    id: SessionGroupId;
+    expectedVersion: number;
+    parentGroupId?: SessionGroupId;
+    updatedAt?: string;
+  }): Promise<SessionGroupStoreResult>;
+  deleteSessionGroup(input: {
+    id: SessionGroupId;
+    expectedVersion: number;
+    updatedAt?: string;
+  }): Promise<SessionGroupStoreResult>;
+  pruneSessionGroupMemberships(input: {
+    sessions: Array<{ id: string; projectId: string }>;
+    updatedAt?: string;
+  }): Promise<SessionGroupStoreResult>;
+}
+
+/**
+ * DRIVEN PORT
+ *
  * Maintains the current worktree metadata cache independently of repository adapters.
  */
 export interface WorktreeMetadataStore {
@@ -244,6 +293,7 @@ export type ObserverPersistenceBundle = CommandJournal &
   ObservationStore &
   ReconcileStore &
   SessionStore &
+  SessionGroupStore &
   WorktreeMetadataStore;
 
 /**

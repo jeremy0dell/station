@@ -228,6 +228,7 @@ export function buildStationSnapshot(input: ObserverGraphInput): StationSnapshot
     projects,
     rows: allRows,
     sessions,
+    sessionGroups: [],
     counts,
     alerts,
     ...(input.featureFlags === undefined ? {} : { featureFlags: input.featureFlags }),

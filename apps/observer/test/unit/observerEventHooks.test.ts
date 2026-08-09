@@ -197,6 +197,7 @@ function snapshot(rows: StationSnapshot["rows"]): StationSnapshot {
     projects: [],
     rows,
     sessions: [],
+    sessionGroups: [],
     counts: {
       projects: 0,
       sessions: 0,

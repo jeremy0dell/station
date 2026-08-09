@@ -57,7 +57,7 @@ describe("CLI manual-smoke commands", () => {
     const configPath = await writeConfigToml(fixture.root, fixture.config);
     const reconciles: Array<string | undefined> = [];
     const receipt: ReconcileReceipt = {
-      schemaVersion: "0.9.0",
+      schemaVersion: "0.10.0",
       reason: "manual-smoke",
       reconciledAt: now,
       snapshot: snapshotFixture(),
@@ -311,7 +311,7 @@ function runningObserverDeps(options: {
     clientFactory: (socketPath: string) =>
       ({
         health: async () => ({
-          schemaVersion: "0.9.0",
+          schemaVersion: "0.10.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -322,7 +322,7 @@ function runningObserverDeps(options: {
         reconcile:
           options.reconcile ??
           (async (reason?: string) => ({
-            schemaVersion: "0.9.0",
+            schemaVersion: "0.10.0",
             reason: reason ?? "manual",
             reconciledAt: now,
             snapshot: options.snapshot ?? snapshotFixture(),
@@ -334,13 +334,14 @@ function runningObserverDeps(options: {
 
 function snapshotFixture(): StationSnapshot {
   return {
-    schemaVersion: "0.9.0",
+    schemaVersion: "0.10.0",
     generatedAt: now,
     observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
     providerHealth: {},
     projects: [],
     rows: [],
     sessions: [],
+    sessionGroups: [],
     counts: {
       projects: 0,
       sessions: 0,

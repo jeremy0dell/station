@@ -46,7 +46,7 @@ describe("CLI popup command", () => {
           health: async () => {
             if (!running) throw new Error("stopped");
             return {
-              schemaVersion: "0.9.0",
+              schemaVersion: "0.10.0",
               status: "healthy",
               pid: 1234,
               startedAt: now,
@@ -119,7 +119,7 @@ describe("CLI popup command", () => {
                   if (!spawned) throw new Error("stopped");
                   await healthReady;
                   return {
-                    schemaVersion: "0.9.0",
+                    schemaVersion: "0.10.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
@@ -189,7 +189,7 @@ describe("CLI popup command", () => {
               clientFactory: () =>
                 ({
                   health: async () => ({
-                    schemaVersion: "0.9.0",
+                    schemaVersion: "0.10.0",
                     status: "healthy",
                     pid: 1234,
                     startedAt: now,
@@ -218,7 +218,7 @@ describe("CLI popup command", () => {
       () =>
         ({
           health: async () => ({
-            schemaVersion: "0.9.0",
+            schemaVersion: "0.10.0",
             status: "healthy",
             pid: 1234,
             startedAt: now,
@@ -702,7 +702,7 @@ function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
     clientFactory: () =>
       ({
         health: async () => ({
-          schemaVersion: "0.9.0",
+          schemaVersion: "0.10.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,
@@ -719,17 +719,18 @@ function runningObserverDeps(reconciles: string[]): ObserverProcessDeps {
 
 function emptySnapshot(reason: string) {
   return {
-    schemaVersion: "0.9.0",
+    schemaVersion: "0.10.0",
     reason,
     reconciledAt: now,
     snapshot: {
-      schemaVersion: "0.9.0",
+      schemaVersion: "0.10.0",
       generatedAt: now,
       observer: { pid: 1234, startedAt: now, version: "0.7.0", healthy: true },
       providerHealth: {},
       projects: [],
       rows: [],
       sessions: [],
+      sessionGroups: [],
       counts: {
         projects: 0,
         sessions: 0,
@@ -766,7 +767,7 @@ function nonCompletingReconcileObserverDeps(reconciles: string[]): ObserverProce
     clientFactory: () =>
       ({
         health: async () => ({
-          schemaVersion: "0.9.0",
+          schemaVersion: "0.10.0",
           status: "healthy",
           pid: 1234,
           startedAt: now,

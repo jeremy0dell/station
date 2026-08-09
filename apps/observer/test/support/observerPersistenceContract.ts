@@ -2197,6 +2197,229 @@ export function observerPersistenceContract(
       });
     });
 
+    describe("SessionGroupStore", () => {
+      it("persists empty Groups and assigns initial members with detached deterministic results", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await expect(persistence.listSessionGroups()).resolves.toEqual([]);
+          const created = await persistence.createSessionGroup({
+            id: "group_b",
+            projectId: "web",
+            name: "  Backend  ",
+            initialMembers: [
+              { sessionId: "ses_b", projectId: "web", expectedGroupId: null },
+              { sessionId: "ses_a", projectId: "web", expectedGroupId: null },
+            ],
+            createdAt: now,
+          });
+          expect(created).toEqual({
+            ok: true,
+            groups: [
+              {
+                id: "group_b",
+                projectId: "web",
+                name: "Backend",
+                sessionIds: ["ses_a", "ses_b"],
+                version: 1,
+                createdAt: now,
+                updatedAt: now,
+              },
+            ],
+          });
+          if (created.ok) created.groups[0]?.sessionIds.push("detached");
+          await persistence.createSessionGroup({
+            id: "group_a",
+            projectId: "web",
+            name: "Frontend",
+            createdAt: earlier,
+          });
+          expect((await persistence.listSessionGroups()).map((group) => group.id)).toEqual([
+            "group_a",
+            "group_b",
+          ]);
+          expect((await persistence.listSessionGroups())[1]?.sessionIds).toEqual([
+            "ses_a",
+            "ses_b",
+          ]);
+        });
+      });
+
+      it("atomically reassigns and ungroups members with stale and no-op protection", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_source",
+            projectId: "web",
+            name: "Source",
+            initialMembers: [{ sessionId: "ses_move", projectId: "web", expectedGroupId: null }],
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_target",
+            projectId: "web",
+            name: "Target",
+            createdAt: earlier,
+          });
+          const moved = await persistence.updateSessionGroupMembership({
+            id: "group_target",
+            expectedVersion: 1,
+            add: [
+              {
+                sessionId: "ses_move",
+                projectId: "web",
+                expectedGroupId: "group_source",
+              },
+            ],
+            updatedAt: now,
+          });
+          expect(moved).toEqual({
+            ok: true,
+            groups: [
+              expect.objectContaining({ id: "group_source", version: 2, sessionIds: [] }),
+              expect.objectContaining({
+                id: "group_target",
+                version: 2,
+                sessionIds: ["ses_move"],
+              }),
+            ],
+          });
+          await expect(
+            persistence.updateSessionGroupMembership({
+              id: "group_target",
+              expectedVersion: 1,
+              remove: [
+                {
+                  sessionId: "ses_move",
+                  projectId: "web",
+                  expectedGroupId: "group_target",
+                },
+              ],
+            }),
+          ).resolves.toEqual({ ok: false, reason: "stale_version" });
+          await expect(
+            persistence.updateSessionGroupMembership({
+              id: "group_target",
+              expectedVersion: 2,
+              add: [
+                {
+                  sessionId: "ses_move",
+                  projectId: "web",
+                  expectedGroupId: "group_target",
+                },
+              ],
+            }),
+          ).resolves.toEqual({
+            ok: true,
+            groups: [expect.objectContaining({ id: "group_target", version: 2 })],
+          });
+          await expect(
+            persistence.updateSessionGroupMembership({
+              id: "group_target",
+              expectedVersion: 2,
+              remove: [
+                {
+                  sessionId: "ses_move",
+                  projectId: "web",
+                  expectedGroupId: "group_source",
+                },
+              ],
+            }),
+          ).resolves.toEqual({ ok: false, reason: "unexpected_assignment" });
+          await expect((await persistence.listSessionGroups())[1]).toMatchObject({
+            id: "group_target",
+            version: 2,
+            sessionIds: ["ses_move"],
+          });
+        });
+      });
+
+      it("validates parentage and reparents children when deleting a Group", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_root",
+            projectId: "web",
+            name: "Root",
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_parent",
+            projectId: "web",
+            name: "Parent",
+            parentGroupId: "group_root",
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_child",
+            projectId: "web",
+            name: "Child",
+            parentGroupId: "group_parent",
+            createdAt: earlier,
+          });
+          await expectPersistenceFailure(
+            persistence.reparentSessionGroup({
+              id: "group_root",
+              expectedVersion: 1,
+              parentGroupId: "group_child",
+            }),
+          );
+          await expect(
+            persistence.reparentSessionGroup({
+              id: "group_child",
+              expectedVersion: 1,
+              parentGroupId: "missing",
+            }),
+          ).resolves.toEqual({ ok: false, reason: "not_found" });
+          const deleted = await persistence.deleteSessionGroup({
+            id: "group_parent",
+            expectedVersion: 1,
+            updatedAt: now,
+          });
+          expect(deleted).toEqual({
+            ok: true,
+            groups: [
+              expect.objectContaining({
+                id: "group_child",
+                parentGroupId: "group_root",
+                version: 2,
+              }),
+            ],
+          });
+          expect((await persistence.listSessionGroups()).map((group) => group.id)).toEqual([
+            "group_root",
+            "group_child",
+          ]);
+        });
+      });
+
+      it("prunes invalid memberships while preserving empty definitions", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_prune",
+            projectId: "web",
+            name: "Prune",
+            initialMembers: [
+              { sessionId: "ses_keep", projectId: "web", expectedGroupId: null },
+              { sessionId: "ses_missing", projectId: "web", expectedGroupId: null },
+            ],
+            createdAt: earlier,
+          });
+          await expect(
+            persistence.pruneSessionGroupMemberships({
+              sessions: [{ id: "ses_keep", projectId: "other" }],
+              updatedAt: now,
+            }),
+          ).resolves.toEqual({
+            ok: true,
+            groups: [expect.objectContaining({ id: "group_prune", sessionIds: [], version: 2 })],
+          });
+          await expect(
+            persistence.pruneSessionGroupMemberships({ sessions: [], updatedAt: later }),
+          ).resolves.toEqual({ ok: true, groups: [] });
+          await expect(persistence.listSessionGroups()).resolves.toEqual([
+            expect.objectContaining({ id: "group_prune", sessionIds: [], version: 2 }),
+          ]);
+        });
+      });
+    });
+
     describe("WorktreeMetadataStore", () => {
       it("replaces rows, filters and orders kinds, marks expiry, and preserves stale errors", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
