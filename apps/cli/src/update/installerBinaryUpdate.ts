@@ -1,20 +1,8 @@
-import { createHash } from "node:crypto";
-import { type BigIntStats, createReadStream } from "node:fs";
-import {
-  chmod,
-  lstat,
-  mkdtemp,
-  readFile,
-  readlink,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
   type ExternalCommandRunner,
-  isSafeError,
   normalizeCancellationError,
   type RuntimeSafeError,
   runExternalCommand,
@@ -30,18 +18,24 @@ import {
   type NativeReleaseDiscovery,
   releaseVersion,
 } from "./githubRelease.js";
+import {
+  type InstallerInstallation,
+  InstallerInstallationSchema,
+  inspectInstallerInstallation,
+  installerExpectationText,
+  postcheckInstallerInstallation,
+  requireUnchangedInstallerInstallation,
+  sameInstallerInstallation,
+} from "./installerInstallation.js";
 import type { UpdateChannel, UpdateOperationOptions } from "./updateChannel.js";
 import {
   appendUpdateErrorHint,
   type UpdateErrorFallback,
   updateErrorFromUnknown,
 } from "./updateError.js";
+import { acquireVerifiedInstaller } from "./verifiedInstaller.js";
 
 const channel = "installer-binary" as const;
-const receiptName = ".station-install-receipt";
-const receiptContent = "station-installer-binary-v1\n";
-const expectedInstallationFormat = "station-installer-expected-v1";
-const downloadedFileMaxBytes = 1024 * 1024;
 const installerTimeoutMs = 5 * 60_000;
 const childOutputMaxChars = 64 * 1024;
 const strippedInstallerEnvironment = [
@@ -54,26 +48,11 @@ const strippedInstallerEnvironment = [
   "STATION_INSTALL_RELEASE_ID",
 ] as const;
 
-export type InstallationFileIdentity = {
-  device: string;
-  inode: string;
-};
-
-export type InstallationBinaryIdentity = InstallationFileIdentity & {
-  sha256: string;
-};
-
-export type InstallerBinaryDetection = {
+export type InstallerBinaryDetection = InstallerInstallation & {
   channel: typeof channel;
   currentVersion: string;
   currentTag: string;
   platform: NativeBinaryTarget;
-  installDir: string;
-  executablePath: string;
-  binaryIdentity: InstallationBinaryIdentity;
-  ingressIdentity: InstallationFileIdentity;
-  popupIdentity: InstallationFileIdentity;
-  receiptIdentity: InstallationFileIdentity;
 };
 
 type InstallerBinaryPlanBase = InstallerBinaryDetection & {
@@ -111,38 +90,12 @@ export type InstallerBinaryUpdateChannelDeps = {
   removeTempDir?: (path: string) => Promise<void>;
 };
 
-type OwnedInstallationLayout = {
-  executablePath: string;
-  installDir: string;
-  binaryIdentity: InstallationBinaryIdentity;
-  ingressIdentity: InstallationFileIdentity;
-  popupIdentity: InstallationFileIdentity;
-  receiptIdentity: InstallationFileIdentity;
-};
-
-const FileIdentitySchema = z
-  .object({
-    device: z.string().regex(/^(?:0|[1-9]\d*)$/u),
-    inode: z.string().regex(/^(?:0|[1-9]\d*)$/u),
-  })
-  .strict();
-const BinaryIdentitySchema = FileIdentitySchema.extend({
-  sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+const InstallerBinaryDetectionSchema = InstallerInstallationSchema.extend({
+  channel: z.literal(channel),
+  currentVersion: z.string().min(1),
+  currentTag: z.string().min(2),
+  platform: z.enum(["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]),
 }).strict();
-const InstallerBinaryDetectionSchema = z
-  .object({
-    channel: z.literal(channel),
-    currentVersion: z.string().min(1),
-    currentTag: z.string().min(2),
-    platform: z.enum(["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]),
-    installDir: z.string().startsWith("/"),
-    executablePath: z.string().startsWith("/"),
-    binaryIdentity: BinaryIdentitySchema,
-    ingressIdentity: FileIdentitySchema,
-    popupIdentity: FileIdentitySchema,
-    receiptIdentity: FileIdentitySchema,
-  })
-  .strict();
 const InstallerBinaryUpdatePlanSchema = InstallerBinaryDetectionSchema.extend({
   status: z.literal("update-available"),
   current: z.unknown(),
@@ -184,7 +137,7 @@ export function createInstallerBinaryUpdateChannel(
         return undefined;
       }
 
-      const beforeVersion = await inspectOwnedInstallation(executablePath);
+      const beforeVersion = await inspectInstallerInstallation(executablePath);
       if (beforeVersion === undefined) return undefined;
       let version: string;
       try {
@@ -208,8 +161,8 @@ export function createInstallerBinaryUpdateChannel(
       }
       if (version !== info.version) return undefined;
 
-      const afterVersion = await inspectOwnedInstallation(executablePath);
-      if (afterVersion === undefined || !sameOwnedLayout(beforeVersion, afterVersion)) {
+      const afterVersion = await inspectInstallerInstallation(executablePath);
+      if (afterVersion === undefined || !sameInstallerInstallation(beforeVersion, afterVersion)) {
         return undefined;
       }
       return {
@@ -228,7 +181,7 @@ export function createInstallerBinaryUpdateChannel(
         platform,
         architecture,
       });
-      await requireUnchangedInstallation(detection);
+      await requireUnchangedInstallerInstallation(detection);
 
       const releases = await releaseDiscovery.resolve({
         currentTag: detection.currentTag,
@@ -334,53 +287,21 @@ async function applyVerifiedInstaller(
   commandRunner: ExternalCommandRunner | undefined,
   options: UpdateOperationOptions,
 ): Promise<InstallerBinaryUpdateReport> {
-  await requireUnchangedInstallation(plan);
-  const installerPath = join(updateTempDir, "install.sh");
-  const checksumsPath = join(updateTempDir, "SHA256SUMS");
+  await requireUnchangedInstallerInstallation(plan);
   const expectedInstallationPath = join(updateTempDir, "expected-installation");
+  const installerPath = await acquireVerifiedInstaller({
+    updateTempDir,
+    installerUrl: plan.target.assets.installer.url,
+    checksumsUrl: plan.target.assets.checksums.url,
+    targetTag: plan.target.tag,
+    maxOutputChars: childOutputMaxChars,
+    unsetEnv: strippedInstallerEnvironment,
+    commandRunner,
+    signal: options.signal,
+  });
 
-  try {
-    await downloadReleaseFile(
-      plan.target.assets.installer.url,
-      installerPath,
-      commandRunner,
-      options.signal,
-    );
-    await downloadReleaseFile(
-      plan.target.assets.checksums.url,
-      checksumsPath,
-      commandRunner,
-      options.signal,
-    );
-  } catch (error) {
-    throw updateErrorFromUnknown(error, {
-      code: "UPDATE_INSTALLER_VERIFICATION_FAILED",
-      message: `Could not download the verified installer for ${plan.target.tag}.`,
-    });
-  }
-
-  await verifyDownloadedInstaller(installerPath, checksumsPath, plan.target.tag);
-  try {
-    await runExternalCommand(
-      {
-        command: "/bin/sh",
-        args: ["-n", installerPath],
-        timeoutMs: 10_000,
-        maxOutputChars: childOutputMaxChars,
-        unsetEnv: strippedInstallerEnvironment,
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      },
-      commandRunner,
-    );
-  } catch (error) {
-    throw updateErrorFromUnknown(error, {
-      code: "UPDATE_INSTALLER_VERIFICATION_FAILED",
-      message: `The installer for ${plan.target.tag} failed shell validation.`,
-    });
-  }
-
-  await requireUnchangedInstallation(plan);
-  await writeFile(expectedInstallationPath, expectedInstallationText(plan), {
+  await requireUnchangedInstallerInstallation(plan);
+  await writeFile(expectedInstallationPath, installerExpectationText(plan), {
     encoding: "utf8",
     flag: "wx",
     mode: 0o600,
@@ -416,13 +337,24 @@ async function applyVerifiedInstaller(
     });
   }
 
+  const postcheck = () =>
+    postcheckInstallerInstallation({
+      previous: plan,
+      targetTag: plan.target.tag,
+      targetVersion: plan.target.version,
+      maxOutputChars: childOutputMaxChars,
+      unsetEnv: strippedInstallerEnvironment,
+      commandRunner,
+      signal: options.signal,
+    });
+
   if (installerFailure === undefined) {
-    await postcheckInstallation(plan, commandRunner, options.signal);
+    await postcheck();
     return installedReport(plan, []);
   }
 
   try {
-    await postcheckInstallation(plan, commandRunner, options.signal);
+    await postcheck();
   } catch (error) {
     const cancellation = normalizeCancellationError(error);
     if (cancellation !== undefined) throw cancellation;
@@ -443,78 +375,6 @@ async function applyVerifiedInstaller(
     false,
   );
   return installedReport(plan, [warning]);
-}
-
-async function inspectOwnedInstallation(
-  candidatePath: string,
-): Promise<OwnedInstallationLayout | undefined> {
-  let executablePath: string;
-  try {
-    executablePath = await realpath(candidatePath);
-  } catch {
-    return undefined;
-  }
-  if (basename(executablePath) !== "stn") return undefined;
-
-  try {
-    const executable = await lstat(executablePath, { bigint: true });
-    if (!executable.isFile() || executable.isSymbolicLink() || (executable.mode & 0o111n) === 0n) {
-      return undefined;
-    }
-    const installDir = dirname(executablePath);
-    const ingressPath = join(installDir, "stn-ingress");
-    const popupPath = join(installDir, "stn-tmux-popup");
-    const receiptPath = join(installDir, receiptName);
-    const [ingress, popup] = await Promise.all([
-      launcherIdentity(ingressPath),
-      launcherIdentity(popupPath),
-    ]);
-    if (ingress === undefined || popup === undefined) return undefined;
-
-    let receipt: BigIntStats;
-    try {
-      receipt = await lstat(receiptPath, { bigint: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      return undefined;
-    }
-    if (
-      !receipt.isFile() ||
-      receipt.isSymbolicLink() ||
-      (receipt.mode & 0o7777n) !== 0o600n ||
-      (await readFile(receiptPath, "utf8")) !== receiptContent
-    ) {
-      throw installationInvalid(
-        `Station installer receipt '${receiptPath}' is malformed or unsafe.`,
-      );
-    }
-
-    return {
-      executablePath,
-      installDir,
-      binaryIdentity: {
-        device: String(executable.dev),
-        inode: String(executable.ino),
-        sha256: await sha256File(executablePath),
-      },
-      ingressIdentity: statIdentity(ingress),
-      popupIdentity: statIdentity(popup),
-      receiptIdentity: statIdentity(receipt),
-    };
-  } catch (error) {
-    if (isSafeError(error) && error.code === "UPDATE_INSTALLATION_INVALID") throw error;
-    return undefined;
-  }
-}
-
-async function launcherIdentity(path: string) {
-  try {
-    const launcher = await lstat(path, { bigint: true });
-    if (!launcher.isSymbolicLink() || (await readlink(path)) !== "stn") return undefined;
-    return launcher;
-  } catch {
-    return undefined;
-  }
 }
 
 async function validateDetectionSemantics(
@@ -581,171 +441,8 @@ async function validateApplyPlan(
   ) {
     throw planInvalid();
   }
-  await requireUnchangedInstallation(updatePlan);
+  await requireUnchangedInstallerInstallation(updatePlan);
   return updatePlan;
-}
-
-async function requireUnchangedInstallation(detection: InstallerBinaryDetection): Promise<void> {
-  let current: OwnedInstallationLayout | undefined;
-  try {
-    current = await inspectOwnedInstallation(detection.executablePath);
-  } catch {
-    throw planStale();
-  }
-  if (current === undefined || !sameDetectionLayout(detection, current)) throw planStale();
-}
-
-async function downloadReleaseFile(
-  url: string,
-  outputPath: string,
-  commandRunner: ExternalCommandRunner | undefined,
-  signal: AbortSignal | undefined,
-): Promise<void> {
-  await runExternalCommand(
-    {
-      command: "curl",
-      args: [
-        "--disable",
-        "--fail",
-        "--silent",
-        "--show-error",
-        "--location",
-        "--proto",
-        "=https",
-        "--proto-redir",
-        "=https",
-        "--tlsv1.2",
-        "--max-filesize",
-        String(downloadedFileMaxBytes),
-        "--output",
-        outputPath,
-        url,
-      ],
-      timeoutMs: 30_000,
-      maxOutputChars: childOutputMaxChars,
-      unsetEnv: strippedInstallerEnvironment,
-      ...(signal === undefined ? {} : { signal }),
-    },
-    commandRunner,
-  );
-  await requireBoundedRegularFile(outputPath);
-}
-
-async function requireBoundedRegularFile(path: string): Promise<void> {
-  const file = await lstat(path);
-  if (
-    !file.isFile() ||
-    file.isSymbolicLink() ||
-    file.size <= 0 ||
-    file.size > downloadedFileMaxBytes
-  ) {
-    throw new Error(`Downloaded release file '${path}' is not a bounded regular file.`);
-  }
-}
-
-async function verifyDownloadedInstaller(
-  installerPath: string,
-  checksumsPath: string,
-  targetTag: string,
-): Promise<void> {
-  try {
-    await Promise.all([
-      requireBoundedRegularFile(installerPath),
-      requireBoundedRegularFile(checksumsPath),
-    ]);
-    const [installer, checksums] = await Promise.all([
-      readFile(installerPath),
-      readFile(checksumsPath, "utf8"),
-    ]);
-    const installerChecksumLines = checksums
-      .split(/\r?\n/u)
-      .filter((line) => /(?:^|[ \t])\*?install\.sh$/u.test(line));
-    if (installerChecksumLines.length !== 1) {
-      throw new Error("SHA256SUMS must contain exactly one checksum for install.sh.");
-    }
-    const checksumMatch = /^([0-9A-Fa-f]{64})[ \t]+\*?install\.sh$/u.exec(
-      installerChecksumLines[0] ?? "",
-    );
-    if (checksumMatch?.[1] === undefined) {
-      throw new Error("SHA256SUMS contains an invalid checksum for install.sh.");
-    }
-    const actualHash = createHash("sha256").update(installer).digest("hex");
-    if (actualHash !== checksumMatch[1].toLowerCase()) {
-      throw new Error("The install.sh checksum does not match SHA256SUMS.");
-    }
-    const stampLines = installer
-      .toString("utf8")
-      .split(/\r?\n/u)
-      .filter((line) => line.startsWith("embedded_version="));
-    if (stampLines.length !== 1 || stampLines[0] !== `embedded_version="${targetTag}"`) {
-      throw new Error("The installer version stamp does not match the target release.");
-    }
-  } catch (error) {
-    throw updateErrorFromUnknown(error, {
-      code: "UPDATE_INSTALLER_VERIFICATION_FAILED",
-      message: `The installer for ${targetTag} could not be verified.`,
-    });
-  }
-}
-
-async function postcheckInstallation(
-  plan: Extract<InstallerBinaryUpdatePlan, { status: "update-available" }>,
-  commandRunner: ExternalCommandRunner | undefined,
-  signal: AbortSignal | undefined,
-): Promise<void> {
-  try {
-    const layout = await inspectOwnedInstallation(plan.executablePath);
-    if (
-      layout === undefined ||
-      layout.executablePath !== plan.executablePath ||
-      layout.installDir !== plan.installDir ||
-      sameFileIdentity(layout.binaryIdentity, plan.binaryIdentity) ||
-      layout.binaryIdentity.sha256 === plan.binaryIdentity.sha256 ||
-      !sameFileIdentity(layout.ingressIdentity, plan.ingressIdentity) ||
-      !sameFileIdentity(layout.popupIdentity, plan.popupIdentity) ||
-      !sameFileIdentity(layout.receiptIdentity, plan.receiptIdentity)
-    ) {
-      throw new Error("The installed Station layout does not match the planned replacement.");
-    }
-    const version = await runExternalCommand(
-      {
-        command: plan.executablePath,
-        args: ["--version"],
-        timeoutMs: 10_000,
-        maxOutputChars: childOutputMaxChars,
-        unsetEnv: strippedInstallerEnvironment,
-        ...(signal === undefined ? {} : { signal }),
-      },
-      commandRunner,
-    );
-    if (version.stdout.trim() !== plan.target.version) {
-      throw new Error(
-        `Installed Station reported '${version.stdout.trim()}' instead of '${plan.target.version}'.`,
-      );
-    }
-  } catch (error) {
-    throw updateErrorFromUnknown(error, {
-      code: "UPDATE_POSTCHECK_FAILED",
-      message: `Station ${plan.target.tag} was installed but could not be verified.`,
-      hint: `Inspect '${plan.executablePath} --version' and the Station installer locks before retrying.`,
-    });
-  }
-}
-
-function expectedInstallationText(detection: InstallerBinaryDetection): string {
-  return [
-    `format=${expectedInstallationFormat}`,
-    `binary_sha256=${detection.binaryIdentity.sha256}`,
-    `binary_device=${detection.binaryIdentity.device}`,
-    `binary_inode=${detection.binaryIdentity.inode}`,
-    `ingress_device=${detection.ingressIdentity.device}`,
-    `ingress_inode=${detection.ingressIdentity.inode}`,
-    `popup_device=${detection.popupIdentity.device}`,
-    `popup_inode=${detection.popupIdentity.inode}`,
-    `receipt_device=${detection.receiptIdentity.device}`,
-    `receipt_inode=${detection.receiptIdentity.inode}`,
-    "",
-  ].join("\n");
 }
 
 function installedReport(
@@ -804,47 +501,6 @@ function comparePublication(left: NativeBinaryRelease, right: NativeBinaryReleas
   return timestampDifference === 0 ? left.releaseId - right.releaseId : timestampDifference;
 }
 
-function sameOwnedLayout(left: OwnedInstallationLayout, right: OwnedInstallationLayout): boolean {
-  return (
-    left.executablePath === right.executablePath &&
-    left.installDir === right.installDir &&
-    sameDetectionLayout(left, right)
-  );
-}
-
-function sameDetectionLayout(
-  left: Pick<
-    InstallerBinaryDetection,
-    "binaryIdentity" | "ingressIdentity" | "popupIdentity" | "receiptIdentity"
-  >,
-  right: OwnedInstallationLayout,
-): boolean {
-  return (
-    sameFileIdentity(left.binaryIdentity, right.binaryIdentity) &&
-    left.binaryIdentity.sha256 === right.binaryIdentity.sha256 &&
-    sameFileIdentity(left.ingressIdentity, right.ingressIdentity) &&
-    sameFileIdentity(left.popupIdentity, right.popupIdentity) &&
-    sameFileIdentity(left.receiptIdentity, right.receiptIdentity)
-  );
-}
-
-function sameFileIdentity(
-  left: InstallationFileIdentity,
-  right: InstallationFileIdentity,
-): boolean {
-  return left.device === right.device && left.inode === right.inode;
-}
-
-function statIdentity(stat: { dev: bigint; ino: bigint }): InstallationFileIdentity {
-  return { device: String(stat.dev), inode: String(stat.ino) };
-}
-
-async function sha256File(path: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk);
-  return hash.digest("hex");
-}
-
 async function createPrivateTempDir(root: string): Promise<string> {
   try {
     const path = await mkdtemp(join(root, "station-update-"));
@@ -866,27 +522,11 @@ function planInvalid(): RuntimeSafeError {
   });
 }
 
-function planStale(): RuntimeSafeError {
-  return updateFailure({
-    code: "UPDATE_PLAN_STALE",
-    message: "The Station installation changed after the update was planned.",
-    hint: "Plan the update again from the currently installed stn binary.",
-  });
-}
-
 function releaseInvalid(message: string): RuntimeSafeError {
   return updateFailure({
     code: "UPDATE_RELEASE_INVALID",
     message,
     hint: "Wait for a complete Station release or install an exact known-good release manually.",
-  });
-}
-
-function installationInvalid(message: string): RuntimeSafeError {
-  return updateFailure({
-    code: "UPDATE_INSTALLATION_INVALID",
-    message,
-    hint: "Repair the installer receipt manually or reinstall the exact current tag.",
   });
 }
 
