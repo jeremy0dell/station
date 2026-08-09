@@ -3,7 +3,12 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createStationHostClient, type HostAttachment, type HostFrame } from "@station/host";
+import {
+  createStationHostClient,
+  type HostAttachment,
+  type HostFrame,
+  type HostPtyIdentity,
+} from "@station/host";
 import { devHostSocketPath, devStateDir } from "./devPaths.js";
 
 /**
@@ -41,24 +46,29 @@ async function main(): Promise<void> {
   log("  host healthy ✓\n");
 
   log("▶ spawning a real agent PTY (a shell that prints a tick every second)");
-  const spawned = await control.spawn({
+  const spawnIdentity = {
+    kind: "agent",
     terminalTargetId: "native:demo",
     worktreeId: "demo",
     projectId: "demo",
     sessionId: "ses_demo",
     worktreePath: stateDir,
     harnessProvider: "scripted",
+  } satisfies HostPtyIdentity;
+  const spawned = await control.spawn({
+    ...spawnIdentity,
     command: "/bin/sh",
     args: ["-c", 'i=0; while true; do i=$((i+1)); echo "tick $i"; sleep 1; done'],
     cwd: stateDir,
     cols: 80,
     rows: 24,
   });
+  const attachExpectation = { ...spawnIdentity, ...spawned };
   log(`  ptyId=${spawned.ptyId}\n`);
 
   log("── client #1 attaches and watches ~3s ──");
   const client1 = createStationHostClient({ socketPath });
-  const attach1 = await client1.attach(spawned);
+  const attach1 = await client1.attach(attachExpectation);
   await readFramesFor(attach1, 3000, (data) => process.stdout.write(`  [c1] ${data}`));
   // host.list returns authoritative pid: the PTY's child after bridge is ready. spawn/attach may briefly report bridge pid.
   const livePid = (await control.list())[0]?.pid;
@@ -73,7 +83,7 @@ async function main(): Promise<void> {
 
   log("── client #2 reattaches (reopen) ──");
   const client2 = createStationHostClient({ socketPath });
-  const attach2 = await client2.attach(spawned);
+  const attach2 = await client2.attach(attachExpectation);
   const samePid = attach2.ack.pid === livePid;
   log(`  pid=${attach2.ack.pid} — same agent as before (pid ${livePid})? ${samePid ? "YES ✓" : "NO ✗"}`);
   log(`  replayed terminal state (${attach2.ack.replay.kind}):`);

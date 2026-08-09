@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { StationTerminalProcess } from "../../types.js";
-import { createLocalPtyTerminal, resolvePtyImplementation } from "../localPtyTerminal.js";
+import type { StationTerminalProcess } from "../types.js";
+import { createLocalPtyTerminal, resolvePtyImplementation } from "./localPtyTerminal.js";
 
 declare const Bun: {
   env: Record<string, string | undefined>;

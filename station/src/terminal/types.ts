@@ -113,8 +113,9 @@ export type StationTerminalProcess = {
   resize(size: StationTerminalSize): void;
   kill(signal?: string): void;
   /**
-   * Bridge-only negotiated handoff: close owner pipes without SIGTERM so the
-   * bridge parks the PTY. Absent on transports that cannot park.
+   * Bridge-only ownership release: close owner pipes or an adopted control
+   * socket without SIGTERM so the bridge parks the PTY. Absent on transports
+   * that cannot park.
    * Returns whether park artifacts (control socket / park.json) will appear —
    * `false` is the explicit non-parking test seam; production bridges return true.
    */

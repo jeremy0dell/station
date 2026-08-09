@@ -29,6 +29,8 @@ import {
   HostHealthResultSchema,
   HostListResultSchema,
   HostOkResultSchema,
+  type HostPtyAttachExpectation,
+  type HostPtyIdentity,
   type HostPtyKind,
   type HostPtyRef,
   type HostResponse,
@@ -40,6 +42,7 @@ import {
   HostStopIfIdleResultSchema,
   hostClientShutdownNotification,
   hostRequest,
+  isSameHostPtyIdentity,
   isSameHostPtyRef,
 } from "./protocol.js";
 
@@ -57,8 +60,8 @@ export type StationHostClientOptions = {
 };
 
 /**
- * A live attachment to one exact Host PTY lifetime. `attachmentId` correlates
- * this attempt only; the acknowledgement retains the immutable PTY reference.
+ * One successful attachment attempt to an exact Host PTY lifetime. Its frame
+ * iterator and detach operation release only this attempt, even after replacement.
  */
 export type HostAttachment = {
   attachmentId: string;
@@ -90,8 +93,8 @@ export type StationHostClient = {
   list(): Promise<HostListResult["ptys"]>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
-  /** Attach only when target, PTY id, and PTY instance still identify one live entry. */
-  attach(ptyRef: HostPtyRef): Promise<HostAttachment>;
+  /** Attach only when the acknowledgement matches the complete client-held identity proof. */
+  attach(expectation: HostPtyAttachExpectation): Promise<HostAttachment>;
   /** Send a one-way shutdown notification, then gracefully close the connection. */
   dispose(): void;
 };
@@ -110,8 +113,11 @@ type Pending = {
 };
 
 type FrameSink = {
+  readonly frames: AsyncIterable<HostFrame>;
+  readonly ended: boolean;
   push(frame: HostFrame): void;
   end(): void;
+  release(): void;
 };
 
 const defaultTimeoutMs = 5000;
@@ -121,6 +127,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
   const expectedBuildVersion = options.expectedBuildVersion ?? stationBuildInfo().version;
   const pending = new Map<string, Pending>();
   const sinks = new Map<string, FrameSink>();
+  const allSinks = new Set<FrameSink>();
   let connection: NdjsonConnection | undefined;
   let connecting: Promise<NdjsonConnection> | undefined;
   let compatibilityCheck: Promise<void> | undefined;
@@ -136,7 +143,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       entry.reject(error);
     }
     pending.clear();
-    for (const sink of sinks.values()) {
+    for (const sink of allSinks) {
       sink.end();
     }
     sinks.clear();
@@ -270,7 +277,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     return rawRequest(method, params, schema, true);
   }
 
-  function registerSink(ptyId: string): AsyncIterable<HostFrame> {
+  function createSink(ptyId: string): FrameSink {
     const queue: HostFrame[] = [];
     const waiters: Array<(result: IteratorResult<HostFrame>) => void> = [];
     let ended = false;
@@ -284,42 +291,61 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         );
       }
     };
-    sinks.set(ptyId, {
+    const sink: FrameSink = {
+      get frames() {
+        return {
+          [Symbol.asyncIterator]: () => ({
+            next: () =>
+              new Promise<IteratorResult<HostFrame>>((resolve) => {
+                if (queue.length > 0) {
+                  const next = queue.shift();
+                  resolve(
+                    next === undefined
+                      ? { done: true, value: undefined }
+                      : { done: false, value: next },
+                  );
+                  return;
+                }
+                if (ended) {
+                  resolve({ done: true, value: undefined });
+                  return;
+                }
+                waiters.push(resolve);
+              }),
+            return: () => {
+              sink.release();
+              return Promise.resolve({ done: true as const, value: undefined });
+            },
+          }),
+        };
+      },
+      get ended() {
+        return ended;
+      },
       push: (frame) => {
+        if (ended) {
+          return;
+        }
         queue.push(frame);
         drain();
       },
       end: () => {
+        if (ended) {
+          return;
+        }
         ended = true;
+        allSinks.delete(sink);
         drain();
       },
-    });
-    return {
-      [Symbol.asyncIterator]: () => ({
-        next: () =>
-          new Promise<IteratorResult<HostFrame>>((resolve) => {
-            if (queue.length > 0) {
-              const next = queue.shift();
-              resolve(
-                next === undefined
-                  ? { done: true, value: undefined }
-                  : { done: false, value: next },
-              );
-              return;
-            }
-            if (ended) {
-              resolve({ done: true, value: undefined });
-              return;
-            }
-            waiters.push(resolve);
-          }),
-        return: () => {
-          ended = true;
-          drain();
-          return Promise.resolve({ done: true, value: undefined });
-        },
-      }),
+      release: () => {
+        if (sinks.get(ptyId) === sink) {
+          sinks.delete(ptyId);
+        }
+        sink.end();
+      },
     };
+    allSinks.add(sink);
+    return sink;
   }
 
   return {
@@ -350,25 +376,32 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },
     close: (ptyId) => request("host.close", { ptyId, confirm: true }, HostCloseResultSchema),
-    attach: async (ptyRef) => {
+    attach: async (expectation) => {
       const requestedRef: HostPtyRef = {
-        terminalTargetId: ptyRef.terminalTargetId,
-        ptyId: ptyRef.ptyId,
-        ptyInstanceId: ptyRef.ptyInstanceId,
+        terminalTargetId: expectation.terminalTargetId,
+        ptyId: expectation.ptyId,
+        ptyInstanceId: expectation.ptyInstanceId,
+      };
+      const requestedIdentity: HostPtyIdentity = {
+        kind: expectation.kind,
+        terminalTargetId: expectation.terminalTargetId,
+        worktreeId: expectation.worktreeId,
+        projectId: expectation.projectId,
+        sessionId: expectation.sessionId,
+        worktreePath: expectation.worktreePath,
+        harnessProvider: expectation.harnessProvider,
       };
       const { ptyId } = requestedRef;
       const attachmentId = `att_${randomUUID()}`;
-      const frames = registerSink(ptyId);
+      const sink = createSink(ptyId);
       let ack: HostAttachAck;
       try {
         ack = await request("host.attach", { ...requestedRef, attachmentId }, HostAttachAckSchema);
       } catch (error) {
-        const sink = sinks.get(ptyId);
-        sinks.delete(ptyId);
-        sink?.end();
+        sink.release();
         throw error;
       }
-      if (!isSameHostPtyRef(requestedRef, ack)) {
+      if (!isSameHostPtyRef(requestedRef, ack) || !isSameHostPtyIdentity(requestedIdentity, ack)) {
         try {
           await request(
             "host.detach",
@@ -378,19 +411,22 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         } catch {
           // Best-effort cleanup: the mismatch remains the authoritative failure.
         } finally {
-          const sink = sinks.get(ptyId);
-          sinks.delete(ptyId);
-          sink?.end();
+          sink.release();
         }
         throw new StationHostProviderError(
           "HOST_ATTACHMENT_MISMATCH",
-          "Station host acknowledged a different PTY reference than the client requested.",
+          "Station host acknowledged a different PTY identity than the client expected.",
         );
+      }
+      // The server acknowledges before it can send frames, so routing starts only after validation.
+      sinks.get(ptyId)?.release();
+      if (!sink.ended) {
+        sinks.set(ptyId, sink);
       }
       return {
         attachmentId,
         ack,
-        frames,
+        frames: sink.frames,
         write: async (data) => {
           await request("host.write", { ptyId, data }, HostOkResultSchema);
         },
@@ -407,9 +443,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
               HostOkResultSchema,
             );
           } finally {
-            const sink = sinks.get(ptyId);
-            sinks.delete(ptyId);
-            sink?.end();
+            sink.release();
           }
         },
       };

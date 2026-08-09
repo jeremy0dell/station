@@ -4,7 +4,7 @@ import {
   STATION_HOST_PROVIDER_ID,
   type HostAttachment,
   type HostFrame,
-  type HostPtyRef,
+  type HostPtyAttachExpectation,
   type HostSpawnParamsInput,
   type StationHostClient,
 } from "@station/host";
@@ -96,8 +96,8 @@ type AttachLoopStep =
 
 export type HostAttachedTerminalOptions = {
   hostSocketPath: string;
-  /** Exact existing Host PTY lifetime. Required unless `spawn` is supplied. */
-  ptyRef?: HostPtyRef;
+  /** Exact existing Host PTY lifetime and immutable spawn identity. Required without `spawn`. */
+  ptyRef?: HostPtyAttachExpectation;
   /**
    * Spawned aux PTYs are Station-owned: `kill()` closes them on the host. Attach
    * only terminals just detach because the observer owns agent lifecycles.
@@ -125,8 +125,8 @@ export type HostAttachedTerminalOptions = {
  * data and geometry frames. Degraded reconstruction replays the Host's
  * mode-restoring, cursor-anchoring reset data before requesting repaint and
  * keeps I/O live; proven PTY loss emits exit, while compatibility failures emit
- * unavailable. Every reconnect retains the same PTY reference while receiving
- * a fresh attachment-attempt identity. `dispose()` only detaches.
+ * unavailable. Every reconnect retains the same complete PTY identity proof
+ * while receiving a fresh attachment-attempt identity. `dispose()` only detaches.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -168,14 +168,14 @@ export function createHostAttachedTerminal(
   let unavailable = false;
   let lastUnavailable: StationTerminalUnavailable | undefined;
   let disposed = false;
-  let resolvedPtyRef = options.ptyRef;
+  let resolvedPtyExpectation = options.ptyRef;
   let closeRequested = false;
 
   // Close an owned (aux) PTY on the host. Uses a SEPARATE short-lived client so
   // the request can't be cut off by dispose() tearing down the attach connection
   // in the same tick (a pane close fires kill() then, via reconcile, dispose()).
   const closeOwnedPty = (): void => {
-    const id = resolvedPtyRef?.ptyId;
+    const id = resolvedPtyExpectation?.ptyId;
     if (id === undefined) {
       return;
     }
@@ -528,7 +528,7 @@ export function createHostAttachedTerminal(
   };
 
   const runAttachAttempt = async (
-    ptyRef: HostPtyRef,
+    ptyExpectation: HostPtyAttachExpectation,
     hadReplayed: boolean,
   ): Promise<AttachAttemptOutcome> => {
     const state: AttachmentPreparationState = { replayed: hadReplayed };
@@ -536,7 +536,7 @@ export function createHostAttachedTerminal(
     // earn the healthy-connection retry reset.
     let connectedAt: number | undefined;
     try {
-      const opened = await client.attach(ptyRef);
+      const opened = await client.attach(ptyExpectation);
       if (!acceptAttachedPty(opened)) {
         return { kind: "complete" };
       }
@@ -585,11 +585,11 @@ export function createHostAttachedTerminal(
   };
 
   const advanceAttachLoop = async (
-    ptyRef: HostPtyRef,
+    ptyExpectation: HostPtyAttachExpectation,
     replayed: boolean,
     attempt: number,
   ): Promise<AttachLoopStep> => {
-    const outcome = await runAttachAttempt(ptyRef, replayed);
+    const outcome = await runAttachAttempt(ptyExpectation, replayed);
     if (outcome.kind === "complete") {
       return { kind: "complete" };
     }
@@ -613,11 +613,11 @@ export function createHostAttachedTerminal(
 
   // Retry only transient transport loss; permanent host evidence or exhaustion
   // ends the pane, while a healthy connection earns a fresh consecutive budget.
-  const runAttachLoop = async (ptyRef: HostPtyRef): Promise<void> => {
+  const runAttachLoop = async (ptyExpectation: HostPtyAttachExpectation): Promise<void> => {
     let replayed = false;
     let lastError: StationTerminalUnavailable | undefined;
     for (let attempt = 0; attempt < MAX_ATTACH_ATTEMPTS; attempt += 1) {
-      const step = await advanceAttachLoop(ptyRef, replayed, attempt);
+      const step = await advanceAttachLoop(ptyExpectation, replayed, attempt);
       if (step.kind === "complete") {
         return;
       }
@@ -647,8 +647,14 @@ export function createHostAttachedTerminal(
       // retry would fork a second PTY. The size rides in from the lazy first-resize.
       try {
         const spawned = await client.spawn({ ...options.spawn, cols: size.cols, rows: size.rows });
-        resolvedPtyRef = {
+        resolvedPtyExpectation = {
+          kind: options.spawn.kind ?? "agent",
           terminalTargetId: spawned.terminalTargetId,
+          worktreeId: options.spawn.worktreeId,
+          projectId: options.spawn.projectId,
+          sessionId: options.spawn.sessionId,
+          worktreePath: options.spawn.worktreePath,
+          harnessProvider: options.spawn.harnessProvider,
           ptyId: spawned.ptyId,
           ptyInstanceId: spawned.ptyInstanceId,
         };
@@ -668,7 +674,7 @@ export function createHostAttachedTerminal(
     if (disposed) {
       return;
     }
-    if (resolvedPtyRef === undefined) {
+    if (resolvedPtyExpectation === undefined) {
       const event = {
         code: "HOST_INVALID_ATTACHMENT",
         message: "Station host attach failed: no canonical PTY reference.",
@@ -677,7 +683,7 @@ export function createHostAttachedTerminal(
       emitUnavailable(event);
       return;
     }
-    await runAttachLoop(resolvedPtyRef);
+    await runAttachLoop(resolvedPtyExpectation);
   })();
 
   const disposableFor = <T>(set: Set<T>, listener: T): StationTerminalDisposable => ({
@@ -757,7 +763,7 @@ export function createHostAttachedTerminal(
         // through the observer-side provider (host.close), not this client.
         return;
       }
-      if (resolvedPtyRef === undefined) {
+      if (resolvedPtyExpectation === undefined) {
         // Spawn still in flight; close it as soon as we have the id.
         closeRequested = true;
         return;

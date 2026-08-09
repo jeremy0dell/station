@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HostAttachment, HostFrame, StationHostClient } from "@station/host";
-import { resolveAuxShellPlacement } from "../auxShellPlacement.js";
+import { resolveAuxShellPlacement } from "./auxShellPlacement.js";
 
 const unusedHandoffClientMethods = {
   beginHandoff: async () => ({

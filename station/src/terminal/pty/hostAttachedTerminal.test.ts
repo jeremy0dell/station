@@ -2,7 +2,7 @@ import {
   type HostAttachAck,
   type HostAttachment,
   type HostFrame,
-  type HostPtyRef,
+  type HostPtyAttachExpectation,
   type StationHostClient,
   StationHostProviderError,
 } from "@station/host";
@@ -10,14 +10,14 @@ import { describe, expect, it } from "bun:test";
 import {
   resetTerminalDiagnosticsForTest,
   terminalCorruptionCounters,
-} from "../../diagnostics.js";
+} from "../diagnostics.js";
 import type {
   StationTerminalDisposable,
   StationTerminalProcess,
   StationTerminalReplay,
   StationTerminalSize,
-} from "../../types.js";
-import { createHostAttachedTerminal, RECONNECT_REPAINT } from "../hostAttachedTerminal.js";
+} from "../types.js";
+import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -26,11 +26,6 @@ const PTY_REF = {
   ptyId: "pty-1",
   ptyInstanceId: "instance-1",
 };
-const ptyRef = (ptyId: string) => ({
-  terminalTargetId: `native:${ptyId}`,
-  ptyId,
-  ptyInstanceId: `instance-${ptyId}`,
-});
 const PTY_IDENTITY = {
   kind: "agent" as const,
   terminalTargetId: PTY_REF.terminalTargetId,
@@ -40,6 +35,13 @@ const PTY_IDENTITY = {
   worktreePath: "/repo/wt-1",
   harnessProvider: "claude",
 };
+const PTY_EXPECTATION = { ...PTY_IDENTITY, ...PTY_REF };
+const ptyRef = (ptyId: string): HostPtyAttachExpectation => ({
+  ...PTY_IDENTITY,
+  terminalTargetId: `native:${ptyId}`,
+  ptyId,
+  ptyInstanceId: `instance-${ptyId}`,
+});
 
 function deferred<T>() {
   let resolve: (value: T | PromiseLike<T>) => void = () => {};
@@ -198,7 +200,7 @@ function terminalFor(
   let clientDisposed = false;
   const terminal = createHostAttachedTerminal({
     hostSocketPath: "/tmp/unused.sock",
-    ptyRef: PTY_REF,
+    ptyRef: PTY_EXPECTATION,
     size,
     clientFactory: () =>
       clientForAttach(async () => attachment, () => {
@@ -448,7 +450,7 @@ describe("createHostAttachedTerminal", () => {
     let clientDisposed = false;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         clientForAttach(async () => pendingAttach.promise, () => {
@@ -494,7 +496,7 @@ describe("createHostAttachedTerminal", () => {
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         clientForAttach(async () => {
@@ -716,7 +718,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let clientCreations = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -760,7 +762,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -796,7 +798,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let clientCreations = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -835,7 +837,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let clientCreations = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         const selected = clientCreations === 0 ? first : second;
@@ -930,7 +932,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () => {
         clientCreations += 1;
@@ -973,7 +975,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -1022,7 +1024,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -1067,7 +1069,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -1111,7 +1113,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     let attachCalls = 0;
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       clientFactory: () =>
         ({
@@ -1155,12 +1157,12 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     // pane (the exact failure finding 2.2 set out to prevent).
     let clock = 0;
     let attachCalls = 0;
-    const attachedRefs: HostPtyRef[] = [];
+    const attachedRefs: HostPtyAttachExpectation[] = [];
     let current = controllableAttachment(ack());
     const sleeps: number[] = [];
     const terminal = createHostAttachedTerminal({
       hostSocketPath: "/tmp/x.sock",
-      ptyRef: PTY_REF,
+      ptyRef: PTY_EXPECTATION,
       size: { cols: 80, rows: 24 },
       now: () => clock,
       clientFactory: () =>
@@ -1187,7 +1189,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     }
     expect(exits).toEqual([]); // never killed despite > MAX_ATTACH_ATTEMPTS drops
     expect(attachCalls).toBe(9); // it kept redialing each time
-    expect(attachedRefs).toEqual(Array.from({ length: 9 }, () => PTY_REF));
+    expect(attachedRefs).toEqual(Array.from({ length: 9 }, () => PTY_EXPECTATION));
     // The fresh-budget reset computes its preserved 125 ms delay from attempt -1.
     expect(sleeps).toEqual(Array.from({ length: 8 }, () => 125));
     terminal.dispose();

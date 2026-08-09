@@ -1,7 +1,9 @@
 import net from "node:net";
 import {
+  type PtyBridgeAdoptionAck,
+  PtyBridgeAdoptionAckSchema,
+  PtyBridgeAdoptCommandSchema,
   type PtyBridgeStatus,
-  PtyBridgeStatusSchema,
   PtyInstanceIdSchema,
 } from "@station/contracts";
 import { z } from "zod";
@@ -39,7 +41,8 @@ const BridgeControlErrorSchema = z
   .strict();
 
 /** A parked bridge rebound as a live terminal; adoption extras ride beside the interface. */
-export type AdoptedPtyBridge = StationTerminalProcess & {
+export type AdoptedPtyBridge = Omit<StationTerminalProcess, "releaseToOrphan"> & {
+  releaseToOrphan(): boolean;
   /** True when the bridge dropped parked output before adoption. */
   readonly parkedEvicted: boolean;
   /** Recorded exit when the PTY died before adoption; undefined while alive. */
@@ -92,9 +95,11 @@ export function adoptLocalPtyBridge(
       finishWithError(error);
     });
     socket.on("connect", () => {
-      socket.write(
-        `${JSON.stringify({ type: "adopt", ptyInstanceId: options.ptyInstanceId })}\n`,
-      );
+      const command = PtyBridgeAdoptCommandSchema.parse({
+        type: "adopt",
+        ptyInstanceId: options.ptyInstanceId,
+      });
+      socket.write(`${JSON.stringify(command)}\n`);
     });
     socket.on("data", (chunk: string) => {
       buffer += chunk;
@@ -120,7 +125,7 @@ export function adoptLocalPtyBridge(
         finishWithError(new Error(errorReply.data.message));
         return;
       }
-      const parsedStatus = PtyBridgeStatusSchema.safeParse(rawMessage);
+      const parsedStatus = PtyBridgeAdoptionAckSchema.safeParse(rawMessage);
       if (!parsedStatus.success) {
         finishWithError(new Error("Invalid bridge adoption status reply."));
         return;
@@ -184,7 +189,7 @@ class AdoptedLocalPtyBridgeProcess implements StationTerminalProcess {
     command: string;
     size: StationTerminalSize;
     socket: net.Socket;
-    status: PtyBridgeStatus;
+    status: PtyBridgeAdoptionAck;
     initialBuffer: string;
   }) {
     const { id, command, size, socket, status, initialBuffer } = init;
@@ -261,6 +266,19 @@ class AdoptedLocalPtyBridgeProcess implements StationTerminalProcess {
       return;
     }
     this.sendControl({ type: "kill", signal });
+  }
+
+  releaseToOrphan(): boolean {
+    if (this.#disposed) {
+      return false;
+    }
+    this.#disposed = true;
+    const willPark = !this.#events.exited && !this.#socketClosed;
+    this.#events.dispose();
+    this.#unavailableListeners.clear();
+    this.#socket.removeListener("data", this.#feed);
+    this.#socket.end();
+    return willPark;
   }
 
   dispose(): void {

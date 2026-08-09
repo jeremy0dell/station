@@ -12,14 +12,14 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStationHostClient, type HostPtyRef } from "@station/host";
+import { createStationHostClient, type HostPtyAttachExpectation } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
-import { type StationHostInstance, startStationHost } from "../../../host/startHost.js";
-import { createPtyRegistry } from "../../registry/ptyRegistry.js";
-import { createScriptedTerminal, type ScriptedTerminal } from "../../testing/scriptedTerminal.js";
-import { waitFor } from "../../testing/waitFor.js";
-import type { StationVtScreen } from "../../vt/screen.js";
-import { createHostAttachedTerminal } from "../hostAttachedTerminal.js";
+import { type StationHostInstance, startStationHost } from "../../host/startHost.js";
+import { createPtyRegistry } from "../registry/ptyRegistry.js";
+import { createScriptedTerminal, type ScriptedTerminal } from "../testing/scriptedTerminal.js";
+import { waitFor } from "../testing/waitFor.js";
+import type { StationVtScreen } from "../vt/screen.js";
+import { createHostAttachedTerminal } from "./hostAttachedTerminal.js";
 
 const noopLogger = { log: async () => undefined } as never;
 
@@ -67,7 +67,7 @@ afterEach(async () => {
 
 async function startAgentHost(
   scripted: ScriptedTerminal,
-): Promise<{ socketPath: string; ptyRef: HostPtyRef }> {
+): Promise<{ socketPath: string; ptyRef: HostPtyAttachExpectation }> {
   const dir = await mkdtemp(join(tmpdir(), "station-replay-sizing-"));
   const socketPath = join(dir, "station-host.sock");
   const host: StationHostInstance = await startStationHost({
@@ -79,7 +79,7 @@ async function startAgentHost(
   cleanups.push(() => host.close());
   const control = createStationHostClient({ socketPath });
   cleanups.push(() => control.dispose());
-  const spawned = await control.spawn({
+  await control.spawn({
     terminalTargetId: "native:wt-replay",
     worktreeId: "wt-replay",
     projectId: "proj-replay",
@@ -92,12 +92,14 @@ async function startAgentHost(
     cols: HOST_SPAWN.cols,
     rows: HOST_SPAWN.rows,
   });
-  return { socketPath, ptyRef: spawned };
+  const [ptyRef] = await control.list();
+  if (ptyRef === undefined) throw new Error("host did not list the spawned PTY");
+  return { socketPath, ptyRef };
 }
 
 async function startRealAgentHost(
   buffer: "normal" | "alternate",
-): Promise<{ socketPath: string; ptyRef: HostPtyRef }> {
+): Promise<{ socketPath: string; ptyRef: HostPtyAttachExpectation }> {
   const dir = await mkdtemp(join(tmpdir(), "station-real-repaint-"));
   const socketPath = join(dir, "station-host.sock");
   cleanups.push(() => rm(dir, { recursive: true, force: true }));
@@ -110,7 +112,7 @@ async function startRealAgentHost(
   cleanups.push(() => host.close());
   const control = createStationHostClient({ socketPath });
   cleanups.push(() => control.dispose());
-  const spawned = await control.spawn({
+  await control.spawn({
     terminalTargetId: "native:wt-real-repaint",
     worktreeId: "wt-real-repaint",
     projectId: "proj-real-repaint",
@@ -124,13 +126,15 @@ async function startRealAgentHost(
     cols: HOST_SPAWN.cols,
     rows: HOST_SPAWN.rows,
   });
-  return { socketPath, ptyRef: spawned };
+  const [ptyRef] = await control.list();
+  if (ptyRef === undefined) throw new Error("host did not list the spawned PTY");
+  return { socketPath, ptyRef };
 }
 
 /** Attach exactly as production does: registry entry with a host-attached override. */
 function attachPane(
   socketPath: string,
-  ptyRef: HostPtyRef,
+  ptyRef: HostPtyAttachExpectation,
   size: { cols: number; rows: number },
 ): StationVtScreen {
   const registry = createPtyRegistry();
@@ -156,7 +160,7 @@ function visibleRows(screen: StationVtScreen, count: number): string[] {
 
 async function waitForReplayKind(
   control: ReturnType<typeof createStationHostClient>,
-  ptyRef: HostPtyRef,
+  ptyRef: HostPtyAttachExpectation,
   expected: string,
 ): Promise<string> {
   const deadline = Date.now() + 5_000;

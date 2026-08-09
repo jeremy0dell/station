@@ -26,6 +26,27 @@ const PTY_IDENTITY = {
   worktreePath: "/repo/wt-1",
   harnessProvider: "claude",
 };
+const PTY_EXPECTATION = { ...PTY_IDENTITY, ...PTY_REF };
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms, "timeout"));
+
+function attachAck(overrides: Record<string, unknown> = {}) {
+  return {
+    subscribed: true,
+    ...PTY_IDENTITY,
+    ...PTY_REF,
+    pid: 42,
+    cols: 80,
+    rows: 24,
+    exited: false,
+    replay: {
+      kind: "raw-complete",
+      initialCols: 80,
+      initialRows: 24,
+      events: [],
+    },
+    ...overrides,
+  };
+}
 
 /** Minimal in-memory host router: answers a fixed set of methods. */
 function startFakeRouter(
@@ -439,7 +460,134 @@ describe("createStationHostClient", () => {
     client.dispose();
   });
 
-  it("rejects and detaches a mismatched attach acknowledgement", async () => {
+  it("routes frames only after a valid acknowledgement installs the attempt sink", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    void (async () => {
+      for await (const message of server.messages()) {
+        if (HostClientShutdownNotificationSchema.safeParse(message).success) continue;
+        const request = HostRequestSchema.parse(message);
+        if (request.method === "host.health") {
+          server.send(
+            hostSuccess(request.id, {
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: "test-build",
+            }),
+          );
+        } else if (request.method === "host.attach") {
+          server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "before-ack" });
+          server.send(hostSuccess(request.id, attachAck()));
+          await delay(0);
+          server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "after-ack" });
+        }
+      }
+    })();
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+
+    const attachment = await client.attach(PTY_EXPECTATION);
+    await expect(attachment.frames[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { data: "after-ack" },
+    });
+    client.dispose();
+  });
+
+  it("keeps the current sink routable when a replacement request fails", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    let attachCount = 0;
+    void (async () => {
+      for await (const message of server.messages()) {
+        if (HostClientShutdownNotificationSchema.safeParse(message).success) continue;
+        const request = HostRequestSchema.parse(message);
+        if (request.method === "host.health") {
+          server.send(
+            hostSuccess(request.id, {
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: "test-build",
+            }),
+          );
+        } else if (request.method === "host.attach") {
+          attachCount += 1;
+          server.send(
+            attachCount === 1
+              ? hostSuccess(request.id, attachAck())
+              : hostFailure(
+                  request.id,
+                  stationHostSafeError("HOST_ATTACH_GONE", "replacement failed"),
+                ),
+          );
+        }
+      }
+    })();
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+    const current = await client.attach(PTY_EXPECTATION);
+    const iterator = current.frames[Symbol.asyncIterator]();
+
+    await expect(client.attach(PTY_EXPECTATION)).rejects.toMatchObject({
+      code: "HOST_ATTACH_GONE",
+    });
+    server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "still-current" });
+    await expect(iterator.next()).resolves.toMatchObject({ value: { data: "still-current" } });
+    client.dispose();
+  });
+
+  it("a failed old detach cannot release a newer sink", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    void (async () => {
+      for await (const message of server.messages()) {
+        if (HostClientShutdownNotificationSchema.safeParse(message).success) continue;
+        const request = HostRequestSchema.parse(message);
+        if (request.method === "host.health") {
+          server.send(
+            hostSuccess(request.id, {
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: "test-build",
+            }),
+          );
+        } else if (request.method === "host.attach") {
+          server.send(hostSuccess(request.id, attachAck()));
+        } else if (request.method === "host.detach") {
+          server.send(
+            hostFailure(request.id, stationHostSafeError("HOST_REQUEST_FAILED", "detach failed")),
+          );
+        }
+      }
+    })();
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+    const old = await client.attach(PTY_EXPECTATION);
+    const current = await client.attach(PTY_EXPECTATION);
+    const iterator = current.frames[Symbol.asyncIterator]();
+
+    await expect(old.detach()).rejects.toMatchObject({ code: "HOST_REQUEST_FAILED" });
+    server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "newer" });
+    await expect(iterator.next()).resolves.toMatchObject({ value: { data: "newer" } });
+    client.dispose();
+  });
+
+  it.each([
+    ["terminalTargetId", "native:wrong"],
+    ["ptyId", "pty-wrong"],
+    ["ptyInstanceId", "ptyi-wrong"],
+    ["kind", "aux"],
+    ["worktreeId", "wt-wrong"],
+    ["projectId", "proj-wrong"],
+    ["sessionId", "ses-wrong"],
+    ["worktreePath", "/repo/wrong"],
+    ["harnessProvider", "codex"],
+  ] as const)("rejects and detaches an acknowledgement with mismatched %s", async (field, value) => {
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
     const detached = Promise.withResolvers<void>();
     void (async () => {
@@ -462,7 +610,7 @@ describe("createStationHostClient", () => {
               subscribed: true,
               ...PTY_IDENTITY,
               ...PTY_REF,
-              ptyInstanceId: "wrong-instance",
+              [field]: value,
               pid: 42,
               cols: 80,
               rows: 24,
@@ -487,7 +635,7 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
 
-    await expect(client.attach(PTY_REF)).rejects.toMatchObject({
+    await expect(client.attach(PTY_EXPECTATION)).rejects.toMatchObject({
       code: "HOST_ATTACHMENT_MISMATCH",
     });
     await expect(detached.promise).resolves.toBeUndefined();

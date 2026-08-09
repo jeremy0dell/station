@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createLocalPtyTerminal } from "../localPtyTerminal.js";
-import { waitFor } from "../../testing/waitFor.js";
-import type { StationTerminalExit, StationTerminalProcess } from "../../types.js";
+import { createLocalPtyTerminal } from "./localPtyTerminal.js";
+import { waitFor } from "../testing/waitFor.js";
+import type { StationTerminalExit, StationTerminalProcess } from "../types.js";
 
-const BRIDGE_PATH = fileURLToPath(new URL("../localPtyBridge.cjs", import.meta.url));
+const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
 
 const gated = (): boolean => {
   if (Bun.env.STATION_PTY_SMOKE !== "1") {

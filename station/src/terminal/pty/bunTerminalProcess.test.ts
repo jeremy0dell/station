@@ -5,19 +5,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "bun:test";
-import type { StationTerminalExit, StationTerminalProcess } from "../../types.js";
-import { waitFor } from "../../testing/waitFor.js";
+import type { StationTerminalExit, StationTerminalProcess } from "../types.js";
+import { waitFor } from "../testing/waitFor.js";
 import {
   CTTY_HELPER_PATH,
   createBunTerminalProcess,
   type BunTerminalProcessOptions,
-} from "../bunTerminalProcess.js";
-import { createStationChildPtyEnvironment } from "../childPtyEnvironment.js";
-import { createLocalPtyTerminal } from "../localPtyTerminal.js";
+} from "./bunTerminalProcess.js";
+import { createStationChildPtyEnvironment } from "./childPtyEnvironment.js";
+import { createLocalPtyTerminal } from "./localPtyTerminal.js";
 
 const RUN_REAL_BUN_PTY = process.env.STATION_PTY_IMPL === "bun";
 const PI_CAPABILITIES_PROBE = fileURLToPath(
-  new URL("../fixtures/piCapabilitiesProbe.ts", import.meta.url),
+  new URL("./fixtures/piCapabilitiesProbe.ts", import.meta.url),
 );
 const cleanups: Array<() => Promise<unknown> | unknown> = [];
 

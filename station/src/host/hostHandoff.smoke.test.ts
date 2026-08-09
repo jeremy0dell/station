@@ -311,9 +311,10 @@ if (SMOKE) {
           childPid = entry?.pid ?? 0;
           return entry?.alive === true && childPid > 0 && childPid !== spawned.pid;
         }, 5_000);
+        const attachExpectation = (await clientA.list())[0]!;
 
         await clientA.beginHandoff("0.0.0-host-b", "processes");
-        await expect(clientA.attach(spawned)).rejects.toMatchObject({
+        await expect(clientA.attach(attachExpectation)).rejects.toMatchObject({
           code: "HOST_UPGRADE_BLOCKED",
         });
         const aborted = await clientA.abortHandoff();
@@ -322,7 +323,7 @@ if (SMOKE) {
         expect(await clientA.list()).toHaveLength(1);
         expect(processAlive(childPid)).toEqual(true);
         expect(processAlive(hostA.pid as number)).toEqual(true);
-        const attachment = await clientA.attach(spawned);
+        const attachment = await clientA.attach(attachExpectation);
         await attachment.detach();
       } finally {
         clientA.dispose();

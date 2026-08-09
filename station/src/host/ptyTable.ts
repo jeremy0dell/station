@@ -9,6 +9,7 @@ import {
   type HostPtyRef,
   type HostSpawnParams,
   type HostSpawnResult,
+  isSameHostPtyIdentity,
   StationHostProviderError,
 } from "@station/host";
 import type { HostHandoffFidelity, PtyHandoffManifest } from "@station/contracts";
@@ -88,7 +89,7 @@ export type PtySnapshot = {
 };
 
 export type PtyTable = {
-  /** Reuse a target only when every immutable identity field agrees; otherwise fail before spawn. */
+  /** Reuse only identical targets; failed activation frees both indexes and disposes new resources. */
   spawn(params: HostSpawnParams): PtySpawnOutcome;
   write(ptyId: string, data: string): void;
   resize(ptyId: string, cols: number, rows: number): void;
@@ -121,9 +122,9 @@ export type PtyTable = {
   /**
    * ADAPTER
    *
-   * Rebind the parked bridges named by a validated manifest as live entries so
-   * this host serves them without respawning; per-entry failures are reported,
-   * never thrown, and an invalid manifest fails closed.
+   * Rebind validated parked bridges transactionally. Each failed entry is
+   * re-parked without killing its process, later entries continue, and no
+   * failed PTY id or target remains visible; invalid manifests fail closed.
    */
   adoptRegistry(manifest: unknown): Promise<PtyAdoptionReport>;
   disposeAll(): void;
@@ -156,18 +157,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       worktreePath: params.worktreePath,
       harnessProvider: params.harnessProvider,
     };
-  }
-
-  function sameIdentity(left: HostPtyIdentity, right: HostPtyIdentity): boolean {
-    return (
-      left.kind === right.kind &&
-      left.terminalTargetId === right.terminalTargetId &&
-      left.worktreeId === right.worktreeId &&
-      left.projectId === right.projectId &&
-      left.sessionId === right.sessionId &&
-      left.worktreePath === right.worktreePath &&
-      left.harnessProvider === right.harnessProvider
-    );
   }
 
   function broadcast(entry: PtyEntry, frame: HostFrame): void {
@@ -219,6 +208,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     for (const subscription of entry.subscriptions) {
       subscription.dispose();
     }
+    entry.subscriptions.length = 0;
     entry.terminal.dispose();
     entry.semantic.dispose();
     deactivateEntry(entry);
@@ -272,8 +262,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     };
   }
 
-  // Retained data/exit may replay synchronously during subscription, so the
-  // entry and its lifecycle event must exist before a replay can reap it.
   function activateEntry(entry: PtyEntry, event: "agent.spawn" | "agent.adopted"): void {
     if (
       entriesByPtyId.has(entry.ptyId) ||
@@ -287,19 +275,22 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     entriesByPtyId.set(entry.ptyId, entry);
     entriesByTarget.set(entry.identity.terminalTargetId, entry);
     advanceSequencePast(entry.ptyId);
-    emit(event, {
-      ptyId: entry.ptyId,
-      worktreeId: entry.identity.worktreeId,
-      sessionId: entry.identity.sessionId,
-      terminalTargetId: entry.identity.terminalTargetId,
-    });
-    entry.subscriptions.push(
-      entry.terminal.onData((data) => {
+    try {
+      emit(event, {
+        ptyId: entry.ptyId,
+        worktreeId: entry.identity.worktreeId,
+        sessionId: entry.identity.sessionId,
+        terminalTargetId: entry.identity.terminalTargetId,
+      });
+      const dataSubscription = entry.terminal.onData((data) => {
         transformAndPublish(entry, data);
-      }),
-    );
-    entry.subscriptions.push(
-      entry.terminal.onExit((exitEvent) => {
+      });
+      if (entry.exited) {
+        dataSubscription.dispose();
+      } else {
+        entry.subscriptions.push(dataSubscription);
+      }
+      const exitSubscription = entry.terminal.onExit((exitEvent) => {
         reap(
           entry,
           {
@@ -310,8 +301,21 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           },
           "exit",
         );
-      }),
-    );
+      });
+      if (entry.exited) {
+        exitSubscription.dispose();
+      } else {
+        entry.subscriptions.push(exitSubscription);
+      }
+    } catch (error) {
+      for (const subscription of entry.subscriptions) {
+        subscription.dispose();
+      }
+      entry.subscriptions.length = 0;
+      // Retained exit replay can fail mid-subscription, so rollback both indexes together.
+      deactivateEntry(entry);
+      throw error;
+    }
   }
 
   const handoff = createPtyHandoff({
@@ -341,7 +345,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       const identity = identityOf(params);
       const existing = entriesByTarget.get(params.terminalTargetId);
       if (existing !== undefined && !existing.exited) {
-        if (sameIdentity(existing.identity, identity)) {
+        if (isSameHostPtyIdentity(existing.identity, identity)) {
           return {
             terminalTargetId: existing.identity.terminalTargetId,
             ptyId: existing.ptyId,
@@ -428,7 +432,17 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         cols,
         rows,
       });
-      activateEntry(entry, "agent.spawn");
+      try {
+        activateEntry(entry, "agent.spawn");
+      } catch (error) {
+        semantic.dispose();
+        terminal.dispose();
+        throw new StationHostProviderError(
+          "HOST_SPAWN_FAILED",
+          "Could not activate the host PTY.",
+          { cause: error, worktreeId: params.worktreeId, sessionId: params.sessionId },
+        );
+      }
 
       // pid stabilizes to PTY's child once bridge reports ready; host.list is authoritative.
       return {

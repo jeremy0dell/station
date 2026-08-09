@@ -491,6 +491,50 @@ describe("createPtyTable", () => {
     ]);
   });
 
+  it("rolls back both indexes and resources when spawn activation fails", () => {
+    const failed = createScriptedTerminal({ cols: 80, rows: 24 });
+    const replacement = createScriptedTerminal({ cols: 80, rows: 24 });
+    let created = 0;
+    let semanticDisposals = 0;
+    const table = createPtyTable({
+      createTerminal: () => {
+        created += 1;
+        if (created === 1) {
+          return {
+            ...failed.terminal,
+            onExit() {
+              throw new Error("subscription failed");
+            },
+          };
+        }
+        return replacement.terminal;
+      },
+      createSemanticTerminal: () => ({
+        write() {},
+        resize() {},
+        capture: async () => [],
+        dispose() {
+          semanticDisposals += 1;
+        },
+      }),
+    });
+
+    let failure: unknown;
+    try {
+      table.spawn(baseParams);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ code: "HOST_SPAWN_FAILED" });
+    expect(table.list()).toEqual([]);
+    expect(failed.helpers.isDisposed()).toBe(true);
+    expect(semanticDisposals).toBe(1);
+
+    expect(table.spawn(baseParams)).toMatchObject({ created: true });
+    expect(table.list()).toHaveLength(1);
+    table.disposeAll();
+  });
+
   it("forwards writes and clamped resizes to the terminal", () => {
     const { table, scripteds } = tableWithScripted();
     const { ptyId } = table.spawn(baseParams);
@@ -514,6 +558,8 @@ describe("createPtyTable", () => {
   it("does not insert a dead entry when output and exit replay during subscription", () => {
     const events: string[] = [];
     let disposed = false;
+    let dataSubscriptionDisposed = false;
+    let exitSubscriptionDisposed = false;
     const terminal: StationTerminalProcess = {
       id: "immediate",
       command: "true",
@@ -521,11 +567,19 @@ describe("createPtyTable", () => {
       size: { cols: 80, rows: 24 },
       onData(listener) {
         listener("complete");
-        return { dispose() {} };
+        return {
+          dispose() {
+            dataSubscriptionDisposed = true;
+          },
+        };
       },
       onExit(listener) {
         listener({ exitCode: 0 });
-        return { dispose() {} };
+        return {
+          dispose() {
+            exitSubscriptionDisposed = true;
+          },
+        };
       },
       onDiagnostic() {
         return { dispose() {} };
@@ -546,6 +600,8 @@ describe("createPtyTable", () => {
 
     expect(table.list()).toEqual([]);
     expect(disposed).toBe(true);
+    expect(dataSubscriptionDisposed).toBe(true);
+    expect(exitSubscriptionDisposed).toBe(true);
     expect(events).toEqual(["agent.spawn", "agent.exit"]);
   });
 

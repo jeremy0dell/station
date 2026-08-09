@@ -34,8 +34,9 @@ export type PtyAdoptionTarget = {
   size: StationTerminalSize;
 };
 
-/** An adopted terminal plus the park-backlog completeness flag, when the transport reports one. */
-export type PtyAdoptedTerminal = StationTerminalProcess & {
+/** Adopted bridge ownership that can be surrendered without killing the PTY when setup fails. */
+export type PtyAdoptedTerminal = Omit<StationTerminalProcess, "releaseToOrphan"> & {
+  releaseToOrphan(): boolean;
   readonly parkedEvicted?: boolean | undefined;
 };
 
@@ -67,7 +68,7 @@ export type PtyHandoffDeps = {
   createSemanticTerminal: (cols: number, rows: number) => SemanticTerminalModel;
   maxScrollbackBytes: number;
   emit: (event: string, attributes: Record<string, unknown>) => void;
-  /** Table-side activation: register, emit the adoption event, wire subscriptions. */
+  /** Transactionally reserve both indexes, emit adoption, and install lifecycle subscriptions. */
   activateAdoptedEntry: (init: AdoptedEntryInit) => void;
   /** Table-owned atomic removal from both PTY-id and terminal-target indexes. */
   deactivateEntry: (entry: PtyEntry) => void;
@@ -406,6 +407,11 @@ function preflightAdoption(
 }
 
 type AdoptOneResult = { kind: "adopted" } | { kind: "failed"; reason: string };
+type AdoptionFailureReason =
+  | "ring-restore-failed"
+  | "semantic-init-failed"
+  | "screen-seed-failed"
+  | "activation-failed";
 
 async function adoptOneEntry(input: {
   ptyId: string;
@@ -434,37 +440,44 @@ async function adoptOneEntry(input: {
   }
 
   const { cols, rows } = clampSize(handoffEntry.cols, handoffEntry.rows);
-  const ring = await restoreAdoptionRing({
-    ptyId,
-    handoffEntry,
-    terminal,
-    cols,
-    rows,
-    maxScrollbackBytes: input.maxScrollbackBytes,
-    emit,
-  });
-
-  let semantic: SemanticTerminalModel;
+  let phase: AdoptionFailureReason = "ring-restore-failed";
+  let semantic: SemanticTerminalModel | undefined;
   try {
+    const ring = await restoreAdoptionRing({
+      ptyId,
+      handoffEntry,
+      terminal,
+      cols,
+      rows,
+      maxScrollbackBytes: input.maxScrollbackBytes,
+      emit,
+    });
+    phase = "semantic-init-failed";
     semantic = input.createSemanticTerminal(cols, rows);
+    phase = "screen-seed-failed";
+    await seedScreenSnapshot(semantic, ptyId, handoffEntry.screenSnapshotRef, emit);
+    phase = "activation-failed";
+    input.activateAdoptedEntry({
+      ptyId,
+      ptyInstanceId: handoffEntry.ptyInstanceId,
+      identity: { ...handoffEntry.identity },
+      command: handoffEntry.command,
+      terminal,
+      ring,
+      semantic,
+      cols,
+      rows,
+    });
   } catch (error) {
-    terminal.dispose();
-    failAdoptionEmit(emit, ptyId, "semantic-init-failed", error);
-    return { kind: "failed", reason: "semantic-init-failed" };
+    semantic?.dispose();
+    try {
+      terminal.releaseToOrphan();
+    } catch (releaseError) {
+      failAdoptionEmit(emit, ptyId, "orphan-release-failed", releaseError);
+    }
+    failAdoptionEmit(emit, ptyId, phase, error);
+    return { kind: "failed", reason: phase };
   }
-
-  await seedScreenSnapshot(semantic, ptyId, handoffEntry.screenSnapshotRef, emit);
-  input.activateAdoptedEntry({
-    ptyId,
-    ptyInstanceId: handoffEntry.ptyInstanceId,
-    identity: { ...handoffEntry.identity },
-    command: handoffEntry.command,
-    terminal,
-    ring,
-    semantic,
-    cols,
-    rows,
-  });
   return { kind: "adopted" };
 }
 
@@ -507,7 +520,7 @@ async function restoreAdoptionRing(input: {
   return ring;
 }
 
-/** Best-effort screen restore; failures degrade to scrollback replay. */
+/** An unreadable snapshot degrades to replay; applying a decoded snapshot must succeed atomically. */
 async function seedScreenSnapshot(
   semantic: SemanticTerminalModel,
   ptyId: string,
@@ -522,15 +535,8 @@ async function seedScreenSnapshot(
     emit("pty.handoff.screen-import-failed", { ptyId, reason: "unreadable" });
     return;
   }
-  try {
-    for (const sequence of screen.sequences) {
-      semantic.write(sequence);
-    }
-  } catch (error) {
-    emit("pty.handoff.screen-import-failed", {
-      ptyId,
-      message: error instanceof Error ? error.message : String(error),
-    });
+  for (const sequence of screen.sequences) {
+    semantic.write(sequence);
   }
 }
 

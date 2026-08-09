@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { createStationChildPtyEnvironment } from "../childPtyEnvironment.js";
+import { createStationChildPtyEnvironment } from "./childPtyEnvironment.js";
 
 const PI_CAPABILITIES_PROBE = fileURLToPath(
-  new URL("../fixtures/piCapabilitiesProbe.ts", import.meta.url),
+  new URL("./fixtures/piCapabilitiesProbe.ts", import.meta.url),
 );
 
 const outerTerminalHints = {

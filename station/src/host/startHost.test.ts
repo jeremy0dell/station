@@ -1,7 +1,12 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStationHostClient, HOST_PROTOCOL_VERSION } from "@station/host";
+import {
+  createStationHostClient,
+  HOST_PROTOCOL_VERSION,
+  type HostPtyAttachExpectation,
+  type HostSpawnResult,
+} from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
 import { paneInputBytes } from "../input/runtime/sequenceNormalize.js";
 import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
@@ -47,6 +52,7 @@ function testClient(socketPath: string, timeoutMs?: number) {
 }
 
 const identity = {
+  kind: "agent" as const,
   terminalTargetId: "native:wt-1",
   worktreeId: "wt-1",
   projectId: "proj-1",
@@ -54,6 +60,10 @@ const identity = {
   worktreePath: "/repo/wt-1",
   harnessProvider: "claude",
 };
+
+function attachExpectation(spawned: HostSpawnResult): HostPtyAttachExpectation {
+  return { ...identity, ...spawned };
+}
 
 describe("startStationHost", () => {
   it("answers host.health over a real unix socket", async () => {
@@ -266,7 +276,7 @@ describe("startStationHost", () => {
       const { ptyId } = spawned;
 
       scripted.helpers.emitData("scroll-"); // captured into the ring before attach
-      const attachment = await client.attach(spawned);
+      const attachment = await client.attach(attachExpectation(spawned));
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -303,7 +313,7 @@ describe("startStationHost", () => {
       const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
 
       scripted.helpers.emitData(input);
-      const attachment = await client.attach(spawned);
+      const attachment = await client.attach(attachExpectation(spawned));
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -338,7 +348,7 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
-      const initial = await client.attach(spawned);
+      const initial = await client.attach(attachExpectation(spawned));
       await initial.detach();
 
       scripted.helpers.emitData("overflowing-history");
@@ -350,7 +360,7 @@ describe("startStationHost", () => {
       registry.ensure(paneId, undefined, () =>
         createHostAttachedTerminal({
           hostSocketPath: socketPath,
-          ptyRef: spawned,
+          ptyRef: attachExpectation(spawned),
           size: { cols: 80, rows: 24 },
           clientFactory: (path) =>
             createStationHostClient({
@@ -428,6 +438,7 @@ describe("startStationHost", () => {
       // A first-class diagnosable failure — never a silent fall-through to respawn.
       await expect(
         client.attach({
+          ...identity,
           terminalTargetId: "native:missing",
           ptyId: "pty-missing",
           ptyInstanceId: "missing-instance",
@@ -491,7 +502,7 @@ describe("startStationHost", () => {
       });
 
       agent.helpers.emitData("scrollback");
-      const attachment = await client.attach(spawned);
+      const attachment = await client.attach(attachExpectation(spawned));
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -688,6 +699,7 @@ describe("startStationHost", () => {
           ...createScriptedTerminal({ cols: 80, rows: 24 }).terminal,
           bridgePid: 9_002,
           parkedEvicted: false,
+          releaseToOrphan: () => false,
         }),
       },
     });
@@ -774,6 +786,7 @@ describe("startStationHost", () => {
           ...createScriptedTerminal({ cols: 80, rows: 24 }).terminal,
           bridgePid: 9_003,
           parkedEvicted: false,
+          releaseToOrphan: () => false,
         }),
       },
     });
@@ -811,7 +824,7 @@ describe("startStationHost", () => {
           rows: 24,
         }),
       ).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
-      await expect(client.attach(spawned)).rejects.toMatchObject({
+      await expect(client.attach(attachExpectation(spawned))).rejects.toMatchObject({
         code: "HOST_UPGRADE_BLOCKED",
       });
       await client.abortHandoff();
@@ -887,6 +900,7 @@ describe("startStationHost", () => {
           ...createScriptedTerminal({ cols: 80, rows: 24 }).terminal,
           bridgePid: 9_004,
           parkedEvicted: false,
+          releaseToOrphan: () => false,
         }),
       },
     });

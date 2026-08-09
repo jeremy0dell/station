@@ -99,8 +99,9 @@ export const HostPtyKindSchema = z.enum(["agent", "aux"]);
 export type HostPtyKind = z.infer<typeof HostPtyKindSchema>;
 
 /**
- * Immutable launch identity echoed by spawn, list, and attach acknowledgement.
- * `kind` defaults only at the spawn input boundary for caller convenience.
+ * Immutable launch identity supplied at spawn and echoed by list and attach
+ * acknowledgement. `HostSpawnResult` returns the canonical reference, not this
+ * identity; `kind` defaults only at the spawn input boundary.
  */
 export const HostPtyIdentitySchema = z
   .object({
@@ -129,6 +130,21 @@ export const HostPtyRefSchema = z
   .strict();
 export type HostPtyRef = z.infer<typeof HostPtyRefSchema>;
 
+/** Client-held attachment proof joining one canonical PTY reference to its immutable spawn identity. */
+export type HostPtyAttachExpectation = HostPtyIdentity & HostPtyRef;
+
+export function isSameHostPtyIdentity(left: HostPtyIdentity, right: HostPtyIdentity): boolean {
+  return (
+    left.kind === right.kind &&
+    left.terminalTargetId === right.terminalTargetId &&
+    left.worktreeId === right.worktreeId &&
+    left.projectId === right.projectId &&
+    left.sessionId === right.sessionId &&
+    left.worktreePath === right.worktreePath &&
+    left.harnessProvider === right.harnessProvider
+  );
+}
+
 export function isSameHostPtyRef(left: HostPtyRef, right: HostPtyRef): boolean {
   return (
     left.terminalTargetId === right.terminalTargetId &&
@@ -148,7 +164,7 @@ export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
 }).strict();
 export type HostSpawnParams = z.infer<typeof HostSpawnParamsSchema>;
 
-/** Spawn returns the exact reference callers must retain for every later attach. */
+/** Spawn returns the canonical reference callers combine with the supplied identity for attach. */
 export const HostSpawnResultSchema = HostPtyRefSchema.extend({ pid: z.number().int() }).strict();
 export type HostSpawnResult = z.infer<typeof HostSpawnResultSchema>;
 

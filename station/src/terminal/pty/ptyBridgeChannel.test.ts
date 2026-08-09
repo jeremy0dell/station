@@ -3,7 +3,7 @@ import {
   createJsonLineFeed,
   parseBridgeLine,
   toTerminalExit,
-} from "../ptyBridgeChannel.js";
+} from "./ptyBridgeChannel.js";
 
 describe("createJsonLineFeed", () => {
   it("emits one line per newline-delimited frame", () => {

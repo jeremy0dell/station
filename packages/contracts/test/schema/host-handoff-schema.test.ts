@@ -1,5 +1,7 @@
 import {
   HostHandoffFidelitySchema,
+  PtyBridgeAdoptCommandSchema,
+  PtyBridgeAdoptionAckSchema,
   PtyBridgeParkStateSchema,
   PtyBridgeProtocolVersion,
   PtyBridgeStatusSchema,
@@ -163,6 +165,19 @@ describe("pty bridge park state schema", () => {
     };
     expect(PtyBridgeStatusSchema.parse(status)).toEqual(status);
     expect(() => PtyBridgeStatusSchema.parse({ ...status, extra: true })).toThrow();
+    expect(PtyBridgeStatusSchema.parse({ ...status, adopted: false }).adopted).toBe(false);
+    expect(PtyBridgeAdoptionAckSchema.parse({ ...status, adopted: true }).adopted).toBe(true);
+    expect(() => PtyBridgeAdoptionAckSchema.parse(status)).toThrow();
+    expect(() =>
+      PtyBridgeAdoptionAckSchema.parse({ ...status, adopted: true, extra: true }),
+    ).toThrow();
+  });
+
+  it("strictly parses bridge adoption commands", () => {
+    const command = { type: "adopt", ptyInstanceId: "ptyi-1" };
+    expect(PtyBridgeAdoptCommandSchema.parse(command)).toEqual(command);
+    expect(() => PtyBridgeAdoptCommandSchema.parse({ type: "adopt" })).toThrow();
+    expect(() => PtyBridgeAdoptCommandSchema.parse({ ...command, extra: true })).toThrow();
   });
 });
 

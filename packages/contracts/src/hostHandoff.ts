@@ -118,6 +118,15 @@ export const PtyBridgeParkStateSchema = z
   .strict();
 export type PtyBridgeParkState = z.infer<typeof PtyBridgeParkStateSchema>;
 
+/** Strict ownership request accepted by a parked PTY bridge. */
+export const PtyBridgeAdoptCommandSchema = z
+  .object({
+    type: z.literal("adopt"),
+    ptyInstanceId: PtyInstanceIdSchema,
+  })
+  .strict();
+export type PtyBridgeAdoptCommand = z.infer<typeof PtyBridgeAdoptCommandSchema>;
+
 /** Strict bridge control status; ownership changes only after its PTY instance is verified. */
 export const PtyBridgeStatusSchema = z
   .object({
@@ -136,6 +145,12 @@ export const PtyBridgeStatusSchema = z
   })
   .strict();
 export type PtyBridgeStatus = z.infer<typeof PtyBridgeStatusSchema>;
+
+/** Strict successful ownership acknowledgement; parked probe statuses remain valid separately. */
+export const PtyBridgeAdoptionAckSchema = PtyBridgeStatusSchema.extend({
+  adopted: z.literal(true),
+}).strict();
+export type PtyBridgeAdoptionAck = z.infer<typeof PtyBridgeAdoptionAckSchema>;
 
 export const PtyScrollbackDataEventSchema = z
   .object({ type: z.literal("data"), data: z.string() })

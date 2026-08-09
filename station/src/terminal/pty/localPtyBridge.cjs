@@ -5,6 +5,7 @@ const readline = require("node:readline");
 const net = require("node:net");
 const fs = require("node:fs");
 const path = require("node:path");
+const { PtyBridgeAdoptCommandSchema } = require("@station/contracts");
 
 // xterm.js silently clamps resize to these minima; the bridge clamps to the
 // same values so the PTY and the VT screen model can never disagree on size.
@@ -441,7 +442,17 @@ function handleControlCommand(socket, command) {
       controlSend(socket, statusMessage());
       return;
     case "adopt": {
-      if (command.ptyInstanceId !== orphan.ptyInstanceId) {
+      const parsed = PtyBridgeAdoptCommandSchema.safeParse(command);
+      if (!parsed.success) {
+        controlSend(socket, {
+          type: "error",
+          code: "INVALID_ADOPT_COMMAND",
+          message: "The PTY bridge adoption request is invalid.",
+        });
+        socket.end();
+        return;
+      }
+      if (parsed.data.ptyInstanceId !== orphan.ptyInstanceId) {
         controlSend(socket, {
           type: "error",
           code: "PTY_INSTANCE_MISMATCH",
