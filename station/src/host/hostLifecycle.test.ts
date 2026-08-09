@@ -4,6 +4,12 @@ import type { HostClientIdentity } from "@station/host";
 import { describe, expect, it } from "bun:test";
 import { createHostLifecycleWitness } from "./hostLifecycle.js";
 
+const spawnRef = {
+  terminalTargetId: "native:wt-1",
+  ptyId: "pty-1",
+  ptyInstanceId: "instance-1",
+};
+
 const firstClient: HostClientIdentity = {
   protocolVersion: 6,
   buildVersion: "test-build",
@@ -33,12 +39,12 @@ describe("Host lifecycle witness", () => {
 
     await witness.ptySpawned(
       firstClient,
-      { ptyId: "pty-1", pid: 101, created: true },
+      { ...spawnRef, pid: 101, created: true },
       "agent",
     );
     await witness.ptySpawned(
       secondClient,
-      { ptyId: "pty-1", pid: 101, created: false },
+      { ...spawnRef, pid: 101, created: false },
       "agent",
     );
     await witness.ptyExited({ ptyId: "pty-1", ptyKind: "agent", exitCode: 0 });
@@ -75,7 +81,7 @@ describe("Host lifecycle witness", () => {
     await witness.ptyExited({ ptyId: "pty-early", ptyKind: "aux", exitCode: 7 });
     await witness.ptySpawned(
       firstClient,
-      { ptyId: "pty-early", pid: 303, created: true },
+      { ...spawnRef, terminalTargetId: "native:early", ptyId: "pty-early", pid: 303, created: true },
       "aux",
     );
 

@@ -27,6 +27,8 @@ export type PtyTableOrphanOptions = {
 
 export type PtyAdoptionTarget = {
   ptyId: string;
+  /** Exact PTY lifetime the parked bridge must prove before yielding ownership. */
+  ptyInstanceId: string;
   command: string;
   controlSocketPath: string;
   size: StationTerminalSize;
@@ -47,6 +49,7 @@ export type PtyAdoptionReport = {
 /** The per-lane pieces adoption assembles before the table activates the entry. */
 export type AdoptedEntryInit = {
   ptyId: string;
+  ptyInstanceId: string;
   identity: HostPtyIdentity;
   command: string;
   terminal: PtyAdoptedTerminal;
@@ -57,7 +60,8 @@ export type AdoptedEntryInit = {
 };
 
 export type PtyHandoffDeps = {
-  entries: Map<string, PtyEntry>;
+  entriesByPtyId: Map<string, PtyEntry>;
+  entriesByTarget: Map<string, PtyEntry>;
   orphanBridges: PtyTableOrphanOptions | undefined;
   adoptTerminal: PtyTerminalAdopter;
   createSemanticTerminal: (cols: number, rows: number) => SemanticTerminalModel;
@@ -65,6 +69,8 @@ export type PtyHandoffDeps = {
   emit: (event: string, attributes: Record<string, unknown>) => void;
   /** Table-side activation: register, emit the adoption event, wire subscriptions. */
   activateAdoptedEntry: (init: AdoptedEntryInit) => void;
+  /** Table-owned atomic removal from both PTY-id and terminal-target indexes. */
+  deactivateEntry: (entry: PtyEntry) => void;
 };
 
 export type PtyHandoffReleaseReport = {
@@ -94,13 +100,15 @@ type Emit = (event: string, attributes: Record<string, unknown>) => void;
  */
 export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
   const {
-    entries,
+    entriesByPtyId,
+    entriesByTarget,
     orphanBridges,
     adoptTerminal,
     createSemanticTerminal,
     maxScrollbackBytes,
     emit,
     activateAdoptedEntry,
+    deactivateEntry,
   } = deps;
 
   async function buildManifest(
@@ -112,7 +120,7 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
   }> {
     const manifest: PtyHandoffManifest = {};
     const skipped: Array<{ ptyId: string; reason: string }> = [];
-    for (const entry of entries.values()) {
+    for (const entry of entriesByPtyId.values()) {
       if (entry.exited) {
         continue;
       }
@@ -139,6 +147,7 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
 
   async function adoptRegistry(manifestInput: unknown): Promise<PtyAdoptionReport> {
     const manifest = parseHandoffManifest(manifestInput);
+    preflightAdoption(manifest, entriesByPtyId, entriesByTarget);
     const report: PtyAdoptionReport = { adopted: [], failed: [] };
     for (const ptyId of Object.keys(manifest)) {
       const handoffEntry = manifest[ptyId];
@@ -148,7 +157,6 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
       const outcome = await adoptOneEntry({
         ptyId,
         handoffEntry,
-        entries,
         adoptTerminal,
         createSemanticTerminal,
         maxScrollbackBytes,
@@ -186,7 +194,11 @@ export function createPtyHandoff(deps: PtyHandoffDeps): PtyHandoff {
         });
         return { manifest: {}, fidelity, released: [], skipped };
       }
-      const parked = parkAndDropReleasedEntries(entries, Object.keys(manifest));
+      const parked = parkAndDropReleasedEntries(
+        entriesByPtyId,
+        Object.keys(manifest),
+        deactivateEntry,
+      );
       try {
         await ensureExpectedParksReady({
           expectPark: parked.expectPark,
@@ -241,6 +253,7 @@ async function tryBuildHandoffEntry(input: {
     command: entry.command,
     cols: entry.cols,
     rows: entry.rows,
+    ptyInstanceId: entry.ptyInstanceId,
     identity: { ...entry.identity },
     ringComplete: snapshot.complete,
   };
@@ -309,13 +322,14 @@ async function attachScreenExport(
 }
 
 function parkAndDropReleasedEntries(
-  entries: Map<string, PtyEntry>,
+  entriesByPtyId: Map<string, PtyEntry>,
   ptyIds: string[],
+  deactivateEntry: (entry: PtyEntry) => void,
 ): { released: string[]; expectPark: string[] } {
   const released: string[] = [];
   const expectPark: string[] = [];
   for (const ptyId of ptyIds) {
-    const entry = entries.get(ptyId);
+    const entry = entriesByPtyId.get(ptyId);
     if (entry === undefined) {
       continue;
     }
@@ -325,7 +339,7 @@ function parkAndDropReleasedEntries(
     entry.subscriptions.length = 0;
     const willPark = entry.terminal.releaseToOrphan?.() === true;
     entry.semantic.dispose();
-    entries.delete(ptyId);
+    deactivateEntry(entry);
     released.push(ptyId);
     if (willPark) {
       expectPark.push(ptyId);
@@ -373,27 +387,42 @@ function parseHandoffManifest(manifestInput: unknown): PtyHandoffManifest {
   }
 }
 
+function preflightAdoption(
+  manifest: PtyHandoffManifest,
+  entriesByPtyId: ReadonlyMap<string, PtyEntry>,
+  entriesByTarget: ReadonlyMap<string, PtyEntry>,
+): void {
+  for (const [ptyId, entry] of Object.entries(manifest)) {
+    if (
+      entriesByPtyId.has(ptyId) ||
+      entriesByTarget.has(entry.identity.terminalTargetId)
+    ) {
+      throw new StationHostProviderError(
+        "HOST_TARGET_CONFLICT",
+        "A handoff entry conflicts with a live Host PTY id or terminal target.",
+      );
+    }
+  }
+}
+
 type AdoptOneResult = { kind: "adopted" } | { kind: "failed"; reason: string };
 
 async function adoptOneEntry(input: {
   ptyId: string;
   handoffEntry: PtyHandoffEntry;
-  entries: Map<string, PtyEntry>;
   adoptTerminal: PtyTerminalAdopter;
   createSemanticTerminal: (cols: number, rows: number) => SemanticTerminalModel;
   maxScrollbackBytes: number;
   emit: Emit;
   activateAdoptedEntry: (init: AdoptedEntryInit) => void;
 }): Promise<AdoptOneResult> {
-  const { ptyId, handoffEntry, entries, emit } = input;
-  if (entries.has(ptyId)) {
-    return { kind: "failed", reason: "duplicate-pty-id" };
-  }
+  const { ptyId, handoffEntry, emit } = input;
 
   let terminal: PtyAdoptedTerminal;
   try {
     terminal = await input.adoptTerminal({
       ptyId,
+      ptyInstanceId: handoffEntry.ptyInstanceId,
       command: handoffEntry.command,
       controlSocketPath: handoffEntry.controlSocket,
       size: { cols: handoffEntry.cols, rows: handoffEntry.rows },
@@ -427,6 +456,7 @@ async function adoptOneEntry(input: {
   await seedScreenSnapshot(semantic, ptyId, handoffEntry.screenSnapshotRef, emit);
   input.activateAdoptedEntry({
     ptyId,
+    ptyInstanceId: handoffEntry.ptyInstanceId,
     identity: { ...handoffEntry.identity },
     command: handoffEntry.command,
     terminal,

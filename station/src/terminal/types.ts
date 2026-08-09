@@ -1,4 +1,8 @@
-import type { PtyHandoffIdentity, TerminalOutputCompatibility } from "@station/contracts";
+import type {
+  PtyHandoffIdentity,
+  PtyInstanceId,
+  TerminalOutputCompatibility,
+} from "@station/contracts";
 
 export type StationTerminalId = string;
 
@@ -21,6 +25,8 @@ export type StationTerminalOrphanOptions = {
   controlSocketPath: string;
   parkStatePath: string;
   ttlMs: number;
+  /** Immutable PTY lifetime preserved in park state and every adoption handshake. */
+  ptyInstanceId: PtyInstanceId;
   identity: PtyHandoffIdentity;
   /** Parked-output budget; the owner passes its scrollback capacity so the backlog cannot outgrow what an adopter replays. */
   parkMaxBytes?: number;

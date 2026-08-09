@@ -15,6 +15,26 @@ import {
 import { inMemoryNdjsonConnectionPair } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 
+function ptyRef(ptyId: string) {
+  return {
+    terminalTargetId: `native:${ptyId}`,
+    ptyId,
+    ptyInstanceId: `instance-${ptyId}`,
+  };
+}
+
+function ptyIdentity(terminalTargetId: string) {
+  return {
+    kind: "agent" as const,
+    terminalTargetId,
+    worktreeId: "wt-1",
+    projectId: "proj-1",
+    sessionId: "ses-1",
+    worktreePath: "/repo/wt-1",
+    harnessProvider: "claude",
+  };
+}
+
 function wire(handlers: Omit<HostHandlers, "hostIdentity">, logger: HostServerLogger = {}) {
   const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
   void serveHostConnection(
@@ -74,6 +94,7 @@ function controllableStream() {
         },
       }),
     },
+    isEnded: () => ended,
   };
 }
 
@@ -261,7 +282,7 @@ describe("serveHostConnection", () => {
       unary: {
         "host.spawn": (params) => {
           received = HostSpawnParamsSchema.parse(params);
-          return { ptyId: "p1", pid: 7 };
+          return { ...ptyRef("p1"), pid: 7 };
         },
       },
     });
@@ -312,7 +333,8 @@ describe("serveHostConnection", () => {
         attach: () => ({
           ack: {
             subscribed: true,
-            ptyId: "p1",
+            ...ptyIdentity(ptyRef("p1").terminalTargetId),
+            ...ptyRef("p1"),
             pid: 7,
             cols: 100,
             rows: 30,
@@ -337,7 +359,7 @@ describe("serveHostConnection", () => {
         onLifecycle: (event) => lifecycle.push(event),
       },
     );
-    const attachment = await client.attach("p1");
+    const attachment = await client.attach(ptyRef("p1"));
     expect(attachment.ack.replay.events).toEqual([
       { type: "data", data: "snap" },
       { type: "resize", cols: 100, rows: 30 },
@@ -400,7 +422,8 @@ describe("serveHostConnection", () => {
   it("strictly distinguishes raw, semantic, and control-only live-reset replay", () => {
     const ack = {
       subscribed: true as const,
-      ptyId: "p1",
+      ...ptyIdentity(ptyRef("p1").terminalTargetId),
+      ...ptyRef("p1"),
       pid: 7,
       cols: 100,
       rows: 30,
@@ -499,7 +522,10 @@ describe("serveHostConnection", () => {
         return {
           ack: {
             subscribed: true,
+            ...ptyIdentity(params.terminalTargetId),
+            terminalTargetId: params.terminalTargetId,
             ptyId: params.ptyId,
+            ptyInstanceId: params.ptyInstanceId,
             pid: params.ptyId === "p1" ? 7 : 8,
             cols: 80,
             rows: 24,
@@ -517,8 +543,8 @@ describe("serveHostConnection", () => {
       },
     });
 
-    const first = await client.attach("p1");
-    const second = await client.attach("p2");
+    const first = await client.attach(ptyRef("p1"));
+    const second = await client.attach(ptyRef("p2"));
     expect(first.ack.replay.events).toEqual([{ type: "data", data: "snap-p1" }]);
     expect(second.ack.replay.events).toEqual([{ type: "data", data: "snap-p2" }]);
 
@@ -549,6 +575,39 @@ describe("serveHostConnection", () => {
       value: { type: "data", ptyId: "p2", data: "still-open" },
     });
     await second.detach();
+    client.dispose();
+  });
+
+  it("rejects a mismatched handler acknowledgement before registering the stream", async () => {
+    const stream = controllableStream();
+    const client = wire({
+      attach: (params) => ({
+        ack: {
+          subscribed: true,
+          ...ptyIdentity(params.terminalTargetId),
+          terminalTargetId: params.terminalTargetId,
+          ptyId: params.ptyId,
+          ptyInstanceId: "wrong-instance",
+          pid: 7,
+          cols: 80,
+          rows: 24,
+          exited: false,
+          replay: {
+            kind: "raw-complete",
+            initialCols: 80,
+            initialRows: 24,
+            events: [],
+          },
+        },
+        frames: stream.frames,
+        captureDurationMs: 0,
+      }),
+    });
+
+    await expect(client.attach(ptyRef("p1"))).rejects.toMatchObject({
+      code: "HOST_ATTACHMENT_MISMATCH",
+    });
+    expect(stream.isEnded()).toBe(true);
     client.dispose();
   });
 

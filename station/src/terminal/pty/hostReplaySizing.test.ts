@@ -12,7 +12,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStationHostClient } from "@station/host";
+import { createStationHostClient, type HostPtyRef } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
 import { type StationHostInstance, startStationHost } from "../../host/startHost.js";
 import { createPtyRegistry } from "../registry/ptyRegistry.js";
@@ -67,7 +67,7 @@ afterEach(async () => {
 
 async function startAgentHost(
   scripted: ScriptedTerminal,
-): Promise<{ socketPath: string; ptyId: string }> {
+): Promise<{ socketPath: string; ptyRef: HostPtyRef }> {
   const dir = await mkdtemp(join(tmpdir(), "station-replay-sizing-"));
   const socketPath = join(dir, "station-host.sock");
   const host: StationHostInstance = await startStationHost({
@@ -79,7 +79,7 @@ async function startAgentHost(
   cleanups.push(() => host.close());
   const control = createStationHostClient({ socketPath });
   cleanups.push(() => control.dispose());
-  const { ptyId } = await control.spawn({
+  const spawned = await control.spawn({
     terminalTargetId: "native:wt-replay",
     worktreeId: "wt-replay",
     projectId: "proj-replay",
@@ -92,12 +92,12 @@ async function startAgentHost(
     cols: HOST_SPAWN.cols,
     rows: HOST_SPAWN.rows,
   });
-  return { socketPath, ptyId };
+  return { socketPath, ptyRef: spawned };
 }
 
 async function startRealAgentHost(
   buffer: "normal" | "alternate",
-): Promise<{ socketPath: string; ptyId: string }> {
+): Promise<{ socketPath: string; ptyRef: HostPtyRef }> {
   const dir = await mkdtemp(join(tmpdir(), "station-real-repaint-"));
   const socketPath = join(dir, "station-host.sock");
   cleanups.push(() => rm(dir, { recursive: true, force: true }));
@@ -110,7 +110,7 @@ async function startRealAgentHost(
   cleanups.push(() => host.close());
   const control = createStationHostClient({ socketPath });
   cleanups.push(() => control.dispose());
-  const { ptyId } = await control.spawn({
+  const spawned = await control.spawn({
     terminalTargetId: "native:wt-real-repaint",
     worktreeId: "wt-real-repaint",
     projectId: "proj-real-repaint",
@@ -124,13 +124,13 @@ async function startRealAgentHost(
     cols: HOST_SPAWN.cols,
     rows: HOST_SPAWN.rows,
   });
-  return { socketPath, ptyId };
+  return { socketPath, ptyRef: spawned };
 }
 
 /** Attach exactly as production does: registry entry with a host-attached override. */
 function attachPane(
   socketPath: string,
-  ptyId: string,
+  ptyRef: HostPtyRef,
   size: { cols: number; rows: number },
 ): StationVtScreen {
   const registry = createPtyRegistry();
@@ -138,7 +138,7 @@ function attachPane(
   registry.ensure(PANE, { cwd: "/repo/wt-replay" }, (spawn) =>
     createHostAttachedTerminal({
       hostSocketPath: socketPath,
-      ptyId,
+      ptyRef,
       size: { cols: spawn.size?.cols ?? 80, rows: spawn.size?.rows ?? 24 },
     }),
   );
@@ -156,13 +156,13 @@ function visibleRows(screen: StationVtScreen, count: number): string[] {
 
 async function waitForReplayKind(
   control: ReturnType<typeof createStationHostClient>,
-  ptyId: string,
+  ptyRef: HostPtyRef,
   expected: string,
 ): Promise<string> {
   const deadline = Date.now() + 5_000;
   let replayKind = "";
   while (Date.now() < deadline) {
-    const attachment = await control.attach(ptyId);
+    const attachment = await control.attach(ptyRef);
     replayKind = attachment.ack.replay.kind;
     await attachment.frames[Symbol.asyncIterator]().return?.();
     if (replayKind === expected) return replayKind;
@@ -190,11 +190,11 @@ function inkRepaintStreamFor80Cols(): string {
 describe("snapshot replay parses at the recorded size, then reflows to the pane", () => {
   it("an 80-col ink repaint replayed into a 120x30 pane keeps the prompt and reflows the frame", async () => {
     const scripted = createScriptedTerminal({ ...HOST_SPAWN });
-    const { socketPath, ptyId } = await startAgentHost(scripted);
+    const { socketPath, ptyRef } = await startAgentHost(scripted);
     // Painted while no pane was attached; recorded verbatim into the ring.
     scripted.helpers.emitData(inkRepaintStreamFor80Cols());
 
-    const screen = attachPane(socketPath, ptyId, { cols: 120, rows: 30 });
+    const screen = attachPane(socketPath, ptyRef, { cols: 120, rows: 30 });
     await waitFor(() => visibleRows(screen, 30).some((row) => row.includes("Y")));
     await screen.whenIdle();
     await waitFor(() => screen.bufferStats().cols === 120);
@@ -209,10 +209,10 @@ describe("snapshot replay parses at the recorded size, then reflows to the pane"
 
   it("the same replay at the recorded size renders identically (no reflow needed)", async () => {
     const scripted = createScriptedTerminal({ ...HOST_SPAWN });
-    const { socketPath, ptyId } = await startAgentHost(scripted);
+    const { socketPath, ptyRef } = await startAgentHost(scripted);
     scripted.helpers.emitData(inkRepaintStreamFor80Cols());
 
-    const screen = attachPane(socketPath, ptyId, { ...HOST_SPAWN });
+    const screen = attachPane(socketPath, ptyRef, { ...HOST_SPAWN });
     await waitFor(() => screen.rowText(1).startsWith("Y"));
     await screen.whenIdle();
 
@@ -226,10 +226,10 @@ describe("snapshot replay parses at the recorded size, then reflows to the pane"
 describe("same-size attach forces a child repaint", () => {
   it("flaps the rows so the child gets a real SIGWINCH after replaying history", async () => {
     const scripted = createScriptedTerminal({ ...HOST_SPAWN });
-    const { socketPath, ptyId } = await startAgentHost(scripted);
+    const { socketPath, ptyRef } = await startAgentHost(scripted);
     scripted.helpers.emitData("stale frame painted before reattach\r\n");
 
-    attachPane(socketPath, ptyId, { ...HOST_SPAWN });
+    attachPane(socketPath, ptyRef, { ...HOST_SPAWN });
     await waitFor(() => scripted.helpers.resizes.length >= 3);
 
     expect(scripted.helpers.resizes).toEqual([
@@ -241,10 +241,10 @@ describe("same-size attach forces a child repaint", () => {
 
   it("a different-size attach relies on its own real size change (no flap)", async () => {
     const scripted = createScriptedTerminal({ ...HOST_SPAWN });
-    const { socketPath, ptyId } = await startAgentHost(scripted);
+    const { socketPath, ptyRef } = await startAgentHost(scripted);
     scripted.helpers.emitData("stale frame painted before reattach\r\n");
 
-    attachPane(socketPath, ptyId, { cols: 120, rows: 30 });
+    attachPane(socketPath, ptyRef, { cols: 120, rows: 30 });
     await waitFor(() => scripted.helpers.resizes.length >= 1);
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -253,9 +253,9 @@ describe("same-size attach forces a child repaint", () => {
 
   it("an empty ring skips the flap (nothing on screen to repaint)", async () => {
     const scripted = createScriptedTerminal({ ...HOST_SPAWN });
-    const { socketPath, ptyId } = await startAgentHost(scripted);
+    const { socketPath, ptyRef } = await startAgentHost(scripted);
 
-    attachPane(socketPath, ptyId, { ...HOST_SPAWN });
+    attachPane(socketPath, ptyRef, { ...HOST_SPAWN });
     await waitFor(() => scripted.helpers.resizes.length >= 1);
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -269,13 +269,13 @@ const describeRealPty: typeof describe =
 describeRealPty("degraded same-size repaint through a real OS PTY", () => {
   it("keeps relative child repaint at its captured row while diagnosing absent history", async () => {
     for (const buffer of ["normal", "alternate"] as const) {
-      const { socketPath, ptyId } = await startRealAgentHost(buffer);
+      const { socketPath, ptyRef } = await startRealAgentHost(buffer);
       const control = createStationHostClient({ socketPath });
       cleanups.push(() => control.dispose());
-      const replayKind = await waitForReplayKind(control, ptyId, "live-reset-recovery");
+      const replayKind = await waitForReplayKind(control, ptyRef, "live-reset-recovery");
       expect(replayKind).toBe("live-reset-recovery");
 
-      const screen = attachPane(socketPath, ptyId, { ...HOST_SPAWN });
+      const screen = attachPane(socketPath, ptyRef, { ...HOST_SPAWN });
       await waitFor(
         () => visibleRows(screen, HOST_SPAWN.rows).some((row) => row.includes(REAL_PTY_REPAINT)),
         5_000,
@@ -308,11 +308,11 @@ describe("recorded startup probes are not re-answered on attach", () => {
 
   it("replaying a pre-attach probe burst writes nothing to the child; a live probe is answered once", async () => {
     const scripted = createScriptedTerminal({ ...HOST_SPAWN });
-    const { socketPath, ptyId } = await startAgentHost(scripted);
+    const { socketPath, ptyRef } = await startAgentHost(scripted);
     // The child probed at startup with no pane attached; the ring records it.
     scripted.helpers.emitData(PROBE_BURST);
 
-    attachPane(socketPath, ptyId, { ...HOST_SPAWN });
+    attachPane(socketPath, ptyRef, { ...HOST_SPAWN });
     // The rows flap marks the attach (replay included) as fully settled.
     await waitFor(() => scripted.helpers.resizes.length >= 3);
     await new Promise((resolve) => setTimeout(resolve, 100));

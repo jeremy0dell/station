@@ -232,9 +232,8 @@ function buildHostHandlers(input: {
       "host.completeHandoff": () => handoff.completeHandoff(),
       "host.abortHandoff": () => handoff.abortHandoff(),
       "host.adoptRegistry": (params) => {
-        handoff.assertCanAdopt();
         const { manifest } = HostAdoptRegistryParamsSchema.parse(params);
-        return ptyTable.adoptRegistry(manifest);
+        return handoff.adoptRegistry(manifest);
       },
       "host.spawn": (params, client) => {
         handoff.assertNotDraining();
@@ -243,7 +242,12 @@ function buildHostHandlers(input: {
         if (client !== undefined) {
           onPtySpawned(client, outcome, parsed.kind);
         }
-        return { ptyId: outcome.ptyId, pid: outcome.pid };
+        return {
+          terminalTargetId: outcome.terminalTargetId,
+          ptyId: outcome.ptyId,
+          ptyInstanceId: outcome.ptyInstanceId,
+          pid: outcome.pid,
+        };
       },
       "host.write": (params) => {
         const { ptyId, data } = HostWriteParamsSchema.parse(params);
@@ -255,7 +259,10 @@ function buildHostHandlers(input: {
         ptyTable.resize(ptyId, cols, rows);
         return { ok: true as const };
       },
-      "host.list": () => ({ ptys: ptyTable.list() }),
+      "host.list": () => {
+        handoff.assertNotDraining();
+        return { ptys: ptyTable.list() };
+      },
       "host.focus": (params) => {
         const { ptyId } = HostFocusParamsSchema.parse(params);
         ptyTable.focus(ptyId); // best-effort
@@ -269,7 +276,7 @@ function buildHostHandlers(input: {
     },
     attach: (params) => {
       handoff.assertNotDraining();
-      return ptyTable.attach(params.ptyId);
+      return ptyTable.attach(params);
     },
     // Draining is set before the ack, and close starts only after it is written, excluding spawn and response-loss races.
     afterUnaryResponseSent: (method) => {

@@ -12,6 +12,21 @@ import {
 import { inMemoryNdjsonConnectionPair, type NdjsonConnection } from "@station/protocol";
 import { describe, expect, it } from "vitest";
 
+const PTY_REF = {
+  terminalTargetId: "native:wt-1",
+  ptyId: "pty-1",
+  ptyInstanceId: "ptyi-1",
+};
+const PTY_IDENTITY = {
+  kind: "agent" as const,
+  terminalTargetId: PTY_REF.terminalTargetId,
+  worktreeId: "wt-1",
+  projectId: "proj-1",
+  sessionId: "ses-1",
+  worktreePath: "/repo/wt-1",
+  harnessProvider: "claude",
+};
+
 /** Minimal in-memory host router: answers a fixed set of methods. */
 function startFakeRouter(
   server: NdjsonConnection,
@@ -63,12 +78,13 @@ async function runFakeRouter(
           hostSuccess(request.id, {
             manifest: {
               "pty-1": {
-                bridgeProtocolVersion: 1,
+                bridgeProtocolVersion: 2,
                 bridgePid: 9,
                 controlSocket: "/tmp/pty-1.sock",
                 command: "/bin/sh",
                 cols: 80,
                 rows: 24,
+                ptyInstanceId: PTY_REF.ptyInstanceId,
                 identity: {
                   kind: "agent",
                   terminalTargetId: "native:wt-1",
@@ -96,7 +112,7 @@ async function runFakeRouter(
         server.send(hostSuccess(request.id, { adopted: ["pty-1"], failed: [] }));
         break;
       case "host.spawn":
-        server.send(hostSuccess(request.id, { ptyId: "pty-1", pid: 4242 }));
+        server.send(hostSuccess(request.id, { ...PTY_REF, pid: 4242 }));
         break;
       case "host.list":
         server.send(hostSuccess(request.id, { ptys: [] }));
@@ -143,7 +159,8 @@ describe("createStationHostClient", () => {
   it("accepts only strict ordered replay events", () => {
     const ack = {
       subscribed: true,
-      ptyId: "pty-1",
+      ...PTY_IDENTITY,
+      ...PTY_REF,
       pid: 42,
       cols: 5,
       rows: 4,
@@ -241,7 +258,7 @@ describe("createStationHostClient", () => {
         cols: 80,
         rows: 24,
       }),
-    ).resolves.toEqual({ ptyId: "pty-1", pid: 4242 });
+    ).resolves.toEqual({ ...PTY_REF, pid: 4242 });
     await expect(client.list()).resolves.toEqual([]);
     client.dispose();
   });
@@ -419,6 +436,61 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
     await expect(client.health()).rejects.toMatchObject({ code: "HOST_REQUEST_FAILED" });
+    client.dispose();
+  });
+
+  it("rejects and detaches a mismatched attach acknowledgement", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    const detached = Promise.withResolvers<void>();
+    void (async () => {
+      for await (const message of server.messages()) {
+        if (HostClientShutdownNotificationSchema.safeParse(message).success) {
+          continue;
+        }
+        const request = HostRequestSchema.parse(message);
+        if (request.method === "host.health") {
+          server.send(
+            hostSuccess(request.id, {
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: "test-build",
+            }),
+          );
+        } else if (request.method === "host.attach") {
+          server.send(
+            hostSuccess(request.id, {
+              subscribed: true,
+              ...PTY_IDENTITY,
+              ...PTY_REF,
+              ptyInstanceId: "wrong-instance",
+              pid: 42,
+              cols: 80,
+              rows: 24,
+              exited: false,
+              replay: {
+                kind: "raw-complete",
+                initialCols: 80,
+                initialRows: 24,
+                events: [],
+              },
+            }),
+          );
+        } else if (request.method === "host.detach") {
+          detached.resolve();
+          server.send(hostSuccess(request.id, { ok: true }));
+        }
+      }
+    })();
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+
+    await expect(client.attach(PTY_REF)).rejects.toMatchObject({
+      code: "HOST_ATTACHMENT_MISMATCH",
+    });
+    await expect(detached.promise).resolves.toBeUndefined();
     client.dispose();
   });
 });

@@ -125,7 +125,7 @@ describe("startStationHost", () => {
     });
     const client = testClient(join(dir, "station-host.sock"));
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "claude",
         args: [],
@@ -133,6 +133,7 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
+      const { ptyId } = spawned;
       scripted.helpers.emitExit({ exitCode: 17 });
       await waitFor(() => records.some((record) => record.lifecycle?.kind === "host.pty.exited"));
 
@@ -157,7 +158,7 @@ describe("startStationHost", () => {
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
     const client = testClient(socketPath);
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "claude",
         args: [],
@@ -165,6 +166,7 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
+      const { ptyId } = spawned;
       // Resolves (not HOST_BAD_REQUEST as it would if host.focus were unwired);
       // best-effort, so focusing a missing PTY also resolves.
       await client.focus(ptyId);
@@ -184,7 +186,7 @@ describe("startStationHost", () => {
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
     const client = testClient(socketPath);
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "claude",
         args: [],
@@ -192,6 +194,7 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
+      const { ptyId } = spawned;
       expect(ptyId).toBe("pty-1");
 
       const listed = await client.list();
@@ -252,7 +255,7 @@ describe("startStationHost", () => {
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
     const client = testClient(socketPath);
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "claude",
         args: [],
@@ -260,9 +263,10 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
+      const { ptyId } = spawned;
 
       scripted.helpers.emitData("scroll-"); // captured into the ring before attach
-      const attachment = await client.attach(ptyId);
+      const attachment = await client.attach(spawned);
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -286,7 +290,7 @@ describe("startStationHost", () => {
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
     const client = testClient(socketPath);
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "codex",
         args: [],
@@ -299,7 +303,7 @@ describe("startStationHost", () => {
       const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
 
       scripted.helpers.emitData(input);
-      const attachment = await client.attach(ptyId);
+      const attachment = await client.attach(spawned);
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -334,7 +338,7 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
-      const initial = await client.attach(spawned.ptyId);
+      const initial = await client.attach(spawned);
       await initial.detach();
 
       scripted.helpers.emitData("overflowing-history");
@@ -346,7 +350,7 @@ describe("startStationHost", () => {
       registry.ensure(paneId, undefined, () =>
         createHostAttachedTerminal({
           hostSocketPath: socketPath,
-          ptyId: spawned.ptyId,
+          ptyRef: spawned,
           size: { cols: 80, rows: 24 },
           clientFactory: (path) =>
             createStationHostClient({
@@ -422,7 +426,13 @@ describe("startStationHost", () => {
       expect(await client.list()).toEqual([]);
 
       // A first-class diagnosable failure — never a silent fall-through to respawn.
-      await expect(client.attach("pty-missing")).rejects.toMatchObject({
+      await expect(
+        client.attach({
+          terminalTargetId: "native:missing",
+          ptyId: "pty-missing",
+          ptyInstanceId: "missing-instance",
+        }),
+      ).rejects.toMatchObject({
         tag: "TerminalProviderError",
         provider: "native",
         code: "HOST_ATTACH_GONE",
@@ -459,7 +469,7 @@ describe("startStationHost", () => {
     });
     const client = testClient(socketPath);
     try {
-      const { ptyId } = await client.spawn({
+      const spawned = await client.spawn({
         ...identity,
         command: "claude",
         args: [],
@@ -481,7 +491,7 @@ describe("startStationHost", () => {
       });
 
       agent.helpers.emitData("scrollback");
-      const attachment = await client.attach(ptyId);
+      const attachment = await client.attach(spawned);
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -597,7 +607,7 @@ describe("startStationHost", () => {
       expect(begun.released).toEqual(["pty-1"]);
       expect(begun.manifest["pty-1"]?.bridgePid).toEqual(9_001);
       expect(released).toEqual(true);
-      expect(await client.list()).toEqual([]);
+      await expect(client.list()).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
       await expect(client.spawn({
         ...identity,
         command: "claude",
@@ -801,7 +811,7 @@ describe("startStationHost", () => {
           rows: 24,
         }),
       ).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
-      await expect(client.attach(spawned.ptyId)).rejects.toMatchObject({
+      await expect(client.attach(spawned)).rejects.toMatchObject({
         code: "HOST_UPGRADE_BLOCKED",
       });
       await client.abortHandoff();

@@ -24,7 +24,7 @@ const SOCKET_RETRY_MS = 30 * 1000;
 const SOCKET_PROBE_TIMEOUT_MS = 1000;
 // Fallback for owners too old to pass bridgeProtocol in the spawn options;
 // current owners always send it, keeping this file free of a hardcoded twin.
-const BRIDGE_CONTROL_PROTOCOL = 1;
+const BRIDGE_CONTROL_PROTOCOL = 2;
 
 const [, , encodedOptions] = process.argv;
 
@@ -75,6 +75,8 @@ if (
     typeof orphan.parkStatePath !== "string" ||
     !Number.isInteger(orphan.ttlMs) ||
     orphan.ttlMs <= 0 ||
+    typeof orphan.ptyInstanceId !== "string" ||
+    orphan.ptyInstanceId.length === 0 ||
     (orphan.parkMaxBytes !== undefined &&
       (!Number.isInteger(orphan.parkMaxBytes) || orphan.parkMaxBytes <= 0)))
 ) {
@@ -284,13 +286,14 @@ function writeParkState() {
     return;
   }
   const state = {
-    v: 1,
+    v: 2,
     bridgePid: process.pid,
     pid: pty.pid,
     controlSocket: orphan.controlSocketPath,
     command: options.command,
     cols: currentCols,
     rows: currentRows,
+    ptyInstanceId: orphan.ptyInstanceId,
     identity: orphan.identity,
     orphanedAtMs,
     ttlMs: orphan.ttlMs,
@@ -438,6 +441,15 @@ function handleControlCommand(socket, command) {
       controlSend(socket, statusMessage());
       return;
     case "adopt": {
+      if (command.ptyInstanceId !== orphan.ptyInstanceId) {
+        controlSend(socket, {
+          type: "error",
+          code: "PTY_INSTANCE_MISMATCH",
+          message: "The requested PTY instance does not own this parked bridge.",
+        });
+        socket.end();
+        return;
+      }
       if (mode === "adopted") {
         if (socket === adopterSocket) {
           // A duplicate adopt on the owning socket is idempotent: resend the
@@ -515,6 +527,7 @@ function statusMessage() {
   const message = {
     type: "status",
     bridgeProtocol: options.bridgeProtocol ?? BRIDGE_CONTROL_PROTOCOL,
+    ptyInstanceId: orphan.ptyInstanceId,
     pid: pty.pid,
     bridgePid: process.pid,
     cols: currentCols,

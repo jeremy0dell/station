@@ -17,6 +17,7 @@ function hostEntry(overrides: Partial<HostListEntry> = {}): HostListEntry {
     worktreePath: "/work/agent",
     harnessProvider: "codex",
     ptyId: "pty-agent",
+    ptyInstanceId: "instance-agent",
     pid: 42,
     alive: true,
     cols: 80,
@@ -26,15 +27,14 @@ function hostEntry(overrides: Partial<HostListEntry> = {}): HostListEntry {
 }
 
 describe("createStationHostManagedTerminalAttacher", () => {
-  it("resolves the first live matching agent to a lazy host terminal factory", async () => {
+  it("resolves one live matching agent to a lazy host terminal factory", async () => {
     const created: HostAttachedTerminalOptions[] = [];
     const scripted = createScriptedTerminal();
     const listed = [
       hostEntry({ ptyId: "pty-dead", alive: false }),
-      hostEntry({ ptyId: "pty-aux", kind: "aux" }),
+      hostEntry({ ptyId: "pty-aux", kind: "aux", terminalTargetId: "aux:pane-1" }),
       hostEntry({ ptyId: "pty-other", terminalTargetId: "native:other" }),
       hostEntry({ ptyId: "pty-first" }),
-      hostEntry({ ptyId: "pty-second" }),
     ];
     const attacher = createStationHostManagedTerminalAttacher("/run/station-host.sock", {
       listHost: async () => listed,
@@ -48,13 +48,12 @@ describe("createStationHostManagedTerminalAttacher", () => {
     expect(created).toEqual([]);
 
     expect(createTerminal({ size: { cols: 120, rows: 40 } })).toBe(scripted.terminal);
-    expect(created).toEqual([
-      {
-        hostSocketPath: "/run/station-host.sock",
-        ptyId: "pty-first",
-        size: { cols: 120, rows: 40 },
-      },
-    ]);
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({
+      hostSocketPath: "/run/station-host.sock",
+      ptyRef: { ptyId: "pty-first", ptyInstanceId: "instance-agent" },
+      size: { cols: 120, rows: 40 },
+    });
   });
 
   it("reports HOST_UNREACHABLE when the host cannot be listed", async () => {
@@ -71,14 +70,38 @@ describe("createStationHostManagedTerminalAttacher", () => {
     const attacher = createStationHostManagedTerminalAttacher("/run/station-host.sock", {
       listHost: async () => [
         hostEntry({ alive: false }),
-        hostEntry({ kind: "aux" }),
+        hostEntry({ kind: "aux", terminalTargetId: "aux:pane-1" }),
         hostEntry({ terminalTargetId: "native:other" }),
-        hostEntry({ sessionId: "ses-replacement" }),
       ],
     });
 
     await expect(attacher.resolve(ATTACHMENT, "ses-agent")).rejects.toMatchObject({
       code: "HOST_ATTACH_GONE",
+    });
+  });
+
+  it("rejects duplicate live targets before constructing a terminal", async () => {
+    let created = false;
+    const attacher = createStationHostManagedTerminalAttacher("/run/station-host.sock", {
+      listHost: async () => [hostEntry(), hostEntry({ ptyId: "pty-duplicate" })],
+      createTerminal: () => {
+        created = true;
+        return createScriptedTerminal().terminal;
+      },
+    });
+
+    await expect(attacher.resolve(ATTACHMENT, "ses-agent")).rejects.toMatchObject({
+      code: "HOST_TARGET_CONFLICT",
+    });
+    expect(created).toBe(false);
+  });
+
+  it("rejects a unique target with the wrong session or kind", async () => {
+    const attacher = createStationHostManagedTerminalAttacher("/run/station-host.sock", {
+      listHost: async () => [hostEntry({ sessionId: "ses-replacement" })],
+    });
+    await expect(attacher.resolve(ATTACHMENT, "ses-agent")).rejects.toMatchObject({
+      code: "HOST_ATTACHMENT_MISMATCH",
     });
   });
 

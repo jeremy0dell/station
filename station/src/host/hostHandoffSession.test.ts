@@ -8,12 +8,13 @@ function fakeTable(overrides: Partial<PtyTable> = {}): PtyTable {
     releaseRegistryForHandoff: async () => ({
       manifest: {
         "pty-1": {
-          bridgeProtocolVersion: 1 as const,
+          bridgeProtocolVersion: 2 as const,
           bridgePid: 1,
           controlSocket: "/tmp/pty-1.sock",
           command: "/bin/sh",
           cols: 80,
           rows: 24,
+          ptyInstanceId: "instance-1",
           identity: {
             kind: "agent" as const,
             terminalTargetId: "t",
@@ -45,7 +46,9 @@ describe("createHostHandoffSession", () => {
     await expect(session.abortHandoff()).rejects.toMatchObject({
       code: "HOST_HANDOFF_INVALID_STATE",
     });
-    expect(() => session.assertCanAdopt()).toThrow(/serving host/i);
+    await expect(session.adoptRegistry({})).rejects.toMatchObject({
+      code: "HOST_HANDOFF_INVALID_STATE",
+    });
   });
 
   it("restores serving on abort before complete", async () => {
@@ -54,9 +57,33 @@ describe("createHostHandoffSession", () => {
       buildVersion: "host-a",
     });
     await session.beginHandoff("host-b", "processes");
-    expect(() => session.assertCanAdopt()).toThrow(/not draining/i);
+    await expect(session.adoptRegistry({})).rejects.toMatchObject({
+      code: "HOST_HANDOFF_INVALID_STATE",
+    });
     await session.abortHandoff();
-    session.assertCanAdopt();
+    await expect(session.adoptRegistry({})).resolves.toEqual({ adopted: ["pty-1"], failed: [] });
+    session.assertNotDraining();
+  });
+
+  it("blocks host operations until registry adoption finishes", async () => {
+    let finishAdoption: () => void = () => {};
+    const adoptionGate = new Promise<void>((resolve) => {
+      finishAdoption = resolve;
+    });
+    const session = createHostHandoffSession({
+      ptyTable: fakeTable({
+        adoptRegistry: async () => {
+          await adoptionGate;
+          return { adopted: ["pty-1"], failed: [] };
+        },
+      }),
+      buildVersion: "host-a",
+    });
+
+    const adopting = session.adoptRegistry({});
+    expect(() => session.assertNotDraining()).toThrow(/adopting a PTY registry/);
+    finishAdoption();
+    await expect(adopting).resolves.toEqual({ adopted: ["pty-1"], failed: [] });
     session.assertNotDraining();
   });
 });

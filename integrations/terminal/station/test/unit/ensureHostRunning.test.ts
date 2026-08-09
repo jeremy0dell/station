@@ -29,7 +29,12 @@ function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClie
     completeHandoff: async () => ({ stopping: true as const }),
     abortHandoff: async () => ({ adopted: [], failed: [] }),
     adoptRegistry: async () => ({ adopted: [], failed: [] }),
-    spawn: async () => ({ ptyId: "p", pid: 1 }),
+    spawn: async () => ({
+      terminalTargetId: "native:p",
+      ptyId: "p",
+      ptyInstanceId: "instance-p",
+      pid: 1,
+    }),
     write: async () => undefined,
     resize: async () => undefined,
     list: async () => [],
@@ -374,12 +379,13 @@ describe("ensureStationHostRunning", () => {
               beginHandoff: async () => ({
                 manifest: {
                   "pty-1": {
-                    bridgeProtocolVersion: 1 as const,
+                    bridgeProtocolVersion: 2 as const,
                     bridgePid: 4242,
                     controlSocket: "/tmp/pty-1.sock",
                     command: "/bin/sh",
                     cols: 80,
                     rows: 24,
+                    ptyInstanceId: "instance-pty-1",
                     identity: {
                       kind: "agent" as const,
                       terminalTargetId: "native:wt-1",
@@ -444,12 +450,13 @@ describe("ensureStationHostRunning", () => {
               beginHandoff: async () => ({
                 manifest: {
                   "pty-1": {
-                    bridgeProtocolVersion: 1 as const,
+                    bridgeProtocolVersion: 2 as const,
                     bridgePid: 4242,
                     controlSocket: "/tmp/pty-1.sock",
                     command: "/bin/sh",
                     cols: 80,
                     rows: 24,
+                    ptyInstanceId: "instance-pty-1",
                     identity: {
                       kind: "agent" as const,
                       terminalTargetId: "native:wt-1",
@@ -488,12 +495,13 @@ describe("ensureStationHostRunning", () => {
     const { socketPath } = socket;
     const manifest = {
       "pty-1": {
-        bridgeProtocolVersion: 1 as const,
+        bridgeProtocolVersion: 2 as const,
         bridgePid: 4242,
         controlSocket: "/tmp/pty-1.sock",
         command: "/bin/sh",
         cols: 80,
         rows: 24,
+        ptyInstanceId: "instance-pty-1",
         identity: {
           kind: "agent" as const,
           terminalTargetId: "native:wt-1",
@@ -624,12 +632,13 @@ describe("ensureStationHostRunning", () => {
     const { socketPath } = socket;
     const manifest = {
       "pty-1": {
-        bridgeProtocolVersion: 1 as const,
+        bridgeProtocolVersion: 2 as const,
         bridgePid: 4242,
         controlSocket: "/tmp/pty-1.sock",
         command: "/bin/sh",
         cols: 80,
         rows: 24,
+        ptyInstanceId: "instance-pty-1",
         identity: {
           kind: "agent" as const,
           terminalTargetId: "native:wt-1",
@@ -710,12 +719,13 @@ describe("ensureStationHostRunning", () => {
     const { socketPath } = socket;
     const manifest = {
       "pty-1": {
-        bridgeProtocolVersion: 1 as const,
+        bridgeProtocolVersion: 2 as const,
         bridgePid: 4242,
         controlSocket: "/tmp/pty-1.sock",
         command: "/bin/sh",
         cols: 80,
         rows: 24,
+        ptyInstanceId: "instance-pty-1",
         identity: {
           kind: "agent" as const,
           terminalTargetId: "native:wt-1",
@@ -727,12 +737,13 @@ describe("ensureStationHostRunning", () => {
         },
       },
       "pty-2": {
-        bridgeProtocolVersion: 1 as const,
+        bridgeProtocolVersion: 2 as const,
         bridgePid: 4243,
         controlSocket: "/tmp/pty-2.sock",
         command: "/bin/sh",
         cols: 80,
         rows: 24,
+        ptyInstanceId: "instance-pty-2",
         identity: {
           kind: "agent" as const,
           terminalTargetId: "native:wt-2",

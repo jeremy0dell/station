@@ -55,7 +55,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startHostWith(scripted);
     const control = createStationHostClient({ socketPath });
-    const { ptyId } = await control.spawn({
+    const spawned = await control.spawn({
       ...identity,
       command: "claude",
       args: [],
@@ -68,7 +68,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
 
     const terminal = createHostAttachedTerminal({
       hostSocketPath: socketPath,
-      ptyId,
+      ptyRef: spawned,
       size: { cols: 80, rows: 24 },
     });
     const screen = createStationVtScreen({ size: { cols: 80, rows: 24 } });
@@ -98,7 +98,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
 
     // Spawn the agent in the host, then produce output BEFORE any client attaches.
     const control = createStationHostClient({ socketPath });
-    const { ptyId } = await control.spawn({
+    const spawned = await control.spawn({
       ...identity,
       command: "claude",
       args: [],
@@ -111,7 +111,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     // A reattaching client: host-attached terminal feeding a brand-new screen.
     const terminal = createHostAttachedTerminal({
       hostSocketPath: socketPath,
-      ptyId,
+      ptyRef: spawned,
       size: { cols: 80, rows: 24 },
     });
     const screen = createStationVtScreen({ size: { cols: 80, rows: 24 } });
@@ -133,7 +133,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     // Detaching (UI close) leaves the agent running in the host.
     terminal.dispose();
     await waitFor(async () => (await control.list())[0]?.alive === true);
-    expect((await control.list())[0]).toMatchObject({ ptyId, alive: true });
+    expect((await control.list())[0]).toMatchObject({ ptyId: spawned.ptyId, alive: true });
 
     control.dispose();
   });
@@ -142,7 +142,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     const scripted = createScriptedTerminal({ cols: 40, rows: 51 });
     const socketPath = await startHostWith(scripted);
     const control = createStationHostClient({ socketPath });
-    const { ptyId } = await control.spawn({
+    const spawned = await control.spawn({
       ...identity,
       harnessProvider: "codex",
       command: "codex",
@@ -159,7 +159,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
 
     const terminal = createHostAttachedTerminal({
       hostSocketPath: socketPath,
-      ptyId,
+      ptyRef: spawned,
       size: { cols: 40, rows: 51 },
     });
     const reattached = createStationVtScreen({ size: { cols: 40, rows: 51 }, scrollback: 100 });
@@ -185,7 +185,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     const scripted = createScriptedTerminal({ cols: 12, rows: 6 });
     const socketPath = await startHostWith(scripted, { maxScrollbackBytes: 5 });
     const control = createStationHostClient({ socketPath });
-    const { ptyId } = await control.spawn({
+    const spawned = await control.spawn({
       ...identity,
       harnessProvider: "opencode",
       command: "opencode",
@@ -194,10 +194,11 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
       cols: 12,
       rows: 6,
     });
+    const { ptyId } = spawned;
     scripted.helpers.emitData("\x1b[?1049h\x1b[2;5r\x1b[3;1H");
     scripted.helpers.emitData("abcdefghijkl");
 
-    const captured = await control.attach(ptyId);
+    const captured = await control.attach(spawned);
     expect(captured.ack.replay.kind).toBe("semantic-truncation-recovery");
     const replay = captured.ack.replay.events
       .flatMap((event) => (event.type === "data" ? [event.data] : []))
@@ -212,7 +213,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
 
     const terminal = createHostAttachedTerminal({
       hostSocketPath: socketPath,
-      ptyId,
+      ptyRef: spawned,
       size: { cols: 12, rows: 6 },
     });
     const reattached = createStationVtScreen({ size: { cols: 12, rows: 6 } });

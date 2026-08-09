@@ -30,6 +30,7 @@ import {
   HostListResultSchema,
   HostOkResultSchema,
   type HostPtyKind,
+  type HostPtyRef,
   type HostResponse,
   HostResponseSchema,
   type HostSpawnParams,
@@ -55,8 +56,8 @@ export type StationHostClientOptions = {
 };
 
 /**
- * A live attachment to one Host PTY with a unique attach-attempt identity and
- * reasoned teardown, independent from whether the underlying PTY remains alive.
+ * A live attachment to one exact Host PTY lifetime. `attachmentId` correlates
+ * this attempt only; the acknowledgement retains the immutable PTY reference.
  */
 export type HostAttachment = {
   attachmentId: string;
@@ -88,7 +89,8 @@ export type StationHostClient = {
   list(): Promise<HostListResult["ptys"]>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
-  attach(ptyId: string): Promise<HostAttachment>;
+  /** Attach only when target, PTY id, and PTY instance still identify one live entry. */
+  attach(ptyRef: HostPtyRef): Promise<HostAttachment>;
   /** Send a one-way shutdown notification, then gracefully close the connection. */
   dispose(): void;
 };
@@ -347,15 +349,42 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },
     close: (ptyId) => request("host.close", { ptyId, confirm: true }, HostCloseResultSchema),
-    attach: async (ptyId) => {
+    attach: async (ptyRef) => {
+      const requestedRef: HostPtyRef = {
+        terminalTargetId: ptyRef.terminalTargetId,
+        ptyId: ptyRef.ptyId,
+        ptyInstanceId: ptyRef.ptyInstanceId,
+      };
+      const { ptyId } = requestedRef;
       const attachmentId = `att_${randomUUID()}`;
       const frames = registerSink(ptyId);
       let ack: HostAttachAck;
       try {
-        ack = await request("host.attach", { ptyId, attachmentId }, HostAttachAckSchema);
+        ack = await request("host.attach", { ...requestedRef, attachmentId }, HostAttachAckSchema);
       } catch (error) {
+        const sink = sinks.get(ptyId);
         sinks.delete(ptyId);
+        sink?.end();
         throw error;
+      }
+      if (!samePtyRef(requestedRef, ack)) {
+        try {
+          await request(
+            "host.detach",
+            { ptyId, attachmentId, reason: "explicit_detach" },
+            HostOkResultSchema,
+          );
+        } catch {
+          // Best-effort cleanup: the mismatch remains the authoritative failure.
+        } finally {
+          const sink = sinks.get(ptyId);
+          sinks.delete(ptyId);
+          sink?.end();
+        }
+        throw new StationHostProviderError(
+          "HOST_ATTACHMENT_MISMATCH",
+          "Station host acknowledged a different PTY reference than the client requested.",
+        );
       }
       return {
         attachmentId,
@@ -397,6 +426,14 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       current?.close();
     },
   };
+}
+
+function samePtyRef(left: HostPtyRef, right: HostPtyRef): boolean {
+  return (
+    left.terminalTargetId === right.terminalTargetId &&
+    left.ptyId === right.ptyId &&
+    left.ptyInstanceId === right.ptyInstanceId
+  );
 }
 
 function createClientIdentity(

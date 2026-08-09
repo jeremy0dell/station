@@ -24,6 +24,11 @@ const unusedHandoffClientMethods = {
 };
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const AUX_REF = {
+  terminalTargetId: "aux:pane-split-0",
+  ptyId: "pty-1",
+  ptyInstanceId: "instance-1",
+};
 
 function tempSocketPath(): { dir: string; path: string } {
   const dir = mkdtempSync(join(tmpdir(), "aux-host-"));
@@ -42,7 +47,13 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     attachmentId: "att-test",
     ack: {
       subscribed: true,
-      ptyId: "pty-1",
+      kind: "aux",
+      ...AUX_REF,
+      worktreeId: "aux",
+      projectId: "aux",
+      sessionId: "aux:pane-split-0",
+      worktreePath: "/work",
+      harnessProvider: "aux",
       pid: 1,
       cols: 80,
       rows: 24,
@@ -62,7 +73,7 @@ function fakeClient(spawns: unknown[]): StationHostClient {
   return {
     spawn: async (params) => {
       spawns.push(params);
-      return { ptyId: "pty-1", pid: 1 };
+      return { ...AUX_REF, terminalTargetId: params.terminalTargetId, pid: 1 };
     },
     attach: async () => attachment,
     dispose: () => undefined,

@@ -27,12 +27,13 @@ const baseParams: HostSpawnParams = {
 
 function handoffEntry(ptyId: string, overrides: Partial<PtyHandoffEntry> = {}): PtyHandoffEntry {
   return {
-    bridgeProtocolVersion: 1,
+    bridgeProtocolVersion: 2,
     bridgePid: 4242,
     controlSocket: `/state/run/pty-bridges/${ptyId}.sock`,
     command: "claude",
     cols: 80,
     rows: 24,
+    ptyInstanceId: `instance-${ptyId}`,
     identity: {
       kind: "agent",
       terminalTargetId: "native:wt-1",
@@ -64,7 +65,7 @@ describe("createPtyTable registry export", () => {
         return created.terminal;
       },
     });
-    const { ptyId } = table.spawn(baseParams);
+    const { ptyId, ptyInstanceId } = table.spawn(baseParams);
     spawned[0]?.scripted.helpers.emitData("exported-output");
 
     const manifest = await table.exportRegistry();
@@ -73,6 +74,7 @@ describe("createPtyTable registry export", () => {
     expect(entry?.bridgePid).toEqual(999);
     expect(entry?.controlSocket).toEqual(join(directory, `${ptyId}.sock`));
     expect(entry?.identity.terminalTargetId).toEqual("native:wt-1");
+    expect(entry?.ptyInstanceId).toEqual(ptyInstanceId);
     expect(entry?.ringComplete).toEqual(true);
     const scrollback = JSON.parse(await readFile(String(entry?.scrollbackRef), "utf8"));
     expect(scrollback.events.some((event: { type: string; data?: string }) =>
@@ -127,10 +129,16 @@ describe("createPtyTable registry adoption", () => {
     expect(report).toEqual({ adopted: ["pty-3"], failed: [] });
     expect(table.list()[0]).toMatchObject({
       ptyId: "pty-3",
+      ptyInstanceId: "instance-pty-3",
       alive: true,
       terminalTargetId: "native:wt-1",
       cols: 80,
       rows: 24,
+    });
+    expect(pool.adoptedTargets).toHaveLength(1);
+    expect(pool.adoptedTargets[0]).toMatchObject({
+      ptyId: "pty-3",
+      ptyInstanceId: "instance-pty-3",
     });
 
     table.write("pty-3", "forwarded\n");
@@ -158,7 +166,9 @@ describe("createPtyTable registry adoption", () => {
 
     const report = await table.adoptRegistry({
       "pty-1": handoffEntry("pty-1"),
-      "pty-2": handoffEntry("pty-2"),
+      "pty-2": handoffEntry("pty-2", {
+        identity: { ...handoffEntry("pty-2").identity, terminalTargetId: "native:wt-2" },
+      }),
     });
     expect(report.adopted).toEqual(["pty-2"]);
     expect(report.failed).toEqual([{ ptyId: "pty-1", reason: "adopt-failed" }]);
@@ -176,11 +186,26 @@ describe("createPtyTable registry adoption", () => {
     });
     table.spawn(baseParams);
 
-    const report = await table.adoptRegistry({ "pty-1": handoffEntry("pty-1") });
-    expect(report).toEqual({
-      adopted: [],
-      failed: [{ ptyId: "pty-1", reason: "duplicate-pty-id" }],
+    await expect(
+      table.adoptRegistry({ "pty-1": handoffEntry("pty-1") }),
+    ).rejects.toMatchObject({ code: "HOST_TARGET_CONFLICT" });
+    expect(pool.adoptedTargets).toEqual([]);
+    table.disposeAll();
+  });
+
+  it("refuses to shadow a live target before invoking the adopter", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const pool = adopterPool(new Map([["pty-9", scripted.terminal]]));
+    const table = createPtyTable({
+      adoptTerminal: pool.adoptTerminal,
+      createTerminal: () => bridgeScripted().terminal,
     });
+    table.spawn(baseParams);
+
+    await expect(
+      table.adoptRegistry({ "pty-9": handoffEntry("pty-9") }),
+    ).rejects.toMatchObject({ code: "HOST_TARGET_CONFLICT" });
+    expect(pool.adoptedTargets).toEqual([]);
     table.disposeAll();
   });
 

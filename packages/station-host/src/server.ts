@@ -15,6 +15,7 @@ import {
   type HostCompatibilityIdentity,
   HostDetachParamsSchema,
   type HostFrame,
+  type HostPtyRef,
   HostRequestSchema,
   hostFailure,
   hostSuccess,
@@ -30,7 +31,7 @@ export type HostAttachmentSource = {
 
 /**
  * Method handlers the Bun host supplies. Unary handlers return a JSON result;
- * `attach` returns an ack plus a live frame stream (sync or async). All are
+ * `attach` validates one exact PTY lifetime and returns its ack plus live frames. All are
  * optional so the host can grow its surface increment by increment — a missing
  * method answers with a classified `HOST_BAD_REQUEST` rather than crashing.
  */
@@ -290,6 +291,13 @@ async function runAttach(
   try {
     params = HostAttachParamsSchema.parse(rawParams);
     attachment = await handlers.attach(params, state.client);
+    if (!samePtyRef(params, attachment.ack)) {
+      await attachment.frames[Symbol.asyncIterator]().return?.();
+      throw stationHostSafeError(
+        "HOST_ATTACHMENT_MISMATCH",
+        "Host attach handler acknowledged a different PTY reference than requested.",
+      );
+    }
   } catch (error) {
     const safeError = stationHostErrorFromUnknown(error, {
       code: "HOST_ATTACH_GONE",
@@ -380,6 +388,14 @@ async function runAttach(
       reason,
     });
   }
+}
+
+function samePtyRef(left: HostPtyRef, right: HostPtyRef): boolean {
+  return (
+    left.terminalTargetId === right.terminalTargetId &&
+    left.ptyId === right.ptyId &&
+    left.ptyInstanceId === right.ptyInstanceId
+  );
 }
 
 function fail(

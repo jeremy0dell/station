@@ -65,7 +65,7 @@ function warmDeps(socketPath: string, live: HostListEntry[]) {
     makeHostTerminal: (entry: HostListEntry) => (options: { size?: { cols?: number; rows?: number } }) =>
       createHostAttachedTerminal({
         hostSocketPath: socketPath,
-        ptyId: entry.ptyId,
+        ptyRef: entry,
         size: { cols: options.size?.cols ?? 80, rows: options.size?.rows ?? 24 },
       }),
   };

@@ -45,6 +45,12 @@ function singleTable() {
   return { table, scripted };
 }
 
+function liveRef(table: ReturnType<typeof createPtyTable>, ptyId: string) {
+  const entry = table.list().find((candidate) => candidate.ptyId === ptyId);
+  if (entry === undefined) throw new Error(`missing live PTY ${ptyId}`);
+  return entry;
+}
+
 describe("createPtyTable", () => {
   it("fails closed on daemon color controls and tmux provenance for persistent Host spawns", () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
@@ -127,7 +133,7 @@ describe("createPtyTable", () => {
       rows: 51,
       outputCompatibility: "top-region-scrollback",
     });
-    const attachment = await table.attach(ptyId);
+    const attachment = await table.attach(liveRef(table, ptyId));
     const iterator = attachment.frames[Symbol.asyncIterator]();
     const input = "\x1b[1;50r\x1b[3S\x1b[r\x1b[48;1H\x1b[J";
     const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
@@ -166,7 +172,7 @@ describe("createPtyTable", () => {
       ...baseParams,
       outputCompatibility: "top-region-scrollback",
     });
-    const iterator = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
+    const iterator = (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
     const partial = "before\x1b[1;23r\x1b[";
 
     scripted.helpers.emitData(partial);
@@ -186,7 +192,7 @@ describe("createPtyTable", () => {
       ...baseParams,
       outputCompatibility: "top-region-scrollback",
     });
-    const iterator = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
+    const iterator = (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
     const partial = "before\x1b[1;23r\x1b[";
 
     scripted.helpers.emitData(partial);
@@ -199,7 +205,7 @@ describe("createPtyTable", () => {
     expect(await iterator.next()).toMatchObject({
       value: { type: "resize", cols: 100, rows: 30 },
     });
-    expect((await table.attach(ptyId)).ack.replay.events).toEqual([
+    expect((await table.attach(liveRef(table, ptyId))).ack.replay.events).toEqual([
       { type: "data", data: "before" },
       { type: "data", data: "\x1b[1;23r\x1b[" },
       { type: "resize", cols: 100, rows: 30 },
@@ -244,7 +250,7 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("first");
     scripted.helpers.emitData("second");
 
-    expect((await table.attach(ptyId)).ack.replay).toEqual({
+    expect((await table.attach(liveRef(table, ptyId))).ack.replay).toEqual({
       kind: "semantic-truncation-recovery",
       initialCols: 80,
       initialRows: 24,
@@ -278,7 +284,7 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("before");
     scripted.helpers.emitData("truncate");
 
-    const attaching = table.attach(ptyId);
+    const attaching = table.attach(liveRef(table, ptyId));
     scripted.helpers.emitData("during");
     table.resize(ptyId, 100, 30);
     capture.resolve(["snapshot-at-boundary"]);
@@ -335,7 +341,7 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("first");
     scripted.helpers.emitData("second");
 
-    const degraded = await table.attach(ptyId);
+    const degraded = await table.attach(liveRef(table, ptyId));
     expect(degraded.ack.replay).toEqual({
       kind: "live-reset-recovery",
       initialCols: 80,
@@ -383,7 +389,7 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("first");
     scripted.helpers.emitData("second");
 
-    const attachment = await table.attach(ptyId);
+    const attachment = await table.attach(liveRef(table, ptyId));
     expect(attachment.ack.replay).toEqual({
       kind: "live-reset-recovery",
       initialCols: 80,
@@ -420,7 +426,7 @@ describe("createPtyTable", () => {
     scripted.helpers.emitData("first");
     scripted.helpers.emitData("second");
 
-    await expect(table.attach(ptyId)).rejects.toMatchObject({ code: "HOST_SNAPSHOT_PENDING" });
+    await expect(table.attach(liveRef(table, ptyId))).rejects.toMatchObject({ code: "HOST_SNAPSHOT_PENDING" });
     expect(table.has(ptyId)).toBe(true);
   });
 
@@ -434,17 +440,21 @@ describe("createPtyTable", () => {
     expect(table.list()).toHaveLength(1);
   });
 
-  it("refuses to reuse a deterministic target for another session", () => {
+  it("refuses every immutable identity disagreement before spawning", () => {
+    const conflicts: Array<Partial<HostSpawnParams>> = [
+      { kind: "aux" },
+      { worktreeId: "wt-replacement" },
+      { projectId: "proj-replacement" },
+      { sessionId: "ses-replacement" },
+      { worktreePath: "/repo/replacement" },
+      { harnessProvider: "codex" },
+    ];
     const { table, scripteds } = tableWithScripted();
     const first = table.spawn(baseParams);
 
-    let conflict: unknown;
-    try {
-      table.spawn({ ...baseParams, sessionId: "ses-replacement" });
-    } catch (error) {
-      conflict = error;
+    for (const conflict of conflicts) {
+      expect(() => table.spawn({ ...baseParams, ...conflict })).toThrow();
     }
-    expect(conflict).toMatchObject({ code: "HOST_TARGET_SESSION_CONFLICT" });
     expect(scripteds).toHaveLength(1);
     expect(table.list()).toMatchObject([{ ptyId: first.ptyId, sessionId: baseParams.sessionId }]);
   });
@@ -472,8 +482,8 @@ describe("createPtyTable", () => {
       cwd: "/repo/wt-2",
     });
 
-    expect(first).toEqual({ ptyId: "pty-1", pid: 4200, created: true });
-    expect(second).toEqual({ ptyId: "pty-2", pid: 4201, created: true });
+    expect(first).toMatchObject({ terminalTargetId: "native:wt-1", ptyId: "pty-1", pid: 4200, created: true });
+    expect(second).toMatchObject({ terminalTargetId: "native:wt-2", ptyId: "pty-2", pid: 4201, created: true });
     expect(scripteds).toHaveLength(2);
     expect(table.list().map((entry) => [entry.terminalTargetId, entry.ptyId, entry.pid])).toEqual([
       ["native:wt-1", "pty-1", 4200],
@@ -541,10 +551,11 @@ describe("createPtyTable", () => {
 
   it("does not accumulate a duplicate target when a worktree's PTY exits then relaunches", () => {
     const { table, scripteds } = tableWithScripted();
-    table.spawn(baseParams);
+    const first = table.spawn(baseParams);
     scripteds[0]?.helpers.emitExit({ exitCode: 0 }); // reaped
     const again = table.spawn(baseParams); // relaunch same worktree
     expect(again.ptyId).toBe("pty-2");
+    expect(again.ptyInstanceId).not.toBe(first.ptyInstanceId);
     expect(table.list().map((entry) => entry.ptyId)).toEqual(["pty-2"]); // one, not two
   });
 
@@ -558,8 +569,15 @@ describe("createPtyTable", () => {
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("before-"); // lands in the ring (snapshot)
 
-    const { ack, frames } = await table.attach(ptyId);
+    const { ack, frames } = await table.attach(liveRef(table, ptyId));
     expect(ack).toMatchObject({
+      kind: baseParams.kind,
+      terminalTargetId: baseParams.terminalTargetId,
+      worktreeId: baseParams.worktreeId,
+      projectId: baseParams.projectId,
+      sessionId: baseParams.sessionId,
+      worktreePath: baseParams.worktreePath,
+      harnessProvider: baseParams.harnessProvider,
       ptyId,
       exited: false,
       replay: {
@@ -579,11 +597,27 @@ describe("createPtyTable", () => {
     await iterator.return?.();
   });
 
+  it("rejects target, PTY-id, and instance mismatches before creating an attachment", async () => {
+    const { table } = singleTable();
+    const spawned = table.spawn(baseParams);
+    const mismatches = [
+      { ...spawned, terminalTargetId: "native:stale-target" },
+      { ...spawned, ptyId: "pty-stale" },
+      { ...spawned, ptyInstanceId: "instance-stale" },
+    ];
+
+    for (const mismatch of mismatches) {
+      await expect(table.attach(mismatch)).rejects.toMatchObject({
+        code: "HOST_ATTACHMENT_MISMATCH",
+      });
+    }
+  });
+
   it("orders live data around the resize barrier applied by the Host", async () => {
     const scripted = createScriptedTerminal({ cols: 10, rows: 4 });
     const table = createPtyTable({ createTerminal: () => scripted.terminal });
     const { ptyId } = table.spawn({ ...baseParams, cols: 10, rows: 4 });
-    const iterator = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
+    const iterator = (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
 
     scripted.helpers.emitData("before-resize");
     table.resize(ptyId, 5, 4);
@@ -595,7 +629,7 @@ describe("createPtyTable", () => {
       { type: "resize", ptyId, cols: 5, rows: 4 },
       { type: "data", ptyId, data: "after-resize" },
     ]);
-    expect((await table.attach(ptyId)).ack.replay).toEqual({
+    expect((await table.attach(liveRef(table, ptyId))).ack.replay).toEqual({
       kind: "raw-complete",
       initialCols: 10,
       initialRows: 4,
@@ -617,7 +651,7 @@ describe("createPtyTable", () => {
     table.resize(ptyId, 5, 4);
     table.resize(ptyId, 10, 4);
 
-    expect((await table.attach(ptyId)).ack.replay).toEqual({
+    expect((await table.attach(liveRef(table, ptyId))).ack.replay).toEqual({
       kind: "raw-complete",
       initialCols: 10,
       initialRows: 4,
@@ -633,13 +667,13 @@ describe("createPtyTable", () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
     scripted.helpers.emitData("xyz");
-    expect((await table.attach(ptyId)).ack.replay).toEqual({
+    expect((await table.attach(liveRef(table, ptyId))).ack.replay).toEqual({
       kind: "raw-complete",
       initialCols: 80,
       initialRows: 24,
       events: [{ type: "data", data: "xyz" }],
     });
-    expect((await table.attach(ptyId)).ack.replay).toEqual({
+    expect((await table.attach(liveRef(table, ptyId))).ack.replay).toEqual({
       kind: "raw-complete",
       initialCols: 80,
       initialRows: 24,
@@ -650,8 +684,8 @@ describe("createPtyTable", () => {
   it("broadcasts data and exit to every attachment, then ends each stream", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    const a = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
-    const b = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
+    const a = (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
+    const b = (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
 
     scripted.helpers.emitData("hi");
     expect(await a.next()).toMatchObject({ value: { type: "data", data: "hi" } });
@@ -666,7 +700,7 @@ describe("createPtyTable", () => {
   it("detach (frames.return) leaves the PTY alive", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    await (await table.attach(ptyId)).frames[Symbol.asyncIterator]().return?.();
+    await (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]().return?.();
     expect(table.list()[0]).toMatchObject({ ptyId, alive: true });
     expect(scripted.helpers.isDisposed()).toBe(false);
   });
@@ -674,7 +708,7 @@ describe("createPtyTable", () => {
   it("close kills the PTY, broadcasts exit to attachments, and drops it from the table", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    const frames = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
+    const frames = (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
 
     expect(table.close(ptyId)).toBe(true);
     expect(scripted.helpers.isDisposed()).toBe(true);
@@ -687,7 +721,7 @@ describe("createPtyTable", () => {
   it("disposeAll broadcasts exit to attachments so streams end (no hang on shutdown)", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
-    const frames = (await table.attach(ptyId)).frames[Symbol.asyncIterator]();
+    const frames = (await table.attach(liveRef(table, ptyId))).frames[Symbol.asyncIterator]();
     table.disposeAll();
     expect(scripted.helpers.isDisposed()).toBe(true);
     expect(await frames.next()).toMatchObject({ value: { type: "exit", ptyId } });
@@ -696,9 +730,9 @@ describe("createPtyTable", () => {
 
   it("attaching after a PTY has exited (and been reaped) is HOST_ATTACH_GONE", async () => {
     const { table, scripted } = singleTable();
-    const { ptyId } = table.spawn(baseParams);
+    const spawned = table.spawn(baseParams);
     scripted.helpers.emitData("done");
     scripted.helpers.emitExit({ exitCode: 3 }); // reaped
-    await expect(table.attach(ptyId)).rejects.toMatchObject({ code: "HOST_ATTACH_GONE" });
+    await expect(table.attach(spawned)).rejects.toMatchObject({ code: "HOST_ATTACH_GONE" });
   });
 });

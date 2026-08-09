@@ -58,7 +58,7 @@ async function main(): Promise<void> {
 
   log("── client #1 attaches and watches ~3s ──");
   const client1 = createStationHostClient({ socketPath });
-  const attach1 = await client1.attach(spawned.ptyId);
+  const attach1 = await client1.attach(spawned);
   await readFramesFor(attach1, 3000, (data) => process.stdout.write(`  [c1] ${data}`));
   // host.list returns authoritative pid: the PTY's child after bridge is ready. spawn/attach may briefly report bridge pid.
   const livePid = (await control.list())[0]?.pid;
@@ -73,7 +73,7 @@ async function main(): Promise<void> {
 
   log("── client #2 reattaches (reopen) ──");
   const client2 = createStationHostClient({ socketPath });
-  const attach2 = await client2.attach(spawned.ptyId);
+  const attach2 = await client2.attach(spawned);
   const samePid = attach2.ack.pid === livePid;
   log(`  pid=${attach2.ack.pid} — same agent as before (pid ${livePid})? ${samePid ? "YES ✓" : "NO ✗"}`);
   log(`  replayed terminal state (${attach2.ack.replay.kind}):`);

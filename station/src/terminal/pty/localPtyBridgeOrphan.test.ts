@@ -11,6 +11,7 @@ import { PtyBridgeProtocolVersion } from "@station/contracts";
 import { adoptLocalPtyBridge } from "./ptyBridgeAdoption.js";
 
 const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
+const PTY_INSTANCE_ID = "instance-1";
 
 const gated = (): boolean => {
   if (Bun.env.STATION_PTY_SMOKE !== "1") {
@@ -51,6 +52,7 @@ async function spawnOrphanBridge(
     controlSocketPath: join(dir, "pty-1.sock"),
     parkStatePath: join(dir, "pty-1.park.json"),
     ttlMs,
+    ptyInstanceId: PTY_INSTANCE_ID,
     identity: {
       kind: "agent",
       terminalTargetId: "native:wt-orphan",
@@ -180,7 +182,7 @@ function send(socket: net.Socket, command: object): void {
 async function adoptRaw(socketPath: string): Promise<{ socket: net.Socket; reader: LineCollector }> {
   const socket = await connectControl(socketPath);
   const reader = readLines(socket);
-  send(socket, { type: "adopt" });
+  send(socket, { type: "adopt", ptyInstanceId: PTY_INSTANCE_ID });
   await reader.waitForLine((line) => line.includes('"status"'));
   return { socket, reader };
 }
@@ -280,6 +282,7 @@ describe("localPtyBridge orphan mode", () => {
           controlSocketPath,
           parkStatePath,
           ttlMs: 60_000,
+          ptyInstanceId: PTY_INSTANCE_ID,
           identity: {
             kind: "agent",
             terminalTargetId: "native:wt-owner",
@@ -316,6 +319,7 @@ describe("localPtyBridge orphan mode", () => {
 
       const terminal = await adoptLocalPtyBridge({
         id: "pty-1",
+        ptyInstanceId: PTY_INSTANCE_ID,
         command: "/bin/sh",
         controlSocketPath,
         size: { cols: 80, rows: 24 },
@@ -383,12 +387,40 @@ describe("localPtyBridge orphan mode", () => {
       const first = await adoptRaw(spawned.controlSocketPath);
       const second = await connectControl(spawned.controlSocketPath);
       const secondReader = readLines(second);
-      send(second, { type: "adopt" });
+      send(second, { type: "adopt", ptyInstanceId: PTY_INSTANCE_ID });
       const errorLine = await secondReader.waitForLine((line) => line.includes("ALREADY_ADOPTED"));
       expect(JSON.parse(errorLine).type).toEqual("error");
       second.destroy();
       send(first.socket, { type: "kill" });
       first.socket.destroy();
+      await waitFor(() => !existsSync(spawned.controlSocketPath), 5_000);
+    } finally {
+      await cleanup(spawned);
+    }
+  });
+
+  it("leaves the bridge parked when an adopter names the wrong PTY instance", async () => {
+    if (gated()) return;
+    const spawned = await spawnOrphanBridge("/bin/sh", ["-c", "sleep 30"]);
+    try {
+      await waitForReady(spawned);
+      await park(spawned);
+
+      const wrong = await connectControl(spawned.controlSocketPath);
+      const wrongReader = readLines(wrong);
+      send(wrong, { type: "adopt", ptyInstanceId: "instance-wrong" });
+      const errorLine = await wrongReader.waitForLine((line) =>
+        line.includes("PTY_INSTANCE_MISMATCH"),
+      );
+      expect(JSON.parse(errorLine)).toMatchObject({
+        type: "error",
+        code: "PTY_INSTANCE_MISMATCH",
+      });
+      wrong.destroy();
+
+      const correct = await adoptRaw(spawned.controlSocketPath);
+      send(correct.socket, { type: "kill" });
+      correct.socket.destroy();
       await waitFor(() => !existsSync(spawned.controlSocketPath), 5_000);
     } finally {
       await cleanup(spawned);
@@ -442,6 +474,7 @@ describe("localPtyBridge orphan mode", () => {
 
       const terminal = await adoptLocalPtyBridge({
         id: "pty-1",
+        ptyInstanceId: PTY_INSTANCE_ID,
         command: "/bin/sh",
         controlSocketPath: spawned.controlSocketPath,
         size: { cols: 80, rows: 24 },
@@ -494,7 +527,7 @@ describe("localPtyBridge orphan mode", () => {
       await waitForReady(spawned);
       await park(spawned);
       const { socket, reader } = await adoptRaw(spawned.controlSocketPath);
-      send(socket, { type: "adopt" });
+      send(socket, { type: "adopt", ptyInstanceId: PTY_INSTANCE_ID });
       await waitForAsync(
         async () => reader.lines.filter((line) => line.includes('"status"')).length >= 2,
         5_000,
