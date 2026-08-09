@@ -129,6 +129,14 @@ export const HostPtyRefSchema = z
   .strict();
 export type HostPtyRef = z.infer<typeof HostPtyRefSchema>;
 
+export function isSameHostPtyRef(left: HostPtyRef, right: HostPtyRef): boolean {
+  return (
+    left.terminalTargetId === right.terminalTargetId &&
+    left.ptyId === right.ptyId &&
+    left.ptyInstanceId === right.ptyInstanceId
+  );
+}
+
 export const HostSpawnParamsSchema = HostPtyIdentitySchema.extend({
   command: z.string().min(1),
   args: z.array(z.string()),

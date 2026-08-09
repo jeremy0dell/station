@@ -40,6 +40,7 @@ import {
   HostStopIfIdleResultSchema,
   hostClientShutdownNotification,
   hostRequest,
+  isSameHostPtyRef,
 } from "./protocol.js";
 
 export type StationHostClientOptions = {
@@ -367,7 +368,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         sink?.end();
         throw error;
       }
-      if (!samePtyRef(requestedRef, ack)) {
+      if (!isSameHostPtyRef(requestedRef, ack)) {
         try {
           await request(
             "host.detach",
@@ -426,14 +427,6 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       current?.close();
     },
   };
-}
-
-function samePtyRef(left: HostPtyRef, right: HostPtyRef): boolean {
-  return (
-    left.terminalTargetId === right.terminalTargetId &&
-    left.ptyId === right.ptyId &&
-    left.ptyInstanceId === right.ptyInstanceId
-  );
 }
 
 function createClientIdentity(

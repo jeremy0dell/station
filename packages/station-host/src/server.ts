@@ -15,10 +15,10 @@ import {
   type HostCompatibilityIdentity,
   HostDetachParamsSchema,
   type HostFrame,
-  type HostPtyRef,
   HostRequestSchema,
   hostFailure,
   hostSuccess,
+  isSameHostPtyRef,
 } from "./protocol.js";
 
 /** A single attachment produced after Host's asynchronous replay-capture barrier. */
@@ -291,7 +291,7 @@ async function runAttach(
   try {
     params = HostAttachParamsSchema.parse(rawParams);
     attachment = await handlers.attach(params, state.client);
-    if (!samePtyRef(params, attachment.ack)) {
+    if (!isSameHostPtyRef(params, attachment.ack)) {
       await attachment.frames[Symbol.asyncIterator]().return?.();
       throw stationHostSafeError(
         "HOST_ATTACHMENT_MISMATCH",
@@ -388,14 +388,6 @@ async function runAttach(
       reason,
     });
   }
-}
-
-function samePtyRef(left: HostPtyRef, right: HostPtyRef): boolean {
-  return (
-    left.terminalTargetId === right.terminalTargetId &&
-    left.ptyId === right.ptyId &&
-    left.ptyInstanceId === right.ptyInstanceId
-  );
 }
 
 function fail(
