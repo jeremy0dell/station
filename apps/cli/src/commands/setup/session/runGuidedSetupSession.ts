@@ -12,6 +12,7 @@ import {
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type { SetupComposition, SetupSessionProjection } from "../composition.js";
+import { SETUP_HARNESS_DEFINITIONS } from "../harnessDefinitions.js";
 import { overlaySetupOperationOutcomes } from "../presentation/projectSetupResult.js";
 import type { TextSetupPresenter } from "../presenters/text.js";
 import { formatSetupCommand } from "../presenters/text.js";
@@ -524,7 +525,7 @@ function installerPromptChoices(
   projection: Extract<SetupSessionProjection, { status: "projected" }>,
   presenter: TextSetupPresenter,
 ): SetupPromptChoice[] {
-  const choices =
+  const choices: (SetupPromptChoice & { readonly value: SupportedHarnessId })[] =
     projection.session.plan?.operations.flatMap((operation) => {
       if (operation.kind !== "install-harness") return [];
       const action = projection.view.actions.find(
@@ -539,10 +540,10 @@ function installerPromptChoices(
         },
       ];
     }) ?? [];
-  const displayOrder = ["claude", "codex", "cursor", "opencode", "pi"];
   return choices.sort(
     (...choicePair) =>
-      displayOrder.indexOf(choicePair[0].value) - displayOrder.indexOf(choicePair[1].value),
+      SETUP_HARNESS_DEFINITIONS[choicePair[0].value].guidedRank -
+      SETUP_HARNESS_DEFINITIONS[choicePair[1].value].guidedRank,
   );
 }
 
@@ -765,7 +766,10 @@ function operationLabel(composition: SetupComposition, operation: SetupOperation
 }
 
 function harnessLabel(facts: SetupFacts | undefined, harnessId: SupportedHarnessId): string {
-  return facts?.harnesses.find((harness) => harness.id === harnessId)?.label ?? harnessId;
+  return (
+    facts?.harnesses.find((harness) => harness.id === harnessId)?.label ??
+    SETUP_HARNESS_DEFINITIONS[harnessId].label
+  );
 }
 
 function renderTmuxFeedback(composition: SetupComposition, requested: boolean): void {

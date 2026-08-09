@@ -14,6 +14,7 @@ import {
   type SupportedHarnessId,
 } from "@station/setup-core";
 import { type CollectSetupFactsOptions, collectSetupFacts } from "../checks/system.js";
+import { SETUP_HARNESS_DEFINITIONS } from "../harnessDefinitions.js";
 import { setupToolDefinitions } from "../toolDefinitions.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "../types.js";
 import { planSetupConfigMutationForInspection } from "./config.js";
@@ -185,10 +186,8 @@ function relevantHarnessTrackingIds(input: {
   );
 }
 
-function harnessSupportsSetupHooks(
-  harnessId: SupportedHarnessId,
-): harnessId is "claude" | "codex" | "cursor" | "opencode" {
-  return harnessId !== "pi";
+function harnessSupportsSetupHooks(harnessId: SupportedHarnessId): boolean {
+  return SETUP_HARNESS_DEFINITIONS[harnessId].tracking === "external";
 }
 
 async function probeHarnessTrackingFact(

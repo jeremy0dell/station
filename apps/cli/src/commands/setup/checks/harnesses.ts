@@ -5,28 +5,9 @@ import {
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
 import type { SetupHarnessFact, SupportedHarnessId } from "../adapters/inspectionTypes.js";
+import { type SetupHarnessDefinition, setupHarnessDefinitions } from "../harnessDefinitions.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
-
-export type HarnessDefinition = {
-  id: SupportedHarnessId;
-  label: string;
-  envKey: string;
-  defaultCommand: string;
-};
-
-export const harnessDefinitions: readonly HarnessDefinition[] = [
-  { id: "codex", label: "Codex", envKey: "STATION_CODEX_BIN", defaultCommand: "codex" },
-  {
-    id: "cursor",
-    label: "Cursor Agent",
-    envKey: "STATION_CURSOR_AGENT_BIN",
-    defaultCommand: "agent",
-  },
-  { id: "opencode", label: "OpenCode", envKey: "STATION_OPENCODE_BIN", defaultCommand: "opencode" },
-  { id: "pi", label: "Pi", envKey: "STATION_PI_BIN", defaultCommand: "pi" },
-  { id: "claude", label: "Claude Code", envKey: "STATION_CLAUDE_BIN", defaultCommand: "claude" },
-] as const;
 
 export type CheckHarnessesOptions = {
   runner?: ExternalCommandRunner;
@@ -42,20 +23,20 @@ export async function checkSetupHarnesses(
 ): Promise<SetupHarnessFact[]> {
   const env = setupEnv(options.env);
   const facts: SetupHarnessFact[] = [];
-  for (const definition of harnessDefinitions) {
+  for (const definition of setupHarnessDefinitions) {
     facts.push(await checkHarness(definition, env, options));
   }
   return facts;
 }
 
 async function checkHarness(
-  definition: HarnessDefinition,
+  definition: SetupHarnessDefinition,
   env: CliEnv,
   options: CheckHarnessesOptions,
 ): Promise<SetupHarnessFact> {
   const configuredCommand = options.configuredCommands?.[definition.id];
   const environmentCommand = env[definition.envKey];
-  const command = configuredCommand ?? environmentCommand ?? definition.defaultCommand;
+  const command = configuredCommand ?? environmentCommand ?? definition.command;
   const defaultCommandHomeDir =
     options.configuredHarnesses?.includes(definition.id) !== true &&
     configuredCommand === undefined &&

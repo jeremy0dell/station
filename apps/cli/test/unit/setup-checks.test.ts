@@ -20,6 +20,7 @@ import { checkSetupBun } from "../../src/commands/setup/checks/bun.js";
 import { setupProbeTimeoutMs } from "../../src/commands/setup/checks/constants.js";
 import { checkSetupDiffViewer } from "../../src/commands/setup/checks/diffViewer.js";
 import { checkSetupGit } from "../../src/commands/setup/checks/git.js";
+import { checkSetupHarnesses } from "../../src/commands/setup/checks/harnesses.js";
 import { checkSetupLaunchers } from "../../src/commands/setup/checks/launchers.js";
 import { checkSetupStateDir } from "../../src/commands/setup/checks/stateDir.js";
 import {
@@ -70,6 +71,24 @@ describe("setup dependency checks", () => {
     await Promise.all(
       tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
     );
+  });
+
+  it("checks harnesses with canonical labels, commands, and fact order", async () => {
+    const facts = await checkSetupHarnesses({
+      runner: fakeRunner([], {
+        "codex --version": "codex 1.2.3\n",
+        "opencode --version": "opencode 3.4.5\n",
+        "claude --version": "claude 6.7.8\n",
+      }),
+    });
+
+    expect(facts.map(({ id, label, status, command }) => [id, label, status, command])).toEqual([
+      ["codex", "Codex", "ok", "codex"],
+      ["cursor", "Cursor Agent", "missing", "agent"],
+      ["opencode", "OpenCode", "ok", "opencode"],
+      ["pi", "Pi", "missing", "pi"],
+      ["claude", "Claude Code", "ok", "claude"],
+    ]);
   });
 
   it("creates and proves a writable private state directory", async () => {

@@ -1,6 +1,7 @@
-export const supportedHarnessIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
+import type { CliSetupHarnessId } from "@station/contracts";
 
-export type SupportedHarnessId = (typeof supportedHarnessIds)[number];
+// biome-ignore lint/plugin: retained setup-core public compatibility boundary
+export type SupportedHarnessId = CliSetupHarnessId;
 
 export type HarnessSelectionFacts = {
   readonly config:

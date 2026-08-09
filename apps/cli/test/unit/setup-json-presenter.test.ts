@@ -632,6 +632,26 @@ describe("setup plan projection", () => {
       ["codex-hooks", true],
       ["opencode-hooks", true],
     ]);
+    expect(plan.actions.find((action) => action.id === "codex-hooks")?.command).toEqual([
+      "/tmp/bin/stn",
+      "--config",
+      "/tmp/config.toml",
+      "hooks",
+      "install",
+      "codex",
+      "--yes",
+      "--hook-bin",
+      "/tmp/bin/stn-ingress",
+    ]);
+    expect(plan.actions.find((action) => action.id === "opencode-hooks")?.command).toEqual([
+      "/tmp/bin/stn",
+      "--config",
+      "/tmp/config.toml",
+      "hooks",
+      "install",
+      "opencode",
+      "--yes",
+    ]);
     expect(plan.actions.some((action) => action.id === "pi-hooks")).toBe(false);
   });
 

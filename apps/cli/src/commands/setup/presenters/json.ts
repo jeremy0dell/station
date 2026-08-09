@@ -19,6 +19,7 @@ import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
 import { tmuxPopupBindingBlock, tmuxPopupBindingEndMarker } from "../checks/tmuxBinding.js";
+import { SETUP_HARNESS_DEFINITIONS } from "../harnessDefinitions.js";
 import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 
 type SetupHarnessSelection = {
@@ -952,7 +953,7 @@ function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessI
     harness,
     "--yes",
   ];
-  if (harness === "claude" || harness === "codex" || harness === "cursor") {
+  if (SETUP_HARNESS_DEFINITIONS[harness].trackingNeedsIngressLauncher) {
     command.push("--hook-bin", setupLauncherExecutable(facts.launchers.ingress));
   }
   return command;

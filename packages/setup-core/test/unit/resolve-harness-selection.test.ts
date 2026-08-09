@@ -1,9 +1,6 @@
+import { cliSetupHarnessIds } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import {
-  type HarnessSelectionFacts,
-  resolveHarnessSelection,
-  supportedHarnessIds,
-} from "../../src/index.js";
+import { type HarnessSelectionFacts, resolveHarnessSelection } from "../../src/index.js";
 
 describe("resolveHarnessSelection", () => {
   it("preserves a supported configured default even when it is unavailable", () => {
@@ -132,10 +129,10 @@ describe("resolveHarnessSelection", () => {
 
 function selectionFacts(input: {
   config: "missing" | "invalid" | string;
-  available: readonly (typeof supportedHarnessIds)[number][];
-  order?: readonly (typeof supportedHarnessIds)[number][];
+  available: readonly (typeof cliSetupHarnessIds)[number][];
+  order?: readonly (typeof cliSetupHarnessIds)[number][];
 }): HarnessSelectionFacts {
-  const order = input.order ?? supportedHarnessIds;
+  const order = input.order ?? cliSetupHarnessIds;
   const config: HarnessSelectionFacts["config"] =
     input.config === "missing"
       ? { status: "missing" }

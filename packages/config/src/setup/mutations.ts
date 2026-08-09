@@ -1,13 +1,12 @@
+import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
 import { setHarnessInstallHooksInToml } from "../harnesses/installHooks.js";
 import { loadConfigFromToml } from "../load/index.js";
 import { quoteTomlString } from "../tomlEdit.js";
 
-type SetupConfigHarnessId = "claude" | "codex" | "cursor" | "opencode" | "pi";
-
 export type SetupConfigDesiredState = {
-  readonly defaultHarness: SetupConfigHarnessId;
+  readonly defaultHarness: CliSetupHarnessId;
   readonly harnesses: readonly {
-    readonly id: SetupConfigHarnessId;
+    readonly id: CliSetupHarnessId;
     readonly command: string;
     readonly installHooks: boolean;
   }[];
@@ -173,19 +172,11 @@ function existingConfigUpdateCoreProblem(defaults: {
   if (defaults.terminal !== "tmux") {
     return `Config defaults use terminal ${defaults.terminal}; setup will not rewrite existing defaults.`;
   }
-  if (!supportedSetupHarnessIds.has(defaults.harness)) {
+  if (!CliSetupHarnessIdSchema.safeParse(defaults.harness).success) {
     return `Config defaults use unsupported harness ${defaults.harness}; setup will not rewrite existing defaults.`;
   }
   return undefined;
 }
-
-const supportedSetupHarnessIds: ReadonlySet<string> = new Set<SetupConfigHarnessId>([
-  "claude",
-  "codex",
-  "cursor",
-  "opencode",
-  "pi",
-]);
 
 async function validateCandidate(
   content: string,

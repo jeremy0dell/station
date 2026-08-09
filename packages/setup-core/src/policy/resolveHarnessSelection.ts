@@ -1,8 +1,7 @@
-import {
-  type HarnessSelectionFacts,
-  type HarnessSelectionResolution,
-  type SupportedHarnessId,
-  supportedHarnessIds,
+import type {
+  HarnessSelectionFacts,
+  HarnessSelectionResolution,
+  SupportedHarnessId,
 } from "../model/facts.js";
 import type { HarnessSelectionIntent } from "../model/intent.js";
 
@@ -75,7 +74,7 @@ export function resolveHarnessSelection(
 function configuredDefaultHarness(facts: HarnessSelectionFacts): SupportedHarnessId | undefined {
   if (facts.config.status !== "valid") return undefined;
   const defaultHarness = facts.config.defaultHarness;
-  return supportedHarnessIds.find((harnessId) => harnessId === defaultHarness);
+  return facts.harnesses.find((harness) => harness.id === defaultHarness)?.id;
 }
 
 function uniqueHarnessIds(ids: readonly SupportedHarnessId[]): SupportedHarnessId[] {

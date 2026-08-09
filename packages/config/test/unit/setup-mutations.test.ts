@@ -145,6 +145,54 @@ describe("setup config mutations", () => {
     });
   });
 
+  it.each([
+    ["codex", "codex"],
+    ["cursor", "agent"],
+    ["opencode", "opencode"],
+    ["pi", "pi"],
+    ["claude", "claude"],
+  ] as const)("accepts the setup-managed %s harness as an existing default", async (id, command) => {
+    const desired: SetupConfigDesiredState = {
+      ...createDesired,
+      defaultHarness: id,
+      harnesses: [{ id, command, installHooks: id !== "pi" }],
+    };
+    const source = renderSetupConfig(desired);
+
+    await expect(
+      planSetupConfigMutation({
+        configPath: "/tmp/station-config.toml",
+        homeDir: "/tmp",
+        current: { state: "valid", source },
+        desired,
+      }),
+    ).resolves.toEqual({
+      operation: "none",
+      reason: "Config already includes the selected harness and core defaults.",
+    });
+  });
+
+  it("blocks setup mutation for a custom existing default", async () => {
+    const source = renderSetupConfig(createDesired).replace(
+      'harness = "codex"',
+      'harness = "crush"',
+    );
+
+    await expect(
+      planSetupConfigMutation({
+        configPath: "/tmp/station-config.toml",
+        homeDir: "/tmp",
+        current: { state: "valid", source },
+        desired: createDesired,
+      }),
+    ).resolves.toEqual({
+      operation: "blocked",
+      path: "/tmp/station-config.toml",
+      reason:
+        "Config defaults use unsupported harness crush; setup will not rewrite existing defaults.",
+    });
+  });
+
   it("blocks source-preserving updates when existing defaults are incompatible", async () => {
     const source = renderSetupConfig(createDesired).replace(
       'worktree_provider = "worktrunk"',
