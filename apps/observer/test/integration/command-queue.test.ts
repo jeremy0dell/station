@@ -73,6 +73,32 @@ const closeTerminalCommand: StationCommand = {
   },
 };
 
+const renameSessionGroupCommand: StationCommand = {
+  type: "sessionGroup.rename",
+  payload: {
+    projectId: "web",
+    groupId: "grp_web",
+    expectedVersion: 1,
+    name: "Web",
+  },
+};
+
+const createSessionGroupCommand: StationCommand = {
+  type: "sessionGroup.create",
+  payload: {
+    projectId: "web",
+    name: "Another web Group",
+  },
+};
+
+const createApiSessionGroupCommand: StationCommand = {
+  type: "sessionGroup.create",
+  payload: {
+    projectId: "api",
+    name: "API Group",
+  },
+};
+
 describe("observer command queue", () => {
   it("records accepted, started, and succeeded lifecycle events", async () => {
     const { sqlite, persistence, queue } = createPersistenceAndQueue();
@@ -340,6 +366,34 @@ describe("observer command queue", () => {
 
     expect(starts).toEqual(["cmd_1", "cmd_2"]);
     expect(finishes).toEqual(["cmd_1", "cmd_2"]);
+    sqlite.close();
+  });
+
+  it("serializes Group writes by project while allowing another project to progress", async () => {
+    const { sqlite, queue } = createPersistenceAndQueue();
+    const starts: string[] = [];
+    let releaseFirst = () => {};
+    const firstBlocked = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const handler = async ({ commandId }: { commandId: string }) => {
+      starts.push(commandId);
+      if (commandId === "cmd_1") await firstBlocked;
+    };
+    queue.registerHandler("sessionGroup.rename", handler);
+    queue.registerHandler("sessionGroup.create", handler);
+
+    await Promise.all([
+      queue.dispatch(renameSessionGroupCommand),
+      queue.dispatch(createSessionGroupCommand),
+      queue.dispatch(createApiSessionGroupCommand),
+    ]);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(starts).toEqual(["cmd_1", "cmd_3"]);
+    releaseFirst();
+    await queue.drain();
+    expect(starts).toEqual(["cmd_1", "cmd_3", "cmd_2"]);
     sqlite.close();
   });
 

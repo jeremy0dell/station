@@ -267,7 +267,8 @@ Nested project tables:
 `[projects.display].group` is a static label for organizing whole projects. It is unrelated to
 dynamic Session Groups, which are Observer-owned state stored in SQLite and projected through
 `StationSnapshot.sessionGroups`. Session Groups are not configured under `[workspace]`, `[tui]`,
-the runtime `config.toml`, or project-local `.station/config.toml`.
+the runtime `config.toml`, or project-local `.station/config.toml`; recorded `sessionGroup.*`
+Observer commands are their mutation boundary.
 | `[projects.worktrunk]` | `enabled` | bool | Defaults to `true` when omitted. |
 | `[projects.worktrunk]` | `base` | string | Overrides `[worktree.worktrunk].base` for this project. |
 | `[projects.worktrunk]` | `managed_root` | string | Per-project authoritative managed root; relative paths resolve against `project.root`. If omitted and global `managed_root` is set, STATION derives a unique project child directory. |

@@ -997,6 +997,18 @@
           "bindings": ["createSessionStartAgentHandler"]
         },
         {
+          "specifier": "./sessionGroups.js",
+          "resolvedPath": "apps/observer/src/commands/sessionGroups.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createSessionGroupCommandHandlers"]
+        },
+        {
+          "specifier": "./sessionGroups.js",
+          "resolvedPath": "apps/observer/src/commands/sessionGroups.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionGroupCommandIdFactory"]
+        },
+        {
           "specifier": "./terminal.js",
           "resolvedPath": "apps/observer/src/commands/terminal.ts",
           "edgeKind": "runtime",
@@ -1048,7 +1060,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["EventJournal", "SessionStore"]
+          "bindings": ["EventJournal", "SessionGroupStore", "SessionStore"]
         },
         {
           "specifier": "../providers/registry.js",
@@ -2164,6 +2176,85 @@
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["ProviderProjectConfig"]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/commands/sessionGroups.ts",
+      "exports": [
+        {
+          "name": "createSessionGroupCommandHandlers",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent."
+        },
+        {
+          "name": "CreateSessionGroupCommandHandlersOptions",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupCommandIdFactory",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./queue.js",
+          "resolvedPath": "apps/observer/src/commands/queue.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CommandHandler", "CommandHandlerContext"]
+        },
+        {
+          "specifier": "../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["EventJournal", "EventRecordOptions", "SessionGroupStore"]
+        },
+        {
+          "specifier": "../reconcile/core.js",
+          "resolvedPath": "apps/observer/src/reconcile/core.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverCore"]
+        },
+        {
+          "specifier": "../runtime/eventBus.js",
+          "resolvedPath": "apps/observer/src/runtime/eventBus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverEventBus"]
+        },
+        {
+          "specifier": "../utils/time.js",
+          "resolvedPath": "apps/observer/src/utils/time.ts",
+          "edgeKind": "runtime",
+          "bindings": ["nowIso"]
+        },
+        {
+          "specifier": "node:crypto",
+          "resolvedPath": "node:crypto",
+          "edgeKind": "runtime",
+          "bindings": ["randomUUID"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "SafeError",
+            "SessionGroupId",
+            "SessionGroupView",
+            "StationCommand",
+            "StationEvent"
+          ]
         },
         {
           "specifier": "@station/runtime",
@@ -8912,6 +9003,7 @@
             "EventJournal",
             "ObservationStore",
             "ReconcileStore",
+            "SessionGroupStore",
             "SessionStore",
             "WorktreeMetadataStore"
           ]
@@ -8957,6 +9049,12 @@
           "resolvedPath": "apps/observer/src/reconcile/run.ts",
           "edgeKind": "type-only",
           "bindings": ["ReconcileTiming"]
+        },
+        {
+          "specifier": "./sessionGroups.js",
+          "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
+          "edgeKind": "runtime",
+          "bindings": ["refreshDurableSessionGroups"]
         },
         {
           "specifier": "./statusProjection.js",
@@ -9222,7 +9320,7 @@
           "name": "runReconcileOnce",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Rebuilds the Observer graph after overlaying durable worktree titles on provider observations. The same resolved title records feed snapshot composition and atomic reconcile persistence."
+          "purpose": "Rebuilds the Observer graph, prunes Group membership, and projects durable titles and Groups. The same resolved title records feed snapshot composition and atomic reconcile persistence."
         }
       ],
       "imports": [
@@ -9260,6 +9358,7 @@
             "PersistedSessionTurnReadiness",
             "PersistedWorktreeDisplayTitle",
             "ReconcileStore",
+            "SessionGroupStore",
             "SessionHarnessDerivedStateRepair",
             "SessionStore",
             "WorktreeMetadataStore"
@@ -9298,6 +9397,12 @@
           "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverHarnessRun"]
+        },
+        {
+          "specifier": "./sessionGroups.js",
+          "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
+          "edgeKind": "runtime",
+          "bindings": ["refreshDurableSessionGroups"]
         },
         {
           "specifier": "../stationLogger.js",
@@ -9350,6 +9455,43 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "type-only",
           "bindings": ["RuntimeClock"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/sessionGroups.ts",
+      "exports": [
+        {
+          "name": "projectSessionGroups",
+          "kind": "function",
+          "role": "POLICY",
+          "purpose": "Selects configured Groups and orders their canonical direct membership deterministically."
+        },
+        {
+          "name": "refreshDurableSessionGroups",
+          "kind": "function",
+          "role": "USE CASE",
+          "purpose": "Repairs durable Group membership against canonical sessions and projects configured Groups."
+        },
+        {
+          "name": "SessionGroupProjection",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionGroupStore"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderProjectConfig", "SafeError", "SessionGroupView", "SessionView"]
         }
       ]
     },
@@ -12763,6 +12905,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/sessionGroups.ts",
+          "declaration": "createSessionGroupCommandHandlers",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/worktree/create.ts",
           "declaration": "createWorktreeCreateHandler",
           "kind": "function",
@@ -12856,6 +13005,22 @@
       "role": "USE CASE",
       "purpose": "Validates and preflights a fresh agent lifecycle before inheriting the worktree's canonical display title. Failed launches discard only the fresh session projection.",
       "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/commands/sessionGroups.ts",
+      "declaration": "createSessionGroupCommandHandlers",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Validates, durably mutates, projects, and publishes project-local Session Group intent.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionGroupStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/terminalIntentRunner.ts",
@@ -13258,7 +13423,7 @@
       "declaration": "runReconcileOnce",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Rebuilds the Observer graph after overlaying durable worktree titles on provider observations. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
+      "purpose": "Rebuilds the Observer graph, prunes Group membership, and projects durable titles and Groups. The same resolved title records feed snapshot composition and atomic reconcile persistence.",
       "dependencies": [
         {
           "path": "apps/observer/src/harnessExecutionIdentity.ts",
@@ -13324,6 +13489,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/reconcile/sessionGroups.ts",
+          "declaration": "refreshDurableSessionGroups",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/stationLogger.ts",
           "declaration": "StationLogger",
           "kind": "interface",
@@ -13343,6 +13515,37 @@
           "kind": "interface",
           "role": "DRIVEN PORT",
           "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/sessionGroups.ts",
+      "declaration": "projectSessionGroups",
+      "kind": "function",
+      "role": "POLICY",
+      "purpose": "Selects configured Groups and orders their canonical direct membership deterministically.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/observer/src/reconcile/sessionGroups.ts",
+      "declaration": "refreshDurableSessionGroups",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Repairs durable Group membership against canonical sessions and projects configured Groups.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionGroupStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "apps/observer/src/reconcile/sessionGroups.ts",
+          "declaration": "projectSessionGroups",
+          "kind": "function",
+          "role": "POLICY",
+          "edgeKind": "runtime"
         }
       ]
     },

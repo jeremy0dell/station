@@ -357,6 +357,10 @@ function commandScope(command: StationCommand): string {
     case "worktree.fork":
     case "session.create":
     case "session.fork":
+    case "sessionGroup.create":
+    case "sessionGroup.rename":
+    case "sessionGroup.updateMembership":
+    case "sessionGroup.delete":
       return `project:${command.payload.projectId}`;
     case "observer.reconcile":
     case "project.add":

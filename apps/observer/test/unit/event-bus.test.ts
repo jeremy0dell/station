@@ -97,4 +97,31 @@ describe("observer event bus", () => {
     await expect(next).resolves.toEqual({ done: false, value: matchingEvent });
     await iterator.return?.();
   });
+
+  it("filters Session Group convergence by command id", async () => {
+    const bus = createObserverEventBus();
+    const iterator = bus.subscribe({ commandId: "cmd_match" })[Symbol.asyncIterator]();
+    const group = {
+      id: "grp_active",
+      projectId: "web",
+      name: "Active",
+      sessionIds: [],
+      version: 1,
+      createdAt: "2026-05-20T12:00:00.000Z",
+      updatedAt: "2026-05-20T12:00:00.000Z",
+    };
+    const matchingEvent: StationEvent = {
+      type: "sessionGroup.updated",
+      at: "2026-05-20T12:00:00.000Z",
+      commandId: "cmd_match",
+      group,
+    };
+
+    const next = iterator.next();
+    bus.publish({ ...matchingEvent, commandId: "cmd_other" });
+    bus.publish(matchingEvent);
+
+    await expect(next).resolves.toEqual({ done: false, value: matchingEvent });
+    await iterator.return?.();
+  });
 });

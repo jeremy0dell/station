@@ -1,0 +1,419 @@
+import type { StationConfig } from "@station/config";
+import type { StationCommand } from "@station/contracts";
+import {
+  createFakeHarnessRun,
+  createFakeTerminalTarget,
+  createFakeWorktree,
+  FakeHarnessProvider,
+  FakeTerminalProvider,
+  FakeWorktreeProvider,
+} from "@station/testing";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type CommandQueue, createCommandQueue } from "../../src/commands/queue";
+import { registerObserverCommandHandlers } from "../../src/commands/router";
+import type { ObserverPersistenceBundle } from "../../src/persistence";
+import { createSqliteObserverPersistence } from "../../src/persistence";
+import { ProviderRegistry } from "../../src/providers/registry";
+import { createObserverCore, type ObserverCore } from "../../src/reconcile/core";
+import { createObserverEventBus } from "../../src/runtime/eventBus";
+import { openObserverSqlite } from "../../src/sqlite";
+import { createInMemoryObserverPersistence } from "../support/inMemoryObserverPersistence";
+import { createUnexpectedProjectConfigWriter } from "../support/projectConfigWriter";
+
+const now = "2026-05-20T12:00:00.000Z";
+const storageKinds = ["SQLite", "in-memory"] as const;
+
+describe.each(storageKinds)("recorded Session Group commands with %s persistence", (storage) => {
+  const fixtures: GroupCommandFixture[] = [];
+
+  afterEach(async () => {
+    for (const fixture of fixtures.splice(0)) {
+      await fixture.queue.shutdown();
+      fixture.close();
+    }
+  });
+
+  async function fixture(options: { repeatedGroupId?: boolean } = {}) {
+    const created = await createFixture(storage, options);
+    fixtures.push(created);
+    return created;
+  }
+
+  it("creates empty and membered Groups with immediate command-correlated convergence", async () => {
+    const test = await fixture();
+    const providerReads = vi.spyOn(test.providers.worktree, "listWorktrees");
+
+    const empty = await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "  Empty  " },
+    });
+    expect(empty.status).toBe("succeeded");
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({
+        id: "grp_1",
+        projectId: "web",
+        name: "Empty",
+        sessionIds: [],
+        version: 1,
+      }),
+    ]);
+
+    const membered = await test.dispatch({
+      type: "sessionGroup.create",
+      payload: {
+        projectId: "web",
+        name: "Membered",
+        initialSessionIds: ["ses_web_a"],
+      },
+    });
+    expect(membered.status).toBe("succeeded");
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_1", sessionIds: [] }),
+      expect.objectContaining({ id: "grp_2", sessionIds: ["ses_web_a"] }),
+    ]);
+    expect(providerReads).not.toHaveBeenCalled();
+    await expect(test.persistence.listEvents({ commandId: membered.id })).resolves.toEqual([
+      expect.objectContaining({ type: "command.accepted" }),
+      expect.objectContaining({ type: "command.started" }),
+      expect.objectContaining({
+        type: "sessionGroup.updated",
+        event: expect.objectContaining({
+          commandId: membered.id,
+          group: expect.objectContaining({ id: "grp_2" }),
+        }),
+      }),
+      expect.objectContaining({ type: "command.succeeded" }),
+    ]);
+  });
+
+  it("emits no Group event or version change for validated rename and membership no-ops", async () => {
+    const test = await fixture();
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Stable", initialSessionIds: ["ses_web_a"] },
+    });
+
+    const rename = await test.dispatch({
+      type: "sessionGroup.rename",
+      payload: { projectId: "web", groupId: "grp_1", expectedVersion: 1, name: " Stable " },
+    });
+    const membership = await test.dispatch({
+      type: "sessionGroup.updateMembership",
+      payload: { projectId: "web", groupId: "grp_1", expectedVersion: 1, add: [], remove: [] },
+    });
+
+    expect(test.core.getSnapshot().sessionGroups[0]).toMatchObject({ version: 1 });
+    for (const commandId of [rename.id, membership.id]) {
+      expect((await test.persistence.listEvents({ commandId })).map((event) => event.type)).toEqual(
+        ["command.accepted", "command.started", "command.succeeded"],
+      );
+    }
+  });
+
+  it("atomically reassigns and ungroups sessions while publishing every changed Group in order", async () => {
+    const test = await fixture();
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Source", initialSessionIds: ["ses_web_a"] },
+    });
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Target" },
+    });
+
+    const move = await test.dispatch({
+      type: "sessionGroup.updateMembership",
+      payload: {
+        projectId: "web",
+        groupId: "grp_2",
+        expectedVersion: 1,
+        add: [{ sessionId: "ses_web_a", expectedGroupId: "grp_1" }],
+      },
+    });
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_1", version: 2, sessionIds: [] }),
+      expect.objectContaining({ id: "grp_2", version: 2, sessionIds: ["ses_web_a"] }),
+    ]);
+    expect(
+      (await test.persistence.listEvents({ commandId: move.id }))
+        .filter((event) => event.type === "sessionGroup.updated")
+        .map((event) =>
+          event.event.type === "sessionGroup.updated" ? event.event.group.id : undefined,
+        ),
+    ).toEqual(["grp_1", "grp_2"]);
+
+    const ungroup = await test.dispatch({
+      type: "sessionGroup.updateMembership",
+      payload: {
+        projectId: "web",
+        groupId: "grp_2",
+        expectedVersion: 2,
+        remove: [{ sessionId: "ses_web_a", expectedGroupId: "grp_2" }],
+      },
+    });
+    expect(ungroup.status).toBe("succeeded");
+    expect(test.core.getSnapshot().sessionGroups[1]).toMatchObject({
+      id: "grp_2",
+      version: 3,
+      sessionIds: [],
+    });
+  });
+
+  it("rejects stale versions and assignment expectations without partial mutation", async () => {
+    const test = await fixture();
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Source", initialSessionIds: ["ses_web_a"] },
+    });
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Target" },
+    });
+
+    const stale = await test.dispatch({
+      type: "sessionGroup.rename",
+      payload: { projectId: "web", groupId: "grp_2", expectedVersion: 2, name: "Changed" },
+    });
+    expect(stale).toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_GROUP_VERSION_CONFLICT" },
+    });
+    const assignment = await test.dispatch({
+      type: "sessionGroup.updateMembership",
+      payload: {
+        projectId: "web",
+        groupId: "grp_2",
+        expectedVersion: 1,
+        add: [{ sessionId: "ses_web_a", expectedGroupId: null }],
+      },
+    });
+    expect(assignment).toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_GROUP_ASSIGNMENT_CONFLICT" },
+    });
+    await expect(test.persistence.listSessionGroups()).resolves.toEqual([
+      expect.objectContaining({ id: "grp_1", version: 1, sessionIds: ["ses_web_a"] }),
+      expect.objectContaining({ id: "grp_2", version: 1, sessionIds: [] }),
+    ]);
+  });
+
+  it("rejects missing and cross-project Groups and sessions before durable mutation", async () => {
+    const test = await fixture();
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Web" },
+    });
+
+    const commands: Array<{ command: StationCommand; code: string }> = [
+      {
+        command: {
+          type: "sessionGroup.rename",
+          payload: { projectId: "web", groupId: "grp_missing", expectedVersion: 1, name: "No" },
+        },
+        code: "SESSION_GROUP_NOT_FOUND",
+      },
+      {
+        command: {
+          type: "sessionGroup.rename",
+          payload: { projectId: "api", groupId: "grp_1", expectedVersion: 1, name: "No" },
+        },
+        code: "SESSION_GROUP_PROJECT_MISMATCH",
+      },
+      {
+        command: {
+          type: "sessionGroup.create",
+          payload: { projectId: "web", name: "Missing", initialSessionIds: ["ses_missing"] },
+        },
+        code: "SESSION_NOT_FOUND",
+      },
+      {
+        command: {
+          type: "sessionGroup.create",
+          payload: { projectId: "web", name: "Cross", initialSessionIds: ["ses_api_a"] },
+        },
+        code: "SESSION_GROUP_SESSION_PROJECT_MISMATCH",
+      },
+      {
+        command: {
+          type: "sessionGroup.create",
+          payload: { projectId: "missing", name: "No project" },
+        },
+        code: "PROJECT_NOT_FOUND",
+      },
+    ];
+    for (const { command, code } of commands) {
+      await expect(test.dispatch(command)).resolves.toMatchObject({
+        status: "failed",
+        error: { code },
+      });
+    }
+    await expect(test.persistence.listSessionGroups()).resolves.toEqual([
+      expect.objectContaining({ id: "grp_1", projectId: "web", version: 1 }),
+    ]);
+  });
+
+  it("deletes only Group organization and reports generated id collisions", async () => {
+    const test = await fixture({ repeatedGroupId: true });
+    const before = test.core.getSnapshot();
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Disposable", initialSessionIds: ["ses_web_a"] },
+    });
+    const collision = await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Collision" },
+    });
+    expect(collision).toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_GROUP_ID_COLLISION" },
+    });
+
+    const deleted = await test.dispatch({
+      type: "sessionGroup.delete",
+      payload: { projectId: "web", groupId: "grp_1", expectedVersion: 1 },
+    });
+    expect(deleted.status).toBe("succeeded");
+    expect(test.core.getSnapshot().sessionGroups).toEqual([]);
+    expect(test.core.getSnapshot().sessions).toEqual(before.sessions);
+    expect(test.core.getSnapshot().rows).toEqual(before.rows);
+    expect(
+      (await test.persistence.listEvents({ commandId: deleted.id })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "sessionGroup.removed", "command.succeeded"]);
+  });
+});
+
+type GroupCommandFixture = {
+  persistence: ObserverPersistenceBundle;
+  providers: ProviderRegistry;
+  core: ObserverCore;
+  queue: CommandQueue;
+  dispatch(
+    command: StationCommand,
+  ): Promise<NonNullable<Awaited<ReturnType<ObserverPersistenceBundle["getCommand"]>>>>;
+  close(): void;
+};
+
+async function createFixture(
+  storage: (typeof storageKinds)[number],
+  options: { repeatedGroupId?: boolean },
+): Promise<GroupCommandFixture> {
+  let instant = Date.parse(now);
+  const clock = { now: () => new Date(instant++) };
+  const idFactory = ids(options);
+  const sqlite = storage === "SQLite" ? openObserverSqlite({ clock }) : undefined;
+  const persistence =
+    sqlite === undefined
+      ? createInMemoryObserverPersistence({ clock, idFactory })
+      : createSqliteObserverPersistence({ sqlite, clock, idFactory });
+  const providers = fakeProviders();
+  const core = createObserverCore({ config, providers, persistence, clock });
+  await core.reconcile("session-group-command-fixture");
+  const eventBus = createObserverEventBus();
+  const queue = createCommandQueue({ persistence, clock, idFactory, eventBus });
+  registerObserverCommandHandlers({
+    queue,
+    core,
+    providers,
+    projects: config.projects,
+    persistence,
+    eventBus,
+    clock,
+    idFactory,
+    projectConfigWriter: createUnexpectedProjectConfigWriter(),
+  });
+
+  return {
+    persistence,
+    providers,
+    core,
+    queue,
+    dispatch: async (command) => {
+      const receipt = await queue.dispatch(command);
+      await queue.drain();
+      const record = await persistence.getCommand(receipt.commandId);
+      if (record === undefined) throw new Error("Expected a persisted command record.");
+      return record;
+    },
+    close: () => sqlite?.close(),
+  };
+}
+
+function ids(options: { repeatedGroupId?: boolean }) {
+  let command = 0;
+  let event = 0;
+  let error = 0;
+  let observation = 0;
+  let group = 0;
+  return {
+    commandId: () => `cmd_${++command}`,
+    eventId: () => `evt_${++event}`,
+    errorId: () => `err_${++error}`,
+    observationId: () => `obs_${++observation}`,
+    sessionGroupId: () => `grp_${options.repeatedGroupId === true ? 1 : ++group}`,
+  };
+}
+
+function fakeProviders(): ProviderRegistry {
+  const sessions = [
+    { projectId: "web", worktreeId: "wt_web_a", sessionId: "ses_web_a", runId: "run_web_a" },
+    { projectId: "web", worktreeId: "wt_web_b", sessionId: "ses_web_b", runId: "run_web_b" },
+    { projectId: "api", worktreeId: "wt_api_a", sessionId: "ses_api_a", runId: "run_api_a" },
+  ];
+  return new ProviderRegistry({
+    worktree: new FakeWorktreeProvider({
+      now,
+      worktrees: sessions.map(({ projectId, worktreeId }) =>
+        createFakeWorktree({ id: worktreeId, projectId, now }),
+      ),
+    }),
+    terminal: new FakeTerminalProvider({
+      now,
+      targets: sessions.map(({ projectId, worktreeId, sessionId, runId }) =>
+        createFakeTerminalTarget({
+          id: `term_${sessionId}`,
+          projectId,
+          worktreeId,
+          sessionId,
+          harnessRunId: runId,
+          now,
+        }),
+      ),
+    }),
+    harnesses: [
+      new FakeHarnessProvider({
+        now,
+        runs: sessions.map(({ projectId, worktreeId, sessionId, runId }) =>
+          createFakeHarnessRun({
+            id: runId,
+            projectId,
+            worktreeId,
+            sessionId,
+            state: "idle",
+            now,
+          }),
+        ),
+      }),
+    ],
+  });
+}
+
+const config: StationConfig = {
+  schemaVersion: 1,
+  defaults: {
+    worktreeProvider: "fake-worktree",
+    terminal: "fake-terminal",
+    harness: "fake-harness",
+    layout: "agent-shell",
+  },
+  projects: ["web", "api"].map((projectId) => ({
+    id: projectId,
+    label: projectId,
+    root: `/tmp/station/${projectId}`,
+    defaults: {
+      harness: "fake-harness",
+      terminal: "fake-terminal",
+      layout: "agent-shell" as const,
+    },
+    worktrunk: { enabled: true },
+  })),
+};

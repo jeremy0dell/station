@@ -18,6 +18,7 @@ import type {
   EventJournal,
   ObservationStore,
   ReconcileStore,
+  SessionGroupStore,
   SessionStore,
   WorktreeMetadataStore,
 } from "../persistence/index.js";
@@ -36,6 +37,7 @@ import {
   type ReconcileTiming,
   runReconcileOnce,
 } from "./run.js";
+import { refreshDurableSessionGroups } from "./sessionGroups.js";
 import {
   projectHarnessEventReportOntoSnapshot,
   type StatusProjectionResult,
@@ -52,6 +54,7 @@ export type ObserverCoreHealth = {
 
 export type ObserverCore = {
   reconcile(reason?: string): Promise<StationSnapshot>;
+  refreshSessionGroups(): Promise<StationSnapshot>;
   commitProviderHealthProbe(health: ProviderHealth): Promise<StationEvent | undefined>;
   projectHarnessEventStatus(report: HarnessEventReport): Promise<StatusProjectionResult>;
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
@@ -68,6 +71,7 @@ export type CreateObserverCoreInput = {
   persistence?: ObservationStore &
     ReconcileStore &
     SessionStore &
+    SessionGroupStore &
     WorktreeMetadataStore &
     EventJournal;
   logger?: StationLogger;
@@ -141,6 +145,22 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
 
       return enqueueSnapshotWrite(run);
     },
+    refreshSessionGroups: () =>
+      enqueueSnapshotWrite(async (): Promise<StationSnapshot> => {
+        const generatedAt = toIsoTimestamp(clock.now());
+        const projection = await refreshDurableSessionGroups({
+          ...(input.persistence === undefined ? {} : { store: input.persistence }),
+          projects,
+          sessions: snapshot.sessions,
+          updatedAt: generatedAt,
+        });
+        snapshot = {
+          ...snapshot,
+          generatedAt,
+          sessionGroups: projection.sessionGroups,
+        };
+        return snapshot;
+      }),
     commitProviderHealthProbe: (health) =>
       enqueueSnapshotWrite(async (): Promise<StationEvent | undefined> => {
         const current = providerHealth[health.providerId];

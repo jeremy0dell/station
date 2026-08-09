@@ -112,6 +112,46 @@ describe("observe formatters", () => {
     ]);
   });
 
+  it("renders complete Group convergence without maintaining Group-local context", () => {
+    const context = createObserveSnapshotContext(snapshotFixture());
+    expect(
+      formatEventLines(
+        {
+          type: "sessionGroup.updated",
+          at: now,
+          commandId: "cmd_group_1",
+          traceId: "trc_group_1",
+          group: {
+            id: "grp_active",
+            projectId: "api",
+            name: "Active work",
+            sessionIds: ["ses_1"],
+            version: 2,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        context,
+        now,
+      ),
+    ).toEqual([
+      "12:00:00  group      updated  Active work  project:api  members:1  version:2  cmd:cmd_group_1  trace:trc_group_1",
+    ]);
+    expect(
+      formatEventLines(
+        {
+          type: "sessionGroup.removed",
+          at: now,
+          commandId: "cmd_group_2",
+          projectId: "api",
+          groupId: "grp_active",
+        },
+        context,
+        now,
+      ),
+    ).toEqual(["12:00:00  group      removed  grp_active  project:api  cmd:cmd_group_2"]);
+  });
+
   it("serializes stable JSONL envelopes", () => {
     const event: StationEvent = { type: "observer.started", at: now };
     expect(formatJsonEnvelope({ kind: "event", seq: 2, receivedAt: now, event })).toBe(
@@ -170,6 +210,7 @@ function snapshotFixture(): StationSnapshot {
     ],
     rows: [rowFixture()],
     sessions: [sessionFixture()],
+    sessionGroups: [],
     counts: {
       projects: 1,
       sessions: 1,

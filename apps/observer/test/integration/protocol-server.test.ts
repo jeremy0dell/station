@@ -377,6 +377,28 @@ describe("observer protocol server", () => {
       id: "cmd_1",
       status: "succeeded",
     });
+    const groupReceipt = await client.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Protocol Group" },
+    });
+    await fixture.queue.drain();
+    await expect(client.getCommand(groupReceipt.commandId)).resolves.toMatchObject({
+      id: "cmd_2",
+      status: "succeeded",
+    });
+    await expect(client.getSnapshot()).resolves.toMatchObject({
+      sessionGroups: [
+        {
+          id: expect.stringMatching(/^grp_/),
+          projectId: "web",
+          name: "Protocol Group",
+          sessionIds: [],
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    });
     await expect(
       lifecycle.stop(socketPath, { timeoutMs: 1000, expectedObserver }),
     ).resolves.toMatchObject({
