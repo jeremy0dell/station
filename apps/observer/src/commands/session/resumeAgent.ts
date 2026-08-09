@@ -1,20 +1,12 @@
-import type {
-  HarnessProvider,
-  HarnessResumeOptions,
-  ProviderProjectConfig,
-  SafeError,
-  SessionRecoveryHandle,
-  WorktreeObservation,
-  WorktreeRow,
-} from "@station/contracts";
+import type { ProviderProjectConfig, SafeError, WorktreeRow } from "@station/contracts";
 import { worktreeHasLiveAgent } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
-import { pathIsSameOrInside } from "@station/runtime";
 import type { FeatureFlagEvaluator } from "../../features/evaluator.js";
 import type { EventJournal, SessionStore } from "../../persistence/index.js";
 import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
+import { resolveSessionRecovery } from "../../sessionRecovery.js";
 import type { StationLogger } from "../../stationLogger.js";
 import { nowIso } from "../../utils/time.js";
 import { assertCommandType } from "../assertCommand.js";
@@ -30,7 +22,6 @@ import {
   findProjectOrThrow,
   lookupWorktree,
   publishSessionCreated,
-  resolveHarnessProviderOrThrow,
   resolveTerminalProviderOrThrow,
   type SessionCommandIdFactory,
   seedSession,
@@ -57,8 +48,9 @@ export type CreateSessionResumeAgentHandlerOptions = {
 /**
  * USE CASE
  *
- * Validates and preflights provider-native recovery into an existing Station identity or a fresh
- * titled session. Failed launch cleanup discards only a newly minted session projection.
+ * Explicitly validates and preflights provider-native recovery into a selected worktree, reusing
+ * a handle's Station identity or minting one when absent. Automatic native activation recovery is
+ * owned separately by external launch. Failed cleanup discards only a newly minted projection.
  */
 export function createSessionResumeAgentHandler(
   options: CreateSessionResumeAgentHandlerOptions,
@@ -110,22 +102,18 @@ export function createSessionResumeAgentHandler(
         : worktreeObservationFromRow(row, options.providers.worktree.id, nowIso(options.clock));
     throwIfAborted(context.signal);
 
-    const handle = await resolveRecoveryHandle({
+    const recovery = await resolveSessionRecovery({
       persistence: options.persistence,
       providers: options.providers,
       projectId: payload.projectId,
       worktreeId: payload.worktreeId,
+      worktree,
       recoveryHandleId: payload.recoveryHandleId,
     });
-    // A provider-native target may outlive the worktree that produced it; keep
-    // recovery tied to the observed cwd/worktree boundary when available.
-    assertHandleMatchesWorktree(handle, worktree);
-    const harnessProvider = resolveHarnessProviderOrThrow(options.providers, handle.provider);
-    assertHarnessCanResume(harnessProvider, handle);
-    await options.launchPreflight(handle.provider, context.signal);
+    await options.launchPreflight(recovery.harness.id, context.signal);
 
-    const sessionIdIsFresh = handle.sessionId === undefined;
-    const sessionId = handle.sessionId ?? idFactory.sessionId();
+    const sessionIdIsFresh = recovery.handle.sessionId === undefined;
+    const sessionId = recovery.handle.sessionId ?? idFactory.sessionId();
     let sessionSeeded = false;
     try {
       await seedSession({
@@ -141,13 +129,6 @@ export function createSessionResumeAgentHandler(
 
       // The terminal runner stays provider-neutral: it opens/focuses the pane, and
       // the harness adapter alone translates this resume target into CLI args.
-      const resume: HarnessResumeOptions = {
-        target: handle.target,
-        recoveryHandleId: handle.id,
-      };
-      if (handle.sessionId !== undefined) {
-        resume.previousSessionId = handle.sessionId;
-      }
       const receipt = await options.terminalIntentRunner.submitIntent(
         buildEnsureAgentWorkspaceIntent({
           commandId: context.commandId,
@@ -155,13 +136,13 @@ export function createSessionResumeAgentHandler(
           worktree,
           sessionId,
           terminalProvider: terminalProviderId,
-          harnessProvider: handle.provider,
+          harnessProvider: recovery.harness.id,
           harness: { mode: "interactive" },
           layout: payload.terminal?.layout ?? project.defaults.layout,
           focus: payload.terminal?.focus,
           origin: payload.terminal?.origin,
           initialPrompt: payload.initialPrompt,
-          resume,
+          resume: recovery.resume,
         }),
         {
           trace: context.trace,
@@ -202,97 +183,6 @@ export function createSessionResumeAgentHandler(
       clock: options.clock,
     });
   };
-}
-
-async function resolveRecoveryHandle(input: {
-  persistence: SessionStore;
-  providers: ProviderRegistry;
-  projectId: string;
-  worktreeId: string;
-  recoveryHandleId?: string | undefined;
-}): Promise<SessionRecoveryHandle> {
-  if (input.recoveryHandleId !== undefined) {
-    const handle = await input.persistence.getSessionRecoveryHandle(input.recoveryHandleId);
-    if (handle === undefined) {
-      throw commandValidationError({
-        code: "SESSION_RECOVERY_HANDLE_NOT_FOUND",
-        message: "The requested recovery handle is not available.",
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-      });
-    }
-    if (handle.projectId !== input.projectId || handle.worktreeId !== input.worktreeId) {
-      throw commandValidationError({
-        code: "SESSION_RECOVERY_HANDLE_MISMATCH",
-        message: "The requested recovery handle belongs to a different worktree.",
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-      });
-    }
-    return handle;
-  }
-
-  // Automatic resume requires one exact persisted handle; picker/latest semantics stay manual.
-  const handles = (
-    await input.persistence.listSessionRecoveryHandles({
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-    })
-  ).filter((handle) => handleIsActionable(handle, input.providers));
-  if (handles.length === 1) {
-    return handles[0] as SessionRecoveryHandle;
-  }
-  if (handles.length > 1) {
-    throw commandValidationError({
-      code: "SESSION_RECOVERY_HANDLE_AMBIGUOUS",
-      message: "More than one recovery handle is available for this worktree.",
-      hint: "Select a specific recovery handle and retry.",
-      projectId: input.projectId,
-      worktreeId: input.worktreeId,
-    });
-  }
-  throw commandValidationError({
-    code: "SESSION_RECOVERY_HANDLE_NOT_FOUND",
-    message: "No actionable recovery handle is available for this worktree.",
-    projectId: input.projectId,
-    worktreeId: input.worktreeId,
-  });
-}
-
-function handleIsActionable(handle: SessionRecoveryHandle, providers: ProviderRegistry): boolean {
-  return providers.harnesses.get(handle.provider)?.capabilities().canResume === true;
-}
-
-function assertHarnessCanResume(provider: HarnessProvider, handle: SessionRecoveryHandle): void {
-  // canResume is configuration-gated; adapter code may support resume but a
-  // project must still opt in before observer commands use it.
-  if (provider.capabilities().canResume) {
-    return;
-  }
-  throw {
-    tag: "HarnessProviderError",
-    code: "HARNESS_RESUME_UNSUPPORTED",
-    message: "The requested harness provider does not support agent resume.",
-    provider: provider.id,
-    worktreeId: handle.worktreeId,
-    sessionId: handle.sessionId,
-  } satisfies SafeError;
-}
-
-function assertHandleMatchesWorktree(
-  handle: SessionRecoveryHandle,
-  worktree: WorktreeObservation,
-): void {
-  if (handle.cwd === undefined || pathIsSameOrInside(handle.cwd, worktree.path)) {
-    return;
-  }
-  throw commandValidationError({
-    code: "SESSION_RECOVERY_CWD_MISMATCH",
-    message: "The recovery handle was observed outside the requested worktree.",
-    projectId: handle.projectId,
-    worktreeId: handle.worktreeId,
-    sessionId: handle.sessionId,
-  });
 }
 
 function assertResumeAllowed(row: WorktreeRow | undefined): void {

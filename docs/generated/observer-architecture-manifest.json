@@ -1667,7 +1667,7 @@
           "name": "createSessionResumeAgentHandler",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection."
+          "purpose": "Explicitly validates and preflights provider-native recovery into a selected worktree, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection."
         },
         {
           "name": "CreateSessionResumeAgentHandlerOptions",
@@ -1713,7 +1713,6 @@
             "findProjectOrThrow",
             "lookupWorktree",
             "publishSessionCreated",
-            "resolveHarnessProviderOrThrow",
             "resolveTerminalProviderOrThrow",
             "seedSession",
             "throwIfAborted",
@@ -1764,6 +1763,12 @@
           "bindings": ["ObserverEventBus"]
         },
         {
+          "specifier": "../../sessionRecovery.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveSessionRecovery"]
+        },
+        {
           "specifier": "../../stationLogger.js",
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
@@ -1785,21 +1790,7 @@
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
-          "bindings": [
-            "HarnessProvider",
-            "HarnessResumeOptions",
-            "ProviderProjectConfig",
-            "SafeError",
-            "SessionRecoveryHandle",
-            "WorktreeObservation",
-            "WorktreeRow"
-          ]
-        },
-        {
-          "specifier": "@station/runtime",
-          "resolvedPath": "packages/runtime/src/index.ts",
-          "edgeKind": "runtime",
-          "bindings": ["pathIsSameOrInside"]
+          "bindings": ["ProviderProjectConfig", "SafeError", "WorktreeRow"]
         },
         {
           "specifier": "@station/runtime",
@@ -9506,7 +9497,7 @@
           "name": "prepareExternalLaunch",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its exact session target and discards only a seed whose target release is confirmed. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely."
+          "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. Failed cleanup releases only the exact opened binding and never discards retained recovery state; local fallbacks preserve the managed terminal's output policy while attachments consume compatibility remotely."
         },
         {
           "name": "reportExternalExit",
@@ -9564,6 +9555,12 @@
           "bindings": ["ObserverCore"]
         },
         {
+          "specifier": "../sessionRecovery.js",
+          "resolvedPath": "apps/observer/src/sessionRecovery.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveSessionRecovery"]
+        },
+        {
           "specifier": "../stationLogger.js",
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
@@ -9591,6 +9588,7 @@
             "AgentReportExternalExitParams",
             "AgentReportExternalExitResult",
             "SafeError",
+            "SessionView",
             "TerminalTargetId"
           ]
         },
@@ -11095,6 +11093,61 @@
       ]
     },
     {
+      "path": "apps/observer/src/sessionRecovery.ts",
+      "exports": [
+        {
+          "name": "resolveSessionRecovery",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./commands/providers.js",
+          "resolvedPath": "apps/observer/src/commands/providers.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveHarnessProviderOrThrow"]
+        },
+        {
+          "specifier": "./commands/session/shared.js",
+          "resolvedPath": "apps/observer/src/commands/session/shared.ts",
+          "edgeKind": "runtime",
+          "bindings": ["commandValidationError"]
+        },
+        {
+          "specifier": "./persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["SessionStore"]
+        },
+        {
+          "specifier": "./providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessProvider",
+            "HarnessResumeOptions",
+            "SafeError",
+            "SessionRecoveryHandle",
+            "WorktreeObservation"
+          ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["pathIsSameOrInside"]
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/sqlite.ts",
       "exports": [
         {
@@ -12435,23 +12488,8 @@
       "declaration": "createSessionResumeAgentHandler",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Validates and preflights provider-native recovery into an existing Station identity or a fresh titled session. Failed launch cleanup discards only a newly minted session projection.",
-      "dependencies": [
-        {
-          "path": "apps/observer/src/persistence/ports.ts",
-          "declaration": "SessionStore",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        },
-        {
-          "path": "packages/contracts/src/providers.ts",
-          "declaration": "HarnessProvider",
-          "kind": "interface",
-          "role": "DRIVEN PORT",
-          "edgeKind": "type-only"
-        }
-      ]
+      "purpose": "Explicitly validates and preflights provider-native recovery into a selected worktree, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/commands/session/startAgent.ts",
@@ -13086,7 +13124,7 @@
       "declaration": "prepareExternalLaunch",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Returns existing live identity without a gate; otherwise freshly preflights the selected harness before seeding the canonical title or registering a target. Failed launch cleanup independently releases its exact session target and discards only a seed whose target release is confirmed. Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume compatibility remotely.",
+      "purpose": "Returns a live or attachable managed identity first, then exactly recovers the canonical open Station session before permitting a fresh identity. Both launch paths preflight only the selected provider and pass provider-neutral resume options to the harness. Failed cleanup releases only the exact opened binding and never discards retained recovery state; local fallbacks preserve the managed terminal's output policy while attachments consume compatibility remotely.",
       "dependencies": [
         {
           "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",

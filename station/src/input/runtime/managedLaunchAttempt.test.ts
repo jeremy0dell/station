@@ -70,6 +70,16 @@ function compatiblePreparedPlan() {
   } satisfies AgentPrepareExternalLaunchResult;
 }
 
+function recoveredPlan(sessionId: string) {
+  return {
+    ...preparedPlan({
+      STATION_SESSION_ID: sessionId,
+      STATION_TERMINAL_TARGET_ID: TERMINAL_TARGET_ID,
+    }),
+    sessionId,
+  } satisfies AgentPrepareExternalLaunchResult;
+}
+
 function stationHostedSnapshot(): StationSnapshot {
   const snapshot = manyProjectsSnapshot();
   return {
@@ -297,8 +307,8 @@ describe("createManagedLaunchAttempt", () => {
     expect(selectStationOverlayVisible(background.store.getState())).toBe(true);
   });
 
-  it("relaunches a proven-exited managed pane while preserving its child layout", async () => {
-    const harness = attemptHarness();
+  it("recycles an exited pane under its recovered identity while preserving child layout", async () => {
+    const harness = attemptHarness({ prepared: recoveredPlan("ses_old") });
     harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
     harness.store.actions.setPrimaryAgent(PANE_ID, {
       sessionId: "ses_old",
@@ -328,7 +338,7 @@ describe("createManagedLaunchAttempt", () => {
       role: "shell",
     });
     expect(selectPaneRecord(harness.store.getState(), PANE_ID)?.agentIdentity).toEqual({
-      sessionId: "ses_managed",
+      sessionId: "ses_old",
       terminalTargetId: TERMINAL_TARGET_ID,
       harnessProvider: "codex",
     });

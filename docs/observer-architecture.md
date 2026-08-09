@@ -577,12 +577,32 @@ focus returns before any health or hook probe.
 handshakes rather than recorded commands. Their use cases depend on the
 composition-supplied `ManagedTerminalLifecycle`, carry provider-owned target IDs
 opaquely, and request reconcile after relevant lifecycle changes. Returning an
-existing live session precedes launch preflight. A new managed session repeats
-the full selected-harness preflight immediately before title, target, or process
-mutation, then durably seeds the session from canonical worktree title authority
-before target registration and process launch. Failed launch cleanup conditionally
-releases only the target still bound to that fresh session and discards its seed
-only after release is confirmed absent or complete.
+attachable managed target or an existing live session precedes launch preflight.
+Target discovery includes Station Host reconstruction, so negotiated handoff and
+orphan-bridge adoption retain their existing PTY instead of entering provider
+recovery. A retained canonical Station session with no such target fails with
+`SESSION_RESUME_DISABLED` while recovery is disabled. When enabled, preparation
+requires one actionable handle whose Station session, harness provider, worktree,
+and cwd match that canonical view, then preflights that provider and passes only
+typed provider-neutral resume options to its launch adapter. Missing or ambiguous
+handles and identity, capability, or cwd mismatches fail before terminal mutation.
+
+Automatic recovery opens and launches the replacement target under the retained
+Station session ID without seeding, reopening, renaming, discarding, or copying
+session state. Canonical worktree title authority remains unchanged, readiness
+stays keyed to that session ID, and newly admitted provider evidence updates
+status through the normal projection and decay policies. Failed recovery releases
+only the exact replacement target/session binding; the retained session, handle,
+title, readiness, and prior evidence remain. An explicitly ended session is absent
+from canonical membership, so activation takes the fresh path even when an old
+handle remains.
+
+A new managed session repeats the full selected-harness preflight immediately
+before title, target, or process mutation, then durably seeds the session from
+canonical worktree title authority before target registration and process launch.
+Failed fresh launch cleanup conditionally releases only the target still bound to
+that fresh session and discards its seed only after release is confirmed absent
+or complete.
 
 When preparation mints a fresh session and receives a title, it persists that
 title before registering the managed target so reconcile cannot publish the new

@@ -409,6 +409,7 @@ function assertProvidersAvailable(options: CreateObserverApiOptions): ExternalLa
     persistence: options.persistence,
     clock: options.clock,
     configPath: options.configPath,
+    sessionResumeAgentEnabled: options.config?.featureFlags?.sessionResumeAgent === true,
     logger: options.logger,
   };
 }

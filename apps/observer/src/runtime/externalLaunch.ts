@@ -4,6 +4,7 @@ import type {
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
   SafeError,
+  SessionView,
   TerminalTargetId,
 } from "@station/contracts";
 import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
@@ -20,6 +21,7 @@ import {
 import type { SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
+import { resolveSessionRecovery } from "../sessionRecovery.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
 
@@ -29,6 +31,7 @@ export type ExternalLaunchDeps = {
   persistence: SessionStore;
   clock?: RuntimeClock | undefined;
   configPath?: string | undefined;
+  sessionResumeAgentEnabled?: boolean | undefined;
   logger?: StationLogger | undefined;
 };
 
@@ -41,11 +44,11 @@ export type ExternalLaunchOutcome<T> = {
 /**
  * USE CASE
  *
- * Returns existing live identity without a gate; otherwise freshly preflights the selected harness
- * before seeding the canonical title or registering a target. Failed launch cleanup independently
- * releases its exact session target and discards only a seed whose target release is confirmed.
- * Local fallbacks retain the managed terminal's provider-neutral output policy; attachments consume
- * compatibility remotely.
+ * Returns a live or attachable managed identity first, then exactly recovers the canonical open
+ * Station session before permitting a fresh identity. Both launch paths preflight only the selected
+ * provider and pass provider-neutral resume options to the harness. Failed cleanup releases only
+ * the exact opened binding and never discards retained recovery state; local fallbacks preserve the
+ * managed terminal's output policy while attachments consume compatibility remotely.
  */
 export async function prepareExternalLaunch(
   deps: ExternalLaunchDeps,
@@ -59,38 +62,6 @@ export async function prepareExternalLaunch(
     throw worktreeProjectMismatchError(params.projectId, row.id);
   }
 
-  // One worktree, one live agent: if a primary agent is genuinely running, hand
-  // back its session rather than minting a second. worktreeHasLiveAgent owns the
-  // unknown/stale-terminal rules — a stale `unknown` falls through and openWorkspace
-  // relaunches it below.
-  if (row !== undefined && worktreeHasLiveAgent(row)) {
-    const agent = row.agent;
-    if (agent?.sessionId === undefined) {
-      throw sessionAlreadyHasAgentError(row.id);
-    }
-    const managedTerminal = deps.providers.managedTerminal;
-    const managedTarget =
-      managedTerminal === undefined
-        ? undefined
-        : (await managedTerminal.listTargets()).find(
-            (target) =>
-              target.worktreeId === params.worktreeId && target.sessionId === agent.sessionId,
-          );
-    const attachment =
-      managedTerminal === undefined || managedTarget === undefined
-        ? undefined
-        : await managedTerminal.attachmentForTarget(managedTarget.id);
-    return {
-      outcome: {
-        kind: "existing-session",
-        sessionId: agent.sessionId,
-        harnessProvider: agent.harness,
-        ...(attachment === undefined ? {} : { attachment }),
-      },
-      reconcile: false,
-    };
-  }
-
   if (row === undefined) {
     throw worktreeMissingError({
       projectId: params.projectId,
@@ -99,9 +70,90 @@ export async function prepareExternalLaunch(
     });
   }
 
+  const managedTerminal = deps.providers.managedTerminal;
+  const managedTargets = managedTerminal === undefined ? [] : await managedTerminal.listTargets();
+  if (managedTerminal !== undefined) {
+    for (const target of managedTargets) {
+      if (
+        target.worktreeId !== params.worktreeId ||
+        (target.projectId !== undefined && target.projectId !== params.projectId) ||
+        target.sessionId === undefined
+      ) {
+        continue;
+      }
+      const attachment = await managedTerminal.attachmentForTarget(target.id);
+      if (attachment !== undefined) {
+        return {
+          outcome: {
+            kind: "existing-session",
+            sessionId: target.sessionId,
+            harnessProvider:
+              target.harnessBinding?.harnessProvider ??
+              row.agent?.harness ??
+              project.defaults.harness,
+            attachment,
+          },
+          reconcile: false,
+        };
+      }
+    }
+  }
+
+  // One worktree, one live agent: an unattachable external or UI-owned target still wins over
+  // application recovery. A stale `unknown` falls through via worktreeHasLiveAgent.
+  if (worktreeHasLiveAgent(row)) {
+    const agent = row.agent;
+    if (agent?.sessionId === undefined) {
+      throw sessionAlreadyHasAgentError(row.id);
+    }
+    return {
+      outcome: {
+        kind: "existing-session",
+        sessionId: agent.sessionId,
+        harnessProvider: agent.harness,
+      },
+      reconcile: false,
+    };
+  }
+
+  const retainedSession = snapshot.sessions.find(
+    (session) =>
+      session.origin === "station" &&
+      session.projectId === params.projectId &&
+      session.worktreeId === params.worktreeId,
+  );
+
+  // Before first reconcile, the target is the only proof a concurrent prepare registered its
+  // session. Retained sessions skip this provisional path so a dead UI target cannot block recovery.
+  const concurrentManagedTarget =
+    retainedSession === undefined && row.agent === undefined
+      ? managedTargets.find(
+          (target) =>
+            target.worktreeId === params.worktreeId &&
+            (target.projectId === undefined || target.projectId === params.projectId) &&
+            target.sessionId !== undefined,
+        )
+      : undefined;
+  if (concurrentManagedTarget?.sessionId !== undefined) {
+    return {
+      outcome: {
+        kind: "existing-session",
+        sessionId: concurrentManagedTarget.sessionId,
+        harnessProvider:
+          concurrentManagedTarget.harnessBinding?.harnessProvider ?? project.defaults.harness,
+      },
+      reconcile: false,
+    };
+  }
+
   const worktree = worktreeObservationFromRow(row, deps.providers.worktree.id, nowIso(deps.clock));
 
+  const recovery =
+    retainedSession === undefined
+      ? undefined
+      : await resolveAutomaticRecovery(deps, retainedSession, worktree, params.projectId);
   const harnessProviderId =
+    recovery?.harness.id ??
     params.harness ??
     (await rememberedHarnessProviderForWorktree({
       persistence: deps.persistence,
@@ -110,7 +162,8 @@ export async function prepareExternalLaunch(
       worktreePath: worktree.path,
     })) ??
     project.defaults.harness;
-  const harness = resolveHarnessProviderOrThrow(deps.providers, harnessProviderId);
+  const harness =
+    recovery?.harness ?? resolveHarnessProviderOrThrow(deps.providers, harnessProviderId);
 
   await assertHarnessLaunchPreconditionsOrThrow({
     providers: deps.providers,
@@ -118,36 +171,8 @@ export async function prepareExternalLaunch(
     ...(deps.configPath === undefined ? {} : { stationConfigPath: deps.configPath }),
   });
 
-  const managedTerminal = deps.providers.managedTerminal;
   if (managedTerminal === undefined) {
     throw managedTerminalUnavailableError();
-  }
-
-  // The snapshot's `row.agent` lags a concurrent prepare's registration (it is
-  // only populated by the post-prepare reconcile). When the snapshot shows no
-  // agent at all but a station target already exists, a concurrent prepare just
-  // registered it — return its session instead of minting a second. (An *exited*
-  // agent's stale target is intentionally NOT reused: `row.agent` is defined, so
-  // this short-circuits to undefined and openWorkspace upserts the stale target
-  // below, relaunching the agent.)
-  const concurrentManagedTarget =
-    row.agent === undefined
-      ? (await managedTerminal.listTargets()).find(
-          (target) => target.worktreeId === params.worktreeId && target.sessionId !== undefined,
-        )
-      : undefined;
-  if (concurrentManagedTarget?.sessionId !== undefined) {
-    const attachment = await managedTerminal.attachmentForTarget(concurrentManagedTarget.id);
-    return {
-      outcome: {
-        kind: "existing-session",
-        sessionId: concurrentManagedTarget.sessionId,
-        harnessProvider:
-          concurrentManagedTarget.harnessBinding?.harnessProvider ?? harnessProviderId,
-        ...(attachment === undefined ? {} : { attachment }),
-      },
-      reconcile: false,
-    };
   }
 
   // Accepted race: two *distinct* UIs racing prepare on the same worktree
@@ -156,27 +181,30 @@ export async function prepareExternalLaunch(
   // the window resolves to one target (the second session may replace the first,
   // which reconcile later reaps) rather than two targets. A single UI is already
   // covered by Station's `launchesInFlight` guard; a server-side lock is out of scope.
-  const sessionId = defaultSessionCommandIdFactory.sessionId();
+  const freshSession = retainedSession === undefined;
+  const sessionId = retainedSession?.id ?? defaultSessionCommandIdFactory.sessionId();
   const seededAt = nowIso(deps.clock);
   let openedTargetId: TerminalTargetId | undefined;
   let sessionSeeded = false;
   try {
-    await deps.persistence.seedSession({
-      sessionId,
-      projectId: project.id,
-      worktreeId: worktree.id,
-      initialTitle: params.title ?? row.title,
-      createdAt: seededAt,
-      lastSeenAt: seededAt,
-    });
-    sessionSeeded = true;
-    if (params.title !== undefined && params.title !== row.title) {
-      // New-session intent may replace reconcile's branch fallback before the target becomes visible.
-      await deps.persistence.renameSession({
+    if (freshSession) {
+      await deps.persistence.seedSession({
         sessionId,
-        title: params.title,
-        renamedAt: seededAt,
+        projectId: project.id,
+        worktreeId: worktree.id,
+        initialTitle: params.title ?? row.title,
+        createdAt: seededAt,
+        lastSeenAt: seededAt,
       });
+      sessionSeeded = true;
+      if (params.title !== undefined && params.title !== row.title) {
+        // New-session intent may replace reconcile's branch fallback before the target becomes visible.
+        await deps.persistence.renameSession({
+          sessionId,
+          title: params.title,
+          renamedAt: seededAt,
+        });
+      }
     }
 
     const opened = await managedTerminal.openWorkspace({
@@ -197,6 +225,7 @@ export async function prepareExternalLaunch(
       worktree,
       terminalTarget,
       sessionId,
+      ...(recovery === undefined ? {} : { resume: recovery.resume }),
     });
 
     // The managed result requires an attachment exactly when it starts the process,
@@ -244,7 +273,7 @@ export async function prepareExternalLaunch(
           .catch(() => undefined);
       }
     }
-    if (sessionSeeded && targetReleaseConfirmed) {
+    if (freshSession && sessionSeeded && targetReleaseConfirmed) {
       try {
         await deps.persistence.discardSessionSeed({ sessionId });
       } catch (cleanupError) {
@@ -258,6 +287,28 @@ export async function prepareExternalLaunch(
     }
     throw error;
   }
+}
+
+async function resolveAutomaticRecovery(
+  deps: ExternalLaunchDeps,
+  session: SessionView,
+  worktree: ReturnType<typeof worktreeObservationFromRow>,
+  projectId: string,
+) {
+  if (deps.sessionResumeAgentEnabled !== true) {
+    throw sessionResumeDisabledError(projectId, worktree.id, session.id);
+  }
+  return resolveSessionRecovery({
+    persistence: deps.persistence,
+    providers: deps.providers,
+    projectId,
+    worktreeId: worktree.id,
+    worktree,
+    expected: {
+      sessionId: session.id,
+      provider: session.harness.provider,
+    },
+  });
 }
 
 /**
@@ -305,6 +356,22 @@ function sessionAlreadyHasAgentError(worktreeId: string): SafeError {
     message: "This worktree already has a primary agent session.",
     hint: "Focus the existing agent or close it before starting a new one.",
     worktreeId,
+  };
+}
+
+function sessionResumeDisabledError(
+  projectId: string,
+  worktreeId: string,
+  sessionId: string,
+): SafeError {
+  return {
+    tag: "CommandValidationError",
+    code: "SESSION_RESUME_DISABLED",
+    message: "Agent resume is disabled for this interrupted session.",
+    hint: "Enable feature_flags.session_resume_agent and retry.",
+    projectId,
+    worktreeId,
+    sessionId,
   };
 }
 
