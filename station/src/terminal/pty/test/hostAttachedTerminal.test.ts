@@ -10,14 +10,14 @@ import { describe, expect, it } from "bun:test";
 import {
   resetTerminalDiagnosticsForTest,
   terminalCorruptionCounters,
-} from "../diagnostics.js";
+} from "../../diagnostics.js";
 import type {
   StationTerminalDisposable,
   StationTerminalProcess,
   StationTerminalReplay,
   StationTerminalSize,
-} from "../types.js";
-import { createHostAttachedTerminal, RECONNECT_REPAINT } from "./hostAttachedTerminal.js";
+} from "../../types.js";
+import { createHostAttachedTerminal, RECONNECT_REPAINT } from "../hostAttachedTerminal.js";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 

@@ -14,12 +14,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStationHostClient, type HostPtyRef } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
-import { type StationHostInstance, startStationHost } from "../../host/startHost.js";
-import { createPtyRegistry } from "../registry/ptyRegistry.js";
-import { createScriptedTerminal, type ScriptedTerminal } from "../testing/scriptedTerminal.js";
-import { waitFor } from "../testing/waitFor.js";
-import type { StationVtScreen } from "../vt/screen.js";
-import { createHostAttachedTerminal } from "./hostAttachedTerminal.js";
+import { type StationHostInstance, startStationHost } from "../../../host/startHost.js";
+import { createPtyRegistry } from "../../registry/ptyRegistry.js";
+import { createScriptedTerminal, type ScriptedTerminal } from "../../testing/scriptedTerminal.js";
+import { waitFor } from "../../testing/waitFor.js";
+import type { StationVtScreen } from "../../vt/screen.js";
+import { createHostAttachedTerminal } from "../hostAttachedTerminal.js";
 
 const noopLogger = { log: async () => undefined } as never;
 

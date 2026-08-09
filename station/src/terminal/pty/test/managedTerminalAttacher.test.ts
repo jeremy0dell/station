@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { StationHostProviderError, type HostListEntry } from "@station/host";
-import { createScriptedTerminal } from "../testing/scriptedTerminal.js";
-import type { HostAttachedTerminalOptions } from "./hostAttachedTerminal.js";
-import { createStationHostManagedTerminalAttacher } from "./managedTerminalAttacher.js";
+import { createScriptedTerminal } from "../../testing/scriptedTerminal.js";
+import type { HostAttachedTerminalOptions } from "../hostAttachedTerminal.js";
+import { createStationHostManagedTerminalAttacher } from "../managedTerminalAttacher.js";
 
 const TARGET_ID = "native:wt-agent";
 const ATTACHMENT = { kind: "managed-terminal", terminalTargetId: TARGET_ID } as const;

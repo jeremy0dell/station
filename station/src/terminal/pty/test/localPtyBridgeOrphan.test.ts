@@ -6,11 +6,11 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { waitFor } from "../testing/waitFor.js";
+import { waitFor } from "../../testing/waitFor.js";
 import { PtyBridgeProtocolVersion } from "@station/contracts";
-import { adoptLocalPtyBridge } from "./ptyBridgeAdoption.js";
+import { adoptLocalPtyBridge } from "../ptyBridgeAdoption.js";
 
-const BRIDGE_PATH = fileURLToPath(new URL("./localPtyBridge.cjs", import.meta.url));
+const BRIDGE_PATH = fileURLToPath(new URL("../localPtyBridge.cjs", import.meta.url));
 const PTY_INSTANCE_ID = "instance-1";
 
 const gated = (): boolean => {
