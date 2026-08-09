@@ -3,7 +3,7 @@ import {
   createStationClientRuntime,
   type ObserverService,
 } from "@station/client";
-import { isNeedsAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
+import { isStationAttentionEvent, type StationAttentionEvent } from "./attentionEvents.js";
 import type { StationClient } from "./types.js";
 
 export type CreateObserverStationClientOptions = {
@@ -38,7 +38,7 @@ export function createObserverStationClient(
     clientLabel: "Station",
     hooks: {
       onEvent: (event) => {
-        if (!isNeedsAttentionEvent(event)) {
+        if (!isStationAttentionEvent(event)) {
           return;
         }
         try {

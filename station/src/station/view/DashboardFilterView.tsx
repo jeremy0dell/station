@@ -7,6 +7,7 @@ import {
   type StationColor,
   type StationTheme,
 } from "../../theme/index.js";
+import { stationAgentStatusTone } from "../statusUi.js";
 
 export function DashboardFilterView({ model }: { model: DashboardFilterHeaderModel }) {
   const theme = useStationTheme();
@@ -66,22 +67,7 @@ function conditionValueForeground(
 ): StationColor {
   if (segment.field === "project") return theme.action.primary;
   if (segment.field === "agent") return theme.status.accent;
-  switch (segment.valueId) {
-    case "needs_attention":
-    case "stuck":
-      return theme.status.danger;
-    case "working":
-    case "starting":
-      return theme.status.working;
-    case "idle":
-      return theme.status.success;
-    case "unknown":
-      return theme.status.warning;
-    case "none":
-    case "exited":
-    default:
-      return theme.status.neutral;
-  }
+  return theme.status[stationAgentStatusTone(segment.valueId)];
 }
 
 function filterSegmentAttributes(segment: DashboardFilterHeaderSegment): number {

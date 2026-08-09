@@ -209,11 +209,10 @@ function countsForRows(rows: readonly WorktreeRow[]) {
     sessions: rows.filter((candidate) => candidate.agent?.sessionId !== undefined).length,
     worktrees: rows.length,
     agents: rows.filter((candidate) => candidate.agent !== undefined).length,
-    working: rows.filter((candidate) => candidate.display.statusLabel === "working").length,
-    idle: rows.filter((candidate) => candidate.display.statusLabel === "idle").length,
-    attention: rows.filter((candidate) => candidate.display.statusLabel === "needs attention")
-      .length,
-    unknown: rows.filter((candidate) => candidate.display.statusLabel === "unknown").length,
+    working: rows.filter((candidate) => candidate.agent?.state === "working").length,
+    idle: rows.filter((candidate) => candidate.agent?.state === "idle").length,
+    attention: rows.filter((candidate) => candidate.agent?.state === "needs_attention").length,
+    unknown: rows.filter((candidate) => candidate.agent?.state === "unknown").length,
   };
 }
 

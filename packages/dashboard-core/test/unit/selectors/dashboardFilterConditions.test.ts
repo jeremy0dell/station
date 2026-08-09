@@ -1,3 +1,4 @@
+import { AGENT_STATUS } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import {
   dashboardFilterConditionFieldForKey,
@@ -59,16 +60,19 @@ describe("dashboard filter conditions", () => {
 
     const options = selectDashboardFilterConditionOptions(snapshot, state, conditions);
 
-    expect(options.status.map((option) => option.id)).toEqual([
-      "needs_attention",
-      "stuck",
-      "working",
-      "starting",
-      "idle",
-      "exited",
-      "none",
-      "unknown",
+    expect(options.status).toEqual([
+      { id: "needs_attention", label: "Needs attention" },
+      { id: "stuck", label: "Stuck" },
+      { id: "working", label: "Working" },
+      { id: "starting", label: "Starting" },
+      { id: "idle", label: "Idle" },
+      { id: "exited", label: "Exited" },
+      { id: "none", label: "No agent" },
+      { id: "unknown", label: "Unknown" },
     ]);
+    expect(new Set(options.status.map((option) => option.id))).toEqual(
+      new Set(Object.keys(AGENT_STATUS)),
+    );
     expect(options.project).toEqual([
       { id: "api", label: "api" },
       { id: "removed", label: "Removed project" },
