@@ -1,5 +1,6 @@
 import {
   externalCommandDiagnosticFromSafeError,
+  normalizeCancellationError,
   publicSafeErrorFromUnknown,
   type RuntimeSafeError,
   safeErrorFromUnknown,
@@ -23,6 +24,40 @@ const commandDiagnostic = {
 };
 
 describe("runtime safe error normalization", () => {
+  it("normalizes raw, nested, and already-shaped cancellation failures", () => {
+    const raw = Object.assign(new Error("aborted"), { name: "AbortError", code: "ABORT_ERR" });
+    expect(normalizeCancellationError(raw)).toEqual({
+      tag: "CancellationError",
+      code: "ABORT_ERR",
+      message: "Operation was cancelled.",
+    });
+    expect(normalizeCancellationError({ cause: raw })).toEqual({
+      tag: "CancellationError",
+      code: "ABORT_ERR",
+      message: "Operation was cancelled.",
+    });
+    expect(
+      normalizeCancellationError({
+        tag: "ExternalCommandError",
+        code: "EXTERNAL_COMMAND_ABORTED",
+        message: "External command was aborted.",
+        diagnosticDetails: [commandDiagnostic],
+      }),
+    ).toEqual({
+      tag: "ExternalCommandError",
+      code: "EXTERNAL_COMMAND_ABORTED",
+      message: "External command was aborted.",
+      diagnosticDetails: [commandDiagnostic],
+    });
+    expect(
+      normalizeCancellationError({
+        tag: "ExternalCommandError",
+        code: "ABORT_ERR",
+        message: "External command was aborted.",
+      }),
+    ).toMatchObject({ code: "ABORT_ERR" });
+  });
+
   it("preserves the outer safe error while inheriting nested typed diagnostics", () => {
     const inner = Object.assign(new Error("inner"), {
       tag: "ExternalCommandError",

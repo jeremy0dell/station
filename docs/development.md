@@ -78,6 +78,8 @@ provider homes are checkout-local. See the copy-paste recipe in
 - `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer. For `start` and `dev`, the nested wrapper first runs `bun install --frozen-lockfile` in `station/`, before creating devbox state or starting the Observer. After isolated Observer and hook setup, it enters the same native-HMR owner as `station:ui-dev`; that owner performs the sole package-link and node-pty repair pass before Bun starts, while UI cleanup leaves the persistent devbox Observer, Host, and agent PTYs intact. `stop` performs no dependency preparation.
 - Native-HMR records live at `<state_dir>/run/runtime-owners/v1` in a `0700` directory with `0600` files. Do not delete an uncertain record: the next matching start revalidates owner PID/start identity and the exact disposable PGID before TERM, bounded wait, and any KILL escalation.
 - Inspect those records without changing a runtime with `pnpm station:runtime-inventory` or, for this checkout's devbox, `cd station && bun run station:isolated inventory`. Both commands support `--json`; they report keyed/redacted roots, lifecycle evidence, Host PTY count when safely available, and refusal reasons, never raw commands, environment, terminal data, or private paths. Inventory never signals, starts, stops, repairs, or deletes anything.
+- Prune one verified abandoned record by first running `pnpm station:runtime-prune -- --runtime <run_uuid>` and then rerunning it with the displayed `--yes --expect-plan <sha256>`. The apply path acquires the same runtime-key lock as startup, rebuilds the plan under that lock, and refreshes record, process-group, cleanup-root, Host, and live-PTY evidence before TERM and any KILL escalation. It refuses active owners, changed or unavailable identities, stale plan digests, protected Host/PTY overlap, and non-temporary or replaced cleanup roots. General socket and persistence roots are classification-only and are never recursively deleted. For a devbox record, use `cd station && bun run station:isolated prune --runtime <run_uuid>`.
+- Manually verify pruning only against a controlled isolated runtime: capture its inventory, generate a plan, change the record or replace a cleanup root and confirm apply refuses without a shutdown event, then generate a fresh plan and apply it. The selected owner record and exact binary-smoke cleanup root should disappear; unrelated Host and PTY processes must remain present in the next inventory.
 - Before Observer startup, `station:devbox` creates or repairs only its checkout-keyed socket directory to mode `0700`. It refuses symlinks, non-directories, and directories owned by another user; it never repairs or replaces socket and claim files.
 - If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
 - `pnpm station:devbox tmux dev` builds the checkout, starts or safely reuses a checkout-keyed private tmux server and isolated live Observer, claims cleanup ownership, and attaches the invoking terminal. Inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`; `Ctrl-b d` detaches and cleans up the owned lane. Use `tmux start` plus `tmux attach` when automation needs a persistent lane that is stopped explicitly.
@@ -447,7 +449,9 @@ gates after each reviewed cleanup slice.
 
 `pnpm test:all` includes `pnpm smoke:install`. The installer smoke uses fake
 public `curl` downloads and authenticated draft responses in temporary homes,
-including startup-file
+including first-argument `--disable` isolation, receipt creation and inode
+preservation, strict expected-installation parsing, binary/launcher/receipt
+identity races, startup-file
 non-interaction, safely evaluated minimal-PATH guidance, physical launcher
 resolution, and normalized-colon preflight coverage. It is deterministic, does
 not download a real release, and does not read or modify real shell startup
@@ -455,7 +459,12 @@ files. The path-selected installer CI job runs it once. On a heavily contended l
 `STATION_INSTALL_SMOKE_TIMEOUT_SCALE=4 pnpm smoke:install` to scale only the
 harness deadlines; the default and hosted gate remain strict.
 The release workflow builds and smokes the compiled binary on all four native
-targets, then installs each actual draft asset with real platform utilities.
+targets, then installs each actual draft asset with real platform utilities and
+requires the exact receipt. The focused
+`apps/cli/test/integration/installer-binary-update.test.ts` fixture invokes the
+real `scripts/install.sh` against fake exact-tag assets to prove atomic binary
+replacement, physical `--version` execution, stable launchers and receipt, and
+invocation-boundary race refusal.
 
 Run `pnpm test:sqlite:bun` after `pnpm build` with Bun 1.3.14 available. It
 creates observer databases under Node and Bun, then reopens each database under

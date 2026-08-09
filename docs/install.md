@@ -71,7 +71,7 @@ choices.
 From any directory, run:
 
 ```bash
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh | sh
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh | sh
 ```
 
 The released `install.sh` is stamped with `v0.0.0-pre-alpha.5.1`. With no
@@ -138,7 +138,7 @@ it separately.
 Pass an absolute or home-relative path through the exact installer:
 
 ```bash
-curl -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh | \
+curl --disable -fsSL https://github.com/jeremy0dell/station/releases/download/v0.0.0-pre-alpha.5.1/install.sh | \
   sh -s -- --install-dir "$HOME/bin"
 ```
 
@@ -246,12 +246,29 @@ The installer and setup have separate ownership:
 The installer:
 
 - accepts only `darwin-arm64`, `darwin-x64`, `linux-arm64`, and `linux-x64`;
-- downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` from the stamped public tag with unauthenticated `curl` (`{version}` excludes the tag's leading `v`);
+- downloads the exact `stn-v{version}-{os}-{arch}.tar.gz` asset and `SHA256SUMS` from the stamped public tag with unauthenticated `curl --disable` (`{version}` excludes the tag's leading `v`), so user curl configuration cannot change the request;
 - verifies the matching SHA-256 before extraction and rejects an unexpected archive manifest;
 - stages the verified binary on the destination filesystem and requires its `--version` to match within 10 seconds, so a hung or incompatible OS/libc/CPU artifact and an embedded-version mismatch fail without replacing an existing command; compatibility failures include at most 4096 sanitized bytes of probe stderr;
 - keeps `stn-ingress` and `stn-tmux-popup` as stable symlinks to `stn`, installs the redistributed `LICENSE` under `${XDG_DATA_HOME:-$HOME/.local/share}/station/`, then atomically renames the verified `stn` last as the sole runtime commit point;
+- preserves or enrolls `<install-dir>/.station-install-receipt` as a regular, non-symlink `0600` file containing exactly `station-installer-binary-v1`; and
 - removes `com.apple.quarantine` from the verified binary defensively on macOS; and
 - physically resolves all three bare launchers after installation. If any is missing or shadowed, it names every mismatch, prints one safely quoted future-shell export for the user's chosen shell configuration, prints a current-shell block that prepends the install directory, runs `hash -r`, and starts `stn setup`, and prints an absolute installed `stn` fallback. If all three launchers already resolve to the installed runtime, it prints only `Next: run stn setup`.
+
+### Automatic-update ownership
+
+This change does not add an update command. It establishes a future
+`installer-binary` channel that may own only compiled installations carrying
+the exact installer receipt above. Detection is local and network-free. Before
+release discovery and again at the installer's locked commit boundary, the
+channel binds the physical `stn` hash, device, and inode plus the device and
+inode of both launchers and the receipt. A missing or changed path is refused
+before mutation.
+
+The current public `v0.0.0-pre-alpha.5.1` installer is immutable and predates
+this receipt, so existing installations continue to work but are not enrolled
+for automatic updates. After a later release includes this contract, run that
+exact-tag installer manually once to create the receipt. A malformed,
+nonregular, or symlinked receipt is never replaced automatically.
 
 ### Concurrent and interrupted installs
 
@@ -290,8 +307,10 @@ bytes of probe stderr. HUP, INT, and TERM forward to the active child, run the
 same TERM/KILL/reap and rollback path, and exit with status 129, 130, and 143
 respectively, so Ctrl-C does not return to an interrupted install.
 
-Immediately before commit, the installer revalidates both aliases as exact
-symlinks to `stn` and the accepted binary and license destination types. Before
+Immediately before license mutation and again immediately before commit, the
+installer revalidates both aliases as exact symlinks to `stn`, the receipt, and
+the accepted binary and license destination types. An internal update invocation
+also rechecks every expected hash, device, and inode while holding both locks. Before
 the final rename, a caught failure restores the prior license and removes only
 an alias that this attempt successfully created and that still matches it. If
 a failed final `mv` leaves the staged `stn` present, rollback restores the
@@ -299,7 +318,9 @@ previous state and the installer reports it unchanged. If the staged `stn`
 disappeared, activation may have committed: the installer preserves the new
 license and aliases, exits nonzero, and prints an absolute
 `<install-dir>/stn --version` inspection command. It does not claim that the previous installation
-was unchanged in that ambiguous case. Post-commit cleanup failures are warnings.
+was unchanged in that ambiguous case. A newly staged receipt is published
+without clobbering only after the binary commit; publication and other
+post-commit cleanup failures are warnings.
 
 SIGKILL cannot run shell cleanup, so it can leave a stale lock or staging path;
 recover a lock only with the inspection-and-manual-removal procedure above.
@@ -381,7 +402,9 @@ Optional integrations can be added later.
 `pnpm smoke:release` builds by default, creates an isolated temporary config, runs `bin/stn doctor`, `reconcile`, `snapshot --json`, `debug bundle`, and the scripted-agent lane, then stops the observer and removes the temp state.
 
 `pnpm smoke:install` exercises stamped and explicit public selection plus
-release-ID-scoped authenticated draft acceptance; strict download arguments;
+release-ID-scoped authenticated draft acceptance; first-argument curl
+isolation; receipt enrollment and preservation; strict expected-installation
+parsing and identity races; strict download arguments;
 all four platform mappings; startup-file
 non-interaction, safely evaluated PATH guidance for spaces and apostrophes,
 normalized-colon preflight, and physical PATH shadow behavior;

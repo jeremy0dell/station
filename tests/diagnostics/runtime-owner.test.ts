@@ -205,5 +205,29 @@ describe("disposable runtime ownership", () => {
         },
       }).success,
     ).toBe(false);
+    expect(
+      RuntimeLifecycleEventSchema.safeParse({
+        timestamp: new Date().toISOString(),
+        level: "info",
+        component: "cli",
+        message: "runtime.prune.applied",
+        traceId: "trc_test",
+        spanId: "spn_test",
+        attributes: {
+          runtimeId: "run_11111111-1111-4111-8111-111111111111",
+          role: "binary-smoke",
+          disposition: "disposable",
+          runtimeKey: "a".repeat(64),
+          checkoutKey: "b".repeat(64),
+          socketRootsKey: "c".repeat(64),
+          persistenceRootsKey: "d".repeat(64),
+          survivorPolicy: "preserve-persistent-station-runtime",
+          ownerPid: 1,
+          ownerStartTime: "start",
+          planDigest: "e".repeat(64),
+          pruneAction: "terminate-and-retire",
+        },
+      }).success,
+    ).toBe(true);
   });
 });

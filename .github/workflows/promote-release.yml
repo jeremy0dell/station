@@ -174,7 +174,7 @@ jobs:
         run: |
           installer="$RUNNER_TEMP/station-install.sh"
           env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN \
-            curl --fail --silent --show-error --location \
+            curl --disable --fail --silent --show-error --location \
               --proto '=https' --proto-redir '=https' --tlsv1.2 \
               --output "$installer" \
               "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/install.sh"
@@ -188,7 +188,7 @@ jobs:
         run: |
           public_path="$RUNNER_TEMP/public-path"
           mkdir -p "$public_path"
-          for command in awk cat chmod cp curl grep gzip ln ls mkdir mktemp mv paste readlink rm rmdir sleep sort tar tr uname; do
+          for command in awk cat chmod cp curl grep gzip ln ls mkdir mktemp mv paste readlink rm rmdir sleep sort stat tar tr uname; do
             command_path="$(command -v "$command")"
             test -n "$command_path"
             ln -s "$command_path" "$public_path/$command"
@@ -215,4 +215,13 @@ jobs:
             PATH="$bin_dir:$public_path" stn --version)" = "$version"
           test "$(readlink "$bin_dir/stn-ingress")" = stn
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          receipt_path="$bin_dir/.station-install-receipt"
+          test -f "$receipt_path"
+          test ! -L "$receipt_path"
+          test "$(cat "$receipt_path")" = station-installer-binary-v1
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            test "$(stat -c '%a' "$receipt_path")" = 600
+          else
+            test "$(stat -f '%Lp' "$receipt_path")" = 600
+          fi
           test -f "$data_home/station/LICENSE"

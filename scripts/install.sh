@@ -10,6 +10,7 @@ requested_version=""
 requested_version_set=0
 embedded_version=""
 install_dir=""
+expected_installation=""
 release_id=${STATION_INSTALL_RELEASE_ID:-}
 temp_dir=""
 install_stage=""
@@ -39,15 +40,32 @@ commit_started=0
 runtime_committed=0
 activation_ambiguity_reported=0
 activation_failed_precommit=0
+activation_ambiguous=0
 rollback_failed=0
 created_ingress=0
 created_popup=0
 created_ingress_inode=""
 created_popup_inode=""
 preserve_install_stage=0
+receipt_path=""
+receipt_stage=""
+receipt_missing=0
+receipt_name=.station-install-receipt
+expected_format=""
+expected_binary_sha256=""
+expected_binary_device=""
+expected_binary_inode=""
+expected_ingress_device=""
+expected_ingress_inode=""
+expected_popup_device=""
+expected_popup_inode=""
+expected_receipt_device=""
+expected_receipt_inode=""
 line_feed='
 '
 tab='	'
+receipt_content='station-installer-binary-v1
+'
 
 usage() {
   cat <<'EOF'
@@ -320,7 +338,7 @@ run_curl() {
   curl_error=$2
   shift 2
   child_starting=1
-  curl "$@" > "$curl_output" 2> "$curl_error" &
+  curl --disable "$@" > "$curl_output" 2> "$curl_error" &
   tracked_child_pid=$!
   child_starting=0
   finish_pending_signal
@@ -454,6 +472,100 @@ valid_version() {
   done
 }
 
+require_decimal() {
+  case "$1" in
+    ''|*[!0-9]*) fail "$2" ;;
+  esac
+}
+
+parse_expected_installation() {
+  expected_path=$1
+  if [ ! -f "$expected_path" ] || [ -L "$expected_path" ]; then
+    fail "expected installation file '$expected_path' must be a regular non-symlink file."
+  fi
+
+  seen_format=0
+  seen_binary_sha256=0
+  seen_binary_device=0
+  seen_binary_inode=0
+  seen_ingress_device=0
+  seen_ingress_inode=0
+  seen_popup_device=0
+  seen_popup_inode=0
+  seen_receipt_device=0
+  seen_receipt_inode=0
+  while IFS='=' read -r expected_key expected_value; do
+    case "$expected_key" in
+      format)
+        [ "$seen_format" -eq 0 ] || fail "expected installation file contains duplicate key 'format'."
+        seen_format=1
+        expected_format=$expected_value
+        ;;
+      binary_sha256)
+        [ "$seen_binary_sha256" -eq 0 ] || fail "expected installation file contains duplicate key 'binary_sha256'."
+        seen_binary_sha256=1
+        expected_binary_sha256=$expected_value
+        ;;
+      binary_device)
+        [ "$seen_binary_device" -eq 0 ] || fail "expected installation file contains duplicate key 'binary_device'."
+        seen_binary_device=1
+        expected_binary_device=$expected_value
+        ;;
+      binary_inode)
+        [ "$seen_binary_inode" -eq 0 ] || fail "expected installation file contains duplicate key 'binary_inode'."
+        seen_binary_inode=1
+        expected_binary_inode=$expected_value
+        ;;
+      ingress_device)
+        [ "$seen_ingress_device" -eq 0 ] || fail "expected installation file contains duplicate key 'ingress_device'."
+        seen_ingress_device=1
+        expected_ingress_device=$expected_value
+        ;;
+      ingress_inode)
+        [ "$seen_ingress_inode" -eq 0 ] || fail "expected installation file contains duplicate key 'ingress_inode'."
+        seen_ingress_inode=1
+        expected_ingress_inode=$expected_value
+        ;;
+      popup_device)
+        [ "$seen_popup_device" -eq 0 ] || fail "expected installation file contains duplicate key 'popup_device'."
+        seen_popup_device=1
+        expected_popup_device=$expected_value
+        ;;
+      popup_inode)
+        [ "$seen_popup_inode" -eq 0 ] || fail "expected installation file contains duplicate key 'popup_inode'."
+        seen_popup_inode=1
+        expected_popup_inode=$expected_value
+        ;;
+      receipt_device)
+        [ "$seen_receipt_device" -eq 0 ] || fail "expected installation file contains duplicate key 'receipt_device'."
+        seen_receipt_device=1
+        expected_receipt_device=$expected_value
+        ;;
+      receipt_inode)
+        [ "$seen_receipt_inode" -eq 0 ] || fail "expected installation file contains duplicate key 'receipt_inode'."
+        seen_receipt_inode=1
+        expected_receipt_inode=$expected_value
+        ;;
+      *) fail "expected installation file contains unknown key '$expected_key'." ;;
+    esac
+  done < "$expected_path"
+
+  [ "$seen_format$seen_binary_sha256$seen_binary_device$seen_binary_inode$seen_ingress_device$seen_ingress_inode$seen_popup_device$seen_popup_inode$seen_receipt_device$seen_receipt_inode" = 1111111111 ] ||
+    fail "expected installation file is missing one or more required keys."
+  [ "$expected_format" = station-installer-expected-v1 ] ||
+    fail "expected installation file has an unsupported format."
+  printf '%s\n' "$expected_binary_sha256" | grep -Eq '^[0-9a-f]{64}$' ||
+    fail "expected installation file contains an invalid binary SHA-256."
+  require_decimal "$expected_binary_device" "expected installation file contains an invalid binary device."
+  require_decimal "$expected_binary_inode" "expected installation file contains an invalid binary inode."
+  require_decimal "$expected_ingress_device" "expected installation file contains an invalid ingress device."
+  require_decimal "$expected_ingress_inode" "expected installation file contains an invalid ingress inode."
+  require_decimal "$expected_popup_device" "expected installation file contains an invalid popup device."
+  require_decimal "$expected_popup_inode" "expected installation file contains an invalid popup inode."
+  require_decimal "$expected_receipt_device" "expected installation file contains an invalid receipt device."
+  require_decimal "$expected_receipt_inode" "expected installation file contains an invalid receipt inode."
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version)
@@ -468,6 +580,13 @@ while [ "$#" -gt 0 ]; do
       [ -z "$install_dir" ] || fail "--install-dir may be specified only once."
       [ -n "$2" ] || fail "--install-dir requires a non-empty path."
       install_dir=$2
+      shift 2
+      ;;
+    --expected-installation)
+      [ "$#" -ge 2 ] || fail "--expected-installation requires a path."
+      [ -z "$expected_installation" ] || fail "--expected-installation may be specified only once."
+      [ -n "$2" ] || fail "--expected-installation requires a non-empty path."
+      expected_installation=$2
       shift 2
       ;;
     -h|--help)
@@ -510,6 +629,11 @@ case "$raw_current_dir" in
   *"$line_feed") current_dir=${raw_current_dir%"$line_feed"} ;;
   *) current_dir=$raw_current_dir ;;
 esac
+if [ -n "$expected_installation" ]; then
+  absolute_path "$expected_installation"
+  expected_installation=$absolute_result
+  parse_expected_installation "$expected_installation"
+fi
 if [ -z "$install_dir" ]; then
   [ -n "${HOME:-}" ] || fail "HOME is unset; pass --install-dir explicitly."
   install_dir=$HOME/.local/bin
@@ -567,6 +691,101 @@ fi
 binary_path=$install_dir/stn
 ingress_path=$install_dir/stn-ingress
 popup_path=$install_dir/stn-tmux-popup
+receipt_path=$install_dir/$receipt_name
+
+stat_identity() {
+  identity_path=$1
+  if identity_raw=$(LC_ALL=C stat -c '%d %i' "$identity_path" 2>/dev/null); then
+    :
+  elif identity_raw=$(LC_ALL=C stat -f '%d %i' "$identity_path" 2>/dev/null); then
+    :
+  else
+    return 1
+  fi
+  set -- $identity_raw
+  [ "$#" -eq 2 ] || return 1
+  case "$1:$2" in
+    *[!0-9:]*) return 1 ;;
+  esac
+  identity_device=$1
+  identity_inode=$2
+}
+
+file_mode() {
+  mode_path=$1
+  if mode_result=$(LC_ALL=C stat -c '%a' "$mode_path" 2>/dev/null); then
+    :
+  elif mode_result=$(LC_ALL=C stat -f '%Lp' "$mode_path" 2>/dev/null); then
+    :
+  else
+    return 1
+  fi
+}
+
+file_sha256() {
+  hash_path=$1
+  if command -v sha256sum >/dev/null 2>&1; then
+    hash_raw=$(sha256sum "$hash_path" 2>/dev/null) || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    hash_raw=$(shasum -a 256 "$hash_path" 2>/dev/null) || return 1
+  else
+    return 1
+  fi
+  set -- $hash_raw
+  [ "$#" -ge 1 ] || return 1
+  printf '%s\n' "$1" | grep -Eq '^[0-9a-f]{64}$' || return 1
+  hash_result=$1
+}
+
+validate_receipt() {
+  if [ ! -f "$receipt_path" ] || [ -L "$receipt_path" ]; then
+    fail "Station installer receipt '$receipt_path' must be a regular non-symlink file."
+  fi
+  if ! file_mode "$receipt_path" || [ "$mode_result" != 600 ]; then
+    fail "Station installer receipt '$receipt_path' must have mode 0600."
+  fi
+  if ! receipt_raw=$(
+    cat "$receipt_path"
+    receipt_status=$?
+    printf x
+    exit "$receipt_status"
+  ) || [ "$receipt_raw" != "${receipt_content}x" ]; then
+    fail "Station installer receipt '$receipt_path' has invalid contents."
+  fi
+}
+
+validate_expected_identity() {
+  identity_label=$1
+  identity_path=$2
+  identity_expected_device=$3
+  identity_expected_inode=$4
+  if ! stat_identity "$identity_path" ||
+    [ "$identity_device" != "$identity_expected_device" ] ||
+    [ "$identity_inode" != "$identity_expected_inode" ]; then
+    fail "expected $identity_label identity changed before installer commit."
+  fi
+}
+
+validate_expected_installation() {
+  [ -n "$expected_installation" ] || return 0
+  if [ ! -f "$binary_path" ] || [ -L "$binary_path" ]; then
+    fail "expected Station binary '$binary_path' changed before installer commit."
+  fi
+  if [ ! -L "$ingress_path" ] || ! readlink_target "$ingress_path" 2>/dev/null || [ "$link_target" != stn ]; then
+    fail "expected Station ingress launcher '$ingress_path' changed before installer commit."
+  fi
+  if [ ! -L "$popup_path" ] || ! readlink_target "$popup_path" 2>/dev/null || [ "$link_target" != stn ]; then
+    fail "expected Station popup launcher '$popup_path' changed before installer commit."
+  fi
+  validate_receipt
+  validate_expected_identity binary "$binary_path" "$expected_binary_device" "$expected_binary_inode"
+  validate_expected_identity ingress "$ingress_path" "$expected_ingress_device" "$expected_ingress_inode"
+  validate_expected_identity popup "$popup_path" "$expected_popup_device" "$expected_popup_inode"
+  validate_expected_identity receipt "$receipt_path" "$expected_receipt_device" "$expected_receipt_inode"
+  if ! file_sha256 "$binary_path" || [ "$hash_result" != "$expected_binary_sha256" ]; then
+    fail "expected Station binary contents changed before installer commit."
+  fi
+}
 
 if [ -e "$binary_path" ] || [ -L "$binary_path" ]; then
   if [ ! -f "$binary_path" ] || [ -L "$binary_path" ]; then
@@ -585,6 +804,15 @@ if [ -e "$license_path" ] || [ -L "$license_path" ]; then
     fail "existing Station license '$license_path' must be a regular non-symlink file."
   fi
 fi
+if [ -e "$receipt_path" ] || [ -L "$receipt_path" ]; then
+  validate_receipt
+else
+  receipt_missing=1
+fi
+if [ -n "$expected_installation" ] && [ "$receipt_missing" -eq 1 ]; then
+  fail "expected Station installer receipt '$receipt_path' is missing."
+fi
+validate_expected_installation
 
 require_single_numeric_id() {
   case "$1" in
@@ -727,6 +955,13 @@ done
 # Stage on each destination filesystem so every final rename is atomic.
 install_stage=$(mktemp -d "$install_dir/.station-install.XXXXXX") || fail "cannot stage files in $install_dir."
 license_stage=$(mktemp -d "$license_dir/.station-install.XXXXXX") || fail "cannot stage the license in $license_dir."
+if [ "$receipt_missing" -eq 1 ]; then
+  receipt_stage=$install_stage/$receipt_name.new
+  if ! printf '%s' "$receipt_content" > "$receipt_stage"; then
+    fail "could not stage the Station installer receipt in $install_dir."
+  fi
+  chmod 0600 "$receipt_stage" || fail "could not set permissions on the staged Station installer receipt."
+fi
 if ! cp "$extracted_dir/stn" "$install_stage/stn"; then
   fail "could not stage the Station binary in $install_dir."
 fi
@@ -942,6 +1177,9 @@ revalidate_managed_paths() {
       fail "Station license destination '$license_path' changed during installation; it must remain absent or a regular non-symlink file."
     fi
   fi
+  if [ "$receipt_missing" -eq 0 ]; then
+    validate_receipt
+  fi
 }
 
 new_license=$license_stage/LICENSE.new
@@ -950,6 +1188,7 @@ if ! cp "$extracted_dir/LICENSE" "$new_license"; then
 fi
 chmod 0644 "$new_license" || fail "could not set permissions on the staged Station license."
 revalidate_managed_paths
+validate_expected_installation
 if [ -e "$license_path" ] || [ -L "$license_path" ]; then
   license_backup=$license_stage/LICENSE.previous
   if ! mv "$license_path" "$license_backup"; then
@@ -964,6 +1203,7 @@ fi
 
 # Renaming the verified binary is the sole runtime commit point; aliases already resolve through stn.
 revalidate_managed_paths
+validate_expected_installation
 commit_started=1
 if mv -f "$install_stage/stn" "$binary_path"; then
   runtime_committed=1
@@ -972,6 +1212,17 @@ elif [ -e "$install_stage/stn" ] || [ -L "$install_stage/stn" ]; then
   fail "could not activate the verified Station binary; restoring the previous installation."
 else
   runtime_committed=1
+  activation_ambiguous=1
+fi
+
+if [ "$receipt_missing" -eq 1 ]; then
+  if [ -e "$receipt_path" ] || [ -L "$receipt_path" ]; then
+    warn "could not publish Station installer receipt '$receipt_path' without replacing an existing path."
+  elif ! ln "$receipt_stage" "$receipt_path" 2>/dev/null; then
+    warn "could not publish Station installer receipt '$receipt_path'; rerun this exact tag manually before automatic updates can own the installation."
+  fi
+fi
+if [ "$activation_ambiguous" -eq 1 ]; then
   report_activation_ambiguity
   exit 1
 fi
