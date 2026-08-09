@@ -1075,6 +1075,18 @@
           "bindings": ["StationLogger"]
         },
         {
+          "specifier": "../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
@@ -1155,8 +1167,8 @@
         {
           "name": "createSessionCloseHandler",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Closes one canonical session and serializes its terminal and durable lifecycle mutation against native activation for the same configured worktree."
         },
         {
           "name": "CreateSessionCloseHandlerOptions",
@@ -1237,6 +1249,18 @@
           "resolvedPath": "apps/observer/src/utils/time.ts",
           "edgeKind": "runtime",
           "bindings": ["nowIso"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "../../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
         },
         {
           "specifier": "@station/runtime",
@@ -9384,6 +9408,18 @@
           "bindings": ["StationLogger"]
         },
         {
+          "specifier": "../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeMutationCoordinator"]
+        },
+        {
+          "specifier": "../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
+        },
+        {
           "specifier": "@station/config",
           "resolvedPath": "packages/config/src/index.ts",
           "edgeKind": "runtime",
@@ -9503,7 +9539,7 @@
           "name": "reportExternalExit",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Forgets only the exact managed target/session binding reported by Station. A missing expected session or superseded target fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`."
+          "purpose": "Forgets only the matching managed target/session and, when reported, generation. A missing expected session or superseded binding fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`."
         }
       ],
       "imports": [
@@ -9573,6 +9609,12 @@
           "bindings": ["nowIso"]
         },
         {
+          "specifier": "../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "type-only",
+          "bindings": ["WorktreeMutationCoordinator"]
+        },
+        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "runtime",
@@ -9587,9 +9629,10 @@
             "AgentPrepareExternalLaunchResult",
             "AgentReportExternalExitParams",
             "AgentReportExternalExitResult",
+            "ManagedOpenWorkspaceResult",
+            "ManagedTerminalLifecycle",
             "SafeError",
-            "SessionView",
-            "TerminalTargetId"
+            "SessionView"
           ]
         },
         {
@@ -9966,6 +10009,12 @@
           "resolvedPath": "apps/observer/src/stationLogger.ts",
           "edgeKind": "type-only",
           "bindings": ["StationLogger"]
+        },
+        {
+          "specifier": "../worktreeMutationCoordinator.js",
+          "resolvedPath": "apps/observer/src/worktreeMutationCoordinator.ts",
+          "edgeKind": "runtime",
+          "bindings": ["createWorktreeMutationCoordinator"]
         },
         {
           "specifier": "node:crypto",
@@ -11098,8 +11147,8 @@
         {
           "name": "resolveSessionRecovery",
           "kind": "function",
-          "role": null,
-          "purpose": null
+          "role": "USE CASE",
+          "purpose": "Resolves one provider-native recovery handle through durable session state and provider capability, returning only typed provider-neutral resume authority."
         }
       ],
       "imports": [
@@ -11385,6 +11434,24 @@
           "bindings": ["PersistedSession", "PersistedWorktreeDisplayTitle"]
         }
       ]
+    },
+    {
+      "path": "apps/observer/src/worktreeMutationCoordinator.ts",
+      "exports": [
+        {
+          "name": "createWorktreeMutationCoordinator",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "WorktreeMutationCoordinator",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": []
     }
   ],
   "controlledDeclarations": [
@@ -12379,6 +12446,13 @@
           "edgeKind": "runtime"
         },
         {
+          "path": "apps/observer/src/commands/session/close.ts",
+          "declaration": "createSessionCloseHandler",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
           "path": "apps/observer/src/commands/session/create.ts",
           "declaration": "createSessionCreateHandler",
           "kind": "function",
@@ -12444,6 +12518,14 @@
       ]
     },
     {
+      "path": "apps/observer/src/commands/session/close.ts",
+      "declaration": "createSessionCloseHandler",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Closes one canonical session and serializes its terminal and durable lifecycle mutation against native activation for the same configured worktree.",
+      "dependencies": []
+    },
+    {
       "path": "apps/observer/src/commands/session/create.ts",
       "declaration": "createSessionCreateHandler",
       "kind": "function",
@@ -12489,7 +12571,15 @@
       "kind": "function",
       "role": "USE CASE",
       "purpose": "Explicitly validates and preflights provider-native recovery into a selected worktree, reusing a handle's Station identity or minting one when absent. Automatic native activation recovery is owned separately by external launch. Failed cleanup discards only a newly minted projection.",
-      "dependencies": []
+      "dependencies": [
+        {
+          "path": "apps/observer/src/sessionRecovery.ts",
+          "declaration": "resolveSessionRecovery",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        }
+      ]
     },
     {
       "path": "apps/observer/src/commands/session/startAgent.ts",
@@ -13132,6 +13222,27 @@
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/sessionRecovery.ts",
+          "declaration": "resolveSessionRecovery",
+          "kind": "function",
+          "role": "USE CASE",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/observer/src/stationLogger.ts",
+          "declaration": "StationLogger",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "ManagedTerminalLifecycle",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
         }
       ]
     },
@@ -13140,7 +13251,7 @@
       "declaration": "reportExternalExit",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Forgets only the exact managed target/session binding reported by Station. A missing expected session or superseded target fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`.",
+      "purpose": "Forgets only the matching managed target/session and, when reported, generation. A missing expected session or superseded binding fails closed without reconcile; reconciliation may retain the durable Station session as `No Agent`.",
       "dependencies": []
     },
     {
@@ -13600,6 +13711,29 @@
       ]
     },
     {
+      "path": "apps/observer/src/sessionRecovery.ts",
+      "declaration": "resolveSessionRecovery",
+      "kind": "function",
+      "role": "USE CASE",
+      "purpose": "Resolves one provider-native recovery handle through durable session state and provider capability, returning only typed provider-neutral resume authority.",
+      "dependencies": [
+        {
+          "path": "apps/observer/src/persistence/ports.ts",
+          "declaration": "SessionStore",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        },
+        {
+          "path": "packages/contracts/src/providers.ts",
+          "declaration": "HarnessProvider",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
       "path": "apps/observer/src/stationLogger.ts",
       "declaration": "StationLogger",
       "kind": "interface",
@@ -13867,7 +14001,7 @@
       "declaration": "StationTerminalProvider",
       "kind": "class",
       "role": "ADAPTER",
-      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle and opaque attachment identity. Native presentation remains locally owned by Station and is never externally focusable. Deterministic targets are released only when their current Station session matches.",
+      "purpose": "Station terminal provider: UI-hosted mode is a registration shim; host-backed mode supplies process lifecycle and opaque attachment identity. Native presentation remains locally owned by Station and is never externally focusable. Deterministic targets are released only when their current Station session and, for managed launch attempts, opaque binding generation match.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",
@@ -13986,7 +14120,7 @@
       "declaration": "ManagedTerminalLifecycle",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree. A local fallback may instead carry a provider-neutral output policy for the caller-owned process. Release forgets only the exact expected session binding and never terminates its process: `false` proves the binding was absent or superseded, while rejection leaves release uncertain.",
+      "purpose": "Owns the single managed terminal target used for an external Station launch. Its capabilities state whether process ownership survives the launching client; attachments expose only adapter-owned target identity, and at most one target may exist per worktree. A local fallback may instead carry a provider-neutral output policy for the caller-owned process. `openManagedWorkspace` returns opaque binding authority so launch and cleanup cannot mutate a superseding same-session attempt. Release never terminates a process: `false` proves the qualified binding was absent or superseded, while rejection leaves release uncertain.",
       "dependencies": [
         {
           "path": "packages/contracts/src/providers.ts",

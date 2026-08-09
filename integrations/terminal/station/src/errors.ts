@@ -4,7 +4,8 @@ export const STATION_TERMINAL_PROVIDER_ID = "native";
 
 export type StationTerminalProviderErrorCode =
   | "TERMINAL_STATION_HOSTED"
-  | "TERMINAL_TARGET_MISSING";
+  | "TERMINAL_TARGET_MISSING"
+  | "TERMINAL_TARGET_SUPERSEDED";
 
 /** Native focus remains Station-owned; Host backing adds lifecycle close but not external focus. */
 export class StationTerminalProviderError extends Error implements SafeError {

@@ -70,12 +70,13 @@ export type PaneSplitDirection = "right" | "below";
 export type PaneRole = "primary-agent" | "shell";
 
 /**
- * Observer-minted identity for a managed primary agent; target and session form
- * the compare-and-release identity used by process-exit reports.
+ * Observer-minted identity for a managed primary agent; new launches also carry
+ * opaque binding authority so same-session exit reports cannot release replacements.
  */
 export type AgentIdentity = {
   sessionId: string;
   terminalTargetId: string;
+  terminalBindingToken?: string;
   harnessProvider?: ProviderId;
 };
 

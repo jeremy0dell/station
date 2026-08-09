@@ -162,6 +162,7 @@ const AgentPreparedExternalLaunchBaseSchema = z.object({
   kind: z.literal("prepared"),
   sessionId: SessionIdSchema,
   terminalTargetId: TerminalTargetIdSchema,
+  terminalBindingToken: nonEmptyStringSchema.optional(),
   launchPlan: HarnessLaunchPlanSchema,
 });
 
@@ -192,6 +193,7 @@ export const AgentReportExternalExitParamsSchema = z
   .object({
     terminalTargetId: TerminalTargetIdSchema,
     expectedSessionId: SessionIdSchema.optional(),
+    expectedBindingToken: nonEmptyStringSchema.optional(),
   })
   .strict();
 

@@ -33,6 +33,7 @@ const ROW_ID = "ses_wt_station_idle";
 const PANE_ID = "agent:wt_station_idle" as PaneId;
 const CWD = "/Users/example/.worktrees/station/pty-buffer";
 const TERMINAL_TARGET_ID = `native:${WORKTREE_ID}`;
+const TERMINAL_BINDING_TOKEN = "binding_1";
 const TARGET: ManagedLaunchTarget = {
   projectId: "station",
   worktreeId: WORKTREE_ID,
@@ -59,6 +60,7 @@ function preparedPlan(
     kind: "prepared",
     sessionId: "ses_managed",
     terminalTargetId: TERMINAL_TARGET_ID,
+    terminalBindingToken: TERMINAL_BINDING_TOKEN,
     launchPlan,
   } satisfies AgentPrepareExternalLaunchResult;
 }
@@ -67,16 +69,6 @@ function compatiblePreparedPlan() {
   return {
     ...preparedPlan(),
     outputCompatibility: "top-region-scrollback",
-  } satisfies AgentPrepareExternalLaunchResult;
-}
-
-function recoveredPlan(sessionId: string) {
-  return {
-    ...preparedPlan({
-      STATION_SESSION_ID: sessionId,
-      STATION_TERMINAL_TARGET_ID: TERMINAL_TARGET_ID,
-    }),
-    sessionId,
   } satisfies AgentPrepareExternalLaunchResult;
 }
 
@@ -308,7 +300,15 @@ describe("createManagedLaunchAttempt", () => {
   });
 
   it("recycles an exited pane under its recovered identity while preserving child layout", async () => {
-    const harness = attemptHarness({ prepared: recoveredPlan("ses_old") });
+    const harness = attemptHarness({
+      prepared: {
+        ...preparedPlan({
+          STATION_SESSION_ID: "ses_old",
+          STATION_TERMINAL_TARGET_ID: TERMINAL_TARGET_ID,
+        }),
+        sessionId: "ses_old",
+      },
+    });
     harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
     harness.store.actions.setPrimaryAgent(PANE_ID, {
       sessionId: "ses_old",
@@ -340,6 +340,7 @@ describe("createManagedLaunchAttempt", () => {
     expect(selectPaneRecord(harness.store.getState(), PANE_ID)?.agentIdentity).toEqual({
       sessionId: "ses_old",
       terminalTargetId: TERMINAL_TARGET_ID,
+      terminalBindingToken: TERMINAL_BINDING_TOKEN,
       harnessProvider: "codex",
     });
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
@@ -539,6 +540,7 @@ describe("createManagedLaunchAttempt", () => {
       {
         terminalTargetId: TERMINAL_TARGET_ID,
         expectedSessionId: "ses_managed",
+        expectedBindingToken: TERMINAL_BINDING_TOKEN,
       },
     ]);
     expect(harness.baseRegistry.get(PANE_ID)?.exited).toBe(true);
@@ -606,6 +608,7 @@ describe("createManagedLaunchAttempt", () => {
       {
         terminalTargetId: TERMINAL_TARGET_ID,
         expectedSessionId: "ses_managed",
+        expectedBindingToken: TERMINAL_BINDING_TOKEN,
       },
     ]);
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);

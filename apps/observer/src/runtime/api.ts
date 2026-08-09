@@ -64,6 +64,10 @@ import type { ObserverPersistenceBundle, PersistenceHealthSource } from "../pers
 import type { ProviderRegistry } from "../providers/registry.js";
 import { type ObserverCore, providerProjectsFromConfig } from "../reconcile/core.js";
 import type { StationLogger } from "../stationLogger.js";
+import {
+  createWorktreeMutationCoordinator,
+  type WorktreeMutationCoordinator,
+} from "../worktreeMutationCoordinator.js";
 import type { ObserverEventBus } from "./eventBus.js";
 import {
   type ExternalLaunchDeps,
@@ -87,6 +91,7 @@ export type CreateObserverApiOptions = {
   persistence: ObserverPersistenceBundle;
   persistenceHealth: PersistenceHealthSource;
   commandQueue: CommandQueue;
+  worktreeMutations?: WorktreeMutationCoordinator;
   eventBus: ObserverEventBus;
   diagnosticEvidenceSource: DiagnosticEvidenceSource;
   clock?: RuntimeClock;
@@ -121,6 +126,7 @@ export type CreateObserverApiOptions = {
  */
 export function createObserverApi(options: CreateObserverApiOptions): ObserverApi {
   const clock = options.clock ?? systemClock;
+  const worktreeMutations = options.worktreeMutations ?? createWorktreeMutationCoordinator();
   const reconciling = { reconciling: false };
   const providerHealthCache = options.providers?.healthCache;
   const pendingProviderHealthPublications = new Set<Promise<void>>();
@@ -293,7 +299,7 @@ export function createObserverApi(options: CreateObserverApiOptions): ObserverAp
     reportHarnessEvent: async (report: HarnessEventReport): Promise<HarnessEventReportReceipt> =>
       harnessIngressQueue.enqueue(report),
     prepareExternalLaunch: (params) =>
-      prepareExternalLaunchSafe(options, reconciling, reconcileDeps, params),
+      prepareExternalLaunchSafe(options, worktreeMutations, reconciling, reconcileDeps, params),
     reportExternalExit: (params) =>
       reportExternalExitSafe(options, reconciling, reconcileDeps, params),
   };
@@ -335,11 +341,12 @@ function reconcileAfterExternalLaunch(
 
 async function prepareExternalLaunchSafe(
   options: CreateObserverApiOptions,
+  worktreeMutations: WorktreeMutationCoordinator,
   reconciling: { reconciling: boolean },
   reconcileDeps: ReconcileExecutorDeps,
   params: Parameters<ObserverApi["prepareExternalLaunch"]>[0],
 ): ReturnType<ObserverApi["prepareExternalLaunch"]> {
-  const deps = assertProvidersAvailable(options);
+  const deps = assertProvidersAvailable(options, worktreeMutations);
   let result: Awaited<ReturnType<typeof prepareExternalLaunch>>;
   try {
     result = await prepareExternalLaunch(deps, params);
@@ -382,8 +389,8 @@ async function reportExternalExitSafe(
   reconcileDeps: ReconcileExecutorDeps,
   params: Parameters<ObserverApi["reportExternalExit"]>[0],
 ): ReturnType<ObserverApi["reportExternalExit"]> {
-  const deps = assertProvidersAvailable(options);
-  const { outcome, reconcile } = await reportExternalExit(deps, params);
+  const providers = assertProviderRegistryAvailable(options);
+  const { outcome, reconcile } = await reportExternalExit({ providers }, params);
   if (reconcile) {
     reconcileAfterExternalLaunch(
       reconcileDeps,
@@ -395,7 +402,23 @@ async function reportExternalExitSafe(
   return outcome;
 }
 
-function assertProvidersAvailable(options: CreateObserverApiOptions): ExternalLaunchDeps {
+function assertProvidersAvailable(
+  options: CreateObserverApiOptions,
+  worktreeMutations: WorktreeMutationCoordinator,
+): ExternalLaunchDeps {
+  return {
+    core: options.core,
+    providers: assertProviderRegistryAvailable(options),
+    persistence: options.persistence,
+    clock: options.clock,
+    configPath: options.configPath,
+    sessionResumeAgentEnabled: options.config?.featureFlags?.sessionResumeAgent === true,
+    logger: options.logger,
+    worktreeMutations,
+  };
+}
+
+function assertProviderRegistryAvailable(options: CreateObserverApiOptions): ProviderRegistry {
   if (options.providers === undefined) {
     throw {
       tag: "ProviderUnavailableError",
@@ -403,15 +426,7 @@ function assertProvidersAvailable(options: CreateObserverApiOptions): ExternalLa
       message: "The observer has no provider registry, so external launches are unavailable.",
     };
   }
-  return {
-    core: options.core,
-    providers: options.providers,
-    persistence: options.persistence,
-    clock: options.clock,
-    configPath: options.configPath,
-    sessionResumeAgentEnabled: options.config?.featureFlags?.sessionResumeAgent === true,
-    logger: options.logger,
-  };
+  return options.providers;
 }
 
 function buildMetadataRefresh(

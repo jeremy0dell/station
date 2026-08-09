@@ -583,7 +583,7 @@ orphan-bridge adoption retain their existing PTY instead of entering provider
 recovery. A retained canonical Station session with no such target fails with
 `SESSION_RESUME_DISABLED` while recovery is disabled. When enabled, preparation
 requires one actionable handle whose Station session, harness provider, worktree,
-and cwd match that canonical view, then preflights that provider and passes only
+and present cwd match that canonical view, then preflights that provider and passes only
 typed provider-neutral resume options to its launch adapter. Missing or ambiguous
 handles and identity, capability, or cwd mismatches fail before terminal mutation.
 
@@ -592,7 +592,10 @@ Station session ID without seeding, reopening, renaming, discarding, or copying
 session state. Canonical worktree title authority remains unchanged, readiness
 stays keyed to that session ID, and newly admitted provider evidence updates
 status through the normal projection and decay policies. Failed recovery releases
-only the exact replacement target/session binding; the retained session, handle,
+only the exact replacement target/session/binding-generation; a failed provisional
+generation restores the binding it superseded. External activation and session close
+serialize on the configured worktree so an ended canonical session cannot launch from
+a stale preflight snapshot. The retained session, handle,
 title, readiness, and prior evidence remain. An explicitly ended session is absent
 from canonical membership, so activation takes the fresh path even when an old
 handle remains.

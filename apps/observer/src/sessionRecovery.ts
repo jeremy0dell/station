@@ -22,6 +22,12 @@ type ResolvedSessionRecovery = {
   resume: HarnessResumeOptions;
 };
 
+/**
+ * USE CASE
+ *
+ * Resolves one provider-native recovery handle through durable session state and
+ * provider capability, returning only typed provider-neutral resume authority.
+ */
 export async function resolveSessionRecovery(input: {
   persistence: SessionStore;
   providers: ProviderRegistry;
@@ -33,7 +39,7 @@ export async function resolveSessionRecovery(input: {
 }): Promise<ResolvedSessionRecovery> {
   const handle = await resolveRecoveryHandle(input);
   assertHandleMatchesExpectation(handle, input.expected);
-  assertHandleMatchesWorktree(handle, input.worktree);
+  assertHandleMatchesWorktree(handle, input.worktree, input.expected !== undefined);
   const harness = resolveHarnessProviderOrThrow(input.providers, handle.provider);
   assertHarnessCanResume(harness, handle);
 
@@ -143,13 +149,17 @@ function assertHarnessCanResume(provider: HarnessProvider, handle: SessionRecove
 function assertHandleMatchesWorktree(
   handle: SessionRecoveryHandle,
   worktree: WorktreeObservation,
+  requireCwd: boolean,
 ): void {
-  if (handle.cwd === undefined || pathIsSameOrInside(handle.cwd, worktree.path)) {
+  if (
+    (handle.cwd === undefined && !requireCwd) ||
+    (handle.cwd !== undefined && pathIsSameOrInside(handle.cwd, worktree.path))
+  ) {
     return;
   }
   throw commandValidationError({
     code: "SESSION_RECOVERY_CWD_MISMATCH",
-    message: "The recovery handle was observed outside the requested worktree.",
+    message: "The recovery handle does not prove a cwd inside the requested worktree.",
     projectId: handle.projectId,
     worktreeId: handle.worktreeId,
     sessionId: handle.sessionId,

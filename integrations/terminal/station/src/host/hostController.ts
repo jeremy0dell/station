@@ -1,11 +1,13 @@
 import { createStationHostClient, type StationHostClient } from "@station/host";
 import { stationBuildInfo } from "@station/runtime";
 import {
+  adoptHandoffManifest,
   type EnsureStationHostDeps,
   type EnsureStationHostOptions,
   ensureStationHostRunning,
   type StationHostHandle,
 } from "./ensureHostRunning.js";
+import { loadParkedOrphanManifest } from "./orphanRecovery.js";
 
 /**
  * Holds the single long-lived host client the provider reuses for both the
@@ -16,6 +18,8 @@ export type StationHostController = {
   readonly socketPath: string;
   client(): StationHostClient;
   ensure(): Promise<StationHostHandle>;
+  /** Reconstructs strictly validated parked ownership, or fails before replacement launch. */
+  recoverOrphanedTargets(): Promise<boolean>;
 };
 
 export function createStationHostController(
@@ -28,16 +32,44 @@ export function createStationHostController(
     ((socketPath: string, buildVersion: string) =>
       createStationHostClient({ socketPath, expectedBuildVersion: buildVersion }));
   const client = makeClient(options.socketPath, expectedBuildVersion);
+  const ensure = () =>
+    ensureStationHostRunning(
+      { ...options, expectedBuildVersion },
+      {
+        ...(deps.spawnHost === undefined ? {} : { spawnHost: deps.spawnHost }),
+        clientFactory: () => client,
+      },
+    );
   return {
     socketPath: options.socketPath,
     client: () => client,
-    ensure: () =>
-      ensureStationHostRunning(
-        { ...options, expectedBuildVersion },
-        {
-          ...(deps.spawnHost === undefined ? {} : { spawnHost: deps.spawnHost }),
-          clientFactory: () => client,
-        },
-      ),
+    ensure,
+    recoverOrphanedTargets: async () => {
+      const parked = await loadParkedOrphanManifest(options.stateDir);
+      if (Object.keys(parked).length === 0) {
+        return false;
+      }
+      const handle = await ensure();
+      if (handle.status !== "running") {
+        throw handle.error;
+      }
+      // Host startup reaps stale sockets before health, so rebuild from the remaining evidence.
+      const adoptable = await loadParkedOrphanManifest(options.stateDir);
+      if (Object.keys(adoptable).length === 0) {
+        return false;
+      }
+      const ownedPtyIds = new Set((await handle.client.list()).map((entry) => entry.ptyId));
+      const unowned = Object.fromEntries(
+        Object.entries(adoptable).filter(([ptyId]) => !ownedPtyIds.has(ptyId)),
+      );
+      if (Object.keys(unowned).length === 0) {
+        return true;
+      }
+      const adopted = await adoptHandoffManifest(handle.client, unowned);
+      if (!adopted.ok) {
+        throw adopted.error;
+      }
+      return true;
+    },
   };
 }

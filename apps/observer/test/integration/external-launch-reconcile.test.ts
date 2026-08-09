@@ -214,6 +214,22 @@ describe("observer external-launch reconcile", () => {
         },
       }),
     ]);
+    expect((await fixture.api.getSnapshot()).sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_web_recoverable",
+        status: expect.objectContaining({ value: "none" }),
+      }),
+    ]);
+    harness.addRun(
+      createFakeHarnessRun({
+        id: "run_web_recovered",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        sessionId: "ses_web_recoverable",
+        state: "idle",
+        now,
+      }),
+    );
 
     await fixture.api.reconcile("verify-recovered-session");
     const snapshot = await fixture.api.getSnapshot();
@@ -301,7 +317,7 @@ function createFixture(
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, harness, persistence, sqlite, station };
+  return { api, harness, persistence, sqlite };
 }
 
 class MissingHooksHarness extends FakeHarnessProvider {
@@ -325,20 +341,7 @@ class RecoveringHarness extends FakeHarnessProvider {
 
   override async buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan> {
     this.requests.push(request);
-    const launch = await super.buildLaunch(request);
-    if (request.resume !== undefined && request.sessionId !== undefined) {
-      this.addRun(
-        createFakeHarnessRun({
-          id: "run_web_recovered",
-          projectId: request.project.id,
-          worktreeId: request.worktree.id,
-          sessionId: request.sessionId,
-          state: "idle",
-          now,
-        }),
-      );
-    }
-    return launch;
+    return super.buildLaunch(request);
   }
 }
 

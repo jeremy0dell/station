@@ -7,6 +7,10 @@ import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import type { StationLogger } from "../stationLogger.js";
 import {
+  createWorktreeMutationCoordinator,
+  type WorktreeMutationCoordinator,
+} from "../worktreeMutationCoordinator.js";
+import {
   assertHarnessLaunchPreconditionsOrThrow,
   type HarnessLaunchPreflight,
 } from "./harnessLaunchPreflight.js";
@@ -49,6 +53,7 @@ export type RegisterObserverCommandHandlersOptions = {
   launchPreflight?: HarnessLaunchPreflight | undefined;
   terminalIntentRunner?: TerminalIntentRunner | undefined;
   projectConfigWriter: ProjectConfigWriter;
+  worktreeMutations?: WorktreeMutationCoordinator | undefined;
 };
 
 /**
@@ -64,6 +69,7 @@ export function registerObserverCommandHandlers(
   options: RegisterObserverCommandHandlersOptions,
 ): void {
   const getProjects = options.getProjects ?? (() => options.projects);
+  const worktreeMutations = options.worktreeMutations ?? createWorktreeMutationCoordinator();
   const featureFlags = options.featureFlags ?? createFeatureFlagEvaluator();
   const launchPreflight: HarnessLaunchPreflight =
     options.launchPreflight ??
@@ -201,6 +207,7 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
       commandTimeoutMs: options.commandTimeoutMs,
+      worktreeMutations,
     }),
     "session.rename": createSessionRenameHandler({
       core: options.core,

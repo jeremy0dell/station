@@ -3,11 +3,13 @@ import type {
   BuildHarnessLaunchRequest,
   HarnessLaunchPlan,
   HarnessProvider,
+  ManagedTerminalLaunchProcessResult,
   ManagedTerminalLifecycle,
   ProviderHealth,
   SafeError,
   TerminalIntent,
   TerminalIntentReceipt,
+  TerminalLaunchProcessRequest,
 } from "@station/contracts";
 import { createCursorHarnessProvider } from "@station/cursor";
 import { createPiHarnessProvider } from "@station/pi";
@@ -2295,24 +2297,33 @@ function createFixture(
 
 function persistentManagedTerminal(): ManagedTerminalLifecycle {
   const terminal = new FakeTerminalProvider({ now });
+  let binding = 0;
+  const launchProcess = async (
+    request: TerminalLaunchProcessRequest,
+  ): Promise<ManagedTerminalLaunchProcessResult> => {
+    await terminal.launchProcess(request);
+    return {
+      terminalTargetId: request.terminalTarget.targetId,
+      agentEndpointId: request.agentEndpointId,
+      started: true,
+      attachment: {
+        kind: "managed-terminal",
+        terminalTargetId: request.terminalTarget.targetId,
+      },
+    };
+  };
   return {
     id: "native",
     capabilities: () => terminal.capabilities(),
     health: () => terminal.health(),
     listTargets: () => terminal.listTargets(),
     openWorkspace: (request) => terminal.openWorkspace(request),
-    launchProcess: async (request) => {
-      await terminal.launchProcess(request);
-      return {
-        terminalTargetId: request.terminalTarget.targetId,
-        agentEndpointId: request.agentEndpointId,
-        started: true,
-        attachment: {
-          kind: "managed-terminal",
-          terminalTargetId: request.terminalTarget.targetId,
-        },
-      };
-    },
+    openManagedWorkspace: async (request) => ({
+      ...(await terminal.openWorkspace(request)),
+      bindingToken: `binding_${++binding}`,
+    }),
+    launchProcess,
+    launchManagedProcess: launchProcess,
     focusTarget: (targetId, context) => terminal.focusTarget(targetId, context),
     closeTarget: (targetId) => terminal.closeTarget(targetId),
     captureTarget: (targetId) => terminal.captureTarget(targetId),

@@ -244,6 +244,12 @@ describe("resolveSessionRecovery", () => {
     const withoutCwdResult = await resolveRecovery({ handles: [withoutCwd] });
     expect(withoutCwdResult.handle).not.toHaveProperty("cwd");
     await expect(
+      resolveRecovery({
+        handles: [withoutCwd],
+        expected: { sessionId: "ses_feature", provider: "fake-harness" },
+      }),
+    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_CWD_MISMATCH" });
+    await expect(
       resolveRecovery({ handles: [recoveryHandle({ cwd: `${worktree.path}/nested` })] }),
     ).resolves.toMatchObject({ handle: { cwd: `${worktree.path}/nested` } });
     await expect(

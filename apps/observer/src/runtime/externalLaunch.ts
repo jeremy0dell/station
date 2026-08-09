@@ -3,9 +3,10 @@ import type {
   AgentPrepareExternalLaunchResult,
   AgentReportExternalExitParams,
   AgentReportExternalExitResult,
+  ManagedOpenWorkspaceResult,
+  ManagedTerminalLifecycle,
   SafeError,
   SessionView,
-  TerminalTargetId,
 } from "@station/contracts";
 import { terminalTargetObservationFromBinding, worktreeHasLiveAgent } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
@@ -24,6 +25,7 @@ import type { ObserverCore } from "../reconcile/core.js";
 import { resolveSessionRecovery } from "../sessionRecovery.js";
 import type { StationLogger } from "../stationLogger.js";
 import { nowIso } from "../utils/time.js";
+import type { WorktreeMutationCoordinator } from "../worktreeMutationCoordinator.js";
 
 export type ExternalLaunchDeps = {
   core: ObserverCore;
@@ -33,7 +35,10 @@ export type ExternalLaunchDeps = {
   configPath?: string | undefined;
   sessionResumeAgentEnabled?: boolean | undefined;
   logger?: StationLogger | undefined;
+  worktreeMutations: WorktreeMutationCoordinator;
 };
+
+type ExternalExitDeps = Pick<ExternalLaunchDeps, "providers">;
 
 export type ExternalLaunchOutcome<T> = {
   outcome: T;
@@ -51,6 +56,15 @@ export type ExternalLaunchOutcome<T> = {
  * managed terminal's output policy while attachments consume compatibility remotely.
  */
 export async function prepareExternalLaunch(
+  deps: ExternalLaunchDeps,
+  params: AgentPrepareExternalLaunchParams,
+): Promise<ExternalLaunchOutcome<AgentPrepareExternalLaunchResult>> {
+  return deps.worktreeMutations.run(params.projectId, params.worktreeId, () =>
+    prepareExternalLaunchForWorktree(deps, params),
+  );
+}
+
+async function prepareExternalLaunchForWorktree(
   deps: ExternalLaunchDeps,
   params: AgentPrepareExternalLaunchParams,
 ): Promise<ExternalLaunchOutcome<AgentPrepareExternalLaunchResult>> {
@@ -175,16 +189,12 @@ export async function prepareExternalLaunch(
     throw managedTerminalUnavailableError();
   }
 
-  // Accepted race: two *distinct* UIs racing prepare on the same worktree
-  // can both pass the listTargets check above before either openWorkspace below
-  // runs. The managed lifecycle owns the one-target-per-worktree invariant, so
-  // the window resolves to one target (the second session may replace the first,
-  // which reconcile later reaps) rather than two targets. A single UI is already
-  // covered by Station's `launchesInFlight` guard; a server-side lock is out of scope.
+  // The worktree mutation coordinator serializes distinct clients through this
+  // mutation boundary; the managed lifecycle still owns binding-generation CAS.
   const freshSession = retainedSession === undefined;
   const sessionId = retainedSession?.id ?? defaultSessionCommandIdFactory.sessionId();
   const seededAt = nowIso(deps.clock);
-  let openedTargetId: TerminalTargetId | undefined;
+  let opened: ManagedOpenWorkspaceResult | undefined;
   let sessionSeeded = false;
   try {
     if (freshSession) {
@@ -207,14 +217,13 @@ export async function prepareExternalLaunch(
       }
     }
 
-    const opened = await managedTerminal.openWorkspace({
+    opened = await managedTerminal.openManagedWorkspace({
       project,
       worktree,
       harness: harnessProviderId,
       layout: project.defaults.layout,
       sessionId,
     });
-    openedTargetId = opened.target.targetId;
     const terminalTarget = terminalTargetObservationFromBinding({
       binding: opened.target,
       worktree,
@@ -230,17 +239,19 @@ export async function prepareExternalLaunch(
 
     // The managed result requires an attachment exactly when it starts the process,
     // so a remote spawn can never be advertised as eligible for local fallback.
-    const launched = await managedTerminal.launchProcess({
+    const launched = await managedTerminal.launchManagedProcess({
       project,
       worktree,
       terminalTarget: opened.target,
       agentEndpointId: opened.agentEndpointId,
+      bindingToken: opened.bindingToken,
       launchPlan,
     });
     const outcome: Extract<AgentPrepareExternalLaunchResult, { kind: "prepared" }> = {
       kind: "prepared",
       sessionId,
       terminalTargetId: opened.target.targetId,
+      terminalBindingToken: opened.bindingToken,
       launchPlan,
     };
     if (launched.started) {
@@ -254,38 +265,56 @@ export async function prepareExternalLaunch(
       reconcile: true,
     };
   } catch (error) {
-    // Cleanup attempts stay independent so one failure cannot suppress the other or replace the launch error.
-    let targetReleaseConfirmed = openedTargetId === undefined;
-    if (openedTargetId !== undefined) {
-      try {
-        await managedTerminal.releaseTarget({
-          targetId: openedTargetId,
-          expectedSessionId: sessionId,
-        });
-        targetReleaseConfirmed = true;
-      } catch (cleanupError) {
-        await deps.logger
-          ?.warn("External launch cleanup could not release its managed target.", {
-            sessionId,
-            terminalTargetId: openedTargetId,
-            error: cleanupError,
-          })
-          .catch(() => undefined);
-      }
-    }
+    const targetReleaseConfirmed = await releaseOpenedTargetBestEffort({
+      managedTerminal,
+      opened,
+      sessionId,
+      logger: deps.logger,
+    });
     if (freshSession && sessionSeeded && targetReleaseConfirmed) {
-      try {
-        await deps.persistence.discardSessionSeed({ sessionId });
-      } catch (cleanupError) {
-        await deps.logger
-          ?.warn("External launch cleanup could not discard its session seed.", {
-            sessionId,
-            error: cleanupError,
-          })
-          .catch(() => undefined);
-      }
+      await discardSessionSeedBestEffort(deps, sessionId);
     }
     throw error;
+  }
+}
+
+async function releaseOpenedTargetBestEffort(input: {
+  managedTerminal: ManagedTerminalLifecycle;
+  opened: ManagedOpenWorkspaceResult | undefined;
+  sessionId: string;
+  logger?: StationLogger | undefined;
+}): Promise<boolean> {
+  if (input.opened === undefined) {
+    return true;
+  }
+  try {
+    return await input.managedTerminal.releaseTarget({
+      targetId: input.opened.target.targetId,
+      expectedSessionId: input.sessionId,
+      expectedBindingToken: input.opened.bindingToken,
+    });
+  } catch (error) {
+    await input.logger
+      ?.warn("External launch cleanup could not release its managed target.", {
+        sessionId: input.sessionId,
+        terminalTargetId: input.opened.target.targetId,
+        error,
+      })
+      .catch(() => undefined);
+    return false;
+  }
+}
+
+async function discardSessionSeedBestEffort(
+  deps: Pick<ExternalLaunchDeps, "persistence" | "logger">,
+  sessionId: string,
+): Promise<void> {
+  try {
+    await deps.persistence.discardSessionSeed({ sessionId });
+  } catch (error) {
+    await deps.logger
+      ?.warn("External launch cleanup could not discard its session seed.", { sessionId, error })
+      .catch(() => undefined);
   }
 }
 
@@ -314,12 +343,12 @@ async function resolveAutomaticRecovery(
 /**
  * USE CASE
  *
- * Forgets only the exact managed target/session binding reported by Station. A
- * missing expected session or superseded target fails closed without reconcile;
+ * Forgets only the matching managed target/session and, when reported, generation.
+ * A missing expected session or superseded binding fails closed without reconcile;
  * reconciliation may retain the durable Station session as `No Agent`.
  */
 export async function reportExternalExit(
-  deps: ExternalLaunchDeps,
+  deps: ExternalExitDeps,
   params: AgentReportExternalExitParams,
 ): Promise<ExternalLaunchOutcome<AgentReportExternalExitResult>> {
   if (params.expectedSessionId === undefined) {
@@ -332,6 +361,9 @@ export async function reportExternalExit(
     (await deps.providers.managedTerminal?.releaseTarget({
       targetId: params.terminalTargetId,
       expectedSessionId: params.expectedSessionId,
+      ...(params.expectedBindingToken === undefined
+        ? {}
+        : { expectedBindingToken: params.expectedBindingToken }),
     })) ?? false;
   return {
     outcome: { acknowledged, terminalTargetId: params.terminalTargetId },
