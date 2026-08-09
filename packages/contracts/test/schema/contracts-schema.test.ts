@@ -265,6 +265,7 @@ describe("contract schemas", () => {
         kind: "prepared",
         sessionId: "ses_api",
         terminalTargetId: "native:wt_api",
+        terminalBindingToken: "binding_1",
         launchPlan: {
           provider: "codex",
           command: "codex",
@@ -360,7 +361,11 @@ describe("contract schemas", () => {
 
     expectParses(
       AgentReportExternalExitParamsSchema,
-      { terminalTargetId: "native:wt_api", expectedSessionId: "ses_api" },
+      {
+        terminalTargetId: "native:wt_api",
+        expectedSessionId: "ses_api",
+        expectedBindingToken: "binding_1",
+      },
       "session-qualified external exit params",
     );
     expectParses(

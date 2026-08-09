@@ -172,6 +172,9 @@ function setupRegistry(
       .reportExternalExit({
         terminalTargetId: identity.terminalTargetId,
         expectedSessionId: identity.sessionId,
+        ...(identity.terminalBindingToken === undefined
+          ? {}
+          : { expectedBindingToken: identity.terminalBindingToken }),
       })
       .catch(() => {});
   };

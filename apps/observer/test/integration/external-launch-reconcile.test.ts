@@ -2,7 +2,12 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_WORKSPACE_CONFIG, type StationConfig } from "@station/config";
-import type { HarnessHooksStatus } from "@station/contracts";
+import type {
+  BuildHarnessLaunchRequest,
+  HarnessHooksStatus,
+  HarnessLaunchPlan,
+  HarnessRunObservation,
+} from "@station/contracts";
 import { StationTerminalProvider } from "@station/terminal";
 import {
   createFakeHarnessRun,
@@ -129,13 +134,150 @@ describe("observer external-launch reconcile", () => {
 
     fixture.sqlite.close();
   });
+
+  it("recovers one canonical session with its title, idle evidence, and readiness", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "station-observer-ext-"));
+    const previousRun = createFakeHarnessRun({
+      id: "run_web_recoverable",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      sessionId: "ses_web_recoverable",
+      state: "idle",
+      now,
+    });
+    const runs: HarnessRunObservation[] = [previousRun];
+    const harness = new RecoveringHarness(runs);
+    const fixture = createFixture(providerIngressSpoolDir(stateDir), {
+      harness,
+      config: {
+        ...config,
+        featureFlags: { sessionResumeAgent: true },
+      },
+    });
+    await fixture.persistence.seedSession({
+      sessionId: "ses_web_recoverable",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      initialTitle: "feature",
+      createdAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.persistence.renameSession({
+      sessionId: "ses_web_recoverable",
+      title: "Recovered checkout",
+      renamedAt: now,
+    });
+    await fixture.persistence.upsertSessionTurnReadiness({
+      sessionId: "ses_web_recoverable",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      token: "ready_web_recoverable",
+      completedAt: now,
+    });
+    const handle = await fixture.persistence.upsertSessionRecoveryHandle({
+      id: "rec_web_recoverable",
+      provider: "fake-harness",
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      sessionId: "ses_web_recoverable",
+      target: { kind: "native-session", id: "native_web_recoverable" },
+      cwd: "/tmp/station/web/feature",
+      observedAt: now,
+      lastSeenAt: now,
+    });
+    await fixture.api.reconcile("establish-recoverable-session");
+    runs.length = 0;
+    await fixture.api.reconcile("simulate-host-loss");
+
+    expect((await fixture.api.getSnapshot()).sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_web_recoverable",
+        origin: "station",
+        title: "Recovered checkout",
+        status: expect.objectContaining({ value: "none" }),
+      }),
+    ]);
+
+    const result = await fixture.api.prepareExternalLaunch({
+      projectId: "web",
+      worktreeId: "wt_web_feature",
+      title: "Ignored replacement title",
+    });
+    expect(result).toMatchObject({ kind: "prepared", sessionId: "ses_web_recoverable" });
+    expect(harness.requests).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_web_recoverable",
+        resume: {
+          target: { kind: "native-session", id: "native_web_recoverable" },
+          previousSessionId: "ses_web_recoverable",
+          recoveryHandleId: handle.id,
+        },
+      }),
+    ]);
+    expect((await fixture.api.getSnapshot()).sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_web_recoverable",
+        status: expect.objectContaining({ value: "none" }),
+      }),
+    ]);
+    harness.addRun(
+      createFakeHarnessRun({
+        id: "run_web_recovered",
+        projectId: "web",
+        worktreeId: "wt_web_feature",
+        sessionId: "ses_web_recoverable",
+        state: "idle",
+        now,
+      }),
+    );
+
+    await fixture.api.reconcile("verify-recovered-session");
+    const snapshot = await fixture.api.getSnapshot();
+    expect(snapshot.sessions).toEqual([
+      expect.objectContaining({
+        id: "ses_web_recoverable",
+        origin: "station",
+        title: "Recovered checkout",
+        status: expect.objectContaining({ value: "idle" }),
+      }),
+    ]);
+    expect(snapshot.rows).toEqual([
+      expect.objectContaining({
+        id: "wt_web_feature",
+        title: "Recovered checkout",
+        agent: expect.objectContaining({
+          sessionId: "ses_web_recoverable",
+          state: "idle",
+          turnReadiness: {
+            state: "ready_to_read",
+            token: "ready_web_recoverable",
+            completedAt: now,
+          },
+        }),
+      }),
+    ]);
+    await expect(fixture.persistence.listSessions()).resolves.toEqual([
+      expect.objectContaining({
+        id: "ses_web_recoverable",
+        lifecycle: "open",
+        title: "Recovered checkout",
+      }),
+    ]);
+
+    fixture.sqlite.close();
+  });
 });
 
 function createFixture(
   spoolDir: string,
-  options: { harness?: FakeHarnessProvider; logger?: StationLogger } = {},
+  options: {
+    harness?: FakeHarnessProvider;
+    logger?: StationLogger;
+    config?: StationConfig;
+  } = {},
 ) {
   const clock = { now: () => new Date(now) };
+  const fixtureConfig = options.config ?? config;
   const sqlite = openObserverSqlite({ clock });
   const persistence = createSqliteObserverPersistence({ sqlite, clock, idFactory: ids() });
   const eventBus = createObserverEventBus();
@@ -160,7 +302,7 @@ function createFixture(
     managedTerminal: station,
     harnesses: [harness],
   });
-  const core = createObserverCore({ config, providers, persistence, clock });
+  const core = createObserverCore({ config: fixtureConfig, providers, persistence, clock });
   const queue = createCommandQueue({ persistence, clock, idFactory: ids(), eventBus });
   const api = createObserverApi({
     core,
@@ -171,10 +313,11 @@ function createFixture(
     eventBus,
     diagnosticEvidenceSource: new FakeDiagnosticEvidenceSource(),
     hookSpoolDir: spoolDir,
+    config: fixtureConfig,
     clock,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  return { api, harness, sqlite };
+  return { api, harness, persistence, sqlite };
 }
 
 class MissingHooksHarness extends FakeHarnessProvider {
@@ -186,6 +329,19 @@ class MissingHooksHarness extends FakeHarnessProvider {
       missing: ["SessionStart"],
       message: "Hooks are not installed.",
     };
+  }
+}
+
+class RecoveringHarness extends FakeHarnessProvider {
+  readonly requests: BuildHarnessLaunchRequest[] = [];
+
+  constructor(runs: HarnessRunObservation[]) {
+    super({ now: () => new Date(now), runs });
+  }
+
+  override async buildLaunch(request: BuildHarnessLaunchRequest): Promise<HarnessLaunchPlan> {
+    this.requests.push(request);
+    return super.buildLaunch(request);
   }
 }
 

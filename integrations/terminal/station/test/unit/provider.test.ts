@@ -78,10 +78,11 @@ describe("StationTerminalProvider", () => {
 
   it("launchProcess does not spawn without a host (the UI owns the PTY)", async () => {
     const provider = new StationTerminalProvider({ clock });
+    const opened = await provider.openWorkspace(openRequest());
     const result = await provider.launchProcess({
       project,
       worktree,
-      terminalTarget: (await provider.openWorkspace(openRequest())).target,
+      terminalTarget: opened.target,
       agentEndpointId: "native:web-feature",
       launchPlan: {
         provider: "claude",
@@ -100,13 +101,14 @@ describe("StationTerminalProvider", () => {
 
   it("carries generic output compatibility when a Codex PTY falls back to the UI", async () => {
     const provider = new StationTerminalProvider({ clock });
-    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
+    const opened = await provider.openManagedWorkspace(openRequest({ harness: "codex" }));
 
-    const result = await provider.launchProcess({
+    const result = await provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: opened.target,
       agentEndpointId: opened.agentEndpointId,
+      bindingToken: opened.bindingToken,
       launchPlan: {
         provider: "codex",
         command: "codex",
@@ -178,6 +180,13 @@ describe("StationTerminalProvider", () => {
     const targets = await provider.listTargets();
     expect(targets).toHaveLength(1);
     expect(targets[0]?.sessionId).toBe("ses_two");
+    await expect(
+      provider.releaseTarget({
+        targetId: stationTargetId(worktree.id),
+        expectedSessionId: "ses_two",
+      }),
+    ).resolves.toBe(true);
+    await expect(provider.listTargets()).resolves.toEqual([]);
   });
 
   it("releaseTarget drops the target so reconcile stops observing it", async () => {
@@ -314,6 +323,7 @@ function providerWithEnsureError(
       socketPath: "/tmp/station-host-test.sock",
       error,
     }),
+    recoverOrphanedTargets: async () => false,
   };
   return new StationTerminalProvider({ clock, host });
 }
@@ -326,6 +336,59 @@ const launchPlan = {
 };
 
 describe("StationTerminalProvider (host-backed)", () => {
+  it("reconstructs parked Host targets before reporting terminal topology", async () => {
+    let recovered = false;
+    const client = fakeHostClient({
+      list: async () => (recovered ? [liveEntry()] : []),
+    });
+    const recoverOrphanedTargets = vi.fn(async () => {
+      recovered = true;
+      return true;
+    });
+    const host: StationHostController = {
+      socketPath: "/tmp/station-host-recovered.sock",
+      client: () => client,
+      ensure: async () => ({
+        status: "running",
+        socketPath: "/tmp/station-host-recovered.sock",
+        client,
+        ensuredBy: "start",
+      }),
+      recoverOrphanedTargets,
+    };
+    const provider = new StationTerminalProvider({ clock, host });
+
+    await expect(provider.listTargets()).resolves.toMatchObject([
+      { id: stationTargetId(worktree.id), sessionId: "ses_web_feature" },
+    ]);
+    expect(recoverOrphanedTargets).toHaveBeenCalledOnce();
+  });
+
+  it("coalesces concurrent parked-target reconstruction", async () => {
+    const recovery = deferred<boolean>();
+    const client = fakeHostClient();
+    const recoverOrphanedTargets = vi.fn(() => recovery.promise);
+    const host: StationHostController = {
+      socketPath: "/tmp/station-host-recovery-race.sock",
+      client: () => client,
+      ensure: async () => ({
+        status: "running",
+        socketPath: "/tmp/station-host-recovery-race.sock",
+        client,
+        ensuredBy: "reuse",
+      }),
+      recoverOrphanedTargets,
+    };
+    const provider = new StationTerminalProvider({ clock, host });
+
+    const first = provider.listTargets();
+    const second = provider.listTargets();
+    expect(recoverOrphanedTargets).toHaveBeenCalledOnce();
+    recovery.resolve(false);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([[], []]);
+  });
+
   it("enables host-backed close without advertising external focus", () => {
     const provider = hostBackedProvider(fakeHostClient());
     expect(provider.capabilities()).toMatchObject({ canFocusTarget: false, canCloseTarget: true });
@@ -337,12 +400,13 @@ describe("StationTerminalProvider (host-backed)", () => {
       pid: 99,
     }));
     const provider = hostBackedProvider(fakeHostClient({ spawn }));
-    const opened = await provider.openWorkspace(openRequest());
-    const result = await provider.launchProcess({
+    const opened = await provider.openManagedWorkspace(openRequest());
+    const result = await provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: opened.target,
       agentEndpointId: opened.agentEndpointId,
+      bindingToken: opened.bindingToken,
       launchPlan,
     });
     expect(result).toEqual({
@@ -369,13 +433,14 @@ describe("StationTerminalProvider (host-backed)", () => {
       pid: 99,
     }));
     const provider = hostBackedProvider(fakeHostClient({ spawn }));
-    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
+    const opened = await provider.openManagedWorkspace(openRequest({ harness: "codex" }));
 
-    const result = await provider.launchProcess({
+    const result = await provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: opened.target,
       agentEndpointId: opened.agentEndpointId,
+      bindingToken: opened.bindingToken,
       launchPlan,
     });
 
@@ -392,13 +457,14 @@ describe("StationTerminalProvider (host-backed)", () => {
       pid: 99,
     }));
     const provider = hostBackedProvider(fakeHostClient({ spawn }));
-    const opened = await provider.openWorkspace(openRequest());
+    const opened = await provider.openManagedWorkspace(openRequest());
 
-    await provider.launchProcess({
+    await provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: opened.target,
       agentEndpointId: opened.agentEndpointId,
+      bindingToken: opened.bindingToken,
       launchPlan: { ...launchPlan, provider: "codex", command: "codex" },
     });
 
@@ -411,14 +477,15 @@ describe("StationTerminalProvider (host-backed)", () => {
       fakeHostClient(),
       stationHostSafeError("HOST_UNREACHABLE", "Station host is unavailable."),
     );
-    const opened = await provider.openWorkspace(openRequest({ harness: "codex" }));
+    const opened = await provider.openManagedWorkspace(openRequest({ harness: "codex" }));
 
     await expect(
-      provider.launchProcess({
+      provider.launchManagedProcess({
         project,
         worktree,
         terminalTarget: opened.target,
         agentEndpointId: opened.agentEndpointId,
+        bindingToken: opened.bindingToken,
         launchPlan: { ...launchPlan, provider: "codex", command: "codex" },
       }),
     ).resolves.toMatchObject({
@@ -427,21 +494,22 @@ describe("StationTerminalProvider (host-backed)", () => {
     });
   });
 
-  it("propagates a live-PTY upgrade block instead of falling back to a local spawn", async () => {
+  it("leaves managed cleanup to the caller when a live-PTY upgrade blocks launch", async () => {
     const upgradeError = stationHostSafeError(
       "HOST_UPGRADE_BLOCKED",
       "Host build older-build owns 2 live terminals; requested build is test-build.",
       { hint: "Reopen with older-build and finish those terminals." },
     );
     const provider = providerWithEnsureError(fakeHostClient(), upgradeError);
-    const opened = await provider.openWorkspace(openRequest());
+    const opened = await provider.openManagedWorkspace(openRequest());
 
     await expect(
-      provider.launchProcess({
+      provider.launchManagedProcess({
         project,
         worktree,
         terminalTarget: opened.target,
         agentEndpointId: opened.agentEndpointId,
+        bindingToken: opened.bindingToken,
         launchPlan,
       }),
     ).rejects.toMatchObject({
@@ -449,14 +517,54 @@ describe("StationTerminalProvider (host-backed)", () => {
       message: upgradeError.message,
       hint: upgradeError.hint,
     });
+    await expect(provider.listTargets()).resolves.toMatchObject([{ sessionId: "ses_web_feature" }]);
+    await expect(
+      provider.releaseTarget({
+        targetId: opened.target.targetId,
+        expectedSessionId: "ses_web_feature",
+        expectedBindingToken: opened.bindingToken,
+      }),
+    ).resolves.toBe(true);
     await expect(provider.listTargets()).resolves.toEqual([]);
   });
 
-  it("releases the registered target when host spawn fails", async () => {
+  it("leaves managed cleanup to the caller when host spawn fails", async () => {
     const spawnError = new StationHostProviderError(
       "HOST_SPAWN_FAILED",
       "The controlling-terminal helper is unavailable.",
     );
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        spawn: async () => {
+          throw spawnError;
+        },
+      }),
+    );
+    const opened = await provider.openManagedWorkspace(openRequest());
+
+    await expect(
+      provider.launchManagedProcess({
+        project,
+        worktree,
+        terminalTarget: opened.target,
+        agentEndpointId: opened.agentEndpointId,
+        bindingToken: opened.bindingToken,
+        launchPlan,
+      }),
+    ).rejects.toBe(spawnError);
+    await expect(provider.listTargets()).resolves.toMatchObject([{ sessionId: "ses_web_feature" }]);
+    await expect(
+      provider.releaseTarget({
+        targetId: opened.target.targetId,
+        expectedSessionId: "ses_web_feature",
+        expectedBindingToken: opened.bindingToken,
+      }),
+    ).resolves.toBe(true);
+    await expect(provider.listTargets()).resolves.toEqual([]);
+  });
+
+  it("releases a general launch binding when host spawn fails", async () => {
+    const spawnError = new StationHostProviderError("HOST_SPAWN_FAILED", "spawn failed");
     const provider = hostBackedProvider(
       fakeHostClient({
         spawn: async () => {
@@ -489,12 +597,13 @@ describe("StationTerminalProvider (host-backed)", () => {
         },
       }),
     );
-    const old = await provider.openWorkspace(openRequest({ sessionId: "ses_old" }));
-    const oldLaunch = provider.launchProcess({
+    const old = await provider.openManagedWorkspace(openRequest({ sessionId: "ses_old" }));
+    const oldLaunch = provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: old.target,
       agentEndpointId: old.agentEndpointId,
+      bindingToken: old.bindingToken,
       launchPlan,
     });
     const oldLaunchResult = oldLaunch.then(
@@ -511,14 +620,86 @@ describe("StationTerminalProvider (host-backed)", () => {
     await expect(provider.listTargets()).resolves.toMatchObject([{ sessionId: "ses_replacement" }]);
   });
 
+  it("does not let a delayed same-session failure release a newer binding generation", async () => {
+    const spawn = deferred<{ ptyId: string; pid: number }>();
+    const spawnStarted = deferred<void>();
+    const provider = hostBackedProvider(
+      fakeHostClient({
+        spawn: async () => {
+          spawnStarted.resolve();
+          return await spawn.promise;
+        },
+      }),
+    );
+    const first = await provider.openManagedWorkspace(openRequest());
+    const firstLaunch = provider.launchManagedProcess({
+      project,
+      worktree,
+      terminalTarget: first.target,
+      agentEndpointId: first.agentEndpointId,
+      bindingToken: first.bindingToken,
+      launchPlan,
+    });
+    const firstResult = firstLaunch.then(
+      () => ({ kind: "resolved" as const }),
+      (error: unknown) => ({ kind: "rejected" as const, error }),
+    );
+    await spawnStarted.promise;
+    const replacement = await provider.openManagedWorkspace(openRequest());
+
+    const spawnError = new StationHostProviderError("HOST_SPAWN_FAILED", "first spawn failed");
+    spawn.reject(spawnError);
+
+    await expect(firstResult).resolves.toEqual({ kind: "rejected", error: spawnError });
+    await expect(provider.listTargets()).resolves.toMatchObject([{ sessionId: "ses_web_feature" }]);
+    await expect(
+      provider.releaseTarget({
+        targetId: replacement.target.targetId,
+        expectedSessionId: "ses_web_feature",
+        expectedBindingToken: first.bindingToken,
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("restores the previous same-session binding when a newer open is rolled back", async () => {
+    const provider = new StationTerminalProvider({ clock });
+    const first = await provider.openManagedWorkspace(openRequest());
+    await provider.launchManagedProcess({
+      project,
+      worktree,
+      terminalTarget: first.target,
+      agentEndpointId: first.agentEndpointId,
+      bindingToken: first.bindingToken,
+      launchPlan,
+    });
+    const replacement = await provider.openManagedWorkspace(openRequest());
+
+    await expect(
+      provider.releaseTarget({
+        targetId: replacement.target.targetId,
+        expectedSessionId: "ses_web_feature",
+        expectedBindingToken: replacement.bindingToken,
+      }),
+    ).resolves.toBe(true);
+    await expect(provider.listTargets()).resolves.toMatchObject([{ sessionId: "ses_web_feature" }]);
+    await expect(
+      provider.releaseTarget({
+        targetId: first.target.targetId,
+        expectedSessionId: "ses_web_feature",
+        expectedBindingToken: first.bindingToken,
+      }),
+    ).resolves.toBe(true);
+  });
+
   it("does not inherit host-backed pruning when a target is rebound", async () => {
     const provider = hostBackedProvider(fakeHostClient({ list: async () => [] }));
-    const old = await provider.openWorkspace(openRequest({ sessionId: "ses_old" }));
-    await provider.launchProcess({
+    const old = await provider.openManagedWorkspace(openRequest({ sessionId: "ses_old" }));
+    await provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: old.target,
       agentEndpointId: old.agentEndpointId,
+      bindingToken: old.bindingToken,
       launchPlan,
     });
     await provider.openWorkspace(openRequest({ sessionId: "ses_replacement" }));
@@ -550,12 +731,13 @@ describe("StationTerminalProvider (host-backed)", () => {
   it("releaseTarget forgets host-backed bookkeeping without closing the process", async () => {
     const close = vi.fn(async () => ({ closed: true }));
     const provider = hostBackedProvider(fakeHostClient({ close }));
-    const opened = await provider.openWorkspace(openRequest());
-    await provider.launchProcess({
+    const opened = await provider.openManagedWorkspace(openRequest());
+    await provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: opened.target,
       agentEndpointId: opened.agentEndpointId,
+      bindingToken: opened.bindingToken,
       launchPlan,
     });
 
@@ -705,12 +887,13 @@ describe("StationTerminalProvider (host-backed)", () => {
   it("drops a host-backed target once its PTY is no longer live", async () => {
     let live = [liveEntry()];
     const provider = hostBackedProvider(fakeHostClient({ list: async () => live }));
-    const opened = await provider.openWorkspace(openRequest());
-    await provider.launchProcess({
+    const opened = await provider.openManagedWorkspace(openRequest());
+    await provider.launchManagedProcess({
       project,
       worktree,
       terminalTarget: opened.target,
       agentEndpointId: opened.agentEndpointId,
+      bindingToken: opened.bindingToken,
       launchPlan,
     }); // marks the target host-backed
     expect(await provider.listTargets()).toHaveLength(1);

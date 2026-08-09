@@ -805,12 +805,13 @@ describe("createStationStore primary-agent bookkeeping", () => {
     expect(count()).toEqual(baseline);
   });
 
-  it("setPrimaryAgent preserves the provider when restamping the same agent without one", () => {
+  it("setPrimaryAgent preserves provider and binding authority when restamping the same agent", () => {
     const store = createStationStore();
     store.actions.createPane("pane-agent");
     store.actions.setPrimaryAgent("pane-agent", {
       sessionId: "ses_a",
       terminalTargetId: "native:wt_a",
+      terminalBindingToken: "binding_1",
       harnessProvider: "codex",
     });
 
@@ -822,6 +823,7 @@ describe("createStationStore primary-agent bookkeeping", () => {
     expect(recordOf(store, "pane-agent")?.agentIdentity).toEqual({
       sessionId: "ses_a",
       terminalTargetId: "native:wt_a",
+      terminalBindingToken: "binding_1",
       harnessProvider: "codex",
     });
   });

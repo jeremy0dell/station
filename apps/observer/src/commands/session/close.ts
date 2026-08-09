@@ -4,6 +4,10 @@ import type { ProviderRegistry } from "../../providers/registry.js";
 import type { ObserverCore } from "../../reconcile/core.js";
 import type { ObserverEventBus } from "../../runtime/eventBus.js";
 import { nowIso } from "../../utils/time.js";
+import {
+  createWorktreeMutationCoordinator,
+  type WorktreeMutationCoordinator,
+} from "../../worktreeMutationCoordinator.js";
 import { assertCommandType } from "../assertCommand.js";
 import {
   assertSessionCloseAllowed,
@@ -25,54 +29,67 @@ export type CreateSessionCloseHandlerOptions = {
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   commandTimeoutMs?: number | undefined;
+  worktreeMutations?: WorktreeMutationCoordinator | undefined;
 };
 
+/**
+ * USE CASE
+ *
+ * Closes one canonical session and serializes its terminal and durable lifecycle
+ * mutation against native activation for the same configured worktree.
+ */
 export function createSessionCloseHandler(
   options: CreateSessionCloseHandlerOptions,
 ): CommandHandler {
+  const worktreeMutations = options.worktreeMutations ?? createWorktreeMutationCoordinator();
   return async (context) => {
     assertCommandType(context, "session.close");
     throwIfAborted(context.signal);
 
     const payload = context.command.payload;
-    const snapshot = options.core.getSnapshot();
-    const session = resolveSessionOrThrow(snapshot, payload.sessionId);
-    const row = resolveRowForSession(snapshot, session);
-    assertSessionCloseAllowed(session, row, payload.force === true);
-    await closeSessionResources({
-      providers: options.providers,
-      terminalIntentRunner: options.terminalIntentRunner,
-      session,
-      row,
-      mode: payload.mode,
-      force: payload.force === true,
-      context,
-      requireTerminalClose: payload.mode === "terminal" || payload.mode === "all",
-      clock: options.clock,
-      commandTimeoutMs: options.commandTimeoutMs,
-    });
-    throwIfAborted(context.signal);
-    if (session.origin === "station" && payload.mode !== "harness") {
-      await options.persistence.markSessionsEnded({
-        subject: { kind: "session", sessionId: session.id },
-        endedAt: nowIso(options.clock),
+    const initialSnapshot = options.core.getSnapshot();
+    const initialSession = resolveSessionOrThrow(initialSnapshot, payload.sessionId);
+    await worktreeMutations.run(initialSession.projectId, initialSession.worktreeId, async () => {
+      throwIfAborted(context.signal);
+      const snapshot = options.core.getSnapshot();
+      const session = resolveSessionOrThrow(snapshot, payload.sessionId);
+      const row = resolveRowForSession(snapshot, session);
+      assertSessionCloseAllowed(session, row, payload.force === true);
+      await closeSessionResources({
+        providers: options.providers,
+        terminalIntentRunner: options.terminalIntentRunner,
+        session,
+        row,
+        mode: payload.mode,
+        force: payload.force === true,
+        context,
+        requireTerminalClose: payload.mode === "terminal" || payload.mode === "all",
+        clock: options.clock,
+        commandTimeoutMs: options.commandTimeoutMs,
       });
-    }
+      throwIfAborted(context.signal);
+      if (session.origin === "station" && payload.mode !== "harness") {
+        await options.persistence.markSessionsEnded({
+          subject: { kind: "session", sessionId: session.id },
+          endedAt: nowIso(options.clock),
+        });
+      }
 
-    const nextSnapshot = await reconcileAndPublish({
-      core: options.core,
-      eventBus: options.eventBus,
-      clock: options.clock,
-      reason: "command:session.close",
-      trace: context.trace,
-    });
-    await publishRemovedSessionIfAbsent({
-      previousSessionId: session.id,
-      nextSessionIds: new Set(nextSnapshot.sessions.map((candidate) => candidate.id)),
-      persistence: options.persistence,
-      eventBus: options.eventBus,
-      context,
-      clock: options.clock,
+      const nextSnapshot = await reconcileAndPublish({
+        core: options.core,
+        eventBus: options.eventBus,
+        clock: options.clock,
+        reason: "command:session.close",
+        trace: context.trace,
+      });
+      await publishRemovedSessionIfAbsent({
+        previousSessionId: session.id,
+        nextSessionIds: new Set(nextSnapshot.sessions.map((candidate) => candidate.id)),
+        persistence: options.persistence,
+        eventBus: options.eventBus,
+        context,
+        clock: options.clock,
+      });
     });
   };
 }

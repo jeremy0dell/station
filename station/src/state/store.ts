@@ -158,17 +158,27 @@ export function createStationStore(options?: StationStoreOptions): StationStore 
         if (record === undefined) {
           return;
         }
-        const nextIdentity: AgentIdentity =
-          identity.harnessProvider === undefined &&
-          record.agentIdentity?.sessionId === identity.sessionId &&
-          record.agentIdentity.terminalTargetId === identity.terminalTargetId &&
-          record.agentIdentity.harnessProvider !== undefined
-            ? { ...identity, harnessProvider: record.agentIdentity.harnessProvider }
-            : identity;
+        const nextIdentity: AgentIdentity = { ...identity };
+        const previousIdentity = record.agentIdentity;
+        if (
+          previousIdentity?.sessionId === identity.sessionId &&
+          previousIdentity.terminalTargetId === identity.terminalTargetId
+        ) {
+          if (nextIdentity.harnessProvider === undefined && previousIdentity.harnessProvider !== undefined) {
+            nextIdentity.harnessProvider = previousIdentity.harnessProvider;
+          }
+          if (
+            nextIdentity.terminalBindingToken === undefined &&
+            previousIdentity.terminalBindingToken !== undefined
+          ) {
+            nextIdentity.terminalBindingToken = previousIdentity.terminalBindingToken;
+          }
+        }
         if (
           record.role === "primary-agent" &&
           record.agentIdentity?.sessionId === nextIdentity.sessionId &&
           record.agentIdentity.terminalTargetId === nextIdentity.terminalTargetId &&
+          record.agentIdentity.terminalBindingToken === nextIdentity.terminalBindingToken &&
           record.agentIdentity.harnessProvider === nextIdentity.harnessProvider
         ) {
           return;
