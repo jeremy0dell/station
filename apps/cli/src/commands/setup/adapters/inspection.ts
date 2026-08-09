@@ -14,6 +14,7 @@ import {
   type SupportedHarnessId,
 } from "@station/setup-core";
 import { type CollectSetupFactsOptions, collectSetupFacts } from "../checks/system.js";
+import { setupToolDefinitions } from "../toolDefinitions.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "../types.js";
 import { planSetupConfigMutationForInspection } from "./config.js";
 import type { SetupFacts, SetupHarnessTrackingFact, SetupMode } from "./inspectionTypes.js";
@@ -297,12 +298,9 @@ export function normalizeSetupPlanningFacts(
         : facts.brew.status === "missing"
           ? "missing"
           : "skipped",
-    tools: [
-      normalizeTool("worktrunk", facts.worktrunk.status === "ok", facts),
-      normalizeTool("tmux", facts.tmux.status === "ok", facts),
-      normalizeTool("bun", facts.bun.status === "ok", facts),
-      normalizeTool("diff-viewer", facts.diffViewer.status === "ok", facts),
-    ],
+    tools: setupToolDefinitions.map(({ id, factKey }) =>
+      normalizeTool(id, facts[factKey].status === "ok", facts),
+    ),
     runtimeUi: normalizeRuntimeUi(facts),
     git:
       facts.git.status === "missing"

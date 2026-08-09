@@ -3,6 +3,7 @@ import { setupMessageRef } from "@station/setup-messages";
 import { stationUiInstallHint } from "../../../stationWorkspace.js";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupDisplayDetail, SetupViewCheck } from "./setupViewTypes.js";
 
 export function projectSetupEnvironmentChecks(facts: SetupFacts): readonly SetupViewCheck[] {
@@ -11,24 +12,21 @@ export function projectSetupEnvironmentChecks(facts: SetupFacts): readonly Setup
     socketEvidenceCheck(facts),
     ...(facts.compiled || facts.xcode.status !== "missing" ? [] : [xcodeCheck(facts)]),
     dependencyCheck(
-      "worktrunk",
-      setupMessageRef("label.worktrunk"),
-      facts.worktrunk,
+      SETUP_TOOL_DEFINITIONS.worktrunk,
+      facts,
       "Worktrunk is required for core worktree setup.",
     ),
     dependencyCheck(
-      "tmux",
-      setupMessageRef("label.tmux"),
-      facts.tmux,
+      SETUP_TOOL_DEFINITIONS.tmux,
+      facts,
       "tmux is required for the reference terminal workflow.",
     ),
     ...(facts.compiled
       ? []
       : [
           dependencyCheck(
-            "bun",
-            setupMessageRef("label.bun"),
-            facts.bun,
+            SETUP_TOOL_DEFINITIONS.bun,
+            facts,
             "Bun is required to run the STATION terminal UI (bare stn).",
           ),
         ]),
@@ -44,10 +42,8 @@ export function projectSetupOperationalChecks(facts: SetupFacts): readonly Setup
     tmuxPopupBindingCheck(facts),
     worktrunkHooksCheck(facts),
     toolCheck(
-      "diff-viewer",
-      setupMessageRef("label.diff-viewer"),
-      facts.diffViewer,
-      setupMessageRef("check.available", { label: "Hunk" }),
+      SETUP_TOOL_DEFINITIONS["diff-viewer"],
+      facts,
       setupMessageRef("check.evidence", {
         message: "Hunk is required for the STATION 'See diff' automation.",
       }),
@@ -108,11 +104,11 @@ function xcodeCheck(facts: SetupFacts): SetupViewCheck {
 }
 
 function dependencyCheck(
-  id: string,
-  label: SetupViewCheck["label"],
-  dependency: SetupFacts["worktrunk"],
+  definition: (typeof SETUP_TOOL_DEFINITIONS)[keyof typeof SETUP_TOOL_DEFINITIONS],
+  facts: SetupFacts,
   fallback: string,
 ): SetupViewCheck {
+  const dependency = facts[definition.factKey];
   const details: SetupDisplayDetail[] = [];
   if (dependency.version !== undefined) {
     details.push({ label: setupMessageRef("detail.version"), value: dependency.version });
@@ -124,29 +120,16 @@ function dependencyCheck(
     });
   }
   return {
-    id,
+    id: definition.id,
     tier: "required",
     status: dependency.status === "ok" ? "ok" : "missing",
-    label,
+    label: definition.label,
     explanation:
       dependency.status === "ok"
-        ? setupMessageRef("check.available", { label: messageLabel(label) })
+        ? setupMessageRef("check.available", { label: definition.availabilityName })
         : setupMessageRef("check.evidence", { message: dependency.message ?? fallback }),
     details,
   };
-}
-
-function messageLabel(label: SetupViewCheck["label"]): string {
-  switch (label.id) {
-    case "label.worktrunk":
-      return "Worktrunk / wt";
-    case "label.tmux":
-      return "tmux";
-    case "label.bun":
-      return "Bun";
-    default:
-      throw new Error(`Unsupported setup dependency label: ${label.id}`);
-  }
 }
 
 function gitCheck(facts: SetupFacts): SetupViewCheck {
@@ -386,12 +369,11 @@ function worktrunkAutomationDetails(facts: SetupFacts): SetupDisplayDetail[] {
 }
 
 function toolCheck(
-  id: string,
-  label: SetupViewCheck["label"],
-  fact: SetupFacts["worktrunk"],
-  ready: SetupViewCheck["explanation"],
+  definition: (typeof SETUP_TOOL_DEFINITIONS)[keyof typeof SETUP_TOOL_DEFINITIONS],
+  facts: SetupFacts,
   missing: SetupViewCheck["explanation"],
 ): SetupViewCheck {
+  const fact = facts[definition.factKey];
   const details: SetupDisplayDetail[] = [];
   if (fact.resolvedPath !== undefined) {
     details.push({
@@ -400,13 +382,13 @@ function toolCheck(
     });
   }
   return {
-    id,
+    id: definition.id,
     tier: "required",
     status: fact.status === "ok" ? "ok" : "missing",
-    label,
+    label: definition.label,
     explanation:
       fact.status === "ok"
-        ? ready
+        ? setupMessageRef("check.available", { label: definition.availabilityName })
         : fact.message === undefined
           ? missing
           : setupMessageRef("check.evidence", { message: fact.message }),

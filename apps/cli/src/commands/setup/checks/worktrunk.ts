@@ -10,6 +10,7 @@ import type {
   SetupWorktrunkAutomationFact,
   SetupWorktrunkShellIntegrationFact,
 } from "../adapters/inspectionTypes.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";
@@ -18,7 +19,8 @@ export async function checkSetupWorktrunk(
   options: SetupDependencyCheckOptions & { command?: string } = {},
 ): Promise<SetupDependencyFact> {
   const env = setupEnv(options.env);
-  const command = options.command ?? env.STATION_WORKTRUNK_BIN ?? "wt";
+  const command =
+    options.command ?? env.STATION_WORKTRUNK_BIN ?? SETUP_TOOL_DEFINITIONS.worktrunk.command;
   const dependencyOptions: Parameters<typeof checkWorktrunkDependency>[0] = {
     command,
     timeoutMs: setupProbeTimeoutMs,

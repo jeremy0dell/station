@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { type ExternalCommandRunner, runExternalCommand } from "@station/runtime";
 import { persistentUiOwnerClientOption } from "@station/tmux";
 import type { SetupTmuxBindingFact } from "../adapters/inspectionTypes.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupFileSystemReader } from "./config.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 
@@ -513,10 +514,11 @@ async function checkLiveTmuxBinding(input: {
   if (!input.insideTmux) {
     return "unknown";
   }
+  const tmuxCommand = input.tmuxCommand ?? SETUP_TOOL_DEFINITIONS.tmux.command;
   try {
     const listed = await runExternalCommand(
       {
-        command: input.tmuxCommand ?? "tmux",
+        command: tmuxCommand,
         args: ["list-keys", "-T", "prefix"],
         timeoutMs: setupProbeTimeoutMs,
         maxOutputChars: 32_768,
@@ -534,7 +536,7 @@ async function checkLiveTmuxBinding(input: {
     if (binding !== "station") return "missing";
     const startup = await runExternalCommand(
       {
-        command: input.tmuxCommand ?? "tmux",
+        command: tmuxCommand,
         args: [
           "run-shell",
           `env STATION_SETUP_LAUNCHER_PROBE=1 ${quoteShellValue(escapeTmuxFormat(input.launcherCommand))} --help >/dev/null 2>&1`,

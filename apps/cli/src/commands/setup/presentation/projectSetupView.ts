@@ -3,6 +3,7 @@ import type { SetupPlan } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import { projectSetupActions } from "./projectSetupActions.js";
 import {
   projectSetupEnvironmentChecks,
@@ -134,7 +135,9 @@ function projectRecovery(plan: SetupPlan, facts: SetupFacts): readonly SetupReco
     return [
       {
         kind: "instruction",
-        message: setupMessageRef("next.install-bun"),
+        message: setupMessageRef("next.install-bun", {
+          formula: SETUP_TOOL_DEFINITIONS.bun.formula,
+        }),
         command: ["stn", "setup", "check"],
       },
     ];
@@ -151,7 +154,9 @@ function projectRecovery(plan: SetupPlan, facts: SetupFacts): readonly SetupReco
     return [
       {
         kind: "instruction",
-        message: setupMessageRef("next.install-diff-viewer"),
+        message: setupMessageRef("next.install-diff-viewer", {
+          formula: SETUP_TOOL_DEFINITIONS["diff-viewer"].formula,
+        }),
         command: ["stn", "setup", "check"],
       },
     ];

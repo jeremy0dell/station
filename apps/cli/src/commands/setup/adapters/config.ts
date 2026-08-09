@@ -14,6 +14,7 @@ import type {
   SetupOperationOutcome,
   SupportedHarnessId,
 } from "@station/setup-core";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupFacts } from "./inspectionTypes.js";
 
 export type SetupConfigAdapterOptions = {
@@ -143,10 +144,10 @@ export function setupConfigMutationInput(
         installHooks: operation.trackingHarnessIds.includes(harnessId),
       };
     }),
-    worktrunkCommand: detectedCommand(facts.worktrunk, "wt"),
+    worktrunkCommand: detectedCommand(facts.worktrunk, SETUP_TOOL_DEFINITIONS.worktrunk.command),
     installWorktrunkHooks: operation.installWorktrunkTracking,
   };
-  const tmuxCommand = detectedOptionalCommand(facts.tmux, "tmux");
+  const tmuxCommand = detectedOptionalCommand(facts.tmux, SETUP_TOOL_DEFINITIONS.tmux.command);
   if (tmuxCommand !== undefined) desired.tmuxCommand = tmuxCommand;
 
   let current: SetupConfigMutationInput["current"];

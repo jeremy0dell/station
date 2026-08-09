@@ -21,6 +21,7 @@ import type {
   SetupMode,
   SetupStationUiFact,
 } from "../adapters/inspectionTypes.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import { checkBrewDependency } from "./brew.js";
 import { checkSetupBun } from "./bun.js";
 import {
@@ -157,7 +158,10 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     worktrunkPromise,
     checkSetupTmux(dependencyOptions),
     compiled
-      ? Promise.resolve({ status: "ok" as const, command: "bun" })
+      ? Promise.resolve({
+          status: "ok" as const,
+          command: SETUP_TOOL_DEFINITIONS.bun.command,
+        })
       : checkSetupBun(dependencyOptions),
     checkSetupDiffViewer(dependencyOptions),
     checkBrewDependency({
