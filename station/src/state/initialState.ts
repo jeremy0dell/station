@@ -50,7 +50,7 @@ function workspaceState(workspace: WorkspaceSlice): StationState {
       contextMenu: null,
       stationButtonHover: false,
     },
-    feedback: { toast: null },
+    feedback: { toast: null, dismissedAttention: {} },
   };
 }
 
@@ -68,7 +68,7 @@ function emptyInitialState(): StationState {
       contextMenu: null,
       stationButtonHover: false,
     },
-    feedback: { toast: null },
+    feedback: { toast: null, dismissedAttention: {} },
   };
 }
 

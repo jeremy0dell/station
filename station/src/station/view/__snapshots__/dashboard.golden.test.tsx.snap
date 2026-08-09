@@ -24,7 +24,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
 ▼ empty-project  0 sessions                                       [sh] [qs] [▾] 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -68,7 +68,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
 "
 `;
 
@@ -88,7 +88,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown
  [6] x batch-export            opencode  exited        #8 ✓ 
 ▼ 4 below · showing 6 of 10                                 
 ─────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/e… 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
 `;
 
@@ -104,7 +104,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0
  [4] + session-resume      starting     
 ▼ 6 below · showing 4 of 10             
 ─────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X… 
+↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
 
@@ -132,7 +132,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0
                                                                                 
                                                                                 
 ─────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/esc:close              
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/esc:close              
 "
 `;
 
@@ -176,7 +176,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown  x 1 exited  ○ 0
                                                                                                                         
                                                                                                                         
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
-↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Q/esc:close                                      
+↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Q/esc:close                                      
 "
 `;
 
@@ -196,7 +196,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3 needs you  ? 1 unknown
  [6] ! sqlite-cleanup     opencode  Agent needs appr… #6 x1 
                                                             
 ─────────────────────────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X delete  ? help  Q/e… 
+↵ activate  N new  ⇥ next  / filter  X delete  ? help  Q/e… 
 "
 `;
 
@@ -212,7 +212,7 @@ FLEET  ● 0 ready  ⠋ 1 working  ! 3
  [4] ⠋ pr-info                          
 ▼ 2 below · showing 4 of 6              
 ─────────────────────────────────────── 
-↵ activate  N new  ⇥ next  / search  X… 
+↵ activate  N new  ⇥ next  / filter  X… 
 "
 `;
 
@@ -457,7 +457,7 @@ FLEET  ● 0 ready  ⠋ 2 working  ! 0 needs you  ? 1 unknown  x 1 exited  ○ 4
  no sessions yet · [ + ad└──────────────────────────────────────────────────────────────────────┘
 
 ──────────────────────────────────────────────────────────────────────────────────────────────────
-↵ activate  N new  A add  ⇥ next-needs-me  / search  X delete  ? help  Esc:dismiss  Q:close
+↵ activate  N new  A add  ⇥ next-needs-me  / filter  X delete  ? help  Esc:dismiss  Q:close
 "
 `;
 

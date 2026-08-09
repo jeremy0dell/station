@@ -28,6 +28,7 @@ export function createFakeObserverApi(
     getSnapshot: async () => snapshot,
     getSessionRecoveryReadiness: async () => ({
       resumeEnabled: true,
+      canonicalTitleImport: true,
       managedTerminal: { provider: "native", canLaunchProcessPersistently: true },
       harnesses: [],
     }),

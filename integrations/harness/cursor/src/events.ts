@@ -178,6 +178,14 @@ function cursorNativeSessionId(event: CursorProviderHookPayload): string | undef
   return event.session_id ?? event.conversation_id;
 }
 
+function turnFromCursorProviderHookPayload(
+  event: CursorProviderHookPayload,
+): HarnessEventReport["turn"] | undefined {
+  return event.hook_event_name === "stop" && event.status === "completed"
+    ? { kind: "turn_completed" }
+    : undefined;
+}
+
 export function parseCursorProviderHookPayload(input: unknown): CursorProviderHookPayload {
   const compacted = compactCursorProviderHookPayload(input);
   const result = CursorProviderHookPayloadSchema.safeParse(compacted.payload);
@@ -214,6 +222,10 @@ export function normalizeCursorRawEvent(
     observedAt,
     providerData: providerDataFromCursorEvent(event),
   };
+  const turn = turnFromCursorProviderHookPayload(event);
+  if (turn !== undefined) {
+    observation.turn = turn;
+  }
   applyCorrelation(observation, correlation);
   return [observation];
 }
@@ -232,6 +244,10 @@ export function cursorProviderHookPayloadToHarnessEventReport(
     status: statusFromCursorProviderHookPayload(event, input.observedAt),
     providerData: providerDataFromCursorEvent(event),
   };
+  const turn = turnFromCursorProviderHookPayload(event);
+  if (turn !== undefined) {
+    report.turn = turn;
+  }
   const correlation = reportCorrelationFromCursorEvent(event);
   if (correlation !== undefined) {
     report.correlation = correlation;

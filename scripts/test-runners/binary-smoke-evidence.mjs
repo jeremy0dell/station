@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readdir, readFile, rename } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import {
@@ -15,6 +15,7 @@ import {
   redact,
 } from "../../packages/observability/dist/index.js";
 import { readUnixSocketHolderPids } from "../../packages/protocol/dist/index.js";
+import { RuntimeLifecycleEventSchema } from "../runtime-owner.mjs";
 
 export const BINARY_SMOKE_EVIDENCE_LIMITS = Object.freeze({
   maxTotalBytes: 1_048_576,
@@ -26,10 +27,13 @@ export const BINARY_SMOKE_EVIDENCE_LIMITS = Object.freeze({
 const manifestMaxBytes = 65_536;
 const failureMaxBytes = 32_768;
 const runtimeMaxBytes = 32_768;
+const lifecycleMaxBytes = 32_768;
+const reservationFile = ".station-binary-smoke-run";
 const bootMaxBytes = 65_536;
 const diagnosticErrorsMaxBytes = 65_536;
 const diagnosticErrorLines = 100;
 const outputStatusSchema = z.enum(["failed", "cancelled"]);
+const runIdSchema = z.string().regex(/^run_[0-9a-f-]{36}$/i);
 const fileStatusSchema = z.enum([
   "captured",
   "missing",
@@ -70,8 +74,28 @@ const cleanupSchema = z
     hostExited: z.boolean(),
     socketRemoved: z.boolean(),
     pidfileRemoved: z.boolean(),
+    hostSocketRemoved: z.boolean(),
+    rootRemoved: z.boolean(),
   })
-  .strict();
+  .strict()
+  .superRefine((cleanup, context) => {
+    if (
+      cleanup.status === "complete" &&
+      ![
+        cleanup.observerExited,
+        cleanup.hostExited,
+        cleanup.socketRemoved,
+        cleanup.pidfileRemoved,
+        cleanup.hostSocketRemoved,
+        cleanup.rootRemoved,
+      ].every(Boolean)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Complete binary smoke cleanup requires zero owned residue.",
+      });
+    }
+  });
 const runtimeProcessSchema = z
   .object({
     role: z.string().min(1),
@@ -92,10 +116,12 @@ const runtimePidfileSchema = z
     buildIdentity: z.string().min(12).optional(),
   })
   .strict();
+const lifecycleSchema = z.array(RuntimeLifecycleEventSchema);
 const BinarySmokeEvidenceManifestSchema = z
   .object({
     schemaVersion: z.literal(1),
     kind: z.literal("station-binary-smoke-failure"),
+    runId: runIdSchema,
     status: outputStatusSchema,
     capturedAt: z.iso.datetime(),
     limits: z
@@ -139,6 +165,7 @@ const BinarySmokeEvidenceManifestSchema = z
               socket: runtimeSocketSchema,
               pidfile: runtimePidfileSchema,
               processes: z.array(runtimeProcessSchema),
+              lifecycle: lifecycleSchema,
             })
             .strict(),
           files: z.array(capturedFileSchema),
@@ -185,17 +212,17 @@ export { BinarySmokeEvidenceManifestSchema, BinarySmokeExitDispositionSchema };
 
 export async function captureBinarySmokeEvidence(input) {
   validateEvidenceSources(input.stateDir, input.socketPath, input.smokeRoot);
-  validateEvidenceDestination(input.evidenceDir, input.smokeRoot);
+  await prepareEvidenceDestination(input.evidenceDir, input.smokeRoot, input.runId);
   const capturedAt = (input.now ?? new Date()).toISOString();
   const roundName = `${String(input.round).padStart(4, "0")}-${safeName(input.direction.physical)}`;
   const roundRoot = `rounds/${roundName}`;
-  await createPrivateDirectory(input.evidenceDir);
   await createPrivateDirectory(resolve(input.evidenceDir, "rounds"));
   await createPrivateDirectory(resolve(input.evidenceDir, roundRoot));
 
   const state = {
     input,
     capturedAt,
+    roundRoot,
     files: [],
     redactionReports: [],
     warnings: [],
@@ -231,6 +258,7 @@ export async function captureBinarySmokeEvidence(input) {
   const manifest = BinarySmokeEvidenceManifestSchema.parse({
     schemaVersion: 1,
     kind: "station-binary-smoke-failure",
+    runId: runIdSchema.parse(input.runId),
     status: input.status,
     capturedAt,
     limits: BINARY_SMOKE_EVIDENCE_LIMITS,
@@ -253,6 +281,8 @@ export async function captureBinarySmokeEvidence(input) {
           hostExited: false,
           socketRemoved: false,
           pidfileRemoved: false,
+          hostSocketRemoved: false,
+          rootRemoved: false,
         },
       },
     ],
@@ -271,6 +301,7 @@ export async function captureBinarySmokeEvidence(input) {
     throw new Error("Binary smoke evidence exceeded its total byte budget before manifest write.");
   }
   await atomicWrite(resolve(input.evidenceDir, "manifest.json"), manifestBytes);
+  await removeMatchingReservation(input.evidenceDir, input.runId);
   return manifest;
 }
 
@@ -298,16 +329,28 @@ export async function finalizeBinarySmokeEvidence(input) {
     throw new Error("Binary smoke evidence manifest exceeds its read limit.");
   }
   const manifest = BinarySmokeEvidenceManifestSchema.parse(JSON.parse(source));
+  const expectedRunId = runIdSchema.parse(input.expectedRunId);
+  if (manifest.runId !== expectedRunId) {
+    throw new Error("Binary smoke evidence belongs to a different binary smoke run.");
+  }
   const [round] = manifest.rounds;
   if (round === undefined) throw new Error("Binary smoke evidence manifest has no round.");
   round.cleanup = cleanupSchema.parse(input.cleanup);
-  round.runtime.processes = input.processes.map((process) => runtimeProcessSchema.parse(process));
+  if (input.processes !== undefined) {
+    round.runtime.processes = input.processes.map((process) => runtimeProcessSchema.parse(process));
+  }
+  if (input.lifecycleEvents !== undefined) {
+    const lifecycle = lifecycleSchema.parse(input.lifecycleEvents);
+    round.runtime.lifecycle = lifecycle;
+    await writeFinalLifecycle(input.evidenceDir, round, lifecycle);
+  }
   manifest.warnings.push(...input.warnings.map((warning) => boundedText(warning, 1_000)));
   const bytes = jsonBytes(BinarySmokeEvidenceManifestSchema.parse(manifest));
   if (bytes.length > manifestMaxBytes) {
     throw new Error(`Binary smoke evidence manifest exceeded ${manifestMaxBytes} bytes.`);
   }
   await atomicWrite(manifestPath, bytes, true);
+  await removeMatchingReservation(input.evidenceDir, expectedRunId);
 }
 
 function validateEvidenceDestination(evidenceDir, smokeRoot) {
@@ -318,6 +361,86 @@ function validateEvidenceDestination(evidenceDir, smokeRoot) {
   const root = resolve(smokeRoot);
   if (output === root || output.startsWith(`${root}${sep}`) || root.startsWith(`${output}${sep}`)) {
     throw new Error("STATION_BINARY_SMOKE_EVIDENCE_DIR must be outside the smoke root.");
+  }
+}
+
+export async function assertNewBinarySmokeEvidenceDestination(evidenceDir, smokeRoot) {
+  validateEvidenceDestination(evidenceDir, smokeRoot);
+  try {
+    await lstat(resolve(evidenceDir));
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error("STATION_BINARY_SMOKE_EVIDENCE_DIR must not exist.");
+}
+
+export async function reserveBinarySmokeEvidenceDestination(input) {
+  await assertNewBinarySmokeEvidenceDestination(input.evidenceDir, input.smokeRoot);
+  const runId = runIdSchema.parse(input.runId);
+  await createPrivateDirectory(input.evidenceDir);
+  const marker = await open(resolve(input.evidenceDir, reservationFile), "wx", 0o600);
+  try {
+    await marker.writeFile(`${runId}\n`, "utf8");
+  } finally {
+    await marker.close();
+  }
+}
+
+export async function resetReservedBinarySmokeEvidenceDestination(input) {
+  await assertReservedEvidenceDestination(input.evidenceDir, input.smokeRoot, input.runId);
+  for (const entry of await readdir(resolve(input.evidenceDir))) {
+    if (entry !== reservationFile) {
+      await rm(resolve(input.evidenceDir, entry), { recursive: true });
+    }
+  }
+}
+
+export async function releaseBinarySmokeEvidenceReservation(input) {
+  await assertReservedEvidenceDestination(input.evidenceDir, input.smokeRoot, input.runId);
+  const entries = await readdir(resolve(input.evidenceDir));
+  if (entries.some((entry) => entry !== reservationFile)) {
+    throw new Error("Binary smoke evidence reservation contains captured data.");
+  }
+  await removeMatchingReservation(input.evidenceDir, input.runId);
+  await rmdir(resolve(input.evidenceDir));
+}
+
+async function prepareEvidenceDestination(evidenceDir, smokeRoot, runId) {
+  try {
+    await assertReservedEvidenceDestination(evidenceDir, smokeRoot, runId);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    await reserveBinarySmokeEvidenceDestination({ evidenceDir, smokeRoot, runId });
+  }
+}
+
+async function assertReservedEvidenceDestination(evidenceDir, smokeRoot, runId) {
+  validateEvidenceDestination(evidenceDir, smokeRoot);
+  const output = resolve(evidenceDir);
+  const stats = await lstat(output);
+  if (!stats.isDirectory() || stats.isSymbolicLink() || (stats.mode & 0o077) !== 0) {
+    throw new Error(`Evidence path is not a private directory: ${output}`);
+  }
+  const markerPath = resolve(output, reservationFile);
+  const markerStats = await lstat(markerPath);
+  if (!markerStats.isFile() || markerStats.isSymbolicLink() || (markerStats.mode & 0o177) !== 0) {
+    throw new Error("Binary smoke evidence reservation is not a private regular file.");
+  }
+  if ((await readFile(markerPath, "utf8")).trim() !== runIdSchema.parse(runId)) {
+    throw new Error("Binary smoke evidence reservation belongs to a different run.");
+  }
+}
+
+async function removeMatchingReservation(evidenceDir, runId) {
+  const markerPath = resolve(evidenceDir, reservationFile);
+  try {
+    if ((await readFile(markerPath, "utf8")).trim() !== runIdSchema.parse(runId)) {
+      throw new Error("Binary smoke evidence reservation belongs to a different run.");
+    }
+    await unlink(markerPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
   }
 }
 
@@ -353,8 +476,78 @@ async function runtimeRecord(input, state) {
     pid,
     exists: processExists(pid),
   }));
-  const runtime = { socket, pidfile, processes };
-  return redactValue(runtime, state);
+  const lifecycle = await captureLifecycle(input, state);
+  const redacted = redactValue({ socket, pidfile, processes }, state);
+  return { ...redacted, lifecycle };
+}
+
+async function captureLifecycle(input, state) {
+  const lifecycle = normalizeLifecycleEvents(
+    input.lifecycleEvents ??
+      (await readLifecycleSource(
+        input.ownerEventsPath ?? resolve(input.stateDir, "logs", "cli.jsonl"),
+        input.smokeRoot,
+      )),
+  );
+  const bytes = Buffer.from(`${lifecycle.map((event) => JSON.stringify(event)).join("\n")}\n`);
+  await writeCaptured(
+    state,
+    `${state.roundRoot}/runtime/lifecycle.jsonl`,
+    "runtime/owner-lifecycle.jsonl",
+    bytes,
+    {
+      maxBytes: lifecycleMaxBytes,
+      lines: lifecycle.length,
+    },
+  );
+  return lifecycle;
+}
+
+async function readLifecycleSource(path, smokeRoot) {
+  const read = await boundedSourceRead(path, smokeRoot, lifecycleMaxBytes, true);
+  if (read.status !== "ready") return [];
+  const parsed = parseJsonlTail(
+    read.bytes.toString("utf8"),
+    RuntimeLifecycleEventSchema,
+    256,
+    read.truncated,
+  );
+  return parsed.status === "malformed" ? [] : parsed.records;
+}
+
+function normalizeLifecycleEvents(events) {
+  const parsed = lifecycleSchema.parse(events ?? []);
+  if (parsed.length <= 256) return parsed;
+  return [...parsed.slice(0, 128), ...parsed.slice(-128)];
+}
+
+async function writeFinalLifecycle(evidenceDir, round, lifecycle) {
+  const roundRoot = resolve(
+    evidenceDir,
+    "rounds",
+    `${String(round.round).padStart(4, "0")}-${safeName(round.direction.physical)}`,
+  );
+  const path = resolve(roundRoot, "runtime/lifecycle.jsonl");
+  const bytes = Buffer.from(`${lifecycle.map((event) => JSON.stringify(event)).join("\n")}\n`);
+  if (bytes.length > lifecycleMaxBytes)
+    throw new Error("Binary smoke lifecycle evidence exceeded its file cap.");
+  await createParentDirectories(path, evidenceDir);
+  await atomicWrite(path, bytes, true);
+  const file = round.files.find((entry) => entry.source === "runtime/owner-lifecycle.jsonl");
+  if (file === undefined) {
+    round.files.push({
+      path: `rounds/${String(round.round).padStart(4, "0")}-${safeName(round.direction.physical)}/runtime/lifecycle.jsonl`,
+      source: "runtime/owner-lifecycle.jsonl",
+      status: "captured",
+      bytes: bytes.length,
+      lines: lifecycle.length,
+    });
+  } else {
+    file.status = "captured";
+    file.bytes = bytes.length;
+    file.lines = lifecycle.length;
+    delete file.truncated;
+  }
 }
 
 async function socketSummary(path, smokeRoot) {

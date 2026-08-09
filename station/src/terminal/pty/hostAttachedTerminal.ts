@@ -1,3 +1,4 @@
+import type { UiRunContext } from "@station/contracts";
 import {
   createStationHostClient,
   STATION_HOST_PROVIDER_ID,
@@ -41,6 +42,7 @@ const PTY_GONE_CODES = new Set(["HOST_ATTACH_GONE", "HOST_PTY_NOT_FOUND"]);
 const PTY_UNAVAILABLE_CODES = new Set([
   "HOST_SNAPSHOT_FAILED",
   "HOST_VERSION_INCOMPATIBLE",
+  "HOST_CLIENT_IDENTITY_MISMATCH",
   "HOST_UPGRADE_BLOCKED",
   "HOST_BAD_REQUEST",
 ]);
@@ -105,6 +107,8 @@ export type HostAttachedTerminalOptions = {
    */
   owned?: boolean;
   size: StationTerminalSize;
+  /** Renderer correlation captured once and reused across reconnect attempts. */
+  uiContext?: UiRunContext;
   /** Test seam; production dials the host unix socket. */
   clientFactory?: (socketPath: string) => StationHostClient;
   /** Test seam for the reconnect-budget clock; production uses wall time. */
@@ -116,8 +120,10 @@ export type HostAttachedTerminalOptions = {
 /**
  * Host-attached `StationTerminalProcess`: attach, replay, then stream live
  * data and geometry frames. Degraded reconstruction replays the Host's
- * mode-restoring reset data and keeps I/O live; proven PTY loss emits exit,
- * while compatibility failures emit unavailable. `dispose()` only detaches.
+ * mode-restoring, cursor-anchoring reset data before requesting repaint and
+ * keeps I/O live; proven PTY loss emits exit, while compatibility failures emit
+ * unavailable. The launcher-minted UI identity is propagated on every reconnect,
+ * while each attach attempt receives a fresh attachment identity. `dispose()` only detaches.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -128,6 +134,7 @@ export function createHostAttachedTerminal(
       createStationHostClient({
         socketPath: path,
         expectedBuildVersion: stationBuildInfo().version,
+        ...(options.uiContext === undefined ? {} : { uiContext: options.uiContext }),
       }));
   const now = options.now ?? (() => Date.now());
   const sleep = options.sleep ?? delay;
@@ -365,9 +372,10 @@ export function createHostAttachedTerminal(
       opened.ack.cols === attachTarget.cols &&
       opened.ack.rows === attachTarget.rows
     ) {
+      // Shrinking clamps alternate-buffer bottom-row cursors, so nudge upward before restoring.
       const nudgeTarget = {
         cols: attachTarget.cols,
-        rows: attachTarget.rows > 1 ? attachTarget.rows - 1 : attachTarget.rows + 1,
+        rows: attachTarget.rows + 1,
       };
       await opened.resize(nudgeTarget.cols, nudgeTarget.rows);
       if (disposed) {

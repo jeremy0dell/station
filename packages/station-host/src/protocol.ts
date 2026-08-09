@@ -1,31 +1,61 @@
-import { SafeErrorSchema, TerminalOutputCompatibilitySchema } from "@station/contracts";
+import {
+  HostHandoffFidelitySchema,
+  PtyHandoffManifestSchema,
+  SafeErrorSchema,
+  TerminalOutputCompatibilitySchema,
+  UiLifecycleDetachReasonSchema,
+  UiRunContextSchema,
+} from "@station/contracts";
 import { z } from "zod";
 
 /**
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 5;
+export const HOST_PROTOCOL_VERSION = 6;
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
+
+/** Wire/build identity used only for guarded Host compatibility decisions. */
+export const HostCompatibilityIdentitySchema = z
+  .object({
+    protocolVersion: z.number().int(),
+    buildVersion: z.string().min(1),
+  })
+  .strict();
+export type HostCompatibilityIdentity = z.infer<typeof HostCompatibilityIdentitySchema>;
+
+/** Content-free UI and connection identity used only for lifecycle correlation. */
+export const HostCorrelationIdentitySchema = UiRunContextSchema.extend({
+  connectionId: idSchema,
+}).strict();
+export type HostCorrelationIdentity = z.infer<typeof HostCorrelationIdentitySchema>;
+
+/** Compatibility and diagnostic correlation carried on every operational Host request. */
+export const HostClientIdentitySchema = HostCompatibilityIdentitySchema.merge(
+  HostCorrelationIdentitySchema,
+).strict();
+export type HostClientIdentity = z.infer<typeof HostClientIdentitySchema>;
 
 export const HostRequestSchema = z
   .object({
     id: idSchema,
     method: z.string().min(1),
     params: z.unknown().optional(),
-    protocolVersion: z.number().int().optional(),
-    buildVersion: z.string().min(1).optional(),
+    client: HostClientIdentitySchema.optional(),
   })
   .strict();
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 
-/** Exact client identity carried by operational requests so the host can reject old callers. */
-export type HostClientIdentity = {
-  protocolVersion: number;
-  buildVersion: string;
-};
+/** One-way normal-shutdown notice; the server must not write a response. */
+export const HostClientShutdownNotificationSchema = z
+  .object({
+    method: z.literal("host.clientShutdown"),
+    client: HostClientIdentitySchema,
+  })
+  .strict();
+export type HostClientShutdownNotification = z.infer<typeof HostClientShutdownNotificationSchema>;
 
 export const HostResponseSchema = z.union([
   z.object({ id: idSchema, ok: z.literal(true), result: z.unknown() }).strict(),
@@ -41,10 +71,15 @@ export function hostRequest(
 ): HostRequest {
   const request: HostRequest = params === undefined ? { id, method } : { id, method, params };
   if (client !== undefined) {
-    request.protocolVersion = client.protocolVersion;
-    request.buildVersion = client.buildVersion;
+    request.client = client;
   }
   return request;
+}
+
+export function hostClientShutdownNotification(
+  client: HostClientIdentity,
+): HostClientShutdownNotification {
+  return { method: "host.clientShutdown", client };
 }
 
 export function hostSuccess(id: string, result: unknown): HostResponse {
@@ -129,7 +164,13 @@ export type HostCompatibility =
   | { action: "replace"; runningBuildVersion: string }
   | { action: "refuse"; reason: "protocol-mismatch" | "legacy-health" };
 
-/** Classify opaque build versions without inferring SemVer compatibility. */
+/**
+ * POLICY
+ *
+ * Decide host reuse, idle replace eligibility, or refuse from opaque health
+ * without inferring SemVer compatibility. Live handoff is only considered when
+ * this returns `replace`; protocol mismatch stays a visible refuse.
+ */
 export function classifyHostCompatibility(
   health: HostHealthResult,
   expectedBuildVersion: string,
@@ -152,7 +193,62 @@ export const HostStopIfIdleParamsSchema = z
 export const HostStopIfIdleResultSchema = z.object({ stopping: z.literal(true) }).strict();
 export type HostStopIfIdleResult = z.infer<typeof HostStopIfIdleResultSchema>;
 
-export const HostAttachParamsSchema = z.object({ ptyId: idSchema }).strict();
+export const HostBeginHandoffParamsSchema = z
+  .object({
+    requestingBuildVersion: z.string().min(1),
+    fidelity: HostHandoffFidelitySchema.default("processes"),
+  })
+  .strict();
+export type HostBeginHandoffParams = z.infer<typeof HostBeginHandoffParamsSchema>;
+
+export const HostBeginHandoffResultSchema = z
+  .object({
+    manifest: PtyHandoffManifestSchema,
+    fidelity: HostHandoffFidelitySchema,
+    released: z.array(z.string().min(1)),
+    skipped: z.array(
+      z
+        .object({
+          ptyId: z.string().min(1),
+          reason: z.string().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type HostBeginHandoffResult = z.infer<typeof HostBeginHandoffResultSchema>;
+
+export const HostCompleteHandoffResultSchema = z.object({ stopping: z.literal(true) }).strict();
+export type HostCompleteHandoffResult = z.infer<typeof HostCompleteHandoffResultSchema>;
+
+export const HostAbortHandoffResultSchema = z
+  .object({
+    adopted: z.array(z.string().min(1)),
+    failed: z.array(
+      z
+        .object({
+          ptyId: z.string().min(1),
+          reason: z.string().min(1),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type HostAbortHandoffResult = z.infer<typeof HostAbortHandoffResultSchema>;
+
+export const HostAdoptRegistryParamsSchema = z
+  .object({
+    manifest: PtyHandoffManifestSchema,
+  })
+  .strict();
+export type HostAdoptRegistryParams = z.infer<typeof HostAdoptRegistryParamsSchema>;
+
+export const HostAdoptRegistryResultSchema = HostAbortHandoffResultSchema;
+export type HostAdoptRegistryResult = z.infer<typeof HostAdoptRegistryResultSchema>;
+
+export const HostAttachParamsSchema = z
+  .object({ ptyId: idSchema, attachmentId: idSchema })
+  .strict();
 export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;
 
 export const HostReplayDataEventSchema = z
@@ -173,7 +269,8 @@ export type HostReplayEvent = z.infer<typeof HostReplayEventSchema>;
 /**
  * Verbatim history, exact semantic restoration, or a control-only degraded
  * reset captured at the Host's semantic boundary. Live reset never carries
- * historical events, and its reset data must begin with RIS.
+ * historical events, begins with RIS, and establishes a valid active-buffer
+ * cursor anchor before the client requests repaint.
  */
 export const HostReplaySchema = z.discriminatedUnion("kind", [
   z
@@ -205,7 +302,8 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
 /**
  * Attach acknowledgement captured atomically with the live listener. Raw replay
  * preserves production geometry; exact semantic and control-only reset recovery
- * both begin at the Host's current geometry before the client geometry nudge.
+ * both begin at the Host's current geometry, with reset recovery anchored before
+ * the client geometry nudge.
  */
 export const HostAttachAckSchema = z
   .object({
@@ -237,7 +335,13 @@ export const HostAttachAckSchema = z
   });
 export type HostAttachAck = z.infer<typeof HostAttachAckSchema>;
 
-export const HostDetachParamsSchema = z.object({ ptyId: idSchema }).strict();
+export const HostDetachParamsSchema = z
+  .object({
+    ptyId: idSchema,
+    attachmentId: idSchema,
+    reason: UiLifecycleDetachReasonSchema.extract(["explicit_detach", "client_shutdown"]),
+  })
+  .strict();
 export const HostFrameSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("data"), ptyId: idSchema, data: z.string() }).strict(),
   z

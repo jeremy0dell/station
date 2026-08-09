@@ -1,57 +1,35 @@
-import type { CommandId, SafeError } from "@station/contracts";
-import type { StoreApi } from "zustand/vanilla";
-import { toSafeError } from "../../services/errors/errors.js";
-import type { ObserverService } from "../../services/types.js";
-import { bindPendingRenameSessionTitle } from "../localRows.js";
-import type { DashboardState } from "../types.js";
+import { safeErrorToToast } from "../../services/errors/errors.js";
+import { removePendingRenameSessionTitle } from "../localRows.js";
+import { addTuiToast } from "../toasts.js";
+import {
+  type DashboardCommandOperationInput,
+  executeDashboardCommandError,
+} from "./commandExecutionError.js";
 import type { RenameSessionOperation } from "./types.js";
 
 export async function runRenameSessionOperation(
-  store: StoreApi<DashboardState>,
-  service: ObserverService,
-  operation: RenameSessionOperation,
-  clientLabel: string,
-  markRenameSessionFailed: (sessionId: string) => void,
-  markCommandFailureHandled: (commandId: CommandId) => void,
-  hasCommandFailureBeenHandled: (commandId: CommandId) => boolean,
-  addSafeErrorToast: (error: SafeError) => void,
-  addRenameSuccessToast: () => void,
+  input: DashboardCommandOperationInput<RenameSessionOperation>,
 ): Promise<void> {
-  let commandId: CommandId | undefined;
-  try {
-    const receipt = await service.dispatch(operation.command);
-    if (!receipt.accepted) {
-      const safeError = receipt.error ?? {
-        tag: "CommandExecutionError",
-        code: "COMMAND_REJECTED",
-        message: `${operation.command.type} was rejected.`,
-      };
-      markRenameSessionFailed(operation.sessionId);
-      addSafeErrorToast(safeError);
+  const { operation } = input;
+  const failure = await executeDashboardCommandError({
+    service: input.service,
+    command: operation.command,
+    clientLabel: input.clientLabel,
+  });
+  input.scope.commit(() => {
+    if (failure === undefined) {
+      input.store.setState(
+        addTuiToast(input.store.getState(), {
+          kind: "success",
+          message: "Session renamed.",
+        }),
+      );
       return;
     }
-
-    commandId = receipt.commandId;
-    store.setState(
-      bindPendingRenameSessionTitle(store.getState(), operation.sessionId, receipt.commandId),
+    const withoutPending = removePendingRenameSessionTitle(
+      input.store.getState(),
+      operation.sessionId,
     );
-    const completion = await service.waitForCommandCompletion(receipt.commandId);
-    if (completion.status === "succeeded") {
-      addRenameSuccessToast();
-      return;
-    }
-
-    const alreadyHandled = hasCommandFailureBeenHandled(completion.commandId);
-    markCommandFailureHandled(completion.commandId);
-    markRenameSessionFailed(operation.sessionId);
-    if (!alreadyHandled) {
-      addSafeErrorToast(completion.error);
-    }
-  } catch (error: unknown) {
-    if (commandId !== undefined) {
-      markCommandFailureHandled(commandId);
-    }
-    markRenameSessionFailed(operation.sessionId);
-    addSafeErrorToast(toSafeError(error, { clientLabel }));
-  }
+    input.store.setState(addTuiToast(withoutPending, safeErrorToToast(failure)));
+  });
 }

@@ -98,7 +98,7 @@ describe("contract schemas", () => {
       schemaVersion: 1,
       launcher: "/source/bin/stn-ingress",
       runtimeKind: "source",
-      version: "0.0.0-pre-alpha.4",
+      version: "0.0.0-pre-alpha.5.1",
       buildIdentity: "a".repeat(64),
     } as const;
     const current = {
@@ -174,10 +174,12 @@ describe("contract schemas", () => {
   });
 
   it("requires a strict observer process identity", () => {
+    const processToken = ["a47ac10b", "58cc", "4372", "a567", "0e02b2c3d479"].join("-");
+    const nonV4ProcessToken = ["a47ac10b", "58cc", "1372", "a567", "0e02b2c3d479"].join("-");
     const identity: ObserverProcessIdentity = {
       pid: 1234,
       osStartTime: "Sat Jul 11 12:34:56 2026",
-      processToken: "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+      processToken,
       version: "0.1.1-dev",
       socketPath: "/tmp/station/observer.sock",
     };
@@ -201,7 +203,7 @@ describe("contract schemas", () => {
     );
     expectFails(
       ObserverProcessIdentitySchema,
-      { ...identity, processToken: "a47ac10b-58cc-1372-a567-0e02b2c3d479" },
+      { ...identity, processToken: nonV4ProcessToken },
       "observer process identity with a non-v4 token",
     );
   });
@@ -358,8 +360,13 @@ describe("contract schemas", () => {
 
     expectParses(
       AgentReportExternalExitParamsSchema,
+      { terminalTargetId: "native:wt_api", expectedSessionId: "ses_api" },
+      "session-qualified external exit params",
+    );
+    expectParses(
+      AgentReportExternalExitParamsSchema,
       { terminalTargetId: "native:wt_api" },
-      "external exit params",
+      "legacy external exit params without release authority",
     );
     expectParses(
       AgentReportExternalExitResultSchema,
@@ -538,11 +545,9 @@ describe("contract schemas", () => {
     expect(FeatureFlagConfigSchema.parse({})).toEqual({});
     expect(
       FeatureFlagConfigSchema.parse({
-        dashboardPersistentFilter: true,
         sessionResumeAgent: true,
       }),
     ).toEqual({
-      dashboardPersistentFilter: true,
       sessionResumeAgent: true,
     });
     expect(FeatureFlagConfigSchema.safeParse({ "test.fake": true }).success).toBe(false);
@@ -550,7 +555,7 @@ describe("contract schemas", () => {
       ClientFeatureFlagsSchema.safeParse({
         revision: "test",
         flags: {
-          dashboardPersistentFilter: true,
+          stationPersistentAgents: true,
           sessionResumeAgent: true,
         },
       }).success,
@@ -1006,6 +1011,55 @@ describe("contract schemas", () => {
       StationCommandSchema,
       await loadJson("commands/invalid-command.json"),
       "invalid command fixture",
+    );
+
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "session.importRecoveryHandle",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          expectedPath: "/tmp/station/web/feature",
+          title: "  Recovered workspace  ",
+          handle: {
+            id: "rec_web_feature",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_web_feature",
+            sessionId: "ses_web_feature",
+            target: { kind: "native-session", id: "thread-web-feature" },
+            cwd: "/tmp/station/web/feature",
+            observedAt: "2026-07-29T12:00:00.000Z",
+            lastSeenAt: "2026-07-29T12:00:00.000Z",
+          },
+        },
+      },
+      "recovery import with canonical title",
+    );
+    expectFails(
+      StationCommandSchema,
+      {
+        type: "session.importRecoveryHandle",
+        payload: {
+          projectId: "web",
+          worktreeId: "wt_web_feature",
+          expectedPath: "/tmp/station/web/feature",
+          title: "   ",
+          handle: {
+            id: "rec_web_feature",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_web_feature",
+            sessionId: "ses_web_feature",
+            target: { kind: "native-session", id: "thread-web-feature" },
+            cwd: "/tmp/station/web/feature",
+            observedAt: "2026-07-29T12:00:00.000Z",
+            lastSeenAt: "2026-07-29T12:00:00.000Z",
+          },
+        },
+      },
+      "recovery import with blank canonical title",
     );
 
     expectParses(
@@ -1715,6 +1769,13 @@ describe("contract schemas", () => {
         status: "complete",
         digest: "a".repeat(64),
         sealedRoot: "/tmp/session-migration/sealed",
+        titleEvidence: [
+          {
+            sessionId: "ses_1",
+            sourceTitle: "Recovered workspace",
+            targetTitle: "feature/recovery",
+          },
+        ],
       },
       "session migration journal entry",
     );
@@ -1759,6 +1820,7 @@ describe("contract schemas", () => {
       SessionRecoveryReadinessSchema,
       {
         resumeEnabled: true,
+        canonicalTitleImport: true,
         managedTerminal: {
           provider: "native",
           canLaunchProcessPersistently: true,
@@ -1771,6 +1833,16 @@ describe("contract schemas", () => {
       SessionRecoveryReadinessSchema,
       { resumeEnabled: true, harnesses: [], providerData: {} },
       "session recovery readiness with unknown fields",
+    );
+    expectParses(
+      SessionRecoveryReadinessSchema,
+      { resumeEnabled: true, harnesses: [] },
+      "older session recovery readiness without canonical title import",
+    );
+    expectFails(
+      SessionRecoveryReadinessSchema,
+      { resumeEnabled: true, canonicalTitleImport: false, harnesses: [] },
+      "session recovery readiness with false canonical title import",
     );
   });
 

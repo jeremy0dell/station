@@ -4,65 +4,21 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    "./runtime": {
+      "types": "./dist/entrypoints/runtime.d.ts",
+      "import": "./dist/entrypoints/runtime.js"
     },
-    "./components/*": {
-      "types": "./dist/components/*.d.ts",
-      "import": "./dist/components/*.js"
+    "./state": {
+      "types": "./dist/entrypoints/state.d.ts",
+      "import": "./dist/entrypoints/state.js"
     },
-    "./flows/*": {
-      "types": "./dist/flows/*.d.ts",
-      "import": "./dist/flows/*.js"
+    "./selectors": {
+      "types": "./dist/entrypoints/selectors.d.ts",
+      "import": "./dist/entrypoints/selectors.js"
     },
-    "./selectors/*": {
-      "types": "./dist/selectors/*.d.ts",
-      "import": "./dist/selectors/*.js"
-    },
-    "./services/*": {
-      "types": "./dist/services/*.d.ts",
-      "import": "./dist/services/*.js"
-    },
-    "./state/*": {
-      "types": "./dist/state/*.d.ts",
-      "import": "./dist/state/*.js"
-    },
-    "./widgets/moon": {
-      "types": "./dist/widgets/moon.d.ts",
-      "import": "./dist/widgets/moon.js"
-    },
-    "./widgets/snapshotWidgets": {
-      "types": "./dist/widgets/snapshotWidgets.d.ts",
-      "import": "./dist/widgets/snapshotWidgets.js"
-    },
-    "./widgets/time": {
-      "types": "./dist/widgets/time.d.ts",
-      "import": "./dist/widgets/time.js"
-    },
-    "./widgets/timezone": {
-      "types": "./dist/widgets/timezone.d.ts",
-      "import": "./dist/widgets/timezone.js"
-    },
-    "./widgets/types": {
-      "types": "./dist/widgets/types.d.ts",
-      "import": "./dist/widgets/types.js"
-    },
-    "./widgets/useTopRowWidgets": {
-      "types": "./dist/widgets/useTopRowWidgets.d.ts",
-      "import": "./dist/widgets/useTopRowWidgets.js"
-    },
-    "./widgets/weather": {
-      "types": "./dist/widgets/weather.d.ts",
-      "import": "./dist/widgets/weather.js"
-    },
-    "./widgets/weatherClient": {
-      "types": "./dist/widgets/weatherClient.d.ts",
-      "import": "./dist/widgets/weatherClient.js"
-    },
-    "./widgets/weatherEmoji": {
-      "types": "./dist/widgets/weatherEmoji.d.ts",
-      "import": "./dist/widgets/weatherEmoji.js"
+    "./widgets": {
+      "types": "./dist/entrypoints/widgets.d.ts",
+      "import": "./dist/entrypoints/widgets.js"
     }
   },
   "scripts": {
@@ -76,8 +32,5 @@
     "string-width": "^8.2.1",
     "zod": "^4.1.12",
     "zustand": "^5.0.14"
-  },
-  "devDependencies": {
-    "@station/config": "workspace:*"
   }
 }

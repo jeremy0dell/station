@@ -1,8 +1,3 @@
-import type { ProjectId, StationCommand } from "@station/contracts";
-import {
-  type DashboardSearchExperience,
-  legacySearchExperience,
-} from "./experiences/dashboardSearch.js";
 import type { TuiKey } from "./keys.js";
 import type { TuiOperation } from "./operations/types.js";
 import { handleAddProjectKey } from "./screens/addProjectScreen.js";
@@ -10,6 +5,7 @@ import { handleDashboardKey } from "./screens/dashboard.js";
 import { handleForkKey } from "./screens/fork.js";
 import { handleHelpKey } from "./screens/help.js";
 import { handleNewSessionKey } from "./screens/newSession.js";
+import { handleDashboardPersistentFilterKey } from "./screens/persistentFilter.js";
 import { handleProjectCollapseKey } from "./screens/projectCollapse.js";
 import { handleProjectDefaultAgentKey } from "./screens/projectDefaultAgent.js";
 import { handleProjectSettingsKey } from "./screens/projectSettings.js";
@@ -19,21 +15,12 @@ import { handleRenameSessionKey } from "./screens/renameSession.js";
 import { handleWidgetSettingsKey } from "./screens/widgetSettings.js";
 import { selectionMiddleware } from "./selection/middleware.js";
 import { activeTuiToast, isTuiToastHiddenByScreen } from "./toasts.js";
-import type { TuiState } from "./types.js";
-
-/** Product intents whose terminal-specific effects are owned by a renderer adapter. */
-export type TuiControlIntent =
-  | { type: "projectShell.open"; projectId: ProjectId }
-  | { type: "quickSession.create"; projectId: ProjectId };
+import type { DashboardState } from "./types.js";
 
 export type TuiTransition = {
-  state: TuiState;
-  controlIntent?: TuiControlIntent;
-  commands?: StationCommand[];
+  state: DashboardState;
   operations?: TuiOperation[];
   reconcileReason?: string;
-  exitCode?: number;
-  dismissPopup?: true;
 };
 
 export type TuiRuntimeContext = {
@@ -42,15 +29,14 @@ export type TuiRuntimeContext = {
 };
 
 export function handleTuiKey(
-  state: TuiState,
+  state: DashboardState,
   key: TuiKey,
   context: TuiRuntimeContext = { cwd: process.cwd(), homeDir: process.env.HOME ?? "" },
-  dashboardSearchExperience: DashboardSearchExperience = legacySearchExperience,
 ): TuiTransition {
   if (key.ctrl === true && key.input === "c") {
     return {
       state,
-      exitCode: 0,
+      operations: [{ type: "exitDashboardRenderer", exitCode: 0 }],
     };
   }
 
@@ -77,12 +63,11 @@ export function handleTuiKey(
 
   switch (state.screen.name) {
     case "dashboard":
-      return handleDashboardKey(state, key, context, dashboardSearchExperience);
+      return handleDashboardKey(state, key, context);
     case "help":
       return handleHelpKey(state, key);
-    case "search":
     case "persistentFilter":
-      return dashboardSearchExperience.handleKey(state, key);
+      return handleDashboardPersistentFilterKey(state, key);
     case "projectCollapse":
       return handleProjectCollapseKey(state, key);
     case "projectSettingsPicker":

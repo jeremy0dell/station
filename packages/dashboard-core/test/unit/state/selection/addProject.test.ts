@@ -1,23 +1,23 @@
+import { describe, expect, it } from "vitest";
+import { handleTuiAction } from "../../../../src/state/actions.js";
+import { deriveTuiInputMode } from "../../../../src/state/keymap.js";
+import { createInitialTuiState } from "../../../../src/state/screen.js";
 import {
-  addProjectSelectedIndex,
   applyAddProjectFolderLoaded,
   applyAddProjectFolderReviewed,
   applyAddProjectFolderReviewFailed,
   applyAddProjectFolderSearchLoaded,
   applyAddProjectSubmitted,
-  createInitialTuiState,
-  deriveTuiInputMode,
-  handleTuiAction,
-  handleTuiKey,
   openAddProject,
   selectAddProjectRow,
-  type TuiState,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../../src/state/screens/addProjectScreen.js";
+import { addProjectSelectedIndex } from "../../../../src/state/selection/addProject.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
+import type { DashboardState } from "../../../../src/state/types.js";
 
 const KEY_CONTEXT = { cwd: "/workspace/station", homeDir: "/Users/example" };
 
-function startState(): TuiState {
+function startState(): DashboardState {
   return openAddProject(createInitialTuiState(), {
     cwd: KEY_CONTEXT.cwd,
     homeDir: KEY_CONTEXT.homeDir,
@@ -33,7 +33,7 @@ function chooseState(
   });
 }
 
-function reviewState(): TuiState {
+function reviewState(): DashboardState {
   return applyAddProjectFolderReviewed(startState(), {
     selectedPath: "/workspace/station",
     gitRoot: "/workspace/station",

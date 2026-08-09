@@ -1,21 +1,22 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
-import {
-  addProjectSelectedIndex,
-  persistentFilterExperience,
-  removeProjectConfirmPhrase,
-  selectDashboardViewport,
-  type DashboardRuntime,
-  type DashboardRuntimeOptions,
-} from "@station/dashboard-core";
+import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { StationMouseTarget } from "../station/input/stationMouse.js";
 import {
   manyProjectsSnapshot,
   noProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
-import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
-import type { DashboardRendererEffects } from "./dashboardEffects.js";
+import {
+  makeStationTestRuntime,
+  type StationTestDashboardRuntime,
+} from "../station/test/support/makeStationTestRuntime.js";
+type DashboardRendererEffects = {
+  openShell(target: { cwd: string }): void;
+  openUrl(url: string): void;
+};
 import * as dashboardMouse from "./dashboardMouse.js";
 
 const LEFT_DOWN: StationMouseEvent = {
@@ -79,16 +80,16 @@ const SCROLL_DOWN: StationMouseEvent = {
 function routeDashboardMouse(
   target: StationMouseTarget,
   event: StationMouseEvent,
-  store: DashboardRuntime,
+  store: StationTestDashboardRuntime,
   effects: DashboardRendererEffects = TEST_EFFECTS,
 ): void {
-  dashboardMouse.routeDashboardMouse(target, event, store, effects);
+  dashboardMouse.routeDashboardMouse(target, event, store, effects.openUrl);
 }
 
 function makeStore(
   snapshot?: StationSnapshot,
   initialState?: DashboardRuntimeOptions["initialState"],
-): DashboardRuntime {
+): StationTestDashboardRuntime {
   return makeStationTestRuntime({
     terminalRows: 14,
     ...(snapshot === undefined ? {} : { snapshot }),
@@ -96,7 +97,7 @@ function makeStore(
   }).runtime;
 }
 
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationTestDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) throw new Error("store has no snapshot");
   const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
@@ -211,7 +212,6 @@ describe("routeDashboardMouse", () => {
   it("routes condition header and footer controls through the standalone renderer", () => {
     const doneStore = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     doneStore.actions.handleKey({ input: "/" });
     doneStore.actions.handleKey({ input: "i", ctrl: true });
@@ -242,7 +242,6 @@ describe("routeDashboardMouse", () => {
 
     const backStore = makeStationTestRuntime({
       terminalRows: 14,
-      dashboardSearchExperience: persistentFilterExperience,
     }).runtime;
     backStore.actions.handleKey({ input: "/" });
     backStore.actions.handleKey({ input: "i", ctrl: true });
@@ -320,6 +319,19 @@ describe("routeDashboardMouse", () => {
       store,
     );
     await waitFor(() => store.state.getState().screen.name === "dashboard");
+  });
+
+  it("routes standalone Rename submit through the shared pointer router", () => {
+    const store = makeStore();
+    const rowId = "ses_wt_station_idle";
+    store.actions.handleKey({ input: "R" });
+    store.actions.handleKey({ input: slotForRow(store, rowId) });
+    store.actions.handleKey({ input: "Mouse title" });
+
+    routeDashboardMouse({ kind: "renameSessionSubmit" }, LEFT_DOWN, store);
+
+    expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    expect(store.state.getState().localRows.pendingRenameTitles?.[rowId]?.title).toBe("Mouse title");
   });
 
   it("maps project settings, add-project, toast, scroll-indicator, and widget targets", async () => {
@@ -431,9 +443,8 @@ describe("routeDashboardMouse", () => {
       fixture.service.dispatched.some((command) => command.type === "session.create"),
     );
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
+      kind: "emptyProjectAction",
       projectId: "empty-project",
-      control: "quickSession",
     });
     const creates = fixture.service.dispatched.filter(
       (command) => command.type === "session.create",
@@ -481,6 +492,47 @@ describe("routeDashboardMouse", () => {
     expect(modal.state.getState().dashboardFocus).toBeUndefined();
   });
 
+  it("dispatches shell semantics without reading stale dashboard projection", () => {
+    const fixture = makeStationTestRuntime({ terminalRows: 14 });
+    const canonical = manyProjectsSnapshot();
+    const canonicalRoot = "/canonical/station";
+    const canonicalWorktree = "/canonical/station/pty-buffer";
+    fixture.source.setSnapshot({
+      ...canonical,
+      projects: canonical.projects.map((project) =>
+        project.id === "station" ? { ...project, root: canonicalRoot } : project,
+      ),
+      rows: canonical.rows.map((row) =>
+        row.id === "wt_station_idle" ? { ...row, path: canonicalWorktree } : row,
+      ),
+    });
+    const openedShells: string[] = [];
+    const effects = {
+      openShell: ({ cwd }: { cwd: string }) => openedShells.push(cwd),
+      openUrl: () => {},
+    };
+
+    routeDashboardMouse(
+      { kind: "openShellForProject", projectId: "station" },
+      LEFT_DOWN,
+      fixture.runtime,
+      effects,
+    );
+    routeDashboardMouse(
+      { kind: "openShellForRow", rowId: "ses_wt_station_idle" },
+      LEFT_DOWN,
+      fixture.runtime,
+      effects,
+    );
+
+    expect(fixture.runtime.state.getState().snapshot?.projects[0]?.root).not.toBe(canonicalRoot);
+    expect(fixture.runtime.state.getState().dashboardFocus).toEqual({
+      kind: "projectHeader",
+      projectId: "station",
+      control: "shell",
+    });
+  });
+
   it("routes project shell, quick-session, and agent-picker actions", async () => {
     const fixture = makeStationTestRuntime({ terminalRows: 14 });
     const store = fixture.runtime;
@@ -502,10 +554,6 @@ describe("routeDashboardMouse", () => {
       store,
       effects,
     );
-    expect(openedShells).toEqual([
-      "/Users/example/Developer/station",
-      "/Users/example/.worktrees/station/pty-buffer",
-    ]);
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",
@@ -583,7 +631,7 @@ describe("routeDashboardMouse", () => {
     });
   });
 
-  it("retains shell focus when the renderer effect reports a recoverable failure", () => {
+  it("does not route shell execution through the URL presentation callback", () => {
     const store = makeStore();
     const effects: DashboardRendererEffects = {
       openShell: () => {
@@ -599,7 +647,7 @@ describe("routeDashboardMouse", () => {
         store,
         effects,
       ),
-    ).toThrow(/shell unavailable/);
+    ).not.toThrow();
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "station",

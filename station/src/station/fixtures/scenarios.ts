@@ -1,6 +1,7 @@
 // Deterministic STATION-view scenarios for layout work, golden-frame tests, and
 // the mock source (many-projects, attention-and-failures, disconnected).
 // Fixture data self-identifies through contract channels (snapshot alerts), not code branches.
+import type { StationClientState } from "@station/client";
 import type {
   ProjectView,
   ProviderHealth,
@@ -9,7 +10,6 @@ import type {
   StationSnapshot,
 } from "@station/contracts";
 import { STATION_SCHEMA_VERSION } from "@station/contracts";
-import type { StationState } from "../../sources/types.js";
 import { mockObserverSnapshot } from "../../sources/fixtures/mockObserverSnapshot.js";
 
 export const SCENARIO_NOW = "2026-06-12T12:00:00.000Z";
@@ -30,8 +30,8 @@ export const STATION_SCENARIO_NAMES: readonly StationScenarioName[] = [
   "showcase",
 ];
 
-/** A scenario is exactly what a StationStateSource serves. */
-export function scenarioState(name: StationScenarioName): StationState {
+/** A scenario is exactly what a canonical client state source serves. */
+export function scenarioState(name: StationScenarioName): StationClientState {
   switch (name) {
     case "baseline":
       return {

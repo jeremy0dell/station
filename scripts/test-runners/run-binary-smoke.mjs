@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { constants } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { constants, readFileSync } from "node:fs";
 import {
   access,
   chmod,
@@ -11,6 +11,7 @@ import {
   readFile,
   readlink,
   realpath,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -18,6 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, parse, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { z } from "zod";
 import {
   ObserverHealthSchema,
   ObserverProcessIdentitySchema,
@@ -33,11 +35,30 @@ import {
 } from "../../packages/runtime/dist/index.js";
 import { createStationHostClient } from "../../packages/station-host/dist/index.js";
 import {
+  assertOwnedDisposableRuntimeChild,
+  RuntimeLifecycleEventSchema,
+  runOwnedDisposableRuntime,
+} from "../runtime-owner.mjs";
+import {
+  BinarySmokeEvidenceManifestSchema,
   captureBinarySmokeEvidence,
   finalizeBinarySmokeEvidence,
+  releaseBinarySmokeEvidenceReservation,
+  reserveBinarySmokeEvidenceDestination,
+  resetReservedBinarySmokeEvidenceDestination,
 } from "./binary-smoke-evidence.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+let packageVersion;
+try {
+  const packageManifest = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  if (typeof packageManifest.version !== "string") {
+    throw new Error("package.json version must be a string");
+  }
+  packageVersion = packageManifest.version;
+} catch (cause) {
+  throw new Error("Failed to read expected version from package.json", { cause });
+}
 const alternateProductionSource = "apps/cli/src/commandRegistry.ts";
 const alternateBuildMarker = " (alternate binary smoke build)";
 let smokeRunSignal;
@@ -55,15 +76,44 @@ class SmokeCommandError extends Error {
   }
 }
 
+const smokeRunIdSchema = z.string().regex(/^run_[0-9a-f-]{36}$/i);
+const ownedInnerResultSchema = z
+  .object({
+    runId: smokeRunIdSchema,
+    warnings: z.array(z.string()),
+  })
+  .strict();
+
+const externalOwner = process.env.STATION_BINARY_SMOKE_OWNED_CHILD === "1";
+const handoffStress = process.argv.some(
+  (arg, index, args) => arg === "--mode" && args[index + 1] === "handoff-stress",
+);
+
 if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   await runObserverCancellationSelfCheck();
 } else if (process.env.STATION_BINARY_SMOKE_FAKE_TMUX === "1") {
   await runFakeTmuxProcess(process.argv.slice(2));
-} else if (
-  process.argv.some((arg, index, args) => arg === "--mode" && args[index + 1] === "handoff-stress")
-) {
-  await runHandoffStress(parseHandoffStressOptions(process.argv.slice(2)));
+} else if (!externalOwner) {
+  await runOwnedBinarySmoke(
+    process.argv.slice(2),
+    handoffStress ? "handoff-stress" : "binary-smoke",
+  );
 } else {
+  await assertOwnedDisposableRuntimeChild({
+    role: "binary-smoke",
+    stateDir: process.env.STATION_BINARY_SMOKE_OWNER_STATE_DIR,
+    runtimeId: process.env.STATION_RUNTIME_OWNER_ID,
+  });
+  if (process.env.STATION_BINARY_SMOKE_OWNERSHIP_TEST_DESCRIPTOR !== undefined) {
+    await runOwnedBinarySmokeTopologyTest();
+  } else if (handoffStress) {
+    await runHandoffStress(parseHandoffStressOptions(process.argv.slice(2)));
+  } else {
+    await runBinarySmoke();
+  }
+}
+
+async function runBinarySmoke() {
   const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
   const sourceCliPath = resolve("apps/cli/dist/main.js");
   const expectedVersion = parseExpectedVersion(process.argv.slice(2));
@@ -76,8 +126,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
     buildIdentity,
   });
   const ptyOnly = process.env.STATION_BINARY_SMOKE_PTY_ONLY === "1";
-  const root = await mkdtemp(join(tmpdir(), "station-binary-smoke-"));
-  const rootIdentity = fileIdentity(await lstat(root));
+  const root = resolve(requiredOwnedEnvironment("STATION_BINARY_SMOKE_ROOT"));
   const smokeStartedAt = Date.now();
   const alternateWorktreePath = join(root, "alternate-worktree");
   const homeDir = join(root, "home");
@@ -85,6 +134,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   const runtimeDir = join(root, "runtime");
   const hostileDir = join(root, "hostile");
   const socketPath = join(runtimeDir, "observer.sock");
+  const hostSocketPath = join(runtimeDir, "station-host.sock");
   const configPath = join(root, "config.toml");
   const popupConfigPath = join(homeDir, ".config", "station", "config.toml");
   const markerPath = join(root, "ambient-config-pwned");
@@ -126,7 +176,11 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
 
   try {
     if (process.env.STATION_BINARY_SMOKE_CANCELLATION_EXIT_SELF_CHECK === "1") {
-      process.kill(process.pid, "SIGINT");
+      const signal = process.env.STATION_BINARY_SMOKE_CANCELLATION_SIGNAL_SELF_CHECK ?? "SIGINT";
+      if (!["SIGINT", "SIGTERM", "SIGHUP"].includes(signal)) {
+        throw new Error(`Unsupported cancellation self-check signal: ${signal}`);
+      }
+      process.kill(process.pid, signal);
       await delay(0);
       throw runCancelledError(process.execPath, [], cancellation.signal);
     }
@@ -654,13 +708,13 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       }
     }
 
-    const hostSocketPath = join(runtimeDir, "station-host.sock");
     hostProcess = spawn(
       binaryPath,
       ["__station-host", "--socket", hostSocketPath, "--state-dir", stateDir],
       {
         cwd: hostileDir,
         env: childEnv,
+        detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -881,6 +935,24 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
           expectedVersion,
           "station-host build remains unchanged across observer handoff",
         );
+        await verifyMixedBuildStationUiAdmission({
+          binaryPath,
+          compiledObserverVersion,
+          sourceObserverVersion,
+          observerClient,
+          stateDir,
+          socketPath,
+          hostClient,
+          hostSocketPath,
+          hostProcess,
+          spawned,
+          childEnv,
+          popupEnv,
+          popupConfigPath,
+          configPath,
+          root,
+          fakeTmuxStatePath,
+        });
       }
     }
     const livePty = (await hostClient.list()).find((entry) => entry.ptyId === spawned.ptyId);
@@ -942,11 +1014,8 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
 
   await cleanupAction(cleanupWarnings, "Observer stop", async () => {
     if (observerClient === undefined) return;
-    await observerClient.stop().catch(() => undefined);
-    await waitForMissing(socketPath).catch(() => undefined);
-  });
-  await cleanupAction(cleanupWarnings, "Observer process cleanup", async () => {
-    if (observerPid !== undefined) await terminateProcess(observerPid);
+    await observerClient.stop();
+    await waitForMissing(socketPath);
   });
   await cleanupAction(cleanupWarnings, "Station Host client cleanup", async () =>
     hostClient?.dispose(),
@@ -960,16 +1029,8 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
       return;
     }
     hostProcess.kill("SIGTERM");
-    try {
-      await waitForExit(hostProcess, 3000);
-    } catch {
-      hostProcess.kill("SIGKILL");
-      await waitForExit(hostProcess, 3000);
-    }
+    await waitForExit(hostProcess, 3000);
   });
-  await cleanupAction(cleanupWarnings, "fake tmux cleanup", () =>
-    stopFakeTmuxProcesses(fakeTmuxStatePath),
-  );
   await cleanupAction(cleanupWarnings, "alternate worktree cleanup", async () => {
     if (alternateWorktreeAdded) await removeTemporaryWorktree(alternateWorktreePath);
   });
@@ -1007,9 +1068,6 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
     }
   }
 
-  await cleanupAction(cleanupWarnings, "smoke root cleanup", () =>
-    removeExactSmokeRoot(root, rootIdentity),
-  );
   if (primaryFailure === undefined && cleanupWarnings.length > 0) {
     primaryFailure = new AggregateError(
       cleanupWarnings.map((warning) => new Error(warning)),
@@ -1043,26 +1101,7 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
     }
   }
   cancellation.dispose();
-
-  if (evidenceCaptured && evidenceDir !== undefined) {
-    const cleanup = {
-      status: cleanupWarnings.length === 0 ? "complete" : "incomplete",
-      observerExited: observerPid === undefined || !processIsAlive(observerPid),
-      hostExited: hostProcess?.pid === undefined || !processIsAlive(hostProcess.pid),
-      socketRemoved: !(await pathExists(socketPath)),
-      pidfileRemoved: !(await pathExists(`${socketPath}.pid`)),
-    };
-    try {
-      await finalizeBinarySmokeEvidence({
-        evidenceDir,
-        cleanup,
-        processes: knownProcessSummaries(observerPid, hostProcess?.pid),
-        warnings: cleanupWarnings,
-      });
-    } catch (error) {
-      cleanupWarnings.push(`Evidence finalization failed: ${errorMessage(error)}`);
-    }
-  }
+  await writeOwnedInnerResult(cleanupWarnings);
 
   reportCleanupWarnings("Binary smoke", cleanupWarnings);
   if (primaryFailure !== undefined && !(primaryFailure instanceof SmokeRunCancelledError)) {
@@ -1073,10 +1112,460 @@ if (process.env.STATION_BINARY_SMOKE_CANCELLATION_SELF_CHECK === "1") {
   }
 }
 
+async function runOwnedBinarySmoke(args, mode) {
+  const prefix = mode === "handoff-stress" ? "stn-h-" : "station-binary-smoke-";
+  const root = resolve(await mkdtemp(join(tmpdir(), prefix)));
+  const rootIdentity = fileIdentity(await lstat(root));
+  const stateDir = join(root, "state");
+  const runtimeDir = join(root, "runtime");
+  const socketPath = join(runtimeDir, "observer.sock");
+  const hostSocketPath = join(runtimeDir, "station-host.sock");
+  const configuredEvidenceDir = process.env.STATION_BINARY_SMOKE_EVIDENCE_DIR;
+  const evidenceDir =
+    configuredEvidenceDir === undefined || configuredEvidenceDir.length === 0
+      ? undefined
+      : configuredEvidenceDir;
+  const runId = `run_${randomUUID()}`;
+  const ownerStateDir = await binarySmokeOwnerStateDirectory(mode);
+  const ownerLogPath = join(ownerStateDir, "logs", "cli.jsonl");
+  const ownerLogOffset = await fileSizeOrZero(ownerLogPath);
+  const startedAt = Date.now();
+  if (evidenceDir !== undefined) {
+    try {
+      await reserveBinarySmokeEvidenceDestination({ evidenceDir, smokeRoot: root, runId });
+    } catch (error) {
+      await removeExactTemporaryRoot(root, rootIdentity, prefix);
+      throw error;
+    }
+  }
+  let result;
+  let ownerError;
+  try {
+    result = await runOwnedDisposableRuntime({
+      role: "binary-smoke",
+      checkoutRoot: repoRoot,
+      stateDir: ownerStateDir,
+      socketRoots: [runtimeDir],
+      persistenceRoots: [root, stateDir],
+      cleanupRoots: [
+        {
+          path: await realpath(root),
+          device: String(rootIdentity.device),
+          inode: String(rootIdentity.inode),
+        },
+      ],
+      survivorPolicy: "preserve-persistent-station-runtime",
+      terminalKey: "binary-smoke-runner",
+      recoveryKey: mode,
+      correlation: {
+        traceId: `trc_${randomUUID()}`,
+        spanId: `spn_${randomUUID()}`,
+      },
+      launch: {
+        cwd: repoRoot,
+        steps: [
+          {
+            command: process.execPath,
+            args: [fileURLToPath(import.meta.url), ...args],
+          },
+        ],
+        env: {
+          STATION_BINARY_SMOKE_OWNED_CHILD: "1",
+          STATION_BINARY_SMOKE_OWNER_LOG_OFFSET: String(ownerLogOffset),
+          STATION_BINARY_SMOKE_OWNER_STATE_DIR: ownerStateDir,
+          STATION_BINARY_SMOKE_ROOT: root,
+          STATION_BINARY_SMOKE_RUN_ID: runId,
+          STATION_RUNTIME_OWNER_FOREGROUND: "1",
+        },
+      },
+    });
+  } catch (error) {
+    ownerError = error;
+  }
+
+  const finalizationWarnings = [];
+  let lifecycleEvents = [];
+  try {
+    lifecycleEvents = await readRuntimeLifecycleEvents(ownerLogPath, ownerLogOffset);
+  } catch (error) {
+    finalizationWarnings.push(`runtime lifecycle read: ${errorMessage(error)}`);
+  }
+  try {
+    finalizationWarnings.push(...(await readOwnedInnerResult(root, runId)).warnings);
+  } catch (error) {
+    finalizationWarnings.push(`inner cleanup result: ${errorMessage(error)}`);
+  }
+
+  const ownerFailure = ownerError ?? ownedResultFailure(result);
+  if (evidenceDir !== undefined && ownerFailure !== undefined) {
+    await captureMissingOwnedSmokeEvidence({
+      args,
+      evidenceDir,
+      lifecycleEvents,
+      mode,
+      ownerFailure,
+      root,
+      runId,
+      startedAt,
+      stateDir,
+      socketPath,
+      warnings: finalizationWarnings,
+    });
+  }
+
+  if (ownerError === undefined) {
+    for (const cleanupRoot of result?.cleanupRoots ?? [{ path: root, ...rootIdentity }]) {
+      try {
+        if (await pathExists(cleanupRoot.path)) {
+          await removeExactTemporaryRoot(cleanupRoot.path, cleanupRoot, prefix);
+        }
+      } catch (error) {
+        finalizationWarnings.push(
+          `owned smoke root cleanup: ${errorMessage(error).replaceAll(cleanupRoot.path, "$SMOKE_ROOT")}`,
+        );
+      }
+    }
+  }
+
+  if (
+    evidenceDir !== undefined &&
+    ownerFailure === undefined &&
+    finalizationWarnings.some((warning) => warning.startsWith("owned smoke root cleanup:"))
+  ) {
+    await captureMissingOwnedSmokeEvidence({
+      args,
+      evidenceDir,
+      lifecycleEvents,
+      mode,
+      ownerFailure: new Error("Binary smoke final root cleanup failed."),
+      root,
+      runId,
+      startedAt,
+      stateDir,
+      socketPath,
+      warnings: finalizationWarnings,
+    });
+  }
+
+  const cleanupFailed = () =>
+    finalizationWarnings.some(
+      (warning) =>
+        warning.startsWith("owned smoke root cleanup:") ||
+        warning.startsWith("evidence reservation cleanup:"),
+    );
+  if (
+    evidenceDir !== undefined &&
+    ownerFailure === undefined &&
+    !cleanupFailed() &&
+    !(await pathExists(join(resolve(evidenceDir), "manifest.json")))
+  ) {
+    try {
+      await releaseBinarySmokeEvidenceReservation({
+        evidenceDir,
+        smokeRoot: root,
+        runId,
+      });
+    } catch (error) {
+      finalizationWarnings.push(`evidence reservation cleanup: ${errorMessage(error)}`);
+    }
+  }
+
+  if (evidenceDir !== undefined) {
+    const manifest = await readCurrentEvidenceManifest(evidenceDir, runId).catch((error) => {
+      finalizationWarnings.push(`Evidence finalization refused: ${errorMessage(error)}`);
+      return undefined;
+    });
+    if (manifest !== undefined) {
+      await finalizeOwnedSmokeEvidence({
+        evidenceDir,
+        hostSocketPath,
+        lifecycleEvents,
+        manifest,
+        ownerError,
+        result,
+        cleanupRoots: result?.cleanupRoots ?? [{ path: root, ...rootIdentity }],
+        root,
+        runId,
+        socketPath,
+        warnings: finalizationWarnings,
+      });
+    }
+  }
+
+  for (const warning of finalizationWarnings)
+    process.stderr.write(`Binary smoke warning: ${warning}\n`);
+  if (ownerError !== undefined) throw ownerError;
+  if (cleanupFailed()) {
+    process.exitCode = 1;
+    return;
+  }
+  process.exitCode = result?.exitCode ?? 1;
+}
+
+async function finalizeOwnedSmokeEvidence(input) {
+  try {
+    const runtimeId = input.result?.runtimeId;
+    const groupExited =
+      input.ownerError === undefined &&
+      runtimeId !== undefined &&
+      input.lifecycleEvents.some(
+        (event) =>
+          event.attributes.runtimeId === runtimeId &&
+          event.message === "runtime.cleanup.completed" &&
+          event.attributes.memberCount === 0,
+      ) &&
+      input.lifecycleEvents.some(
+        (event) =>
+          event.attributes.runtimeId === runtimeId && event.message === "runtime.owner.retired",
+      );
+    const cleanup = {
+      observerExited: groupExited,
+      hostExited: groupExited,
+      socketRemoved: !(await pathExists(input.socketPath)),
+      pidfileRemoved: !(await pathExists(`${input.socketPath}.pid`)),
+      hostSocketRemoved: !(await pathExists(input.hostSocketPath)),
+      rootRemoved: (
+        await Promise.all(input.cleanupRoots.map((root) => pathExists(root.path)))
+      ).every((exists) => !exists),
+    };
+    const complete =
+      groupExited &&
+      Object.values(cleanup).every(Boolean) &&
+      !input.warnings.some((warning) => warning.startsWith("owned smoke root cleanup:"));
+    await finalizeBinarySmokeEvidence({
+      evidenceDir: input.evidenceDir,
+      expectedRunId: input.runId,
+      cleanup: { status: complete ? "complete" : "incomplete", ...cleanup },
+      ...(groupExited
+        ? {
+            processes: input.manifest.rounds[0].runtime.processes.map((process) => ({
+              ...process,
+              exists: false,
+            })),
+          }
+        : {}),
+      warnings: [
+        ...input.warnings,
+        ...(input.ownerError === undefined
+          ? []
+          : [`runtime owner: ${errorMessage(input.ownerError)}`]),
+      ],
+      lifecycleEvents: input.lifecycleEvents,
+    });
+  } catch (error) {
+    input.warnings.push(`Evidence finalization failed: ${errorMessage(error)}`);
+  }
+}
+
+async function readRuntimeLifecycleEvents(source, offset = 0) {
+  const path = source.endsWith(".jsonl") ? source : join(source, "logs", "cli.jsonl");
+  let content;
+  try {
+    const bytes = await readFile(path);
+    content = bytes.subarray(Math.min(offset, bytes.length)).toString("utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  return content
+    .split(/\r?\n/)
+    .filter((line) => line.length > 0)
+    .flatMap((line) => {
+      try {
+        const event = RuntimeLifecycleEventSchema.safeParse(JSON.parse(line));
+        return event.success ? [event.data] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
+async function binarySmokeOwnerStateDirectory(mode) {
+  const checkoutRoot = await realpath(repoRoot);
+  const checkout = await lstat(checkoutRoot);
+  const key = createHash("sha256")
+    .update(`${checkoutRoot}\0${checkout.dev}\0${checkout.ino}`)
+    .digest("hex")
+    .slice(0, 24);
+  const stateDir = join(resolve(tmpdir()), `station-binary-smoke-owner-${key}-${mode}`);
+  try {
+    await mkdir(stateDir, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+  }
+  const metadata = await lstat(stateDir);
+  if (
+    !metadata.isDirectory() ||
+    metadata.isSymbolicLink() ||
+    (metadata.mode & 0o777) !== 0o700 ||
+    (typeof process.geteuid === "function" && metadata.uid !== process.geteuid())
+  ) {
+    throw new Error(`Binary smoke owner state is not a private owned directory: ${stateDir}`);
+  }
+  return stateDir;
+}
+
+async function fileSizeOrZero(path) {
+  try {
+    const metadata = await lstat(path);
+    if (!metadata.isFile() || metadata.isSymbolicLink()) {
+      throw new Error(`Runtime lifecycle path is not a regular file: ${path}`);
+    }
+    return metadata.size;
+  } catch (error) {
+    if (error?.code === "ENOENT") return 0;
+    throw error;
+  }
+}
+
+function requiredOwnedEnvironment(name) {
+  const value = process.env[name];
+  if (value === undefined || value.length === 0) {
+    throw new Error(`Owned binary smoke environment is missing ${name}.`);
+  }
+  return value;
+}
+
+function ownerLifecycleOffset() {
+  const value = requiredOwnedEnvironment("STATION_BINARY_SMOKE_OWNER_LOG_OFFSET");
+  if (!/^[0-9]+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+    throw new Error("Owned binary smoke lifecycle offset is invalid.");
+  }
+  return Number(value);
+}
+
+async function readCurrentOwnerLifecycleEvents() {
+  return readRuntimeLifecycleEvents(
+    requiredOwnedEnvironment("STATION_BINARY_SMOKE_OWNER_STATE_DIR"),
+    ownerLifecycleOffset(),
+  );
+}
+
+function ownedInnerResultPath(root) {
+  return join(root, "runtime", "binary-smoke-inner-result.json");
+}
+
+async function writeOwnedInnerResult(warnings) {
+  const root = resolve(requiredOwnedEnvironment("STATION_BINARY_SMOKE_ROOT"));
+  const result = ownedInnerResultSchema.parse({
+    runId: requiredOwnedEnvironment("STATION_BINARY_SMOKE_RUN_ID"),
+    warnings,
+  });
+  await mkdir(dirname(ownedInnerResultPath(root)), { recursive: true, mode: 0o700 });
+  await writeFile(ownedInnerResultPath(root), `${JSON.stringify(result)}\n`, {
+    flag: "wx",
+    mode: 0o600,
+  });
+}
+
+async function readOwnedInnerResult(root, runId) {
+  try {
+    const result = ownedInnerResultSchema.parse(
+      JSON.parse(await readFile(ownedInnerResultPath(root), "utf8")),
+    );
+    if (result.runId !== runId) throw new Error("Inner result belongs to a different smoke run.");
+    return result;
+  } catch (error) {
+    if (error?.code === "ENOENT") return { runId, warnings: [] };
+    throw error;
+  }
+}
+
+function ownedResultFailure(result) {
+  if (result === undefined || result.exitCode === 0) return undefined;
+  const exitDisposition =
+    result.signal === undefined
+      ? { type: "code", code: result.exitCode }
+      : { type: "signal", signal: result.signal };
+  return new SmokeCommandError(
+    `Owned binary smoke runner exited ${result.exitCode}${result.signal === undefined ? "" : ` after ${result.signal}`}.`,
+    process.execPath,
+    [],
+    exitDisposition,
+  );
+}
+
+async function captureMissingOwnedSmokeEvidence(input) {
+  if (await pathExists(join(input.evidenceDir, "manifest.json"))) return;
+  try {
+    await resetReservedBinarySmokeEvidenceDestination({
+      evidenceDir: input.evidenceDir,
+      smokeRoot: input.root,
+      runId: input.runId,
+    });
+    const expectedVersion =
+      input.mode === "handoff-stress"
+        ? parseHandoffStressOptions(input.args).expectedVersion
+        : parseExpectedVersion(input.args);
+    const buildIdentity = await readFile(resolve("packages/runtime/dist/station-build-id"), "utf8")
+      .then((value) => value.trim())
+      .catch(() => "unavailable");
+    const exitDisposition =
+      input.ownerFailure instanceof SmokeCommandError
+        ? input.ownerFailure.exitDisposition
+        : { type: "unavailable" };
+    const cancelled =
+      exitDisposition.type === "signal" &&
+      ["SIGINT", "SIGTERM", "SIGHUP"].includes(exitDisposition.signal);
+    await captureBinarySmokeEvidence({
+      runId: input.runId,
+      evidenceDir: input.evidenceDir,
+      smokeRoot: input.root,
+      stateDir: input.stateDir,
+      socketPath: input.socketPath,
+      status: cancelled ? "cancelled" : "failed",
+      round: 1,
+      elapsedMs: Date.now() - input.startedAt,
+      direction: {
+        logical: input.mode === "handoff-stress" ? "lower-to-higher" : "binary-smoke",
+        physical: "runner",
+      },
+      error: input.ownerFailure,
+      failure: {
+        message: errorMessage(input.ownerFailure),
+        command: { artifact: "runner", argv: input.args },
+        exitDisposition,
+      },
+      artifacts: {
+        current: {
+          path: relative(
+            repoRoot,
+            resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn"),
+          ),
+          displayVersion: expectedVersion,
+          buildIdentity,
+        },
+        alternate: {
+          path: join(input.root, "alternate-worktree", "station", "dist", "bin", "stn"),
+          displayVersion: expectedVersion,
+          buildIdentity: "unavailable",
+        },
+        incumbent: "current",
+        requested: "alternate",
+      },
+      knownProcesses: [],
+      lifecycleEvents: input.lifecycleEvents,
+    });
+  } catch (error) {
+    input.warnings.push(`Evidence capture failed: ${errorMessage(error)}`);
+  }
+}
+
+async function readCurrentEvidenceManifest(evidenceDir, runId) {
+  const manifestPath = join(resolve(evidenceDir), "manifest.json");
+  if (!(await pathExists(manifestPath))) return undefined;
+  const manifest = BinarySmokeEvidenceManifestSchema.parse(
+    JSON.parse(await readFile(manifestPath, "utf8")),
+  );
+  if (manifest.runId !== runId) {
+    throw new Error("Evidence manifest belongs to a different binary smoke run.");
+  }
+  return manifest;
+}
+
 async function runHandoffStress(options) {
   const binaryPath = resolve(process.env.STATION_BINARY_PATH ?? "station/dist/bin/stn");
-  const baseRoot = await mkdtemp(join(tmpdir(), "stn-h-"));
-  const baseIdentity = fileIdentity(await lstat(baseRoot));
+  const baseRoot = resolve(requiredOwnedEnvironment("STATION_BINARY_SMOKE_ROOT"));
   const alternateWorktreePath = join(baseRoot, "alternate-worktree");
   const evidenceDir = process.env.STATION_BINARY_SMOKE_EVIDENCE_DIR;
   const cancellation = installSmokeCancellation();
@@ -1145,10 +1634,8 @@ async function runHandoffStress(options) {
   await cleanupAction(cleanupWarnings, "alternate worktree cleanup", async () => {
     if (alternateWorktreeAdded) await removeTemporaryWorktree(alternateWorktreePath);
   });
-  await cleanupAction(cleanupWarnings, "stress root cleanup", () =>
-    removeExactTemporaryRoot(baseRoot, baseIdentity, "stn-h-"),
-  );
   cancellation.dispose();
+  await writeOwnedInnerResult(cleanupWarnings);
 
   if (primaryFailure === undefined && cleanupWarnings.length > 0) {
     primaryFailure = new AggregateError(
@@ -1179,7 +1666,6 @@ async function runHandoffStressRound(input) {
   );
   smokeRunSignal = AbortSignal.any([input.cancellationSignal, roundController.signal]);
   let primaryFailure;
-  let evidenceCaptured = false;
   const cleanupWarnings = [];
   const startedAt = Date.now();
 
@@ -1196,13 +1682,12 @@ async function runHandoffStressRound(input) {
   if (primaryFailure !== undefined && input.evidenceDir !== undefined) {
     try {
       await captureStressRoundEvidence(context, primaryFailure, startedAt, input.evidenceDir);
-      evidenceCaptured = true;
     } catch (error) {
       cleanupWarnings.push(`Evidence capture failed: ${errorMessage(error)}`);
     }
   }
 
-  const cleanup = await cleanupStressRound(context, cleanupWarnings);
+  await cleanupStressRound(context, cleanupWarnings);
   if (primaryFailure === undefined && cleanupWarnings.length > 0) {
     primaryFailure = new AggregateError(
       cleanupWarnings.map((warning) => new Error(warning)),
@@ -1211,28 +1696,15 @@ async function runHandoffStressRound(input) {
     if (input.evidenceDir !== undefined) {
       try {
         await captureStressRoundEvidence(context, primaryFailure, startedAt, input.evidenceDir);
-        evidenceCaptured = true;
       } catch (error) {
         cleanupWarnings.push(`Evidence capture failed: ${errorMessage(error)}`);
       }
     }
   }
 
-  if (evidenceCaptured && input.evidenceDir !== undefined) {
-    try {
-      await finalizeBinarySmokeEvidence({
-        evidenceDir: input.evidenceDir,
-        cleanup,
-        processes: stressKnownProcessSummaries(context),
-        warnings: cleanupWarnings,
-      });
-    } catch (error) {
-      cleanupWarnings.push(`Evidence finalization failed: ${errorMessage(error)}`);
-    }
-  }
-  await cleanupAction(cleanupWarnings, "stress round root cleanup", () =>
-    removeExactDirectory(roundRoot, roundIdentity, input.baseRoot),
-  );
+  await cleanupAction(cleanupWarnings, "stress round root cleanup", () => {
+    return removeExactDirectory(roundRoot, roundIdentity, input.baseRoot);
+  });
 
   reportCleanupWarnings(`Binary handoff stress round ${input.round}`, cleanupWarnings);
   if (primaryFailure !== undefined) throw primaryFailure;
@@ -1273,6 +1745,12 @@ async function createStressRoundContext(input, roundRoot) {
     hostSocketPath,
     configPath,
     releasePath,
+    ownerEventsPath: join(
+      requiredOwnedEnvironment("STATION_BINARY_SMOKE_OWNER_STATE_DIR"),
+      "logs",
+      "cli.jsonl",
+    ),
+    ownerEventsOffset: ownerLifecycleOffset(),
     env: isolatedBinaryEnv({ homeDir, runtimeDir }),
     client: createObserverClient({ socketPath, timeoutMs: 5000 }),
     timings: {},
@@ -1314,7 +1792,11 @@ async function executeStressRound(context) {
   context.hostProcess = spawn(
     lower.binaryPath,
     ["__station-host", "--socket", context.hostSocketPath, "--state-dir", context.stateDir],
-    { env: context.env, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
+      env: context.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
   );
   const hostDiagnostics = collectOutput(context.hostProcess);
   context.hostClient = createStationHostClient({
@@ -1445,9 +1927,14 @@ async function executeStressRound(context) {
 async function assertStressObserverOwnership(context, health, version, label) {
   assertEqual(health.status, "healthy", `${label} Observer health`);
   assertEqual(health.version, version, `${label} Observer selector`);
-  const identity = ObserverProcessIdentitySchema.parse(
-    JSON.parse(await readFile(`${context.socketPath}.pid`, "utf8")),
-  );
+  const pidfileText = await readFile(`${context.socketPath}.pid`, "utf8");
+  let pidfileJson;
+  try {
+    pidfileJson = JSON.parse(pidfileText);
+  } catch (cause) {
+    throw new Error(`Failed to parse Observer pidfile at ${context.socketPath}.pid`, { cause });
+  }
+  const identity = ObserverProcessIdentitySchema.parse(pidfileJson);
   assertEqual(identity.pid, health.pid, `${label} pidfile PID`);
   assertEqual(identity.version, version, `${label} pidfile selector`);
   assertEqual(identity.socketPath, context.socketPath, `${label} pidfile socket`);
@@ -1485,6 +1972,7 @@ async function captureStressRoundEvidence(context, primaryFailure, startedAt, ev
     };
   }
   await captureBinarySmokeEvidence({
+    runId: requiredOwnedEnvironment("STATION_BINARY_SMOKE_RUN_ID"),
     evidenceDir,
     smokeRoot: context.roundRoot,
     stateDir: context.stateDir,
@@ -1505,6 +1993,10 @@ async function captureStressRoundEvidence(context, primaryFailure, startedAt, ev
       requested: higher.label,
     },
     knownProcesses: stressKnownProcesses(context),
+    lifecycleEvents: await readRuntimeLifecycleEvents(
+      context.ownerEventsPath,
+      context.ownerEventsOffset,
+    ),
   });
 }
 
@@ -1524,13 +2016,8 @@ function stressArtifact(context, label) {
 async function cleanupStressRound(context, warnings) {
   smokeRunSignal = undefined;
   await cleanupAction(warnings, "Observer stop", async () => {
-    await context.client.stop().catch(() => undefined);
-    await waitForMissing(context.socketPath).catch(() => undefined);
-  });
-  await cleanupAction(warnings, "Observer process cleanup", async () => {
-    for (const process of stressKnownProcesses(context)) {
-      if (process.role !== "station-host") await terminateProcess(process.pid);
-    }
+    await context.client.stop();
+    await waitForMissing(context.socketPath);
   });
   await cleanupAction(warnings, "Station Host client cleanup", async () =>
     context.hostClient?.dispose(),
@@ -1544,12 +2031,7 @@ async function cleanupStressRound(context, warnings) {
       return;
     }
     context.hostProcess.kill("SIGTERM");
-    try {
-      await waitForExit(context.hostProcess, 3000);
-    } catch {
-      context.hostProcess.kill("SIGKILL");
-      await waitForExit(context.hostProcess, 3000);
-    }
+    await waitForExit(context.hostProcess, 3000);
   });
   await cleanupAction(warnings, "Observer cleanup proof", async () => {
     const survivingObserver = stressKnownProcesses(context).find(
@@ -1573,16 +2055,6 @@ async function cleanupStressRound(context, warnings) {
     if (await pathExists(context.hostSocketPath))
       throw new Error("Station Host socket remained present.");
   });
-  const observersExited = stressKnownProcesses(context)
-    .filter((process) => process.role !== "station-host")
-    .every((process) => !processIsAlive(process.pid));
-  return {
-    status: warnings.length === 0 ? "complete" : "incomplete",
-    observerExited: observersExited,
-    hostExited: context.hostProcess?.pid === undefined || !processIsAlive(context.hostProcess.pid),
-    socketRemoved: !(await pathExists(context.socketPath)),
-    pidfileRemoved: !(await pathExists(`${context.socketPath}.pid`)),
-  };
 }
 
 function parseHandoffStressOptions(args) {
@@ -1665,6 +2137,7 @@ async function captureSmokeFailureEvidence(input) {
   };
   if (command !== undefined) failure.command = command;
   await captureBinarySmokeEvidence({
+    runId: requiredOwnedEnvironment("STATION_BINARY_SMOKE_RUN_ID"),
     evidenceDir: input.evidenceDir,
     smokeRoot: input.root,
     stateDir: input.stateDir,
@@ -1693,6 +2166,7 @@ async function captureSmokeFailureEvidence(input) {
       requested: input.evidenceRequested,
     },
     knownProcesses: knownProcesses(input.observerPid, input.hostPid),
+    lifecycleEvents: await readCurrentOwnerLifecycleEvents(),
   });
 }
 
@@ -1718,13 +2192,6 @@ function knownProcesses(observerPid, hostPid) {
   return processes;
 }
 
-function knownProcessSummaries(observerPid, hostPid) {
-  return knownProcesses(observerPid, hostPid).map((entry) => ({
-    ...entry,
-    exists: processIsAlive(entry.pid),
-  }));
-}
-
 function stressKnownProcesses(context) {
   const processes = [];
   if (context.incumbentPid !== undefined) {
@@ -1739,13 +2206,6 @@ function stressKnownProcesses(context) {
   return processes;
 }
 
-function stressKnownProcessSummaries(context) {
-  return stressKnownProcesses(context).map((entry) => ({
-    ...entry,
-    exists: processIsAlive(entry.pid),
-  }));
-}
-
 async function cleanupAction(warnings, label, action) {
   try {
     await action();
@@ -1758,19 +2218,17 @@ function reportCleanupWarnings(scope, warnings) {
   for (const warning of warnings) process.stderr.write(`${scope} warning: ${warning}\n`);
 }
 
-async function removeExactSmokeRoot(root, expectedIdentity) {
-  return removeExactTemporaryRoot(root, expectedIdentity, "station-binary-smoke-");
-}
-
 async function removeExactTemporaryRoot(root, expectedIdentity, prefix) {
   const resolvedRoot = resolve(root);
+  const canonicalRoot = await realpath(resolvedRoot);
+  const canonicalTemporaryDirectory = await realpath(tmpdir());
   if (
-    dirname(resolvedRoot) !== resolve(tmpdir()) ||
-    !resolvedRoot.startsWith(join(resolve(tmpdir()), prefix))
+    dirname(canonicalRoot) !== canonicalTemporaryDirectory ||
+    !canonicalRoot.startsWith(join(canonicalTemporaryDirectory, prefix))
   ) {
     throw new Error(`Refusing unexpected temporary deletion target: ${resolvedRoot}`);
   }
-  await removeExactDirectory(resolvedRoot, expectedIdentity, resolve(tmpdir()));
+  await removeExactDirectory(canonicalRoot, expectedIdentity, canonicalTemporaryDirectory);
 }
 
 async function removeExactDirectory(path, expectedIdentity, expectedParent) {
@@ -1783,8 +2241,8 @@ async function removeExactDirectory(path, expectedIdentity, expectedParent) {
   if (
     !stats.isDirectory() ||
     stats.isSymbolicLink() ||
-    identity.device !== expectedIdentity.device ||
-    identity.inode !== expectedIdentity.inode
+    String(identity.device) !== String(expectedIdentity.device) ||
+    String(identity.inode) !== String(expectedIdentity.inode)
   ) {
     throw new Error(`Refusing replaced deletion target: ${resolvedPath}`);
   }
@@ -1878,7 +2336,6 @@ async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, l
   const configPath = join(root, "config.toml");
   const env = isolatedBinaryEnv({ homeDir, runtimeDir });
   const client = createObserverClient({ socketPath, timeoutMs: 5000 });
-  let pid;
 
   await Promise.all([
     mkdir(join(homeDir, "tmp"), { recursive: true, mode: 0o700 }),
@@ -1895,7 +2352,6 @@ async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, l
       { client, env, socketPath },
     );
     const health = startup.health;
-    pid = health.pid;
     assertEqual(health.status, "healthy", `${label} health`);
     if (health.version === undefined) {
       fail(`${label} did not publish an exact build selector`);
@@ -1904,9 +2360,6 @@ async function queryBinaryObserverVersion({ binaryPath, expectedVersion, root, l
   } finally {
     await client.stop().catch(() => undefined);
     await waitForMissing(socketPath).catch(() => undefined);
-    if (pid !== undefined) {
-      await terminateProcess(pid);
-    }
   }
 }
 
@@ -1983,7 +2436,7 @@ function environmentWithoutGitLocals(source) {
 function parseExpectedVersion(args) {
   const normalized = args[0] === "--" ? args.slice(1) : args;
   if (normalized.length === 0) {
-    return "0.0.0-pre-alpha.4";
+    return packageVersion;
   }
   if (
     normalized.length === 2 &&
@@ -2006,7 +2459,165 @@ function isolatedBinaryEnv({ homeDir: home, runtimeDir: runtime }) {
     LANG: "C",
     TERM: "xterm-256color",
     TMPDIR: join(home, "tmp"),
+    STATION_RUNTIME_OWNER_FOREGROUND: "1",
   };
+}
+
+async function verifyMixedBuildStationUiAdmission(input) {
+  await waitForStableObserverReconcile(input.observerClient, 300, 10_000);
+  const baselineReason = "binary-smoke-ui-build-admission-baseline";
+  await input.observerClient.reconcile(baselineReason);
+  const observerHealth = await waitForObserverLastReconcile(
+    input.observerClient,
+    baselineReason,
+    5_000,
+  );
+  const observerIdentity = stableObserverIdentity(observerHealth);
+  assertEqual(
+    observerIdentity.version,
+    input.sourceObserverVersion,
+    "UI admission baseline Observer selector",
+  );
+  assertEqual(
+    observerIdentity.socketPath,
+    input.socketPath,
+    "UI admission baseline Observer socket",
+  );
+  assertEqual(
+    observerIdentity.stateDir,
+    input.stateDir,
+    "UI admission baseline Observer state directory",
+  );
+
+  const pidfilePath = `${input.socketPath}.pid`;
+  const observerSocket = await socketState(input.socketPath);
+  const observerPidfile = await observerPidfileState(pidfilePath);
+  const commandCount = readCommandCount(join(input.stateDir, "observer.sqlite"));
+  const hostHealth = await input.hostClient.health();
+  const hostList = await input.hostClient.list();
+  const hostSocket = await socketState(input.hostSocketPath);
+  const hostPid = input.hostProcess.pid;
+  assertEqual(processIsAlive(hostPid), true, "UI admission baseline Host process");
+  const livePty = hostList.find((entry) => entry.ptyId === input.spawned.ptyId);
+  assertEqual(livePty?.alive, true, "UI admission baseline live PTY");
+  const ptyPid = livePty?.pid;
+  if (ptyPid === undefined) {
+    fail("UI admission baseline PTY did not report its child PID");
+  }
+  assertEqual(processIsAlive(ptyPid), true, "UI admission baseline PTY child");
+  const layoutPath = join(input.childEnv.XDG_STATE_HOME, "station", "station", "layout.json");
+  const layout = await optionalFileState(layoutPath);
+  const tmuxState = await readFakeTmuxState(input.fakeTmuxStatePath);
+
+  const popupRendererCanary = join(input.root, "lower-build-popup-renderer-started");
+  const refusedPopup = await run(input.binaryPath, ["--config", input.popupConfigPath, "popup"], {
+    env: {
+      ...input.popupEnv,
+      STATION_DASHBOARD_COMMAND: `/usr/bin/touch ${quoteShellWord(popupRendererCanary)}`,
+    },
+    allowedExitCodes: [1],
+    timeoutMs: 5_000,
+    terminateDescendants: true,
+  });
+  assertUiBuildAdmissionRefusal(
+    refusedPopup.stderr,
+    input.compiledObserverVersion,
+    input.sourceObserverVersion,
+    "lower-build public popup",
+  );
+  assertEqual(
+    await pathExists(popupRendererCanary),
+    false,
+    "lower-build public popup renderer canary",
+  );
+  assertDeepEqual(
+    await readFakeTmuxState(input.fakeTmuxStatePath),
+    tmuxState,
+    "lower-build public popup tmux state",
+  );
+
+  const nativeRendererCanary = join(input.root, "lower-build-native-renderer-started");
+  const refusedNative = await run(input.binaryPath, ["--config", input.configPath, "tui"], {
+    env: {
+      ...input.childEnv,
+      STATION_DASHBOARD_COMMAND: `/usr/bin/touch ${quoteShellWord(nativeRendererCanary)}`,
+    },
+    allowedExitCodes: [1],
+    timeoutMs: 5_000,
+    terminateDescendants: true,
+  });
+  assertUiBuildAdmissionRefusal(
+    refusedNative.stderr,
+    input.compiledObserverVersion,
+    input.sourceObserverVersion,
+    "lower-build native",
+  );
+  assertEqual(await pathExists(nativeRendererCanary), false, "lower-build native renderer canary");
+
+  await delay(350);
+  const healthAfterRefusal = await input.observerClient.health();
+  assertDeepEqual(
+    stableObserverIdentity(healthAfterRefusal),
+    observerIdentity,
+    "UI refusal preserves Observer identity",
+  );
+  assertDeepEqual(
+    healthAfterRefusal.lastReconcile,
+    observerHealth.lastReconcile,
+    "UI refusal preserves explicit reconcile baseline",
+  );
+  assertEqual(
+    healthAfterRefusal.lastReconcile?.reason,
+    baselineReason,
+    "UI refusal schedules no popup-open or tui-startup reconcile",
+  );
+  assertDeepEqual(
+    await socketState(input.socketPath),
+    observerSocket,
+    "UI refusal preserves Observer socket identity and holders",
+  );
+  assertDeepEqual(
+    await observerPidfileState(pidfilePath),
+    observerPidfile,
+    "UI refusal preserves Observer pidfile",
+  );
+  assertEqual(
+    readCommandCount(join(input.stateDir, "observer.sqlite")),
+    commandCount,
+    "UI refusal records no Observer command",
+  );
+  assertEqual(processIsAlive(hostPid), true, "UI refusal preserves Host process");
+  assertDeepEqual(await input.hostClient.health(), hostHealth, "UI refusal preserves Host health");
+  assertDeepEqual(
+    await socketState(input.hostSocketPath),
+    hostSocket,
+    "UI refusal preserves Host socket identity and holders",
+  );
+  assertDeepEqual(
+    await input.hostClient.list(),
+    hostList,
+    "UI refusal preserves complete Host PTY inventory",
+  );
+  assertDeepEqual(
+    await optionalFileState(layoutPath),
+    layout,
+    "UI refusal preserves Station layout",
+  );
+  assertDeepEqual(
+    await readFakeTmuxState(input.fakeTmuxStatePath),
+    tmuxState,
+    "UI refusal preserves final tmux state",
+  );
+  assertEqual(processIsAlive(ptyPid), true, "UI refusal preserves PTY child");
+  for (const rendererPid of tmuxState.rendererPids) {
+    assertEqual(processIsAlive(rendererPid), true, "UI refusal preserves existing popup renderer");
+  }
+}
+
+function assertUiBuildAdmissionRefusal(stderr, callerSelector, observerSelector, label) {
+  assertIncludes(stderr, "TUI_OBSERVER_BUILD_MISMATCH", `${label} refusal code`);
+  assertIncludes(stderr, callerSelector, `${label} caller selector`);
+  assertIncludes(stderr, observerSelector, `${label} Observer selector`);
 }
 
 async function verifyCompiledInaccessibleObserver(input) {
@@ -2151,6 +2762,57 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function stableObserverIdentity(health) {
+  return {
+    pid: health.pid,
+    startedAt: health.startedAt,
+    version: health.version,
+    socketPath: health.socketPath,
+    stateDir: health.stateDir,
+  };
+}
+
+async function socketState(path) {
+  const stats = await lstat(path);
+  assertEqual(stats.isSocket(), true, `socket type at ${path}`);
+  return {
+    identity: fileIdentity(stats),
+    holders: readUnixSocketHolderPids(path),
+  };
+}
+
+async function observerPidfileState(path) {
+  const bytes = await readFile(path);
+  const identityText = bytes.toString("utf8");
+  let identityJson;
+  try {
+    identityJson = JSON.parse(identityText);
+  } catch (cause) {
+    throw new Error(`Failed to parse Observer pidfile at ${path}`, { cause });
+  }
+  return {
+    identity: fileIdentity(await lstat(path)),
+    hash: sha256(bytes),
+    process: ObserverProcessIdentitySchema.parse(identityJson),
+  };
+}
+
+async function optionalFileState(path) {
+  try {
+    const stats = await lstat(path);
+    return {
+      status: "present",
+      identity: fileIdentity(stats),
+      hash: sha256(await readFile(path)),
+    };
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { status: "missing" };
+    }
+    throw error;
+  }
+}
+
 async function observerProcessInventory(socketPath) {
   const psPath = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
   const result = await run(psPath, ["-axo", "pid=,command="]);
@@ -2198,8 +2860,7 @@ async function verifyCompiledGitFailure({ binaryPath, installedRoot, root }) {
     ),
     writeFile(join(fakeBin, "wt"), "#!/bin/sh\necho 'worktrunk 1.2.3'\n", { mode: 0o700 }),
     writeFile(join(fakeBin, "tmux"), "#!/bin/sh\necho 'tmux 3.5a'\n", { mode: 0o700 }),
-    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
-    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "hunk"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
     writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
     writeFile(
       configPath,
@@ -2280,8 +2941,7 @@ async function verifyCompiledSetupApplyLauncherWarning({ binaryPath, installedRo
       "#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux 3.5a'; exit 0; fi\nexit 1\n",
       { mode: 0o700 },
     ),
-    writeFile(join(fakeBin, "diffnav"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
-    writeFile(join(fakeBin, "delta"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
+    writeFile(join(fakeBin, "hunk"), "#!/bin/sh\nexit 0\n", { mode: 0o700 }),
     writeFile(join(fakeBin, "pi"), "#!/bin/sh\necho 'pi 0.80.10'\n", { mode: 0o700 }),
     writeFile(
       configPath,
@@ -2559,20 +3219,6 @@ async function writeFakeTmuxState(path, state) {
   await writeFile(path, `${JSON.stringify(state)}\n`, { mode: 0o600 });
 }
 
-async function stopFakeTmuxProcesses(path) {
-  let state;
-  try {
-    state = await readFakeTmuxState(path);
-  } catch {
-    return;
-  }
-  for (const pid of state.rendererPids ?? []) {
-    if (Number.isInteger(pid) && pid > 0) {
-      await terminateProcess(pid).catch(() => undefined);
-    }
-  }
-}
-
 async function runFakeTmuxProcess(args) {
   const statePath = process.env.FAKE_TMUX_STATE_PATH;
   if (statePath === undefined) {
@@ -2718,7 +3364,7 @@ function createFakeTmuxSession(state, args) {
   if (sessionName.length === 0) return fakeTmuxResult(1);
   if (state.sessions[sessionName] !== undefined) return fakeTmuxResult(1);
   const renderer = spawn("/bin/sleep", ["2147483647"], {
-    detached: true,
+    detached: process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1",
     stdio: "ignore",
   });
   renderer.unref();
@@ -2736,7 +3382,6 @@ function killFakeTmuxSession(state, args) {
   const sessionName = normalizeFakeTmuxSessionName(optionValue(args, "-t") ?? "");
   const session = state.sessions[sessionName];
   if (session === undefined) return fakeTmuxResult(1);
-  signalProcess(session.rendererPid, "SIGTERM");
   delete state.sessions[sessionName];
   return fakeTmuxResult(0);
 }
@@ -2973,7 +3618,9 @@ function run(command, args, options = {}) {
       return;
     }
     const terminateDescendants =
-      options.terminateDescendants === true && process.platform !== "win32";
+      options.terminateDescendants === true &&
+      process.platform !== "win32" &&
+      process.env.STATION_RUNTIME_OWNER_FOREGROUND !== "1";
     const child = spawn(command, args, {
       cwd: options.cwd,
       detached: terminateDescendants,
@@ -3057,7 +3704,7 @@ async function runObserverStart(command, args, { client, env, socketPath, timeou
   if (cancellationSignal?.aborted === true) {
     throw runCancelledError(command, args, cancellationSignal);
   }
-  // The launcher owns its detached child until startup resolves, so cancellation waits for that bounded handoff.
+  // Defer cancellation while the command publishes its Observer health so the owner can reap one group.
   const result = await run(command, args, {
     deferSmokeCancellation: true,
     env,
@@ -3074,7 +3721,6 @@ async function runObserverStart(command, args, { client, env, socketPath, timeou
   if (health !== undefined) {
     await client.stop().catch(() => undefined);
     await waitForMissing(socketPath).catch(() => undefined);
-    await terminateProcess(health.pid);
   }
   throw runCancelledError(command, args, cancellationSignal);
 }
@@ -3094,6 +3740,49 @@ async function waitForObserverClientHealth(client, timeoutMs) {
     await delay(25);
   } while (Date.now() < deadline);
   throw lastError ?? new Error("Observer did not become reachable.");
+}
+
+async function waitForObserverLastReconcile(client, reason, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const health = await client.health();
+    if (health.lastReconcile?.reason === reason) {
+      return health;
+    }
+    if (smokeRunSignal?.aborted === true) {
+      throw (
+        smokeRunSignal.reason ?? new SmokeRunCancelledError("Observer reconcile wait cancelled.")
+      );
+    }
+    await delay(25);
+  } while (Date.now() < deadline);
+  fail(`Observer last reconcile did not reach ${reason}.`);
+}
+
+async function waitForStableObserverReconcile(client, quietMs, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let previous;
+  let unchangedSince = Date.now();
+  do {
+    const health = await client.health();
+    const current =
+      health.lastReconcile === undefined ? undefined : JSON.stringify(health.lastReconcile);
+    if (current !== undefined && current === previous) {
+      if (Date.now() - unchangedSince >= quietMs) {
+        return health;
+      }
+    } else {
+      previous = current;
+      unchangedSince = Date.now();
+    }
+    if (smokeRunSignal?.aborted === true) {
+      throw (
+        smokeRunSignal.reason ?? new SmokeRunCancelledError("Observer reconcile wait cancelled.")
+      );
+    }
+    await delay(25);
+  } while (Date.now() < deadline);
+  fail("Observer reconcile activity did not settle.");
 }
 
 async function runObserverCancellationSelfCheck() {
@@ -3139,25 +3828,85 @@ async function runObserverCancellationSelfCheck() {
   } finally {
     clearTimeout(cancel);
     smokeRunSignal = undefined;
-    if (observerPid !== undefined) await terminateProcess(observerPid);
+    if (observerPid !== undefined) await terminateSelfCheckProcess(observerPid);
     await rm(root, { recursive: true, force: true });
   }
+}
+
+async function runOwnedBinarySmokeTopologyTest() {
+  const descriptorPath = resolve(
+    requiredOwnedEnvironment("STATION_BINARY_SMOKE_OWNERSHIP_TEST_DESCRIPTOR"),
+  );
+  const termResistant = process.env.STATION_BINARY_SMOKE_OWNERSHIP_TEST_TERM_RESISTANT === "1";
+  if (termResistant) {
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => {});
+  }
+  const children = ["observer", "station-host", "popup-renderer"].map((role) =>
+    spawn(
+      process.execPath,
+      [
+        "-e",
+        [
+          `process.title = ${JSON.stringify(`station-${role}-ownership-test`)};`,
+          ...(termResistant && role === "popup-renderer"
+            ? [
+                "process.on('SIGINT', () => {});",
+                "process.on('SIGTERM', () => {});",
+                "process.on('SIGHUP', () => {});",
+              ]
+            : []),
+          "setInterval(() => {}, 1000);",
+        ].join("\n"),
+      ],
+      { stdio: "ignore" },
+    ),
+  );
+  await writeFile(
+    descriptorPath,
+    `${JSON.stringify({
+      root: requiredOwnedEnvironment("STATION_BINARY_SMOKE_ROOT"),
+      ownerStateDir: requiredOwnedEnvironment("STATION_BINARY_SMOKE_OWNER_STATE_DIR"),
+      runId: requiredOwnedEnvironment("STATION_BINARY_SMOKE_RUN_ID"),
+      innerPid: process.pid,
+      pids: {
+        observer: children[0].pid,
+        stationHost: children[1].pid,
+        popupRenderer: children[2].pid,
+      },
+    })}\n`,
+    { flag: "wx", mode: 0o600 },
+  );
+  if (process.env.STATION_BINARY_SMOKE_OWNERSHIP_TEST_EXIT_IMMEDIATELY === "1") {
+    for (const child of children) child.kill("SIGTERM");
+    await Promise.all(children.map((child) => waitForExit(child, 3_000)));
+    if (process.env.STATION_BINARY_SMOKE_OWNERSHIP_TEST_REPLACE_ROOT === "1") {
+      const root = resolve(requiredOwnedEnvironment("STATION_BINARY_SMOKE_ROOT"));
+      await rename(root, `${root}-original`);
+      await mkdir(root, { mode: 0o700 });
+      await writeFile(join(root, "replacement-sentinel"), "preserve\n", { mode: 0o600 });
+    }
+    return;
+  }
+  await new Promise(() => {});
 }
 
 function installSmokeCancellation() {
   const controller = new AbortController();
   const handleSignal = (signal) => {
-    process.exitCode = signal === "SIGINT" ? 130 : 143;
+    process.exitCode = signal === "SIGINT" ? 130 : signal === "SIGHUP" ? 129 : 143;
     controller.abort(signal);
   };
   const onInterrupt = () => handleSignal("SIGINT");
+  const onHangup = () => handleSignal("SIGHUP");
   const onTerminate = () => handleSignal("SIGTERM");
   process.on("SIGINT", onInterrupt);
+  process.on("SIGHUP", onHangup);
   process.on("SIGTERM", onTerminate);
   return {
     signal: controller.signal,
     dispose: () => {
       process.off("SIGINT", onInterrupt);
+      process.off("SIGHUP", onHangup);
       process.off("SIGTERM", onTerminate);
     },
   };
@@ -3189,6 +3938,27 @@ function collectOutput(child) {
   child.stdout?.on("data", (chunk) => (stdout += chunk));
   child.stderr?.on("data", (chunk) => (stderr += chunk));
   return () => ({ stdout, stderr });
+}
+
+async function waitForExit(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolvePromise, reject) => {
+    const timeout = setTimeout(() => {
+      child.off("close", onClose);
+      child.off("error", onError);
+      reject(new Error(`child did not exit within ${timeoutMs} ms`));
+    }, timeoutMs);
+    const onClose = () => {
+      clearTimeout(timeout);
+      resolvePromise();
+    };
+    const onError = (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    };
+    child.once("close", onClose);
+    child.once("error", onError);
+  });
 }
 
 async function waitForHost(client, diagnostics) {
@@ -3283,18 +4053,7 @@ async function waitForMissing(path) {
   fail(`path remained present: ${path}`);
 }
 
-function waitForExit(child, timeoutMs) {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolveWait, reject) => {
-    const timeout = setTimeout(() => reject(new Error("process did not exit")), timeoutMs);
-    child.once("exit", () => {
-      clearTimeout(timeout);
-      resolveWait();
-    });
-  });
-}
-
-async function terminateProcess(pid) {
+async function terminateSelfCheckProcess(pid) {
   if (await waitForProcessExit(pid, 3000)) return;
   if (!signalProcess(pid, "SIGTERM")) return;
   if (await waitForProcessExit(pid, 3000)) return;

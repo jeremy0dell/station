@@ -1,6 +1,6 @@
 import { addProjectRows } from "../../flows/addProject/rows.js";
 import type { AddProjectFlowState, AddProjectFlowStateView } from "../../flows/addProject/types.js";
-import type { DashboardStateView, TuiState } from "../types.js";
+import type { DashboardState, DashboardStateView } from "../types.js";
 import type { TuiSelectionState } from "./types.js";
 
 export const ADD_PROJECT_START_LIST_ID = "addProjectStart";
@@ -51,10 +51,10 @@ export function selectedAddProjectFolderRow(state: DashboardStateView) {
  * Reconcile only start/folder list selection; review and terminal-state action focus is flow-owned.
  */
 export function reconcileAddProjectSelection(
-  state: TuiState,
+  state: DashboardState,
   previousFlow: AddProjectFlowState | undefined,
   reset: boolean,
-): TuiState {
+): DashboardState {
   if (state.screen.name !== "addProject") {
     return state;
   }
@@ -86,7 +86,7 @@ export function reconcileAddProjectSelection(
 }
 
 /** Mouse selection writes the same cursor used by arrows and Enter. */
-export function selectAddProjectRowByIndex(state: TuiState, index: number): TuiState {
+export function selectAddProjectRowByIndex(state: DashboardState, index: number): DashboardState {
   if (state.screen.name !== "addProject") {
     return state;
   }
@@ -118,7 +118,11 @@ function clampedItem<T>(
   return value === undefined ? undefined : { index: clampedIndex, value };
 }
 
-function withSelection(state: TuiState, listId: string, id: string | undefined): TuiState {
+function withSelection(
+  state: DashboardState,
+  listId: string,
+  id: string | undefined,
+): DashboardState {
   if (id === undefined && !state.selection.has(listId)) {
     return state;
   }

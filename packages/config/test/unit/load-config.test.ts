@@ -776,7 +776,6 @@ harness = "codex"
 layout = "agent-build-shell"
 
 [feature_flags]
-dashboard_persistent_filter = true
 session_resume_agent = true
 
 [harness.codex]
@@ -788,7 +787,6 @@ ${projectToml("web", root)}
     );
 
     expect(loaded.config.featureFlags).toEqual({
-      dashboardPersistentFilter: true,
       sessionResumeAgent: true,
     });
     expect(loaded.config.harness?.codex?.resume).toBe(true);

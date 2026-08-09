@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import {
   chooseNewSessionAgentById,
   chooseNewSessionProjectById,
@@ -6,11 +7,10 @@ import {
   newSessionActionEnabled,
   newSessionIntentForAction,
   newSessionIntentForInput,
-  selectNewSessionHarnessOptions,
   transitionNewSessionFlow,
   validateNewSessionCreate,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/flows/newSession.js";
+import { selectNewSessionHarnessOptions } from "../../../src/selectors/selectors.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 describe("new session flow", () => {

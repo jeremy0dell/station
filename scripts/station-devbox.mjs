@@ -61,11 +61,13 @@ function start() {
   // Always build (Turbo-cached when clean) so the observer/CLI and the dist the
   // Station UI links are never stale — `station:devbox` needs no separate build.
   run("pnpm", ["build"], { cwd: repoRoot });
+  warnHostBuildMismatch();
   process.exit(run("bun", ["run", "station:isolated"], { cwd: STATION_DIR, check: false }));
 }
 
 function dev() {
   run("pnpm", ["build"], { cwd: repoRoot });
+  warnHostBuildMismatch();
   process.exit(run("bun", ["run", "station:isolated", "dev"], { cwd: STATION_DIR, check: false }));
 }
 
@@ -79,6 +81,7 @@ function restart() {
     cwd: repoRoot,
     env: { ...process.env, STATION_ISOLATED_NO_LAUNCH: "1" },
   });
+  warnHostBuildMismatch();
   log(
     "Done. If you changed the station host (hostMain.ts), run `stop` then `start` to recycle it.",
   );
@@ -99,6 +102,7 @@ function status() {
     log(
       `               live agents: bun run --cwd ${STATION_DIR} host:list -- --socket ${HOST_SOCK}`,
     );
+    warnHostBuildMismatch();
   }
   // Read-only: is a SEPARATE global observer running? Resolve it the way the CLI
   // does (honors ~/.config/station + XDG_RUNTIME_DIR). `observer status` only probes;
@@ -106,6 +110,41 @@ function status() {
   log("");
   log("global observer (separate, read-only):");
   run("node", [CLI, "observer", "status"], { cwd: repoRoot, check: false, env: globalEnv() });
+}
+
+/**
+ * Devbox always launches a Bun source host. Warn when a listening host's build
+ * does not match this checkout CLI (replace/refuse), e.g. after a binary handoff.
+ */
+function warnHostBuildMismatch() {
+  if (!existsSync(CFG) || !existsSync(HOST_SOCK) || !existsSync(CLI)) {
+    return;
+  }
+  const result = spawnSync(process.execPath, [CLI, "--config", CFG, "host", "status"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: process.env,
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (!/compatibility:\s*(replace|refuse)/u.test(output)) {
+    return;
+  }
+  log("");
+  log("WARNING: host build mismatch for this station:devbox lane.");
+  log("  Devbox always launches a Bun source host (STATION_HOST_ENTRY=hostMain.ts).");
+  log(
+    "  The listening host is not this checkout CLI's expected build (compatibility replace/refuse).",
+  );
+  log("  Run `pnpm station:devbox stop` then `start` to recycle the host, or deliberately");
+  log(
+    "  `pnpm stn --config .dev-state/config.toml host handoff` only if you intend to change packaging.",
+  );
+  const healthLine = output
+    .split("\n")
+    .find((line) => line.startsWith("health:") || line.startsWith("compatibility:"));
+  if (healthLine !== undefined) {
+    log(`  (${healthLine.trim()})`);
+  }
 }
 
 function logs(args) {
@@ -154,7 +193,7 @@ function help() {
       "  start            (default) build if needed, then start the isolated Station sandbox",
       "  dev, --hot       build if needed, then start the isolated Station sandbox with UI HMR",
       "  restart          rebuild + recycle the isolated observer (persistent host/agents survive)",
-      "  status           report the isolated observer/host + (read-only) the global observer",
+      "  status           report the isolated observer/host (+ host build mismatch warning) and global observer",
       "  logs [--follow]  tail the isolated observer/host/cli logs",
       "  stop             stop the isolated observer + host (preserves .dev-state for reattach)",
       "  reset --yes      stop, then delete .dev-state for this checkout",

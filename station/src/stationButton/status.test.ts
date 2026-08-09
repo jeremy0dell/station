@@ -1,18 +1,20 @@
 import { describe, expect, it } from "bun:test";
-import {
-  createInitialTuiState,
-  selectDashboardSessionRows,
-  selectFleetSummary,
-} from "@station/dashboard-core";
+import type { StationSnapshot } from "@station/contracts";
+import { selectDashboardSessionRows, selectFleetSummary } from "@station/dashboard-core/selectors";
+import { createInitialTuiState } from "@station/dashboard-core/state";
 import {
   attentionAndFailuresSnapshot,
   manyProjectsSnapshot,
 } from "../station/fixtures/scenarios.js";
 import { selectStationButtonStatus, stationButtonStatusEqual } from "./status.js";
 
+function statusFor(snapshot?: StationSnapshot, options?: { projectRollup?: boolean }) {
+  return selectStationButtonStatus(snapshot, createInitialTuiState().localRows, options);
+}
+
 describe("selectStationButtonStatus", () => {
   it("is empty before a snapshot arrives", () => {
-    expect(selectStationButtonStatus(createInitialTuiState())).toEqual({
+    expect(statusFor()).toEqual({
       attention: false,
       needsYouCount: 0,
       workingCount: 0,
@@ -23,7 +25,7 @@ describe("selectStationButtonStatus", () => {
 
   it("reports the client-side fleet breakdown and no attention for a healthy snapshot", () => {
     const snapshot = manyProjectsSnapshot();
-    const status = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
+    const status = statusFor(snapshot);
     const fleet = selectFleetSummary(snapshot);
 
     expect(status.workingCount).toBe(fleet.working);
@@ -41,7 +43,7 @@ describe("selectStationButtonStatus", () => {
 
   it("flags the first session needing the user and counts the queue", () => {
     const snapshot = attentionAndFailuresSnapshot();
-    const status = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
+    const status = statusFor(snapshot);
     const flagged = selectDashboardSessionRows(snapshot).filter(
       (row) => row.session.status.value === "needs_attention" || row.session.status.value === "stuck",
     );
@@ -53,6 +55,34 @@ describe("selectStationButtonStatus", () => {
     expect(typeof status.sessionName).toBe("string");
   });
 
+  it("uses canonical fleet truth with dashboard-local optimistic title decoration", () => {
+    const staleDashboard = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
+    const canonical = attentionAndFailuresSnapshot();
+    const attentionRow = selectDashboardSessionRows(canonical).find(
+      (row) => row.session.status.value === "needs_attention",
+    );
+    if (attentionRow === undefined) {
+      throw new Error("expected canonical attention row");
+    }
+    const localRows = {
+      ...staleDashboard.localRows,
+      pendingRenameTitles: {
+        [attentionRow.id]: {
+          sessionId: attentionRow.id,
+          title: "Optimistic canonical attention",
+          createdAt: "2026-06-17T12:00:00.000Z",
+        },
+      },
+    };
+
+    const status = selectStationButtonStatus(canonical, localRows);
+
+    expect(status.attention).toBe(true);
+    expect(status.needsYouCount).toBe(selectFleetSummary(canonical).needsYou);
+    expect(status.attentionSessionId).toBe(attentionRow.id);
+    expect(status.sessionName).toBe("Optimistic canonical attention");
+  });
+
   it("alerts on a stuck session even though counts.attention excludes it", () => {
     const base = attentionAndFailuresSnapshot();
     const stuckRow = base.rows.find((row) => row.display.statusLabel === "stuck");
@@ -62,7 +92,7 @@ describe("selectStationButtonStatus", () => {
     // A stuck-only snapshot: the observer's counts.attention is 0, but the
     // session still needs the user.
     const snapshot = { ...base, rows: [stuckRow], counts: { ...base.counts, attention: 0 } };
-    const status = selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }));
+    const status = statusFor(snapshot);
 
     expect(status.attention).toBe(true);
     expect(status.needsYouCount).toBe(1);
@@ -72,8 +102,7 @@ describe("selectStationButtonStatus", () => {
 
   it("builds the per-project roll-up only when asked, keeping the worst status", () => {
     const snapshot = attentionAndFailuresSnapshot();
-    const state = createInitialTuiState({ initialSnapshot: snapshot });
-    const status = selectStationButtonStatus(state, { projectRollup: true });
+    const status = statusFor(snapshot, { projectRollup: true });
     const rollup = status.projectRollup;
     if (rollup === undefined) {
       throw new Error("expected a roll-up when the option is on");
@@ -104,9 +133,7 @@ describe("selectStationButtonStatus", () => {
     };
 
     expect(
-      selectStationButtonStatus(createInitialTuiState({ initialSnapshot: snapshot }), {
-        projectRollup: true,
-      }),
+      statusFor(snapshot, { projectRollup: true }),
     ).toEqual({
       attention: false,
       needsYouCount: 0,
@@ -119,9 +146,8 @@ describe("selectStationButtonStatus", () => {
 
   it("compares field-wise so the snapshot reference can stay stable", () => {
     const snapshot = manyProjectsSnapshot();
-    const state = createInitialTuiState({ initialSnapshot: snapshot });
-    const a = selectStationButtonStatus(state, { projectRollup: true });
-    const b = selectStationButtonStatus(state, { projectRollup: true });
+    const a = statusFor(snapshot, { projectRollup: true });
+    const b = statusFor(snapshot, { projectRollup: true });
 
     expect(stationButtonStatusEqual(a, b)).toBe(true);
     expect(stationButtonStatusEqual(a, { ...a, workingCount: a.workingCount + 1 })).toBe(false);

@@ -6,7 +6,7 @@
 // dashboard has no vocabulary for (F-keys, unknown CSI) — the overlay layer
 // swallows those without dispatching, so stray escape sequences can never
 // leak into text-input modes as garbage characters.
-import type { TuiKey } from "@station/dashboard-core";
+import type { TuiKey } from "@station/dashboard-core/state";
 import { ARROW_KEYS } from "../../terminal/protocol/cursorKeys.js";
 import { LegacyKeySequence } from "../../terminal/protocol/keySequences.js";
 import { C0 } from "../../terminal/protocol/syntax.js";

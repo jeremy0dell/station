@@ -83,6 +83,11 @@ precedence. At one display version, immutable build identity provides a determin
 winner; a losing or legacy same-version candidate refuses rather than silently delegating
 to different code.
 
+Station UI composition applies a stricter exact caller/accepted-selector admission check
+after this singleton decision. That UI-only check is not another ordering, attachment, or
+handoff rule; non-UI commands, hooks, ingress, and generic clients continue to use the
+winner selected here.
+
 A winning replacement candidate may coordinate handoff only while holding the boot claim.
 It revalidates holder, health, pidfile, argv, socket, and OS start token before controlled
 stop and before the one permitted SIGTERM. The controlled health-plus-stop exchange uses one

@@ -1,7 +1,7 @@
 import type { ProjectView, ProviderId, StationSnapshot } from "@station/contracts";
 import { selectNewSessionHarnessChoices } from "../../../selectors/selectors.js";
 import type { TuiTransition } from "../../transition.js";
-import type { TuiState } from "../../types.js";
+import type { DashboardState } from "../../types.js";
 import { flatPickerSpec } from "../flatPicker.js";
 import type { RegisteredListSpec } from "../types.js";
 
@@ -15,9 +15,9 @@ import type { RegisteredListSpec } from "../types.js";
  */
 export function harnessPickerSpec(config: {
   listId: string;
-  resolveProject: (snapshot: StationSnapshot, state: TuiState) => ProjectView | undefined;
-  commit: (state: TuiState, harness: ProviderId) => TuiTransition;
-  active?: (state: TuiState) => boolean;
+  resolveProject: (snapshot: StationSnapshot, state: DashboardState) => ProjectView | undefined;
+  commit: (state: DashboardState, harness: ProviderId) => TuiTransition;
+  active?: (state: DashboardState) => boolean;
 }): RegisteredListSpec {
   return flatPickerSpec<ProviderId>({
     listId: config.listId,

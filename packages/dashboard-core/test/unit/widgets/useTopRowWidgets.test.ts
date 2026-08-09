@@ -1,4 +1,4 @@
-import type { TuiWidgetConfig } from "@station/config";
+import type { TuiWidgetConfig } from "@station/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { WeatherClient, WeatherCurrentConditions } from "../../../src/widgets/types.js";
 import {

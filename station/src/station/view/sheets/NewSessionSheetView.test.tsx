@@ -3,11 +3,7 @@ import { type BaseRenderable, rgbToHex, TextRenderable } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
-import {
-  createNewSessionFlow,
-  transitionNewSessionFlow,
-  type NewSessionFlowState,
-} from "@station/dashboard-core";
+import { createNewSessionFlow, transitionNewSessionFlow } from "@station/dashboard-core/state";
 import type { StationSnapshot } from "@station/contracts";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import { manyProjectsSnapshot } from "../../fixtures/scenarios.js";
@@ -43,7 +39,10 @@ function snapshotWithCodexStatus(
   };
 }
 
-async function render(snapshot: StationSnapshot, state: NewSessionFlowState, width = 80) {
+/** Flow state named through the public transition contract rather than the private mutable model. */
+type NewSessionSheetFlowState = NonNullable<Parameters<typeof transitionNewSessionFlow>[0]>;
+
+async function render(snapshot: StationSnapshot, state: NewSessionSheetFlowState, width = 80) {
   const targets: StationMouseTarget[] = [];
   const setup = await testRender(
     <StationThemeProvider theme={nativeStationTheme}>

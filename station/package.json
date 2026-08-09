@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build:ctty-helper": "mkdir -p dist && cc -std=c11 -Wall -Wextra -Werror -O2 -o dist/ctty-helper src/terminal/pty/station-ctty-helper.c && chmod 0755 dist/ctty-helper",
-    "dev": "bun run link:station && bun run repair:node-pty && bun --hot src/main.tsx",
+    "dev": "node ../scripts/native-hmr-runner.mjs",
     "link:station": "./scripts/link-station-packages.sh",
     "repair:node-pty": "./scripts/repair-node-pty.sh",
     "station": "./scripts/link-station-packages.sh && ./scripts/repair-node-pty.sh && bun src/main.tsx",
@@ -13,15 +13,16 @@
     "doctor": "./scripts/doctor.sh",
     "station:profile": "bun run link:station && bun run repair:node-pty && STATION_PROFILE=1 bun src/main.tsx",
     "station:devtools": "bun run link:station && bun run repair:node-pty && DEV=true bun src/main.tsx",
-    "station:isolated": "bun run link:station && bun run repair:node-pty && ./scripts/station-isolated.sh",
+    "station:isolated": "./scripts/station-isolated.sh",
     "station:isolated:stop": "./scripts/station-isolated.sh stop",
     "test": "bun run link:station && bun test",
     "e2e:persist": "bun run link:station && bun run repair:node-pty && bun src/host/e2eReattachDemo.ts",
     "host:dev": "bun run link:station && bun run repair:node-pty && bun src/host/e2eReattachDemo.ts --dev --hold",
     "host:list": "bun run link:station && bun src/host/listHostAgents.ts",
     "test:agents": "bun run repair:node-pty && STATION_PTY_SMOKE=1 STATION_PTY_SMOKE_TUI=1 bun test src/input/stationInput.e2e.test.tsx src/terminal/ptyPipeline.smoke.test.ts",
-    "test:pty": "bun run repair:node-pty && STATION_PTY_SMOKE=1 bun test src/terminal/pty/childPtyEnvironment.test.ts src/terminal/pty/localPtyTerminal.test.ts src/terminal/pty/auxShellPlacement.test.ts src/terminal/ptyPipeline.smoke.test.ts src/host/ptyTable.smoke.test.ts src/terminal/pty/localPtyBridgeHardening.test.ts src/input/stationInput.e2e.test.tsx",
-    "test:pty:bun": "bun run build:ctty-helper && STATION_PTY_SMOKE=1 STATION_PTY_IMPL=bun bun test src/terminal/pty/terminalProcessEmitter.test.ts src/terminal/pty/childPtyEnvironment.test.ts src/terminal/pty/localPtyTerminal.test.ts src/terminal/pty/auxShellPlacement.test.ts src/terminal/pty/bunTerminalProcess.test.ts src/host/ptyTable.smoke.test.ts",
+    "test:pty": "bun run repair:node-pty && STATION_PTY_SMOKE=1 bun test src/terminal/pty/childPtyEnvironment.test.ts src/terminal/pty/localPtyTerminal.test.ts src/terminal/pty/auxShellPlacement.test.ts src/terminal/ptyPipeline.smoke.test.ts src/host/ptyTable.smoke.test.ts src/terminal/pty/hostReplaySizing.test.ts src/terminal/pty/localPtyBridgeHardening.test.ts src/terminal/pty/localPtyBridgeOrphan.test.ts src/host/ptyTableRegistry.test.ts src/host/orphanBridges.test.ts src/host/orphanAdoption.smoke.test.ts src/host/hostHandoff.smoke.test.ts src/host/hostHandoff.packaging.smoke.test.ts src/input/stationInput.e2e.test.tsx",
+    "test:host:upgrade": "bun run repair:node-pty && STATION_PTY_SMOKE=1 bun test src/host/hostHandoff.smoke.test.ts src/host/hostHandoff.packaging.smoke.test.ts",
+    "test:pty:bun": "bun run build:ctty-helper && STATION_PTY_SMOKE=1 STATION_PTY_IMPL=bun bun test src/terminal/pty/terminalProcessEmitter.test.ts src/terminal/pty/childPtyEnvironment.test.ts src/terminal/pty/localPtyTerminal.test.ts src/terminal/pty/auxShellPlacement.test.ts src/terminal/pty/bunTerminalProcess.test.ts src/host/ptyTable.smoke.test.ts src/terminal/pty/hostReplaySizing.test.ts src/host/ptyTableRegistry.test.ts src/host/orphanBridges.test.ts",
     "test:stress": "STATION_VT_STRESS=1 bun test src/terminal/vt/screen.stress.test.ts",
     "test:vt": "bun test src/terminal",
     "typecheck": "bun run link:station && tsc -p tsconfig.json --noEmit"
@@ -29,6 +30,7 @@
   "dependencies": {
     "@opentui/core": "0.4.1",
     "@opentui/react": "0.4.1",
+    "@texel/color": "^1.1.11",
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/headless": "6.0.0",
@@ -40,10 +42,15 @@
     "zod": "^4.1.12",
     "zustand": "^5.0.14"
   },
+  "overrides": {
+    "@typescript/old": "npm:typescript@6.0.3"
+  },
   "devDependencies": {
     "@earendil-works/pi-tui": "0.80.10",
+    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "^25.9.3",
     "@types/react": "19.2.17",
-    "typescript": "5.9.3"
+    "@typescript/typescript6": "6.0.2",
+    "typescript": "7.0.2"
   }
 }

@@ -13,7 +13,15 @@ import { describe, expect, it, vi } from "vitest";
 import { createTempState, writeConfigToml } from "../../../../tests/support/temp-projects";
 
 const now = "2026-05-20T12:00:00.000Z";
-const observerBuildVersion = `0.7.0+station.${"a".repeat(64)}`;
+const buildIdentity = "a".repeat(64);
+const observerBuildVersion = `0.0.0-local+station.${buildIdentity}`;
+const higherObserverBuildVersion = `0.0.0-pre-alpha.5.1+station.${buildIdentity}`;
+const tuiObserverBuildMismatchError = {
+  tag: "TuiCommandError",
+  code: "TUI_OBSERVER_BUILD_MISMATCH",
+  message: `Station UI caller selector "${observerBuildVersion}" does not match accepted Observer selector "${higherObserverBuildVersion}"; launch was refused before Station Host-producing work could mix builds.`,
+  hint: `Use the matching Observer build "${higherObserverBuildVersion}" to account for live terminals. When hosted work is empty, stop the incumbent Observer and retry, or use isolated Observer state.`,
+} as const;
 const repoRoot = realpathSync(fileURLToPath(new URL("../../../../", import.meta.url))).replace(
   /\/$/,
   "",
@@ -199,6 +207,57 @@ describe("CLI popup command", () => {
     } finally {
       stderrWrite.mockRestore();
     }
+  });
+
+  it("refuses a lower-build popup before reconcile or configured, warm, and registered routing", async () => {
+    const fixture = await createTempState();
+    fixture.config.defaults.terminal = "tmux";
+    const reconcile = vi.fn(async () => emptySnapshot("unexpected"));
+    const spawnObserver = vi.fn(async () => ({ pid: 5678, unref: () => undefined }));
+    const clientFactory = vi.fn(
+      () =>
+        ({
+          health: async () => ({
+            schemaVersion: "0.9.0",
+            status: "healthy",
+            pid: 1234,
+            startedAt: now,
+            version: higherObserverBuildVersion,
+          }),
+          reconcile,
+        }) as never,
+    );
+    const openTmuxPopup = vi.fn(openedPopup);
+
+    await expect(
+      runPopupCommand(
+        [],
+        {
+          config: fixture.config,
+          env: {
+            TMUX: "/tmp/tmux-501/default,123,0",
+            STATION_TUI_COMMAND: "custom-station-ui",
+          },
+          preferRegisteredDevPopup: true,
+          registeredDevPopupRoot: "/warm/station",
+          tuiCommand: "nested-station-dashboard",
+          uiSessionName: "_station-ui-warm",
+        },
+        {
+          observer: {
+            buildVersion: observerBuildVersion,
+            clientFactory,
+            spawnObserver,
+          },
+          openTmuxPopup,
+        },
+      ),
+    ).rejects.toEqual(tuiObserverBuildMismatchError);
+
+    expect(clientFactory).toHaveBeenCalledOnce();
+    expect(spawnObserver).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(openTmuxPopup).not.toHaveBeenCalled();
   });
 
   it("keeps an explicitly missing popup config as a hard error", async () => {

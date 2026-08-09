@@ -52,6 +52,7 @@ function controllableAttachment(
     }
   };
   const attachment: HostAttachment = {
+    attachmentId: "att-test",
     ack,
     frames: {
       [Symbol.asyncIterator]: () => ({
@@ -124,6 +125,25 @@ function ack(overrides: AckOverrides = {}): HostAttachAck {
   };
 }
 
+
+const unusedHandoffClientMethods = {
+  beginHandoff: async () => ({
+    manifest: {},
+    fidelity: "processes" as const,
+    released: [] as string[],
+    skipped: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+  completeHandoff: async () => ({ stopping: true as const }),
+  abortHandoff: async () => ({
+    adopted: [] as string[],
+    failed: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+  adoptRegistry: async () => ({
+    adopted: [] as string[],
+    failed: [] as Array<{ ptyId: string; reason: string }>,
+  }),
+};
+
 function clientForAttach(
   attach: StationHostClient["attach"],
   dispose: () => void = () => {},
@@ -133,6 +153,7 @@ function clientForAttach(
     dispose,
     health: async () => ({ ok: true, protocolVersion: 1 }),
     stopIfIdle: async () => ({ stopping: true }),
+    ...unusedHandoffClientMethods,
     spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
     write: async () => undefined,
     resize: async () => undefined,
@@ -363,7 +384,7 @@ describe("createHostAttachedTerminal", () => {
 
     expect(ctrl.state.resizes).toEqual([
       { cols: 80, rows: 24 },
-      { cols: 80, rows: 23 },
+      { cols: 80, rows: 25 },
       { cols: 80, rows: 24 },
       { cols: 100, rows: 30 },
     ]);
@@ -480,6 +501,7 @@ function trackingClientFactory(attachment: HostAttachment, tracking: Tracking) {
       dispose: () => {},
       health: async () => ({ ok: true, protocolVersion: 1 }),
       stopIfIdle: async () => ({ stopping: true }),
+      ...unusedHandoffClientMethods,
       spawn: async (params: unknown) => {
         tracking.spawns.push(params);
         return { ptyId: tracking.spawnPtyId, pid: 4242 };
@@ -809,7 +831,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
 
   it("replays Host reset data verbatim before geometry recovery and keeps I/O live", async () => {
     resetTerminalDiagnosticsForTest();
-    const resetData = "\x1bc\x1b[?1h\x1b[?2004h\x1b[=5u";
+    const resetData = "\x1bc\x1b[?1h\x1b[?2004h\x1b[=5u\x1b[20;1H";
     const ctrl = controllableAttachment(
       ack({
         replay: {
@@ -850,7 +872,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
       await flush();
       expect(ctrl.state.resizes).toEqual([
         { cols: 80, rows: 24 },
-        { cols: 80, rows: 23 },
+        { cols: 80, rows: 25 },
         { cols: 80, rows: 24 },
       ]);
       expect(diagnostics).toContain(
@@ -939,6 +961,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -982,6 +1005,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -1026,6 +1050,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -1045,10 +1070,10 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     await new Promise((resolve) => setTimeout(resolve, 400));
 
     expect(exits).toEqual([]);
-    // Reconnect flapped the rows (24 -> 23 -> 24) to force a repaint.
+    // Reconnect flapped the rows (24 -> 25 -> 24) to force a repaint.
     expect(second.state.resizes).toEqual([
       { cols: 80, rows: 24 },
-      { cols: 80, rows: 23 },
+      { cols: 80, rows: 25 },
       { cols: 80, rows: 24 },
     ]);
   });
@@ -1069,6 +1094,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async () => ({ ptyId: "pty-1", pid: 4242 }),
           write: async () => undefined,
           resize: async () => undefined,
@@ -1194,6 +1220,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
     "HOST_ATTACH_GONE",
     "HOST_SNAPSHOT_FAILED",
     "HOST_VERSION_INCOMPATIBLE",
+    "HOST_CLIENT_IDENTITY_MISMATCH",
     "HOST_UPGRADE_BLOCKED",
     "HOST_BAD_REQUEST",
   ] as const) {
@@ -1212,6 +1239,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
             dispose: () => {},
             health: async () => ({ ok: true, protocolVersion: 1 }),
             stopIfIdle: async () => ({ stopping: true }),
+            ...unusedHandoffClientMethods,
             spawn: async () => ({ ptyId: "pty-gone", pid: 1 }),
             write: async () => undefined,
             resize: async () => undefined,
@@ -1249,6 +1277,7 @@ describe("createHostAttachedTerminal (Station-owned aux)", () => {
           dispose: () => {},
           health: async () => ({ ok: true, protocolVersion: 1 }),
           stopIfIdle: async () => ({ stopping: true }),
+          ...unusedHandoffClientMethods,
           spawn: async (params: unknown) => {
             await gate;
             tracking.spawns.push(params);

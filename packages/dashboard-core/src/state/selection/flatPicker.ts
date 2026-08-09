@@ -1,6 +1,6 @@
 import type { KeyedChoice } from "../../selectors/selectors.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import { type CommitVia, defineList, type ListRow, type RegisteredListSpec } from "./types.js";
 
 /**
@@ -10,9 +10,9 @@ import { type CommitVia, defineList, type ListRow, type RegisteredListSpec } fro
  */
 export function flatPickerSpec<TId extends string>(config: {
   listId: string;
-  choices: (state: TuiState) => readonly KeyedChoice<TId>[];
-  commit: (state: TuiState, id: TId, via: CommitVia) => TuiTransition;
-  active?: (state: TuiState) => boolean;
+  choices: (state: DashboardState) => readonly KeyedChoice<TId>[];
+  commit: (state: DashboardState, id: TId, via: CommitVia) => TuiTransition;
+  active?: (state: DashboardState) => boolean;
 }): RegisteredListSpec {
   return defineList<TId>({
     listId: config.listId,

@@ -1,11 +1,7 @@
-import {
-  createInitialTuiState,
-  handleTuiKey,
-  persistentFilterExperience,
-  replaceSnapshot,
-  selectDashboardItems,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { selectDashboardItems } from "../../../../src/selectors/dashboardViewport.js";
+import { createInitialTuiState, replaceSnapshot } from "../../../../src/state/screen.js";
+import { handleTuiKey } from "../../../../src/state/transition.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
 
 const KEY_CONTEXT = { cwd: "/Users/example/Developer/station", homeDir: "/Users/example" };
@@ -15,7 +11,7 @@ function handle(
   state: ReturnType<typeof createInitialTuiState>,
   key: Parameters<typeof handleTuiKey>[1],
 ) {
-  return handleTuiKey(state, key, KEY_CONTEXT, persistentFilterExperience).state;
+  return handleTuiKey(state, key, KEY_CONTEXT).state;
 }
 
 describe("persistent-filter screen", () => {
@@ -33,7 +29,6 @@ describe("persistent-filter screen", () => {
       draftConditions: [],
     });
     expect(opened.persistentFilter).toEqual({ query: "working" });
-    expect(opened.searchQuery).toBe("");
   });
 
   it("uses the shared text editor for insertion, movement, deletion, and Ctrl-U", () => {
@@ -61,7 +56,6 @@ describe("persistent-filter screen", () => {
   it("applies a nonblank hard projection, retains matching focus, and clamps scroll", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
-      searchQuery: "",
       scrollOffset: 3,
       terminalRows: 10,
       dashboardFocus: { kind: "session", sessionId: "ses_wt_web_idle" },
@@ -73,7 +67,6 @@ describe("persistent-filter screen", () => {
 
     expect(applied.screen).toEqual({ name: "dashboard" });
     expect(applied.persistentFilter).toEqual({ query: "NaV" });
-    expect(applied.searchQuery).toBe("");
     expect(applied.scrollOffset).toBe(0);
     expect(applied.dashboardFocus).toEqual(base.dashboardFocus);
   });

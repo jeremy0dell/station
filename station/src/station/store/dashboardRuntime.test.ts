@@ -1,10 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import {
-  selectDashboardViewport,
-  type DashboardSearchExperience,
-} from "@station/dashboard-core";
-import type { TuiFolderService } from "@station/dashboard-core";
-import type { DashboardRuntime } from "@station/dashboard-core";
+import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import type { TuiFolderService } from "@station/dashboard-core/runtime";
+import type { DashboardRuntime } from "@station/dashboard-core/runtime";
 import { waitFor } from "../../terminal/testing/waitFor.js";
 import { manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { FakeStationSource } from "../test/support/fakeStationSource.js";
@@ -12,7 +11,17 @@ import { createStationStubObserverService } from "./stubObserverService.js";
 import { createStationDashboardRuntime } from "./dashboardRuntime.js";
 
 describe("createStationDashboardRuntime", () => {
-  it("composes the legacy dashboard search experience", () => {
+  it("forwards one asynchronous repeat-safe dashboard settlement", async () => {
+    const store = makeStore();
+
+    const first = store.dispose();
+    const second = store.dispose();
+
+    expect(second).toBe(first);
+    await first;
+  });
+
+  it("applies the persistent filter through the native composition", () => {
     const store = makeStore();
 
     store.actions.handleKey({ input: "/" });
@@ -20,32 +29,7 @@ describe("createStationDashboardRuntime", () => {
     store.actions.handleKey({ input: "\r", return: true });
 
     expect(store.state.getState().screen).toEqual({ name: "dashboard" });
-    expect(store.state.getState().searchQuery).toBe("pty");
-  });
-
-  it("forwards a supplied resolved search experience without selecting one", () => {
-    const dashboardSearchExperience: DashboardSearchExperience = {
-      open: (state) => ({
-        state: { ...state, screen: { name: "search", value: "resolved:" } },
-      }),
-      handleKey: (state, key) => {
-        if (state.screen.name !== "search") {
-          return { state };
-        }
-        return {
-          state: {
-            ...state,
-            screen: { name: "search", value: `${state.screen.value}${key.input}` },
-          },
-        };
-      },
-    };
-    const store = makeStore(undefined, dashboardSearchExperience);
-
-    store.actions.handleKey({ input: "/" });
-    store.actions.handleKey({ input: "native" });
-
-    expect(store.state.getState().screen).toEqual({ name: "search", value: "resolved:native" });
+    expect(store.state.getState().persistentFilter).toEqual({ query: "pty" });
   });
 
   it("routes row activation through the stubbed command service with real pending state", async () => {
@@ -133,29 +117,33 @@ describe("createStationDashboardRuntime", () => {
   });
 });
 
-function makeStore(
-  folderService?: TuiFolderService,
-  dashboardSearchExperience?: DashboardSearchExperience,
-): DashboardRuntime {
+function makeStore(folderService?: TuiFolderService): DashboardRuntime {
   const snapshot = manyProjectsSnapshot();
   const source = new FakeStationSource(snapshot);
-  const options: Parameters<typeof createStationDashboardRuntime>[1] = {
-  };
+  const options: Parameters<typeof createStationDashboardRuntime>[2] = {};
   if (folderService !== undefined) {
     options.folderService = folderService;
   }
-  if (dashboardSearchExperience !== undefined) {
-    options.dashboardSearchExperience = dashboardSearchExperience;
-  }
+  const service = createStationStubObserverService(source, { dispatchDelayMs: 1 });
+  const capabilities: DashboardCapabilities = {
+    activation: createObserverActivationCapabilities({ source, service, clientLabel: "Station" }),
+    managedSessions: createObserverManagedSessionCapabilities({ service, clientLabel: "Station" }),
+    shell: { open: () => dashboardExecution({ kind: "success" }) },
+    dismissal: {
+      dismissDashboard: () => dashboardExecution({ kind: "success" }),
+      exitRenderer: () => dashboardExecution({ kind: "success" }),
+    },
+  };
   const store = createStationDashboardRuntime(
     {
       state: source,
-      service: createStationStubObserverService(source, { dispatchDelayMs: 1 }),
+      service,
       start: () => {
         source.start();
       },
       stop: () => source.stop(),
     },
+    capabilities,
     options,
   );
   store.start();

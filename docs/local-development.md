@@ -21,7 +21,6 @@ cd /path/to/the-worktree
 git branch --show-current
 
 test -d node_modules || pnpm install --frozen-lockfile
-test -d station/node_modules || (cd station && bun install)
 pnpm station:devbox dev
 ```
 
@@ -147,6 +146,9 @@ bun run station:isolated:stop     # tear down the observer + host for this workt
 
 `station:isolated` does everything needed for a self-contained sandbox:
 
+- runs `bun install --frozen-lockfile` in `station/` before creating `.dev-state`
+  or starting the Observer (`stop` deliberately skips installation and all other
+  preparation);
 - generates a worktree-local config (`.dev-state/config.toml`: state relocated
   under `.dev-state`, socket relocated under a short checkout-keyed temp path,
   `terminal = "noop-terminal"`, persistence flag on, supported
@@ -170,6 +172,17 @@ bun run station:isolated:stop     # tear down the observer + host for this workt
   `OPENCODE_CONFIG_DIR=.dev-state/opencode-config`, then installs Cursor and
   OpenCode hooks there as well;
 - starts the isolated observer and opens Station.
+
+The launch order is one coherent path:
+
+```text
+pnpm build
+→ bun install --frozen-lockfile in station/
+→ isolated Observer and hooks
+→ native-HMR owner for dev
+→ one package-link and node-pty repair pass
+→ Bun renderer
+```
 
 Use `pnpm station:devbox dev` for the same isolated stack with `bun --hot` UI
 reload. It keeps the observer, state, hooks, and host under `.dev-state`, but UI
@@ -496,8 +509,10 @@ node apps/cli/dist/main.js --config /abs/iso-config.toml debug logs
 - **Run this checkout's CLI** with `pnpm stn …` or `node apps/cli/dist/main.js …`
   from the worktree root — not a globally-installed `stn`, which may point
   elsewhere. (`pnpm station:link` mutates all three global launchers; avoid it for isolated dev.)
-- **Station (Bun) workspace** is off the pnpm/Node build. After a root `pnpm build`:
-  `cd station && bun install && bun run link:station && bun run repair:node-pty`.
+- **Station (Bun) workspace** is off the pnpm/Node build. `pnpm station:devbox`
+  and `pnpm station:devbox dev` install its dependencies with the nested frozen
+  lockfile automatically. For direct Station scripts after a root `pnpm build`,
+  run `cd station && bun install --frozen-lockfile && bun run link:station && bun run repair:node-pty`.
   The `bun run station*`/`host*`/`e2e:persist` scripts do the link/repair for you.
 
 ### Test gates (run before claiming green)

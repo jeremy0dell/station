@@ -9,11 +9,10 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-
-const ts = createRequire(import.meta.url)("typescript");
+// TypeScript 7 has no stable compiler API, so architecture analysis uses its official TS6 compatibility package.
+import ts from "@typescript/typescript6";
 
 const roles = ["DRIVING PORT", "DRIVEN PORT", "ADAPTER", "USE CASE", "POLICY", "COMPOSITION ROOT"];
 const roleSet = new Set(roles);

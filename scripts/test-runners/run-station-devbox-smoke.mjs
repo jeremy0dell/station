@@ -8,7 +8,16 @@
 // then STOPS the devbox, so a live devbox here will be stopped.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +41,23 @@ const hookLog = join(ds, "observer", "logs", "hooks.jsonl");
 const codexHookScript = join(hooksDir, "station-codex-hook.sh");
 const codexProfileConfig = join(ds, "codex-home", "station.config.toml");
 const globalStateFragment = join(".local", "state", "station");
+const bunShimRoot = mkdtempSync(join(tmpdir(), "station-devbox-smoke-bun-"));
+const bunInvocationLog = join(bunShimRoot, "invocations.log");
+const bunShim = join(bunShimRoot, "bun");
+const resolvedBun = spawnSync("bash", ["-c", "command -v bun"], { encoding: "utf8" });
+assert(resolvedBun.status === 0, `bun is unavailable: ${resolvedBun.stderr}`);
+writeFileSync(
+  bunShim,
+  `#!/usr/bin/env bash
+set -euo pipefail
+{
+  for argument in "$@"; do printf '%s\\037' "$argument"; done
+  printf '\\n'
+} >> "$STATION_DEVBOX_SMOKE_BUN_LOG"
+exec "$STATION_DEVBOX_SMOKE_REAL_BUN" "$@"
+`,
+  { mode: 0o700 },
+);
 let socketRestricted = false;
 
 process.stderr.write(
@@ -57,7 +83,24 @@ try {
 
   // Start via the no-UI seam: the wrapper delegates to the isolated path, which
   // brings up the observer + installs codex/claude hooks, then exits (no TUI).
-  const start = devbox(["start"], "start", { STATION_ISOLATED_NO_LAUNCH: "1" });
+  const start = devbox(["start"], "start", {
+    PATH: `${bunShimRoot}:${process.env.PATH ?? ""}`,
+    STATION_DEVBOX_SMOKE_BUN_LOG: bunInvocationLog,
+    STATION_DEVBOX_SMOKE_REAL_BUN: resolvedBun.stdout.trim(),
+    STATION_ISOLATED_NO_LAUNCH: "1",
+  });
+  const bunInvocations = readBunInvocations();
+  assert(
+    bunInvocations.filter((args) => args[0] === "install" && args[1] === "--frozen-lockfile")
+      .length === 1,
+    `headless start did not perform exactly one frozen Station install: ${JSON.stringify(bunInvocations)}`,
+  );
+  assert(
+    !bunInvocations.some(
+      (args) => args.includes("link:station") || args.includes("repair:node-pty"),
+    ),
+    `headless start ran a redundant link or node-pty repair: ${JSON.stringify(bunInvocations)}`,
+  );
   assert(
     start.stdout.includes(observerSock),
     `start did not report the isolated observer socket ${observerSock}\n${start.stdout}`,
@@ -156,6 +199,8 @@ try {
   if (socketRestricted) chmodSync(observerSock, 0o600);
   spawnSync("node", [wrapper, "stop"], { cwd: repoRoot, encoding: "utf8", timeout: 30_000 });
   throw error;
+} finally {
+  rmSync(bunShimRoot, { recursive: true, force: true });
 }
 
 function parseArgs(args) {
@@ -246,6 +291,14 @@ function assertCodexHookDelivery() {
     ),
     `Codex hook did not deliver to the restarted Observer\n${JSON.stringify(newRecords, null, 2)}`,
   );
+}
+
+function readBunInvocations() {
+  if (!existsSync(bunInvocationLog)) return [];
+  return readFileSync(bunInvocationLog, "utf8")
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => line.split("\u001f").filter((argument) => argument.length > 0));
 }
 
 function readJsonl(path) {

@@ -73,7 +73,12 @@ Normalized events are `HarnessEventReport` / `HarnessEventObservation`
    a contract field set at the provider boundary.
 3. **Attention is typed.** `needs_attention` without `attention` renders as a
    status but never triggers attention UX (sound, notification). Providers own
-   the classification.
+   the classification. The OpenCode transport applies one provider-owned
+   carveout: it suppresses a `permission.asked` event when OpenCode's own
+   auto-accept resolves it with a matching `permission.replied` before the
+   ask's 300 ms confirmation window expires, because such an ask never blocked
+   a user. A genuine ask (no reply within the window) is forwarded unchanged
+   and opens attention as usual.
 4. **Blocking states beat activity.** A tool call that *is* the user request
    (Codex `request_user_input`) must normalize as `needs_attention`, not as
    tool activity. When a provider separates prompt-open from tool preflight,

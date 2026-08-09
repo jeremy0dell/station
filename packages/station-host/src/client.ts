@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import type { HostHandoffFidelity, PtyHandoffManifest, UiRunContext } from "@station/contracts";
 import { connectUnixSocket, type NdjsonConnection } from "@station/protocol";
 import { stationBuildInfo } from "@station/runtime";
 import type { z } from "zod";
@@ -8,9 +10,19 @@ import {
 } from "./errors.js";
 import {
   HOST_PROTOCOL_VERSION,
+  type HostAbortHandoffResult,
+  HostAbortHandoffResultSchema,
+  type HostAdoptRegistryResult,
+  HostAdoptRegistryResultSchema,
   type HostAttachAck,
   HostAttachAckSchema,
+  type HostBeginHandoffResult,
+  HostBeginHandoffResultSchema,
+  type HostClientIdentity,
+  HostClientIdentitySchema,
   HostCloseResultSchema,
+  type HostCompleteHandoffResult,
+  HostCompleteHandoffResultSchema,
   type HostFrame,
   HostFrameSchema,
   type HostHealthResult,
@@ -25,6 +37,7 @@ import {
   HostSpawnResultSchema,
   type HostStopIfIdleResult,
   HostStopIfIdleResultSchema,
+  hostClientShutdownNotification,
   hostRequest,
 } from "./protocol.js";
 
@@ -33,12 +46,20 @@ export type StationHostClientOptions = {
   timeoutMs?: number;
   /** Build expected by operational calls; defaults to this Station build. */
   expectedBuildVersion?: string;
+  /** Cross-process UI identity captured once by renderer composition. */
+  uiContext?: UiRunContext;
+  /** Test seam for deterministic protocol assertions. */
+  connectionId?: string;
   /** Test seam: supply a connection instead of dialing the unix socket. */
   connect?: () => Promise<NdjsonConnection>;
 };
 
-/** A live attachment to one host PTY: a frame stream plus input/teardown. */
+/**
+ * A live attachment to one Host PTY with a unique attach-attempt identity and
+ * reasoned teardown, independent from whether the underlying PTY remains alive.
+ */
 export type HostAttachment = {
+  attachmentId: string;
   ack: HostAttachAck;
   frames: AsyncIterable<HostFrame>;
   write(data: string): Promise<void>;
@@ -50,6 +71,17 @@ export type StationHostClient = {
   health(): Promise<HostHealthResult>;
   /** Lifecycle-only request; intentionally available before compatibility is established. */
   stopIfIdle(requestingBuildVersion: string): Promise<HostStopIfIdleResult>;
+  /** Lifecycle-only negotiated live handoff begin; parks bridges and returns the manifest. */
+  beginHandoff(
+    requestingBuildVersion: string,
+    fidelity?: HostHandoffFidelity,
+  ): Promise<HostBeginHandoffResult>;
+  /** Lifecycle-only: release the socket and exit without disposing parked bridges. */
+  completeHandoff(): Promise<HostCompleteHandoffResult>;
+  /** Lifecycle-only: re-adopt parked bridges and resume normal serving. */
+  abortHandoff(): Promise<HostAbortHandoffResult>;
+  /** Lifecycle-only: adopt a parked manifest on a successor host. */
+  adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAdoptRegistryResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
   write(ptyId: string, data: string): Promise<void>;
   resize(ptyId: string, cols: number, rows: number): Promise<void>;
@@ -57,6 +89,7 @@ export type StationHostClient = {
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
   attach(ptyId: string): Promise<HostAttachment>;
+  /** Send a one-way shutdown notification, then gracefully close the connection. */
   dispose(): void;
 };
 
@@ -88,6 +121,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
   let connection: NdjsonConnection | undefined;
   let connecting: Promise<NdjsonConnection> | undefined;
   let compatibilityCheck: Promise<void> | undefined;
+  let clientIdentity: HostClientIdentity | undefined;
   let disposed = false;
   let nextId = 0;
 
@@ -106,6 +140,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     connection = undefined;
     connecting = undefined;
     compatibilityCheck = undefined;
+    clientIdentity = undefined;
   }
 
   async function readLoop(active: NdjsonConnection): Promise<void> {
@@ -150,6 +185,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       return connection;
     }
     if (connecting === undefined) {
+      clientIdentity = createClientIdentity(options, expectedBuildVersion);
       connecting = connect()
         .then((opened) => {
           if (disposed) {
@@ -196,14 +232,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       }, timeoutMs);
       pending.set(id, { resolve, reject, timer });
       active.send(
-        hostRequest(
-          id,
-          method,
-          params,
-          includeClientIdentity
-            ? { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: expectedBuildVersion }
-            : undefined,
-        ),
+        hostRequest(id, method, params, includeClientIdentity ? clientIdentity : undefined),
       );
     });
     if (!response.ok) {
@@ -294,6 +323,18 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     health: () => rawRequest("host.health", undefined, HostHealthResultSchema),
     stopIfIdle: (requestingBuildVersion) =>
       rawRequest("host.stopIfIdle", { requestingBuildVersion }, HostStopIfIdleResultSchema),
+    beginHandoff: (requestingBuildVersion, fidelity = "processes") =>
+      rawRequest(
+        "host.beginHandoff",
+        { requestingBuildVersion, fidelity },
+        HostBeginHandoffResultSchema,
+      ),
+    completeHandoff: () =>
+      rawRequest("host.completeHandoff", undefined, HostCompleteHandoffResultSchema),
+    abortHandoff: () => rawRequest("host.abortHandoff", undefined, HostAbortHandoffResultSchema),
+    // Successor adopt requires matching build identity; not a lifecycle exemption.
+    adoptRegistry: (manifest) =>
+      request("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
     write: async (ptyId, data) => {
       await request("host.write", { ptyId, data }, HostOkResultSchema);
@@ -307,15 +348,17 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     },
     close: (ptyId) => request("host.close", { ptyId, confirm: true }, HostCloseResultSchema),
     attach: async (ptyId) => {
+      const attachmentId = `att_${randomUUID()}`;
       const frames = registerSink(ptyId);
       let ack: HostAttachAck;
       try {
-        ack = await request("host.attach", { ptyId }, HostAttachAckSchema);
+        ack = await request("host.attach", { ptyId, attachmentId }, HostAttachAckSchema);
       } catch (error) {
         sinks.delete(ptyId);
         throw error;
       }
       return {
+        attachmentId,
         ack,
         frames,
         write: async (data) => {
@@ -328,7 +371,11 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           // Ask the host to detach first, then release the local sink — but always
           // end it (finally) so a failed/closed request can't leave frames hanging.
           try {
-            await request("host.detach", { ptyId }, HostOkResultSchema);
+            await request(
+              "host.detach",
+              { ptyId, attachmentId, reason: "explicit_detach" },
+              HostOkResultSchema,
+            );
           } finally {
             const sink = sinks.get(ptyId);
             sinks.delete(ptyId);
@@ -340,10 +387,31 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     dispose: () => {
       disposed = true;
       const current = connection;
+      const identity = clientIdentity;
+      if (current !== undefined && identity !== undefined) {
+        current.send(hostClientShutdownNotification(identity));
+      }
       teardown(
         new StationHostProviderError("HOST_UNREACHABLE", "Station host client is disposed."),
       );
       current?.close();
     },
   };
+}
+
+function createClientIdentity(
+  options: StationHostClientOptions,
+  buildVersion: string,
+): HostClientIdentity {
+  const uiContext = options.uiContext ?? {
+    uiRunId: `ui_${randomUUID()}`,
+    rendererPid: process.pid,
+    clientKind: "host_tool" as const,
+  };
+  return HostClientIdentitySchema.parse({
+    protocolVersion: HOST_PROTOCOL_VERSION,
+    buildVersion,
+    ...uiContext,
+    connectionId: options.connectionId ?? `conn_${randomUUID()}`,
+  });
 }

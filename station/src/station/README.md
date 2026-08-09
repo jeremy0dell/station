@@ -5,8 +5,8 @@ Architecture: render-framework-free dashboard behavior comes
 from `@station/dashboard-core`; the OpenTUI render layer under `view/` and the
 Station input/mouse plumbing stay local. Input registers into Station's router:
 the overlay keymap slot delegates to the shared transition machine
-(`input/stationOverlayLayer.ts`), and mouse targets resolve through one pure
-`routeStationMouse` (`input/stationMouse.ts`).
+(`input/stationOverlayLayer.ts`), and both native and standalone mouse targets
+resolve through one pure `routeStationMouse` (`input/stationMouse.ts`).
 
 ## Running it
 
@@ -32,18 +32,25 @@ the dashboard is open so the hidden native layout cannot change.
 Runtime keyboard dispatch goes through the shared dashboard-core transition
 machine. Workflow mouse targets call `DashboardActions.dispatch(...)` with
 renderer-neutral Dashboard actions; direct commands and focused Enter decode to the
-same core intents, and the runtime applies every resulting transition and effect
-through one executor.
+same core intents, and the runtime applies every resulting transition and semantic
+capability execution through one executor.
 `DashboardRuntime.state` is read-only (`getState`, `getInitialState`, and
 `subscribe`), while `DashboardRuntime.actions` is the only external mutation
 authority. Presentation receives the state source; input receives state plus actions;
-`createStation` alone owns `start` and repeat-safe `dispose`.
+`createStation` alone owns `start` and asynchronous repeat-safe `dispose`. Disposal
+closes actions immediately, cancels dashboard subscriptions and timers, prevents late
+state writes, and drains already-started operations before the composition stops its
+client. Native and standalone HMR release renderer/stdin ownership synchronously and
+await the prior dashboard disposer before composing a replacement; native HMR retains
+the compatible workspace store and live PTYs.
 
-Station keeps only sequence translation and managed-pane overrides needed for row
-activation, new sessions, and forks. Native pointer Create, direct `C`, and focused
-Create Enter converge after semantic resolution and shared validation in one native
-managed-launch resolver; standalone rendering applies the same action through the
-existing observer operation instead.
+Every renderer injects session-activation, managed-session, shell-opening, and
+dismissal capabilities. Native Station composes those capabilities with managed panes
+and overlay authority; standalone rendering composes Observer commands and popup IPC.
+Dashboard state contains no renderer control intents, and dashboard-core owns optimistic
+rows, notices, failures, and expiry. Native pointer Create, direct `C`, and focused
+Create Enter therefore converge after semantic resolution and shared validation before
+the same managed-session capability invocation.
 
 ## Acceptance suite
 
@@ -64,17 +71,19 @@ existing observer operation instead.
 - Isolation: `importBoundaries.test.ts` (no apps/tui imports, only linked
   @station packages, no local ported fork, no `focusable`).
 
-## Command dispatch (client plan PR 4)
+## Command execution
 
 Live mode dispatches through the single shared `@station/client` service: one
-`ObserverService` feeds both runtime state and commands
-(`sources/observerStationClient.ts`). Its service facet routes reconcile and
-operation snapshot loads through the client runtime (dashboard-core's
-`bridgeOperationService`) so the runtime's reducer base stays converged with
-dashboard state and the connected transition plus recovery toast arrive via the
-read-only state subscription — the seam from PR #78 review finding #3. Dispatch and
-command-completion waits pass through unchanged; row-activate focus,
-jump-to-session on click, and `Z` refresh are live
+client runtime owns canonical snapshot/connection state and the `ObserverService`
+used by commands (`sources/observerStationClient.ts`). Its provider-neutral
+`executeObserverCommand` primitive dispatches typed commands and normalizes
+rejection, acceptance, successful completion, completion failure, and thrown
+failure exactly once while retaining receipt/trace identity. Dashboard and native
+callers continue to own optimistic rows, operation-specific fallback copy, toasts,
+and launch or popup effects. Reconcile and operation snapshot loads commit through
+the client runtime before resolving, so the next event reduces from the same
+snapshot object dashboard projection receives through its read-only client-state
+subscription. Row-activate focus, jump-to-session on click, and `Z` refresh are live
 (`store/stationCommandDispatch.test.ts`).
 
 Mock mode keeps the rejecting service by design
@@ -82,9 +91,10 @@ Mock mode keeps the rejecting service by design
 paths (pending rows, TTL revert, toasts) and resolve as rejected receipts
 naming mock mode.
 
-Known gap: Station's runtime runs without `createObserverBridgeHooks`, so
-`command.failed` event notices do not surface as toasts; failures still toast
-through the command-completion waits on the focus and operation paths.
+Known gap: canonical client state carries snapshot and connection truth, not a
+notice queue, so `command.failed` event notices do not independently surface as
+toasts; failures still toast once through command-completion waits on focus and
+operation paths.
 
 ## Known not-yet
 

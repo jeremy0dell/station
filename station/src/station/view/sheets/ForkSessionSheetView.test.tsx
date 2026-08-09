@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import { createEditableTextInputState, type TuiScreen } from "@station/dashboard-core";
+import { createEditableTextInputState } from "@station/dashboard-core/selectors";
+import type { DashboardScreenView } from "@station/dashboard-core/state";
 import { act } from "react";
 import { spanAtFrameCell } from "../../../terminal/testing/frameProbe.js";
 import type { StationMouseTarget } from "../../input/stationMouse.js";
@@ -14,7 +15,7 @@ import {
 } from "../../../theme/index.js";
 import { ForkSessionSheetView } from "./ForkSessionSheetView.js";
 
-type ForkDetailsScreen = Extract<TuiScreen, { name: "fork"; step: "details" }>;
+type ForkDetailsScreen = Extract<DashboardScreenView, { name: "fork"; step: "details" }>;
 
 const teardowns: Array<() => void> = [];
 afterEach(() => {

@@ -6,7 +6,7 @@ import { scrollDashboard } from "../dashboardScroll.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 
 /**
  * The shared choose-a-dashboard-row step behind remove/rename/fork. Arrows move
@@ -17,9 +17,9 @@ import type { TuiState } from "../types.js";
  * stream (viewport-windowed slots, follow-scroll) the engine deliberately omits.
  */
 export function handleDashboardRowChoiceKey(
-  state: TuiState,
+  state: DashboardState,
   key: TuiKey,
-  commit: (state: TuiState, rowId: SessionId) => TuiTransition,
+  commit: (state: DashboardState, rowId: SessionId) => TuiTransition,
 ): TuiTransition {
   if (key.upArrow === true) {
     return { state: moveDashboardSessionFocus(state, -1) };

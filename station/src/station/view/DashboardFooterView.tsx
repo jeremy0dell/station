@@ -1,16 +1,15 @@
 import type { ColorInput } from "@opentui/core";
 import { useStore } from "zustand/react";
+import type { DashboardStateSource } from "@station/dashboard-core/runtime";
+import { dashboardFooterModel, truncateCells } from "@station/dashboard-core/selectors";
+import type { DashboardFooterModel } from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
-  dashboardFooterModel,
   isTuiToastHiddenByScreen,
   QUIT_HINT_CLOSE,
   QUIT_HINT_DISMISS_ERROR,
-  truncateCells,
-  type DashboardFooterModel,
-  type DashboardStateSource,
-  type DashboardStateView,
-} from "@station/dashboard-core";
+ } from "@station/dashboard-core/state";
+import type { DashboardStateView } from "@station/dashboard-core/state";
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
 import { DashboardFilterFooterView } from "./DashboardFilterFooterView.js";
 

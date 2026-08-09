@@ -47,7 +47,7 @@ Use the narrowest tool that can answer the question:
 Use `stn debug logs [query]` for bounded historical log inspection when there is no
 trace, command, or diagnostic ID yet. It reads structured JSONL logs from the
 configured state directory without contacting the observer. By default it searches
-`observer`, `cli`, and `tui` logs, excludes noisy hook logs, returns recent
+`observer`, `cli`, `tui`, and `station-host` logs, excludes noisy hook logs, returns recent
 `warn`/`error` records when no query is supplied, and searches all levels when a
 query is supplied. Opt into hook logs explicitly:
 
@@ -167,13 +167,19 @@ logs/observer.jsonl
 logs/hooks.jsonl
 logs/cli.jsonl
 logs/tui.jsonl
+logs/station-host.jsonl
 diagnostics/*/diagnostic-index.json
 diagnostics/*/commands.jsonl
 diagnostics/*/errors.jsonl
 diagnostics/*/logs/observer.jsonl
 diagnostics/panes/
 spool/hooks/
+run/runtime-owners/v1/
 ```
+
+`run/runtime-owners/v1` contains private (`0700` directory, `0600` files) disposable-runtime records for native development HMR and the supervised setup guided E2E lane. Binary smoke uses the same relative record path beneath private checkout-and-mode-keyed state in the OS temporary directory so an ordinary next start can find a prior random smoke root. A matching next start may recover only a dead owner's exact registered process group after PID, PGID, OS start, launch-token, script, and executable evidence agree. Device-and-inode-pinned cleanup roots remain on the next record until exact deletion succeeds. A malformed, insecure, replaced, reused, or unavailable identity blocks cleanup and preserves the record for diagnosis. These records classify socket and persistence roots but never authorize signals to persistent Observer, Station Host, or Host-owned PTYs.
+
+Use `pnpm station:runtime-inventory [-- --json]` to inspect registered disposable owners without changing them. The report distinguishes a live persistent Host/PTY cohort from a disposable launcher record, returns only keys and root classifications, and names unavailable or ambiguous evidence as a refusal. It never prints raw commands, environment, terminal contents, prompts, credentials, or absolute private paths; use its logical `logs/cli.jsonl` location with `stn debug logs "runtime." --component cli` for the correlated lifecycle evidence. For the checkout-local devbox, run `cd station && bun run station:isolated inventory`.
 
 `observer.sock.pid` is mode `0600` for the default socket and contains exactly:
 
@@ -181,7 +187,7 @@ spool/hooks/
 {
   "pid": 12345,
   "osStartTime": "Sat Jul 11 10:42:03 2026",
-  "processToken": "a47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "processToken": "00000000-0000-4000-8000-000000000001",
   "version": "0.7.0+station.0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "socketPath": "/resolved/socket/directory/observer.sock"
 }
@@ -269,10 +275,12 @@ pnpm station:sessions:migrate -- \
 ```
 
 The plan is read-only: it uses `snapshot --require-running`, checks the exact
-source Observer and Host census, verifies target worktree and Host identities,
-refuses live target sessions on providers being migrated, checks provider-file
-conflicts, and prints a SHA-256 digest. It never starts an Observer or
-edits configuration. Apply must bind confirmation to that evidence:
+source Observer and Host census, requires each source row title to match its
+session projection, verifies target worktree and Host identities, records the
+target's current canonical title, refuses live target sessions on providers
+being migrated, requires canonical-title import readiness, checks provider-file
+conflicts, and prints a SHA-256 digest over that evidence. It never starts an
+Observer or edits configuration. Apply must bind confirmation to that evidence:
 
 ```bash
 pnpm station:sessions:migrate -- \
@@ -283,13 +291,15 @@ pnpm station:sessions:migrate -- \
 ```
 
 Apply intentionally has downtime. It closes only the planned source sessions
-without force, proves the source Host owns no live PTY, captures stable final
-provider state into a hash-inventoried private directory, and stops the pinned source
-Observer before importing handles through the recorded
-`session.importRecoveryHandle` command. It then resumes each target and verifies
-its exact Host PTY and provider-native identity. Source and target agents never
-run concurrently, target TOML is never edited, target SQLite is never opened by
-the maintenance script, and an entire devbox is never stopped as a side effect.
+without force only after revalidating the source and target titles, proves the
+source Host owns no live PTY, captures stable final provider state into a
+hash-inventoried private directory, and stops the pinned source Observer before
+atomically importing each canonical title and handle through the recorded
+`session.importRecoveryHandle` command. It then resumes each target without a
+post-launch rename and verifies both title projections, its exact Host PTY, and
+provider-native identity. Source and target agents never run concurrently,
+target TOML is never edited, target SQLite is never opened by the maintenance
+script, and an entire devbox is never stopped as a side effect.
 
 Only one apply process may own a digest at a time; a stale owner-private lock is
 reclaimed only after its recorded process is gone. `SIGINT`, `SIGTERM`, and
@@ -300,7 +310,9 @@ of source sessions running; rerun with the same digest so the journal closes the
 remaining sessions. After `source-sealed`, source agents remain stopped and the
 sealed directory is authoritative; the same retry accepts already-resumed exact
 target sessions and continues from sealed evidence instead of rerunning live
-source planning checks.
+source planning checks. A journal created by the former resume-then-rename flow
+may issue one idempotent rename repair for an already-resumed target; new
+journals import the canonical title before resume and do not use that repair.
 
 Codex and OpenCode migration accept each provider's shared source database, an
 absent target database, or a byte-identical target database. They refuse instead
@@ -330,6 +342,22 @@ it accepted at launch. The failed operation was not sent to the replacement.
 Close and relaunch that client, or use an isolated socket/state directory; do
 not retry the stale process in a loop.
 
+`TUI_OBSERVER_BUILD_MISMATCH` occurs earlier: a command-capable native or popup
+Station launcher reached a healthy Observer selected by normal singleton policy,
+but its complete caller selector did not exactly equal the accepted Observer
+selector. No renderer, startup or popup reconcile, tmux popup, Station Host,
+PTY, or layout effect should have started. Use the matching Observer build named
+in the error to inspect and account for live terminals. When hosted work is
+empty, stop the incumbent gracefully and retry, or select an isolated Observer
+state directory. Do not spoof either selector.
+
+This differs from `OBSERVER_HANDOFF_REFUSED`, where singleton ordering or safe
+replacement could not produce an acceptable handoff, and from
+`OBSERVER_BUILD_MISMATCH`, where an already-pinned client observed later
+replacement. `HOST_UPGRADE_BLOCKED` is independent: Station Host protocol or
+display build differs and the incumbent Host still owns live PTYs. Reopen the
+matching Host build and account for those terminals before replacement.
+
 A missing, invalid, or checkout/output-mismatched `station-build-id` stops a
 source client before it can claim compatibility. Run `pnpm build`, then relaunch
 the client; a scoped `tsc` output is not an identified whole-repository build.
@@ -338,6 +366,7 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 
 - `logs/observer-boot.log` is the raw, local-only record of the latest observer startup attempt. Each attempt atomically replaces it at mode `0600` with a JSON-encoded command header followed by that child's stdout/stderr. It sits outside structured `stn debug logs`; an `OBSERVER_EXITED_ON_START` error includes the latest path and, when available, a redacted final 15-line tail captured from its own failed child.
 - A failed hosted binary smoke can upload `binary-smoke-evidence-<run-id>-<attempt>` for three days. Download it with `gh run download <run-id> --name binary-smoke-evidence-<run-id>-<attempt> --dir /tmp/station-binary-smoke-evidence-<run-id>`, then read `manifest.json` before the round's `failure.json`, bounded logs, and runtime summary. The bundle is redacted, allowlisted, and capped at 1 MiB, but collaborators with Actions access can download it. Do not run `stn debug trace` against unrelated live state and treat it as evidence for the downloaded CI run.
+- Binary-smoke runtime ownership is recorded in `rounds/*/runtime/lifecycle.jsonl`. Read the owner registration and process-start events first, then the shutdown signal, any bounded escalation, refusal or rescue event, and `runtime.cleanup.completed` counts. The manifest's per-run ID must match the invocation that finalized it. A complete disposable cleanup has zero group members, private roots, Observer or Host sockets, Observer pidfiles, or active owner records; an incomplete or ambiguous cleanup retains the relevant root identity for the next ordinary start or manual inspection. Do not remove a retained root or signal a listed PID unless its executable, process group, start identity, and disposable role still match.
 - `observer.claim.sqlite` is boot-exclusion evidence only. Inspect it with
   read-only SQLite tooling after confirming no startup is in progress; never
   infer ownership from the file or sidecars being present.
@@ -345,7 +374,9 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 - `commands.jsonl` is the command lifecycle record. Failed commands can include redacted provider command diagnostics when an error envelope was persisted for the command.
 - `errors.jsonl` carries safe error envelopes, diagnostic IDs, trace IDs, provider context, and redacted diagnostic details when available.
 - `logs/observer.jsonl` and `logs/hooks.jsonl` explain runtime events around reconcile, command execution, hook delivery, projection, spool fallback, and provider health.
-- `logs/tui.jsonl` carries pane corruption telemetry from the native workspace: `Terminal corruption signal.` lines with `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
+- `logs/cli.jsonl` includes the native development owner lifecycle (`runtime.owner.registered`, process start, shutdown request, cleanup result/refusal/failure, orphan detection/recovery, and retirement). Query `stn debug logs "runtime." --component cli` and then `stn debug trace <traceId>`; records contain correlation and hashed roots, not argv, environment, terminal output, prompts, credentials, or arbitrary private paths.
+- `logs/tui.jsonl` carries the strict native UI lifecycle (`ui.started`, ready/surface changes, shutdown intent/completion, and fatal errors) plus pane corruption telemetry. Lifecycle records contain IDs, typed surfaces/reasons, process outcomes, and source ordering only; they never contain terminal output, prompts, keys, foreground applications, process lists, environment variables, cwd, or repository paths. `Terminal corruption signal.` lines retain `kind` (`unhandled_sequence`, `replacement_char`, `escape_fragment`, `geometry_divergence`, `overflow_clip`, `terminal_diagnostic`, `parse_error`), the pane, and a rate-limited count. `escape_fragment` is a heuristic — a pane that prints ANSI codes as text trips it.
+- `logs/station-host.jsonl` keeps the frozen `agent.attach`/`agent.detach` operational timeline and replay metrics alongside typed client, attachment, and PTY lifecycle records. Use typed records for `uiRunId`, connection/attachment correlation, and detach reasons; a detached attachment is not evidence that its PTY exited.
 - `diagnostics/panes/` holds pane evidence dumps written when a detector trips: the visible grid plus the raw byte tail that produced it. Feed `rawTail` back through `createStationVtScreen` to replay the corruption offline.
 - SQLite is observer-owned runtime history; inspect through existing debug/diagnostic surfaces unless a task explicitly needs database-level investigation.
 - Logs and bundles are diagnostic evidence only. Reconcile from config/providers/current observer state before treating old evidence as current truth.
@@ -355,15 +386,20 @@ the client; a scoped `tsc` output is not an identified whole-repository build.
 
 Station (the OpenTUI terminal workspace under `station/`) adds a second runtime process beside the observer: the `station-station-host` daemon, which owns PTYs that outlive the UI so panes can warm-reattach across a UI restart.
 
-When Station "does nothing" or panes read "exited", check the process topology before the code:
+When Station "does nothing" or panes read "exited", inspect the `cli`, `tui`, and
+`station-host` lifecycle logs, then check the process topology before the code:
 
 - Native Station coordinates one UI per input TTY with an active SQLite write
   transaction and a cooperative Unix-socket endpoint under
   `/tmp/station-tui-<uid>/<tty-hash>.{sqlite,sock}`. Database-file presence is
   never evidence of ownership: process exit releases the transaction, and the
-  file should not be deleted as a stale lock. A second current UI asks the
-  incumbent to close and enters raw mode only after acquiring the transaction;
-  Station sends no process signal.
+  file should not be deleted as a stale lock. Under native-HMR supervision the
+  detached renderer and helper have no controlling TTY, so legacy-owner checks
+  walk a bounded exact parent chain to the nearest controlling-TTY ancestor,
+  corroborate `/dev/<tty>` against stdin, anchor and revalidate the `ps -t` scan,
+  and refuse on missing, malformed, cyclic, or changing ancestry. A second
+  current UI asks the incumbent to close and enters raw mode only after acquiring
+  the transaction; Station sends no process signal.
 - `TUI_TTY_LEGACY_OWNER_POSSIBLE` means same-TTY evidence may describe a
   pre-protocol Station. `TUI_TTY_TAKEOVER_REFUSED` and
   `TUI_TTY_TAKEOVER_TIMEOUT` mean a current endpoint did not cooperate or did
@@ -371,10 +407,13 @@ When Station "does nothing" or panes read "exited", check the process topology b
   that is impossible, inspect candidates independently with
   `ps -t "$(tty | sed 's#^/dev/##')" -o pid=,command=` and only then send
   `kill -TERM <independently-verified-station-pid>` yourself.
-- The host the UI dials must match both its host protocol and exact Station build. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different build owns live PTYs; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy or speaks another protocol. Both are deliberate preservation failures, not stale-socket evidence.
-- The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect live PTYs with `bun run host:list` in `station/`.
+- The host the UI dials must match both its host protocol and Station display build version. `host.start` in `station-host.jsonl` records both versions. `HOST_UPGRADE_BLOCKED` means a different display build owns live PTYs and handoff was not opted in; `HOST_VERSION_INCOMPATIBLE` means the running host is legacy, uses another display build, or speaks another protocol. `HOST_HANDOFF_INVALID_STATE` / `HOST_HANDOFF_MANIFEST_INVALID` diagnose negotiated handoff misuse or a bad manifest. `HOST_CLIENT_IDENTITY_MISMATCH` instead means one connection omitted or changed its UI correlation identity. Compatibility failures preserve the Host; correlation failures reject only the malformed client request. These are separate from Observer immutable-selector admission.
+- The host socket defaults to `<state_dir>/run/station-host.sock` (beside `observer.sock`); override with `STATION_HOST_SOCKET_PATH`. Inspect with `pnpm stn host status` or `bun run host:list` in `station/`. Opt into live ownership transfer with `pnpm stn host handoff [--dry-run] [--fidelity processes|screen]` (default busy-host behavior remains refuse).
+- Host reuse/replace keys on Host protocol major equality plus exact display `buildVersion` string equality (`stationBuildInfo().version`). It does **not** key on `compiled` vs source, and does **not** use Observer's content `buildIdentity`. Same display version ⇒ reuse (handoff refused as unnecessary). Different display versions + matching protocol ⇒ replace (handoff only when opted in). Protocol major skew ⇒ refuse (never handoffs). The successor process form follows whoever requests the handoff (`bun hostMain.ts` from source CLI, `<stn> __station-host` from a binary).
+- `pnpm station:devbox` always launches a Bun source host (`STATION_HOST_ENTRY=hostMain.ts`) under checkout-local `.dev-state`. Do not point a binary `stn host handoff` at that socket unless you intend to flip packaging; afterward run `pnpm station:devbox stop` then `start`, or another deliberate handoff, before treating the lane as normal. `station:devbox status` warns when the listening host's build does not match this checkout's expected source CLI build.
+- Orphaned PTY bridges park under `<state_dir>/run/pty-bridges/` when their host dies without an intentional stop, or when `beginHandoff` releases owner pipes without SIGTERM: `<ptyId>.sock` is the live control socket, `<ptyId>.park.json` the redaction-safe park state (ids, pid, geometry, timestamps — never PTY data), `<ptyId>.scrollback.json` a persisted replay export when one was written, and optional `<ptyId>.screen.json` a best-effort semantic snapshot for fidelity `screen`. A live socket answering `exit-status` means the agent is still parked and adoptable; a clean host startup reaps the dead ones automatically (`host.orphan-reap` in `station-host.jsonl` reports the counts). Unadopted parks self-reap at the TTL (`STATION_PTY_ORPHAN_TTL_MS`, default 24h). If `<ptyId>.park.json` exists without `<ptyId>.sock`, check for `<ptyId>.park.json.listen-error` — on macOS an overlong unix socket path (`sun_path` ≈ 104 bytes) fails listen with `EINVAL`, and `beginHandoff` refuses rather than returning an unadoptable manifest.
 - Never kill a version-mismatched host or remove its socket until a matching build proves that its PTY list is empty. Reopen with the build named by the error to finish or explicitly close live terminals, then retry; current-protocol idle hosts replace themselves automatically. A legacy or different-protocol host requires an explicit stop only after its sessions are accounted for.
-- Successful `agent.attach` entries in `station-host.jsonl` report `replayKind` (`raw-complete`, `semantic-truncation-recovery`, or `live-reset-recovery`), replay entry/byte counts, recorded geometry, and capture duration without terminal contents. `live-reset-recovery` means historical output could not be reconstructed exactly, so Station applied Host-captured control-only reset data, restored interaction modes, nudged geometry for a child repaint, and retained live I/O. The associated `pty.snapshot.degraded` entry classifies the content-free cause as `unsupported-state`, `model-update-failed`, or `serialization-failed`; unsupported state also carries an optional stable, content-free `detail` classification. `HOST_SNAPSHOT_PENDING` is retried because later output may finish an incomplete parser sequence. `HOST_SNAPSHOT_FAILED` is no longer an expected live-reconstruction outcome; if it appears, confirm the PTY in `host:list` and treat it as a Host/client regression rather than an Observer session exit.
+- Successful `agent.attach` entries in `station-host.jsonl` report `replayKind` (`raw-complete`, `semantic-truncation-recovery`, or `live-reset-recovery`), replay entry/byte counts, recorded geometry, and capture duration without terminal contents. `live-reset-recovery` means historical output could not be reconstructed exactly, so Station applied Host-captured control-only reset data, restored interaction modes and a valid active-buffer cursor anchor, nudged geometry for a child repaint, and retained live I/O. The associated `pty.snapshot.degraded` entry classifies the content-free cause as `unsupported-state`, `model-update-failed`, or `serialization-failed`; unsupported state also carries an optional stable, content-free `detail` classification. `HOST_SNAPSHOT_PENDING` is retried because later output may finish an incomplete parser sequence. `HOST_SNAPSHOT_FAILED` is no longer an expected live-reconstruction outcome; if it appears, confirm the PTY in `host:list` and treat it as a Host/client regression rather than an Observer session exit.
 
 Other Station diagnostics:
 
@@ -386,6 +425,7 @@ Station runtime files (alongside the observer state directory):
 
 ```text
 run/station-host.sock
+run/pty-bridges/<ptyId>.sock + .park.json (+ .scrollback.json)
 logs/station-host.jsonl
 station/layout.json
 ```
@@ -393,14 +433,15 @@ station/layout.json
 The per-TTY claim and endpoint live in the separate cross-config rendezvous
 directory `/tmp/station-tui-<uid>/`; they are intentionally not state-directory
 files. Inspect their owner, type, and mode when diagnosing
-`TUI_TTY_OWNERSHIP_UNAVAILABLE`, but do not infer a live owner from the SQLite
-file or remove it.
+`TUI_TTY_OWNERSHIP_UNAVAILABLE`; for a supervised renderer also inspect its
+bounded parent chain and controlling-TTY evidence. Do not infer a live owner
+from the SQLite file or remove it.
 
 ## Harness Event Census
 
 The contract these events implement is `docs/harness-signals.md`; the integration workflow is `docs/harness-authoring.md`. Attention states (`needs_attention` plus the typed `attention` kind on the agent status: `question`, `plan_approval`, `tool_approval`, `input`) are normalized at each provider boundary. When a harness behavior is unclear — or a new harness/scenario needs mapping — capture what actually happens instead of reasoning from source:
 
-1. Every ingested report is logged as `Harness event report processed.` (or `skipped.`) in `logs/observer.jsonl` with provider, eventType, status value, attention kind, correlation keys, optional `correlationIssue`, and the projection outcome. `station_identity_cwd_mismatch` means the provider retained native identity and cwd but withheld inherited Station correlation because cwd could not belong to the stamped worktree, including a nested managed-worktree boundary. An ordinary active-owner rejection instead has no `correlationIssue`; it retains Station session/native correlation and reports `projected: false` while the durable owner remains unchanged. Other accepted reports with `projected: false` are correlation failures and change no projected state.
+1. Every ingested report is logged as `Harness event report processed.` (or `skipped.`) in `logs/observer.jsonl` with provider, eventType, status value, attention kind, correlation keys, optional `correlationIssue`, and the projection outcome. `station_identity_cwd_mismatch` means the provider retained native identity and cwd but withheld inherited Station correlation because cwd could not belong to the stamped worktree, including a nested managed-worktree boundary. An ordinary active-owner rejection instead has no `correlationIssue`; it retains Station session/native correlation and reports `projected: false` while the durable owner remains unchanged. Other accepted reports with `projected: false` are correlation failures and change no projected state. The OpenCode plugin suppresses `permission.asked` events that OpenCode auto-accepts within its 300 ms confirmation window, so such asks produce no census line at all (see `docs/harness-signals.md` invariant 3).
 2. Drive one scenario at a time in the harness TUI and watch `stn debug logs "Harness event report"` (or `stn observe --json`) alongside the harness's own native session log (for Codex: the `rollout-*.jsonl` under `$CODEX_HOME/sessions/<y>/<m>/<d>/`).
 3. Scenario matrix worth capturing per harness: clarifying question during planning, plan approval ("run this plan?"), standalone question, tool/permission approval, user answers, user aborts the prompt, turn completes, compaction.
 

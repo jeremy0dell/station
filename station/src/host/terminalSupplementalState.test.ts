@@ -9,6 +9,16 @@ async function write(terminal: Terminal, data: string): Promise<void> {
   await new Promise<void>((resolve) => terminal.write(data, resolve));
 }
 
+function activeMargins(terminal: Terminal): { bottom: number; top: number } {
+  const pinned = terminal as unknown as {
+    _core: { _bufferService: { buffer: { scrollBottom: number; scrollTop: number } } };
+  };
+  return {
+    bottom: pinned._core._bufferService.buffer.scrollBottom,
+    top: pinned._core._bufferService.buffer.scrollTop,
+  };
+}
+
 describe("TerminalSupplementalState", () => {
   it("restores margins and Station-relevant modes omitted by addon-serialize", async () => {
     const terminal = new Terminal({ cols: 12, rows: 6, allowProposedApi: true });
@@ -127,6 +137,53 @@ describe("TerminalSupplementalState", () => {
       );
       await target.whenIdle();
       expect(responses).toEqual([`${CSI}?7u`, `${CSI}?2u`, `${CSI}?5u`, `${CSI}?1u`]);
+    } finally {
+      state.dispose();
+      terminal.dispose();
+      target.dispose();
+    }
+  });
+
+  it("anchors degraded repaint to the active buffer cursor and origin region", async () => {
+    for (const alternate of [false, true]) {
+      const terminal = new Terminal({ cols: 12, rows: 6, allowProposedApi: true });
+      const state = new TerminalSupplementalState(terminal);
+      const target = createStationVtScreen({ size: { cols: 12, rows: 6 } });
+      try {
+        await write(
+          terminal,
+          (alternate ? `${CSI}?1049h` : "") + `${CSI}2;5r${CSI}?6h${CSI}3;7H`,
+        );
+        target.feed(state.liveResetSequence());
+        await target.whenIdle();
+
+        expect(target.isAltScreen()).toBe(alternate);
+        expect(target.unsafeEngine.modes.originMode).toBe(true);
+        expect(activeMargins(target.unsafeEngine)).toEqual({ bottom: 4, top: 1 });
+        expect(target.cursor()).toEqual({
+          x: terminal.buffer.active.cursorX,
+          y: terminal.buffer.active.cursorY,
+        });
+      } finally {
+        state.dispose();
+        terminal.dispose();
+        target.dispose();
+      }
+    }
+  });
+
+  it("normalizes a wrap-pending cursor to the last valid anchor cell", async () => {
+    const terminal = new Terminal({ cols: 12, rows: 6, allowProposedApi: true });
+    const state = new TerminalSupplementalState(terminal);
+    const target = createStationVtScreen({ size: { cols: 12, rows: 6 } });
+    try {
+      await write(terminal, `${CSI}6;1Habcdefghijkl`);
+      expect(terminal.buffer.active.cursorX).toBe(12);
+
+      target.feed(state.liveResetSequence());
+      await target.whenIdle();
+
+      expect(target.cursor()).toEqual({ x: 11, y: 5 });
     } finally {
       state.dispose();
       terminal.dispose();

@@ -9,6 +9,29 @@ Status: current living doc for development, test, and documentation workflow.
 - Use `pnpm station:link` only when you intentionally want all three launchers globally bound to the current checkout.
 - External tools are optional unless the lane needs them: Worktrunk for real worktree workflows, tmux for the reference terminal provider, Claude Code, Codex, Cursor, Pi, or OpenCode for real harness workflows, and `lsof` for fail-closed socket recovery or Observer handoff.
 
+## TypeScript Compiler And Editor
+
+Root and renderer build/typecheck commands use the native TypeScript 7 compiler. The conventional
+`typescript` dependency also resolves to TypeScript 7 so repository-aware tools and LSP clients can
+discover the native compiler. Tools that import the compiler API use the explicit TypeScript 6
+compatibility package until TypeScript 7 provides a stable replacement API. Verify the split with:
+
+```bash
+pnpm exec tsc --version
+node -p 'require("typescript/package.json").version'
+node -p 'require("@typescript/typescript6").version'
+cd station && bun run tsc --version
+```
+
+VS Code does not select the native language server from this dependency split automatically. To opt
+in, install the official [TypeScript 7 extension](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview),
+then run **TypeScript: Enable TypeScript 7** or set `"js/ts.experimental.useTsgo": true` in a user or
+profile setting. Do not point `js/ts.tsdk.path` at `node_modules/typescript`; that package provides the
+native compiler and LSP rather than the legacy `tsserver` plugin layout. Disable the setting or
+extension to return to VS Code's standard TypeScript service. Editors that accept a custom LSP
+command can start `pnpm exec tsc --lsp --stdio` with the repository root as the working directory;
+integrations that require `tsserver` should use the editor's bundled TypeScript service.
+
 ## Local TUI Workflow
 
 | Need | Command | Boundary |
@@ -50,9 +73,11 @@ provider homes are checkout-local. See the copy-paste recipe in
   `pnpm build:binary -- --version <version>` when validating this path; a source
   `pnpm build` does not create the installed artifact ownership used by the
   binding.
-- `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout.
+- `pnpm station:ui-dev` starts the Bun renderer with hot reload for `station/src/**` UI changes from the current checkout. The foreground native-HMR owner registers a private disposable process group before Bun starts, reaps it on exit or interruption, and recovers an exact abandoned group on the next start. Observer, Station Host, and Host-owned PTYs remain outside that group.
 - `pnpm station:tui-dev` starts the CLI-side dev TUI for the checkout where it is run. It watches the built Node CLI/package outputs, not the Bun renderer source. Its watcher restarts the TUI only after the identity-aware whole-graph build publishes a stable `station-build-id` sentinel. By default it uses a generated worktree-local config at `.dev-state/tui-dev/config.toml`, with observer `state_dir` and supported harness hook homes under `.dev-state` and a short checkout-keyed socket path under the OS temp dir so Unix socket names do not overflow on long worktree roots. It preconfigures isolated Codex, Claude, Cursor, and OpenCode hooks for that observer. Pass `--config <path>` or set `STATION_CONFIG_PATH` only to select a controlled development config. This selector retains ordinary CLI Observer startup and handoff behavior; it is not a safe real-state popup lane and should not target a live runtime that must remain undisturbed. While that process is alive, popup routing can reuse that dev UI only from the same checkout root. If another checkout already owns the dev popup, the command shows that root/session and asks whether to stop it before starting here.
-- `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer.
+- `pnpm station:devbox dev` starts the isolated Station sandbox with Bun hot reload for `station/src/**`; use it when UI iteration should not connect to the real observer. For `start` and `dev`, the nested wrapper first runs `bun install --frozen-lockfile` in `station/`, before creating devbox state or starting the Observer. After isolated Observer and hook setup, it enters the same native-HMR owner as `station:ui-dev`; that owner performs the sole package-link and node-pty repair pass before Bun starts, while UI cleanup leaves the persistent devbox Observer, Host, and agent PTYs intact. `stop` performs no dependency preparation.
+- Native-HMR records live at `<state_dir>/run/runtime-owners/v1` in a `0700` directory with `0600` files. Do not delete an uncertain record: the next matching start revalidates owner PID/start identity and the exact disposable PGID before TERM, bounded wait, and any KILL escalation.
+- Inspect those records without changing a runtime with `pnpm station:runtime-inventory` or, for this checkout's devbox, `cd station && bun run station:isolated inventory`. Both commands support `--json`; they report keyed/redacted roots, lifecycle evidence, Host PTY count when safely available, and refusal reasons, never raw commands, environment, terminal data, or private paths. Inventory never signals, starts, stops, repairs, or deletes anything.
 - Before Observer startup, `station:devbox` creates or repairs only its checkout-keyed socket directory to mode `0700`. It refuses symlinks, non-directories, and directories owned by another user; it never repairs or replaces socket and claim files.
 - If a devbox socket is inaccessible, startup exits nonzero without replacing the Observer or `.dev-state` and prints recovery commands. Restore access (normally mode `0600`) or install the named `lsof` executable, inspect with `pnpm station:devbox status`, then rerun the same start command; it reconnects to the original Observer. `pnpm station:devbox reset -- --yes` is only for intentionally disposable state because it deletes `.dev-state` and its agents.
 - `pnpm station:devbox tmux dev` builds the checkout, starts or safely reuses a checkout-keyed private tmux server and isolated live Observer, claims cleanup ownership, and attaches the invoking terminal. Inside that client, `Ctrl-b Space` invokes the built production `popup` command while its Bun dashboard child hot-reloads `station/src/**`; `Ctrl-b d` detaches and cleans up the owned lane. Use `tmux start` plus `tmux attach` when automation needs a persistent lane that is stopped explicitly.
@@ -181,15 +206,25 @@ pnpm test:e2e:setup:guided
 pnpm test:e2e:setup:guided:all-shells
 ```
 
+Both guided entrypoints run under a disposable runtime owner
+(`scripts/test-runners/run-setup-guided-e2e.mjs`): it registers a private
+`setup-guided-e2e` owner record before Vitest spawns, reaps the exact
+supervised process group on normal completion, interruption, or terminal loss,
+and recovers only an exact registered abandoned group on the next start.
+Records live at `<state_dir>/run/runtime-owners/v1` beside the other disposable
+runtime records, and lifecycle events reach `<state_dir>/logs/cli.jsonl` through the
+existing `stn debug logs` surface. Fixture cleanup inside the tests remains
+defense in depth, not the sole owner; do not invoke Vitest directly for the
+guided suites except through the owner's passthrough arguments.
+
 The PTY support normalizes terminal controls and redraws. When intentional copy or layout changes
 alter `apps/cli/test/fixtures/setup-guided-transcript.txt`, regenerate from the fixed 100×24 happy
 scenario with the command below, review the normalized transcript manually, and verify it contains
 no environment paths, JSON envelopes, provider values, or raw operation structures:
 
 ```bash
-STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm exec vitest run \
-  --config config/vitest/vitest.setup-e2e.config.ts \
-  tests/e2e/setup-guided-feedback.test.ts -t "writes multiple selected agent CLIs"
+STATION_UPDATE_SETUP_TRANSCRIPT=1 pnpm test:e2e:setup:guided -- \
+  -t "writes multiple selected agent CLIs"
 ```
 
 Python must never reach the user's
@@ -377,6 +412,10 @@ STATION_REAL_E2E=1 pnpm exec vitest run \
   --config config/vitest/vitest.real-e2e.config.ts \
   tests/e2e/real/real-native-tui-singleton.test.ts
 
+STATION_REAL_E2E=1 pnpm exec vitest run \
+  --config config/vitest/vitest.real-e2e.config.ts \
+  tests/e2e/real/real-native-hmr-lifecycle.test.ts
+
 pnpm build:binary -- --version 0.0.0-local
 STATION_REAL_E2E=1 \
 STATION_COMPILED_BIN="$PWD/station/dist/bin/stn" \
@@ -445,7 +484,10 @@ also builds a second artifact from one production-source change in an isolated
 detached worktree, queries both exact selectors, proves lower-to-higher
 same-version replacement and post-handoff mutation refusal, then proves
 source/compiled ordering and Station Host PTY continuity across both Observer
-replacements. Singleton-cleanup promotion must also prove the same guarded
+replacements. In the mixed source/compiled branch it also proves that lower-build
+native and public-popup Station launchers refuse exact-selector admission before
+renderer, reconcile, tmux, Host, PTY, or layout mutation while non-UI lower-build
+reuse remains available. Singleton-cleanup promotion must also prove the same guarded
 SIGTERM-only behavior under the compiled Bun artifact before production
 composition leaves report-only mode. The smoke also chmods the physical Observer socket to `000`, proves status,
 start, restart, doctor, and ingress preserve the original PID/socket/pidfile,
@@ -505,8 +547,21 @@ The `0.0.0-local` display version exercises cross-version Observer handoff. The
 smoke first builds two independently stamped binaries at that display version,
 runs the lower identity as incumbent, replaces it with the higher identity, and
 verifies that a later mutating command from the loser is refused without
-changing the Observer, Station Host, or live PTY. It requires a committed clean
-checkout so the detached-worktree artifact has one controlled source delta.
+changing the Observer, Station Host, or live PTY. The same `0.0.0-local` lane
+then runs its mixed source/compiled native and popup admission checks against the
+higher source Observer and verifies the complete runtime baseline is unchanged.
+It requires a committed clean checkout so the detached-worktree artifact has one
+controlled source delta; do not weaken or bypass that requirement.
+
+Before any child starts, the runner records one disposable process group for
+the smoke runner, Observer, Station Host, and popup renderer in private,
+checkout-and-mode-keyed owner state. INT, TERM, and HUP cleanup sends TERM
+first, escalates only after bounded identity revalidation, and records the
+result in the failure bundle's `runtime/lifecycle.jsonl`. Unrelated persistent
+Station runtime remains outside that group. The next ordinary binary-smoke or
+handoff-stress start reopens the same owner state and rescues only an owner-dead
+exact group; device-and-inode-pinned abandoned roots remain carried forward
+until exact deletion succeeds. Ambiguous process or root identity is preserved.
 
 For a local failure bundle, name an absolute path that does not exist and is
 outside the smoke root:
@@ -516,9 +571,17 @@ STATION_BINARY_SMOKE_EVIDENCE_DIR=/absolute/new/path \
   pnpm smoke:binary -- --expected-version 0.0.0-local
 ```
 
-The runner creates that private directory only for failure or cancellation,
-captures evidence before teardown, records cleanup afterward, and preserves the
-original failure. Inspect `manifest.json` first. In hosted CI, use:
+The outer launcher refuses an existing destination before spawning, then
+reserves it with a private per-run marker that is removed after an uncaptured
+success. The same per-run ID binds capture and finalization to the current
+invocation, including outer capture after a hard-killed inner runner. Failure or
+cancellation evidence is captured before teardown and finalized once after
+exact group and root cleanup while preserving the original failure. `complete`
+requires the owned group, private roots,
+Observer and Host sockets, and Observer pidfile all to be absent. Inspect
+`manifest.json` first; `rounds/*/runtime/lifecycle.jsonl` shows registration,
+signal, escalation, refusal, rescue, and final zero-residue counts. In hosted
+CI, use:
 
 ```bash
 gh run download <run-id> \
@@ -560,21 +623,58 @@ Open a shell pane, run `sleep 30`, press Ctrl-Z, run `fg`, then press Ctrl-C.
 The isolated or configured `logs/station-host.jsonl` should record
 `ptyImplementation` as `bun`.
 
-To verify binary host upgrades, build two copies with distinct prerelease
-versions (for example `0.7.0-host-a` and `0.7.0-host-b`) and use an isolated
-config with `station_persistent_agents = true`. Start A, open a hosted terminal,
-print a recognizable marker, leave a long command running, and exit the UI so
-the host survives. Because Observer version eviction is separate B3 work,
-explicitly stop the A observer and start B's observer before launching B.
+Host upgrade handoff is gated by automated lanes (preferred over a manual A/B
+binary pair for day-to-day validation):
 
-B must report `HOST_UPGRADE_BLOCKED` with both versions and the live-terminal
-count without opening or rewriting the saved layout. Reopen A and confirm the
-command and marker scrollback survived. Close every hosted agent and auxiliary
-terminal, retry B, then open a hosted terminal so the stopped idle host is
-replaced on demand. The next `host.start` record in `logs/station-host.jsonl`
-must show B's build and protocol versions. Legacy or different-protocol hosts
-refuse automatic replacement and must be stopped explicitly only after their
-sessions are accounted for.
+```bash
+pnpm --dir station test:pty          # includes hostHandoff.smoke (STATION_PTY_SMOKE=1)
+pnpm test:e2e:host-upgrade           # focused A→B refuse + opt-in handoff smoke
+```
+
+The smoke uses test-only `--build-version` overrides on `hostMain` (requires
+`STATION_HOST_ALLOW_BUILD_VERSION_OVERRIDE=1`) so two host identities share one
+checkout entrypoint. Cases covered: busy refuse without
+opt-in (`HOST_UPGRADE_BLOCKED`, child survives), negotiated
+`beginHandoff` → `completeHandoff` → successor `adoptRegistry` with the same
+child PID, idle `stopIfIdle` remains the empty-host path, multi-PTY + abort +
+recovery, and a packaging-shape handoff (source-style `bun hostMain` → trampoline
+successor argv, proving adopt still works when the successor is not launched with
+the same command prefix). Set `STATION_BINARY_PATH=/path/to/stn` to additionally
+exercise a real compiled `__station-host` successor in that packaging case.
+
+### Source ↔ binary and `station:devbox`
+
+Host compatibility is display `buildVersion` + protocol major only — not
+`compiled` vs source, and not Observer content identity. Consequences:
+
+- Source and a binary that report the **same** display version **reuse** the host;
+  `stn host handoff` refuses as unnecessary.
+- Different display versions with matching protocol are `replace`; busy hosts still
+  default to `HOST_UPGRADE_BLOCKED` until someone opts into handoff. The successor
+  packaging follows the requesting CLI (`bun hostMain.ts` vs `<stn> __station-host`).
+- Protocol major skew never handoffs.
+- Both sides must target the same socket/state dir (same config). Global state and
+  a worktree `.dev-state` are different islands.
+- `pnpm station:devbox` always wants a Bun source host. Mixing a binary
+  `stn host handoff` into that socket can flip packaging; `station:devbox status`
+  warns on mismatch. Prefer `stop` then `start` to restore the source host.
+  `restart` recycles the Observer only and intentionally leaves the host alive.
+
+CLI surface for operators:
+
+```bash
+pnpm stn host status
+pnpm stn host handoff --dry-run
+pnpm stn host handoff --fidelity processes|screen
+pnpm station:devbox status           # warns if host build ≠ this checkout's CLI
+```
+
+Manual UX check (optional): isolated config with `station_persistent_agents = true`,
+start a hosted terminal, leave a long command running, exit the UI, then run
+`stn host handoff` from the newer build. Without opt-in, B must still report
+`HOST_UPGRADE_BLOCKED`. Legacy or different-protocol hosts refuse automatic
+replacement and must be stopped explicitly only after their sessions are
+accounted for.
 
 ## Hosted Workflow Security
 
@@ -633,23 +733,23 @@ containing spaces and apostrophes. Source-checkout acceptance separately
 requires the preserved `pnpm --dir <checkout> station:link` command when
 linking is declined.
 
-The public candidate is experimental pre-alpha `v0.0.0-pre-alpha.4`. The old
+The public candidate is experimental pre-alpha `v0.0.0-pre-alpha.5.1`. The old
 `v0.7.1-rc.*` releases were internal previews, not predecessors in the public
 version line. `v0.7.1-rc.8` is retained as the installed-version fixture that
 proves the intentional version-number reset:
 
 1. Enable GitHub immutable releases, confirm the release commit is on `main`
-   with `package.json` and runtime reporting at `0.0.0-pre-alpha.4`, then create
-   and push `v0.0.0-pre-alpha.4`.
+   with `package.json` and runtime reporting at `0.0.0-pre-alpha.5.1`, then create
+   and push `v0.0.0-pre-alpha.5.1`.
 2. Confirm every release job passed and the successful run contains exactly one
-   `accepted-release-candidate-0.0.0-pre-alpha.4-attempt-*` artifact.
+   `accepted-release-candidate-0.0.0-pre-alpha.5.1-attempt-*` artifact.
 3. Install the draft on clean native machines for `darwin-arm64`, `darwin-x64`,
    `linux-arm64`, and `linux-x64`, then complete the manual UX gate below.
 4. Install `v0.7.1-rc.8`, upgrade to the accepted candidate, and confirm the
    lower public version number does not block replacement. Confirm the complete
    version and all three launchers after every transition.
 5. Dispatch `promote-release.yml` with the successful release run ID, tag
-   `v0.0.0-pre-alpha.4`, and the manual-acceptance confirmation. It rechecks the
+   `v0.0.0-pre-alpha.5.1`, and the manual-acceptance confirmation. It rechecks the
    successful run SHA, immutable candidate manifest, tag commit, release ID,
    asset IDs, the stamped installer, and all hashes immediately before
    publishing that exact draft. Its four public-install jobs must then pass.
@@ -726,7 +826,7 @@ codex --version
 ```
 
 Take a `dev-ready-before-station` snapshot before authenticating. Do not
-preinstall Station, Worktrunk, tmux, diffnav, or git-delta; this lane must prove
+preinstall Station, Worktrunk, tmux, or Hunk; this lane must prove
 that guided setup identifies and installs the missing Station dependencies.
 Authenticate GitHub and confirm private-repository access:
 
@@ -774,7 +874,7 @@ promotion will verify:
   set -eu
   umask 077
   export GH_HOST=github.com
-  tag=v0.0.0-pre-alpha.4
+  tag=v0.0.0-pre-alpha.5.1
   version=${tag#v}
   release_run_id=123456789
   case "$release_run_id" in
@@ -849,7 +949,7 @@ For the primary VirtualBuddy user-flow pass, start with `XDG_DATA_HOME` unset
 and `~/.local/bin` absent from `PATH`, and retain the complete installer output.
 Follow the installer's printed current-shell block exactly; on this clean lane
 it must name all three missing launchers and end by running `stn setup`. Allow
-guided setup to install Worktrunk, tmux, diffnav, and git-delta, select one or
+guided setup to install Worktrunk, tmux, and Hunk, select one or
 more authenticated agents, consent to required Station tracking artifacts, and
 optionally install the tmux binding. Confirm the first selection becomes the
 default only for a new config, every explicit selection receives its own harness
@@ -958,7 +1058,7 @@ manually verify the actual user experience, not a dashboard override:
    scrollback before the idle host is replaced.
 9. In terminal A, continuously run the installed `stn --version`. In terminal
    B, repeatedly reinstall the draft. Terminal A may print only
-   `0.0.0-pre-alpha.4`:
+   `0.0.0-pre-alpha.5.1`:
    never command-not-found or malformed output. After each transition, confirm
    `stn-ingress` and `stn-tmux-popup` still link to `stn`, so the runtime never
    has mixed entrypoints. Repeat the same checks while alternating the draft

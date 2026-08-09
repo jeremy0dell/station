@@ -24,6 +24,7 @@ describe("createSessionReaper", () => {
       store,
       liveSessionIds: () => live,
       observerInstanceId: () => "obs-1",
+      hasProvenExit: () => false,
       killPane: (paneId) => killed.push(paneId),
     });
 
@@ -46,6 +47,7 @@ describe("createSessionReaper", () => {
       store,
       liveSessionIds: () => live,
       observerInstanceId: () => instance,
+      hasProvenExit: () => false,
       killPane: (paneId) => killed.push(paneId),
     });
 
@@ -82,6 +84,7 @@ describe("createSessionReaper", () => {
       store,
       liveSessionIds: () => new Set<string>(),
       observerInstanceId: () => "obs-1",
+      hasProvenExit: () => false,
       killPane: (paneId) => killed.push(paneId),
     });
 
@@ -97,6 +100,7 @@ describe("createSessionReaper", () => {
       store,
       liveSessionIds: () => undefined,
       observerInstanceId: () => "obs-1",
+      hasProvenExit: () => false,
       killPane: () => {},
     });
 
@@ -113,12 +117,37 @@ describe("createSessionReaper", () => {
       store,
       liveSessionIds: () => new Set<string>(),
       observerInstanceId: () => "obs-1",
+      hasProvenExit: () => false,
       killPane: (paneId) => killed.push(paneId),
     });
 
     reap();
 
     expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual(["plain-shell"]);
+    expect(killed).toEqual([]);
+  });
+
+  it("retains a proven-exited pane tree when its old session leaves the snapshot", () => {
+    const store = twoSessionStore();
+    let live = new Set(["s1", "s2"]);
+    const killed: PaneId[] = [];
+    const reap = createSessionReaper({
+      store,
+      liveSessionIds: () => live,
+      observerInstanceId: () => "obs-1",
+      hasProvenExit: (paneId) => paneId === "agent-1",
+      killPane: (paneId) => killed.push(paneId),
+    });
+
+    reap();
+    live = new Set(["s2"]);
+    reap();
+
+    expect(store.getState().workspace.panes.map((pane) => pane.id)).toEqual([
+      "agent-1",
+      "sh-1",
+      "agent-2",
+    ]);
     expect(killed).toEqual([]);
   });
 });

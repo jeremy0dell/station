@@ -1,5 +1,4 @@
 import type {
-  CommandId,
   ProjectId,
   ProviderId,
   SafeError,
@@ -8,7 +7,7 @@ import type {
   WorktreeId,
 } from "@station/contracts";
 import type { ReadonlyDeep } from "./readonly.js";
-import type { TuiState } from "./types.js";
+import type { DashboardState } from "./types.js";
 
 export type PendingCreateSessionRow = {
   localId: string;
@@ -17,7 +16,6 @@ export type PendingCreateSessionRow = {
   branch: string;
   harnessProvider?: ProviderId;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 export type FailedCreateSessionRow = {
@@ -35,7 +33,6 @@ export type PendingRemoveWorktreeRow = {
   worktreeId: WorktreeId;
   branch: string;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 export type PendingStartAgentRow = {
@@ -45,14 +42,12 @@ export type PendingStartAgentRow = {
   worktreeId: WorktreeId;
   branch: string;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 export type PendingRenameSessionTitle = {
   sessionId: SessionId;
   title: string;
   createdAt: string;
-  commandId?: CommandId;
 };
 
 /**
@@ -90,9 +85,9 @@ export function createEmptyTuiLocalRows(): TuiLocalRows {
 }
 
 export function addPendingCreateSessionRow(
-  state: TuiState,
+  state: DashboardState,
   row: PendingCreateSessionRow,
-): TuiState {
+): DashboardState {
   return {
     ...state,
     localRows: {
@@ -105,31 +100,12 @@ export function addPendingCreateSessionRow(
   };
 }
 
-export function bindPendingCreateSessionRow(
-  state: TuiState,
-  localId: string,
-  commandId: CommandId,
-): TuiState {
-  return {
-    ...state,
-    localRows: {
-      ...state.localRows,
-      pendingCreate: state.localRows.pendingCreate.map((row) => {
-        if (row.localId !== localId) {
-          return row;
-        }
-        return { ...row, commandId };
-      }),
-    },
-  };
-}
-
 export function failPendingCreateSessionRow(
-  state: TuiState,
+  state: DashboardState,
   localId: string,
   error: SafeError,
   expiresAt: number,
-): TuiState {
+): DashboardState {
   const row = state.localRows.pendingCreate.find((candidate) => candidate.localId === localId);
   if (row === undefined) {
     return state;
@@ -156,7 +132,10 @@ export function failPendingCreateSessionRow(
   };
 }
 
-export function removeCreateSessionLocalRow(state: TuiState, localId: string): TuiState {
+export function removeCreateSessionLocalRow(
+  state: DashboardState,
+  localId: string,
+): DashboardState {
   return {
     ...state,
     localRows: {
@@ -167,10 +146,27 @@ export function removeCreateSessionLocalRow(state: TuiState, localId: string): T
   };
 }
 
+export function removeExpiredFailedCreateSessionRows(
+  state: DashboardState,
+  nowMs: number,
+): DashboardState {
+  const failedCreate = state.localRows.failedCreate.filter((row) => row.expiresAt > nowMs);
+  if (failedCreate.length === state.localRows.failedCreate.length) {
+    return state;
+  }
+  return {
+    ...state,
+    localRows: {
+      ...state.localRows,
+      failedCreate,
+    },
+  };
+}
+
 export function addPendingRemoveWorktreeRow(
-  state: TuiState,
+  state: DashboardState,
   row: PendingRemoveWorktreeRow,
-): TuiState {
+): DashboardState {
   return {
     ...state,
     localRows: {
@@ -185,26 +181,10 @@ export function addPendingRemoveWorktreeRow(
   };
 }
 
-export function bindPendingRemoveWorktreeRow(
-  state: TuiState,
+export function removePendingRemoveWorktreeRow(
+  state: DashboardState,
   localId: string,
-  commandId: CommandId,
-): TuiState {
-  return {
-    ...state,
-    localRows: {
-      ...state.localRows,
-      pendingRemove: state.localRows.pendingRemove.map((row) => {
-        if (row.localId !== localId) {
-          return row;
-        }
-        return { ...row, commandId };
-      }),
-    },
-  };
-}
-
-export function removePendingRemoveWorktreeRow(state: TuiState, localId: string): TuiState {
+): DashboardState {
   return {
     ...state,
     localRows: {
@@ -214,7 +194,10 @@ export function removePendingRemoveWorktreeRow(state: TuiState, localId: string)
   };
 }
 
-export function addPendingStartAgentRow(state: TuiState, row: PendingStartAgentRow): TuiState {
+export function addPendingStartAgentRow(
+  state: DashboardState,
+  row: PendingStartAgentRow,
+): DashboardState {
   return {
     ...state,
     localRows: {
@@ -229,26 +212,7 @@ export function addPendingStartAgentRow(state: TuiState, row: PendingStartAgentR
   };
 }
 
-export function bindPendingStartAgentRow(
-  state: TuiState,
-  localId: string,
-  commandId: CommandId,
-): TuiState {
-  return {
-    ...state,
-    localRows: {
-      ...state.localRows,
-      pendingStart: state.localRows.pendingStart.map((row) => {
-        if (row.localId !== localId) {
-          return row;
-        }
-        return { ...row, commandId };
-      }),
-    },
-  };
-}
-
-export function removePendingStartAgentRow(state: TuiState, localId: string): TuiState {
+export function removePendingStartAgentRow(state: DashboardState, localId: string): DashboardState {
   return {
     ...state,
     localRows: {
@@ -259,9 +223,9 @@ export function removePendingStartAgentRow(state: TuiState, localId: string): Tu
 }
 
 export function addPendingRenameSessionTitle(
-  state: TuiState,
+  state: DashboardState,
   row: PendingRenameSessionTitle,
-): TuiState {
+): DashboardState {
   return {
     ...state,
     localRows: withPendingRenameTitles(state.localRows, {
@@ -271,28 +235,10 @@ export function addPendingRenameSessionTitle(
   };
 }
 
-export function bindPendingRenameSessionTitle(
-  state: TuiState,
+export function removePendingRenameSessionTitle(
+  state: DashboardState,
   sessionId: SessionId,
-  commandId: CommandId,
-): TuiState {
-  const pending = state.localRows.pendingRenameTitles?.[sessionId];
-  if (pending === undefined) {
-    return state;
-  }
-  return {
-    ...state,
-    localRows: withPendingRenameTitles(state.localRows, {
-      ...pendingRenameTitles(state.localRows),
-      [sessionId]: {
-        ...pending,
-        commandId,
-      },
-    }),
-  };
-}
-
-export function removePendingRenameSessionTitle(state: TuiState, sessionId: SessionId): TuiState {
+): DashboardState {
   const pending = pendingRenameTitles(state.localRows);
   if (pending[sessionId] === undefined) {
     return state;
@@ -306,9 +252,9 @@ export function removePendingRenameSessionTitle(state: TuiState, sessionId: Sess
 }
 
 export function addPendingProjectDefaultHarness(
-  state: TuiState,
+  state: DashboardState,
   row: PendingProjectDefaultHarness,
-): TuiState {
+): DashboardState {
   return {
     ...state,
     localRows: withPendingProjectDefaults(state.localRows, {
@@ -319,9 +265,9 @@ export function addPendingProjectDefaultHarness(
 }
 
 export function removePendingProjectDefaultHarness(
-  state: TuiState,
+  state: DashboardState,
   projectId: ProjectId,
-): TuiState {
+): DashboardState {
   const pending = pendingProjectDefaultHarnesses(state.localRows);
   if (pending[projectId] === undefined) {
     return state;

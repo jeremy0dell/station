@@ -3,7 +3,9 @@
 // via client runtime (keeping store and runtime reducer synchronized).
 import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
-import { selectDashboardViewport, type DashboardRuntime } from "@station/dashboard-core";
+import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
+import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
+import { selectDashboardViewport } from "@station/dashboard-core/selectors";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -11,7 +13,10 @@ import type { StationMouseEvent } from "../../input/mouse.js";
 import { externalAgentSnapshot, manyProjectsSnapshot } from "../fixtures/scenarios.js";
 import { routeStationMouse } from "../input/stationMouse.js";
 import { FakeTuiObserverService } from "../test/support/fakeObserverService.js";
-import { createStationDashboardRuntime } from "./dashboardRuntime.js";
+import {
+  createStationDashboardRuntime,
+  type StationDashboardRuntime,
+} from "./dashboardRuntime.js";
 
 const LEFT_DOWN: StationMouseEvent = {
   type: "down",
@@ -36,7 +41,24 @@ describe("station command dispatch through the shared client", () => {
   async function makeLiveStore(snapshot = manyProjectsSnapshot()): Promise<Harness> {
     const fake = new FakeTuiObserverService(snapshot);
     const client = createObserverStationClient({ service: fake });
-    const store = createStationDashboardRuntime(client);
+    const capabilities: DashboardCapabilities = {
+      activation: createObserverActivationCapabilities({
+        source: client.state,
+        service: client.service,
+        clientLabel: "Station test",
+        waitForFocusCompletion: true,
+      }),
+      managedSessions: createObserverManagedSessionCapabilities({
+        service: client.service,
+        clientLabel: "Station test",
+      }),
+      shell: { open: () => dashboardExecution({ kind: "success" }) },
+      dismissal: {
+        dismissDashboard: () => dashboardExecution({ kind: "success" }),
+        exitRenderer: () => dashboardExecution({ kind: "success" }),
+      },
+    };
+    const store = createStationDashboardRuntime(client, capabilities);
     store.start();
     client.start();
     const harness: Harness = { fake, client, store, detach: () => store.dispose() };
@@ -63,7 +85,7 @@ describe("station command dispatch through the shared client", () => {
     expect(errorToastMessages(store)).toEqual([]);
   });
 
-  it("launches the worktree's managed primary agent on row click instead of dispatching focus", async () => {
+  it("routes row clicks through the same semantic activation as keyboard", async () => {
     const { fake, store } = await makeLiveStore();
 
     const outcome = routeStationMouse(
@@ -72,20 +94,12 @@ describe("station command dispatch through the shared client", () => {
       store,
     );
 
-    // The mouse row-click now launches the session's managed primary agent (a
-    // router outcome the Station store consumes that asks the observer to
-    // prepare the launch), so it no longer dispatches the observer/tmux
-    // terminal.focus the keyboard slot key still drives.
-    expect(outcome).toMatchObject({
-      kind: "launch-managed",
-      paneId: "pane-agent-wt-wt_station_idle",
-      worktreeId: "wt_station_idle",
-      projectId: "station",
-    });
-    // Let any (unexpected) async dispatch settle, then assert none happened.
-    await Promise.resolve();
-    expect(fake.dispatched).toEqual([]);
-    expect(fake.waitedForCommandIds).toEqual([]);
+    expect(outcome).toEqual({ kind: "handled" });
+    await waitFor(() => fake.waitedForCommandIds.length === 1);
+    expect(fake.dispatched).toEqual([
+      { type: "terminal.focus", payload: { sessionId: "ses_wt_station_idle" } },
+    ]);
+    expect(fake.waitedForCommandIds).toEqual([fake.nextReceipt.commandId]);
     expect(errorToastMessages(store)).toEqual([]);
   });
 
@@ -194,11 +208,11 @@ const RECONCILED_AT = "2026-06-12T12:30:00.000Z";
 type Harness = {
   fake: FakeTuiObserverService;
   client: StationClient;
-  store: DashboardRuntime;
+  store: StationDashboardRuntime;
   detach(): void;
 };
 
-function slotForRow(store: DashboardRuntime, rowId: string): string {
+function slotForRow(store: StationDashboardRuntime, rowId: string): string {
   const state = store.state.getState();
   if (state.snapshot === undefined) {
     throw new Error("store has no snapshot");
@@ -212,18 +226,21 @@ function slotForRow(store: DashboardRuntime, rowId: string): string {
   return choice.key;
 }
 
-function toastMessages(store: DashboardRuntime): string[] {
+function toastMessages(store: StationDashboardRuntime): string[] {
   return store.state.getState().toasts.map((entry) => entry.toast.message);
 }
 
-function errorToastMessages(store: DashboardRuntime): string[] {
+function errorToastMessages(store: StationDashboardRuntime): string[] {
   return store
     .state.getState()
     .toasts.filter((entry) => entry.toast.kind === "error")
     .map((entry) => entry.toast.message);
 }
 
-function rowStatusLabel(store: DashboardRuntime, rowId: string): string | undefined {
+function rowStatusLabel(
+  store: StationDashboardRuntime,
+  rowId: string,
+): string | undefined {
   return store.state.getState().snapshot?.rows.find((row) => row.id === rowId)?.display.statusLabel;
 }
 

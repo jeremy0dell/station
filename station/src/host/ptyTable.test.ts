@@ -357,7 +357,7 @@ describe("createPtyTable", () => {
     await frames.return?.();
   });
 
-  it("logs safe unsupported-state detail while preserving live-reset recovery", async () => {
+  it("logs a safe cell-attribute subtype while preserving live-reset recovery", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
     const resetData = "\x1bc\x1b[?2004h";
@@ -366,7 +366,7 @@ describe("createPtyTable", () => {
       resize() {},
       capture: async () => {
         throw new TerminalSnapshotUnavailableError(
-          { reason: "unsupported-state", detail: "wrap-pending-cell" },
+          { reason: "unsupported-state", detail: "cell-underline-color" },
           resetData,
           "unsafe terminal context stays provider-private",
         );
@@ -396,7 +396,7 @@ describe("createPtyTable", () => {
       attributes: {
         ptyId,
         reason: "unsupported-state",
-        detail: "wrap-pending-cell",
+        detail: "cell-underline-color",
       },
     });
   });
@@ -428,9 +428,25 @@ describe("createPtyTable", () => {
     const { table, scripteds } = tableWithScripted();
     const first = table.spawn(baseParams);
     const second = table.spawn(baseParams);
-    expect(second.ptyId).toBe(first.ptyId);
+    expect(first.created).toBe(true);
+    expect(second).toEqual({ ...first, created: false });
     expect(scripteds).toHaveLength(1);
     expect(table.list()).toHaveLength(1);
+  });
+
+  it("refuses to reuse a deterministic target for another session", () => {
+    const { table, scripteds } = tableWithScripted();
+    const first = table.spawn(baseParams);
+
+    let conflict: unknown;
+    try {
+      table.spawn({ ...baseParams, sessionId: "ses-replacement" });
+    } catch (error) {
+      conflict = error;
+    }
+    expect(conflict).toMatchObject({ code: "HOST_TARGET_SESSION_CONFLICT" });
+    expect(scripteds).toHaveLength(1);
+    expect(table.list()).toMatchObject([{ ptyId: first.ptyId, sessionId: baseParams.sessionId }]);
   });
 
   it("keeps distinct terminal targets as separate live PTYs", () => {
@@ -456,8 +472,8 @@ describe("createPtyTable", () => {
       cwd: "/repo/wt-2",
     });
 
-    expect(first).toEqual({ ptyId: "pty-1", pid: 4200 });
-    expect(second).toEqual({ ptyId: "pty-2", pid: 4201 });
+    expect(first).toEqual({ ptyId: "pty-1", pid: 4200, created: true });
+    expect(second).toEqual({ ptyId: "pty-2", pid: 4201, created: true });
     expect(scripteds).toHaveLength(2);
     expect(table.list().map((entry) => [entry.terminalTargetId, entry.ptyId, entry.pid])).toEqual([
       ["native:wt-1", "pty-1", 4200],

@@ -12,6 +12,7 @@ import { C0, VtPrefix } from "../protocol/syntax.js";
 
 const CSI_U_PATTERN = /^\x1b\[([0-9:]+)(?:;([0-9:]+))?u$/;
 const XTERM_MODIFY_OTHER_KEYS_PATTERN = /^\x1b\[27;([0-9]+);([0-9]+)~$/;
+const legacySequences = LegacyKeySequence;
 
 type ModifiedKeySequence = {
   codePoint: number;
@@ -106,27 +107,34 @@ function modifiedEnterSequence(sequence: string, parsed: ModifiedKeySequence): s
 }
 
 function legacyBaseBytes(
-  codePoint: number,
+  scalar: number,
   codeParts: string[],
   state: { shift: boolean; ctrl: boolean },
 ): string | undefined {
-  switch (codePoint) {
-    case KittyKey.Escape:
-      return C0.Escape;
-    case KittyKey.Enter:
-      return C0.CarriageReturn;
-    case KittyKey.Tab:
-      return state.shift ? LegacyKeySequence.ShiftTab : C0.HorizontalTab;
-    case KittyKey.Backspace:
-      return state.ctrl ? C0.Backspace : LegacyKeySequence.Backspace;
-    case KittyKey.Space:
-      return state.ctrl ? C0.Null : " ";
-    default:
-      break;
+  if (scalar === KittyKey.Escape) {
+    return C0.Escape;
+  }
+  if (scalar === KittyKey.Enter) {
+    return C0.CarriageReturn;
+  }
+  if (scalar === KittyKey.Tab) {
+    if (state.shift) {
+      return legacySequences.ShiftTab;
+    }
+    return C0.HorizontalTab;
+  }
+  if (scalar === KittyKey.Backspace) {
+    if (state.ctrl) {
+      return C0.Backspace;
+    }
+    return legacySequences.Backspace;
+  }
+  if (scalar === KittyKey.Space) {
+    return state.ctrl ? C0.Null : " ";
   }
 
   if (state.ctrl) {
-    const control = controlByteFor(codePoint);
+    const control = controlByteFor(scalar);
     if (control !== undefined) {
       return control;
     }
@@ -135,20 +143,20 @@ function legacyBaseBytes(
   // Kitty encodes functional keys in the Unicode private-use area. Keypad
   // keys have direct legacy equivalents (a numpad Enter must type Enter);
   // the rest (F-keys, media keys, modifiers-as-keys) are dropped.
-  const keypad = KEYPAD_LEGACY.get(codePoint);
+  const keypad = KEYPAD_LEGACY.get(scalar);
   if (keypad !== undefined) {
     return keypad;
   }
-  if (codePoint >= 0xe000 && codePoint <= 0xf8ff) {
+  if (scalar >= 0xe000 && scalar <= 0xf8ff) {
     return undefined;
   }
   // Malformed sequences can carry fields beyond the Unicode range;
   // String.fromCodePoint would throw inside the input dispatch path.
-  if (codePoint > 0x10ffff) {
+  if (scalar > 0x10ffff) {
     return undefined;
   }
 
-  if (codePoint >= 0x20 && codePoint !== KittyKey.Backspace) {
+  if (scalar >= 0x20 && scalar !== KittyKey.Backspace) {
     // With shift, kitty reports the shifted character as the first alternate
     // (`code:shifted`); prefer it so Shift+1 emits "!" not "1".
     if (state.shift && codeParts.length > 1) {
@@ -158,12 +166,12 @@ function legacyBaseBytes(
       }
     }
     if (state.shift) {
-      const shifted = shiftedAscii(codePoint);
+      const shifted = shiftedAscii(scalar);
       if (shifted !== undefined) {
         return shifted;
       }
     }
-    return String.fromCodePoint(codePoint);
+    return String.fromCodePoint(scalar);
   }
 
   return undefined;
@@ -223,12 +231,12 @@ const KEYPAD_LEGACY = new Map<number, string>([
   [57418, ARROW_KEYS.right.normal], // keypad right
   [57419, ARROW_KEYS.up.normal], // keypad up
   [57420, ARROW_KEYS.down.normal], // keypad down
-  [57421, LegacyKeySequence.PageUp], // keypad page up
-  [57422, LegacyKeySequence.PageDown], // keypad page down
-  [57423, LegacyKeySequence.Home], // keypad home
-  [57424, LegacyKeySequence.End], // keypad end
-  [57425, LegacyKeySequence.Insert], // keypad insert
-  [57426, LegacyKeySequence.Delete], // keypad delete
+  [57421, legacySequences.PageUp], // keypad page up
+  [57422, legacySequences.PageDown], // keypad page down
+  [57423, legacySequences.Home], // keypad home
+  [57424, legacySequences.End], // keypad end
+  [57425, legacySequences.Insert], // keypad insert
+  [57426, legacySequences.Delete], // keypad delete
 ]);
 
 function controlByteFor(codePoint: number): string | undefined {

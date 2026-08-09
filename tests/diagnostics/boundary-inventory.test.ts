@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import ts from "typescript";
+// TypeScript 7 has no stable compiler API, so AST diagnostics use its official TS6 compatibility package.
+import ts from "@typescript/typescript6";
 import { describe, expect, it } from "vitest";
 
 const roots = ["apps", "packages", "integrations"];
@@ -49,8 +50,12 @@ const setTimeoutAllowlist = new Map([
     "Shutdown backstop and final exit timers keep a stopped Observer process from lingering.",
   ],
   [
-    "packages/dashboard-core/src/state/operations/localOperationRunner.ts",
-    "Short failed-create row expiry is local TUI operation feedback, isolated from observer command timeout plumbing.",
+    "packages/dashboard-core/src/state/operations/failedCreateExpiry.ts",
+    "A single earliest-deadline timer schedules local failed-row expiry, isolated from observer command timeout plumbing.",
+  ],
+  [
+    "packages/dashboard-core/src/state/runtimeEffectScope.ts",
+    "The dashboard-owned timer registry cancels local UI scheduling during disposal before draining admitted effects.",
   ],
   [
     "packages/dashboard-core/src/state/runtime.ts",

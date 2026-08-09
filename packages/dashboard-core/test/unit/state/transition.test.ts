@@ -1,17 +1,13 @@
-import {
-  addTuiToast,
-  createInitialTuiState,
-  deriveTuiInputMode,
-  handleTuiKey,
-  openProjectDefaultAgentPicker,
-  openRenameEditForRow,
-  persistentFilterExperience,
-  replaceSnapshot,
-  selectDashboardViewport,
-  type TuiKey,
-  tuiScreenBehavior,
-} from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
+import { deriveTuiInputMode } from "../../../src/state/keymap.js";
+import type { TuiKey } from "../../../src/state/keys.js";
+import { createInitialTuiState, replaceSnapshot } from "../../../src/state/screen.js";
+import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
+import { openProjectDefaultAgentPicker } from "../../../src/state/screens/projectDefaultAgent.js";
+import { openRenameEditForRow } from "../../../src/state/screens/sessionRows.js";
+import { addTuiToast } from "../../../src/state/toasts.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
 import {
   createCommandSnapshot,
   createDashboardSnapshot,
@@ -22,23 +18,20 @@ import {
 describe("TUI screen transitions", () => {
   it("dismisses a visible error with Esc before the dashboard popup", () => {
     const state = addTuiToast(
-      createInitialTuiState({
-        initialSnapshot: createDashboardSnapshot(),
-        runtime: { persistentPopup: true, canDismissPopup: true },
-      }),
+      createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { kind: "error", message: "Worktree remove failed." },
       1_000,
     );
 
     const dismissedError = handleTuiKey(state, { input: "", escape: true });
     expect(dismissedError.state.toasts).toEqual([]);
-    expect(dismissedError.dismissPopup).toBeUndefined();
+    expect(dismissedError.operations).toBeUndefined();
 
     const dismissedPopup = handleTuiKey(dismissedError.state, { input: "", escape: true });
-    expect(dismissedPopup.dismissPopup).toBe(true);
+    expect(dismissedPopup.operations).toEqual([{ type: "dismissDashboard" }]);
 
     const closedImmediately = handleTuiKey(state, { input: "Q" });
-    expect(closedImmediately.dismissPopup).toBe(true);
+    expect(closedImmediately.operations).toEqual([{ type: "exitDashboardRenderer", exitCode: 0 }]);
     expect(closedImmediately.state.toasts).toHaveLength(1);
   });
 
@@ -46,37 +39,25 @@ describe("TUI screen transitions", () => {
     const state = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       persistentFilter: { query: "working" },
-      runtime: { persistentPopup: true, canDismissPopup: true },
     });
 
-    const cleared = handleTuiKey(
-      state,
-      { input: "", escape: true },
-      undefined,
-      persistentFilterExperience,
-    );
+    const cleared = handleTuiKey(state, { input: "", escape: true });
     expect("persistentFilter" in cleared.state).toBe(false);
-    expect(cleared.dismissPopup).toBeUndefined();
+    expect(cleared.operations).toBeUndefined();
 
-    const dismissed = handleTuiKey(
-      cleared.state,
-      { input: "", escape: true },
-      undefined,
-      persistentFilterExperience,
-    );
-    expect(dismissed.dismissPopup).toBe(true);
+    const dismissed = handleTuiKey(cleared.state, { input: "", escape: true });
+    expect(dismissed.operations).toEqual([{ type: "dismissDashboard" }]);
   });
 
   it("retains applied dashboard-local filter state when Q closes", () => {
     const state = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       persistentFilter: { query: "working" },
-      runtime: { persistentPopup: true, canDismissPopup: true },
     });
 
-    const closed = handleTuiKey(state, { input: "Q" }, undefined, persistentFilterExperience);
+    const closed = handleTuiKey(state, { input: "Q" });
 
-    expect(closed.dismissPopup).toBe(true);
+    expect(closed.operations).toEqual([{ type: "exitDashboardRenderer", exitCode: 0 }]);
     expect(closed.state.persistentFilter).toEqual({ query: "working" });
   });
 
@@ -199,35 +180,17 @@ describe("TUI screen transitions", () => {
       { input: "1" },
     );
 
-    expect(transition.commands).toBeUndefined();
-    expect(transition.state.localRows.pendingStart).toMatchObject([
+    expect(transition.state.localRows.pendingStart).toEqual([]);
+    expect(transition.operations).toEqual([
       {
+        type: "activateSession",
+        sessionId: "ses_wt_web_no_agent",
         localId: "start:wt_web_no_agent",
+        preferredObserverAction: "start",
         projectId: "web",
         worktreeId: "wt_web_no_agent",
         branch: "feature-start",
       },
-    ]);
-    expect(transition.operations).toEqual([
-      expect.objectContaining({
-        type: "startAgent",
-        localId: "start:wt_web_no_agent",
-        projectId: "web",
-        worktreeId: "wt_web_no_agent",
-        branch: "feature-start",
-        command: {
-          type: "session.startAgent",
-          payload: {
-            projectId: "web",
-            worktreeId: "wt_web_no_agent",
-            terminal: {
-              provider: "tmux",
-              layout: "agent-build-shell",
-              focus: false,
-            },
-          },
-        },
-      }),
     ]);
   });
 
@@ -249,27 +212,14 @@ describe("TUI screen transitions", () => {
       { input: "1" },
     );
 
-    expect(transition.commands).toBeUndefined();
-    expect(transition.state.localRows.pendingStart).toMatchObject([
-      {
-        localId: "resume:wt_web_no_agent",
-        operation: "resumeAgent",
-        projectId: "web",
-        worktreeId: "wt_web_no_agent",
-      },
-    ]);
+    expect(transition.state.localRows.pendingStart).toEqual([]);
     expect(transition.operations).toEqual([
       expect.objectContaining({
-        type: "resumeAgent",
+        type: "activateSession",
         localId: "resume:wt_web_no_agent",
-        command: expect.objectContaining({
-          type: "session.resumeAgent",
-          payload: expect.objectContaining({
-            projectId: "web",
-            worktreeId: "wt_web_no_agent",
-            recoveryHandleId: "rec_codex_123",
-          }),
-        }),
+        preferredObserverAction: "resume",
+        projectId: "web",
+        worktreeId: "wt_web_no_agent",
       }),
     ]);
   });
@@ -280,12 +230,12 @@ describe("TUI screen transitions", () => {
       { input: "1" },
     );
 
-    expect(transition.operations).toBeUndefined();
-    expect(transition.commands).toEqual([
-      {
-        type: "terminal.focus",
-        payload: { sessionId: "ses_wt_web_idle" },
-      },
+    expect(transition.operations).toEqual([
+      expect.objectContaining({
+        type: "activateSession",
+        sessionId: "ses_wt_web_idle",
+        preferredObserverAction: "focus",
+      }),
     ]);
     expect(transition.state.localRows.pendingStart).toEqual([]);
   });
@@ -327,13 +277,16 @@ describe("TUI screen transitions", () => {
 
     const transition = handleTuiKey(state, { input: choice.key });
 
-    expect(transition.operations).toBeUndefined();
-    expect(transition.commands).toEqual([
-      { type: "terminal.focus", payload: { sessionId: externalSession.id } },
+    expect(transition.operations).toEqual([
+      expect.objectContaining({
+        type: "activateSession",
+        sessionId: externalSession.id,
+        preferredObserverAction: "focus",
+      }),
     ]);
   });
 
-  it("keeps the dashboard active when a native session is not externally focusable", () => {
+  it("delegates native non-focusable sessions to renderer activation", () => {
     const base = createCommandSnapshot("idle");
     const snapshot = {
       ...base,
@@ -350,12 +303,11 @@ describe("TUI screen transitions", () => {
       input: "1",
     });
 
-    expect(transition.commands).toBeUndefined();
-    expect(transition.operations).toBeUndefined();
+    expect(transition.operations).toEqual([
+      expect.objectContaining({ type: "activateSession", preferredObserverAction: "focus" }),
+    ]);
     expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.state.toasts.at(-1)?.toast).toMatchObject({ kind: "info" });
-    expect(transition.state.toasts.at(-1)?.toast.message).toContain('"native" terminal');
-    expect(transition.state.toasts.at(-1)?.toast.message).toContain("can't be focused");
+    expect(transition.state.toasts).toEqual([]);
   });
 
   it("ignores a pending-start slot as an action while preserving dashboard state", () => {
@@ -381,7 +333,6 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(state, { input: "1" });
 
     expect(transition.state).toBe(state);
-    expect(transition.commands).toBeUndefined();
     expect(transition.operations).toBeUndefined();
   });
 
@@ -481,7 +432,6 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(state, { input: "y" });
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.commands).toBeUndefined();
     expect(transition.state.localRows.pendingRemove).toMatchObject([
       {
         localId: "remove:wt_web_idle",
@@ -635,11 +585,15 @@ describe("TUI screen transitions", () => {
     expect(openRenameEditForRow(dashboard, "missing")).toBe(dashboard);
     expect(openRenameEditForRow(dashboard, "wt_web_no_agent")).toBe(dashboard);
 
-    const search = {
+    const filter = {
       ...createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
-      screen: { name: "search", value: "" } as const,
+      screen: {
+        name: "persistentFilter",
+        draft: { value: "", cursor: 0 },
+        draftConditions: [],
+      } as const,
     };
-    expect(openRenameEditForRow(search, "ses_wt_web_idle")).toBe(search);
+    expect(openRenameEditForRow(filter, "ses_wt_web_idle")).toBe(filter);
   });
 
   it("does not open rename for external session membership", () => {
@@ -806,10 +760,9 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(state, key);
 
     expect(transition.state.screen).toEqual({ name: "dashboard" });
-    expect(transition.commands).toBeUndefined();
   });
 
-  it("opens new session from the dashboard and submits a session.create command", () => {
+  it("opens new session and submits semantic managed-session product values", () => {
     const opened = handleTuiKey(
       createInitialTuiState({ initialSnapshot: createDashboardSnapshot() }),
       { input: "N" },
@@ -819,30 +772,14 @@ describe("TUI screen transitions", () => {
     const submitted = handleTuiKey(opened.state, { input: "\r", return: true });
 
     expect(submitted.state.screen).toEqual({ name: "dashboard" });
-    expect(submitted.commands).toBeUndefined();
     expect(submitted.operations?.[0]).toMatchObject({
-      type: "createSession",
-      projectId: "web",
-      command: {
-        type: "session.create",
-        payload: {
-          projectId: "web",
-          terminal: {
-            provider: "tmux",
-            layout: "agent-build-shell",
-            focus: false,
-          },
-        },
-      },
+      type: "createManagedSession",
+      project: { id: "web" },
     });
     const operation = submitted.operations?.[0];
-    if (operation?.type !== "createSession") throw new Error("expected create operation");
-    expect(operation.title).toBe(operation.branch);
-    expect(operation.command.payload.title).toBe(operation.branch);
-    expect(submitted.state.localRows.pendingCreate[0]).toMatchObject({
-      title: operation.title,
-      branch: operation.branch,
-    });
+    if (operation?.type !== "createManagedSession") throw new Error("expected create operation");
+    expect(operation.title).toBe(operation.hiddenBranch);
+    expect(submitted.state.localRows.pendingCreate).toEqual([]);
   });
 
   it("keeps unavailable project submission inert in New Session", () => {
@@ -1092,7 +1029,7 @@ describe("TUI screen transitions", () => {
     expect(up.selection.get("projectDefaultAgent")).toBe("codex");
   });
 
-  it("emits focused empty-project Quick Session intents without resolving availability", () => {
+  it("emits focused empty-project Quick Session operations", () => {
     const transition = handleTuiKey(
       createInitialTuiState({
         initialSnapshot: createZeroWorktreeSnapshot(),
@@ -1101,14 +1038,17 @@ describe("TUI screen transitions", () => {
       { input: "\r", return: true },
     );
 
-    expect(transition.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(transition.operations?.[0]).toMatchObject({
+      type: "quickCreateManagedSession",
+      project: { id: "web" },
+    });
     expect(transition.state.dashboardFocus).toEqual({
       kind: "emptyProjectAction",
       projectId: "web",
     });
   });
 
-  it("leaves focused empty-project availability to the Quick Session consumer", () => {
+  it("keeps unavailable empty-project Quick Session blocked in the pure transition", () => {
     const snapshot = createZeroWorktreeSnapshot();
     const unavailable = {
       ...snapshot,
@@ -1126,12 +1066,12 @@ describe("TUI screen transitions", () => {
       { input: "\r", return: true },
     );
 
-    expect(transition.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(transition.operations).toBeUndefined();
     expect(transition.state.dashboardFocus).toEqual({
       kind: "emptyProjectAction",
       projectId: "web",
     });
-    expect(transition.state.toasts).toEqual([]);
+    expect(transition.state.toasts.at(-1)?.toast.kind).toBe("error");
   });
 
   it("keeps stale projects and no-longer-empty actions inert", () => {
@@ -1221,7 +1161,7 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("resets dashboard scroll when a search query is applied", () => {
+  it("resets dashboard scroll when a filter is applied", () => {
     const opened = handleTuiKey(
       createInitialTuiState({
         initialSnapshot: createDashboardSnapshot(),
@@ -1233,7 +1173,7 @@ describe("TUI screen transitions", () => {
     const typed = handleTuiKey(opened.state, { input: "nav" });
     const transition = handleTuiKey(typed.state, { input: "\r", return: true });
 
-    expect(transition.state.searchQuery).toBe("nav");
+    expect(transition.state.persistentFilter).toEqual({ query: "nav" });
     expect(transition.state.scrollOffset).toBe(0);
   });
 

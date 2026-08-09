@@ -190,7 +190,93 @@ describe("TTY identity and legacy upgrade evidence", () => {
           args[0] === "-p" ? `${tty}\n` : `${TEST_PID} ${tty} bun test src/main.tsx\n`,
       }),
     );
-    expect(ttyPaths).toEqual(["/dev/pts/7"]);
+    expect(ttyPaths).toEqual(["/dev/pts/7", "/dev/pts/7"]);
+  });
+
+  it("anchors supervised renderers to the nearest exact ancestor with the stdin TTY", async () => {
+    const helperPid = 5_252;
+    const ownerPid = 5_151;
+    const processRows = new Map([
+      [TEST_PID, `${TEST_PID} ${helperPid} ??\n`],
+      [helperPid, `${helperPid} ${ownerPid} ??\n`],
+      [ownerPid, `${ownerPid} 5000 ${TEST_TTY}\n`],
+    ]);
+    const ancestryQueries: number[] = [];
+    const ttyPaths: string[] = [];
+
+    await acquireOwned(
+      makeDeps(makeRoot(), {
+        readTtyPathStat: (path) => {
+          ttyPaths.push(path);
+          return fakeStat();
+        },
+        runPs: (args) => {
+          if (args[0] === "-t") {
+            return [
+              `${ownerPid} ${TEST_TTY} node scripts/native-hmr-runner.mjs`,
+              `5000 ${TEST_TTY} -zsh`,
+              "",
+            ].join("\n");
+          }
+          if (args.join(" ") === `-p ${TEST_PID} -o tty=`) return "??\n";
+          const pid = Number(args[1]);
+          ancestryQueries.push(pid);
+          const row = processRows.get(pid);
+          if (row === undefined) throw new Error(`Unexpected ancestry query for ${pid}`);
+          return row;
+        },
+      }),
+    );
+
+    expect(ancestryQueries).toEqual([
+      TEST_PID,
+      helperPid,
+      ownerPid,
+      TEST_PID,
+      helperPid,
+      ownerPid,
+    ]);
+    expect(ttyPaths).toEqual([`/dev/${TEST_TTY}`, `/dev/${TEST_TTY}`]);
+  });
+
+  it("fails closed on missing, malformed, cyclic, changing, or overlong supervised ancestry", async () => {
+    for (const mode of ["missing", "malformed", "cyclic", "changing", "overlong"] as const) {
+      const helperPid = 5_252;
+      const ownerPid = 5_151;
+      let selfAncestryReads = 0;
+      const result = await acquireStationTtyOwnership(
+        makeDeps(makeRoot(), {
+          runPs: (args) => {
+            if (args[0] === "-t") {
+              return `${ownerPid} ${TEST_TTY} node scripts/native-hmr-runner.mjs\n`;
+            }
+            if (args.join(" ") === `-p ${TEST_PID} -o tty=`) return "??\n";
+            const pid = Number(args[1]);
+            if (mode === "overlong") {
+              const ppid = pid === TEST_PID ? 6_000 : pid - 1;
+              return `${pid} ${ppid} ??\n`;
+            }
+            if (pid === TEST_PID) {
+              selfAncestryReads += 1;
+              if (mode === "missing") return "";
+              if (mode === "malformed") return "not a process row\n";
+              if (mode === "changing" && selfAncestryReads > 1) {
+                return `${TEST_PID} 9999 ??\n`;
+              }
+              return `${TEST_PID} ${helperPid} ??\n`;
+            }
+            if (pid === helperPid) {
+              return mode === "cyclic"
+                ? `${helperPid} ${TEST_PID} ??\n`
+                : `${helperPid} ${ownerPid} ??\n`;
+            }
+            if (pid === ownerPid) return `${ownerPid} 5000 ${TEST_TTY}\n`;
+            throw new Error(`Unexpected ancestry query for ${pid}`);
+          },
+        }),
+      );
+      expect(result).toMatchObject({ kind: "refused", reason: "claim-unavailable" });
+    }
   });
 
   it("fails closed before scanning peers when the controlling TTY is not stdin", async () => {

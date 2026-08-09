@@ -23,10 +23,11 @@ import { MouseTrackingDecMode } from "../terminal/protocol/mouse.js";
 import { VtPrefix } from "../terminal/protocol/syntax.js";
 import {
   isUnsupportedBlankXtermAttribute,
-  isUnsupportedXtermCellAttribute,
   isUnsupportedXtermAttribute,
   type PinnedXtermAttributes,
   type PinnedXtermCellAttributes,
+  type UnsupportedXtermCellAttributeDetail,
+  unsupportedXtermCellAttributeDetail,
   xtermAttributeSgr,
   xtermBackgroundKey,
   xtermBackgroundSgr,
@@ -85,14 +86,12 @@ export type TerminalSnapshotUnsupportedStateDetail =
   | "cell-attributes"
   | "current-attributes"
   | "custom-tabs"
-  | "wrap-pending-cell";
+  | "wrap-pending-cell"
+  | UnsupportedXtermCellAttributeDetail;
 
 /** Exactness failure carrying only a stable, content-free diagnostic detail. */
 export class TerminalSnapshotUnsupportedStateError extends Error {
-  constructor(
-    readonly detail: TerminalSnapshotUnsupportedStateDetail,
-    message: string,
-  ) {
+  constructor(readonly detail: TerminalSnapshotUnsupportedStateDetail, message: string) {
     super(message);
   }
 }
@@ -189,7 +188,8 @@ export class TerminalSupplementalState {
   /**
    * Build RIS-prefixed control-only VT for degraded live attachment. It restores
    * interaction modes and per-buffer Kitty stacks without cells, title, raw
-   * history, or provider data.
+   * history, or provider data, then establishes a valid active-buffer cursor
+   * anchor for a cursor-relative child repaint.
    */
   liveResetSequence(): string {
     const parts: string[] = [EscSequence.ResetToInitialState];
@@ -245,6 +245,7 @@ export class TerminalSupplementalState {
     if (modes.reverseWraparoundMode) {
       parts.push(`${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.ReverseWraparound}${CsiCommand.SetDecPrivateMode.final}`);
     }
+    parts.push(this.#activeCursorAnchorSequence());
     return parts.join("");
   }
 
@@ -349,6 +350,33 @@ export class TerminalSupplementalState {
       this.#bufferType === "alternate" &&
       this.#alternateMode === DecMode.SaveCursorAndAlternate;
     return this.#savedBuffers.has(bufferType) && !recreatedByActiveAlternate;
+  }
+
+  #activeCursorAnchorSequence(): string {
+    const buffer = this.#buffer(this.#bufferType);
+    const pinned = this.#pinnedBuffer(this.#bufferType);
+    const scrollTop = Math.max(0, Math.min(this.terminal.rows - 1, pinned.scrollTop));
+    const scrollBottom = Math.max(
+      scrollTop,
+      Math.min(this.terminal.rows - 1, pinned.scrollBottom),
+    );
+    const column = Math.max(1, Math.min(this.terminal.cols, buffer.cursorX + 1));
+    const parts: string[] = [];
+    if (scrollTop !== 0 || scrollBottom !== this.terminal.rows - 1) {
+      parts.push(
+        `${VtPrefix.Csi}${scrollTop + 1};${scrollBottom + 1}${CsiCommand.SetScrollingRegion.final}`,
+      );
+    }
+    const row = this.terminal.modes.originMode
+      ? Math.max(1, Math.min(scrollBottom - scrollTop + 1, buffer.cursorY - scrollTop + 1))
+      : Math.max(1, Math.min(this.terminal.rows, buffer.cursorY + 1));
+    if (this.terminal.modes.originMode) {
+      parts.push(
+        `${VtPrefix.Csi}${CsiCommand.SetDecPrivateMode.prefix}${DecMode.Origin}${CsiCommand.SetDecPrivateMode.final}`,
+      );
+    }
+    parts.push(`${VtPrefix.Csi}${row};${column}${CsiCommand.CursorPosition.final}`);
+    return parts.join("");
   }
 
   #savedCursorSequence(
@@ -529,40 +557,43 @@ export class TerminalSupplementalState {
     }
     for (const bufferType of buffers) {
       this.#assertDefaultTabs(bufferType);
-      const buffer = this.#buffer(bufferType);
-      const reusable = buffer.getNullCell();
-      for (let row = 0; row < buffer.length; row += 1) {
-        const line = buffer.getLine(row);
-        if (
-          line?.isWrapped &&
-          !hasNaturallySerializableWrap(buffer.getLine(row - 1), line)
-        ) {
-          throw new TerminalSnapshotUnsupportedStateError(
-            "nonserializable-wrap",
-            `Cannot restore a non-serializable wrapped ${bufferType} line at row ${row + 1}.`,
-          );
-        }
-        for (let column = 0; column < this.terminal.cols; column += 1) {
-          const cell = line?.getCell(column, reusable) as
-            | PinnedXtermCellAttributes
-            | undefined;
-          if (
-            cell !== undefined &&
-            (isUnsupportedXtermCellAttribute(cell) || isUnsupportedBlankXtermAttribute(cell))
-          ) {
-            throw new TerminalSnapshotUnsupportedStateError(
-              "cell-attributes",
-              `Cannot restore unsupported ${bufferType} attributes at row ${row + 1}, column ${column + 1}.`,
-            );
-          }
-        }
-      }
+      this.#assertSerializableBuffer(bufferType);
     }
     if (isUnsupportedXtermAttribute(pinned._core._inputHandler._curAttrData)) {
       throw new TerminalSnapshotUnsupportedStateError(
         "current-attributes",
         "Cannot restore unsupported current terminal attributes.",
       );
+    }
+  }
+
+  #assertSerializableBuffer(bufferType: BufferType): void {
+    const buffer = this.#buffer(bufferType);
+    const reusable = buffer.getNullCell();
+    for (let row = 0; row < buffer.length; row += 1) {
+      const line = buffer.getLine(row);
+      if (line?.isWrapped && !hasNaturallySerializableWrap(buffer.getLine(row - 1), line)) {
+        throw new TerminalSnapshotUnsupportedStateError(
+          "nonserializable-wrap",
+          `Cannot restore a non-serializable wrapped ${bufferType} line at row ${row + 1}.`,
+        );
+      }
+      if (line === undefined) continue;
+
+      for (let column = 0; column < this.terminal.cols; column += 1) {
+        const cell = line.getCell(column, reusable) as PinnedXtermCellAttributes | undefined;
+        if (cell === undefined) continue;
+
+        const detail =
+          unsupportedXtermCellAttributeDetail(cell) ??
+          (isUnsupportedBlankXtermAttribute(cell) ? "cell-attributes" : undefined);
+        if (detail === undefined) continue;
+
+        throw new TerminalSnapshotUnsupportedStateError(
+          detail,
+          `Cannot restore unsupported ${bufferType} attributes at row ${row + 1}, column ${column + 1}.`,
+        );
+      }
     }
   }
 

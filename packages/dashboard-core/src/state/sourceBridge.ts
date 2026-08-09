@@ -1,31 +1,19 @@
-import type { StationClientConnectionState } from "@station/client";
-import type { StationSnapshot } from "@station/contracts";
+import type { StationClientConnectionState, StationClientState } from "@station/client";
 import { safeErrorEquals } from "../services/errors/errors.js";
 import { replaceSnapshot } from "./screen.js";
 import { OBSERVER_RECOVERY_TOAST_THRESHOLD_MS } from "./timing.js";
 import { addTuiToast } from "./toasts.js";
-import type { TuiObserverConnectionStatus, TuiState } from "./types.js";
-
-export type TuiSnapshotSourceState = {
-  snapshot?: StationSnapshot;
-  connection: StationClientConnectionState;
-};
-
-export interface TuiSnapshotSource {
-  getState(): TuiSnapshotSourceState;
-  subscribe(listener: () => void): () => void;
-}
+import type { DashboardState, TuiObserverConnectionStatus } from "./types.js";
 
 /**
- * Mirrors the runtime-hook path for callers that already own a subscribable
- * snapshot source: fresh snapshots replace and clamp state, while recovery
- * after a long outage emits the same user-facing reconnection toast.
+ * Projects canonical client state into dashboard-local state without changing
+ * snapshot identity; recovery after a long outage emits the dashboard toast.
  */
 export function applySnapshotSourceState(
-  state: TuiState,
-  sourceState: TuiSnapshotSourceState,
+  state: DashboardState,
+  sourceState: StationClientState,
   nowMs: number,
-): TuiState {
+): DashboardState {
   let next = state;
   if (sourceState.snapshot !== undefined && sourceState.snapshot !== state.snapshot) {
     next = replaceSnapshot(next, sourceState.snapshot);
@@ -34,10 +22,10 @@ export function applySnapshotSourceState(
 }
 
 function applyConnectionState(
-  state: TuiState,
+  state: DashboardState,
   connection: StationClientConnectionState,
   nowMs: number,
-): TuiState {
+): DashboardState {
   switch (connection.state) {
     case "idle":
     case "loading":
@@ -83,12 +71,12 @@ function sameFailureStatus(
   );
 }
 
-function observerConnectedState(state: TuiState, nowMs: number): TuiState {
+function observerConnectedState(state: DashboardState, nowMs: number): DashboardState {
   const previous = state.observerConnectionStatus;
   if (previous.state === "connected") {
     return state;
   }
-  let next: TuiState = {
+  let next: DashboardState = {
     ...state,
     observerConnectionStatus: { state: "connected" },
   };

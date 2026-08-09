@@ -10,8 +10,14 @@ import {
   TerminalSnapshotPendingError,
   TerminalSnapshotUnavailableError,
 } from "./semanticTerminalSnapshot.js";
+import {
+  type PinnedXtermAttributes,
+  unsupportedXtermCellAttributeDetail,
+} from "./xtermSnapshotAttributes.js";
 
 const CSI = "\x1b[";
+const CURSOR_UNDERLINED_LINK =
+  "\x1b]8;;https://example.invalid\x07" + `${CSI}4mX${CSI}24m` + "\x1b]8;;\x07";
 
 async function write(terminal: Terminal, data: string): Promise<void> {
   await new Promise<void>((resolve) => terminal.write(data, resolve));
@@ -47,6 +53,30 @@ function margins(terminal: Terminal): [number, number] {
   ];
 }
 
+function unsupportedAttributes(options: {
+  protected?: boolean;
+  storedUnderlineStyle?: number;
+  underlineColor?: number;
+  underlineOffset?: number;
+  underlineStyle?: number;
+  urlId?: number;
+}): PinnedXtermAttributes {
+  const extended = {
+    underlineColor: options.underlineColor ?? 0,
+    underlineStyle: options.storedUnderlineStyle ?? options.underlineStyle ?? 1,
+    urlId: options.urlId ?? 0,
+    clone() {
+      return { ...this };
+    },
+  };
+  return {
+    extended,
+    getUnderlineStyle: () => options.underlineStyle ?? 1,
+    getUnderlineVariantOffset: () => options.underlineOffset ?? 0,
+    isProtected: () => (options.protected === true ? 1 : 0),
+  } as PinnedXtermAttributes;
+}
+
 async function captureError(source: SemanticTerminalSnapshot): Promise<Error> {
   try {
     await source.capture();
@@ -60,6 +90,31 @@ async function captureError(source: SemanticTerminalSnapshot): Promise<Error> {
 }
 
 describe("SemanticTerminalSnapshot", () => {
+  it("classifies rejected cell attributes without inspecting terminal content", () => {
+    expect(unsupportedXtermCellAttributeDetail(unsupportedAttributes({ protected: true }))).toBe(
+      "cell-protected",
+    );
+    expect(unsupportedXtermCellAttributeDetail(unsupportedAttributes({ underlineStyle: 3 }))).toBe(
+      "cell-underline-style",
+    );
+    expect(unsupportedXtermCellAttributeDetail(unsupportedAttributes({ underlineColor: 1 }))).toBe(
+      "cell-underline-color",
+    );
+    expect(unsupportedXtermCellAttributeDetail(unsupportedAttributes({ underlineOffset: 1 }))).toBe(
+      "cell-underline-offset",
+    );
+    expect(
+      unsupportedXtermCellAttributeDetail(
+        unsupportedAttributes({ underlineStyle: 5, storedUnderlineStyle: 1, urlId: 1 }),
+      ),
+    ).toBeUndefined();
+    expect(
+      unsupportedXtermCellAttributeDetail(
+        unsupportedAttributes({ underlineStyle: 5, storedUnderlineStyle: 3, urlId: 1 }),
+      ),
+    ).toBe("cell-underline-style");
+  });
+
   it("round-trips retained history, cursor, styling, and title", async () => {
     const source = new SemanticTerminalSnapshot(12, 4);
     const restored = target(12, 4);
@@ -488,19 +543,50 @@ describe("SemanticTerminalSnapshot", () => {
     }
   });
 
+  it("preserves history and ordinary underline from Cursor-style OSC 8 cells", async () => {
+    const source = new SemanticTerminalSnapshot(20, 4);
+    const restored = target(20, 4);
+    try {
+      source.write(`one\r\ntwo\r\nthree\r\nfour\r\n${CURSOR_UNDERLINED_LINK}`);
+      const [snapshot] = await source.capture();
+      await write(restored, snapshot);
+
+      expect(lines(restored)).toEqual(["one", "two", "three", "four", "X"]);
+      const linkedCell = restored.buffer.active.getLine(4)?.getCell(0);
+      expect(Boolean(linkedCell?.isUnderline())).toBe(true);
+      if (linkedCell === undefined) throw new Error("Restored underlined cell is unavailable.");
+      expect(resolveXtermCellHyperlink(restored, linkedCell)).toBeUndefined();
+    } finally {
+      source.dispose();
+      restored.dispose();
+    }
+  });
+
   it("rejects terminal state the serializer cannot represent exactly", async () => {
     const cases = [
       ["character-set", "Cannot restore non-default terminal character sets.", "\x1b(0"],
       ["custom-tabs", "Cannot restore custom normal tab stops.", `${CSI}3g${CSI}5G\x88`],
       [
-        "cell-attributes",
+        "cell-protected",
         "Cannot restore unsupported normal attributes at row 1, column 1.",
         `${CSI}1\"qX${CSI}0\"q`,
       ],
       [
-        "cell-attributes",
+        "cell-underline-style",
         "Cannot restore unsupported normal attributes at row 1, column 1.",
-        `${CSI}4:3;58:2::255:0:0mX${CSI}0m`,
+        `${CSI}4:3mX${CSI}0m`,
+      ],
+      [
+        "cell-underline-style",
+        "Cannot restore unsupported normal attributes at row 1, column 1.",
+        "\x1b]8;;https://example.invalid\x07" +
+          `${CSI}4:3mX${CSI}0m` +
+          "\x1b]8;;\x07",
+      ],
+      [
+        "cell-underline-color",
+        "Cannot restore unsupported normal attributes at row 1, column 1.",
+        `${CSI}4;58:2::255:0:0mX${CSI}0m`,
       ],
       [
         "current-attributes",

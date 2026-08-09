@@ -2,7 +2,6 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStationHostClient, HOST_PROTOCOL_VERSION } from "@station/host";
-import { stationBuildInfo } from "@station/runtime";
 import { afterEach, describe, expect, it } from "bun:test";
 import { paneInputBytes } from "../input/runtime/sequenceNormalize.js";
 import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
@@ -14,6 +13,7 @@ import { type StationHostInstance, startStationHost } from "./startHost.js";
 
 // startStationHost only calls logger.log; a no-op keeps the host test off the FS.
 const noopLogger = { log: async () => undefined } as never;
+const TEST_HOST_BUILD = "test-host-build";
 
 let host: StationHostInstance | undefined;
 
@@ -31,9 +31,19 @@ async function startOnTempSocket(
     socketPath,
     stateDir: dir,
     logger: noopLogger,
+    // Keep hermetic unit runs off checkout build-identity verification.
+    buildVersion: TEST_HOST_BUILD,
     ...(ptyTableOptions === undefined ? {} : { ptyTableOptions }),
   });
   return socketPath;
+}
+
+function testClient(socketPath: string, timeoutMs?: number) {
+  return createStationHostClient({
+    socketPath,
+    expectedBuildVersion: TEST_HOST_BUILD,
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  });
 }
 
 const identity = {
@@ -48,16 +58,31 @@ const identity = {
 describe("startStationHost", () => {
   it("answers host.health over a real unix socket", async () => {
     const socketPath = await startOnTempSocket();
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       expect(await client.health()).toEqual({
         ok: true,
         protocolVersion: HOST_PROTOCOL_VERSION,
-        buildVersion: stationBuildInfo().version,
+        buildVersion: TEST_HOST_BUILD,
       });
     } finally {
       client.dispose();
     }
+  });
+
+  it("closes after a one-way client shutdown notification over a real socket", async () => {
+    const socketPath = await startOnTempSocket();
+    const client = testClient(socketPath);
+    await client.list();
+
+    client.dispose();
+    await Promise.race([
+      host?.close(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Station Host close timed out.")), 1_000);
+      }),
+    ]);
+    host = undefined;
   });
 
   it("records the selected PTY implementation at startup", async () => {
@@ -67,6 +92,7 @@ describe("startStationHost", () => {
       socketPath: join(dir, "station-host.sock"),
       stateDir: dir,
       ptyImplementation: "bun-nocctty",
+      buildVersion: TEST_HOST_BUILD,
       logger: {
         log: async (record: (typeof records)[number]) => {
           records.push(record);
@@ -79,15 +105,57 @@ describe("startStationHost", () => {
       attributes: {
         ptyImplementation: "bun-nocctty",
         protocolVersion: HOST_PROTOCOL_VERSION,
-        buildVersion: stationBuildInfo().version,
+        buildVersion: TEST_HOST_BUILD,
       },
     });
+  });
+
+  it("records PTY spawn and exit independently from attachment lifecycle", async () => {
+    const records: Array<{
+      lifecycle?: { kind: string; ptyId?: string; pid?: number; exitCode?: number };
+    }> = [];
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const dir = await mkdtemp(join(tmpdir(), "station-host-pty-lifecycle-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      buildVersion: TEST_HOST_BUILD,
+      ptyTableOptions: { createTerminal: () => scripted.terminal },
+      logger: { log: async (record: (typeof records)[number]) => records.push(record) } as never,
+    });
+    const client = testClient(join(dir, "station-host.sock"));
+    try {
+      const { ptyId } = await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      scripted.helpers.emitExit({ exitCode: 17 });
+      await waitFor(() => records.some((record) => record.lifecycle?.kind === "host.pty.exited"));
+
+      const lifecycle = records.map((record) => record.lifecycle).filter(Boolean);
+      expect(lifecycle.find((event) => event?.kind === "host.pty.spawned")).toMatchObject({
+        kind: "host.pty.spawned",
+        ptyId,
+        pid: scripted.terminal.pid,
+      });
+      expect(lifecycle.find((event) => event?.kind === "host.pty.exited")).toMatchObject({
+        kind: "host.pty.exited",
+        ptyId,
+        exitCode: 17,
+      });
+    } finally {
+      client.dispose();
+    }
   });
 
   it("handles host.focus (best-effort) over a real unix socket", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       const { ptyId } = await client.spawn({
         ...identity,
@@ -104,7 +172,7 @@ describe("startStationHost", () => {
       expect(await client.health()).toEqual({
         ok: true,
         protocolVersion: HOST_PROTOCOL_VERSION,
-        buildVersion: stationBuildInfo().version,
+        buildVersion: TEST_HOST_BUILD,
       });
     } finally {
       client.dispose();
@@ -114,7 +182,7 @@ describe("startStationHost", () => {
   it("spawns a PTY, lists it, and forwards writes over the socket", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       const { ptyId } = await client.spawn({
         ...identity,
@@ -159,7 +227,7 @@ describe("startStationHost", () => {
         );
       },
     });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       await expect(
         client.spawn({
@@ -182,7 +250,7 @@ describe("startStationHost", () => {
   it("attach replays scrollback then streams live frames; detach keeps the PTY", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       const { ptyId } = await client.spawn({
         ...identity,
@@ -216,7 +284,7 @@ describe("startStationHost", () => {
   it("applies output compatibility before replay and live delivery", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 51 });
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       const { ptyId } = await client.spawn({
         ...identity,
@@ -254,7 +322,7 @@ describe("startStationHost", () => {
       createTerminal: () => scripted.terminal,
       maxScrollbackBytes: 5,
     });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     const registry = createPtyRegistry({ resizeDebounceMs: 0 });
     const paneId = "pane-degraded-host-reattach";
     try {
@@ -280,6 +348,11 @@ describe("startStationHost", () => {
           hostSocketPath: socketPath,
           ptyId: spawned.ptyId,
           size: { cols: 80, rows: 24 },
+          clientFactory: (path) =>
+            createStationHostClient({
+              socketPath: path,
+              expectedBuildVersion: TEST_HOST_BUILD,
+            }),
         }),
       );
       registry.resize(paneId, { cols: 80, rows: 24 });
@@ -335,7 +408,7 @@ describe("startStationHost", () => {
   it("host.close drops the PTY; attaching to a missing PTY is HOST_ATTACH_GONE", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       const { ptyId } = await client.spawn({
         ...identity,
@@ -361,7 +434,7 @@ describe("startStationHost", () => {
 
   it("stops an idle host only after acknowledging the lifecycle request", async () => {
     const socketPath = await startOnTempSocket();
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       expect(await client.stopIfIdle("next-build")).toEqual({ stopping: true });
       await host?.closed;
@@ -384,7 +457,7 @@ describe("startStationHost", () => {
         return terminal;
       },
     });
-    const client = createStationHostClient({ socketPath });
+    const client = testClient(socketPath);
     try {
       const { ptyId } = await client.spawn({
         ...identity,
@@ -440,8 +513,8 @@ describe("startStationHost", () => {
         return createScriptedTerminal({ cols: 80, rows: 24 }).terminal;
       },
     });
-    const stoppingClient = createStationHostClient({ socketPath });
-    const spawningClient = createStationHostClient({ socketPath });
+    const stoppingClient = testClient(socketPath);
+    const spawningClient = testClient(socketPath);
     try {
       await Promise.all([stoppingClient.list(), spawningClient.list()]);
       const [stopping, spawning] = await Promise.allSettled([
@@ -475,6 +548,466 @@ describe("startStationHost", () => {
     } finally {
       stoppingClient.dispose();
       spawningClient.dispose();
+    }
+  });
+
+  it("beginHandoff parks bridge-capable PTYs and completeHandoff exits without disposeAll kill", async () => {
+    let released = false;
+    let killed = false;
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const terminal = {
+      ...scripted.terminal,
+      bridgePid: 9_001,
+      releaseToOrphan() {
+        released = true;
+        scripted.helpers.isDisposed();
+        scripted.terminal.dispose();
+        return false;
+      },
+      kill() {
+        killed = true;
+        scripted.terminal.kill();
+      },
+      dispose() {
+        // Intentionally empty: releaseToOrphan owns park; dispose must not kill parks.
+      },
+    };
+    const dir = await mkdtemp(join(tmpdir(), "station-host-handoff-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: { createTerminal: () => terminal },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      const begun = await client.beginHandoff("host-b", "processes");
+      expect(begun.released).toEqual(["pty-1"]);
+      expect(begun.manifest["pty-1"]?.bridgePid).toEqual(9_001);
+      expect(released).toEqual(true);
+      expect(await client.list()).toEqual([]);
+      await expect(client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      })).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
+
+      expect(await client.completeHandoff()).toEqual({ stopping: true });
+      await host?.closed;
+      host = undefined;
+      expect(killed).toEqual(false);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("refuses adoptRegistry while a handoff is in progress", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const terminal = {
+      ...scripted.terminal,
+      bridgePid: 9_012,
+      releaseToOrphan() {
+        return false;
+      },
+    };
+    const dir = await mkdtemp(join(tmpdir(), "station-host-adopt-gate-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: { createTerminal: () => terminal },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      const begun = await client.beginHandoff("host-b");
+      await expect(client.adoptRegistry(begun.manifest)).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      await client.abortHandoff();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("abortHandoff restores serving after beginHandoff", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const terminal = {
+      ...scripted.terminal,
+      bridgePid: 9_002,
+      releaseToOrphan() {
+        scripted.terminal.dispose();
+        return false;
+      },
+    };
+    const dir = await mkdtemp(join(tmpdir(), "station-host-abort-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: {
+        createTerminal: () => terminal,
+        adoptTerminal: async () => ({
+          ...createScriptedTerminal({ cols: 80, rows: 24 }).terminal,
+          bridgePid: 9_002,
+          parkedEvicted: false,
+        }),
+      },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      await client.beginHandoff("host-b");
+      const aborted = await client.abortHandoff();
+      expect(aborted.adopted).toEqual(["pty-1"]);
+      expect(await client.list()).toHaveLength(1);
+      await client.spawn({
+        ...identity,
+        terminalTargetId: "native:wt-2",
+        worktreeId: "wt-2",
+        sessionId: "ses-2",
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-2",
+        cols: 80,
+        rows: 24,
+      });
+      expect(await client.list()).toHaveLength(2);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("refuses beginHandoff without live PTYs and complete without begin", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-host-empty-handoff-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-empty",
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-empty",
+    });
+    try {
+      await expect(client.beginHandoff("next")).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      await expect(client.completeHandoff()).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      await expect(client.abortHandoff()).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("refuses double beginHandoff and blocks spawn/attach while still answering health", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const terminal = {
+      ...scripted.terminal,
+      bridgePid: 9_003,
+      releaseToOrphan() {
+        scripted.terminal.dispose();
+        return false;
+      },
+    };
+    const dir = await mkdtemp(join(tmpdir(), "station-host-double-begin-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: {
+        createTerminal: () => terminal,
+        adoptTerminal: async () => ({
+          ...createScriptedTerminal({ cols: 80, rows: 24 }).terminal,
+          bridgePid: 9_003,
+          parkedEvicted: false,
+        }),
+      },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      const spawned = await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      await client.beginHandoff("host-b", "processes");
+      await expect(client.beginHandoff("host-c", "processes")).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      expect(await client.health()).toMatchObject({
+        ok: true,
+        buildVersion: "host-a",
+      });
+      await expect(
+        client.spawn({
+          ...identity,
+          terminalTargetId: "native:wt-2",
+          worktreeId: "wt-2",
+          sessionId: "ses-2",
+          command: "claude",
+          args: [],
+          cwd: "/repo/wt-2",
+          cols: 80,
+          rows: 24,
+        }),
+      ).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
+      await expect(client.attach(spawned.ptyId)).rejects.toMatchObject({
+        code: "HOST_UPGRADE_BLOCKED",
+      });
+      await client.abortHandoff();
+      expect(await client.list()).toHaveLength(1);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("refuses beginHandoff once stopIfIdle has started draining", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "station-host-idle-drain-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-idle",
+    });
+    const stopper = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-idle",
+    });
+    const handoffClient = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-idle",
+      timeoutMs: 1_000,
+    });
+    try {
+      // Empty-host stopIfIdle closes after ack; begin must fail closed (drain,
+      // empty-table, or socket-gone) and must never return a manifest.
+      const [stopping, handoff] = await Promise.allSettled([
+        stopper.stopIfIdle("host-next"),
+        handoffClient.beginHandoff("host-next"),
+      ]);
+      expect(stopping.status).toBe("fulfilled");
+      if (stopping.status === "fulfilled") {
+        expect(stopping.value).toEqual({ stopping: true });
+      }
+      expect(handoff.status).toBe("rejected");
+      if (handoff.status === "rejected") {
+        expect([
+          "HOST_HANDOFF_INVALID_STATE",
+          "HOST_UNREACHABLE",
+          "HOST_REQUEST_FAILED",
+        ]).toContain((handoff.reason as { code?: string }).code);
+      }
+      await host?.closed;
+      host = undefined;
+    } finally {
+      stopper.dispose();
+      handoffClient.dispose();
+    }
+  });
+
+  it("refuses stopIfIdle while a live handoff is in progress", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const terminal = {
+      ...scripted.terminal,
+      bridgePid: 9_004,
+      releaseToOrphan() {
+        scripted.terminal.dispose();
+        return false;
+      },
+    };
+    const dir = await mkdtemp(join(tmpdir(), "station-host-stop-during-handoff-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: {
+        createTerminal: () => terminal,
+        adoptTerminal: async () => ({
+          ...createScriptedTerminal({ cols: 80, rows: 24 }).terminal,
+          bridgePid: 9_004,
+          parkedEvicted: false,
+        }),
+      },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      await client.beginHandoff("host-b");
+      await expect(client.stopIfIdle("host-b")).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      await client.abortHandoff();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("refuses beginHandoff when only non-bridge terminals are live", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const dir = await mkdtemp(join(tmpdir(), "station-host-no-bridge-handoff-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: { createTerminal: () => scripted.terminal },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      await expect(client.beginHandoff("host-b")).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      expect(await client.list()).toHaveLength(1);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("refuses mixed bridge/non-bridge tables without parking anyone", async () => {
+    let next = 0;
+    let released = false;
+    const dir = await mkdtemp(join(tmpdir(), "station-host-mixed-handoff-"));
+    host = await startStationHost({
+      socketPath: join(dir, "station-host.sock"),
+      stateDir: dir,
+      logger: noopLogger,
+      buildVersion: "host-a",
+      ptyTableOptions: {
+        createTerminal: () => {
+          next += 1;
+          const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+          if (next === 1) {
+            return {
+              ...scripted.terminal,
+              bridgePid: 9_005,
+              releaseToOrphan() {
+                released = true;
+                scripted.terminal.dispose();
+                return false;
+              },
+            };
+          }
+          return scripted.terminal;
+        },
+      },
+    });
+    const client = createStationHostClient({
+      socketPath: join(dir, "station-host.sock"),
+      expectedBuildVersion: "host-a",
+    });
+    try {
+      await client.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      await client.spawn({
+        ...identity,
+        terminalTargetId: "native:wt-2",
+        worktreeId: "wt-2",
+        sessionId: "ses-2",
+        kind: "aux",
+        command: "sh",
+        args: [],
+        cwd: "/repo/wt-2",
+        cols: 80,
+        rows: 24,
+      });
+      await expect(client.beginHandoff("host-b", "processes")).rejects.toMatchObject({
+        code: "HOST_HANDOFF_INVALID_STATE",
+      });
+      expect(released).toEqual(false);
+      expect(await client.list()).toHaveLength(2);
+      // Drain gate must not stick after a refused begin.
+      await client.spawn({
+        ...identity,
+        terminalTargetId: "native:wt-3",
+        worktreeId: "wt-3",
+        sessionId: "ses-3",
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-3",
+        cols: 80,
+        rows: 24,
+      });
+      expect(await client.list()).toHaveLength(3);
+    } finally {
+      client.dispose();
     }
   });
 });

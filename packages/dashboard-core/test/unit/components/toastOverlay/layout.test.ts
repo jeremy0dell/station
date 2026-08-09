@@ -1,5 +1,5 @@
-import { toastOverlayLayout } from "@station/dashboard-core";
 import { describe, expect, it } from "vitest";
+import { toastOverlayLayout } from "../../../../src/components/ToastOverlay/layout.js";
 
 describe("toast overlay layout", () => {
   it("caps the width at 72 columns and reserves footer and prompt rows", () => {

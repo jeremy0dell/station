@@ -2,6 +2,7 @@ import {
   createStationHostClient,
   HOST_PROTOCOL_VERSION,
   HostAttachAckSchema,
+  HostClientShutdownNotificationSchema,
   HostFrameSchema,
   HostRequestSchema,
   hostFailure,
@@ -14,18 +15,36 @@ import { describe, expect, it } from "vitest";
 /** Minimal in-memory host router: answers a fixed set of methods. */
 function startFakeRouter(
   server: NdjsonConnection,
-  options: { buildVersion?: string; onRequest?: (method: string) => void } = {},
+  options: {
+    buildVersion?: string;
+    onRequest?: (method: string) => void;
+    onClient?: (client: NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>) => void;
+    onShutdown?: () => void;
+  } = {},
 ): void {
   void runFakeRouter(server, options);
 }
 
 async function runFakeRouter(
   server: NdjsonConnection,
-  options: { buildVersion?: string; onRequest?: (method: string) => void },
+  options: {
+    buildVersion?: string;
+    onRequest?: (method: string) => void;
+    onClient?: (client: NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>) => void;
+    onShutdown?: () => void;
+  },
 ): Promise<void> {
   for await (const message of server.messages()) {
+    const shutdown = HostClientShutdownNotificationSchema.safeParse(message);
+    if (shutdown.success) {
+      options.onShutdown?.();
+      continue;
+    }
     const request = HostRequestSchema.parse(message);
     options.onRequest?.(request.method);
+    if (request.client !== undefined) {
+      options.onClient?.(request.client);
+    }
     switch (request.method) {
       case "host.health":
         server.send(
@@ -38,6 +57,43 @@ async function runFakeRouter(
         break;
       case "host.stopIfIdle":
         server.send(hostSuccess(request.id, { stopping: true }));
+        break;
+      case "host.beginHandoff":
+        server.send(
+          hostSuccess(request.id, {
+            manifest: {
+              "pty-1": {
+                bridgeProtocolVersion: 1,
+                bridgePid: 9,
+                controlSocket: "/tmp/pty-1.sock",
+                command: "/bin/sh",
+                cols: 80,
+                rows: 24,
+                identity: {
+                  kind: "agent",
+                  terminalTargetId: "native:wt-1",
+                  worktreeId: "wt-1",
+                  projectId: "proj-1",
+                  sessionId: "ses-1",
+                  worktreePath: "/repo/wt-1",
+                  harnessProvider: "claude",
+                },
+              },
+            },
+            fidelity: "processes",
+            released: ["pty-1"],
+            skipped: [],
+          }),
+        );
+        break;
+      case "host.completeHandoff":
+        server.send(hostSuccess(request.id, { stopping: true }));
+        break;
+      case "host.abortHandoff":
+        server.send(hostSuccess(request.id, { adopted: ["pty-1"], failed: [] }));
+        break;
+      case "host.adoptRegistry":
+        server.send(hostSuccess(request.id, { adopted: ["pty-1"], failed: [] }));
         break;
       case "host.spawn":
         server.send(hostSuccess(request.id, { ptyId: "pty-1", pid: 4242 }));
@@ -190,6 +246,82 @@ describe("createStationHostClient", () => {
     client.dispose();
   });
 
+  it("uses the composition-supplied UI context on operational requests", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    const identities: Array<NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>> = [];
+    startFakeRouter(server, { onClient: (client) => identities.push(client) });
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      uiContext: {
+        uiRunId: "ui_11111111-1111-4111-8111-111111111111",
+        rendererPid: 42,
+        clientKind: "native_renderer",
+      },
+      connectionId: "conn-test",
+      connect: async () => clientConn,
+    });
+
+    await client.list();
+
+    expect(identities).toEqual([
+      {
+        protocolVersion: HOST_PROTOCOL_VERSION,
+        buildVersion: "test-build",
+        uiRunId: "ui_11111111-1111-4111-8111-111111111111",
+        rendererPid: 42,
+        clientKind: "native_renderer",
+        connectionId: "conn-test",
+      },
+    ]);
+    client.dispose();
+  });
+
+  it("mints host_tool correlation without reading renderer environment", async () => {
+    const previousRunId = process.env.STATION_UI_RUN_ID;
+    const previousClientKind = process.env.STATION_UI_CLIENT_KIND;
+    process.env.STATION_UI_RUN_ID = "ui_99999999-9999-4999-8999-999999999999";
+    process.env.STATION_UI_CLIENT_KIND = "native_renderer";
+    try {
+      const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+      const identities: Array<NonNullable<ReturnType<typeof HostRequestSchema.parse>["client"]>> =
+        [];
+      startFakeRouter(server, { onClient: (client) => identities.push(client) });
+      const client = createStationHostClient({
+        socketPath: "unused",
+        expectedBuildVersion: "test-build",
+        connect: async () => clientConn,
+      });
+
+      await client.list();
+
+      expect(identities[0]).toMatchObject({ clientKind: "host_tool" });
+      expect(identities[0]?.uiRunId).not.toBe(process.env.STATION_UI_RUN_ID);
+      client.dispose();
+    } finally {
+      if (previousRunId === undefined) delete process.env.STATION_UI_RUN_ID;
+      else process.env.STATION_UI_RUN_ID = previousRunId;
+      if (previousClientKind === undefined) delete process.env.STATION_UI_CLIENT_KIND;
+      else process.env.STATION_UI_CLIENT_KIND = previousClientKind;
+    }
+  });
+
+  it("sends client shutdown as a one-way notification", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    const shutdown = Promise.withResolvers<void>();
+    startFakeRouter(server, { onShutdown: shutdown.resolve });
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+
+    await client.list();
+    client.dispose();
+
+    await expect(shutdown.promise).resolves.toBeUndefined();
+  });
+
   it("throws the host's classified SafeError on a failed request", async () => {
     const client = clientAgainstFakeRouter();
     await expect(client.focus("pty-x")).rejects.toMatchObject({
@@ -203,11 +335,19 @@ describe("createStationHostClient", () => {
   it("gates operational calls while leaving lifecycle inspection available", async () => {
     const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
     let spawnRequests = 0;
+    const lifecycle: string[] = [];
     startFakeRouter(server, {
       buildVersion: "old-build",
       onRequest: (method) => {
         if (method === "host.spawn") {
           spawnRequests += 1;
+        }
+        if (
+          method === "host.beginHandoff" ||
+          method === "host.completeHandoff" ||
+          method === "host.abortHandoff"
+        ) {
+          lifecycle.push(method);
         }
       },
     });
@@ -219,6 +359,14 @@ describe("createStationHostClient", () => {
 
     await expect(client.health()).resolves.toMatchObject({ buildVersion: "old-build" });
     await expect(client.stopIfIdle("new-build")).resolves.toEqual({ stopping: true });
+    const begun = await client.beginHandoff("new-build", "processes");
+    expect(begun.released).toEqual(["pty-1"]);
+    await expect(client.completeHandoff()).resolves.toEqual({ stopping: true });
+    await expect(client.abortHandoff()).resolves.toEqual({ adopted: ["pty-1"], failed: [] });
+    // adoptRegistry is identity-bound and requires a reusable successor build.
+    await expect(client.adoptRegistry(begun.manifest)).rejects.toMatchObject({
+      code: "HOST_VERSION_INCOMPATIBLE",
+    });
     await expect(
       client.spawn({
         terminalTargetId: "native:wt-1",
@@ -235,6 +383,7 @@ describe("createStationHostClient", () => {
       }),
     ).rejects.toMatchObject({ code: "HOST_VERSION_INCOMPATIBLE" });
     expect(spawnRequests).toBe(0);
+    expect(lifecycle).toEqual(["host.beginHandoff", "host.completeHandoff", "host.abortHandoff"]);
     client.dispose();
   });
 
@@ -266,6 +415,7 @@ describe("createStationHostClient", () => {
     const client = createStationHostClient({
       socketPath: "unused",
       timeoutMs: 50,
+      expectedBuildVersion: "test-build",
       connect: async () => clientConn,
     });
     await expect(client.health()).rejects.toMatchObject({ code: "HOST_REQUEST_FAILED" });

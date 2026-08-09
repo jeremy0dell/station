@@ -1,8 +1,12 @@
 import type { ProviderId } from "@station/contracts";
-import type { TuiViewState } from "@station/dashboard-core";
+import { describe, expect, it } from "vitest";
+import {
+  selectProjectGroups,
+  sessionForWorktreeRow,
+  sessionRowDisplayTitle,
+} from "../../../src/selectors/dashboardSessionRows.js";
 import {
   choiceValueByKey,
-  createInitialTuiState,
   isSelectionKey,
   keyChoices,
   SELECTION_KEYS,
@@ -10,11 +14,9 @@ import {
   selectNewSessionHarnessOptions,
   selectNewSessionProjectChoices,
   selectProjectChooserChoices,
-  selectProjectGroups,
-  sessionForWorktreeRow,
-  sessionRowDisplayTitle,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/selectors/selectors.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import type { TuiViewState } from "../../../src/state/types.js";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
 
 describe("TUI selectors", () => {
@@ -264,24 +266,9 @@ describe("TUI selectors", () => {
     });
   });
 
-  it("filters by search and collapses project groups without changing snapshot truth", () => {
+  it("collapses project groups without changing snapshot truth", () => {
     const snapshot = createDashboardSnapshot();
-    const searched: TuiViewState = {
-      searchQuery: "nav",
-      collapsedProjectIds: new Set(),
-      scrollOffset: 0,
-      terminalRows: 24,
-      localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
-      selection: new Map(),
-    };
-    expect(
-      selectProjectGroups(snapshot, searched)
-        .flatMap((group) => group.rows)
-        .map((candidate) => candidate.id),
-    ).toEqual(["ses_wt_web_idle"]);
-
     const collapsed: TuiViewState = {
-      searchQuery: "",
       collapsedProjectIds: new Set(["web"]),
       scrollOffset: 0,
       terminalRows: 24,
@@ -301,12 +288,10 @@ describe("TUI selectors", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({
       initialSnapshot: snapshot,
-      searchQuery: "missing",
       collapsedProjectIds: ["web"],
     });
     const groups = selectProjectGroups(snapshot, state, {
       includeCollapsedRows: true,
-      applySearch: false,
     });
 
     expect(groups.find((group) => group.project.id === "web")).toMatchObject({
@@ -316,51 +301,7 @@ describe("TUI selectors", () => {
     expect(state.collapsedProjectIds).toEqual(new Set(["web"]));
   });
 
-  it.each([
-    ["branch", "FIX-NAV-MOBILE", ["ses_wt_web_idle"]],
-    ["status value", "needs_attention", ["ses_wt_web_attention"]],
-    ["status reason", "approval", ["ses_wt_web_attention"]],
-    ["harness provider", "  OpEnCoDe  ", ["ses_wt_api_working"]],
-    [
-      "terminal provider",
-      "tmux",
-      [
-        "ses_wt_web_working",
-        "ses_wt_web_attention",
-        "ses_wt_web_exited",
-        "ses_wt_web_idle",
-        "ses_wt_web_unknown",
-        "ses_wt_web_stuck",
-        "ses_wt_api_working",
-      ],
-    ],
-    ["project label", "  API ", ["ses_wt_api_working"]],
-  ] as const)("filters sessions by %s", (_field, searchQuery, expectedIds) => {
-    const snapshot = createDashboardSnapshot();
-    const state = createInitialTuiState({ initialSnapshot: snapshot, searchQuery });
-
-    expect(
-      selectProjectGroups(snapshot, state)
-        .flatMap((group) => group.rows)
-        .map((candidate) => candidate.id),
-    ).toEqual(expectedIds);
-  });
-
-  it("does not make a bare worktree searchable as a session", () => {
-    const snapshot = createDashboardSnapshot();
-    const searched: TuiViewState = {
-      searchQuery: "feature-auth",
-      collapsedProjectIds: new Set(),
-      scrollOffset: 0,
-      terminalRows: 24,
-      localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
-      selection: new Map(),
-    };
-
-    expect(selectProjectGroups(snapshot, searched).flatMap((group) => group.rows)).toEqual([]);
-  });
-
-  it("searches by resolved session title while sorting uses resolved titles", () => {
+  it("sorts by resolved session title while leaving hidden branch metadata unused", () => {
     const snapshot = createDashboardSnapshot();
     const titled = {
       ...snapshot,
@@ -370,20 +311,6 @@ describe("TUI selectors", () => {
           : candidate,
       ),
     };
-    const searched: TuiViewState = {
-      searchQuery: "readable",
-      collapsedProjectIds: new Set(),
-      scrollOffset: 0,
-      terminalRows: 24,
-      localRows: { pendingCreate: [], failedCreate: [], pendingRemove: [], pendingStart: [] },
-      selection: new Map(),
-    };
-
-    expect(
-      selectProjectGroups(titled, searched)
-        .flatMap((group) => group.rows)
-        .map((candidate) => candidate.id),
-    ).toEqual(["ses_wt_web_stuck"]);
 
     const web = selectProjectGroups(titled, createInitialTuiState()).find(
       (group) => group.project.id === "web",

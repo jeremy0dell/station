@@ -7,8 +7,9 @@ import {
   type TuiRendererControlRequest,
   type TuiRendererControlResponse,
 } from "@station/contracts";
-import type { TuiFocusTarget, DashboardRuntimeOptions } from "@station/dashboard-core";
+import type { DashboardFocusTarget } from "@station/dashboard-core/runtime";
 
+/** Minimal request/response transport used by popup renderer-control IPC. */
 export type RendererControlChannel = {
   isConnected(): boolean;
   send(request: TuiRendererControlRequest): void;
@@ -19,67 +20,55 @@ export type RendererControlChannel = {
   close(): void;
 };
 
-type PopupDashboardRuntimeOptions = Pick<
-  DashboardRuntimeOptions,
-  | "exitOnFocusSuccess"
-  | "focusOrigin"
-  | "onDismiss"
-  | "onFocusSuccess"
-  | "persistentPopup"
-  | "resolveFocusTarget"
->;
-
+/** Popup IPC capabilities and lifecycle selected from the renderer environment. */
 export type PopupRuntime = {
-  runtimeOptions: PopupDashboardRuntimeOptions;
+  persistentPopup: boolean;
+  exitOnFocusSuccess: boolean;
+  focusOrigin?: TerminalFocusOrigin;
+  resolveFocusTarget?: () => Promise<DashboardFocusTarget | undefined>;
+  dismissDashboard?: () => Promise<void>;
   openShell?: (cwd: string) => Promise<void>;
   dispose(): void;
 };
 
+/** Resolve standalone, transient-popup, or persistent-popup renderer authority. */
 export function createPopupRuntime(
   env: Record<string, string | undefined>,
   channel: RendererControlChannel | undefined,
   onControlLoss: () => void = () => {},
 ): PopupRuntime {
   if (env.STATION_TUI_POPUP !== "1") {
-    return { runtimeOptions: {}, dispose: () => {} };
+    return { persistentPopup: false, exitOnFocusSuccess: false, dispose: () => {} };
   }
 
   if (env.STATION_TUI_PERSISTENT !== "1") {
     const focusOrigin = focusOriginFromEnv(env);
-    const runtimeOptions: PopupDashboardRuntimeOptions = {
+    const base: PopupRuntime = {
+      persistentPopup: false,
       exitOnFocusSuccess: true,
-      ...(focusOrigin === undefined ? {} : { focusOrigin }),
+      dispose: () => {},
     };
-    if (env.STATION_TUI_POPUP !== "1" || channel === undefined) {
-      return { runtimeOptions, dispose: () => {} };
+    if (focusOrigin !== undefined) {
+      base.focusOrigin = focusOrigin;
+    }
+    if (channel === undefined) {
+      return base;
     }
     const control = createRendererControlClient(channel, onControlLoss);
-    return {
-      runtimeOptions,
-      openShell: control.openShell,
-      dispose: control.dispose,
-    };
+    return { ...base, openShell: control.openShell, dispose: control.dispose };
   }
 
   if (channel === undefined) {
     onControlLoss();
-    return {
-      runtimeOptions: {
-        exitOnFocusSuccess: false,
-        persistentPopup: true,
-      },
-      dispose: () => {},
-    };
+    return { persistentPopup: true, exitOnFocusSuccess: false, dispose: () => {} };
   }
 
   const control = createRendererControlClient(channel, onControlLoss);
   return {
-    runtimeOptions: {
-      exitOnFocusSuccess: false,
-      persistentPopup: true,
-      onDismiss: () => control.dismiss(),
-      resolveFocusTarget: () => control.resolveFocusTarget(),
-    },
+    persistentPopup: true,
+    exitOnFocusSuccess: false,
+    dismissDashboard: control.dismiss,
+    resolveFocusTarget: control.resolveFocusTarget,
     openShell: control.openShell,
     dispose: control.dispose,
   };
@@ -130,7 +119,7 @@ type PendingRequest =
     }
   | {
       type: "resolve-focus-target";
-      resolve(target: TuiFocusTarget): void;
+      resolve(target: DashboardFocusTarget): void;
       reject(error: SafeError): void;
     }
   | {
@@ -142,7 +131,7 @@ type PendingRequest =
 type RendererControlClient = {
   dismiss(): Promise<void>;
   openShell(cwd: string): Promise<void>;
-  resolveFocusTarget(): Promise<TuiFocusTarget>;
+  resolveFocusTarget(): Promise<DashboardFocusTarget>;
   dispose(): void;
 };
 
@@ -342,9 +331,9 @@ function createRendererControlClient(
         );
       });
     },
-    resolveFocusTarget: async (): Promise<TuiFocusTarget> => {
+    resolveFocusTarget: async (): Promise<DashboardFocusTarget> => {
       const requestId = newRequestId();
-      return new Promise<TuiFocusTarget>((resolve, reject) => {
+      return new Promise<DashboardFocusTarget>((resolve, reject) => {
         send(
           {
             protocolVersion: TUI_RENDERER_CONTROL_PROTOCOL_VERSION,

@@ -9,7 +9,7 @@
  * - startup probes recorded in the ring (CPR/DA1/OSC) were re-answered by the
  *   fresh VT and written into the child's stdin as unsolicited input.
  */
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStationHostClient } from "@station/host";
@@ -26,6 +26,37 @@ const noopLogger = { log: async () => undefined } as never;
 // Mirrors DEFAULT_COLS / DEFAULT_ROWS hardcoded in the station terminal provider.
 const HOST_SPAWN = { cols: 80, rows: 24 };
 const PANE = "pane-replay";
+const REAL_PTY_REPAINT = "REPAINT-AT-ANCHOR";
+const REAL_PTY_REPAINT_CHILD = String.raw`
+const CSI = "\x1b[";
+const alternate = process.env.STATION_REAL_REPAINT_BUFFER === "alternate";
+let repaintTimer;
+let repainted = false;
+const repaintWhenRestored = () => {
+  if (process.stdout.rows !== 24) {
+    repaintTimer = setTimeout(repaintWhenRestored, 10);
+    return;
+  }
+  if (repainted) return;
+  repainted = true;
+  process.stdout.write(CSI + "4A\r" + CSI + "2K" + "REPAINT-AT-ANCHOR");
+};
+process.on("SIGWINCH", () => {
+  clearTimeout(repaintTimer);
+  repaintTimer = setTimeout(repaintWhenRestored, 0);
+});
+process.stdout.write(
+  Array.from({ length: 32 }, (_, index) => "history-" + String(index).padStart(2, "0"))
+    .join("\r\n") + "\r\n",
+);
+setTimeout(() => {
+  process.stdout.write(
+    (alternate ? CSI + "?1049h" : "") +
+      CSI + "1;1H" + CSI + "1\"qP" + CSI + "0\"q" + CSI + "24;1HSTATEFUL-FRAME",
+  );
+}, 80);
+setInterval(() => {}, 1_000);
+`;
 
 const cleanups: Array<() => Promise<unknown> | unknown> = [];
 afterEach(async () => {
@@ -64,6 +95,38 @@ async function startAgentHost(
   return { socketPath, ptyId };
 }
 
+async function startRealAgentHost(
+  buffer: "normal" | "alternate",
+): Promise<{ socketPath: string; ptyId: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "station-real-repaint-"));
+  const socketPath = join(dir, "station-host.sock");
+  cleanups.push(() => rm(dir, { recursive: true, force: true }));
+  const host: StationHostInstance = await startStationHost({
+    socketPath,
+    stateDir: dir,
+    logger: noopLogger,
+    ptyTableOptions: { maxScrollbackBytes: 64 },
+  });
+  cleanups.push(() => host.close());
+  const control = createStationHostClient({ socketPath });
+  cleanups.push(() => control.dispose());
+  const { ptyId } = await control.spawn({
+    terminalTargetId: "native:wt-real-repaint",
+    worktreeId: "wt-real-repaint",
+    projectId: "proj-real-repaint",
+    sessionId: "ses-real-repaint",
+    worktreePath: process.cwd(),
+    harnessProvider: "scripted",
+    command: process.execPath,
+    args: ["-e", REAL_PTY_REPAINT_CHILD],
+    env: { STATION_REAL_REPAINT_BUFFER: buffer },
+    cwd: process.cwd(),
+    cols: HOST_SPAWN.cols,
+    rows: HOST_SPAWN.rows,
+  });
+  return { socketPath, ptyId };
+}
+
 /** Attach exactly as production does: registry entry with a host-attached override. */
 function attachPane(
   socketPath: string,
@@ -89,6 +152,23 @@ function attachPane(
 
 function visibleRows(screen: StationVtScreen, count: number): string[] {
   return Array.from({ length: count }, (_, index) => screen.rowText(index));
+}
+
+async function waitForReplayKind(
+  control: ReturnType<typeof createStationHostClient>,
+  ptyId: string,
+  expected: string,
+): Promise<string> {
+  const deadline = Date.now() + 5_000;
+  let replayKind = "";
+  while (Date.now() < deadline) {
+    const attachment = await control.attach(ptyId);
+    replayKind = attachment.ack.replay.kind;
+    await attachment.frames[Symbol.asyncIterator]().return?.();
+    if (replayKind === expected) return replayKind;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return replayKind;
 }
 
 const PROMPT = "PROMPT> run agent";
@@ -154,7 +234,7 @@ describe("same-size attach forces a child repaint", () => {
 
     expect(scripted.helpers.resizes).toEqual([
       { cols: 80, rows: 24 },
-      { cols: 80, rows: 23 },
+      { cols: 80, rows: 25 },
       { cols: 80, rows: 24 },
     ]);
   });
@@ -180,6 +260,39 @@ describe("same-size attach forces a child repaint", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(scripted.helpers.resizes).toEqual([{ ...HOST_SPAWN }]);
+  });
+});
+
+const describeRealPty: typeof describe =
+  process.env.STATION_PTY_SMOKE === "1" ? describe : () => undefined;
+
+describeRealPty("degraded same-size repaint through a real OS PTY", () => {
+  it("keeps relative child repaint at its captured row while diagnosing absent history", async () => {
+    for (const buffer of ["normal", "alternate"] as const) {
+      const { socketPath, ptyId } = await startRealAgentHost(buffer);
+      const control = createStationHostClient({ socketPath });
+      cleanups.push(() => control.dispose());
+      const replayKind = await waitForReplayKind(control, ptyId, "live-reset-recovery");
+      expect(replayKind).toBe("live-reset-recovery");
+
+      const screen = attachPane(socketPath, ptyId, { ...HOST_SPAWN });
+      await waitFor(
+        () => visibleRows(screen, HOST_SPAWN.rows).some((row) => row.includes(REAL_PTY_REPAINT)),
+        5_000,
+      );
+      await screen.whenIdle();
+
+      const rows = visibleRows(screen, HOST_SPAWN.rows);
+      expect(screen.isAltScreen()).toBe(buffer === "alternate");
+      expect(rows.findIndex((row) => row.includes(REAL_PTY_REPAINT))).toBe(
+        HOST_SPAWN.rows - 5,
+      );
+      expect(rows[0]).not.toContain(REAL_PTY_REPAINT);
+      expect(rows.some((row) => row.includes("history-"))).toBe(false);
+      expect(screen.bufferStats().baseY).toBe(0);
+      expect(screen.scrollBy(1)).toBe(false);
+      expect(screen.getScrollOffset()).toBe(0);
+    }
   });
 });
 

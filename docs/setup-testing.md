@@ -56,6 +56,12 @@ pnpm test:e2e:setup:guided
 pnpm test:e2e:setup:guided:all-shells
 ```
 
+Both entrypoints run under a disposable runtime owner that registers the
+supervised Vitest process group before launch, reaps it on completion or
+interruption, and recovers only an exact registered abandoned group on the
+next start; fixture cleanup remains defense in depth rather than the sole
+owner.
+
 The bridge isolates the child terminal and normalizes ANSI, OSC, cursor movement, and carriage
 redraws before assertions. Review changes to
 `apps/cli/test/fixtures/setup-guided-transcript.txt` as user-facing copy: regenerate it only from
@@ -77,7 +83,7 @@ comparisons are structural diffs, not log scraping.
 
 ```text
 profile { name, state: { platform, xcodeClt, git, insideRepo, brew, worktrunk,
-                         tmux, bun, diffnav, gitDelta, harnesses[],
+                         tmux, bun, diffViewer, harnesses[],
                          harnessTracking?, configToml? },
           expect: { exitCode, requiredOk, checks: { <id>: <status> } } }
 ```
@@ -148,7 +154,7 @@ pnpm test:env:docker                                         # same, via script
 ```
 
 Requires Docker. Covers: `happy-linux`, `no-git`, `no-tmux`, `no-worktrunk`,
-`no-bun`, `no-diffnav`, `no-harness`.
+`no-bun`, `no-diff-viewer`, `no-harness`.
 
 The minimal Linux images intentionally omit `/usr/bin/lsof`. `happy-linux`
 therefore proves that setup reports `observer-socket-evidence` as a recommended
@@ -163,7 +169,7 @@ keg-only PATH behaviour, and a truly CLT-absent host. We use **Tart**
 copy-on-write `tart clone` (near-instant fresh state), OCI image distribution.
 
 - `tests/env/macos/station-happy.pkr.hcl` — a Packer template that builds the
-  "STATION happy-path" image (brew + node@24 + bun + wt + tmux + diffnav + delta)
+  "STATION happy-path" image (brew + node@24 + bun + wt + tmux + Hunk)
   from a base image. Use `cirruslabs/macos-image-templates` `*-vanilla` (no brew,
   no Xcode) for the `no-brew` / `no-xcode-clt` profiles.
 - `tests/env/macos/run-setup-macos.mjs` — clones the right base per profile, runs

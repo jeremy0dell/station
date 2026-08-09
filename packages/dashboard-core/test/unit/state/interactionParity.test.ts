@@ -1,19 +1,21 @@
+import { describe, expect, it } from "vitest";
+import type { AddProjectActionId } from "../../../src/flows/addProject/actions.js";
+import { addProjectActions } from "../../../src/flows/addProject/actions.js";
 import {
-  type AddProjectActionId,
-  addProjectActions,
+  createNewSessionFlow,
+  newSessionIntentForAction,
+  transitionNewSessionFlow,
+} from "../../../src/flows/newSession.js";
+import { handleTuiAction } from "../../../src/state/actions.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import {
   applyAddProjectFolderReviewed,
   applyAddProjectFolderReviewFailed,
-  createInitialTuiState,
-  createNewSessionFlow,
-  handleTuiAction,
-  handleTuiKey,
-  newSessionIntentForAction,
   openAddProject,
-  openForkDetailsForRow,
-  openRemoveWorktreeConfirmForRow,
-  transitionNewSessionFlow,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/state/screens/addProjectScreen.js";
+import { openForkDetailsForRow } from "../../../src/state/screens/fork.js";
+import { openRemoveWorktreeConfirmForRow } from "../../../src/state/screens/removeWorktree.js";
+import { handleTuiKey } from "../../../src/state/transition.js";
 import { createDashboardSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
 
 const context = { cwd: "/workspace", homeDir: "/home/example" };
@@ -266,7 +268,18 @@ describe("primary workflow interaction parity", () => {
     });
     expect(semantic.state.screen).toEqual(keyboard.state.screen);
     expect(semantic.state.collapsedProjectIds).toEqual(keyboard.state.collapsedProjectIds);
-    expect(semantic.controlIntent).toEqual(keyboard.controlIntent);
+    if (actionId === "quickSession") {
+      expect(semantic.operations?.[0]).toMatchObject({
+        type: "quickCreateManagedSession",
+        project: { id: "web" },
+      });
+      expect(keyboard.operations?.[0]).toMatchObject({
+        type: "quickCreateManagedSession",
+        project: { id: "web" },
+      });
+    } else {
+      expect(semantic.operations).toEqual(keyboard.operations);
+    }
   });
 
   it("converges empty-project pointer semantics with focused Enter", () => {
@@ -288,11 +301,17 @@ describe("primary workflow interaction parity", () => {
       projectId: "web",
     });
     expect(semantic.state.dashboardFocus).toEqual(keyboard.state.dashboardFocus);
-    expect(semantic.controlIntent).toEqual(keyboard.controlIntent);
-    expect(semantic.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(semantic.operations?.[0]).toMatchObject({
+      type: "quickCreateManagedSession",
+      project: { id: "web" },
+    });
+    expect(keyboard.operations?.[0]).toMatchObject({
+      type: "quickCreateManagedSession",
+      project: { id: "web" },
+    });
   });
 
-  it("defers header and empty-project Quick Session availability to renderer consumers", () => {
+  it("validates header and empty-project Quick Session before capability execution", () => {
     const snapshot = createDashboardSnapshot();
     const unavailable = {
       ...snapshot,
@@ -312,13 +331,13 @@ describe("primary workflow interaction parity", () => {
       },
       context,
     );
-    expect(blocked.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(blocked.operations).toBeUndefined();
     expect(blocked.state.dashboardFocus).toEqual({
       kind: "projectHeader",
       projectId: "web",
       control: "quickSession",
     });
-    expect(blocked.state.toasts).toEqual([]);
+    expect(blocked.state.toasts.at(-1)?.toast.kind).toBe("error");
 
     const emptySnapshot = createZeroWorktreeSnapshot();
     const unavailableEmpty = {
@@ -334,9 +353,9 @@ describe("primary workflow interaction parity", () => {
       { type: "dashboard.emptyProject.activate", projectId: "web" },
       context,
     );
-    expect(empty.controlIntent).toEqual({ type: "quickSession.create", projectId: "web" });
+    expect(empty.operations).toBeUndefined();
     expect(empty.state.dashboardFocus).toEqual({ kind: "emptyProjectAction", projectId: "web" });
-    expect(empty.state.toasts).toEqual([]);
+    expect(empty.state.toasts.at(-1)?.toast.kind).toBe("error");
 
     const stale = handleTuiAction(
       state,

@@ -35,7 +35,7 @@ import {
   addProjectStartListSpec,
 } from "../selection/specs/addProject.js";
 import type { TuiTransition } from "../transition.js";
-import type { TuiState } from "../types.js";
+import type { DashboardState } from "../types.js";
 import { applyAddProjectAction } from "./addProjectTransition.js";
 
 export type AddProjectInputIntent =
@@ -50,7 +50,10 @@ export const addProjectScreenBehavior = {
   clickAway: cancelAddProject,
 };
 
-export function openAddProject(state: TuiState, input: CreateAddProjectFlowInput): TuiState {
+export function openAddProject(
+  state: DashboardState,
+  input: CreateAddProjectFlowInput,
+): DashboardState {
   return reconcileAddProjectSelection(
     {
       ...state,
@@ -64,19 +67,22 @@ export function openAddProject(state: TuiState, input: CreateAddProjectFlowInput
   );
 }
 
-export function handleAddProjectKey(state: TuiState, key: TuiKey): TuiTransition {
+export function handleAddProjectKey(state: DashboardState, key: TuiKey): TuiTransition {
   return executeAddProjectIntent(state, addProjectIntentForInput(state, key));
 }
 
 /** Applies an enabled Add Project action through the same intent executor used by keyboard input. */
 export function handleAddProjectAction(
-  state: TuiState,
+  state: DashboardState,
   actionId: AddProjectActionId,
 ): TuiTransition {
   return executeAddProjectIntent(state, addProjectIntentForAction(state, actionId));
 }
 
-function executeAddProjectIntent(state: TuiState, intent: AddProjectInputIntent): TuiTransition {
+function executeAddProjectIntent(
+  state: DashboardState,
+  intent: AddProjectInputIntent,
+): TuiTransition {
   switch (intent.type) {
     case "none":
       return { state };
@@ -102,7 +108,7 @@ function executeAddProjectIntent(state: TuiState, intent: AddProjectInputIntent)
   }
 }
 
-function cancelAddProject(state: TuiState): TuiState {
+function cancelAddProject(state: DashboardState): DashboardState {
   if (state.screen.name !== "addProject") {
     return state;
   }
@@ -119,7 +125,7 @@ function cancelAddProject(state: TuiState): TuiState {
   return closeAddProject(state);
 }
 
-function closeAddProject(state: TuiState): TuiState {
+function closeAddProject(state: DashboardState): DashboardState {
   return { ...state, screen: { name: "dashboard" } };
 }
 
@@ -128,7 +134,7 @@ function closeAddProject(state: TuiState): TuiState {
  * chooser cursor so pointer and keyboard activation share one target.
  */
 export function addProjectIntentForAction(
-  state: TuiState,
+  state: DashboardState,
   actionId: AddProjectActionId,
 ): AddProjectInputIntent {
   if (state.screen.name !== "addProject") return { type: "none" };
@@ -181,7 +187,7 @@ export function addProjectIntentForAction(
   }
 }
 
-function addProjectIntentForInput(state: TuiState, key: TuiKey): AddProjectInputIntent {
+function addProjectIntentForInput(state: DashboardState, key: TuiKey): AddProjectInputIntent {
   if (state.screen.name !== "addProject") return { type: "none" };
   const flow = state.screen.flow;
   if (flow.mode === "review" && flow.submitting) return { type: "none" };
@@ -214,7 +220,7 @@ function addProjectIntentForInput(state: TuiState, key: TuiKey): AddProjectInput
 }
 
 function editProjectIdIntent(
-  state: TuiState,
+  state: DashboardState,
   flow: AddProjectReviewState,
   key: TuiKey,
 ): AddProjectInputIntent {
@@ -237,7 +243,7 @@ function editProjectIdIntent(
 }
 
 function chooseIntent(
-  state: TuiState,
+  state: DashboardState,
   flow: AddProjectChooseState,
   key: TuiKey,
 ): AddProjectInputIntent {
@@ -266,7 +272,7 @@ function filterInputIntent(key: TuiKey): AddProjectInputIntent {
 }
 
 function reviewIntent(
-  state: TuiState,
+  state: DashboardState,
   flow: AddProjectReviewState,
   key: TuiKey,
 ): AddProjectInputIntent {
@@ -280,7 +286,7 @@ function reviewIntent(
 }
 
 function failedIntent(
-  state: TuiState,
+  state: DashboardState,
   flow: Extract<AddProjectFlowState, { mode: "failed" }>,
   key: TuiKey,
 ): AddProjectInputIntent {
@@ -293,7 +299,7 @@ function failedIntent(
 }
 
 function focusedActionIntent(
-  state: TuiState,
+  state: DashboardState,
   flow: AddProjectFlowState,
   focus: AddProjectActionFocus,
 ): AddProjectInputIntent {
@@ -306,21 +312,21 @@ function transitionIntent(action: AddProjectFlowAction): AddProjectInputIntent {
 }
 
 /** Mouse selection writes the canonical cursor shared by arrows and Enter. */
-export function selectAddProjectRow(state: TuiState, index: number): TuiState {
+export function selectAddProjectRow(state: DashboardState, index: number): DashboardState {
   return selectAddProjectRowByIndex(state, index);
 }
 
 export function applyAddProjectFolderLoaded(
-  state: TuiState,
+  state: DashboardState,
   result: TuiFolderReadResult,
-): TuiState {
+): DashboardState {
   return applyAddProjectAction(state, { type: "folderLoaded", result }).state;
 }
 
 export function applyAddProjectFolderRefreshed(
-  state: TuiState,
+  state: DashboardState,
   result: TuiFolderReadResult,
-): TuiState {
+): DashboardState {
   if (
     state.screen.name !== "addProject" ||
     state.screen.flow.mode !== "choose" ||
@@ -353,11 +359,11 @@ export function applyAddProjectFolderRefreshed(
 }
 
 export function applyAddProjectFolderLoadFailed(
-  state: TuiState,
+  state: DashboardState,
   path: string,
   error: unknown,
   clientLabel = "TUI",
-): TuiState {
+): DashboardState {
   return applyAddProjectAction(state, {
     type: "folderLoadFailed",
     path,
@@ -366,18 +372,18 @@ export function applyAddProjectFolderLoadFailed(
 }
 
 export function applyAddProjectFolderSearchLoaded(
-  state: TuiState,
+  state: DashboardState,
   result: TuiFolderSearchResult,
-): TuiState {
+): DashboardState {
   return applyAddProjectAction(state, { type: "folderSearchLoaded", result }).state;
 }
 
 export function applyAddProjectFolderSearchFailed(
-  state: TuiState,
+  state: DashboardState,
   query: string,
   error: unknown,
   clientLabel = "TUI",
-): TuiState {
+): DashboardState {
   return applyAddProjectAction(state, {
     type: "folderSearchFailed",
     query,
@@ -385,16 +391,19 @@ export function applyAddProjectFolderSearchFailed(
   }).state;
 }
 
-export function applyAddProjectFolderReviewed(state: TuiState, review: TuiFolderReview): TuiState {
+export function applyAddProjectFolderReviewed(
+  state: DashboardState,
+  review: TuiFolderReview,
+): DashboardState {
   return applyAddProjectAction(state, { type: "folderReviewed", review }).state;
 }
 
 export function applyAddProjectFolderReviewFailed(
-  state: TuiState,
+  state: DashboardState,
   path: string,
   error: unknown,
   clientLabel = "TUI",
-): TuiState {
+): DashboardState {
   return applyAddProjectAction(state, {
     type: "folderReviewFailed",
     path,
@@ -403,17 +412,17 @@ export function applyAddProjectFolderReviewFailed(
 }
 
 export function applyAddProjectSubmitted(
-  state: TuiState,
+  state: DashboardState,
   input: { label: string; root: string },
-): TuiState {
+): DashboardState {
   return applyAddProjectAction(state, { type: "submitted", ...input }).state;
 }
 
 export function applyAddProjectSubmitFailed(
-  state: TuiState,
+  state: DashboardState,
   error: unknown,
   clientLabel = "TUI",
-): TuiState {
+): DashboardState {
   return applyAddProjectAction(state, {
     type: "submitFailed",
     error: toSafeError(error, { clientLabel }),

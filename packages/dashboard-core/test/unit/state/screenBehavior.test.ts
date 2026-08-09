@@ -1,20 +1,18 @@
+import { describe, expect, it } from "vitest";
+import { createEditableTextInputState } from "../../../src/components/EditableTextInput/editing.js";
+import { createAddProjectFlow } from "../../../src/flows/addProject/flow.js";
 import {
-  type AddProjectFlowState,
   chooseStateForLoadedFolder,
-  createAddProjectFlow,
-  createEditableTextInputState,
-  createInitialTuiState,
-  createNewSessionFlow,
   failedStateForError,
-  type NewSessionFlowState,
   reviewStateForFolder,
   successStateForProject,
-  type TuiScreen,
-  type TuiState,
-  transitionNewSessionFlow,
-  tuiScreenBehavior,
-} from "@station/dashboard-core";
-import { describe, expect, it } from "vitest";
+} from "../../../src/flows/addProject/state.js";
+import type { AddProjectFlowState } from "../../../src/flows/addProject/types.js";
+import type { NewSessionFlowState } from "../../../src/flows/newSession.js";
+import { createNewSessionFlow, transitionNewSessionFlow } from "../../../src/flows/newSession.js";
+import { createInitialTuiState } from "../../../src/state/screen.js";
+import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
+import type { DashboardState, TuiScreen } from "../../../src/state/types.js";
 import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
 
 const snapshot = createDashboardSnapshot();
@@ -69,7 +67,6 @@ const screenBehaviorCases: readonly [
   expected: "present" | "absent",
 ][] = [
   ["dashboard", { name: "dashboard" }, "absent"],
-  ["search", { name: "search", value: "api" }, "absent"],
   [
     "persistent filter",
     {
@@ -297,7 +294,7 @@ describe("TUI screen behavior", () => {
   });
 
   it("preserves applied widget changes while backing out of picker and panel", () => {
-    const state: TuiState = {
+    const state: DashboardState = {
       ...withScreen({ name: "widgetSettings", focus: "picker", cursor: 1, pickerCursor: 2 }),
       widgets: [{ type: "time", enabled: false }, { type: "moon" }],
     };
@@ -335,7 +332,6 @@ describe("TUI screen behavior", () => {
       { name: "removeWorktree", step: "chooseSlot" },
       { name: "renameSession", step: "chooseSlot" },
       { name: "fork", step: "chooseSlot" },
-      { name: "search", value: "api" },
       {
         name: "persistentFilter",
         draft: createEditableTextInputState("api"),
@@ -349,11 +345,11 @@ describe("TUI screen behavior", () => {
   });
 });
 
-function withScreen(screen: TuiScreen): TuiState {
+function withScreen(screen: TuiScreen): DashboardState {
   return { ...createInitialTuiState({ initialSnapshot: snapshot }), screen };
 }
 
-function clickAway(state: TuiState): TuiState {
+function clickAway(state: DashboardState): DashboardState {
   const handler = tuiScreenBehavior(state.screen).clickAway;
   return handler === undefined ? state : handler(state);
 }

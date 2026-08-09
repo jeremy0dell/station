@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
-import type { TuiWidgetConfig } from "@station/dashboard-core/widgets/types";
+import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import { act } from "react";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import {
@@ -19,15 +19,11 @@ import {
   lightTerminalColors,
 } from "../theme/terminalPalette/test/fixtures.js";
 import { frameChar, spanAtFrameCell } from "../terminal/testing/frameProbe.js";
-import type { DashboardRendererEffects } from "./dashboardEffects.js";
 import { StandaloneDashboardApp } from "./StandaloneDashboardApp.js";
 
 const SURFACE = { width: 80, height: 24 };
 const WIDGET_SURFACE = { width: 99, height: 25 };
-const TEST_EFFECTS: DashboardRendererEffects = {
-  openShell: () => {},
-  openUrl: () => {},
-};
+const NO_OP_OPEN_URL = (): void => {};
 
 function fixtureTheme(value: unknown): StationTheme {
   const observation = parseStationTerminalPaletteObservation(value);
@@ -94,7 +90,7 @@ describe("FullscreenDashboard surface ownership", () => {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
     };
-    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, lightSource);
+    const setup = await render(fixture.runtime, SURFACE, NO_OP_OPEN_URL, lightSource);
 
     expectTerminalDefaultBackground(setup, "station · overview", LIGHT_THEME);
     expect(
@@ -129,7 +125,7 @@ describe("FullscreenDashboard surface ownership", () => {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
     };
-    const setup = await render(fixture.runtime, size, TEST_EFFECTS, lightSource);
+    const setup = await render(fixture.runtime, size, NO_OP_OPEN_URL, lightSource);
     const addSession = cellFor(setup.captureCharFrame(), "[ + add session ]");
     const span = spanAtFrameCell(setup.captureSpans(), addSession.row, addSession.col);
 
@@ -142,13 +138,41 @@ describe("FullscreenDashboard surface ownership", () => {
     ).toBeGreaterThanOrEqual(STATION_TEXT_CONTRAST_RATIO);
   });
 
+  it("keeps focused light controls visually distinct from the canvas", async () => {
+    const size = { width: 120, height: 40 };
+    const fixture = makeStationTestRuntime({
+      terminalRows: size.height,
+      initialState: {
+        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+      },
+    });
+    const lightSource: StationThemeSource = {
+      getSnapshot: () => LIGHT_THEME,
+      subscribe: () => () => {},
+    };
+    const setup = await render(fixture.runtime, size, NO_OP_OPEN_URL, lightSource);
+    const frame = setup.captureCharFrame();
+    const addSession = cellFor(frame, "[ + add session ]");
+    const title = cellFor(frame, "station · overview");
+    const controlSpan = spanAtFrameCell(setup.captureSpans(), addSession.row, addSession.col);
+    const canvasSpan = spanAtFrameCell(setup.captureSpans(), title.row, title.col);
+
+    expect(spanBgHex(controlSpan)).toBe(
+      stationColorSnapshotValue(LIGHT_THEME.interaction.compactFocus),
+    );
+    expect(spanBgHex(canvasSpan)).toBe(stationColorSnapshotValue(LIGHT_THEME.surfaces.canvas));
+    expect(
+      themeContrast(LIGHT_THEME.interaction.compactFocus, LIGHT_THEME.surfaces.canvas),
+    ).toBeGreaterThan(1.1);
+  });
+
   it("keeps focused light sheet-button roles readable", async () => {
     const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     const lightSource: StationThemeSource = {
       getSnapshot: () => LIGHT_THEME,
       subscribe: () => () => {},
     };
-    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, lightSource);
+    const setup = await render(fixture.runtime, SURFACE, NO_OP_OPEN_URL, lightSource);
     const row = cellFor(setup.captureCharFrame(), "docs-cleanup");
 
     await actOn(async () => {
@@ -187,7 +211,7 @@ describe("FullscreenDashboard surface ownership", () => {
   it("repaints in place when the external theme source changes", async () => {
     const fixture = makeStationTestRuntime({ terminalRows: SURFACE.height });
     const source = new MutableThemeSource(DARK_THEME);
-    const setup = await render(fixture.runtime, SURFACE, TEST_EFFECTS, source);
+    const setup = await render(fixture.runtime, SURFACE, NO_OP_OPEN_URL, source);
     const title = cellFor(setup.captureCharFrame(), "station · overview");
     const darkBackground = spanBgHex(
       spanAtFrameCell(setup.captureSpans(), title.row, title.col),
@@ -484,11 +508,7 @@ describe("FullscreenDashboard mouse composition", () => {
   it("renders and routes the same project actions as native Station", async () => {
     const size = { width: 120, height: 40 };
     const fixture = makeStationTestRuntime({ terminalRows: size.height });
-    const openedShells: string[] = [];
-    const setup = await render(fixture.runtime, size, {
-      openShell: ({ cwd }) => openedShells.push(cwd),
-      openUrl: () => {},
-    });
+    const setup = await render(fixture.runtime, size);
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("▼ station");
@@ -510,7 +530,6 @@ describe("FullscreenDashboard mouse composition", () => {
       await setup.mockMouse.click(agentPicker.col, agentPicker.row, MouseButtons.LEFT);
     });
 
-    expect(openedShells).toEqual(["/Users/example/Developer/station"]);
     expect(fixture.runtime.state.getState().screen).toMatchObject({
       name: "projectDefaultAgent",
       projectId: "station",
@@ -521,10 +540,7 @@ describe("FullscreenDashboard mouse composition", () => {
     const size = { width: 120, height: 40 };
     const fixture = makeStationTestRuntime({ terminalRows: size.height });
     const openedUrls: string[] = [];
-    const setup = await render(fixture.runtime, size, {
-      openShell: () => {},
-      openUrl: (url) => openedUrls.push(url),
-    });
+    const setup = await render(fixture.runtime, size, (url: string) => openedUrls.push(url));
     const frame = setup.captureCharFrame();
     const addSession = cellFor(frame, "[ + add session ]");
     const pullRequest = cellFor(frame, "#73");
@@ -625,13 +641,13 @@ describe("FullscreenDashboard configured widgets", () => {
 async function render(
   store: ReturnType<typeof makeStationTestRuntime>["runtime"],
   size: { width: number; height: number } = SURFACE,
-  effects: DashboardRendererEffects = TEST_EFFECTS,
+  openUrl: (url: string) => void = NO_OP_OPEN_URL,
   themeSource: StationThemeSource = DARK_THEME_SOURCE,
 ) {
   const setup = await testRender(
     <StandaloneDashboardApp
       runtime={store}
-      effects={effects}
+      openUrl={openUrl}
       onCopyNotice={() => {}}
       themeSource={themeSource}
     />,

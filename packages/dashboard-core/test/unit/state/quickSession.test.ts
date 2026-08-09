@@ -1,55 +1,55 @@
-import { createDashboardRuntime } from "@station/dashboard-core";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createCommandSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
+import { createTestDashboardRuntime } from "../../support/fakeClientStateSource.js";
+import { createFakeDashboardCapabilities } from "../../support/fakeDashboardCapabilities.js";
 import { FakeTuiObserverService } from "../../support/fakeObserverService.js";
 
 describe("quick session", () => {
-  it("creates immediately with the project's configured harness and terminal", async () => {
+  it("dispatches the project's product values through Quick Session capability", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const capabilities = createFakeDashboardCapabilities();
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot, capabilities });
     const project = snapshot.projects[0];
     if (project === undefined) throw new Error("project fixture missing");
 
-    store.actions.createQuickSession(project.id);
-
-    await vi.waitFor(() => expect(service.dispatched).toHaveLength(1));
-    expect(service.dispatched[0]).toMatchObject({
-      type: "session.create",
-      payload: {
-        projectId: project.id,
-        harness: { provider: project.defaults.harness },
-        terminal: {
-          provider: project.defaults.terminal,
-          focus: false,
-        },
-      },
+    store.actions.dispatch({
+      type: "dashboard.projectHeader.activate",
+      projectId: project.id,
+      actionId: "quickSession",
     });
-    const command = service.dispatched[0];
-    if (command?.type !== "session.create") throw new Error("expected create command");
-    expect(command.payload.title).toBe(command.payload.branch);
-    expect(service.waitedForCommandIds).toEqual(["cmd_tui_1"]);
+
+    expect(capabilities.quickCreateRequests).toHaveLength(1);
+    expect(capabilities.quickCreateRequests[0]).toMatchObject({
+      project: { id: project.id },
+      harness: project.defaults.harness,
+    });
+    expect(capabilities.quickCreateRequests[0]?.title).toBe(
+      capabilities.quickCreateRequests[0]?.hiddenBranch,
+    );
   });
 
-  it("moves accepted empty-project Quick Session focus at the standalone consumer", async () => {
+  it("retains accepted empty-project focus through capability invocation", () => {
     const snapshot = createZeroWorktreeSnapshot();
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({
+    const capabilities = createFakeDashboardCapabilities();
+    const store = createTestDashboardRuntime({
       service,
+      capabilities,
       initialSnapshot: snapshot,
       initialState: { dashboardFocus: { kind: "emptyProjectAction", projectId: "web" } },
     });
-    store.actions.createQuickSession("web");
+
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
 
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
+      kind: "emptyProjectAction",
       projectId: "web",
-      control: "quickSession",
     });
-    await vi.waitFor(() => expect(service.dispatched).toHaveLength(1));
+    expect(capabilities.quickCreateRequests).toHaveLength(1);
   });
 
-  it("shows the unavailable project's exact error without dispatching", () => {
+  it("shows the unavailable project's exact error without invoking capability", () => {
     const snapshot = createZeroWorktreeSnapshot();
     const project = snapshot.projects[0];
     if (project === undefined) throw new Error("project fixture missing");
@@ -73,15 +73,17 @@ describe("quick session", () => {
       ),
     };
     const service = new FakeTuiObserverService(unavailable);
-    const store = createDashboardRuntime({
+    const capabilities = createFakeDashboardCapabilities();
+    const store = createTestDashboardRuntime({
       service,
+      capabilities,
       initialSnapshot: unavailable,
       initialState: { dashboardFocus: { kind: "emptyProjectAction", projectId: project.id } },
     });
 
-    store.actions.createQuickSession(project.id);
+    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: project.id });
 
-    expect(service.dispatched).toEqual([]);
+    expect(capabilities.quickCreateRequests).toEqual([]);
     expect(store.state.getState().dashboardFocus).toEqual({
       kind: "emptyProjectAction",
       projectId: project.id,
@@ -97,11 +99,16 @@ describe("quick session", () => {
   it("leaves a missing project inert", () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new FakeTuiObserverService(snapshot);
-    const store = createDashboardRuntime({ service, initialSnapshot: snapshot });
+    const capabilities = createFakeDashboardCapabilities();
+    const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot, capabilities });
 
-    store.actions.createQuickSession("missing-project");
+    store.actions.dispatch({
+      type: "dashboard.projectHeader.activate",
+      projectId: "missing-project",
+      actionId: "quickSession",
+    });
 
-    expect(service.dispatched).toEqual([]);
+    expect(capabilities.quickCreateRequests).toEqual([]);
     expect(store.state.getState().localRows.pendingCreate).toEqual([]);
     expect(store.state.getState().toasts).toEqual([]);
   });

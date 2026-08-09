@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { testRender } from "@opentui/react/test-utils";
-import {
-  dashboardPersistentFilterHeaderModel,
-  dashboardPersistentFilterSummarySegments,
-  type DashboardPersistentFilterProjection,
-} from "@station/dashboard-core";
+import { dashboardPersistentFilterHeaderModel, dashboardPersistentFilterSummarySegments } from "@station/dashboard-core/selectors";
+import type { DashboardPersistentFilterProjection } from "@station/dashboard-core/selectors";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
   nativeStationTheme,

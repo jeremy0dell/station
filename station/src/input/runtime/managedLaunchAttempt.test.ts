@@ -1,22 +1,30 @@
 import { describe, expect, it } from "bun:test";
-import type { AgentPrepareExternalLaunchParams, AgentPrepareExternalLaunchResult } from "@station/client";
+import {
+  safeErrorToNotice,
+  type AgentPrepareExternalLaunchParams,
+  type AgentPrepareExternalLaunchResult,
+} from "@station/client";
 import type { StationCommand, StationSnapshot, WorktreeRow } from "@station/contracts";
-import { createDashboardRuntime } from "@station/dashboard-core";
-import { selectStationOverlayVisible } from "../../state/selectors.js";
+import { selectPaneRecord, selectStationOverlayVisible } from "../../state/selectors.js";
 import { createStationStore } from "../../state/store.js";
 import { STATION_OVERLAY_ID, type PaneId } from "../../state/types.js";
 import { manyProjectsSnapshot } from "../../station/fixtures/scenarios.js";
 import { FakeTuiObserverService } from "../../station/test/support/fakeObserverService.js";
 import { FakeStationSource } from "../../station/test/support/fakeStationSource.js";
+import { createStationTestDashboardRuntime } from "../../station/test/support/makeStationTestRuntime.js";
 import type {
   ManagedTerminalAttacher,
   ManagedTerminalFactory,
 } from "../../terminal/pty/managedTerminalAttacher.js";
 import { createPtyRegistry, type PtyRegistry } from "../../terminal/registry/ptyRegistry.js";
 import { createScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
-import type { StationTerminalSpawnOptions } from "../../terminal/types.js";
+import type {
+  StationTerminalSize,
+  StationTerminalSpawnOptions,
+} from "../../terminal/types.js";
 import {
   createManagedLaunchAttempt,
+  type ManagedLaunchAttemptResult,
   type ManagedLaunchTarget,
 } from "./managedLaunchAttempt.js";
 
@@ -167,16 +175,29 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
     prepareCalls.push(params);
     return prepare === undefined ? observerService.nextPreparedLaunch : await prepare(params);
   };
-  const dashboardRuntime = createDashboardRuntime({
-    source: new FakeStationSource(snapshot),
+  const source = new FakeStationSource(snapshot);
+  const dashboardRuntime = createStationTestDashboardRuntime({
+    source,
     service: observerService,
     initialSnapshot: snapshot,
     persistentPopup: true,
     onDismiss: async () => {},
     initialState: { terminalRows: 12 },
   });
-  const scripted = createScriptedTerminal();
-  const baseRegistry = createPtyRegistry({ createTerminal: () => scripted.terminal });
+  const scripted = [createScriptedTerminal(), createScriptedTerminal()];
+  const spawnSizes: StationTerminalSize[] = [];
+  let spawnIndex = 0;
+  const baseRegistry = createPtyRegistry({
+    createTerminal: (spawnOptions) => {
+      const terminal = scripted[spawnIndex]?.terminal;
+      if (terminal === undefined) throw new Error("scripted terminal pool exhausted");
+      spawnIndex += 1;
+      if (spawnOptions.size?.cols !== undefined && spawnOptions.size.rows !== undefined) {
+        spawnSizes.push({ cols: spawnOptions.size.cols, rows: spawnOptions.size.rows });
+      }
+      return terminal;
+    },
+  });
   const calls: string[] = [];
   const ensured: StationTerminalSpawnOptions[] = [];
   const terminalFactories: ManagedTerminalFactory[] = [];
@@ -209,23 +230,41 @@ function attemptHarness(options: AttemptHarnessOptions = {}) {
     calls.push(`reveal:${paneId}`);
     revealPane(paneId);
   };
-  const runManagedLaunchAttempt = createManagedLaunchAttempt({
+  const rawManagedLaunchAttempt = createManagedLaunchAttempt({
     store,
-    dashboardRuntime,
+    clientState: source,
     observerService: options.observer === false ? undefined : observerService,
     registry: options.registry === false ? undefined : registry,
     managedTerminalAttacher: options.attacher,
   });
+  let lastResult: ManagedLaunchAttemptResult | undefined;
+  const runManagedLaunchAttempt = async (
+    paneId: PaneId,
+    target: ManagedLaunchTarget,
+  ): Promise<ManagedLaunchAttemptResult> => {
+    lastResult = await rawManagedLaunchAttempt(paneId, target);
+    return lastResult;
+  };
   return {
     store,
     dashboardRuntime,
+    source,
     observerService,
     prepareCalls,
     calls,
     ensured,
     terminalFactories,
+    registry,
+    baseRegistry,
+    scripted,
+    spawnSizes,
     runManagedLaunchAttempt,
-    lastToast: () => dashboardRuntime.state.getState().toasts.at(-1)?.toast,
+    lastToast: () =>
+      lastResult?.kind === "notice"
+        ? lastResult.notice
+        : lastResult?.kind === "failure"
+          ? safeErrorToNotice(lastResult.error)
+          : undefined,
   };
 }
 
@@ -244,7 +283,7 @@ describe("createManagedLaunchAttempt", () => {
 
     expect(foreground.prepareCalls).toEqual([]);
     expect(foreground.calls).toEqual([`reveal:${PANE_ID}`]);
-    expect(selectStationOverlayVisible(foreground.store.getState())).toBe(false);
+    expect(selectStationOverlayVisible(foreground.store.getState())).toBe(true);
 
     const background = attemptHarness();
     background.store.actions.createPane(PANE_ID, { role: "primary-agent" });
@@ -258,6 +297,118 @@ describe("createManagedLaunchAttempt", () => {
     expect(selectStationOverlayVisible(background.store.getState())).toBe(true);
   });
 
+  it("relaunches a proven-exited managed pane while preserving its child layout", async () => {
+    const harness = attemptHarness();
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+      harnessProvider: "codex",
+    });
+    harness.store.actions.createPane("pane-child", {
+      split: { anchorPaneId: PANE_ID, direction: "right" },
+    });
+    harness.baseRegistry.ensure(PANE_ID, { cwd: CWD });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    const oldEntry = harness.baseRegistry.get(PANE_ID);
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    harness.calls.length = 0;
+    openOverlay(harness);
+
+    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(harness.prepareCalls).toHaveLength(1);
+    expect(harness.baseRegistry.get(PANE_ID)).not.toBe(oldEntry);
+    expect(harness.baseRegistry.get(PANE_ID)?.terminal).toBe(harness.scripted[1].terminal);
+    expect(
+      harness.store.getState().workspace.panes.find((pane) => pane.id === "pane-child"),
+    ).toEqual({
+      id: "pane-child",
+      split: { anchorPaneId: PANE_ID, direction: "right" },
+      role: "shell",
+    });
+    expect(selectPaneRecord(harness.store.getState(), PANE_ID)?.agentIdentity).toEqual({
+      sessionId: "ses_managed",
+      terminalTargetId: TERMINAL_TARGET_ID,
+      harnessProvider: "codex",
+    });
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
+  it("waits for current layout before spawning a newly revealed exited pane", async () => {
+    const harness = attemptHarness();
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    harness.store.actions.createPane("pane-other", { role: "primary-agent" });
+    openOverlay(harness);
+
+    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(harness.baseRegistry.get(PANE_ID)?.terminal).toBeNull();
+    const current = { cols: 52, rows: 14 };
+    harness.baseRegistry.resize(PANE_ID, current);
+    expect(harness.baseRegistry.get(PANE_ID)?.terminal).toBe(harness.scripted[1].terminal);
+    expect(harness.spawnSizes).toEqual([{ cols: 90, rows: 24 }, current]);
+  });
+
+  it("rechecks tree activity when another session closes during preparation", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    harness.store.actions.createPane("pane-other", { role: "primary-agent" });
+
+    const attempt = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    await Promise.resolve();
+    harness.store.actions.closePaneTree("pane-other");
+    release(preparedPlan());
+    await attempt;
+
+    expect(harness.baseRegistry.get(PANE_ID)?.terminal).toBe(harness.scripted[1].terminal);
+    expect(harness.spawnSizes).toEqual([
+      { cols: 90, rows: 24 },
+      { cols: 90, rows: 24 },
+    ]);
+  });
+
+  it("preserves the exited pane when replacement preparation fails", async () => {
+    const harness = attemptHarness({
+      prepare: async () => {
+        throw new Error("prepare failed");
+      },
+    });
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.ensure(PANE_ID, { cwd: CWD });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    const oldEntry = harness.baseRegistry.get(PANE_ID);
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    openOverlay(harness);
+
+    const result = await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(result.kind).toBe("failure");
+    expect(harness.baseRegistry.get(PANE_ID)).toBe(oldEntry);
+    expect(harness.scripted[0].helpers.isDisposed()).toBe(false);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
   it("reports a detached terminal without preparing or closing the overlay", async () => {
     const harness = attemptHarness({ snapshot: withDetachedTerminal() });
     openOverlay(harness);
@@ -268,6 +419,48 @@ describe("createManagedLaunchAttempt", () => {
     expect(harness.lastToast()).toMatchObject({ kind: "info" });
     expect(harness.lastToast()?.message).toContain("detached");
     expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
+  it("resolves existing-session targets from client truth when dashboard projection is stale", async () => {
+    const existing: AgentPrepareExternalLaunchResult = {
+      kind: "existing-session",
+      sessionId: "ses_elsewhere",
+      harnessProvider: "codex",
+    };
+    const harness = attemptHarness({ prepared: existing });
+    harness.source.setSnapshot(withoutTerminal());
+
+    expect(
+      harness.dashboardRuntime.state.getState().snapshot?.rows.find(
+        (row) => row.id === WORKTREE_ID,
+      )?.terminal?.provider,
+    ).toBe("tmux");
+    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(harness.observerService.dispatched).toEqual([
+      { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
+    ]);
+  });
+
+  it("acknowledges readiness from client truth when dashboard projection is stale", async () => {
+    const harness = attemptHarness();
+    harness.source.setSnapshot(withTurnReadiness());
+
+    expect(
+      harness.dashboardRuntime.state.getState().snapshot?.rows.find(
+        (row) => row.id === WORKTREE_ID,
+      )?.agent?.turnReadiness,
+    ).toBeUndefined();
+    await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+
+    expect(
+      harness.observerService.dispatched.some(
+        (command) =>
+          command.type === "session.acknowledgeTurn" &&
+          command.payload.sessionId === ROW_ID &&
+          command.payload.token === "report_station_ready",
+      ),
+    ).toBe(true);
   });
 
   it("deduplicates preparation while one pane launch is in flight", async () => {
@@ -284,6 +477,157 @@ describe("createManagedLaunchAttempt", () => {
     expect(harness.prepareCalls).toHaveLength(1);
     release(preparedPlan());
     await Promise.all([first, duplicate]);
+  });
+
+  it("deduplicates preparation across replacement HMR compositions", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    const replacementRunner = createManagedLaunchAttempt({
+      store: harness.store,
+      clientState: harness.source,
+      observerService: harness.observerService,
+      registry: harness.registry,
+      managedTerminalAttacher: undefined,
+    });
+
+    const first = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    const duplicate = replacementRunner(PANE_ID, TARGET);
+    await Promise.resolve();
+
+    expect(harness.prepareCalls).toHaveLength(1);
+    release(preparedPlan());
+    await Promise.all([first, duplicate]);
+  });
+
+  it("releases an unplaced local target when the exited pane changes during preparation", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+
+    const attempt = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    await Promise.resolve();
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_other",
+      terminalTargetId: "native:other",
+    });
+    release(preparedPlan());
+    await attempt;
+
+    expect(harness.observerService.reportedExits).toEqual([
+      {
+        terminalTargetId: TERMINAL_TARGET_ID,
+        expectedSessionId: "ses_managed",
+      },
+    ]);
+    expect(harness.baseRegistry.get(PANE_ID)?.exited).toBe(true);
+  });
+
+  it("toasts and keeps the overlay open when the exited pane's identity changes during preparation", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    openOverlay(harness);
+
+    const attempt = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    await Promise.resolve();
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_other",
+      terminalTargetId: "native:other",
+    });
+    release(preparedPlan());
+    await attempt;
+
+    expect(harness.lastToast()).toMatchObject({
+      kind: "info",
+      message: "The agent pane changed while Station was preparing its relaunch.",
+    });
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+    expect(harness.baseRegistry.get(PANE_ID)?.exited).toBe(true);
+  });
+
+  it("refuses to replace an exited entry superseded during preparation", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+    openOverlay(harness);
+
+    const attempt = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    await Promise.resolve();
+    harness.baseRegistry.dispose(PANE_ID);
+    harness.baseRegistry.ensure(PANE_ID, { cwd: CWD });
+    release(preparedPlan());
+    await attempt;
+
+    expect(harness.lastToast()).toMatchObject({
+      kind: "info",
+      message: "The agent pane changed while Station was preparing its relaunch.",
+    });
+    expect(harness.observerService.reportedExits).toEqual([
+      {
+        terminalTargetId: TERMINAL_TARGET_ID,
+        expectedSessionId: "ses_managed",
+      },
+    ]);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
+  });
+
+  it("surfaces uncertain cleanup when an unplaced local target cannot be released", async () => {
+    let release!: (result: AgentPrepareExternalLaunchResult) => void;
+    const gate = new Promise<AgentPrepareExternalLaunchResult>((resolve) => {
+      release = resolve;
+    });
+    const harness = attemptHarness({ prepare: async () => await gate });
+    harness.observerService.reportExternalExit = async () => {
+      throw new Error("observer disconnected");
+    };
+    harness.store.actions.createPane(PANE_ID, { role: "primary-agent" });
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_old",
+      terminalTargetId: TERMINAL_TARGET_ID,
+    });
+    harness.baseRegistry.resize(PANE_ID, { cols: 90, rows: 24 });
+    harness.scripted[0].helpers.emitExit({ exitCode: 0 });
+
+    const attempt = harness.runManagedLaunchAttempt(PANE_ID, TARGET);
+    await Promise.resolve();
+    harness.store.actions.setPrimaryAgent(PANE_ID, {
+      sessionId: "ses_other",
+      terminalTargetId: "native:other",
+    });
+    release(preparedPlan());
+    await attempt;
+
+    expect(harness.lastToast()).toMatchObject({ kind: "error" });
   });
 
   it("releases the in-flight guard after a failed preparation so retry is accepted", async () => {
@@ -303,14 +647,14 @@ describe("createManagedLaunchAttempt", () => {
 
     expect(harness.prepareCalls).toHaveLength(2);
     expect(failure).toEqual({
-      kind: "preparation-failed",
+      kind: "failure",
       error: {
         tag: "ClientObserverError",
         code: "CLIENT_OBSERVER_OPERATION_FAILED",
         message: "The Station could not complete the observer operation.",
       },
     });
-    expect(retry).toEqual({ kind: "settled" });
+    expect(retry).toEqual({ kind: "success", landed: true });
     expect(harness.calls).toEqual([
       `ensure:${PANE_ID}`,
       `pane:${PANE_ID}:primary-agent`,
@@ -390,7 +734,10 @@ describe("createManagedLaunchAttempt", () => {
     const result = await failing.runManagedLaunchAttempt(PANE_ID, TARGET);
     await failing.runManagedLaunchAttempt(PANE_ID, TARGET);
 
-    expect(result).toEqual({ kind: "settled" });
+    expect(result).toMatchObject({
+      kind: "failure",
+      error: { code: "HOST_ATTACH_FAILED", message: "attachment failed" },
+    });
     expect(failing.prepareCalls).toHaveLength(2);
     expect(failing.calls).toEqual([]);
     expect(failing.lastToast()?.message).toContain("attachment failed");
@@ -493,7 +840,7 @@ describe("createManagedLaunchAttempt", () => {
     expect(harness.observerService.dispatched).toEqual([
       { type: "terminal.focus", payload: { sessionId: "ses_elsewhere" } },
     ]);
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(false);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
   });
 
   it("does not land after rejected, failed, or thrown focus operations", async () => {
@@ -561,7 +908,7 @@ describe("createManagedLaunchAttempt", () => {
 
     await harness.runManagedLaunchAttempt(PANE_ID, TARGET);
 
-    expect(selectStationOverlayVisible(harness.store.getState())).toBe(false);
+    expect(selectStationOverlayVisible(harness.store.getState())).toBe(true);
     expect(
       harness.store
         .getState()

@@ -17,7 +17,8 @@ const GRACEFUL_HANDOFF_BUDGET_RATIO = 0.5;
 const DEFAULT_HANDOFF_POLL_INTERVAL_MS = 50;
 const MIN_HANDOFF_TIMEOUT_MS = 1;
 const INTERNAL_PREVIEW_VERSION_PATTERN = /^0\.7\.1-rc\.(?:0|[1-9]\d*)$/u;
-const PUBLIC_PRE_ALPHA_VERSION_PATTERN = /^0\.0\.0-pre-alpha\.(?:0|[1-9]\d*)$/u;
+const PUBLIC_PRE_ALPHA_VERSION_PATTERN =
+  /^0\.0\.0-pre-alpha\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/u;
 
 const SemVerSchema = z
   .string()
