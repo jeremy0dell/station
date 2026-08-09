@@ -22,9 +22,11 @@ export type CommandHandlerContext = {
   trace: TraceContext;
   command: StationCommand;
   signal: AbortSignal;
+  /** Refuses cancellation before entry, then makes the handler drain to one completion. */
+  beginCommit(): void;
 };
 
-type CommandExecutionContext = Omit<CommandHandlerContext, "signal">;
+type CommandExecutionContext = Omit<CommandHandlerContext, "signal" | "beginCommit">;
 
 export type CommandHandler = (context: CommandHandlerContext) => Promise<void>;
 
@@ -218,6 +220,8 @@ async function executeCommand(
   runtime?.eventBus?.publish(startedEvent);
 
   const handler = handlers.get(context.command.type);
+  let commitStarted = false;
+  let handlerExecution: Promise<void> | undefined;
   const result = await runRuntimeBoundaryWithTimeout(
     {
       operation: `command.${context.command.type}`,
@@ -246,15 +250,34 @@ async function executeCommand(
         if (handler === undefined) {
           throw missingCommandHandlerError();
         }
-        await handler({ ...context, signal: linked.signal });
-        throwIfAborted(linked.signal);
+        handlerExecution = handler({
+          ...context,
+          signal: linked.signal,
+          beginCommit: () => {
+            throwIfAborted(linked.signal);
+            commitStarted = true;
+          },
+        });
+        await handlerExecution;
+        if (!commitStarted) throwIfAborted(linked.signal);
       } finally {
         linked.cleanup();
       }
     },
   );
 
-  if (result.ok) {
+  let executionError: unknown = result.ok ? undefined : result.error;
+  if (!result.ok && commitStarted && handlerExecution !== undefined) {
+    try {
+      // A begun durable commit must reach one completion even if its runtime budget expires.
+      await handlerExecution;
+      executionError = undefined;
+    } catch (error) {
+      executionError = error;
+    }
+  }
+
+  if (executionError === undefined) {
     await persistence.markCommandSucceeded(context.commandId, nowIso(clock));
     const succeededEvent: StationEvent = {
       type: "command.succeeded",
@@ -279,7 +302,7 @@ async function executeCommand(
   }
 
   const safeError = toSafeError(
-    result.error,
+    executionError,
     {
       tag: "CommandExecutionError",
       code: "COMMAND_EXECUTION_FAILED",
@@ -289,7 +312,7 @@ async function executeCommand(
   );
   const envelope = createErrorEnvelope({
     id: idFactory.errorId(),
-    error: result.error,
+    error: executionError,
     fallback: {
       tag: "CommandExecutionError",
       code: "COMMAND_EXECUTION_FAILED",

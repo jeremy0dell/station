@@ -11,6 +11,7 @@ import type { EventJournal, EventRecordOptions, SessionGroupStore } from "../per
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
 import { nowIso } from "../utils/time.js";
+import { throwIfAborted } from "./cancellation.js";
 import type { CommandHandler, CommandHandlerContext } from "./queue.js";
 
 type SessionGroupCommand = Extract<StationCommand, { type: `sessionGroup.${string}` }>;
@@ -39,59 +40,69 @@ export function createSessionGroupCommandHandlers(
   const handle: CommandHandler = async (context) => {
     const command = sessionGroupCommand(context);
     const projectId = command.payload.projectId;
-    if (!options.core.getProjects().some((project) => project.id === projectId)) {
-      throw projectMissingError(projectId);
-    }
+    const events: Array<
+      Extract<StationEvent, { type: "sessionGroup.updated" | "sessionGroup.removed" }>
+    > = [];
 
-    const before = await options.persistence.listSessionGroups();
-    const beforeById = new Map(before.map((group) => [group.id, group]));
-    if (command.type !== "sessionGroup.create") {
-      requireProjectGroup(beforeById, command.payload.groupId, projectId);
-    }
+    await options.core.commitSessionGroupMutation(projectId, async (snapshot) => {
+      throwIfAborted(context.signal);
+      if (!options.core.getProjects().some((project) => project.id === projectId)) {
+        throw projectMissingError(projectId);
+      }
 
-    validateCommandSessions(command, options.core, beforeById);
-    const at = nowIso(options.clock);
-    const result = await mutateSessionGroups({
-      command,
-      persistence: options.persistence,
-      at,
-      sessionGroupId,
+      const before = await options.persistence.listSessionGroups();
+      const beforeById = new Map(before.map((group) => [group.id, group]));
+      const target =
+        command.type === "sessionGroup.create"
+          ? undefined
+          : requireProjectGroup(beforeById, command.payload.groupId, projectId);
+      validateCommandSessions(command, snapshot, beforeById);
+
+      const at = nowIso(options.clock);
+      context.beginCommit();
+      const result = await mutateSessionGroups({
+        command,
+        persistence: options.persistence,
+        at,
+        sessionGroupId,
+      });
+      if (!result.ok) {
+        throw sessionGroupConflict(result.reason, command);
+      }
+
+      for (const group of result.groups) {
+        if (beforeById.get(group.id)?.version === group.version) continue;
+        events.push({
+          type: "sessionGroup.updated",
+          at,
+          commandId: context.commandId,
+          group,
+          traceId: context.trace.traceId,
+          spanId: context.trace.spanId,
+        });
+      }
+      if (command.type === "sessionGroup.delete" && target !== undefined) {
+        events.push({
+          type: "sessionGroup.removed",
+          at,
+          commandId: context.commandId,
+          projectId: target.projectId,
+          groupId: target.id,
+          traceId: context.trace.traceId,
+          spanId: context.trace.spanId,
+        });
+      }
+      for (const event of events) {
+        await persistEvent(options, event);
+      }
+
+      return (await options.persistence.listSessionGroups()).filter(
+        (group) => group.projectId === projectId,
+      );
     });
-    if (!result.ok) {
-      throw sessionGroupConflict(result.reason, command);
-    }
 
-    const snapshot = await options.core.refreshSessionGroups();
-    const after = snapshot.sessionGroups;
-    const afterIds = new Set(after.map((group) => group.id));
-    const updated = after.filter(
-      (group) =>
-        group.projectId === projectId && beforeById.get(group.id)?.version !== group.version,
-    );
-    const removed = before
-      .filter((group) => group.projectId === projectId && !afterIds.has(group.id))
-      .sort((left, right) => left.id.localeCompare(right.id));
-
-    for (const group of updated) {
-      await persistAndPublish(options, {
-        type: "sessionGroup.updated",
-        at,
-        commandId: context.commandId,
-        group,
-        traceId: context.trace.traceId,
-        spanId: context.trace.spanId,
-      });
-    }
-    for (const group of removed) {
-      await persistAndPublish(options, {
-        type: "sessionGroup.removed",
-        at,
-        commandId: context.commandId,
-        projectId: group.projectId,
-        groupId: group.id,
-        traceId: context.trace.traceId,
-        spanId: context.trace.spanId,
-      });
+    for (const event of events) {
+      options.eventBus?.publish(event);
     }
   };
 
@@ -177,7 +188,7 @@ async function mutateSessionGroups(input: {
 
 function validateCommandSessions(
   command: SessionGroupCommand,
-  core: ObserverCore,
+  snapshot: ReturnType<ObserverCore["getSnapshot"]>,
   groups: ReadonlyMap<string, SessionGroupView>,
 ): void {
   const sessionIds =
@@ -188,7 +199,7 @@ function validateCommandSessions(
             (expectation) => expectation.sessionId,
           )
         : [];
-  const sessions = new Map(core.getSnapshot().sessions.map((session) => [session.id, session]));
+  const sessions = new Map(snapshot.sessions.map((session) => [session.id, session]));
   for (const sessionId of sessionIds) {
     const session = sessions.get(sessionId);
     if (session === undefined) {
@@ -221,7 +232,7 @@ function requireProjectGroup(
   return group;
 }
 
-async function persistAndPublish(
+async function persistEvent(
   options: CreateSessionGroupCommandHandlersOptions,
   event: Extract<StationEvent, { type: "sessionGroup.updated" | "sessionGroup.removed" }>,
 ): Promise<void> {
@@ -232,7 +243,6 @@ async function persistAndPublish(
   if (event.traceId !== undefined) recordOptions.traceId = event.traceId;
   if (event.spanId !== undefined) recordOptions.spanId = event.spanId;
   await options.persistence.recordEvent(event, recordOptions);
-  options.eventBus?.publish(event);
 }
 
 function sessionGroupConflict(

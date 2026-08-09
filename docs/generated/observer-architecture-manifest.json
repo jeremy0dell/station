@@ -2209,6 +2209,12 @@
       ],
       "imports": [
         {
+          "specifier": "./cancellation.js",
+          "resolvedPath": "apps/observer/src/commands/cancellation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["throwIfAborted"]
+        },
+        {
           "specifier": "./queue.js",
           "resolvedPath": "apps/observer/src/commands/queue.ts",
           "edgeKind": "type-only",
@@ -9054,7 +9060,7 @@
           "specifier": "./sessionGroups.js",
           "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
           "edgeKind": "runtime",
-          "bindings": ["refreshDurableSessionGroups"]
+          "bindings": ["projectSessionGroups"]
         },
         {
           "specifier": "./statusProjection.js",
@@ -9094,6 +9100,7 @@
             "HarnessEventReport",
             "ProviderHealth",
             "ProviderProjectConfig",
+            "SessionGroupView",
             "StationEvent",
             "StationSnapshot",
             "WorktreeRow"
@@ -9402,7 +9409,7 @@
           "specifier": "./sessionGroups.js",
           "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
           "edgeKind": "runtime",
-          "bindings": ["refreshDurableSessionGroups"]
+          "bindings": ["reconcileSessionGroups"]
         },
         {
           "specifier": "../stationLogger.js",
@@ -9468,7 +9475,7 @@
           "purpose": "Selects configured Groups and orders their canonical direct membership deterministically."
         },
         {
-          "name": "refreshDurableSessionGroups",
+          "name": "reconcileSessionGroups",
           "kind": "function",
           "role": "USE CASE",
           "purpose": "Repairs durable Group membership against canonical sessions and projects configured Groups."
@@ -13490,7 +13497,7 @@
         },
         {
           "path": "apps/observer/src/reconcile/sessionGroups.ts",
-          "declaration": "refreshDurableSessionGroups",
+          "declaration": "reconcileSessionGroups",
           "kind": "function",
           "role": "USE CASE",
           "edgeKind": "runtime"
@@ -13528,7 +13535,7 @@
     },
     {
       "path": "apps/observer/src/reconcile/sessionGroups.ts",
-      "declaration": "refreshDurableSessionGroups",
+      "declaration": "reconcileSessionGroups",
       "kind": "function",
       "role": "USE CASE",
       "purpose": "Repairs durable Group membership against canonical sessions and projects configured Groups.",

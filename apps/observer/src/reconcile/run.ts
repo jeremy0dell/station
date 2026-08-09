@@ -54,7 +54,7 @@ import {
   type ObserverHarnessRun,
   synthesizeExternalHarnessRuns,
 } from "./harnessEventStatus.js";
-import { refreshDurableSessionGroups } from "./sessionGroups.js";
+import { reconcileSessionGroups } from "./sessionGroups.js";
 
 export type ReconcileTiming = {
   reason: string;
@@ -293,7 +293,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     turnReadiness,
     ...(input.featureFlags === undefined ? {} : { featureFlags: input.featureFlags }),
   });
-  const groupProjection = await refreshDurableSessionGroups({
+  const groupProjection = await reconcileSessionGroups({
     ...(input.persistence === undefined ? {} : { store: input.persistence }),
     projects: input.projects,
     sessions: baseSnapshot.sessions,

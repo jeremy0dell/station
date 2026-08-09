@@ -16,7 +16,7 @@ export type SessionGroupProjection = {
  *
  * Repairs durable Group membership against canonical sessions and projects configured Groups.
  */
-export async function refreshDurableSessionGroups(input: {
+export async function reconcileSessionGroups(input: {
   store?: SessionGroupStore | undefined;
   projects: readonly ProviderProjectConfig[];
   sessions: readonly SessionView[];

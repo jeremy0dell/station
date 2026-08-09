@@ -1,5 +1,5 @@
 import type { StationConfig } from "@station/config";
-import type { StationCommand } from "@station/contracts";
+import type { StationCommand, StationEvent } from "@station/contracts";
 import {
   createFakeHarnessRun,
   createFakeTerminalTarget,
@@ -33,7 +33,13 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
     }
   });
 
-  async function fixture(options: { repeatedGroupId?: boolean } = {}) {
+  async function fixture(
+    options: {
+      repeatedGroupId?: boolean;
+      commandTimeoutMs?: number;
+      groupCommitDelayMs?: number;
+    } = {},
+  ) {
     const created = await createFixture(storage, options);
     fixtures.push(created);
     return created;
@@ -108,6 +114,69 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
         ["command.accepted", "command.started", "command.succeeded"],
       );
     }
+  });
+
+  it("projects only the command project without repairing durable memberships", async () => {
+    const test = await fixture();
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Web" },
+    });
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "api", name: "API" },
+    });
+    await test.persistence.updateSessionGroupMembership({
+      id: "grp_1",
+      expectedVersion: 1,
+      add: [{ sessionId: "ses_missing_web", projectId: "web", expectedGroupId: null }],
+      updatedAt: "2026-05-20T12:01:00.000Z",
+    });
+    await test.persistence.updateSessionGroupMembership({
+      id: "grp_2",
+      expectedVersion: 1,
+      add: [{ sessionId: "ses_missing_api", projectId: "api", expectedGroupId: null }],
+      updatedAt: "2026-05-20T12:01:00.000Z",
+    });
+
+    const command = await test.dispatch({
+      type: "sessionGroup.updateMembership",
+      payload: { projectId: "web", groupId: "grp_1", expectedVersion: 2, add: [], remove: [] },
+    });
+
+    expect(command.status).toBe("succeeded");
+    await expect(test.persistence.listSessionGroups()).resolves.toEqual([
+      expect.objectContaining({ id: "grp_2", version: 2, sessionIds: ["ses_missing_api"] }),
+      expect.objectContaining({ id: "grp_1", version: 2, sessionIds: ["ses_missing_web"] }),
+    ]);
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_2", version: 1, sessionIds: [] }),
+      expect.objectContaining({ id: "grp_1", version: 2, sessionIds: [] }),
+    ]);
+    expect(
+      (await test.persistence.listEvents({ commandId: command.id })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "command.succeeded"]);
+  });
+
+  it("times out before the Group commit without a late mutation or event", async () => {
+    const test = await fixture({ commandTimeoutMs: 5, groupCommitDelayMs: 30 });
+
+    const command = await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Too late" },
+    });
+    expect(command).toMatchObject({ status: "failed", error: { code: "COMMAND_TIMEOUT" } });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await expect(test.persistence.listSessionGroups()).resolves.toEqual([]);
+    expect(
+      (await test.persistence.listEvents({ commandId: command.id })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "command.failed"]);
+    expect(test.publishedEvents.map((event) => event.type)).toEqual([
+      "command.accepted",
+      "command.started",
+      "command.failed",
+    ]);
   });
 
   it("atomically reassigns and ungroups sessions while publishing every changed Group in order", async () => {
@@ -287,6 +356,7 @@ type GroupCommandFixture = {
   providers: ProviderRegistry;
   core: ObserverCore;
   queue: CommandQueue;
+  publishedEvents: StationEvent[];
   dispatch(
     command: StationCommand,
   ): Promise<NonNullable<Awaited<ReturnType<ObserverPersistenceBundle["getCommand"]>>>>;
@@ -295,7 +365,11 @@ type GroupCommandFixture = {
 
 async function createFixture(
   storage: (typeof storageKinds)[number],
-  options: { repeatedGroupId?: boolean },
+  options: {
+    repeatedGroupId?: boolean;
+    commandTimeoutMs?: number;
+    groupCommitDelayMs?: number;
+  },
 ): Promise<GroupCommandFixture> {
   let instant = Date.parse(now);
   const clock = { now: () => new Date(instant++) };
@@ -308,11 +382,32 @@ async function createFixture(
   const providers = fakeProviders();
   const core = createObserverCore({ config, providers, persistence, clock });
   await core.reconcile("session-group-command-fixture");
+  const groupCommitDelayMs = options.groupCommitDelayMs;
+  const handlerCore: ObserverCore =
+    groupCommitDelayMs === undefined
+      ? core
+      : {
+          ...core,
+          commitSessionGroupMutation: async (projectId, mutate) => {
+            await new Promise((resolve) => setTimeout(resolve, groupCommitDelayMs));
+            return core.commitSessionGroupMutation(projectId, mutate);
+          },
+        };
   const eventBus = createObserverEventBus();
-  const queue = createCommandQueue({ persistence, clock, idFactory, eventBus });
+  const publishedEvents: StationEvent[] = [];
+  vi.spyOn(eventBus, "publish").mockImplementation((event) => publishedEvents.push(event));
+  const queue = createCommandQueue({
+    persistence,
+    clock,
+    idFactory,
+    eventBus,
+    ...(options.commandTimeoutMs === undefined
+      ? {}
+      : { commandTimeoutMs: options.commandTimeoutMs }),
+  });
   registerObserverCommandHandlers({
     queue,
-    core,
+    core: handlerCore,
     providers,
     projects: config.projects,
     persistence,
@@ -327,6 +422,7 @@ async function createFixture(
     providers,
     core,
     queue,
+    publishedEvents,
     dispatch: async (command) => {
       const receipt = await queue.dispatch(command);
       await queue.drain();

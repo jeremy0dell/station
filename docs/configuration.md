@@ -211,6 +211,8 @@ worktree.agentStateChanged
 session.created
 session.updated
 session.removed
+sessionGroup.updated
+sessionGroup.removed
 command.accepted
 command.started
 command.succeeded

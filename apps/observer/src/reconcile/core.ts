@@ -3,6 +3,7 @@ import type {
   HarnessEventReport,
   ProviderHealth,
   ProviderProjectConfig,
+  SessionGroupView,
   StationEvent,
   StationSnapshot,
   WorktreeRow,
@@ -37,7 +38,7 @@ import {
   type ReconcileTiming,
   runReconcileOnce,
 } from "./run.js";
-import { refreshDurableSessionGroups } from "./sessionGroups.js";
+import { projectSessionGroups } from "./sessionGroups.js";
 import {
   projectHarnessEventReportOntoSnapshot,
   type StatusProjectionResult,
@@ -54,7 +55,10 @@ export type ObserverCoreHealth = {
 
 export type ObserverCore = {
   reconcile(reason?: string): Promise<StationSnapshot>;
-  refreshSessionGroups(): Promise<StationSnapshot>;
+  commitSessionGroupMutation(
+    projectId: string,
+    mutate: (snapshot: StationSnapshot) => Promise<SessionGroupView[]>,
+  ): Promise<StationSnapshot>;
   commitProviderHealthProbe(health: ProviderHealth): Promise<StationEvent | undefined>;
   projectHarnessEventStatus(report: HarnessEventReport): Promise<StatusProjectionResult>;
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
@@ -145,19 +149,22 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
 
       return enqueueSnapshotWrite(run);
     },
-    refreshSessionGroups: () =>
+    commitSessionGroupMutation: (projectId, mutate) =>
       enqueueSnapshotWrite(async (): Promise<StationSnapshot> => {
+        const projectGroups = await mutate(snapshot);
         const generatedAt = toIsoTimestamp(clock.now());
-        const projection = await refreshDurableSessionGroups({
-          ...(input.persistence === undefined ? {} : { store: input.persistence }),
+        const retainedGroups = snapshot.sessionGroups.filter(
+          (group) => group.projectId !== projectId,
+        );
+        const sessionGroups = projectSessionGroups({
+          groups: [...retainedGroups, ...projectGroups],
           projects,
           sessions: snapshot.sessions,
-          updatedAt: generatedAt,
         });
         snapshot = {
           ...snapshot,
           generatedAt,
-          sessionGroups: projection.sessionGroups,
+          sessionGroups,
         };
         return snapshot;
       }),

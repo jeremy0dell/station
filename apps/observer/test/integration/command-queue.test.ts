@@ -421,6 +421,25 @@ describe("observer command queue", () => {
     sqlite.close();
   });
 
+  it("waits for a begun durable commit instead of recording a timeout failure", async () => {
+    const { sqlite, persistence, queue } = createPersistenceAndQueue({ commandTimeoutMs: 5 });
+    queue.registerHandler("observer.reconcile", async ({ beginCommit }) => {
+      beginCommit();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    await queue.dispatch(reconcileCommand);
+    await queue.drain();
+
+    await expect(persistence.getCommand("cmd_1")).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    expect(
+      (await persistence.listEvents({ commandId: "cmd_1" })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "command.succeeded"]);
+    sqlite.close();
+  });
+
   it("shutdown interrupts an in-flight command and drains after failure is recorded", async () => {
     const { sqlite, persistence, queue } = createPersistenceAndQueue({ commandTimeoutMs: 1000 });
     let started = () => {};
