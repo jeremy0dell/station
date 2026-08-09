@@ -81,6 +81,7 @@ describe("Observer API composition with in-memory persistence", () => {
 
     await expect(api.getSessionRecoveryReadiness()).resolves.toEqual({
       resumeEnabled: false,
+      canonicalTitleImport: true,
       harnesses: [{ provider: "fake-harness", canResume: true }],
     });
 

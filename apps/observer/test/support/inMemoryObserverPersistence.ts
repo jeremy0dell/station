@@ -540,6 +540,24 @@ export function createInMemoryObserverPersistence(
         return { endedSessions, deletedWorktreeTitles };
       }),
 
+    importSessionRecoveryHandle: (input) =>
+      transaction((draft) => {
+        if (input.title !== undefined) {
+          const key = worktreeDisplayTitleKey(input.handle.projectId, input.handle.worktreeId);
+          const current = draft.worktreeDisplayTitles.get(key);
+          const canonical: PersistedWorktreeDisplayTitle = {
+            projectId: input.handle.projectId,
+            worktreeId: input.handle.worktreeId,
+            title: input.title,
+            createdAt: current?.createdAt ?? input.importedAt,
+            updatedAt: input.importedAt,
+          };
+          draft.worktreeDisplayTitles.set(key, canonical);
+          synchronizeInMemorySessionTitleProjections(draft, canonical);
+        }
+        return upsertSessionRecoveryHandle(draft, input.handle);
+      }),
+
     upsertSessionRecoveryHandle: (input) =>
       transaction((draft) => upsertSessionRecoveryHandle(draft, input)),
 

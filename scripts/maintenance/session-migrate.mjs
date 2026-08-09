@@ -195,6 +195,9 @@ export function buildSessionMigrationPlan(
     ) {
       throw new Error(`Session ${item.sessionId} is absent from the archived snapshot`);
     }
+    if (sourceSession.title !== sourceRow.title) {
+      throw new Error(`Session ${item.sessionId} archived row and session titles differ`);
+    }
     if (
       targetRow === undefined ||
       targetRow.projectId !== item.projectId ||
@@ -228,7 +231,8 @@ export function buildSessionMigrationPlan(
     }
     return {
       sessionId: item.sessionId,
-      title: sourceSession.title,
+      title: sourceRow.title,
+      targetTitle: targetRow.title,
       provider: item.provider,
       projectId: item.projectId,
       worktreeId: item.worktreeId,
@@ -397,6 +401,10 @@ async function loadResumableMigration(options, journalPath) {
       entry.status === "complete" &&
       ["source-sealed", "target-staged", "verified", "complete"].includes(entry.phase),
   );
+  const titleEvidence = records.find((entry) => entry.titleEvidence !== undefined)?.titleEvidence;
+  if (!sourceSealed && titleEvidence !== undefined) {
+    assertPlanMatchesTitleEvidence(plan, titleEvidence);
+  }
   if (plan.some((item) => item.alreadyResumed) && !sourceSealed) {
     throw new Error("Target sessions appeared before the source-sealed journal phase");
   }
@@ -412,6 +420,7 @@ async function loadResumableMigration(options, journalPath) {
     targetReadiness,
     plan,
     digest: recordedDigest,
+    legacyJournal: titleEvidence === undefined,
     sourceQuiesced: records.some(
       (entry) =>
         entry.status === "complete" &&
@@ -456,7 +465,12 @@ async function applyMigration(options) {
   try {
     sourceAlreadySealed = await pathExists(join(sealedRoot, "sealed.json"));
     if (sourceAlreadySealed) sourceQuiesced = true;
-    await appendJournal(journalPath, { phase, status: "complete", digest });
+    await appendJournal(journalPath, {
+      phase,
+      status: "complete",
+      digest,
+      ...(resumed === undefined ? { titleEvidence: migrationTitleEvidence(plan) } : {}),
+    });
     if (sourceAlreadySealed) {
       await verifySealedProviderState(sealedRoot, digest, plan);
     }
@@ -500,10 +514,12 @@ async function applyMigration(options) {
       throwIfInterrupted(signals);
       await assertSourceStopped(options, sourceConfig, inputs);
       if (item.alreadyResumed) {
-        await dispatchCommand(options.targetStn, options.targetConfig, {
-          type: "session.rename",
-          payload: { sessionId: item.sessionId, title: item.title },
-        });
+        if (resumed?.legacyJournal === true) {
+          await dispatchCommand(options.targetStn, options.targetConfig, {
+            type: "session.rename",
+            payload: { sessionId: item.sessionId, title: item.title },
+          });
+        }
         launched.push(item.sessionId);
         await appendJournal(journalPath, {
           phase: "target-session-resumed",
@@ -522,6 +538,7 @@ async function applyMigration(options) {
           ...(item.registrationIdentity === undefined
             ? {}
             : { expectedRegistrationIdentity: item.registrationIdentity }),
+          title: item.title,
           handle: targetHandle,
         },
       });
@@ -534,10 +551,6 @@ async function applyMigration(options) {
           recoveryHandleId,
           terminal: { provider: "native", layout: "agent-only", focus: false },
         },
-      });
-      await dispatchCommand(options.targetStn, options.targetConfig, {
-        type: "session.rename",
-        payload: { sessionId: item.sessionId, title: item.title },
       });
       launched.push(item.sessionId);
       await appendJournal(journalPath, {
@@ -612,12 +625,14 @@ async function assertTargetUnchangedForCutover(options, planned) {
   ) {
     throw new Error("Target Observer identity changed before source cutover");
   }
-  buildSessionMigrationPlan(
+  const revalidatedPlan = buildSessionMigrationPlan(
     planned.inputs.coverage,
     planned.inputs.handles,
     planned.inputs.snapshot,
     snapshot,
   );
+  assertTargetTitlesMatchPlan(snapshot, planned.plan);
+  assertPlanSourceTitlesMatch(revalidatedPlan, planned.plan);
   assertNoTargetHostConflicts(await readTargetHostPtys(options.targetConfig), planned.plan);
   await preflightProviderState(options, planned.inputs, planned.plan);
 }
@@ -711,7 +726,7 @@ async function recoveryReadiness(configPath) {
   return client.getSessionRecoveryReadiness();
 }
 
-function assertTargetReadiness(readiness, plan) {
+export function assertTargetReadiness(readiness, plan) {
   if (!readiness.resumeEnabled) {
     throw new Error(
       "Target Observer has session resume disabled; enable feature_flags.session_resume_agent and restart it",
@@ -720,6 +735,11 @@ function assertTargetReadiness(readiness, plan) {
   if (readiness.managedTerminal?.canLaunchProcessPersistently !== true) {
     throw new Error(
       "Target Observer cannot persist native launches; enable feature_flags.station_persistent_agents and restart it",
+    );
+  }
+  if (readiness.canonicalTitleImport !== true) {
+    throw new Error(
+      "Target Observer does not support canonical recovery-title import; update and restart it",
     );
   }
   const harnesses = new Map(readiness.harnesses.map((item) => [item.provider, item.canResume]));
@@ -756,6 +776,7 @@ function assertSourceMatchesPlan(snapshot, plan) {
       `Source session census changed after rescue: ${active.map((session) => session.id).join(", ")}`,
     );
   }
+  assertSourceTitlesMatchPlan(snapshot, plan);
   for (const item of plan) {
     const session = active.find((candidate) => candidate.id === item.sessionId);
     if (
@@ -765,6 +786,64 @@ function assertSourceMatchesPlan(snapshot, plan) {
       session.harness.provider !== item.provider
     ) {
       throw new Error(`Source session identity changed after rescue: ${item.sessionId}`);
+    }
+  }
+}
+
+export function assertSourceTitlesMatchPlan(snapshot, plan, options = {}) {
+  for (const item of plan) {
+    const row = snapshot.rows.find(
+      (candidate) => candidate.id === item.worktreeId && candidate.projectId === item.projectId,
+    );
+    const session = snapshot.sessions.find((candidate) => candidate.id === item.sessionId);
+    if (
+      row?.title !== item.title ||
+      (session === undefined ? options.allowMissingSessions !== true : session.title !== item.title)
+    ) {
+      throw new Error(`Source title changed after migration planning: ${item.sessionId}`);
+    }
+  }
+}
+
+export function assertTargetTitlesMatchPlan(snapshot, plan) {
+  for (const item of plan) {
+    const row = snapshot.rows.find(
+      (candidate) => candidate.id === item.worktreeId && candidate.projectId === item.projectId,
+    );
+    if (row?.title !== item.targetTitle) {
+      throw new Error(`Target title changed after migration planning: ${item.sessionId}`);
+    }
+  }
+}
+
+function assertPlanSourceTitlesMatch(actual, expected) {
+  for (const item of expected) {
+    const current = actual.find((candidate) => candidate.sessionId === item.sessionId);
+    if (current?.title !== item.title) {
+      throw new Error(`Source title changed after migration planning: ${item.sessionId}`);
+    }
+  }
+}
+
+function migrationTitleEvidence(plan) {
+  return plan.map((item) => ({
+    sessionId: item.sessionId,
+    sourceTitle: item.title,
+    targetTitle: item.targetTitle,
+  }));
+}
+
+function assertPlanMatchesTitleEvidence(plan, evidence) {
+  if (plan.length !== evidence.length) {
+    throw new Error("Migration title evidence changed after planning");
+  }
+  for (const expected of evidence) {
+    const item = plan.find((candidate) => candidate.sessionId === expected.sessionId);
+    if (item?.title !== expected.sourceTitle) {
+      throw new Error(`Source title changed after migration planning: ${expected.sessionId}`);
+    }
+    if (item.targetTitle !== expected.targetTitle) {
+      throw new Error(`Target title changed after migration planning: ${expected.sessionId}`);
     }
   }
 }
@@ -794,6 +873,7 @@ async function quiesceSource(options, sourceConfig, inputs, plan, signals) {
       `New source sessions appeared before cutover: ${unexpected.map((session) => session.id).join(", ")}`,
     );
   }
+  assertSourceTitlesMatchPlan(snapshot, plan, { allowMissingSessions: true });
   for (const item of plan) {
     const session = active.find((candidate) => candidate.id === item.sessionId);
     if (
@@ -1212,6 +1292,7 @@ async function stageProviderState(options, inputs, plan, sealedRoot) {
 async function assertTargetConverged(options, plan) {
   const snapshot = await waitForSnapshot(options.targetStn, options.targetConfig);
   const hostPtys = await readTargetHostPtys(options.targetConfig);
+  assertTargetTitlesConverged(snapshot, plan);
   for (const item of plan) {
     const session = snapshot.sessions.find((candidate) => candidate.id === item.sessionId);
     const hostPty = hostPtys.find(
@@ -1234,6 +1315,18 @@ async function assertTargetConverged(options, plan) {
       !nativeIdentityMatches
     ) {
       throw new Error(`Target session did not converge with its exact Host PTY: ${item.sessionId}`);
+    }
+  }
+}
+
+export function assertTargetTitlesConverged(snapshot, plan) {
+  for (const item of plan) {
+    const row = snapshot.rows.find(
+      (candidate) => candidate.id === item.worktreeId && candidate.projectId === item.projectId,
+    );
+    const session = snapshot.sessions.find((candidate) => candidate.id === item.sessionId);
+    if (row?.title !== item.title || session?.title !== item.title) {
+      throw new Error(`Target titles did not converge: ${item.sessionId}`);
     }
   }
 }
@@ -1511,6 +1604,7 @@ async function main() {
           sessions: plan.map((item) => ({
             sessionId: item.sessionId,
             title: item.title,
+            targetTitle: item.targetTitle,
             provider: item.provider,
             projectId: item.projectId,
             worktreeId: item.worktreeId,

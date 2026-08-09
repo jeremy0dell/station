@@ -1778,6 +1778,90 @@ export function observerPersistenceContract(
         });
       });
 
+      it("atomically imports a canonical title with its recovery handle", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.seedSession({
+            sessionId: "ses_import_title",
+            projectId: "web",
+            worktreeId: "wt_import_title",
+            initialTitle: "branch-title",
+            createdAt: earlier,
+            lastSeenAt: earlier,
+          });
+          const handle: SessionRecoveryHandle = {
+            id: "report_import_title",
+            provider: "codex",
+            projectId: "web",
+            worktreeId: "wt_import_title",
+            sessionId: "ses_import_title",
+            target: { kind: "native-session", id: "native_import_title" },
+            cwd: "/tmp/station/web/import-title",
+            observedAt: now,
+            lastSeenAt: now,
+          };
+
+          const imported = await persistence.importSessionRecoveryHandle({
+            handle,
+            title: "Recovered workspace",
+            importedAt: later,
+          });
+
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+            {
+              projectId: "web",
+              worktreeId: "wt_import_title",
+              title: "Recovered workspace",
+              createdAt: earlier,
+              updatedAt: later,
+            },
+          ]);
+          await expect(persistence.listSessions()).resolves.toEqual([
+            expect.objectContaining({
+              id: "ses_import_title",
+              title: "Recovered workspace",
+            }),
+          ]);
+          await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([imported]);
+
+          await expect(
+            persistence.importSessionRecoveryHandle({
+              handle,
+              title: "Recovered workspace",
+              importedAt: later,
+            }),
+          ).resolves.toEqual(imported);
+          await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([imported]);
+
+          const invalidHandle = {
+            ...handle,
+            target: { kind: "native-session", id: "" },
+          } as SessionRecoveryHandle;
+          await expectPersistenceFailure(
+            persistence.importSessionRecoveryHandle({
+              handle: invalidHandle,
+              title: "Must roll back",
+              importedAt: latest,
+            }),
+          );
+          await expect(persistence.listWorktreeDisplayTitles()).resolves.toEqual([
+            {
+              projectId: "web",
+              worktreeId: "wt_import_title",
+              title: "Recovered workspace",
+              createdAt: earlier,
+              updatedAt: later,
+            },
+          ]);
+          await expect(persistence.listSessions()).resolves.toEqual([
+            expect.objectContaining({
+              id: "ses_import_title",
+              title: "Recovered workspace",
+            }),
+          ]);
+          await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([imported]);
+        });
+      });
+
       it("ends open sessions without generic evidence reviving them and reopens explicitly", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           for (const sessionId of ["ses_lifecycle_a", "ses_lifecycle_b"]) {

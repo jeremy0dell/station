@@ -140,6 +140,7 @@ export interface ReconcileStore {
  *
  * Maintains Observer-owned session lifecycle, provider-native execution bindings, canonical
  * worktree-scoped title authority, synchronized session projections, recovery, and readiness.
+ * Canonical-title handoff and recovery import commit atomically before recovery can reconcile.
  */
 export interface SessionStore {
   listSessions(): Promise<PersistedSession[]>;
@@ -187,6 +188,11 @@ export interface SessionStore {
     worktreeId: string;
     endedAt: string;
   }): Promise<{ endedSessions: number; deletedWorktreeTitles: number }>;
+  importSessionRecoveryHandle(input: {
+    handle: SessionRecoveryHandle;
+    title?: string;
+    importedAt: string;
+  }): Promise<SessionRecoveryHandle>;
   upsertSessionRecoveryHandle(input: SessionRecoveryHandle): Promise<SessionRecoveryHandle>;
   getSessionRecoveryHandle(handleId: string): Promise<SessionRecoveryHandle | undefined>;
   listSessionRecoveryHandles(

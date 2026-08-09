@@ -98,6 +98,7 @@
       "worktreeId": "wt_api_cache",
       "expectedPath": "/tmp/station/api/worktrees/cache",
       "expectedRegistrationIdentity": "git-registration:fixture-cache",
+      "title": "Cache Investigation",
       "handle": {
         "id": "rec_codex_123",
         "provider": "codex",

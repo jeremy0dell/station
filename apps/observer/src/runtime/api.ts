@@ -305,6 +305,7 @@ function sessionRecoveryReadiness(options: CreateObserverApiOptions): SessionRec
   const managedTerminal = options.providers?.managedTerminal;
   const readiness: SessionRecoveryReadiness = {
     resumeEnabled: options.config?.featureFlags?.sessionResumeAgent === true,
+    canonicalTitleImport: true,
     harnesses: Array.from(options.providers?.harnesses.values() ?? [])
       .map((provider) => ({
         provider: provider.id,

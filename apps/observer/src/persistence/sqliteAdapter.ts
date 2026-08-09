@@ -345,6 +345,21 @@ export function createSqliteObserverPersistence(
         correlationStore.retireRemovedWorktreeSessionState(database, input),
       ),
 
+    importSessionRecoveryHandle: (input) =>
+      transaction((database) => {
+        if (input.title !== undefined) {
+          const canonical = worktreeDisplayTitleStore.upsertWorktreeDisplayTitle(database, {
+            projectId: input.handle.projectId,
+            worktreeId: input.handle.worktreeId,
+            title: input.title,
+            createdAt: input.importedAt,
+            updatedAt: input.importedAt,
+          });
+          worktreeDisplayTitleStore.synchronizeSessionTitleProjections(database, canonical);
+        }
+        return sessionRecoveryHandleStore.upsertSessionRecoveryHandle(database, input.handle);
+      }),
+
     upsertSessionRecoveryHandle: (input) =>
       transaction((database) =>
         sessionRecoveryHandleStore.upsertSessionRecoveryHandle(database, input),

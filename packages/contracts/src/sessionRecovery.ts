@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type ProviderId, ProviderIdSchema, TimestampSchema } from "./ids.js";
 import type { SessionRecoveryHandle } from "./recovery.js";
-import { nonEmptyStringSchema } from "./shared.js";
+import { nonEmptyStringSchema, userFacingTitleSchema } from "./shared.js";
 
 export const SessionRecoveryHarnessReadinessSchema = z
   .object({
@@ -13,6 +13,7 @@ export const SessionRecoveryHarnessReadinessSchema = z
 export const SessionRecoveryReadinessSchema = z
   .object({
     resumeEnabled: z.boolean(),
+    canonicalTitleImport: z.literal(true).optional(),
     managedTerminal: z
       .object({
         provider: ProviderIdSchema,
@@ -125,6 +126,17 @@ export const SessionMigrationJournalEntrySchema = z
       .optional(),
     sealedRoot: nonEmptyStringSchema.optional(),
     sessionId: nonEmptyStringSchema.optional(),
+    titleEvidence: z
+      .array(
+        z
+          .object({
+            sessionId: nonEmptyStringSchema,
+            sourceTitle: userFacingTitleSchema,
+            targetTitle: userFacingTitleSchema,
+          })
+          .strict(),
+      )
+      .optional(),
     error: nonEmptyStringSchema.optional(),
   })
   .strict();
