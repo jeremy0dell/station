@@ -7,9 +7,9 @@ import {
   readFile,
   readlink,
   realpath,
+  rename,
   rm,
   symlink,
-  unlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -162,7 +162,7 @@ if [ -n "$output" ]; then cp "$source_file" "$output"; else cat "$source_file"; 
       input.args?.[0] !== "-n";
     if (installerInvocation && options.replaceIngressBeforeInstaller === true && !replaced) {
       const ingressPath = join(installDir, "stn-ingress");
-      await unlink(ingressPath);
+      await rename(ingressPath, `${ingressPath}.previous`);
       await symlink("stn", ingressPath);
       replaced = true;
     }

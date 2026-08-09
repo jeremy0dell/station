@@ -342,7 +342,7 @@ describe("installer-binary apply", () => {
           fixture.installDir,
           changed === "ingress" ? "stn-ingress" : "stn-tmux-popup",
         );
-        await unlink(path);
+        await rename(path, `${path}.previous`);
         await symlink("stn", path);
       }
 

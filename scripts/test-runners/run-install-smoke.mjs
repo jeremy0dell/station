@@ -11,6 +11,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -686,10 +687,13 @@ function scenarioReceiptAndExpectedInstallation() {
     if (changed === "binary") {
       writeExecutable(join(installDir, "stn"), "#!/bin/sh\nprintf 'tampered\\n'\n");
     } else if (changed === "ingress") {
-      unlinkSync(join(installDir, "stn-ingress"));
+      renameSync(join(installDir, "stn-ingress"), join(root, "expected-ingress-race.previous"));
       symlinkSync("stn", join(installDir, "stn-ingress"));
     } else {
-      unlinkSync(join(installDir, ".station-install-receipt"));
+      renameSync(
+        join(installDir, ".station-install-receipt"),
+        join(root, "expected-receipt-race.previous"),
+      );
       writeText(
         join(installDir, ".station-install-receipt"),
         "station-installer-binary-v1\n",
