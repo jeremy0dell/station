@@ -321,8 +321,10 @@ right-click, multi-click, wheel, and child mouse reporting remain unchanged.
 
 Station Host records and replays raw PTY data events, so a complete replay feeds
 the original OSC 8 open/close bytes back through xterm and restores link
-metadata without a Host protocol change. A replay whose required bytes were
-already truncated cannot reconstruct that state and remains owned by #216.
+metadata without a Host protocol change. After raw replay truncation, semantic
+recovery restores closed links as text without their URI. An xterm link marker
+may be normalized to ordinary underline only when that is the authored style;
+protected cells and true extended underline state still fail closed.
 
 Manual validation in a hyperlink-capable outer terminal:
 

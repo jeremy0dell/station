@@ -21,8 +21,15 @@ type XtermStyleAttributes = Pick<
   | "isUnderline"
 >;
 
+type PinnedXtermExtendedAttributes = {
+  clone(): PinnedXtermExtendedAttributes;
+  underlineColor: number;
+  underlineStyle: number;
+  urlId: number;
+};
+
 export type PinnedXtermAttributes = XtermStyleAttributes & {
-  extended: { underlineColor: number; urlId: number };
+  extended: PinnedXtermExtendedAttributes;
   getUnderlineStyle(): number;
   getUnderlineVariantOffset(): number;
   isProtected(): number;
@@ -30,6 +37,12 @@ export type PinnedXtermAttributes = XtermStyleAttributes & {
 
 export type PinnedXtermCellAttributes = PinnedXtermAttributes &
   Pick<IBufferCell, "getChars" | "getWidth">;
+
+export type UnsupportedXtermCellAttributeDetail =
+  | "cell-protected"
+  | "cell-underline-style"
+  | "cell-underline-color"
+  | "cell-underline-offset";
 
 export function isUnsupportedXtermAttribute(attributes: PinnedXtermAttributes): boolean {
   return isUnsupportedXtermCellAttribute(attributes) || attributes.extended.urlId !== 0;
@@ -39,12 +52,27 @@ export function isUnsupportedXtermAttribute(attributes: PinnedXtermAttributes): 
 export function isUnsupportedXtermCellAttribute(
   attributes: PinnedXtermAttributes,
 ): boolean {
-  return (
-    Boolean(attributes.isProtected()) ||
-    attributes.getUnderlineStyle() > 1 ||
-    attributes.extended.underlineColor !== 0 ||
-    attributes.getUnderlineVariantOffset() !== 0
-  );
+  return unsupportedXtermCellAttributeDetail(attributes) !== undefined;
+}
+
+/** Classifies the first exactness-breaking cell attribute without inspecting cell content. */
+export function unsupportedXtermCellAttributeDetail(
+  attributes: PinnedXtermAttributes,
+): UnsupportedXtermCellAttributeDetail | undefined {
+  if (attributes.isProtected()) return "cell-protected";
+  if (authoredUnderlineStyle(attributes) > 1) return "cell-underline-style";
+  if (attributes.extended.underlineColor !== 0) return "cell-underline-color";
+  if (attributes.getUnderlineVariantOffset() !== 0) return "cell-underline-offset";
+  return undefined;
+}
+
+function authoredUnderlineStyle(attributes: PinnedXtermAttributes): number {
+  const style = attributes.getUnderlineStyle();
+  if (style <= 1 || attributes.extended.urlId === 0) return style;
+  // xterm reports underlined OSC 8 cells as dashed; clearing urlId reveals the authored style.
+  const extended = attributes.extended.clone();
+  extended.urlId = 0;
+  return extended.underlineStyle;
 }
 
 export function isUnsupportedBlankXtermAttribute(

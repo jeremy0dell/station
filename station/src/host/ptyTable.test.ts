@@ -357,7 +357,7 @@ describe("createPtyTable", () => {
     await frames.return?.();
   });
 
-  it("logs safe unsupported-state detail while preserving live-reset recovery", async () => {
+  it("logs a safe cell-attribute subtype while preserving live-reset recovery", async () => {
     const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
     const events: Array<{ event: string; attributes: Record<string, unknown> }> = [];
     const resetData = "\x1bc\x1b[?2004h";
@@ -366,7 +366,7 @@ describe("createPtyTable", () => {
       resize() {},
       capture: async () => {
         throw new TerminalSnapshotUnavailableError(
-          { reason: "unsupported-state", detail: "wrap-pending-cell" },
+          { reason: "unsupported-state", detail: "cell-underline-color" },
           resetData,
           "unsafe terminal context stays provider-private",
         );
@@ -396,7 +396,7 @@ describe("createPtyTable", () => {
       attributes: {
         ptyId,
         reason: "unsupported-state",
-        detail: "wrap-pending-cell",
+        detail: "cell-underline-color",
       },
     });
   });
