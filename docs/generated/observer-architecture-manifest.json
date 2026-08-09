@@ -12639,6 +12639,30 @@
       ]
     },
     {
+      "path": "apps/cli/src/update/nativeBinaryUpdate.ts",
+      "declaration": "createNativeBinaryUpdateEngine",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates compiled-install identity, GitHub release metadata, and the verified release installer into an atomic native-binary replacement report.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/nativeBinaryUpdate.ts",
+          "declaration": "NativeBinaryUpdateEngine",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/nativeBinaryUpdate.ts",
+      "declaration": "NativeBinaryUpdateEngine",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Gives the future update coordinator a typed capability for planning and applying one verified native-binary replacement without owning process crossover.",
+      "dependencies": []
+    },
+    {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",
       "declaration": "assertHarnessLaunchPreconditionsOrThrow",
       "kind": "function",

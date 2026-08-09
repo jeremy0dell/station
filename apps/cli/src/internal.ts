@@ -18,3 +18,4 @@ export * from "./commands/tui.js";
 export { runCliMain, shouldSuppressCliProcessOutput } from "./main.js";
 export type { ChildProcessLike, ObserverProcessDeps } from "./observerProcess.js";
 export * from "./selfExec.js";
+export * from "./update/nativeBinaryUpdate.js";
