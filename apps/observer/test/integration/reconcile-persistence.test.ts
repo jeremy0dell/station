@@ -101,6 +101,153 @@ function providersWithOneSession() {
 }
 
 describe("observer reconcile persistence", () => {
+  it("prunes missing and cross-project Group members once while preserving definitions", async () => {
+    const groupConfig: StationConfig = {
+      ...config,
+      projects: [
+        ...config.projects,
+        {
+          id: "api",
+          label: "api",
+          root: "/tmp/station/api",
+          defaults: {
+            harness: "fake-harness",
+            terminal: "fake-terminal",
+            layout: "agent-shell",
+          },
+          worktrunk: { enabled: true },
+        },
+      ],
+    };
+    const sessions = [
+      { projectId: "web", worktreeId: "wt_web_main", sessionId: "ses_web_main" },
+      { projectId: "api", worktreeId: "wt_api_main", sessionId: "ses_api_main" },
+    ];
+    const providers = new ProviderRegistry({
+      worktree: new FakeWorktreeProvider({
+        now,
+        worktrees: sessions.map(({ projectId, worktreeId }) =>
+          createFakeWorktree({ id: worktreeId, projectId, now }),
+        ),
+      }),
+      terminal: new FakeTerminalProvider({
+        now,
+        targets: sessions.map(({ projectId, worktreeId, sessionId }) =>
+          createFakeTerminalTarget({
+            id: `term_${sessionId}`,
+            projectId,
+            worktreeId,
+            sessionId,
+            harnessRunId: `run_${sessionId}`,
+            now,
+          }),
+        ),
+      }),
+      harnesses: [
+        new FakeHarnessProvider({
+          now,
+          runs: sessions.map(({ projectId, worktreeId, sessionId }) =>
+            createFakeHarnessRun({
+              id: `run_${sessionId}`,
+              projectId,
+              worktreeId,
+              sessionId,
+              state: "idle",
+              now,
+            }),
+          ),
+        }),
+      ],
+    });
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config: groupConfig,
+      providers,
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_missing_member",
+      projectId: "web",
+      name: "Missing member",
+      initialMembers: [
+        { sessionId: "ses_web_main", projectId: "web", expectedGroupId: null },
+        { sessionId: "ses_missing", projectId: "web", expectedGroupId: null },
+      ],
+      createdAt: now,
+    });
+    await persistence.createSessionGroup({
+      id: "grp_cross_project_member",
+      projectId: "web",
+      name: "Cross project member",
+      initialMembers: [{ sessionId: "ses_api_main", projectId: "web", expectedGroupId: null }],
+      createdAt: now,
+    });
+
+    const snapshot = await core.reconcile("session-group-prune");
+
+    expect(snapshot.sessionGroups).toEqual([
+      expect.objectContaining({
+        id: "grp_cross_project_member",
+        version: 2,
+        sessionIds: [],
+      }),
+      expect.objectContaining({
+        id: "grp_missing_member",
+        version: 2,
+        sessionIds: ["ses_web_main"],
+      }),
+    ]);
+    expect(core.getHealth().lastReconcile?.errors).toEqual([
+      expect.objectContaining({
+        code: "SESSION_GROUP_MEMBERSHIP_REPAIRED",
+        projectId: "web",
+      }),
+      expect.objectContaining({
+        code: "SESSION_GROUP_MEMBERSHIP_REPAIRED",
+        projectId: "web",
+      }),
+    ]);
+    await core.reconcile("session-group-prune-repeat");
+    expect((await persistence.listSessionGroups()).map((group) => group.version)).toEqual([2, 2]);
+    sqlite.close();
+  });
+
+  it("preserves empty Groups and retains excluded-project definitions outside the snapshot", async () => {
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_web_empty",
+      projectId: "web",
+      name: "Configured",
+      createdAt: now,
+    });
+    await persistence.createSessionGroup({
+      id: "grp_removed_empty",
+      projectId: "removed",
+      name: "Retained",
+      createdAt: now,
+    });
+
+    const snapshot = await core.reconcile("session-group-excluded-project");
+
+    expect(snapshot.sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_web_empty", sessionIds: [], version: 1 }),
+    ]);
+    await expect(persistence.listSessionGroups()).resolves.toEqual([
+      expect.objectContaining({ id: "grp_removed_empty", projectId: "removed" }),
+      expect.objectContaining({ id: "grp_web_empty", projectId: "web" }),
+    ]);
+    expect(core.getHealth().lastReconcile?.errors).toContainEqual(
+      expect.objectContaining({
+        code: "SESSION_GROUP_PROJECT_EXCLUDED",
+        projectId: "removed",
+      }),
+    );
+    sqlite.close();
+  });
+
   it("persists provider observations, session correlations, and reconcile events", async () => {
     const dbPath = await tempDbPath();
     const providers = providersWithOneSession();

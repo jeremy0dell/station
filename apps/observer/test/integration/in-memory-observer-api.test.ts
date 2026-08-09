@@ -120,6 +120,20 @@ describe("Observer API composition with in-memory persistence", () => {
       expect.objectContaining({ worktreeId: "wt_web_task", projectId: "web", branch: "task" }),
     ]);
 
+    const group = await api.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "API Group", initialSessionIds: ["ses_web_task"] },
+    });
+    await commandQueue.drain();
+    await expect(api.getCommand(group.commandId)).resolves.toMatchObject({ status: "succeeded" });
+    expect((await api.getSnapshot()).sessionGroups).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(/^grp_/),
+        name: "API Group",
+        sessionIds: ["ses_web_task"],
+      }),
+    ]);
+
     const command = await api.dispatch({
       type: "observer.reconcile",
       payload: { reason: "in-memory-command" },
@@ -177,7 +191,10 @@ describe("Observer API composition with in-memory persistence", () => {
       },
       localState: { stateDir: "memory://state" },
       hookSpool: { path: "urn:station:hook-spool" },
-      commands: [expect.objectContaining({ id: command.commandId, status: "succeeded" })],
+      commands: expect.arrayContaining([
+        expect.objectContaining({ id: group.commandId, status: "succeeded" }),
+        expect.objectContaining({ id: command.commandId, status: "succeeded" }),
+      ]),
       events: expect.arrayContaining([
         expect.objectContaining({ type: "providerHook.ingested", hookId: "hook_memory_1" }),
       ]),

@@ -216,8 +216,8 @@ areas contain the following responsibilities:
 
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
-| `commands/` | command queue, routing, scopes, cancellation, launch preflight, terminal-intent execution, and command use cases | Driving application behavior; launch preflight and terminal-intent execution coordinate provider ports as use cases. |
-| `reconcile/` | provider reads, correlation, graph construction, projection, and core state | Reconcile use case plus deterministic policies; provider I/O remains at its driven edges. `run.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
+| `commands/` | command queue, routing, scopes, cancellation, launch preflight, terminal-intent execution, Group mutation, and command use cases | Driving application behavior; launch preflight, terminal-intent execution, and Group mutation coordinate their narrow ports as use cases. |
+| `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `run.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
@@ -253,7 +253,7 @@ No single layer owns all truth.
 | Observer boot claim | `dirname(resolvedSocket)/observer.claim.sqlite` is a persistent private transport-lifecycle file. Only its active SQLite write transaction owns boot exclusion; file or sidecar existence is never authority. It has no Observer migrations or application persistence role. |
 | Observer process identity | `<resolved socketPath>.pid` is the strict, socket-specific `{pid, osStartTime, processToken, version, socketPath}` identity published by the process that successfully bound the socket. The UUID v4 `processToken` identifies one launch and `version` is the Observer selector: display SemVer plus reserved `station.<sha256>` build metadata. They corroborate process and immutable-build identity for later handoff and diagnostics; `lsof` remains primary socket-ownership evidence, and the file alone is never liveness authority. |
 | In-memory persistence adapter | Process-local test state that preserves the eight persistence ports' observable transaction semantics. It is neither restart-durable nor selectable by production runtime composition. |
-| `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state. Until Group reconcile projection is wired, production snapshots deliberately publish `sessionGroups: []`. Reconcile replaces the base projection; accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
+| `StationSnapshot` | Current normalized graph held in memory. `rows` is configured worktree inventory; `sessions` is canonical session membership; and required `sessionGroups` carries normalized organizational state for configured projects. Reconcile replaces the base projection; recorded Group mutations refresh only their project through the same serialized writer, and accepted harness reports can project status and readiness between reconciles. It is derived and not a durable replay log. |
 | Live event bus | Future-only, process-local delivery. Subscriber queues are currently unbounded, events have no sequence numbers, and reconnects cannot request replay. |
 | Persisted event rows | Historical and diagnostic observer memory. They are not currently the source for live subscription replay. |
 | Hook spool | Durable delivery fallback while ingress cannot reach the observer. A queued record is pending evidence, not current graph truth. Its stable spool identity drives replay completion after primary dedupe, and the filesystem record remains until all derived durable work finishes. |
@@ -375,6 +375,15 @@ unrelated scopes may run concurrently. Failure is normalized into `SafeError`,
 persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
 
+Recorded `sessionGroup.create`, `sessionGroup.rename`,
+`sessionGroup.updateMembership`, and `sessionGroup.delete` commands serialize by
+project. Inside the snapshot-writer turn they validate configured-project and
+canonical-session identity, enter a non-cancellable commit immediately before calling
+`SessionGroupStore`, and project only the command project without reconcile repair.
+Changed Group events derive from the mutation result and are persisted and published in
+canonical order before command success; validated no-ops emit no Group event. This path
+does not read providers or publish `observer.reconciled`.
+
 `worktree.remove` carries the selected worktree ID, canonical path, branch, and
 opaque Git registration identity. Its use case refreshes provider evidence and
 uniquely re-resolves that identity before terminal or worktree cleanup, refusing
@@ -414,8 +423,11 @@ target agents.
 
 Reconcile reads worktree and terminal actors, derives the worktree context for
 harness reads, applies cached metadata and durable overlays, resolves one effective display title
-per current worktree, correlates the graph, persists the same title records with the result, and
-replaces the in-memory snapshot. Existing canonical titles win; missing authority initializes from
+per current worktree, and correlates canonical sessions. It then prunes durable Group memberships
+against those sessions, excludes but retains definitions for unconfigured projects, projects
+configured Groups deterministically, persists the same title records with the result, and replaces
+the in-memory snapshot. Membership repair and excluded definitions contribute provider-neutral
+errors to the reconcile timing record. Existing canonical titles win; missing authority initializes from
 the best non-ended custom session evidence before branch fallback, using insert-only reconcile
 persistence so stale evidence cannot overwrite a concurrent rename. It then
 publishes state-change and reconcile events and schedules metadata refresh.
@@ -440,9 +452,10 @@ sessions. Terminal attachment requires matching session or run identity. Session
 and activity totals derive from canonical sessions; only worktree totals derive
 from rows.
 
-Observer core serializes full reconciles, completed provider-health commits, and
-harness-report authorization plus base snapshot projection on one non-poisoning
-writer chain. A health commit persists one observation, coherently updates the
+Observer core serializes full reconciles, Group mutation commits,
+completed provider-health commits, and harness-report authorization plus base snapshot
+projection on one non-poisoning writer chain. A Group mutation projects only its command
+project, performs no reconcile repair, and never invokes providers. A health commit persists one observation, coherently updates the
 current health projection, and then publishes `provider.healthChanged` without a
 full provider scan. Readiness persistence and application happen after its base
 commit and revalidate the live snapshot.
@@ -661,8 +674,8 @@ expires.
 | Observer build ordering | Health and pidfile `version` carry display SemVer plus reserved `station.<sha256>` build metadata derived from both repository inputs and production package outputs. Exact identified selectors attach. At one display version, the lexicographically greater immutable build identity is the only candidate allowed to replace; the loser and any missing legacy identity refuse, so neither silently delegates to different code. Each source process verifies the published identity once before adopting it and reuses that selector without further Git or hash I/O for its lifetime. Different display versions retain SemVer precedence and the existing exact-string equal-precedence tiebreak, except that the declared public reset orders `0.0.0-pre-alpha.*` after internal `0.7.1-rc.*` previews. Missing, invalid, or stale identities refuse. Replacement requires complete corroborating identity and never uses automatic SIGKILL. |
 | Command ordering | Commands serialize by session, worktree, project, terminal target, or command-specific fallback scope. Different scopes can execute concurrently. |
 | Managed target release | Station target IDs are deterministic per worktree, so release is compare-and-delete on target plus expected Station session. A delayed old exit or failed-launch cleanup cannot remove a replacement binding; `false` proves absence or supersession, while rejection leaves cleanup uncertain. |
-| Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. Cancellation is cooperative; the process shutdown backstop handles ignored signals. |
-| Snapshot writer ordering | Full reconciles and harness-report authorization plus base projection share a non-poisoning promise chain. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
+| Command timeout and cancellation | Handlers receive a signal combining the runtime timeout and queue shutdown. A handler with a non-cancellable durable section calls `beginCommit` after read-only validation and immediately before its first write; cancellation may prevent entry, but the queue drains a begun commit to one completion. Other cancellation remains cooperative, and the process shutdown backstop handles ignored signals. |
+| Snapshot writer ordering | Full reconciles, Group mutation commits, and harness-report authorization plus base projection share a non-poisoning promise chain. A Group mutation projects only its command project and never scans providers, repairs other durable state, or publishes a reconcile event. Readiness persistence revalidates the live snapshot after its write. Scheduled reconcile requests coalesce; queued work after a run receives a later flush. |
 | Persisted harness compatibility | A harness adapter may use a provider-local strict schema to reject recognizable observations accepted by an earlier build. Unparseable legacy data remains admitted. Reconcile excludes only provider-rejected observations, then atomically replaces the affected session's derived native binding and readiness from the remaining admitted history; a succeeded acknowledgement remains authoritative. |
 | Provider reads | Reads are timeboxed, retried at the runtime boundary, and concurrency-limited. Failures become provider health and reconcile errors. |
 | Harness ingress | First-party hook transports delegate delivery and spooling to `stn-ingress`. Known build/schema/handoff incompatibility rejects without spooling. One Observer worker processes a bounded pending map; new reports can replace pending work for the same key, and a full map rejects unrelated work with a backpressure error. |
@@ -875,7 +888,7 @@ participate. Nonliteral dynamic module edges fail because their ownership cannot
 be resolved. External literal dynamics such as `bun:sqlite` and `node:sqlite`
 remain recorded external edges rather than source-cycle members.
 
-The current Observer graph contains 127 production modules and no strongly
+The current Observer graph contains 139 production modules and no strongly
 connected component. `migrations/migration.ts` now owns
 `ObserverSqliteMigration`, so numbered migration declarations do not depend on
 their ordered aggregator. `reconcile/run.ts` owns `ReconcileTiming`, so the

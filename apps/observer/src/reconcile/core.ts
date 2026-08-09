@@ -3,6 +3,7 @@ import type {
   HarnessEventReport,
   ProviderHealth,
   ProviderProjectConfig,
+  SessionGroupView,
   StationEvent,
   StationSnapshot,
   WorktreeRow,
@@ -18,6 +19,7 @@ import type {
   EventJournal,
   ObservationStore,
   ReconcileStore,
+  SessionGroupStore,
   SessionStore,
   WorktreeMetadataStore,
 } from "../persistence/index.js";
@@ -36,6 +38,7 @@ import {
   type ReconcileTiming,
   runReconcileOnce,
 } from "./run.js";
+import { projectSessionGroups } from "./sessionGroups.js";
 import {
   projectHarnessEventReportOntoSnapshot,
   type StatusProjectionResult,
@@ -52,6 +55,10 @@ export type ObserverCoreHealth = {
 
 export type ObserverCore = {
   reconcile(reason?: string): Promise<StationSnapshot>;
+  commitSessionGroupMutation(
+    projectId: string,
+    mutate: (snapshot: StationSnapshot) => Promise<SessionGroupView[]>,
+  ): Promise<StationSnapshot>;
   commitProviderHealthProbe(health: ProviderHealth): Promise<StationEvent | undefined>;
   projectHarnessEventStatus(report: HarnessEventReport): Promise<StatusProjectionResult>;
   clearTurnReadiness(input: { sessionId: string; token: string }): StationEvent | undefined;
@@ -68,6 +75,7 @@ export type CreateObserverCoreInput = {
   persistence?: ObservationStore &
     ReconcileStore &
     SessionStore &
+    SessionGroupStore &
     WorktreeMetadataStore &
     EventJournal;
   logger?: StationLogger;
@@ -141,6 +149,25 @@ export function createObserverCore(input: CreateObserverCoreInput): ObserverCore
 
       return enqueueSnapshotWrite(run);
     },
+    commitSessionGroupMutation: (projectId, mutate) =>
+      enqueueSnapshotWrite(async (): Promise<StationSnapshot> => {
+        const projectGroups = await mutate(snapshot);
+        const generatedAt = toIsoTimestamp(clock.now());
+        const retainedGroups = snapshot.sessionGroups.filter(
+          (group) => group.projectId !== projectId,
+        );
+        const sessionGroups = projectSessionGroups({
+          groups: [...retainedGroups, ...projectGroups],
+          projects,
+          sessions: snapshot.sessions,
+        });
+        snapshot = {
+          ...snapshot,
+          generatedAt,
+          sessionGroups,
+        };
+        return snapshot;
+      }),
     commitProviderHealthProbe: (health) =>
       enqueueSnapshotWrite(async (): Promise<StationEvent | undefined> => {
         const current = providerHealth[health.providerId];

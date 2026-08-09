@@ -5,13 +5,19 @@ import {
   CommandIdSchema,
   ProjectIdSchema,
   ProviderIdSchema,
+  SessionGroupIdSchema,
   SessionIdSchema,
   TimestampSchema,
   WorktreeIdSchema,
 } from "./ids.js";
 import { ProviderHealthSchema } from "./providers.js";
 import { nonEmptyStringSchema } from "./shared.js";
-import { SessionViewSchema, WorktreeAgentSchema, WorktreeRowSchema } from "./snapshot.js";
+import {
+  SessionGroupViewSchema,
+  SessionViewSchema,
+  WorktreeAgentSchema,
+  WorktreeRowSchema,
+} from "./snapshot.js";
 
 export const WorktreeAgentStateChangeSourceSchema = z.enum(["harness_event_report", "reconcile"]);
 export const StationEventTypeSchema = z.enum([
@@ -25,6 +31,8 @@ export const StationEventTypeSchema = z.enum([
   "session.created",
   "session.updated",
   "session.removed",
+  "sessionGroup.updated",
+  "sessionGroup.removed",
   "command.accepted",
   "command.started",
   "command.succeeded",
@@ -99,6 +107,27 @@ export const SessionUpdatedEventSchema = z
 
 export const SessionRemovedEventSchema = z
   .object({ type: z.literal("session.removed"), sessionId: SessionIdSchema })
+  .strict();
+
+export const SessionGroupUpdatedEventSchema = z
+  .object({
+    type: z.literal("sessionGroup.updated"),
+    at: TimestampSchema,
+    commandId: CommandIdSchema,
+    group: SessionGroupViewSchema,
+    ...DiagnosticEventFields,
+  })
+  .strict();
+
+export const SessionGroupRemovedEventSchema = z
+  .object({
+    type: z.literal("sessionGroup.removed"),
+    at: TimestampSchema,
+    commandId: CommandIdSchema,
+    projectId: ProjectIdSchema,
+    groupId: SessionGroupIdSchema,
+    ...DiagnosticEventFields,
+  })
   .strict();
 
 export const CommandAcceptedEventSchema = z
@@ -184,6 +213,8 @@ export const StationEventSchema = z.discriminatedUnion("type", [
   SessionCreatedEventSchema,
   SessionUpdatedEventSchema,
   SessionRemovedEventSchema,
+  SessionGroupUpdatedEventSchema,
+  SessionGroupRemovedEventSchema,
   CommandAcceptedEventSchema,
   CommandStartedEventSchema,
   CommandSucceededEventSchema,
@@ -210,6 +241,17 @@ export function stationEventMetadata(event: StationEvent): StationEventMetadata 
     case "command.failed": {
       const metadata: StationEventMetadata = {
         commandId: event.commandId,
+      };
+      if (event.traceId !== undefined) {
+        metadata.traceId = event.traceId;
+      }
+      return metadata;
+    }
+    case "sessionGroup.updated":
+    case "sessionGroup.removed": {
+      const metadata: StationEventMetadata = {
+        commandId: event.commandId,
+        timestamp: event.at,
       };
       if (event.traceId !== undefined) {
         metadata.traceId = event.traceId;

@@ -122,6 +122,28 @@
     "type": "session.removed",
     "sessionId": "ses_web_feature_auth"
   },
+  "sessionGroupUpdated": {
+    "type": "sessionGroup.updated",
+    "at": "2026-05-20T12:01:00.000Z",
+    "commandId": "cmd_group_1",
+    "traceId": "trc_group_1",
+    "group": {
+      "id": "grp_active",
+      "projectId": "web",
+      "name": "Active work",
+      "sessionIds": ["ses_web_feature_auth"],
+      "version": 1,
+      "createdAt": "2026-05-20T12:01:00.000Z",
+      "updatedAt": "2026-05-20T12:01:00.000Z"
+    }
+  },
+  "sessionGroupRemoved": {
+    "type": "sessionGroup.removed",
+    "at": "2026-05-20T12:02:00.000Z",
+    "commandId": "cmd_group_2",
+    "projectId": "web",
+    "groupId": "grp_active"
+  },
   "commandAccepted": {
     "type": "command.accepted",
     "commandId": "cmd_reconcile_1",
