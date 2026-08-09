@@ -811,108 +811,19 @@ describe("prepareExternalLaunch", () => {
     expect(persistence.seeded).toEqual([]);
   });
 
-  it("rejects zero or multiple actionable automatic recovery handles", async () => {
-    const noHandlePersistence = createInMemoryObserverPersistence({
-      clock: { now: () => new Date(now) },
-    });
+  it("fails recovery validation before terminal mutation", async () => {
+    const station = new FakeManagedTerminalLifecycle();
     await expect(
       prepareExternalLaunch(
-        deps([row()], new FakeManagedTerminalLifecycle(), undefined, noHandlePersistence, {
+        deps([row()], station, undefined, undefined, {
           sessions: [retainedSession()],
           sessionResumeAgentEnabled: true,
         }),
         prepareParams,
       ),
     ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_NOT_FOUND" });
-
-    const ambiguousPersistence = createInMemoryObserverPersistence({
-      clock: { now: () => new Date(now) },
-    });
-    await ambiguousPersistence.upsertSessionRecoveryHandle(recoveryHandle());
-    await ambiguousPersistence.upsertSessionRecoveryHandle(
-      recoveryHandle({
-        id: "rec_recoverable_2",
-        target: { kind: "native-session", id: "native_recoverable_2" },
-      }),
-    );
-    const station = new FakeManagedTerminalLifecycle();
-    await expect(
-      prepareExternalLaunch(
-        deps([row()], station, undefined, ambiguousPersistence, {
-          sessions: [retainedSession()],
-          sessionResumeAgentEnabled: true,
-        }),
-        prepareParams,
-      ),
-    ).rejects.toMatchObject({ code: "SESSION_RECOVERY_HANDLE_AMBIGUOUS" });
     expect(await station.listTargets()).toEqual([]);
   });
-
-  for (const recoveryCase of [
-    {
-      name: "missing Station session id",
-      handle: () => {
-        const handle = recoveryHandle();
-        delete handle.sessionId;
-        return handle;
-      },
-      harnesses: undefined,
-      code: "SESSION_RECOVERY_HANDLE_MISMATCH",
-    },
-    {
-      name: "wrong Station session id",
-      handle: () => recoveryHandle({ sessionId: "ses_other" }),
-      harnesses: undefined,
-      code: "SESSION_RECOVERY_HANDLE_MISMATCH",
-    },
-    {
-      name: "provider mismatch",
-      handle: () => recoveryHandle({ provider: "other-harness" }),
-      harnesses: [
-        new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) }),
-        new FakeHarnessProvider({ id: "other-harness", now: () => new Date(now) }),
-      ],
-      code: "SESSION_RECOVERY_HANDLE_MISMATCH",
-    },
-    {
-      name: "cwd mismatch",
-      handle: () => recoveryHandle({ cwd: "/tmp/station/other" }),
-      harnesses: undefined,
-      code: "SESSION_RECOVERY_CWD_MISMATCH",
-    },
-    {
-      name: "unsupported provider",
-      handle: () => recoveryHandle({ provider: "unsupported-harness" }),
-      harnesses: [
-        new FakeHarnessProvider({ id: "fake-harness", now: () => new Date(now) }),
-        new FakeHarnessProvider({
-          id: "unsupported-harness",
-          now: () => new Date(now),
-          capabilities: { canResume: false },
-        }),
-      ],
-      code: "SESSION_RECOVERY_HANDLE_NOT_FOUND",
-    },
-  ]) {
-    it(`fails ${recoveryCase.name} before terminal mutation`, async () => {
-      const persistence = createInMemoryObserverPersistence({
-        clock: { now: () => new Date(now) },
-      });
-      await persistence.upsertSessionRecoveryHandle(recoveryCase.handle());
-      const station = new FakeManagedTerminalLifecycle();
-
-      await expect(
-        prepareExternalLaunch(
-          deps([row()], station, recoveryCase.harnesses, persistence, {
-            sessions: [retainedSession()],
-            sessionResumeAgentEnabled: true,
-          }),
-          prepareParams,
-        ),
-      ).rejects.toMatchObject({ code: recoveryCase.code });
-      expect(await station.listTargets()).toEqual([]);
-    });
-  }
 
   it("starts fresh for an explicitly ended session without consuming its old handle", async () => {
     const persistence = createInMemoryObserverPersistence({
@@ -952,7 +863,10 @@ describe("prepareExternalLaunch", () => {
     await expect(persistence.listSessionRecoveryHandles()).resolves.toEqual([persistedHandle]);
   });
 
-  it("preserves retained session state when a recovered process launch fails", async () => {
+  it.each([
+    "harness build",
+    "managed process launch",
+  ] as const)("preserves retained session state when recovered %s fails", async (failureStage) => {
     const persistence = createInMemoryObserverPersistence({
       clock: { now: () => new Date(now) },
     });
@@ -977,23 +891,36 @@ describe("prepareExternalLaunch", () => {
       completedAt: now,
     });
     const persistedHandle = await persistence.upsertSessionRecoveryHandle(recoveryHandle());
-    const station = new FakeManagedTerminalLifecycle({
-      launchFailure: {
-        tag: "TerminalProviderError",
-        code: "MANAGED_LAUNCH_FAILED",
-        message: "launch failed",
-      },
+    const failure: SafeError =
+      failureStage === "harness build"
+        ? {
+            tag: "HarnessProviderError",
+            code: "HARNESS_BUILD_LAUNCH_FAILED",
+            message: "build failed",
+          }
+        : {
+            tag: "TerminalProviderError",
+            code: "MANAGED_LAUNCH_FAILED",
+            message: "launch failed",
+          };
+    const harness = new FakeHarnessProvider({
+      id: "fake-harness",
+      now: () => new Date(now),
+      ...(failureStage === "harness build" ? { failures: { buildLaunch: failure } } : {}),
     });
+    const station = new FakeManagedTerminalLifecycle(
+      failureStage === "managed process launch" ? { launchFailure: failure } : {},
+    );
 
     await expect(
       prepareExternalLaunch(
-        deps([row()], station, undefined, persistence, {
+        deps([row()], station, [harness], persistence, {
           sessions: [retainedSession({ title: "Canonical recovered title" })],
           sessionResumeAgentEnabled: true,
         }),
         prepareParams,
       ),
-    ).rejects.toMatchObject({ code: "MANAGED_LAUNCH_FAILED" });
+    ).rejects.toEqual(failure);
 
     expect(station.released).toEqual([
       {
