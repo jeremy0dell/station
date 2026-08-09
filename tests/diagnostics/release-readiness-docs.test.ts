@@ -128,6 +128,7 @@ describe("release readiness docs", () => {
       promote,
       installer,
       installSmoke,
+      installerBinaryUpdate,
     ] = await Promise.all(
       [
         "README.md",
@@ -141,6 +142,7 @@ describe("release readiness docs", () => {
         ".github/workflows/promote-release.yml",
         "scripts/install.sh",
         "scripts/test-runners/run-install-smoke.mjs",
+        "apps/cli/src/update/installerBinaryUpdate.ts",
       ].map(read),
     );
     const packageJson = await readPackageManifest();
@@ -170,6 +172,13 @@ describe("release readiness docs", () => {
     }
 
     expect(readme).toContain(exactInstallerUrl);
+    for (const [path, document] of [
+      ["README.md", readme],
+      ["docs/install.md", install],
+      ["docs/README.md", docsReadme],
+    ] as const) {
+      expect(document, path).toContain("curl --disable -fsSL");
+    }
     expect(readme.indexOf(exactInstallerUrl)).toBeLessThan(readme.indexOf("## Why Station"));
     expect(readme.indexOf("stn setup")).toBeLessThan(readme.indexOf("## Why Station"));
     expect(readme).toContain("[installation guide](docs/install.md)");
@@ -186,6 +195,10 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("release **draft**");
     expect(singleBinary).toContain("six assets");
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
+    expect(singleBinary).toContain("station-installer-binary-v1");
+    expect(singleBinary).toContain("adds no update command or runtime crossover");
+    expect(install).toContain("Automatic-update ownership");
+    expect(install).toContain("existing installations continue to work but are not enrolled");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
     expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.5.1");
     expect(development).toContain("v0.7.1-rc.8");
@@ -196,6 +209,9 @@ describe("release readiness docs", () => {
     expect(installer).toContain('embedded_version=""');
     expect(installer).toContain("releases/download/$tag");
     expect(installer).toContain("run_curl");
+    expect(installer).toContain('curl --disable "$@"');
+    expect(installer).toContain("--expected-installation");
+    expect(installer).toContain("station-installer-binary-v1");
     expect(installer).toContain("STATION_INSTALL_RELEASE_ID");
     expect(installer).not.toContain("releases/latest");
     expect(installer).not.toContain("contents/scripts/install.sh");
@@ -207,6 +223,9 @@ describe("release readiness docs", () => {
     expect(installSmoke).toContain("assertStrictPublicFlow");
     expect(installSmoke).toContain("strict stamped public flow without gh");
     expect(installSmoke).toContain("STATION_INSTALL_RELEASE_ID");
+    expect(installSmoke).toContain("scenarioReceiptAndExpectedInstallation");
+    expect(installerBinaryUpdate).toContain('const channel = "installer-binary" as const');
+    expect(installerBinaryUpdate).toContain("--expected-installation");
 
     expect(release).toContain("Stamp release installer");
     expect(release).toContain(['embedded_version=\\"$', 'TAG\\"'].join(""));
@@ -238,6 +257,8 @@ describe("release readiness docs", () => {
     expect(installDraft).toContain("STATION_INSTALL_RELEASE_ID");
     expect(installDraft).not.toContain('--version "$TAG"');
     expect(installDraft).toContain("0.7.1-rc.8");
+    expect(installDraft).toContain(".station-install-receipt");
+    expect(installDraft).toContain("station-installer-binary-v1");
     const recordCandidate = release.slice(release.indexOf("  record-accepted-candidate:"));
     expect(recordCandidate).toContain("asset-ids.txt");
     expect(recordCandidate).toContain("releaseId");
@@ -246,9 +267,12 @@ describe("release readiness docs", () => {
     expect(promote).toContain("Download exact-tag public installer");
     expect(promote).toContain("Install without GitHub credentials or gh");
     expect(promote).toContain("releases/download/$TAG/install.sh");
+    expect(promote).toContain("curl --disable --fail --silent --show-error --location");
     expect(promote).toContain('test ! -e "$public_path/gh"');
     expect(promote).toContain("env -u GH_TOKEN -u GITHUB_TOKEN");
     expect(promote).toContain("install.sh");
+    expect(promote).toContain(".station-install-receipt");
+    expect(promote).toContain("station-installer-binary-v1");
     for (const target of ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"]) {
       expect(release).toContain(target);
       expect(promote).toContain(target);

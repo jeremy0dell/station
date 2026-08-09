@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { runRuntimeBoundary, runRuntimeBoundaryWithTimeout } from "./boundary.js";
 import {
   type ExternalCommandError,
-  isSafeError,
+  normalizeCancellationError,
   type RuntimeSafeError,
   type RuntimeSafeErrorFallback,
   safeErrorFromUnknown,
@@ -504,11 +504,7 @@ function linkAbortSignals(...signals: Array<AbortSignal | undefined>): {
 }
 
 function isAbortLikeError(error: unknown): boolean {
-  if (isSafeError(error)) {
-    return error.tag === "CancellationError" || error.code === "EXTERNAL_COMMAND_ABORTED";
-  }
-  const cause = normalizeProcessError(error);
-  return cause.name === "AbortError" || cause.code === "ABORT_ERR";
+  return normalizeCancellationError(error) !== undefined;
 }
 
 export function redactCommandOutput(value: string): string {

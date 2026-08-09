@@ -433,6 +433,7 @@ jobs:
           bin_dir="$install_home/.local/bin"
           data_home="$install_home/.local/share"
           license_path="$data_home/station/LICENSE"
+          receipt_path="$bin_dir/.station-install-receipt"
           runtime_path="$RUNNER_TEMP/runtime-path"
           mkdir -p "$runtime_path"
 
@@ -447,10 +448,14 @@ jobs:
           test -x "$bin_dir/stn"
           test "$(readlink "$bin_dir/stn-ingress")" = stn
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          test -f "$receipt_path"
+          test ! -L "$receipt_path"
           test -f "$license_path"
           test ! -L "$license_path"
           test "$(mode "$bin_dir/stn")" = 755
+          test "$(mode "$receipt_path")" = 600
           test "$(mode "$license_path")" = 644
+          test "$(cat "$receipt_path")" = station-installer-binary-v1
           ! cmp -s "$RUNNER_TEMP/old-stn-fixture" "$bin_dir/stn"
           cmp -s LICENSE "$license_path"
 
@@ -471,6 +476,7 @@ jobs:
           bin_dir="$install_home/.local/bin"
           data_home="$install_home/.local/share"
           license_path="$data_home/station/LICENSE"
+          receipt_path="$bin_dir/.station-install-receipt"
           lock_dir="$bin_dir/.station-install.lock"
           lock_stderr="$RUNNER_TEMP/locked-install.stderr"
 
@@ -486,7 +492,7 @@ jobs:
 
           before_binary="$(cksum < "$bin_dir/stn")"
           before_license="$(cksum < "$license_path")"
-          before_entries="$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$license_path")"
+          before_entries="$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path" "$license_path")"
           if (
             umask 0777
             HOME="$install_home" \
@@ -504,11 +510,12 @@ jobs:
           test -d "$lock_dir"
           test "$(cksum < "$bin_dir/stn")" = "$before_binary"
           test "$(cksum < "$license_path")" = "$before_license"
-          test "$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$license_path")" = "$before_entries"
+          test "$(ls -ldi "$bin_dir/stn" "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path" "$license_path")" = "$before_entries"
           test "$(readlink "$bin_dir/stn-ingress")" = stn
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
 
           rm -rf "$lock_dir"
+          before_owned_entries="$(ls -ldi "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path")"
           (
             umask 0777
             HOME="$install_home" \
@@ -517,8 +524,10 @@ jobs:
           )
 
           test ! -e "$lock_dir"
+          test "$(ls -ldi "$bin_dir/stn-ingress" "$bin_dir/stn-tmux-popup" "$receipt_path")" = "$before_owned_entries"
           test "$(readlink "$bin_dir/stn-ingress")" = stn
           test "$(readlink "$bin_dir/stn-tmux-popup")" = stn
+          test "$(cat "$receipt_path")" = station-installer-binary-v1
           actual="$(env -i \
             HOME="$install_home" \
             XDG_DATA_HOME="$data_home" \

@@ -11,6 +11,7 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -99,6 +100,7 @@ try {
     await scenarioExplicitRollbackAndDraft();
     await scenarioStrictDownloadFlows();
     await scenarioAuthenticatedReleaseValidation();
+    scenarioReceiptAndExpectedInstallation();
     await scenarioDownloadFailuresAndRetries();
     await scenarioArtifactValidation();
     await scenarioStrictVersionValidation();
@@ -586,6 +588,143 @@ function scenarioAuthenticatedReleaseValidation() {
     assertFailure(result, expected, label);
     assertEqual(readFileSync(binary, "utf8"), "existing installation\n", `${label} preservation`);
     assertNoInstallerResidue(installDir, dataDir);
+  }
+}
+
+function scenarioReceiptAndExpectedInstallation() {
+  const enrolledInstallDir = join(root, "receipt-enrollment-bin");
+  const enrolledDataHome = join(root, "receipt-enrollment-data");
+  const first = runInstaller({
+    installDir: enrolledInstallDir,
+    platform: linuxX64(),
+    dataHome: enrolledDataHome,
+  });
+  assertSuccess(first, "first install receipt enrollment");
+  assertInstalled({
+    installDir: enrolledInstallDir,
+    dataHome: enrolledDataHome,
+    tag: releaseTag,
+    target: "linux-x64",
+  });
+  const receiptPath = join(enrolledInstallDir, ".station-install-receipt");
+  const enrolledReceipt = lstatSync(receiptPath);
+  const upgrade = runInstaller({
+    installDir: enrolledInstallDir,
+    platform: linuxX64(),
+    version: rollbackTag,
+    dataHome: enrolledDataHome,
+  });
+  assertSuccess(upgrade, "receipt-preserving upgrade");
+  assertInstalled({
+    installDir: enrolledInstallDir,
+    dataHome: enrolledDataHome,
+    tag: rollbackTag,
+    target: "linux-x64",
+  });
+  const preservedReceipt = lstatSync(receiptPath);
+  assertEqual(
+    [preservedReceipt.dev, preservedReceipt.ino],
+    [enrolledReceipt.dev, enrolledReceipt.ino],
+    "upgrades preserve receipt identity",
+  );
+
+  const malformedInstallDir = join(root, "malformed-receipt-bin");
+  const malformedDataHome = join(root, "malformed-receipt-data");
+  seedInstallation({
+    installDir: malformedInstallDir,
+    dataHome: malformedDataHome,
+    tag: rollbackTag,
+  });
+  const malformedReceipt = join(malformedInstallDir, ".station-install-receipt");
+  writeText(malformedReceipt, "not-owned\n", 0o644);
+  const malformedBefore = lstatSync(malformedReceipt);
+  const malformed = runInstaller({
+    installDir: malformedInstallDir,
+    platform: linuxX64(),
+    dataHome: malformedDataHome,
+  });
+  assertFailure(malformed, "receipt", "malformed receipt refusal");
+  assertNoGhApiCalls(malformed, "malformed receipt refusal");
+  assertEqual(readFileSync(malformedReceipt, "utf8"), "not-owned\n", "malformed receipt bytes");
+  assertMode(malformedReceipt, 0o644, "malformed receipt mode preserved");
+  const malformedAfter = lstatSync(malformedReceipt);
+  assertEqual(
+    [malformedAfter.dev, malformedAfter.ino],
+    [malformedBefore.dev, malformedBefore.ino],
+    "malformed receipt identity preserved",
+  );
+
+  const expectedInstallDir = join(root, "expected-installation-bin");
+  const expectedDataHome = join(root, "expected-installation-data");
+  seedInstallation({
+    installDir: expectedInstallDir,
+    dataHome: expectedDataHome,
+    tag: rollbackTag,
+    withReceipt: true,
+  });
+  const expectedFile = join(root, "expected-installation.valid");
+  writeExpectedInstallation(expectedFile, expectedInstallDir);
+  const expected = runInstaller({
+    installDir: expectedInstallDir,
+    platform: linuxX64(),
+    dataHome: expectedDataHome,
+    extraArguments: ["--expected-installation", expectedFile],
+  });
+  assertSuccess(expected, "valid expected installation contract");
+  assertInstalled({
+    installDir: expectedInstallDir,
+    dataHome: expectedDataHome,
+    tag: releaseTag,
+    target: "linux-x64",
+  });
+
+  for (const changed of ["binary", "ingress", "receipt"]) {
+    const installDir = join(root, `expected-${changed}-race-bin`);
+    const dataHome = join(root, `expected-${changed}-race-data`);
+    seedInstallation({ installDir, dataHome, tag: rollbackTag, withReceipt: true });
+    const expectation = join(root, `expected-${changed}-race.contract`);
+    writeExpectedInstallation(expectation, installDir);
+    if (changed === "binary") {
+      writeExecutable(join(installDir, "stn"), "#!/bin/sh\nprintf 'tampered\\n'\n");
+    } else if (changed === "ingress") {
+      renameSync(join(installDir, "stn-ingress"), join(root, "expected-ingress-race.previous"));
+      symlinkSync("stn", join(installDir, "stn-ingress"));
+    } else {
+      renameSync(
+        join(installDir, ".station-install-receipt"),
+        join(root, "expected-receipt-race.previous"),
+      );
+      writeText(
+        join(installDir, ".station-install-receipt"),
+        "station-installer-binary-v1\n",
+        0o600,
+      );
+    }
+    const refused = runInstaller({
+      installDir,
+      platform: linuxX64(),
+      dataHome,
+      extraArguments: ["--expected-installation", expectation],
+    });
+    assertFailure(refused, "changed before installer commit", `${changed} expectation race`);
+    assertNoGhApiCalls(refused, `${changed} expectation race`);
+  }
+
+  const validExpectation = readFileSync(expectedFile, "utf8");
+  for (const [label, contents] of [
+    ["duplicate", `${validExpectation}binary_inode=1\n`],
+    ["unknown", `${validExpectation}unknown=1\n`],
+    ["missing", validExpectation.replace(/^receipt_inode=.*\n/m, "")],
+  ]) {
+    const contract = join(root, `expected-installation.${label}`);
+    writeText(contract, contents, 0o600);
+    const result = runInstaller({
+      installDir: join(root, `invalid-expected-${label}-bin`),
+      platform: linuxX64(),
+      extraArguments: ["--expected-installation", contract],
+    });
+    assertFailure(result, "expected installation file", `strict expected contract ${label}`);
+    assertNoGhApiCalls(result, `strict expected contract ${label}`);
   }
 }
 
@@ -1412,6 +1551,10 @@ function scenarioCommitFailures() {
       !existsSync(join(dataHome, "station", "LICENSE")),
       `${testCase.label} first-install leaves license absent`,
     );
+    assert(
+      !existsSync(join(installDir, ".station-install-receipt")),
+      `${testCase.label} first-install leaves receipt absent before commit`,
+    );
     assertNoInstallerResidue(installDir, dataHome);
   }
 }
@@ -2040,7 +2183,12 @@ async function scenarioSigkillLeavesActionableLocks() {
     dataHome: committedDataHome,
     tag: releaseTag,
     target: "linux-x64",
+    receipt: false,
   });
+  assert(
+    !existsSync(join(committedInstallDir, ".station-install-receipt")),
+    "SIGKILL after binary commit can interrupt receipt publication",
+  );
   assert(existsSync(committedLock), "SIGKILL after commit leaves command lock");
   assert(existsSync(committedLicenseLock), "SIGKILL after commit leaves license lock");
 
@@ -2476,7 +2624,7 @@ function writeFakeCommands() {
       'url=""',
       'while [ "$#" -gt 0 ]; do',
       '  case "$1" in',
-      "    --fail|--silent|--show-error|--location|--tlsv1.2) shift ;;",
+      "    --disable|--fail|--silent|--show-error|--location|--tlsv1.2) shift ;;",
       '    --proto|--proto-redir) [ "$#" -ge 2 ]; shift 2 ;;',
       '    https://*) [ -z "$url" ]; url=$1; shift ;;',
       "    *) exit 2 ;;",
@@ -3054,7 +3202,7 @@ function resolveCommand(command) {
   return result.stdout.trim();
 }
 
-function seedInstallation({ installDir, dataHome, tag, withAliases = true }) {
+function seedInstallation({ installDir, dataHome, tag, withAliases = true, withReceipt = false }) {
   makeDirectory(installDir);
   const version = tag.slice(1);
   writeExecutable(
@@ -3067,12 +3215,44 @@ if [ "\${1:-}" = --version ]; then printf '%s\\n' '${version}'; else printf '%s\
     symlinkSync("stn", join(installDir, "stn-ingress"));
     symlinkSync("stn", join(installDir, "stn-tmux-popup"));
   }
+  if (withReceipt) {
+    writeText(join(installDir, ".station-install-receipt"), "station-installer-binary-v1\n", 0o600);
+  }
   const licenseDir = join(dataHome, "station");
   makeDirectory(licenseDir);
   writeText(join(licenseDir, "LICENSE"), `Station fixture license ${tag}\n`, 0o644);
 }
 
-function assertInstalled({ installDir, dataHome = dataDir, tag, target }) {
+function writeExpectedInstallation(path, installDir) {
+  const binary = join(installDir, "stn");
+  const ingress = join(installDir, "stn-ingress");
+  const popup = join(installDir, "stn-tmux-popup");
+  const receipt = join(installDir, ".station-install-receipt");
+  const binaryStat = lstatSync(binary);
+  const ingressStat = lstatSync(ingress);
+  const popupStat = lstatSync(popup);
+  const receiptStat = lstatSync(receipt);
+  const binaryHash = createHash("sha256").update(readFileSync(binary)).digest("hex");
+  writeText(
+    path,
+    [
+      "format=station-installer-expected-v1",
+      `binary_sha256=${binaryHash}`,
+      `binary_device=${binaryStat.dev}`,
+      `binary_inode=${binaryStat.ino}`,
+      `ingress_device=${ingressStat.dev}`,
+      `ingress_inode=${ingressStat.ino}`,
+      `popup_device=${popupStat.dev}`,
+      `popup_inode=${popupStat.ino}`,
+      `receipt_device=${receiptStat.dev}`,
+      `receipt_inode=${receiptStat.ino}`,
+      "",
+    ].join("\n"),
+    0o600,
+  );
+}
+
+function assertInstalled({ installDir, dataHome = dataDir, tag, target, receipt = true }) {
   const binary = join(installDir, "stn");
   const result = spawnSync(binary, [], syncOptions({ env: { PATH: "/usr/bin:/bin" } }));
   assertSuccess(result, `${target} installed binary`);
@@ -3080,6 +3260,15 @@ function assertInstalled({ installDir, dataHome = dataDir, tag, target }) {
   assertRuntimeVersion(installDir, tag, `${target} installed entrypoints`);
   assertLicense(dataHome, tag, `${target} installed license`);
   assertMode(binary, 0o755, `${target} executable mode`);
+  if (receipt) assertInstallerReceipt(installDir, `${target} installer receipt`);
+}
+
+function assertInstallerReceipt(installDir, label) {
+  const receipt = join(installDir, ".station-install-receipt");
+  assert(existsSync(receipt), `${label} exists`);
+  assert(!isSymlink(receipt), `${label} is not a symlink`);
+  assertEqual(readFileSync(receipt, "utf8"), "station-installer-binary-v1\n", `${label} contents`);
+  assertMode(receipt, 0o600, `${label} mode`);
 }
 
 function assertRuntimeVersion(
@@ -3258,7 +3447,9 @@ function assertNoInstallerResidue(installDir, dataHome) {
   for (const directory of directories) {
     if (!existsSync(directory)) continue;
     const residue = readdirSync(directory).filter(
-      (name) => name.startsWith(".station-install") || name.startsWith("station-install."),
+      (name) =>
+        name !== ".station-install-receipt" &&
+        (name.startsWith(".station-install") || name.startsWith("station-install.")),
     );
     assertEqual(residue, [], `installer residue in ${directory}`);
   }
@@ -3323,6 +3514,7 @@ function assertStrictPublicFlow(result, { tag, target }) {
   const baseUrl = "https://github.com/jeremy0dell/station/releases";
   const archiveName = `stn-${tag}-${target}.tar.gz`;
   const common = [
+    "--disable",
     "--fail",
     "--silent",
     "--show-error",

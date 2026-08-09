@@ -430,8 +430,9 @@ claim bit-for-bit reproducible Bun executables or archives.
 
 The released `scripts/install.sh` is self-versioned for one exact public tag and
 supports an explicit `--version` override and `--install-dir` (default
-`~/.local/bin`). Its public path uses unauthenticated `curl` only for the exact
-tagged archive and `SHA256SUMS`; it has no `latest` or source-branch fallback.
+`~/.local/bin`). Its public path uses unauthenticated `curl --disable` only for
+the exact tagged archive and `SHA256SUMS`, isolating downloads from user curl
+configuration; it has no `latest` or source-branch fallback.
 The source installer is intentionally unstamped and therefore requires an exact
 version. Draft-release CI preserves authenticated `STATION_INSTALL_RELEASE_ID`
 handling so it can download mutable draft assets by their captured IDs without
@@ -473,10 +474,24 @@ retry. A legacy lock with one `owner` file remains readable for refusal.
 Existing exact `stn-ingress` and `stn-tmux-popup` symlinks remain stable; a
 missing alias is considered created only after `ln` succeeds and cleanup
 removes it only while it still exactly matches this attempt. Immediately before
-commit, both aliases are revalidated as symlinks to `stn` and binary/license
-destinations are revalidated against their accepted types. The previous license
-is backed up, the new `LICENSE` is installed, and the verified staged `stn` is
-atomically renamed last as the sole runtime commit point.
+license mutation and again immediately before commit, both aliases are
+revalidated as symlinks to `stn`, the installer receipt is revalidated, and
+binary/license destinations are revalidated against their accepted types. An
+internal update invocation additionally binds the existing binary hash, device,
+and inode and the device/inode identities of both aliases and the receipt while
+both locks are held. The previous license is backed up, the new `LICENSE` is
+installed, and the verified staged `stn` is atomically renamed last as the
+sole runtime commit point.
+
+The receipt is `<install-dir>/.station-install-receipt`, a regular non-symlink
+`0600` file containing exactly `station-installer-binary-v1`. A valid existing
+receipt keeps its inode. A missing receipt is published without clobbering only
+after binary commit; a malformed receipt is refused. The future
+`installer-binary` update channel requires this ownership marker, but this
+slice adds no update command or runtime crossover. The immutable current public
+`v0.0.0-pre-alpha.5.1` installer predates the receipt, so a later exact-tag
+manual install is required once before automatic updates can own an existing
+layout.
 
 A caught HUP, INT, or TERM forwards to the active child, runs bounded
 TERM/KILL/reap cleanup, and exits 129, 130, or 143. If a failed final rename
@@ -493,7 +508,8 @@ is not equivalent: the installer does not fsync files or containing directories
 and therefore makes no post-power-loss durability guarantee; old/new
 cross-filesystem `LICENSE` metadata may also remain. The deterministic
 `smoke:install` suite exercises this boundary with fake exact-tag public
-downloads and authenticated draft assets and is part of `test:all`.
+downloads, authenticated draft assets, receipt lifecycle checks, and
+identity-race refusal and is part of `test:all`.
 
 After success, all three bare launchers are resolved physically. If every one
 points into the new install directory, the installer prints only
