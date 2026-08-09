@@ -1,6 +1,6 @@
 import { isCompiledBinary } from "@station/runtime";
 import type { SetupToolInstallOperation } from "@station/setup-core";
-import { resolveSetupMessage, setupMessageRef } from "@station/setup-messages";
+import { setupMessageRef } from "@station/setup-messages";
 import type { CliEnv } from "../../env.js";
 import { createSetupOperationAdapter } from "./adapters/operations.js";
 import { checkBrewDependency } from "./checks/brew.js";
@@ -16,6 +16,7 @@ import type {
   TextSetupSystemRow,
   TextSetupSystemView,
 } from "./presenters/text.js";
+import { SETUP_TOOL_DEFINITIONS, setupToolDefinitions } from "./toolDefinitions.js";
 import type { SetupCommandDeps, SetupCommandOptions, SetupCommandResult } from "./types.js";
 
 export async function runSetupSystemCommand(
@@ -31,16 +32,9 @@ export async function runSetupSystemCommand(
 
   let operationFailed = false;
   if (args.yes && initial.brew.status === "ok") {
-    const operations: SetupToolInstallOperation[] = [];
-    if (initial.worktrunk.status === "missing")
-      operations.push(systemInstallOperation("worktrunk"));
-    if (initial.tmux.status === "missing") operations.push(systemInstallOperation("tmux"));
-    if (!initial.compiled && initial.bun.status === "missing") {
-      operations.push(systemInstallOperation("bun"));
-    }
-    if (initial.diffViewer.status === "missing") {
-      operations.push(systemInstallOperation("diff-viewer"));
-    }
+    const operations = applicableSystemTools(initial).flatMap(({ id, factKey }) =>
+      initial[factKey].status === "missing" ? [systemInstallOperation(id)] : [],
+    );
     const executeOperation = createSetupOperationAdapter({ deps });
     // System prerequisites are ordered and fail-fast, so later installs never run after a required package failure.
     for (const operation of operations) {
@@ -94,7 +88,7 @@ async function collectSystemFacts(
     checkSetupWorktrunk(dependencyOptions),
     checkSetupTmux(dependencyOptions),
     compiled
-      ? Promise.resolve({ status: "ok" as const, command: "bun" })
+      ? Promise.resolve({ status: "ok" as const, command: SETUP_TOOL_DEFINITIONS.bun.command })
       : checkSetupBun(dependencyOptions),
     checkSetupDiffViewer(dependencyOptions),
     checkBrewDependency({
@@ -118,12 +112,9 @@ function projectSystemView(
   facts: SystemFacts,
 ): TextSetupSystemView {
   const rows: TextSetupSystemRow[] = [
-    dependencySystemRow(facts.worktrunk.status, setupMessageRef("label.worktrunk")),
-    dependencySystemRow(facts.tmux.status, setupMessageRef("label.tmux")),
-    ...(facts.compiled
-      ? []
-      : [dependencySystemRow(facts.bun.status, setupMessageRef("label.bun"))]),
-    dependencySystemRow(facts.diffViewer.status, setupMessageRef("label.diff-viewer")),
+    ...applicableSystemTools(facts).map(({ factKey, label }) =>
+      dependencySystemRow(facts[factKey].status, label),
+    ),
     {
       status: facts.brew.status === "ok" ? "ok" : facts.brew.status,
       label: setupMessageRef("label.homebrew"),
@@ -154,13 +145,14 @@ function toolchainSystemRow(
 
 function systemReady(facts: SystemFacts): boolean {
   return (
-    facts.worktrunk.status === "ok" &&
-    facts.tmux.status === "ok" &&
-    (facts.compiled || facts.bun.status === "ok") &&
-    facts.diffViewer.status === "ok" &&
+    applicableSystemTools(facts).every(({ factKey }) => facts[factKey].status === "ok") &&
     facts.toolchain.node.status === "ok" &&
     facts.toolchain.pnpm.status === "ok"
   );
+}
+
+function applicableSystemTools(facts: SystemFacts) {
+  return setupToolDefinitions.filter(({ id }) => id !== "bun" || !facts.compiled);
 }
 
 function systemInstallOperation(
@@ -180,17 +172,10 @@ function systemToolInstallLabel(input: {
   readonly text: (reference: ReturnType<typeof setupMessageRef>) => string;
 }): string {
   const { operation, text } = input;
-  const label =
-    operation.tool === "worktrunk"
-      ? setupMessageRef("label.worktrunk")
-      : operation.tool === "tmux"
-        ? setupMessageRef("label.tmux")
-        : operation.tool === "bun"
-          ? setupMessageRef("label.bun")
-          : setupMessageRef("label.diff-viewer");
+  const definition = SETUP_TOOL_DEFINITIONS[operation.tool];
   return text(
     setupMessageRef("action.install-label", {
-      label: resolveSetupMessage(label),
+      label: text(definition.label),
     }),
   );
 }

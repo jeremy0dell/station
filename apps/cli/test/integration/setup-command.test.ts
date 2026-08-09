@@ -1308,17 +1308,50 @@ describe("CLI setup command", () => {
     });
 
     expect(result.code).toBe(0);
+    expect(
+      calls
+        .filter((call) => call.command === "brew" && call.args?.[0] === "install")
+        .map((call) => [call.command, ...(call.args ?? [])].join(" ")),
+    ).toEqual([
+      "brew install worktrunk",
+      "brew install tmux",
+      "brew install bun",
+      "brew install hunk",
+    ]);
     expect(calls).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ command: "brew", args: ["install", "worktrunk"] }),
-        expect.objectContaining({ command: "brew", args: ["install", "tmux"] }),
-        expect.objectContaining({ command: "brew", args: ["install", "bun"] }),
         expect.objectContaining({ command: "/fake/bin/wt", args: ["--version"] }),
         expect.objectContaining({ command: "/fake/bin/tmux", args: ["-V"] }),
       ]),
     );
     expect(chunks.join("")).toContain("stn setup system final");
     expect(chunks.join("")).toContain("OK Worktrunk / wt");
+  });
+
+  it("setup system omits Bun rows and installation in compiled mode", async () => {
+    const calls: ExternalCommandInput[] = [];
+    const chunks: string[] = [];
+
+    const result = await runCli(["setup", "system", "--yes"], {
+      setupDeps: {
+        compiled: true,
+        env: { PATH: "/fake/bin" },
+        runner: fakeRunner(calls, {
+          "brew --version": "Homebrew 4.0.0\n",
+          "pnpm --version": "11.0.0\n",
+          "wt --version": "worktrunk 1.2.3\n",
+          "tmux -V": "tmux 3.5a\n",
+        }),
+        access: fakeAccess(["/fake/bin/wt", "/fake/bin/tmux", "/fake/bin/hunk"]),
+        writeStdout: (chunk) => {
+          chunks.push(chunk);
+        },
+      },
+    });
+
+    expect(result.code).toBe(0);
+    expect(calls.some((call) => call.args?.join(" ") === "install bun")).toBe(false);
+    expect(chunks.join("")).not.toMatch(/(?:OK|MISSING) Bun/);
   });
 });
 

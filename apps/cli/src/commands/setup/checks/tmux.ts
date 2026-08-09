@@ -1,5 +1,6 @@
 import { checkTmuxDependency } from "@station/tmux";
 import type { SetupDependencyFact } from "../adapters/inspectionTypes.js";
+import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { setupEnv } from "./env.js";
 import type { SetupDependencyCheckOptions } from "./system.js";
@@ -8,7 +9,7 @@ export async function checkSetupTmux(
   options: SetupDependencyCheckOptions = {},
 ): Promise<SetupDependencyFact> {
   const env = setupEnv(options.env);
-  const command = env.STATION_TMUX_BIN ?? "tmux";
+  const command = env.STATION_TMUX_BIN ?? SETUP_TOOL_DEFINITIONS.tmux.command;
   const dependencyOptions: Parameters<typeof checkTmuxDependency>[0] = {
     command,
     timeoutMs: setupProbeTimeoutMs,
