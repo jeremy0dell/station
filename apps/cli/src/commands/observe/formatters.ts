@@ -1,11 +1,12 @@
 import type {
+  AgentState,
   ProviderHealth,
   SafeError,
   StationEvent,
   StationSnapshot,
   WorktreeRow,
 } from "@station/contracts";
-import { stationEventTimestamp } from "@station/contracts";
+import { AGENT_STATUS, stationEventTimestamp } from "@station/contracts";
 import {
   commandTypeLabel,
   type ObserveSnapshotContext,
@@ -108,7 +109,7 @@ export function formatEventLines(
           ),
         ];
       }
-      return [line(at, "agent", `${event.worktreeId}  none`)];
+      return [line(at, "agent", `${event.worktreeId}  ${AGENT_STATUS.none.label}`)];
     }
     case "session.created":
       return [
@@ -126,7 +127,7 @@ export function formatEventLines(
       ];
     case "session.updated": {
       const changedStatus =
-        event.patch.status === undefined ? undefined : `status:${event.patch.status.value}`;
+        event.patch.status === undefined ? undefined : statusPart(event.patch.status.value);
       return [
         line(
           at,
@@ -187,7 +188,7 @@ export function formatEventLines(
 function formatAgentRow(at: string, row: WorktreeRow): string {
   const agent = row.agent;
   if (agent === undefined) {
-    return line(at, "agent", `${rowLabel(row)}  none  ${terminalPart(row)}`);
+    return line(at, "agent", `${rowLabel(row)}  ${AGENT_STATUS.none.label}  ${terminalPart(row)}`);
   }
   return line(
     at,
@@ -260,15 +261,15 @@ function formatClockTime(timestamp: string): string {
   return timestamp;
 }
 
-function agentLineLabel(state: string): string {
-  return state === "needs_attention" || state === "stuck" ? "agent!" : "agent";
+function agentLineLabel(state: AgentState): string {
+  return AGENT_STATUS[state].alert ? "agent!" : "agent";
 }
 
-function displayAgentState(state: string): string {
-  return state.replaceAll("_", " ");
+function displayAgentState(state: AgentState): string {
+  return AGENT_STATUS[state].label;
 }
 
-function statusPart(status: string): string {
+function statusPart(status: AgentState): string {
   return `status:${displayAgentState(status)}`;
 }
 

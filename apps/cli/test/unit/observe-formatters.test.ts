@@ -49,6 +49,35 @@ describe("observe formatters", () => {
     ]);
   });
 
+  it("uses canonical alert and no-agent presentation without cached rows", () => {
+    const context = createObserveSnapshotContext();
+
+    expect(
+      formatEventLines(
+        {
+          type: "worktree.agentStateChanged",
+          worktreeId: "wt_missing",
+          agent: {
+            harness: "codex",
+            state: "stuck",
+            confidence: "high",
+            reason: "stalled",
+            updatedAt: now,
+          },
+        },
+        context,
+        now,
+      ),
+    ).toEqual(["12:00:00  agent!     wt_missing  stuck  codex high"]);
+    expect(
+      formatEventLines(
+        { type: "worktree.agentStateChanged", worktreeId: "wt_missing" },
+        context,
+        now,
+      ),
+    ).toEqual(["12:00:00  agent      wt_missing  no agent"]);
+  });
+
   it("renders command failures with command, trace, diagnostic, message, and hint lines", () => {
     const context = createObserveSnapshotContext(snapshotFixture());
     applyEventToSnapshotContext(context, {

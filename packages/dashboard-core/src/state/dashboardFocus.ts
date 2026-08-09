@@ -239,7 +239,7 @@ function collapsedParentHeaderIndex(
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {
-  return row.session.status.value === "needs_attention" || row.session.status.value === "stuck";
+  return row.presentation.display.alert;
 }
 
 function moveFocus(

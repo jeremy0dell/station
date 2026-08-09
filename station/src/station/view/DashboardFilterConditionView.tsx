@@ -9,6 +9,7 @@ import {
   type StationColor,
   type StationTheme,
 } from "../../theme/index.js";
+import { stationAgentStatusTone } from "../statusUi.js";
 import {
   stationMouseProps,
   useStationHoverState,
@@ -316,20 +317,7 @@ function conditionRowForeground(
   if (row.kind === "field") return theme.text.primary;
   if (row.field === "project") return theme.action.primary;
   if (row.field === "agent") return theme.status.accent;
-  switch (row.valueId) {
-    case "needs_attention":
-    case "stuck":
-      return theme.status.danger;
-    case "working":
-    case "starting":
-      return theme.status.working;
-    case "idle":
-      return theme.status.success;
-    case "unknown":
-      return theme.status.warning;
-    default:
-      return theme.status.neutral;
-  }
+  return theme.status[stationAgentStatusTone(row.valueId)];
 }
 
 function fitConditionLine(value: string, width: number): string {

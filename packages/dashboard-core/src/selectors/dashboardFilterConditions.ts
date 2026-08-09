@@ -1,4 +1,4 @@
-import type { StationSnapshot } from "@station/contracts";
+import { AGENT_STATUS, type AgentState, type StationSnapshot } from "@station/contracts";
 import type {
   DashboardFilterCondition,
   DashboardFilterConditionField,
@@ -8,16 +8,26 @@ import type {
 } from "../state/types.js";
 import { SELECTION_KEYS } from "./selectors.js";
 
-export const DASHBOARD_FILTER_STATUS_VALUES: readonly DashboardFilterStatusConditionValue[] = [
-  { id: "needs_attention", label: "Needs attention" },
-  { id: "stuck", label: "Stuck" },
-  { id: "working", label: "Working" },
-  { id: "starting", label: "Starting" },
-  { id: "idle", label: "Idle" },
-  { id: "exited", label: "Exited" },
-  { id: "none", label: "No agent" },
-  { id: "unknown", label: "Unknown" },
-];
+const DASHBOARD_FILTER_STATUS_RANK = {
+  needs_attention: 0,
+  stuck: 1,
+  working: 2,
+  starting: 3,
+  idle: 4,
+  exited: 5,
+  none: 6,
+  unknown: 7,
+} as const satisfies Record<AgentState, number>;
+
+const dashboardFilterStatusOrder = (Object.keys(DASHBOARD_FILTER_STATUS_RANK) as AgentState[]).sort(
+  (left, right) => DASHBOARD_FILTER_STATUS_RANK[left] - DASHBOARD_FILTER_STATUS_RANK[right],
+);
+
+export const DASHBOARD_FILTER_STATUS_VALUES: readonly DashboardFilterStatusConditionValue[] =
+  dashboardFilterStatusOrder.map((id) => {
+    const label = AGENT_STATUS[id].label;
+    return { id, label: `${label.charAt(0).toUpperCase()}${label.slice(1)}` };
+  });
 
 type DashboardFilterConditionOptionContext = {
   snapshot: StationSnapshot | undefined;
