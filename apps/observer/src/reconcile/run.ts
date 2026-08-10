@@ -38,6 +38,7 @@ import type {
   PersistedSessionTurnReadiness,
   PersistedWorktreeDisplayTitle,
   ReconcileStore,
+  SessionGroupStore,
   SessionHarnessDerivedStateRepair,
   SessionStore,
   WorktreeMetadataStore,
@@ -53,6 +54,7 @@ import {
   type ObserverHarnessRun,
   synthesizeExternalHarnessRuns,
 } from "./harnessEventStatus.js";
+import { reconcileSessionGroups } from "./sessionGroups.js";
 
 export type ReconcileTiming = {
   reason: string;
@@ -90,6 +92,7 @@ export type ReconcileOnceInput = {
   persistence?: ObservationStore &
     ReconcileStore &
     SessionStore &
+    SessionGroupStore &
     WorktreeMetadataStore &
     EventJournal;
   providerObservationRetentionDays?: number;
@@ -134,7 +137,7 @@ export function buildInitialSnapshot(input: {
 /**
  * USE CASE
  *
- * Rebuilds the Observer graph after overlaying durable worktree titles on provider observations.
+ * Rebuilds the Observer graph, prunes Group membership, and projects durable titles and Groups.
  * The same resolved title records feed snapshot composition and atomic reconcile persistence.
  */
 export async function runReconcileOnce(input: ReconcileOnceInput): Promise<ReconcileOnceResult> {
@@ -273,7 +276,7 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     eventsEmitted: 0,
     errors,
   };
-  const snapshot = buildStationSnapshot({
+  const baseSnapshot = buildStationSnapshot({
     generatedAt: finishedAt,
     observer: input.observer,
     projects: input.projects,
@@ -290,6 +293,17 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     turnReadiness,
     ...(input.featureFlags === undefined ? {} : { featureFlags: input.featureFlags }),
   });
+  const groupProjection = await reconcileSessionGroups({
+    ...(input.persistence === undefined ? {} : { store: input.persistence }),
+    projects: input.projects,
+    sessions: baseSnapshot.sessions,
+    updatedAt: finishedAt,
+  });
+  errors.push(...groupProjection.errors);
+  const snapshot: StationSnapshot = {
+    ...baseSnapshot,
+    sessionGroups: groupProjection.sessionGroups,
+  };
 
   lastReconcile.eventsEmitted = await persistReconcileResult({
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),

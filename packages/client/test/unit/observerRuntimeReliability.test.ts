@@ -15,6 +15,7 @@ import {
   createCommandSnapshot,
   createZeroWorktreeSnapshot,
   fixtureNow,
+  sessionGroup,
 } from "../support/snapshots.js";
 
 // Timing assertions use ratios and generous absolute bounds: jitter is ±20%
@@ -127,7 +128,7 @@ describe("observer client runtime refresh coalescing and shutdown", () => {
     return runtime;
   }
 
-  it("coalesces refresh-worthy events into one in-flight snapshot request plus one follow-up", async () => {
+  it("coalesces unsafe Group events into one in-flight snapshot request plus one follow-up", async () => {
     const snapshot = createCommandSnapshot("idle");
     const service = new DeferredLoadService(snapshot);
     const runtime = track(
@@ -140,10 +141,10 @@ describe("observer client runtime refresh coalescing and shutdown", () => {
     runtime.start();
     await waitFor(() => service.subscribeCount === 1);
 
-    service.emit(reconciledEvent());
+    service.emit(missingGroupUpdatedEvent());
     await waitFor(() => service.loadCount === 1);
-    service.emit(reconciledEvent());
-    service.emit(reconciledEvent());
+    service.emit(missingGroupUpdatedEvent());
+    service.emit(missingGroupUpdatedEvent());
     await delay(20);
     expect(service.loadCount).toBe(1);
 
@@ -436,6 +437,15 @@ function subscribeGaps(service: FakeObserverService): number[] {
 
 function reconciledEvent(): StationEvent {
   return { type: "observer.reconciled", at: fixtureNow, changed: 1 };
+}
+
+function missingGroupUpdatedEvent(): StationEvent {
+  return {
+    type: "sessionGroup.updated",
+    at: fixtureNow,
+    commandId: "cmd_group_updated",
+    group: sessionGroup({ id: "grp_missing" }),
+  };
 }
 
 function rowUpdateEvent(): StationEvent {

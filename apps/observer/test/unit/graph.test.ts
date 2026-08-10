@@ -2,6 +2,7 @@ import type {
   HarnessRunObservation,
   ProviderHealth,
   ProviderProjectConfig,
+  SessionGroupView,
   TerminalTargetObservation,
   WorktreeObservation,
 } from "@station/contracts";
@@ -15,6 +16,7 @@ import {
   projectProviderHealthOntoSnapshot,
 } from "../../src/reconcile/graph";
 import type { ObserverHarnessRun } from "../../src/reconcile/harnessEventStatus";
+import { projectSessionGroups } from "../../src/reconcile/sessionGroups";
 import { observerHarnessRunFromRun } from "../support/harnessRuns";
 
 const generatedAt = "2026-05-20T12:00:00.000Z";
@@ -172,6 +174,70 @@ function build(overrides: {
 }
 
 describe("observer graph derivation", () => {
+  it("projects configured Groups in deterministic parent-first order from canonical sessions", () => {
+    const web = worktree("wt_web_group", "web", "group");
+    const api = worktree("wt_api_group", "api", "group");
+    const snapshot = build({
+      worktrees: [web, api],
+      terminals: [
+        terminal("term_web_group", web.id, "run_web_group"),
+        terminal("term_api_group", api.id, "run_api_group"),
+      ],
+      harnessRuns: [
+        harness("run_web_group", web.id, "idle"),
+        harness("run_api_group", api.id, "idle"),
+      ],
+    });
+    const group = (
+      input: Partial<SessionGroupView> & Pick<SessionGroupView, "id" | "projectId">,
+    ) => ({
+      name: input.id,
+      sessionIds: [],
+      version: 1,
+      createdAt: generatedAt,
+      updatedAt: generatedAt,
+      ...input,
+    });
+
+    const projected = projectSessionGroups({
+      projects,
+      sessions: snapshot.sessions,
+      groups: [
+        group({
+          id: "grp_web_grandchild",
+          projectId: "web",
+          parentGroupId: "grp_web_child",
+        }),
+        group({
+          id: "grp_web_child",
+          projectId: "web",
+          parentGroupId: "grp_web_parent",
+          sessionIds: ["ses_wt_web_group", "ses_missing"],
+        }),
+        group({ id: "grp_removed_project", projectId: "removed" }),
+        group({ id: "grp_api_empty", projectId: "api" }),
+        group({ id: "grp_web_parent", projectId: "web" }),
+      ],
+    });
+
+    expect(projected).toEqual([
+      expect.objectContaining({ id: "grp_api_empty", sessionIds: [] }),
+      expect.objectContaining({ id: "grp_web_parent", sessionIds: [] }),
+      expect.objectContaining({
+        id: "grp_web_child",
+        parentGroupId: "grp_web_parent",
+        sessionIds: ["ses_wt_web_group"],
+      }),
+      expect.objectContaining({
+        id: "grp_web_grandchild",
+        parentGroupId: "grp_web_child",
+        sessionIds: [],
+      }),
+    ]);
+    expect(projected.every((item) => !("children" in item))).toBe(true);
+    expect(projected.flatMap((item) => item.sessionIds)).toEqual(["ses_wt_web_group"]);
+  });
+
   it("projects one provider health result without rebuilding unrelated alerts", () => {
     const worktreeHealth: ProviderHealth = {
       ...worktreeProviderHealth,

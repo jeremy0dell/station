@@ -35,8 +35,6 @@ function fakeClient(overrides: Partial<StationHostClient> = {}): StationHostClie
       ptyInstanceId: "instance-p",
       pid: 1,
     }),
-    write: async () => undefined,
-    resize: async () => undefined,
     list: async () => [],
     focus: async () => undefined,
     close: async () => ({ closed: true }),

@@ -39,6 +39,24 @@ export type SessionGroupStoreResult =
   | { ok: true; groups: SessionGroupView[] }
   | { ok: false; reason: SessionGroupStoreConflictReason };
 
+export type SessionGroupRepairEvidence =
+  | {
+      reason: "invalid_membership";
+      groupId: SessionGroupId;
+      projectId: string;
+    }
+  | {
+      reason: "missing_parent" | "cross_project_parent" | "parent_cycle";
+      groupId: SessionGroupId;
+      projectId: string;
+      parentGroupId: SessionGroupId;
+    };
+
+export type SessionGroupRepairResult = {
+  groups: SessionGroupView[];
+  repairs: SessionGroupRepairEvidence[];
+};
+
 export type PersistedCommandStatus = "accepted" | "started" | "succeeded" | "failed";
 
 export type ObserverIdFactory = {

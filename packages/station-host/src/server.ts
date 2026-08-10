@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { SafeError, UiLifecycleEventInputFor } from "@station/contracts";
 import type { NdjsonConnection } from "@station/protocol";
 import { z } from "zod";
@@ -10,12 +11,17 @@ import {
   type HostAttachAck,
   type HostAttachParams,
   HostAttachParamsSchema,
+  HostClaimControlParamsSchema,
   type HostClientIdentity,
   HostClientShutdownNotificationSchema,
   type HostCompatibilityIdentity,
+  type HostControlEpoch,
+  type HostControlState,
   HostDetachParamsSchema,
   type HostFrame,
   HostRequestSchema,
+  HostResizeParamsSchema,
+  HostWriteParamsSchema,
   hostFailure,
   hostSuccess,
   isSameHostPtyRef,
@@ -27,6 +33,13 @@ export type HostAttachmentSource = {
   frames: AsyncIterable<HostFrame>;
   /** Host-local timing metadata; never serialized onto the acknowledgement. */
   captureDurationMs: number;
+  /** Current table-authoritative role and epoch, used only for safe lifecycle evidence. */
+  readonly controlState: HostControlState;
+  /** Reclaim mutation authority for this registered attachment without presenting a stale epoch. */
+  claimControl(): HostControlState;
+  /** The connection registry binds attachment identity; the table still rejects a stale epoch. */
+  write(controlEpoch: HostControlEpoch, data: string): void;
+  resize(controlEpoch: HostControlEpoch, cols: number, rows: number): void;
 };
 
 /**
@@ -44,7 +57,7 @@ export type HostHandlers = {
   >;
   attach?: (
     params: HostAttachParams,
-    client: HostClientIdentity,
+    attachmentId: string,
   ) => HostAttachmentSource | Promise<HostAttachmentSource>;
   /** Called only after a successful unary response has been written to the connection. */
   afterUnaryResponseSent?: (method: string) => void;
@@ -65,6 +78,8 @@ type ActiveAttachment = {
   ptyId: string;
   iterator: AsyncIterator<HostFrame>;
   client: HostClientIdentity;
+  source: HostAttachmentSource;
+  detachedControlState?: HostControlState;
   reason?: Extract<HostLifecycleEventInput, { kind: "host.attachment.detached" }>["reason"];
 };
 
@@ -74,6 +89,7 @@ type ConnectionState = {
   attachments: Map<string, ActiveAttachment>;
   attachmentByPty: Map<string, ActiveAttachment>;
   inFlight: Set<Promise<void>>;
+  acceptingAttachments: boolean;
 };
 
 /**
@@ -92,6 +108,7 @@ export async function serveHostConnection(
     attachments: new Map(),
     attachmentByPty: new Map(),
     inFlight: new Set(),
+    acceptingAttachments: true,
   };
   try {
     for await (const message of connection.messages()) {
@@ -107,13 +124,15 @@ export async function serveHostConnection(
     state.clientDetachReason = "stream_failed";
     connection.close();
   } finally {
-    for (const attachment of state.attachments.values()) {
-      attachment.reason ??= state.clientDetachReason;
-      void attachment.iterator.return?.();
-    }
-    await Promise.allSettled([...state.inFlight]);
+    state.acceptingAttachments = false;
+    const attachments = [...state.attachments.values()];
     state.attachments.clear();
     state.attachmentByPty.clear();
+    for (const attachment of attachments) {
+      attachment.reason ??= state.clientDetachReason;
+      void releaseAttachmentRegistration(state, attachment);
+    }
+    await Promise.allSettled([...state.inFlight]);
     if (state.client !== undefined) {
       logger.onLifecycle?.({
         kind: "host.client.detached",
@@ -167,15 +186,70 @@ async function handleMessage(
       return;
     }
     const attachment = state.attachments.get(params.data.attachmentId);
-    if (attachment !== undefined && attachment.ptyId === params.data.ptyId) {
+    if (attachment !== undefined) {
       attachment.reason = params.data.reason;
-      state.attachments.delete(attachment.attachmentId);
-      if (state.attachmentByPty.get(attachment.ptyId) === attachment) {
-        state.attachmentByPty.delete(attachment.ptyId);
-      }
-      await attachment.iterator.return?.();
+      await releaseAttachmentRegistration(state, attachment);
     }
     connection.send(hostSuccess(request.id, { ok: true }));
+    return;
+  }
+
+  if (request.method === "host.claimControl") {
+    const params = HostClaimControlParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      fail(connection, logger, request.id, "HOST_BAD_REQUEST", "Malformed host control claim.");
+      return;
+    }
+    const attachment = state.attachments.get(params.data.attachmentId);
+    if (attachment === undefined) {
+      failControlRevoked(connection, logger, request.id);
+      return;
+    }
+    try {
+      connection.send(hostSuccess(request.id, attachment.source.claimControl()));
+    } catch (error) {
+      failFromHandler(connection, logger, request.id, "host.claimControl", error);
+    }
+    return;
+  }
+
+  if (request.method === "host.write") {
+    const params = HostWriteParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      fail(connection, logger, request.id, "HOST_BAD_REQUEST", "Malformed host write request.");
+      return;
+    }
+    const attachment = state.attachments.get(params.data.attachmentId);
+    if (attachment === undefined) {
+      failControlRevoked(connection, logger, request.id);
+      return;
+    }
+    try {
+      attachment.source.write(params.data.controlEpoch, params.data.data);
+      connection.send(hostSuccess(request.id, { ok: true }));
+    } catch (error) {
+      failFromHandler(connection, logger, request.id, "host.write", error);
+    }
+    return;
+  }
+
+  if (request.method === "host.resize") {
+    const params = HostResizeParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      fail(connection, logger, request.id, "HOST_BAD_REQUEST", "Malformed host resize request.");
+      return;
+    }
+    const attachment = state.attachments.get(params.data.attachmentId);
+    if (attachment === undefined) {
+      failControlRevoked(connection, logger, request.id);
+      return;
+    }
+    try {
+      attachment.source.resize(params.data.controlEpoch, params.data.cols, params.data.rows);
+      connection.send(hostSuccess(request.id, { ok: true }));
+    } catch (error) {
+      failFromHandler(connection, logger, request.id, "host.resize", error);
+    }
     return;
   }
 
@@ -205,6 +279,51 @@ async function handleMessage(
   }
   connection.send(hostSuccess(request.id, result));
   handlers.afterUnaryResponseSent?.(request.method);
+}
+
+/** Release one registered attachment while retaining its last authoritative control evidence. */
+function releaseAttachmentRegistration(
+  state: ConnectionState,
+  attachment: ActiveAttachment,
+): Promise<IteratorResult<HostFrame>> | undefined {
+  if (state.attachments.get(attachment.attachmentId) === attachment) {
+    state.attachments.delete(attachment.attachmentId);
+  }
+  if (state.attachmentByPty.get(attachment.ptyId) === attachment) {
+    state.attachmentByPty.delete(attachment.ptyId);
+  }
+  attachment.detachedControlState ??= attachment.source.controlState;
+  // Registry removal precedes synchronous iterator return so no concurrent request can retain authority.
+  return attachment.iterator.return?.();
+}
+
+function failControlRevoked(
+  connection: NdjsonConnection,
+  logger: HostServerLogger,
+  id: string,
+): void {
+  fail(
+    connection,
+    logger,
+    id,
+    "HOST_CONTROL_REVOKED",
+    "Station Host rejected a mutation from an unknown or cross-connection attachment.",
+  );
+}
+
+function failFromHandler(
+  connection: NdjsonConnection,
+  logger: HostServerLogger,
+  id: string,
+  method: string,
+  error: unknown,
+): void {
+  const safeError = stationHostErrorFromUnknown(error, {
+    code: "HOST_REQUEST_FAILED",
+    message: `Host method "${method}" failed.`,
+  });
+  logger.onError?.(safeError);
+  connection.send(hostFailure(id, safeError));
 }
 
 type ClientBinding =
@@ -288,10 +407,11 @@ async function runAttach(
   }
   let attachment: HostAttachmentSource;
   let params: HostAttachParams;
+  const attachmentId = `att_${randomUUID()}`;
   try {
     params = HostAttachParamsSchema.parse(rawParams);
-    attachment = await handlers.attach(params, state.client);
-    if (!isSameHostPtyRef(params, attachment.ack)) {
+    attachment = await handlers.attach(params, attachmentId);
+    if (attachment.ack.attachmentId !== attachmentId || !isSameHostPtyRef(params, attachment.ack)) {
       await attachment.frames[Symbol.asyncIterator]().return?.();
       throw stationHostSafeError(
         "HOST_ATTACHMENT_MISMATCH",
@@ -309,17 +429,21 @@ async function runAttach(
   }
 
   const iterator = attachment.frames[Symbol.asyncIterator]();
+  if (!state.acceptingAttachments) {
+    await iterator.return?.();
+    return;
+  }
   const active: ActiveAttachment = {
-    attachmentId: params.attachmentId,
+    attachmentId,
     ptyId: attachment.ack.ptyId,
     iterator,
     client: state.client,
+    source: attachment,
   };
   const previous = state.attachmentByPty.get(active.ptyId);
   if (previous !== undefined) {
     previous.reason = "attachment_replaced";
-    state.attachments.delete(previous.attachmentId);
-    void previous.iterator.return?.();
+    void releaseAttachmentRegistration(state, previous);
   }
   state.attachments.set(active.attachmentId, active);
   state.attachmentByPty.set(active.ptyId, active);
@@ -338,6 +462,13 @@ async function runAttach(
     rows: attachment.ack.rows,
     captureDurationMs: attachment.captureDurationMs,
   });
+  logger.onEvent?.("host.attachment.attached", {
+    ptyId: attachment.ack.ptyId,
+    attachmentId: active.attachmentId,
+    controlEpoch: attachment.ack.controlEpoch,
+    role: attachment.ack.role,
+    reason: params.intent,
+  });
   logger.onLifecycle?.({
     kind: "host.attachment.attached",
     uiRunId: active.client.uiRunId,
@@ -350,7 +481,7 @@ async function runAttach(
 
   void connection.closed.then(() => {
     active.reason ??= state.clientDetachReason;
-    void iterator.return?.();
+    void releaseAttachmentRegistration(state, active);
   });
 
   try {
@@ -368,15 +499,17 @@ async function runAttach(
     active.reason ??=
       state.clientDetachReason === "socket_closed" ? "stream_failed" : state.clientDetachReason;
   } finally {
-    if (state.attachments.get(active.attachmentId) === active) {
-      state.attachments.delete(active.attachmentId);
-    }
-    if (state.attachmentByPty.get(active.ptyId) === active) {
-      state.attachmentByPty.delete(active.ptyId);
-    }
-    await iterator.return?.();
+    await releaseAttachmentRegistration(state, active);
+    const finalControl = active.detachedControlState ?? active.source.controlState;
     const reason = active.reason ?? "stream_failed";
     logger.onEvent?.("agent.detach", { ptyId: active.ptyId });
+    logger.onEvent?.("host.attachment.detached", {
+      ptyId: active.ptyId,
+      attachmentId: active.attachmentId,
+      controlEpoch: finalControl.controlEpoch,
+      role: finalControl.role,
+      reason,
+    });
     logger.onLifecycle?.({
       kind: "host.attachment.detached",
       uiRunId: active.client.uiRunId,
@@ -435,9 +568,13 @@ function handleClientShutdownNotification(
     return;
   }
   state.clientDetachReason = "client_shutdown";
-  for (const attachment of state.attachments.values()) {
+  state.acceptingAttachments = false;
+  const attachments = [...state.attachments.values()];
+  state.attachments.clear();
+  state.attachmentByPty.clear();
+  for (const attachment of attachments) {
     attachment.reason ??= "client_shutdown";
-    void attachment.iterator.return?.();
+    void releaseAttachmentRegistration(state, attachment);
   }
 }
 

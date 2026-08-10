@@ -143,6 +143,36 @@ export function formatEventLines(
     }
     case "session.removed":
       return [line(at, "session", `${sessionLabel(context, event.sessionId)} removed`)];
+    case "sessionGroup.updated":
+      return [
+        line(
+          at,
+          "group",
+          joinParts([
+            "updated",
+            event.group.name,
+            `project:${context.projects.get(event.group.projectId)?.label ?? event.group.projectId}`,
+            `members:${event.group.sessionIds.length}`,
+            `version:${event.group.version}`,
+            `cmd:${event.commandId}`,
+            tracePart(event.traceId),
+          ]),
+        ),
+      ];
+    case "sessionGroup.removed":
+      return [
+        line(
+          at,
+          "group",
+          joinParts([
+            "removed",
+            event.groupId,
+            `project:${context.projects.get(event.projectId)?.label ?? event.projectId}`,
+            `cmd:${event.commandId}`,
+            tracePart(event.traceId),
+          ]),
+        ),
+      ];
     case "command.accepted":
       return [
         line(

@@ -9,14 +9,14 @@ import {
   type HostFrame,
   type HostPtyIdentity,
 } from "@station/host";
-import { devHostSocketPath, devStateDir } from "./devPaths.js";
+import { devHostSocketPath, devStateDir } from "../src/host/devPaths.js";
 
 /**
  * Manual persistent-agent demo: start a detached host, spawn a PTY, reattach,
  * prove same pid/scrollback. `--hold` leaves it running; `--dev` uses the stable
  * worktree-local socket.
  */
-const HOST_ENTRY = fileURLToPath(new URL("./hostMain.ts", import.meta.url));
+const HOST_ENTRY = fileURLToPath(new URL("../src/host/hostMain.ts", import.meta.url));
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const log = (text = "") => process.stdout.write(`${text}\n`);
 
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
 
   log("── client #1 attaches and watches ~3s ──");
   const client1 = createStationHostClient({ socketPath });
-  const attach1 = await client1.attach(attachExpectation);
+  const attach1 = await client1.attach(attachExpectation, "viewer");
   await readFramesFor(attach1, 3000, (data) => process.stdout.write(`  [c1] ${data}`));
   // host.list returns authoritative pid: the PTY's child after bridge is ready. spawn/attach may briefly report bridge pid.
   const livePid = (await control.list())[0]?.pid;
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
 
   log("── client #2 reattaches (reopen) ──");
   const client2 = createStationHostClient({ socketPath });
-  const attach2 = await client2.attach(attachExpectation);
+  const attach2 = await client2.attach(attachExpectation, "viewer");
   const samePid = attach2.ack.pid === livePid;
   log(`  pid=${attach2.ack.pid} — same agent as before (pid ${livePid})? ${samePid ? "YES ✓" : "NO ✗"}`);
   log(`  replayed terminal state (${attach2.ack.replay.kind}):`);

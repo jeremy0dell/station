@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HostAttachment, HostFrame, StationHostClient } from "@station/host";
-import { resolveAuxShellPlacement } from "./auxShellPlacement.js";
+import { resolveAuxShellPlacement } from "../auxShellPlacement.js";
 
 const unusedHandoffClientMethods = {
   beginHandoff: async () => ({
@@ -44,9 +44,11 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<HostFrame>>(() => {}) }),
   };
   const attachment: HostAttachment = {
-    attachmentId: "att-test",
     ack: {
       subscribed: true,
+      attachmentId: "att-test",
+      controlEpoch: 1,
+      role: "controller",
       kind: "aux",
       ...AUX_REF,
       worktreeId: "aux",
@@ -65,7 +67,19 @@ function fakeClient(spawns: unknown[]): StationHostClient {
         events: [],
       },
     },
+    get controlState() {
+      return {
+        attachmentId: "att-test",
+        controlEpoch: 1,
+        role: "controller" as const,
+      };
+    },
     frames: pendingFrames,
+    claimControl: async () => ({
+      attachmentId: "att-test",
+      controlEpoch: 1,
+      role: "controller",
+    }),
     write: async () => undefined,
     resize: async () => undefined,
     detach: async () => undefined,
@@ -80,8 +94,6 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     health: async () => ({ ok: true, protocolVersion: 1 }),
     stopIfIdle: async () => ({ stopping: true }),
     ...unusedHandoffClientMethods,
-    write: async () => undefined,
-    resize: async () => undefined,
     list: async () => [],
     focus: async () => undefined,
     close: async () => ({ closed: true }),

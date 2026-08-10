@@ -1,7 +1,7 @@
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
-import { createStationVtScreen } from "../terminal/vt/screen.js";
-import { TerminalSupplementalState } from "./terminalSupplementalState.js";
+import { createStationVtScreen } from "../../terminal/vt/screen.js";
+import { TerminalSupplementalState } from "../terminalSupplementalState.js";
 
 const CSI = "\x1b[";
 

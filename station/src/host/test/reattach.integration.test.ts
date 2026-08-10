@@ -8,11 +8,11 @@ import {
   type HostSpawnResult,
 } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
-import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
-import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
-import { createStationVtScreen } from "../terminal/vt/screen.js";
-import type { PtyTableOptions } from "./ptyTable.js";
-import { type StationHostInstance, startStationHost } from "./startHost.js";
+import { createScriptedTerminal, type ScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
+import { createHostAttachedTerminal } from "../../terminal/pty/hostAttachedTerminal.js";
+import { createStationVtScreen } from "../../terminal/vt/screen.js";
+import type { PtyTableOptions } from "../ptyTable.js";
+import { type StationHostInstance, startStationHost } from "../startHost.js";
 
 const noopLogger = { log: async () => undefined } as never;
 const identity = {
@@ -212,7 +212,7 @@ describe("data-plane reattach (host PTY → host-attached terminal → VT screen
     scripted.helpers.emitData("abcdefghijkl");
 
     const expectation = attachExpectation(spawned, { harnessProvider: "opencode" });
-    const captured = await control.attach(expectation);
+    const captured = await control.attach(expectation, "viewer");
     expect(captured.ack.replay.kind).toBe("semantic-truncation-recovery");
     const replay = captured.ack.replay.events
       .flatMap((event) => (event.type === "data" ? [event.data] : []))

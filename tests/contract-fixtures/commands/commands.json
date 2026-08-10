@@ -198,5 +198,54 @@
       "projectId": "web",
       "harness": "codex"
     }
+  },
+  "sessionGroupCreate": {
+    "type": "sessionGroup.create",
+    "payload": {
+      "projectId": "web",
+      "name": "Active work",
+      "initialSessionIds": ["ses_web_feature_auth"]
+    }
+  },
+  "sessionGroupRename": {
+    "type": "sessionGroup.rename",
+    "payload": {
+      "projectId": "web",
+      "groupId": "grp_active",
+      "expectedVersion": 1,
+      "name": "Current work"
+    }
+  },
+  "sessionGroupUpdateMembership": {
+    "type": "sessionGroup.updateMembership",
+    "payload": {
+      "projectId": "web",
+      "groupId": "grp_active",
+      "expectedVersion": 2,
+      "add": [
+        {
+          "sessionId": "ses_web_feature_auth",
+          "expectedGroupId": null
+        }
+      ],
+      "remove": []
+    }
+  },
+  "sessionGroupReparent": {
+    "type": "sessionGroup.reparent",
+    "payload": {
+      "projectId": "web",
+      "groupId": "grp_active",
+      "expectedVersion": 3,
+      "parentGroupId": "grp_parent"
+    }
+  },
+  "sessionGroupDelete": {
+    "type": "sessionGroup.delete",
+    "payload": {
+      "projectId": "web",
+      "groupId": "grp_active",
+      "expectedVersion": 3
+    }
   }
 }

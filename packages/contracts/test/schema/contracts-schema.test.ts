@@ -61,6 +61,9 @@ import {
   StationEventSchema,
   StationHookIdentityPayloadSchema,
   StationSnapshotSchema,
+  stationEventCommandId,
+  stationEventTimestamp,
+  stationEventTraceId,
   TerminalAttachmentSchema,
   TerminalCapabilitiesSchema,
   TerminalHarnessBindingSchema,
@@ -1324,6 +1327,176 @@ describe("contract schemas", () => {
     );
   });
 
+  it("strictly validates recorded Session Group command intent", () => {
+    expect(
+      StationCommandSchema.parse({
+        type: "sessionGroup.create",
+        payload: {
+          projectId: "web",
+          name: "  Active work  ",
+          initialSessionIds: ["ses_a", "ses_b"],
+        },
+      }),
+    ).toMatchObject({ payload: { name: "Active work" } });
+    expectParses(
+      StationCommandSchema,
+      { type: "sessionGroup.create", payload: { projectId: "web", name: "Empty" } },
+      "empty Group creation",
+    );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "sessionGroup.updateMembership",
+        payload: { projectId: "web", groupId: "grp_target", expectedVersion: 1 },
+      },
+      "expectation-validating empty membership delta",
+    );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "sessionGroup.updateMembership",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 2,
+          add: [
+            { sessionId: "ses_root", expectedGroupId: null },
+            { sessionId: "ses_move", expectedGroupId: "grp_source" },
+            { sessionId: "ses_same", expectedGroupId: "grp_target" },
+          ],
+          remove: [{ sessionId: "ses_remove", expectedGroupId: "grp_target" }],
+        },
+      },
+      "atomic reassignment and ungrouping expectations",
+    );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_child",
+          expectedVersion: 3,
+          parentGroupId: "grp_parent",
+        },
+      },
+      "Group reparenting",
+    );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "sessionGroup.reparent",
+        payload: { projectId: "web", groupId: "grp_child", expectedVersion: 3 },
+      },
+      "Group root detachment",
+    );
+
+    const invalidCommands = [
+      {
+        type: "sessionGroup.create",
+        payload: { projectId: "web", name: "   " },
+      },
+      {
+        type: "sessionGroup.create",
+        payload: { projectId: "web", name: "Duplicate", initialSessionIds: ["ses_a", "ses_a"] },
+      },
+      {
+        type: "sessionGroup.rename",
+        payload: { projectId: "web", groupId: "grp_a", expectedVersion: 0, name: "Name" },
+      },
+      {
+        type: "sessionGroup.rename",
+        payload: { projectId: "web", groupId: "   ", expectedVersion: 1, name: "Name" },
+      },
+      {
+        type: "sessionGroup.updateMembership",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          add: [
+            { sessionId: "ses_duplicate", expectedGroupId: null },
+            { sessionId: "ses_duplicate", expectedGroupId: "grp_source" },
+          ],
+        },
+      },
+      {
+        type: "sessionGroup.updateMembership",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          add: [{ sessionId: "ses_duplicate", expectedGroupId: null }],
+          remove: [{ sessionId: "ses_duplicate", expectedGroupId: "grp_target" }],
+        },
+      },
+      {
+        type: "sessionGroup.updateMembership",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          remove: [{ sessionId: "ses_remove", expectedGroupId: null }],
+        },
+      },
+      {
+        type: "sessionGroup.delete",
+        payload: { projectId: "", groupId: "grp_target", expectedVersion: 1 },
+      },
+      {
+        type: "sessionGroup.delete",
+        payload: { projectId: "web", groupId: "grp_target", expectedVersion: 1, extra: true },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          parentGroupId: null,
+        },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          parentGroupId: "   ",
+        },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 0,
+        },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          unexpected: true,
+        },
+      },
+      {
+        type: "sessionGroup.updateMembership",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          add: [{ sessionId: "", expectedGroupId: null }],
+        },
+      },
+    ];
+    for (const [index, command] of invalidCommands.entries()) {
+      expectFails(StationCommandSchema, command, `invalid Session Group command ${index}`);
+    }
+  });
+
   it("keeps session titles optional, trimmed, and independent from branches", () => {
     const create = {
       type: "session.create",
@@ -1410,6 +1583,8 @@ describe("contract schemas", () => {
       "session.created",
       "session.removed",
       "session.updated",
+      "sessionGroup.removed",
+      "sessionGroup.updated",
       "worktree.added",
       "worktree.agentStateChanged",
       "worktree.removed",
@@ -1428,6 +1603,38 @@ describe("contract schemas", () => {
       "legacy hook event name stays invalid for emitted events",
     );
     expectFails(StationEventSchema, await loadJson("events/invalid-event.json"), "invalid event");
+  });
+
+  it("exposes command, trace, and timestamp identity for Session Group events", () => {
+    const event = StationEventSchema.parse({
+      type: "sessionGroup.updated",
+      at: "2026-05-20T12:01:00.000Z",
+      commandId: "cmd_group_1",
+      traceId: "trc_group_1",
+      group: {
+        id: "grp_active",
+        projectId: "web",
+        name: "Active work",
+        sessionIds: [],
+        version: 1,
+        createdAt: "2026-05-20T12:01:00.000Z",
+        updatedAt: "2026-05-20T12:01:00.000Z",
+      },
+    });
+
+    expect(stationEventCommandId(event)).toBe("cmd_group_1");
+    expect(stationEventTraceId(event)).toBe("trc_group_1");
+    expect(stationEventTimestamp(event)).toBe("2026-05-20T12:01:00.000Z");
+    expectFails(
+      StationEventSchema,
+      { ...event, extra: true },
+      "Session Group event with unknown field",
+    );
+    expectFails(
+      StationEventSchema,
+      { ...event, at: "invalid" },
+      "Session Group event with invalid timestamp",
+    );
   });
 
   it("parses hook, observer, command-record, and event-filter contracts", async () => {

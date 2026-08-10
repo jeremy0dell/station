@@ -12,7 +12,7 @@ import {
   reapStaleOrphanBridges,
   resolveOrphanTtlMs,
   waitForParkedBridge,
-} from "./orphanBridges.js";
+} from "../orphanBridges.js";
 import net from "node:net";
 
 describe("waitForParkedBridge", () => {

@@ -112,6 +112,46 @@ describe("protocol event subscriptions", () => {
     }
   });
 
+  it("streams complete Session Group events with command filters intact", async () => {
+    const { socketPath } = await createTempSocketPath();
+    const event: StationEvent = {
+      type: "sessionGroup.updated",
+      at: protocolTestNow,
+      commandId: "cmd_group",
+      group: {
+        id: "grp_active",
+        projectId: "web",
+        name: "Active",
+        sessionIds: [],
+        version: 1,
+        createdAt: protocolTestNow,
+        updatedAt: protocolTestNow,
+      },
+    };
+    let observedFilter: EventFilter | undefined;
+    const server = await startProtocolServer({
+      socketPath,
+      api: createFakeObserverApi({
+        subscribe: (filter) => {
+          observedFilter = filter;
+          return stream([event]);
+        },
+      }),
+    });
+    const client = createObserverClient({ socketPath, requestId: ids("group-sub") });
+    const iterator = client
+      .subscribe({ type: ["sessionGroup.updated", "sessionGroup.removed"], commandId: "cmd_group" })
+      [Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: event });
+    expect(observedFilter).toEqual({
+      type: ["sessionGroup.updated", "sessionGroup.removed"],
+      commandId: "cmd_group",
+    });
+    await iterator.return?.();
+    await server.close();
+  });
+
   it("rejects retired hook event filters at the subscribe boundary", async () => {
     const { socketPath } = await createTempSocketPath();
     let observedFilter: EventFilter | undefined;

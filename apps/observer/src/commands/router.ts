@@ -1,7 +1,7 @@
 import type { ProviderProjectConfig, StationCommand } from "@station/contracts";
 import type { RuntimeClock } from "@station/runtime";
 import { createFeatureFlagEvaluator, type FeatureFlagEvaluator } from "../features/evaluator.js";
-import type { EventJournal, SessionStore } from "../persistence/index.js";
+import type { EventJournal, SessionGroupStore, SessionStore } from "../persistence/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { ObserverCore } from "../reconcile/core.js";
 import type { ObserverEventBus } from "../runtime/eventBus.js";
@@ -31,6 +31,10 @@ import { createSessionRenameHandler } from "./session/rename.js";
 import { createSessionResumeAgentHandler } from "./session/resumeAgent.js";
 import type { SessionCommandIdFactory } from "./session/shared.js";
 import { createSessionStartAgentHandler } from "./session/startAgent.js";
+import {
+  createSessionGroupCommandHandlers,
+  type SessionGroupCommandIdFactory,
+} from "./sessionGroups.js";
 import { createTerminalCloseHandler, createTerminalFocusHandler } from "./terminal.js";
 import { createTerminalIntentRunner, type TerminalIntentRunner } from "./terminalIntentRunner.js";
 import { createWorktreeCreateHandler } from "./worktree/create.js";
@@ -43,12 +47,12 @@ export type RegisterObserverCommandHandlersOptions = {
   providers: ProviderRegistry;
   projects: readonly ProviderProjectConfig[];
   getProjects?: (() => readonly ProviderProjectConfig[]) | undefined;
-  persistence: SessionStore & EventJournal;
+  persistence: SessionStore & SessionGroupStore & EventJournal;
   featureFlags?: FeatureFlagEvaluator | undefined;
   eventBus?: ObserverEventBus | undefined;
   clock?: RuntimeClock | undefined;
   logger?: StationLogger | undefined;
-  idFactory?: Partial<SessionCommandIdFactory> | undefined;
+  idFactory?: Partial<SessionCommandIdFactory & SessionGroupCommandIdFactory> | undefined;
   commandTimeoutMs?: number | undefined;
   launchPreflight?: HarnessLaunchPreflight | undefined;
   terminalIntentRunner?: TerminalIntentRunner | undefined;
@@ -91,6 +95,13 @@ export function registerObserverCommandHandlers(
       logger: options.logger,
       commandTimeoutMs: options.commandTimeoutMs,
     });
+  const sessionGroupHandlers = createSessionGroupCommandHandlers({
+    core: options.core,
+    persistence: options.persistence,
+    eventBus: options.eventBus,
+    clock: options.clock,
+    idFactory: options.idFactory,
+  });
   const handlers = {
     "worktree.create": createWorktreeCreateHandler({
       getProjects,
@@ -243,6 +254,7 @@ export function registerObserverCommandHandlers(
       eventBus: options.eventBus,
       clock: options.clock,
     }),
+    ...sessionGroupHandlers,
   } satisfies Record<StationCommand["type"], CommandHandler>;
 
   const commandTypes = Object.keys(handlers) as StationCommand["type"][];

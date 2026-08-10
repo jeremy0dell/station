@@ -654,11 +654,11 @@ export function createInMemoryObserverPersistence(
         ),
       ),
 
-    pruneSessionGroupMemberships: (input) =>
+    repairSessionGroups: (input) =>
       transaction((draft) =>
         applySessionGroupMutation(
           draft,
-          sessionGroupStore.pruneSessionGroupMemberships(draft.sessionGroups, {
+          sessionGroupStore.repairSessionGroups(draft.sessionGroups, {
             ...input,
             updatedAt: input.updatedAt ?? now(),
           }),
@@ -732,10 +732,10 @@ function emptyState(): InMemoryObserverPersistenceState {
   };
 }
 
-function applySessionGroupMutation(
+function applySessionGroupMutation<T>(
   state: InMemoryObserverPersistenceState,
-  mutation: sessionGroupStore.SessionGroupMutation,
-) {
+  mutation: { state: sessionGroupStore.SessionGroupPersistenceState; result: T },
+): T {
   state.sessionGroups = mutation.state;
   return mutation.result;
 }
