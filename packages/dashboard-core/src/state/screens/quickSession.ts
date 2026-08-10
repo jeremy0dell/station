@@ -5,7 +5,6 @@ import {
   resolveNewSessionProjectAvailability,
 } from "../../flows/newSession.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
-import { focusDashboardProjectHeader } from "../dashboardFocus.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiTransition } from "../transition.js";
 import type { DashboardState, DashboardStateView } from "../types.js";
@@ -63,7 +62,7 @@ export function submitQuickSession(state: DashboardState, projectId: string): Tu
 
   const { title, branch, harnessProvider, token } = resolution;
   return {
-    state: focusDashboardProjectHeader(state, project.id, "quickSession"),
+    state,
     operations: [
       {
         type: "quickCreateManagedSession",

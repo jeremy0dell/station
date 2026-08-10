@@ -1,11 +1,14 @@
 import { TextAttributes, type ColorInput } from "@opentui/core";
 import { projectHeaderLabelParts, textMatchSegments, truncateCells } from "@station/dashboard-core/selectors";
-import type { DashboardPersistentFilterProjectMatch } from "@station/dashboard-core/selectors";
-import type { DashboardSnapshotView, ProjectHeaderControl } from "@station/dashboard-core/state";
+import type {
+  DashboardCellId,
+  DashboardPersistentFilterProjectMatch,
+  DashboardRowId,
+} from "@station/dashboard-core/selectors";
+import type { DashboardSnapshotView } from "@station/dashboard-core/state";
 
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
 import { toOpenTuiColor, useStationTheme, type StationTheme } from "../../theme/index.js";
-import type { StationMouseTarget } from "../input/stationMouse.js";
 import {
   stationMouseProps,
   useStationHoverState,
@@ -22,15 +25,17 @@ const RESPONSIVE_AFFORDANCE_BREAKPOINT = 90;
 
 export function ProjectHeaderView({
   columns,
+  rowId,
   project,
   collapsed,
-  focus,
+  focusedCellId,
   persistentFilterMatch,
 }: {
   columns: number;
+  rowId: DashboardRowId;
   project: DashboardProjectView;
   collapsed: boolean;
-  focus?: ProjectHeaderControl | undefined;
+  focusedCellId?: DashboardCellId | undefined;
   persistentFilterMatch?: DashboardPersistentFilterProjectMatch | undefined;
 }) {
   const compact = columns < RESPONSIVE_AFFORDANCE_BREAKPOINT;
@@ -47,10 +52,11 @@ export function ProjectHeaderView({
   return (
     <box flexDirection="row" width="100%" height={1} overflow="hidden">
       <ProjectHeaderPrimary
+        rowId={rowId}
         project={project}
         collapsed={collapsed}
         width={Math.max(1, columns - controlsWidth)}
-        focused={focus === "primary"}
+        focused={focusedCellId === "identity"}
         dimmed={dimmed}
         persistentFilterMatch={persistentFilterMatch}
       />
@@ -58,22 +64,25 @@ export function ProjectHeaderView({
       <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
         label={shellLabel}
-        target={{ kind: "openShellForProject", projectId: project.id }}
-        focused={focus === "shell"}
+        rowId={rowId}
+        cellId="shell"
+        focused={focusedCellId === "shell"}
         dimmed={dimmed}
       />
       <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
         label={quickSessionLabel}
-        target={{ kind: "quickSessionForProject", projectId: project.id }}
-        focused={focus === "quickSession"}
+        rowId={rowId}
+        cellId="quickSession"
+        focused={focusedCellId === "quickSession"}
         dimmed={dimmed}
       />
       <ProjectHeaderSeparator dimmed={dimmed} />
       <ProjectHeaderAction
         label={DEFAULT_AGENT_AFFORDANCE_LABEL}
-        target={{ kind: "showDefaultAgentPickerForProject", projectId: project.id }}
-        focused={focus === "defaultAgent"}
+        rowId={rowId}
+        cellId="defaultAgent"
+        focused={focusedCellId === "defaultAgent"}
         dimmed={dimmed}
       />
     </box>
@@ -81,6 +90,7 @@ export function ProjectHeaderView({
 }
 
 function ProjectHeaderPrimary({
+  rowId,
   project,
   collapsed,
   width,
@@ -88,6 +98,7 @@ function ProjectHeaderPrimary({
   dimmed,
   persistentFilterMatch,
 }: {
+  rowId: DashboardRowId;
   project: DashboardProjectView;
   collapsed: boolean;
   width: number;
@@ -104,7 +115,7 @@ function ProjectHeaderPrimary({
       fg={toOpenTuiColor(theme.text.primary)}
       attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
       {...projectHeaderBackground(theme, hover, focused)}
-      {...stationMouseProps(dispatch, { kind: "projectHeader", projectId: project.id })}
+      {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "identity" })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >
@@ -122,12 +133,14 @@ function ProjectHeaderPrimary({
 // Each action has its own trailing cell so its click cannot also toggle the project header.
 function ProjectHeaderAction({
   label,
-  target,
+  rowId,
+  cellId,
   focused,
   dimmed,
 }: {
   label: string;
-  target: StationMouseTarget;
+  rowId: DashboardRowId;
+  cellId: DashboardCellId;
   focused: boolean;
   dimmed: boolean;
 }) {
@@ -140,7 +153,7 @@ function ProjectHeaderAction({
       fg={toOpenTuiColor(hover ? theme.status.success : theme.text.muted)}
       attributes={dimmed ? TextAttributes.DIM : TextAttributes.NONE}
       {...projectHeaderBackground(theme, hover, focused)}
-      {...stationMouseProps(dispatch, target)}
+      {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >

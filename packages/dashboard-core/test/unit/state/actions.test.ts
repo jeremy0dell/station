@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import type { DashboardStateAction } from "../../../src/state/actions.js";
 import { handleTuiAction } from "../../../src/state/actions.js";
-import { focusDashboardProjectHeader } from "../../../src/state/dashboardFocus.js";
+import { focusDashboardCell } from "../../../src/state/dashboardCells.js";
 import { scrollDashboard } from "../../../src/state/dashboardScroll.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
@@ -48,14 +49,14 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
     reduce: (state) => scrollDashboard(state, 5),
   },
   {
-    name: "dashboard.projectHeader.focus",
+    name: "dashboard.cell.focus",
     action: {
-      type: "dashboard.projectHeader.focus",
-      projectId: "web",
-      control: "quickSession",
+      type: "dashboard.cell.focus",
+      rowId: dashboardRowIds.project("web"),
+      cellId: "quickSession",
     },
     state: dashboardState,
-    reduce: (state) => focusDashboardProjectHeader(state, "web", "quickSession"),
+    reduce: (state) => focusDashboardCell(state, dashboardRowIds.project("web"), "quickSession"),
   },
   {
     name: "projectSettings.focusItem",
@@ -137,9 +138,9 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
 
 const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
   {
-    type: "dashboard.projectHeader.focus",
-    projectId: "missing",
-    control: "primary",
+    type: "dashboard.cell.focus",
+    rowId: dashboardRowIds.project("missing"),
+    cellId: "identity",
   },
   { type: "projectSettings.focusItem", itemId: "agent" },
   { type: "addProject.selectRow", index: 0 },
@@ -372,6 +373,56 @@ describe("dashboard state actions", () => {
     expect(
       handleTuiAction(state, { type: "widgetSettings.addFromPicker", index: 99 }, context),
     ).toEqual({ state });
+  });
+
+  it("keeps stale, hidden, filtered, and wrong-cell dashboard targets inert", () => {
+    const state = dashboardState();
+    const stale = {
+      type: "dashboard.cell.activate" as const,
+      rowId: dashboardRowIds.session("missing"),
+      cellId: "identity" as const,
+    };
+    expect(handleTuiAction(state, stale, context)).toEqual({ state });
+    expect(
+      handleTuiAction(
+        state,
+        {
+          type: "dashboard.cell.activate",
+          rowId: dashboardRowIds.project("web"),
+          cellId: "addSession",
+        },
+        context,
+      ),
+    ).toEqual({ state });
+
+    const hidden = {
+      ...state,
+      collapsedProjectIds: new Set(["web"]),
+    };
+    expect(
+      handleTuiAction(
+        hidden,
+        {
+          type: "dashboard.cell.activate",
+          rowId: dashboardRowIds.session("ses_wt_web_idle"),
+          cellId: "identity",
+        },
+        context,
+      ),
+    ).toEqual({ state: hidden });
+
+    const filtered = { ...state, persistentFilter: { query: "api" } };
+    expect(
+      handleTuiAction(
+        filtered,
+        {
+          type: "dashboard.cell.activate",
+          rowId: dashboardRowIds.session("ses_wt_web_idle"),
+          cellId: "identity",
+        },
+        context,
+      ),
+    ).toEqual({ state: filtered });
   });
 });
 

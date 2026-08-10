@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { createInitialTuiState } from "@station/dashboard-core/state";
 import { createStationStore } from "../state/store.js";
 import { agentWorktreePaneId, MAIN_PANE_ID, type StationState } from "../state/types.js";
@@ -148,7 +149,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: STATION_IDLE_SESSION_ID } },
+        { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session(STATION_IDLE_SESSION_ID), cellId: "identity" } },
         store.getState(),
         stationState,
       ),
@@ -178,7 +179,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: "ses_wt_station_none" } },
+        { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session("ses_wt_station_none"), cellId: "identity" } },
         store.getState(),
         stationState,
       ),
@@ -208,7 +209,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: "wt_scripts_none" } },
+        { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session("wt_scripts_none"), cellId: "identity" } },
         store.getState(),
         stationState,
       ),
@@ -227,7 +228,7 @@ describe("buildContextMenuItems", () => {
     const stationState = createInitialTuiState({ initialSnapshot: externalAgentSnapshot() });
 
     const items = buildContextMenuItems(
-      { kind: "station", target: { kind: "row", rowId: "run_wt_station_idle" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session("run_wt_station_idle"), cellId: "identity" } },
       store.getState(),
       stationState,
     );
@@ -259,12 +260,12 @@ describe("buildContextMenuItems", () => {
     });
 
     const stationItems = buildContextMenuItems(
-      { kind: "station", target: { kind: "row", rowId: retained.id } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session(retained.id), cellId: "identity" } },
       store.getState(),
       stationState,
     );
     const externalItems = buildContextMenuItems(
-      { kind: "station", target: { kind: "row", rowId: "run_wt_station_idle" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session("run_wt_station_idle"), cellId: "identity" } },
       store.getState(),
       stationState,
     );
@@ -296,7 +297,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: STATION_IDLE_SESSION_ID } },
+        { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session(STATION_IDLE_SESSION_ID), cellId: "identity" } },
         store.getState(),
         stationState,
       ),
@@ -333,7 +334,7 @@ describe("buildContextMenuItems", () => {
     const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
 
     const items = buildContextMenuItems(
-      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       store.getState(),
       stationState,
     );
@@ -364,7 +365,7 @@ describe("buildContextMenuItems", () => {
 
     expect(
       buildContextMenuItems(
-        { kind: "station", target: { kind: "row", rowId: STATION_IDLE_SESSION_ID } },
+        { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.session(STATION_IDLE_SESSION_ID), cellId: "identity" } },
         store.getState(),
         stationState,
       )[0]?.disabled,

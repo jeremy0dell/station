@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import { createCommandSnapshot, createZeroWorktreeSnapshot } from "../../fixtures/snapshots.js";
 import { createTestDashboardRuntime } from "../../support/fakeClientStateSource.js";
 import { createFakeDashboardCapabilities } from "../../support/fakeDashboardCapabilities.js";
@@ -14,9 +15,9 @@ describe("quick session", () => {
     if (project === undefined) throw new Error("project fixture missing");
 
     store.actions.dispatch({
-      type: "dashboard.projectHeader.activate",
-      projectId: project.id,
-      actionId: "quickSession",
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.project(project.id),
+      cellId: "quickSession",
     });
 
     expect(capabilities.quickCreateRequests).toHaveLength(1);
@@ -37,14 +38,20 @@ describe("quick session", () => {
       service,
       capabilities,
       initialSnapshot: snapshot,
-      initialState: { dashboardFocus: { kind: "emptyProjectAction", projectId: "web" } },
+      initialState: {
+        dashboardFocus: { rowId: dashboardRowIds.empty("web"), cellId: "addSession" },
+      },
     });
 
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
 
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: "web",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
     });
     expect(capabilities.quickCreateRequests).toHaveLength(1);
   });
@@ -78,15 +85,24 @@ describe("quick session", () => {
       service,
       capabilities,
       initialSnapshot: unavailable,
-      initialState: { dashboardFocus: { kind: "emptyProjectAction", projectId: project.id } },
+      initialState: {
+        dashboardFocus: {
+          rowId: dashboardRowIds.empty(project.id),
+          cellId: "addSession",
+        },
+      },
     });
 
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: project.id });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty(project.id),
+      cellId: "addSession",
+    });
 
     expect(capabilities.quickCreateRequests).toEqual([]);
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: project.id,
+      rowId: dashboardRowIds.empty(project.id),
+      cellId: "addSession",
     });
     expect(store.state.getState().localRows.pendingCreate).toEqual([]);
     expect(store.state.getState().toasts.at(-1)?.toast).toMatchObject({
@@ -103,9 +119,9 @@ describe("quick session", () => {
     const store = createTestDashboardRuntime({ service, initialSnapshot: snapshot, capabilities });
 
     store.actions.dispatch({
-      type: "dashboard.projectHeader.activate",
-      projectId: "missing-project",
-      actionId: "quickSession",
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.project("missing-project"),
+      cellId: "quickSession",
     });
 
     expect(capabilities.quickCreateRequests).toEqual([]);

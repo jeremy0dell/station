@@ -11,19 +11,11 @@ import type {
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
 import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
+import type { DashboardFocus } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
 import type { ReadonlyDeep } from "./readonly.js";
 import type { TuiSelectionState } from "./selection/types.js";
-
-/** Stable control identities for the four project-header action segments. */
-export type ProjectHeaderControl = "primary" | "shell" | "quickSession" | "defaultAgent";
-
-/** Renderer-neutral focus over session rows, project headers, and empty-project actions. */
-export type DashboardFocus =
-  | { kind: "session"; sessionId: SessionId }
-  | { kind: "projectHeader"; projectId: ProjectId; control: ProjectHeaderControl }
-  | { kind: "emptyProjectAction"; projectId: ProjectId };
 
 export type DashboardFilterConditionField = "status" | "project" | "agent";
 
@@ -82,7 +74,7 @@ export type TuiViewState = {
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
-  /** Dashboard cursor; native overlays synchronize session identity once per open. */
+  /** Branded dashboard row/cell cursor; native overlays synchronize session identity once per open. */
   dashboardFocus?: DashboardFocus;
   /** Per-list cursor for screens migrated onto the shared selection engine. */
   selection: TuiSelectionState;

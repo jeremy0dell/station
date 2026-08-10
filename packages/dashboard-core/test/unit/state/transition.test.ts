@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
 import { deriveTuiInputMode } from "../../../src/state/keymap.js";
 import type { TuiKey } from "../../../src/state/keys.js";
@@ -110,7 +111,10 @@ describe("TUI screen transitions", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const withPending: typeof base = {
       ...base,
-      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_api_working"),
+        cellId: "identity",
+      },
       localRows: {
         ...base.localRows,
         pendingRemove: [
@@ -137,7 +141,10 @@ describe("TUI screen transitions", () => {
     });
     const state: typeof base = {
       ...base,
-      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_api_working"),
+        cellId: "identity",
+      },
     };
     const opened = handleTuiKey(state, { input: "X" }).state;
     const committed = handleTuiKey(opened, { input: "\r", return: true }).state;
@@ -871,9 +878,8 @@ describe("TUI screen transitions", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       dashboardFocus: {
-        kind: "projectHeader",
-        projectId: "web",
-        control: "defaultAgent",
+        rowId: dashboardRowIds.project("web"),
+        cellId: "defaultAgent",
       },
     });
     const expectedFocus = base.dashboardFocus;
@@ -904,9 +910,8 @@ describe("TUI screen transitions", () => {
     const base = createInitialTuiState({
       initialSnapshot: snapshot,
       dashboardFocus: {
-        kind: "projectHeader",
-        projectId: "web",
-        control: "defaultAgent",
+        rowId: dashboardRowIds.project("web"),
+        cellId: "defaultAgent",
       },
     });
     const opened = openProjectDefaultAgentPicker(base, "web");
@@ -920,9 +925,8 @@ describe("TUI screen transitions", () => {
     const returned = handleTuiKey(replaced, { input: "", escape: true }).state;
 
     expect(returned.dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "api",
-      control: "primary",
+      rowId: dashboardRowIds.project("api"),
+      cellId: "identity",
     });
   });
 
@@ -1033,7 +1037,7 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(
       createInitialTuiState({
         initialSnapshot: createZeroWorktreeSnapshot(),
-        dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+        dashboardFocus: { rowId: dashboardRowIds.empty("web"), cellId: "addSession" },
       }),
       { input: "\r", return: true },
     );
@@ -1043,8 +1047,8 @@ describe("TUI screen transitions", () => {
       project: { id: "web" },
     });
     expect(transition.state.dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: "web",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
     });
   });
 
@@ -1061,15 +1065,15 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(
       createInitialTuiState({
         initialSnapshot: unavailable,
-        dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+        dashboardFocus: { rowId: dashboardRowIds.empty("web"), cellId: "addSession" },
       }),
       { input: "\r", return: true },
     );
 
     expect(transition.operations).toBeUndefined();
     expect(transition.state.dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: "web",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
     });
     expect(transition.state.toasts.at(-1)?.toast.kind).toBe("error");
   });
@@ -1078,11 +1082,11 @@ describe("TUI screen transitions", () => {
     for (const state of [
       createInitialTuiState({
         initialSnapshot: createZeroWorktreeSnapshot(),
-        dashboardFocus: { kind: "emptyProjectAction", projectId: "ghost" },
+        dashboardFocus: { rowId: dashboardRowIds.empty("ghost"), cellId: "addSession" },
       }),
       createInitialTuiState({
         initialSnapshot: createDashboardSnapshot(),
-        dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+        dashboardFocus: { rowId: dashboardRowIds.empty("web"), cellId: "addSession" },
       }),
     ]) {
       expect(handleTuiKey(state, { input: "\r", return: true })).toEqual({ state });
@@ -1141,7 +1145,10 @@ describe("TUI screen transitions", () => {
     const base = createInitialTuiState({
       initialSnapshot: createDashboardSnapshot(),
       persistentFilter: { query: "queue-worker" },
-      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_api_working"),
+        cellId: "identity",
+      },
     });
     const choosing = handleTuiKey(base, { input: "X" }).state;
 

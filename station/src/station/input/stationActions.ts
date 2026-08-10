@@ -1,5 +1,6 @@
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
 import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import type { DashboardRowId } from "@station/dashboard-core/selectors";
 import type { TuiKey, TuiSemanticAction } from "@station/dashboard-core/state";
 import { sequenceToTuiKey } from "./sequenceToTuiKey.js";
 
@@ -40,16 +41,20 @@ export function dispatchStationAction(
 
 /**
  * Dispatch a current row's slot only for chooser modes that intentionally retain
- * slot semantics; dashboard activation uses `dashboard.row.activate` directly.
+ * slot semantics; dashboard activation uses the exact dashboard cell directly.
  */
-export function dispatchRowSlot(runtime: DashboardTransitionInput, rowId: string): void {
+export function dispatchRowSlot(runtime: DashboardTransitionInput, rowId: DashboardRowId): void {
   const state = runtime.state.getState();
   if (state.snapshot === undefined) {
     return;
   }
-  const choice = selectDashboardViewport(state.snapshot, state).rowChoices.find(
-    (candidate) => candidate.value.id === rowId,
-  );
+  const viewport = selectDashboardViewport(state.snapshot, state);
+  const row = viewport.rowById.get(rowId);
+  if (row?.payload.type !== "session") {
+    return;
+  }
+  const sessionId = row.payload.row.id;
+  const choice = viewport.rowChoices.find((candidate) => candidate.value.id === sessionId);
   if (choice !== undefined) {
     dispatchStationKey(runtime, { input: choice.key });
   }

@@ -8,6 +8,7 @@ import { testRender } from "@opentui/react/test-utils";
 import type { StationClientConnectionState } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
 import type { ClientNotice, DashboardCapabilities } from "@station/dashboard-core/runtime";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { act } from "react";
 import { spanAtFrameCell } from "../../terminal/testing/frameProbe.js";
 import {
@@ -637,8 +638,9 @@ describe("dashboard golden frames", () => {
       });
       await act(async () => {
         setup.store.actions.dispatch({
-          type: "dashboard.emptyProject.activate",
-          projectId: "empty-project",
+          type: "dashboard.cell.activate",
+          rowId: dashboardRowIds.empty("empty-project"),
+          cellId: "addSession",
         });
       });
       await setup.flush();
@@ -689,7 +691,13 @@ describe("dashboard golden frames", () => {
       await setup.mockMouse.click(col - 1, row, MouseButtons.LEFT);
       await setup.mockMouse.click(col, row, MouseButtons.LEFT);
       await setup.mockMouse.click(after, row, MouseButtons.LEFT);
-      expect(targets).toEqual([{ kind: "emptyProjectAction", projectId: "empty-project" }]);
+      expect(targets).toEqual([
+        {
+          kind: "dashboardCell",
+          rowId: dashboardRowIds.empty("empty-project"),
+          cellId: "addSession",
+        },
+      ]);
     }
   });
 
@@ -824,10 +832,26 @@ describe("dashboard golden frames", () => {
     await setup.mockMouse.click(picker, row, MouseButtons.LEFT);
 
     expect(targets).toEqual([
-      { kind: "projectHeader", projectId: "station" },
-      { kind: "openShellForProject", projectId: "station" },
-      { kind: "quickSessionForProject", projectId: "station" },
-      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.project("station"),
+        cellId: "identity",
+      },
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.project("station"),
+        cellId: "shell",
+      },
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.project("station"),
+        cellId: "quickSession",
+      },
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.project("station"),
+        cellId: "defaultAgent",
+      },
     ]);
   });
 
@@ -936,7 +960,10 @@ describe("dashboard golden frames", () => {
       stationColorSnapshotValue(nativeStationTheme.interaction.hover),
     );
     await setup.mockMouse.click(col, row, MouseButtons.LEFT);
-    expect(clicked).toMatchObject({ kind: "row" });
+    expect(clicked).toMatchObject({
+      kind: "dashboardCell",
+      cellId: "identity",
+    });
   });
 
   it("wraps the complete actionable error at wide and narrow widths", async () => {

@@ -2,21 +2,15 @@ import { createNewSessionFlow, createNewSessionNameToken } from "../../flows/new
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
 import { safeErrorToToast } from "../../services/errors/errors.js";
+import { activateFocusedDashboardCell } from "../dashboardCells.js";
 import {
-  activateFocusedDashboardRow,
-  focusedEmptyProjectAction,
-  focusedProjectHeaderControl,
   focusNextNeedsMe,
-  moveDashboardFocus,
-  moveDashboardFocusHorizontal,
+  moveDashboardCursor,
+  moveDashboardCursorHorizontal,
 } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import { matchDashboardBinding, type TuiDashboardAction } from "../keymap.js";
 import type { TuiKey } from "../keys.js";
-import {
-  activateEmptyProjectAction,
-  activateProjectHeaderControl,
-} from "../projectHeaderActions.js";
 import { activateDashboardRow } from "../rowActivation.js";
 import { addTuiToast } from "../toasts.js";
 import type { TuiRuntimeContext, TuiTransition } from "../transition.js";
@@ -60,32 +54,25 @@ function handleDashboardAction(
   switch (action) {
     case "tui.focus.up":
       return {
-        state: moveDashboardFocus(state, -1),
+        state: moveDashboardCursor(state, -1),
       };
     case "tui.focus.down":
       return {
-        state: moveDashboardFocus(state, 1),
+        state: moveDashboardCursor(state, 1),
       };
     case "tui.focus.left":
       return {
-        state: moveDashboardFocusHorizontal(state, -1),
+        state: moveDashboardCursorHorizontal(state, -1),
       };
     case "tui.focus.right":
       return {
-        state: moveDashboardFocusHorizontal(state, 1),
+        state: moveDashboardCursorHorizontal(state, 1),
       };
     case "tui.focus.activate": {
       if (hasNoProjects(state)) {
         return handleDashboardAddProjectAction(state, context);
       }
-      const emptyProject = focusedEmptyProjectAction(state);
-      if (emptyProject !== undefined) {
-        return activateEmptyProjectAction(state, emptyProject.projectId);
-      }
-      const header = focusedProjectHeaderControl(state);
-      return header === undefined
-        ? activateFocusedDashboardRow(state)
-        : activateProjectHeaderControl(state, header.projectId, header.control);
+      return activateFocusedDashboardCell(state);
     }
     case "tui.focus.nextNeedsMe":
       return {

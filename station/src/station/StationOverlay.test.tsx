@@ -3,6 +3,7 @@ import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import type { DashboardRuntime } from "@station/dashboard-core/runtime";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { act } from "react";
 import type { StationMouseEvent } from "../input/mouse.js";
 import type { MouseTargetRef } from "../input/router.js";
@@ -133,7 +134,7 @@ describe("StationOverlay", () => {
 
     expect(calls.at(-1)?.target).toEqual({
       kind: "station",
-      target: { kind: "row", rowId: "ses_wt_station_working" },
+      target: { kind: "dashboardCell", rowId: dashboardRowIds.session("ses_wt_station_working"), cellId: "identity" },
     });
   });
 

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { rgbToHex } from "@opentui/core";
 import { MouseButtons } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import type { TuiWidgetConfig } from "@station/dashboard-core/widgets";
 import { act } from "react";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
@@ -118,7 +119,7 @@ describe("FullscreenDashboard surface ownership", () => {
     const fixture = makeStationTestRuntime({
       terminalRows: size.height,
       initialState: {
-        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+        dashboardFocus: { rowId: dashboardRowIds.empty("empty-project"), cellId: "addSession" },
       },
     });
     const lightSource: StationThemeSource = {
@@ -143,7 +144,7 @@ describe("FullscreenDashboard surface ownership", () => {
     const fixture = makeStationTestRuntime({
       terminalRows: size.height,
       initialState: {
-        dashboardFocus: { kind: "emptyProjectAction", projectId: "empty-project" },
+        dashboardFocus: { rowId: dashboardRowIds.empty("empty-project"), cellId: "addSession" },
       },
     });
     const lightSource: StationThemeSource = {
