@@ -2,6 +2,7 @@ import type {
   ClientFeatureFlags,
   HarnessRunObservation,
   ProviderHealth,
+  ProviderId,
   ProviderProjectConfig,
   SafeError,
   StationSnapshot,
@@ -20,29 +21,18 @@ import type {
 } from "../persistence/index.js";
 import { providerObservationRetentionDays } from "../persistence/retention.js";
 import type { ProviderRegistry } from "../providers/registry.js";
-import { resolveWorktreeDisplayTitle } from "../worktreeDisplayTitle.js";
 import { buildStationSnapshot } from "./graph.js";
-import {
-  harnessRunsWithPersistedEventStatus,
-  repairPersistedHarnessEventCompatibility,
-} from "./harnessEventRepair.js";
-import { decayStaleBusyStatuses, type ObserverHarnessRun } from "./harnessEventStatus.js";
-import {
-  normalizeHarnessRunsForCurrentWorktrees,
-  normalizeTerminalTargetsForCurrentWorktrees,
-  reattachSessionTitleEvidence,
-} from "./observationCorrelation.js";
-import {
-  type ProviderReadOptions,
-  readHarnessObservations,
-  readRepositoryProviderHealth,
-  readTerminalTargetObservations,
-  readWorktreeObservations,
-} from "./providerObservations.js";
+import { repairPersistedHarnessEventCompatibility } from "./harnessEventRepair.js";
+import type { ObserverHarnessRun } from "./harnessEventStatus.js";
+import type { ProviderReadOptions } from "./providerObservations.js";
 import type { ReconcileTiming } from "./reconcileResult.js";
+import {
+  type CurrentReconcileObservations,
+  readCurrentReconcileObservations,
+} from "./run/currentObservations.js";
+import { type ReconcileSnapshotInputs, readReconcileSnapshotInputs } from "./run/snapshotInputs.js";
 import { reconcileSessionGroups } from "./sessionGroups.js";
 import { harnessesFromRegistry } from "./snapshotSeed.js";
-import { worktreesWithCachedMetadata } from "./worktreeMetadataOverlay.js";
 
 type ReconcileOnceInput = {
   reason: string;
@@ -82,6 +72,8 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   const retentionDays =
     input.providerObservationRetentionDays ?? providerObservationRetentionDays();
   await input.read.logger?.info("Reconcile started.", { reason: input.reason });
+
+  // Compatibility repair must precede current provider state assembly.
   if (input.persistence !== undefined) {
     await repairPersistedHarnessEventCompatibility({
       persistence: input.persistence,
@@ -93,162 +85,64 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   const errors: SafeError[] = [];
   const providerHealth: Record<string, ProviderHealth> = {};
 
-  // Worktree and terminal reads are independent of each other.
-  const [worktreeResult, terminalResult] = await Promise.all([
-    readWorktreeObservations({
-      providers: input.providers,
-      projects: input.projects,
-      read: input.read,
-      providerHealth,
-      errors,
-    }),
-    readTerminalTargetObservations({
-      providers: input.providers,
-      read: input.read,
-      providerHealth,
-      errors,
-    }),
-  ]);
-  const terminalTargets = normalizeTerminalTargetsForCurrentWorktrees({
-    terminalTargets: terminalResult.terminalTargets,
-    worktrees: worktreeResult.worktrees,
-  });
-  const harnessResult = await readHarnessObservations({
+  // Provider reads, relationship correlation, durable status, and cached metadata stay ordered here.
+  const observations = await readCurrentReconcileObservations({
     providers: input.providers,
     projects: input.projects,
-    worktrees: worktreeResult.worktrees,
-    terminalTargets,
     read: input.read,
+    ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     providerHealth,
     errors,
   });
-  readRepositoryProviderHealth({
-    providers: input.providers,
-    read: input.read,
-    providerHealth,
-  });
+  const finishedAt = observations.observedAt;
 
-  const finishedAt = toIsoTimestamp(input.read.clock.now());
-  const harnessStatusInput: {
-    persistence?: ObservationStore & SessionStore;
-    providers: ProviderRegistry;
-    harnessRuns: ObserverHarnessRun[];
-    now: string;
-  } = {
-    providers: input.providers,
-    harnessRuns: harnessResult.harnessRuns,
+  // Snapshot records are loaded after current identities so title evidence is reattached correctly.
+  const snapshotInputs = await readReconcileSnapshotInputs({
+    projects: input.projects,
+    worktrees: observations.worktreesForSnapshot,
+    harnessRuns: observations.harnessRuns,
+    terminalTargets: observations.terminalTargets,
     now: finishedAt,
-  };
-  if (input.persistence !== undefined) {
-    harnessStatusInput.persistence = input.persistence;
-  }
-  const harnessRunsWithStatus = decayStaleBusyStatuses({
-    runs: await harnessRunsWithPersistedEventStatus(harnessStatusInput),
-    now: finishedAt,
+    ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
   });
-  const harnessRuns = normalizeHarnessRunsForCurrentWorktrees({
-    harnessRuns: harnessRunsWithStatus,
-    worktrees: worktreeResult.worktrees,
-    terminalTargets,
-  });
-  const metadataInput: {
-    persistence?: WorktreeMetadataStore;
-    worktrees: WorktreeObservation[];
-    now: string;
-  } = {
-    worktrees: worktreeResult.worktrees,
-    now: finishedAt,
-  };
-  if (input.persistence !== undefined) {
-    metadataInput.persistence = input.persistence;
-  }
-  const worktreesForSnapshot = await worktreesWithCachedMetadata(metadataInput);
-  const [sessionMetadata, persistedWorktreeDisplayTitles, recoveryHandles, turnReadiness] =
-    input.persistence === undefined
-      ? [[], [], [], []]
-      : await Promise.all([
-          input.persistence.listSessions(),
-          input.persistence.listWorktreeDisplayTitles(),
-          input.persistence.listSessionRecoveryHandles(),
-          input.persistence.listSessionTurnReadiness(),
-        ]);
-  const configuredProjectIds = new Set(input.projects.map((project) => project.id));
-  const titleSessionEvidence = reattachSessionTitleEvidence({
-    sessions: sessionMetadata,
-    harnessRuns,
-    terminalTargets,
-  });
-  const worktreeDisplayTitles: PersistedWorktreeDisplayTitle[] = worktreesForSnapshot
-    .filter(
-      (worktree) => worktree.state === "exists" && configuredProjectIds.has(worktree.projectId),
-    )
-    .map((worktree) => {
-      const existing = persistedWorktreeDisplayTitles.find(
-        (title) => title.projectId === worktree.projectId && title.worktreeId === worktree.id,
-      );
-      if (existing !== undefined) return existing;
-      return {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        title: resolveWorktreeDisplayTitle({
-          projectId: worktree.projectId,
-          worktreeId: worktree.id,
-          branch: worktree.branch,
-          canonicalTitles: persistedWorktreeDisplayTitles,
-          sessions: titleSessionEvidence,
-        }),
-        createdAt: finishedAt,
-        updatedAt: finishedAt,
-      };
-    });
   const lastReconcile: ReconcileTiming = {
     reason: input.reason,
     startedAt: started,
     finishedAt,
     durationMs: durationMs(started, finishedAt),
-    projectsScanned: worktreeResult.projectsScanned,
-    worktreesObserved: worktreeResult.worktrees.length,
-    terminalTargetsObserved: terminalTargets.length,
-    harnessRunsObserved: harnessRuns.length,
+    projectsScanned: observations.projectsScanned,
+    worktreesObserved: observations.worktrees.length,
+    terminalTargetsObserved: observations.terminalTargets.length,
+    harnessRunsObserved: observations.harnessRuns.length,
     eventsEmitted: 0,
     errors,
   };
-  const baseSnapshot = buildStationSnapshot({
-    generatedAt: finishedAt,
+
+  // Graph assembly and atomic persistence consume the same correlated records.
+  const snapshot = await buildReconcileSnapshot({
     observer: input.observer,
     projects: input.projects,
     worktreeProviderId: input.providers.worktree.id,
     providerHealth,
     harnesses: harnessesFromRegistry(input.providers),
-    harnessCapabilities: harnessResult.harnessCapabilities,
-    worktrees: worktreesForSnapshot,
-    terminalTargets,
-    harnessRuns,
-    sessionMetadata,
-    worktreeDisplayTitles,
-    recoveryHandles,
-    turnReadiness,
+    harnessCapabilities: observations.harnessCapabilities,
+    worktrees: observations.worktreesForSnapshot,
+    terminalTargets: observations.terminalTargets,
+    harnessRuns: observations.harnessRuns,
+    snapshotInputs,
     ...(input.featureFlags === undefined ? {} : { featureFlags: input.featureFlags }),
+    ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
+    generatedAt: finishedAt,
+    errors,
   });
-  const groupProjection = await reconcileSessionGroups({
-    ...(input.persistence === undefined ? {} : { store: input.persistence }),
-    projects: input.projects,
-    sessions: baseSnapshot.sessions,
-    updatedAt: finishedAt,
-  });
-  errors.push(...groupProjection.errors);
-  const snapshot: StationSnapshot = {
-    ...baseSnapshot,
-    sessionGroups: groupProjection.sessionGroups,
-  };
 
   lastReconcile.eventsEmitted = await persistReconcileResult({
     ...(input.persistence === undefined ? {} : { persistence: input.persistence }),
     projects: input.projects,
-    worktrees: worktreeResult.worktrees,
-    terminalTargets,
-    harnessRuns: harnessRuns.map((harnessRun) => harnessRun.run),
-    worktreeDisplayTitles,
+    worktrees: observations.worktrees,
+    terminalTargets: observations.terminalTargets,
+    harnessRuns: observations.harnessRuns.map((harnessRun) => harnessRun.run),
+    worktreeDisplayTitles: snapshotInputs.worktreeDisplayTitles,
     providerHealth,
     observedAt: finishedAt,
     providerObservationRetentionDays: retentionDays,
@@ -257,10 +151,10 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
   await input.read.logger?.info("Reconcile finished.", {
     reason: input.reason,
     durationMs: lastReconcile.durationMs,
-    projectsScanned: worktreeResult.projectsScanned,
-    worktreesObserved: worktreeResult.worktrees.length,
-    terminalTargetsObserved: terminalResult.terminalTargets.length,
-    harnessRunsObserved: harnessRuns.length,
+    projectsScanned: observations.projectsScanned,
+    worktreesObserved: observations.worktrees.length,
+    terminalTargetsObserved: observations.terminalTargetsRead,
+    harnessRunsObserved: observations.harnessRuns.length,
     errorCount: errors.length,
   });
 
@@ -268,6 +162,55 @@ export async function runReconcileOnce(input: ReconcileOnceInput): Promise<Recon
     snapshot,
     providerHealth,
     lastReconcile,
+  };
+}
+
+/**
+ * Builds the graph and applies durable Group repair from the same correlated records used for persistence.
+ */
+async function buildReconcileSnapshot(input: {
+  generatedAt: string;
+  observer: ReconcileOnceInput["observer"];
+  projects: ProviderProjectConfig[];
+  worktreeProviderId: ProviderId;
+  providerHealth: Record<string, ProviderHealth>;
+  harnesses: ReturnType<typeof harnessesFromRegistry>;
+  harnessCapabilities: CurrentReconcileObservations["harnessCapabilities"];
+  worktrees: WorktreeObservation[];
+  terminalTargets: TerminalTargetObservation[];
+  harnessRuns: ObserverHarnessRun[];
+  snapshotInputs: ReconcileSnapshotInputs;
+  featureFlags?: ClientFeatureFlags;
+  persistence?: SessionGroupStore;
+  errors: SafeError[];
+}): Promise<StationSnapshot> {
+  const baseSnapshot = buildStationSnapshot({
+    generatedAt: input.generatedAt,
+    observer: input.observer,
+    projects: input.projects,
+    worktreeProviderId: input.worktreeProviderId,
+    providerHealth: input.providerHealth,
+    harnesses: input.harnesses,
+    harnessCapabilities: input.harnessCapabilities,
+    worktrees: input.worktrees,
+    terminalTargets: input.terminalTargets,
+    harnessRuns: input.harnessRuns,
+    sessionMetadata: input.snapshotInputs.sessionMetadata,
+    worktreeDisplayTitles: input.snapshotInputs.worktreeDisplayTitles,
+    recoveryHandles: input.snapshotInputs.recoveryHandles,
+    turnReadiness: input.snapshotInputs.turnReadiness,
+    ...(input.featureFlags === undefined ? {} : { featureFlags: input.featureFlags }),
+  });
+  const groupProjection = await reconcileSessionGroups({
+    ...(input.persistence === undefined ? {} : { store: input.persistence }),
+    projects: input.projects,
+    sessions: baseSnapshot.sessions,
+    updatedAt: input.generatedAt,
+  });
+  input.errors.push(...groupProjection.errors);
+  return {
+    ...baseSnapshot,
+    sessionGroups: groupProjection.sessionGroups,
   };
 }
 

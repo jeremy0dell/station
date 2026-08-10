@@ -896,7 +896,7 @@ participate. Nonliteral dynamic module edges fail because their ownership cannot
 be resolved. External literal dynamics such as `bun:sqlite` and `node:sqlite`
 remain recorded external edges rather than source-cycle members.
 
-The current Observer graph contains 145 production modules and no strongly
+The current Observer graph contains 147 production modules and no strongly
 connected component. `migrations/migration.ts` now owns
 `ObserverSqliteMigration`, so numbered migration declarations do not depend on
 their ordered aggregator. `reconcile/reconcileResult.ts` owns

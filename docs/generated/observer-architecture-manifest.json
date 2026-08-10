@@ -9650,43 +9650,13 @@
           "specifier": "./harnessEventRepair.js",
           "resolvedPath": "apps/observer/src/reconcile/harnessEventRepair.ts",
           "edgeKind": "runtime",
-          "bindings": [
-            "harnessRunsWithPersistedEventStatus",
-            "repairPersistedHarnessEventCompatibility"
-          ]
-        },
-        {
-          "specifier": "./harnessEventStatus.js",
-          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
-          "edgeKind": "runtime",
-          "bindings": ["decayStaleBusyStatuses"]
+          "bindings": ["repairPersistedHarnessEventCompatibility"]
         },
         {
           "specifier": "./harnessEventStatus.js",
           "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
           "edgeKind": "type-only",
           "bindings": ["ObserverHarnessRun"]
-        },
-        {
-          "specifier": "./observationCorrelation.js",
-          "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
-          "edgeKind": "runtime",
-          "bindings": [
-            "normalizeHarnessRunsForCurrentWorktrees",
-            "normalizeTerminalTargetsForCurrentWorktrees",
-            "reattachSessionTitleEvidence"
-          ]
-        },
-        {
-          "specifier": "./providerObservations.js",
-          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
-          "edgeKind": "runtime",
-          "bindings": [
-            "readHarnessObservations",
-            "readRepositoryProviderHealth",
-            "readTerminalTargetObservations",
-            "readWorktreeObservations"
-          ]
         },
         {
           "specifier": "./providerObservations.js",
@@ -9701,6 +9671,30 @@
           "bindings": ["ReconcileTiming"]
         },
         {
+          "specifier": "./run/currentObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/run/currentObservations.ts",
+          "edgeKind": "runtime",
+          "bindings": ["readCurrentReconcileObservations"]
+        },
+        {
+          "specifier": "./run/currentObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/run/currentObservations.ts",
+          "edgeKind": "type-only",
+          "bindings": ["CurrentReconcileObservations"]
+        },
+        {
+          "specifier": "./run/snapshotInputs.js",
+          "resolvedPath": "apps/observer/src/reconcile/run/snapshotInputs.ts",
+          "edgeKind": "runtime",
+          "bindings": ["readReconcileSnapshotInputs"]
+        },
+        {
+          "specifier": "./run/snapshotInputs.js",
+          "resolvedPath": "apps/observer/src/reconcile/run/snapshotInputs.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ReconcileSnapshotInputs"]
+        },
+        {
           "specifier": "./sessionGroups.js",
           "resolvedPath": "apps/observer/src/reconcile/sessionGroups.ts",
           "edgeKind": "runtime",
@@ -9713,18 +9707,6 @@
           "bindings": ["harnessesFromRegistry"]
         },
         {
-          "specifier": "./worktreeMetadataOverlay.js",
-          "resolvedPath": "apps/observer/src/reconcile/worktreeMetadataOverlay.ts",
-          "edgeKind": "runtime",
-          "bindings": ["worktreesWithCachedMetadata"]
-        },
-        {
-          "specifier": "../worktreeDisplayTitle.js",
-          "resolvedPath": "apps/observer/src/worktreeDisplayTitle.ts",
-          "edgeKind": "runtime",
-          "bindings": ["resolveWorktreeDisplayTitle"]
-        },
-        {
           "specifier": "@station/contracts",
           "resolvedPath": "packages/contracts/src/index.ts",
           "edgeKind": "type-only",
@@ -9732,6 +9714,7 @@
             "ClientFeatureFlags",
             "HarnessRunObservation",
             "ProviderHealth",
+            "ProviderId",
             "ProviderProjectConfig",
             "SafeError",
             "StationSnapshot",
@@ -9744,6 +9727,165 @@
           "resolvedPath": "packages/runtime/src/index.ts",
           "edgeKind": "runtime",
           "bindings": ["durationMs", "toIsoTimestamp"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/run/currentObservations.ts",
+      "exports": [
+        {
+          "name": "CurrentReconcileObservations",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "readCurrentReconcileObservations",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObservationStore", "SessionStore", "WorktreeMetadataStore"]
+        },
+        {
+          "specifier": "../../providers/registry.js",
+          "resolvedPath": "apps/observer/src/providers/registry.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderRegistry"]
+        },
+        {
+          "specifier": "../harnessEventRepair.js",
+          "resolvedPath": "apps/observer/src/reconcile/harnessEventRepair.ts",
+          "edgeKind": "runtime",
+          "bindings": ["harnessRunsWithPersistedEventStatus"]
+        },
+        {
+          "specifier": "../harnessEventStatus.js",
+          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
+          "edgeKind": "runtime",
+          "bindings": ["decayStaleBusyStatuses"]
+        },
+        {
+          "specifier": "../harnessEventStatus.js",
+          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverHarnessRun"]
+        },
+        {
+          "specifier": "../observationCorrelation.js",
+          "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "normalizeHarnessRunsForCurrentWorktrees",
+            "normalizeTerminalTargetsForCurrentWorktrees"
+          ]
+        },
+        {
+          "specifier": "../providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "runtime",
+          "bindings": [
+            "readHarnessObservations",
+            "readRepositoryProviderHealth",
+            "readTerminalTargetObservations",
+            "readWorktreeObservations"
+          ]
+        },
+        {
+          "specifier": "../providerObservations.js",
+          "resolvedPath": "apps/observer/src/reconcile/providerObservations.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ProviderReadOptions"]
+        },
+        {
+          "specifier": "../worktreeMetadataOverlay.js",
+          "resolvedPath": "apps/observer/src/reconcile/worktreeMetadataOverlay.ts",
+          "edgeKind": "runtime",
+          "bindings": ["worktreesWithCachedMetadata"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "HarnessCapabilities",
+            "ProviderHealth",
+            "ProviderProjectConfig",
+            "SafeError",
+            "TerminalTargetObservation",
+            "WorktreeObservation"
+          ]
+        },
+        {
+          "specifier": "@station/runtime",
+          "resolvedPath": "packages/runtime/src/index.ts",
+          "edgeKind": "runtime",
+          "bindings": ["toIsoTimestamp"]
+        }
+      ]
+    },
+    {
+      "path": "apps/observer/src/reconcile/run/snapshotInputs.ts",
+      "exports": [
+        {
+          "name": "readReconcileSnapshotInputs",
+          "kind": "function",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "ReconcileSnapshotInputs",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "../../persistence/index.js",
+          "resolvedPath": "apps/observer/src/persistence/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "PersistedSession",
+            "PersistedSessionTurnReadiness",
+            "PersistedWorktreeDisplayTitle",
+            "SessionStore"
+          ]
+        },
+        {
+          "specifier": "../harnessEventStatus.js",
+          "resolvedPath": "apps/observer/src/reconcile/harnessEventStatus.ts",
+          "edgeKind": "type-only",
+          "bindings": ["ObserverHarnessRun"]
+        },
+        {
+          "specifier": "../observationCorrelation.js",
+          "resolvedPath": "apps/observer/src/reconcile/observationCorrelation.ts",
+          "edgeKind": "runtime",
+          "bindings": ["reattachSessionTitleEvidence"]
+        },
+        {
+          "specifier": "../../worktreeDisplayTitle.js",
+          "resolvedPath": "apps/observer/src/worktreeDisplayTitle.ts",
+          "edgeKind": "runtime",
+          "bindings": ["resolveWorktreeDisplayTitle"]
+        },
+        {
+          "specifier": "@station/contracts",
+          "resolvedPath": "packages/contracts/src/index.ts",
+          "edgeKind": "type-only",
+          "bindings": [
+            "ProviderProjectConfig",
+            "SessionRecoveryHandle",
+            "TerminalTargetObservation",
+            "WorktreeObservation"
+          ]
         }
       ]
     },
@@ -13989,13 +14131,6 @@
           "declaration": "reconcileSessionGroups",
           "kind": "function",
           "role": "USE CASE",
-          "edgeKind": "runtime"
-        },
-        {
-          "path": "apps/observer/src/worktreeDisplayTitle.ts",
-          "declaration": "resolveWorktreeDisplayTitle",
-          "kind": "function",
-          "role": "POLICY",
           "edgeKind": "runtime"
         }
       ]
