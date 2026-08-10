@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import { selectDashboardViewport } from "../../../src/selectors/dashboardViewport.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
-import { createDashboardSnapshot } from "../../fixtures/snapshots.js";
+import {
+  createDashboardSnapshot,
+  createGroupedDashboardSnapshot,
+} from "../../fixtures/snapshots.js";
 
 describe("dashboard viewport selector", () => {
   it("clips projected rows and reports terminal hidden counts", () => {
@@ -51,6 +54,34 @@ describe("dashboard viewport selector", () => {
       ["2", "ses_wt_web_unknown"],
       ["3", "ses_wt_web_stuck"],
     ]);
+  });
+
+  it("assigns continuous visible-session slots across Group boundaries", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const expanded = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 30 }),
+    );
+    const collapsed = selectDashboardViewport(
+      snapshot,
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        terminalRows: 30,
+        collapsedGroupIds: ["group_active"],
+      }),
+    );
+
+    expect(expanded.rowChoices.map((choice) => [choice.key, choice.value.id])).toEqual([
+      ["1", "ses_wt_web_attention"],
+      ["2", "ses_wt_web_idle"],
+      ["3", "ses_wt_web_working"],
+      ["4", "ses_wt_web_exited"],
+      ["5", "ses_wt_web_unknown"],
+      ["6", "ses_wt_web_stuck"],
+      ["7", "ses_wt_api_working"],
+    ]);
+    expect(collapsed.rowChoices.map((choice) => choice.key)).toEqual(["1", "2", "3", "4", "5"]);
+    expect(collapsed.rowChoices.map((choice) => choice.value.id)).not.toContain("ses_wt_web_idle");
   });
 
   it("keeps pending-start sessions displayable but not actionable", () => {
@@ -179,6 +210,8 @@ describe("dashboard viewport selector", () => {
     );
 
     expect(viewport.rows.map((row) => row.id)).toEqual([
+      "project:web",
+      "gap:api",
       "project:api",
       "session:ses_wt_api_working",
     ]);

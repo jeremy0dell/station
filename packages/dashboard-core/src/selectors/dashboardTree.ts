@@ -1,4 +1,4 @@
-import type { ProjectId, SessionId } from "@station/contracts";
+import type { ProjectId, SessionGroupId, SessionId } from "@station/contracts";
 import { worktreeRowVisibleFields } from "../components/WorktreeRow/rowInput.js";
 import type {
   DashboardScreenView,
@@ -14,6 +14,7 @@ import {
 } from "../treeGrid.js";
 import {
   type DashboardPersistentFilterCandidate,
+  type DashboardPersistentFilterGroupMatch,
   type DashboardPersistentFilterProjection,
   type DashboardPersistentFilterProjectMatch,
   type DashboardPersistentFilterRowMatch,
@@ -36,17 +37,28 @@ export type DashboardRowId = string & {
 /** Sole constructors for dashboard row IDs; consumers resolve IDs instead of parsing them. */
 export const dashboardRowIds = {
   project: (projectId: ProjectId): DashboardRowId => `project:${projectId}` as DashboardRowId,
+  group: (groupId: SessionGroupId): DashboardRowId => `group:${groupId}` as DashboardRowId,
   session: (sessionId: SessionId): DashboardRowId => `session:${sessionId}` as DashboardRowId,
   create: (localId: string): DashboardRowId => `create:${localId}` as DashboardRowId,
   empty: (projectId: ProjectId): DashboardRowId => `empty:${projectId}` as DashboardRowId,
   gap: (projectId: ProjectId): DashboardRowId => `gap:${projectId}` as DashboardRowId,
 } as const;
 
-export type DashboardCellId = "identity" | "shell" | "quickSession" | "defaultAgent" | "addSession";
+export type DashboardCellId =
+  | "identity"
+  | "shell"
+  | "quickSession"
+  | "defaultAgent"
+  | "addSession"
+  | "menu";
+
+/** Determines whether Group blocks precede or interleave with project-root session rows. */
+export type GroupOrderingMode = "groups-first" | "alphabetical-interleaved";
 
 export type DashboardFocus = TreeGridCursor<DashboardRowId, DashboardCellId>;
 
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
+type DashboardGroupView = DashboardSnapshotView["sessionGroups"][number];
 type DashboardPendingCreateSessionRowView =
   DashboardViewState["localRows"]["pendingCreate"][number];
 type DashboardFailedCreateSessionRowView = DashboardViewState["localRows"]["failedCreate"][number];
@@ -63,6 +75,19 @@ export type DashboardProjectHeaderPayload = {
   readonly project: DashboardProjectView;
   readonly collapsed: boolean;
   readonly persistentFilterMatch?: DashboardPersistentFilterProjectMatch;
+};
+
+/**
+ * Canonical snapshots enforce exclusive direct membership; the dashboard flattens parent links,
+ * and only the viewport assigns keys to visible sessions.
+ */
+export type DashboardGroupHeaderPayload = {
+  readonly type: "groupHeader";
+  readonly group: DashboardGroupView;
+  readonly collapsed: boolean;
+  readonly sessionCount: number;
+  readonly visibleSessionCount: number;
+  readonly persistentFilterMatch?: DashboardPersistentFilterGroupMatch;
 };
 
 export type DashboardSessionPayload = {
@@ -94,6 +119,7 @@ export type DashboardProjectGapPayload = {
 
 export type DashboardTreePayload =
   | DashboardProjectHeaderPayload
+  | DashboardGroupHeaderPayload
   | DashboardSessionPayload
   | DashboardCreateLocalRowPayload
   | DashboardEmptyProjectPayload
@@ -104,8 +130,10 @@ export type DashboardTreeRow = TreeGridRow<
   DashboardCellId,
   DashboardTreePayload
 > & {
-  /** Cursor decoration rebuilds row objects; row identity is not cursor-independent. */
+  /** Focus and containment decoration rebuild rows; row identity is not cursor-independent. */
   readonly focusedCellId?: DashboardCellId;
+  /** Present when this Group contains the directly focused visible row. */
+  readonly containsFocusedRow?: true;
 };
 
 export type DashboardTreeProjection = Omit<
@@ -127,9 +155,19 @@ type ProjectRows = {
   readonly project: DashboardProjectView;
   readonly collapsed: boolean;
   readonly rows: readonly (DashboardSessionPayload | DashboardCreateLocalRowPayload)[];
+  readonly rootRows: readonly (DashboardSessionPayload | DashboardCreateLocalRowPayload)[];
+  readonly groups: readonly ProjectGroupRows[];
+  readonly orderingMode: GroupOrderingMode;
+};
+
+type ProjectGroupRows = {
+  readonly group: DashboardGroupView;
+  readonly collapsed: boolean;
+  readonly rows: readonly DashboardSessionPayload[];
 };
 
 const PROJECT_CELLS = ["identity", "shell", "quickSession", "defaultAgent"] as const;
+const GROUP_CELLS = ["identity", "quickSession", "menu"] as const;
 const SESSION_CELLS = ["identity"] as const;
 const EMPTY_PROJECT_CELLS = ["addSession"] as const;
 
@@ -140,24 +178,56 @@ export function selectDashboardTree(
 ): DashboardTreeProjection {
   const sessionRows = selectDashboardSessionRows(snapshot);
   const localRows = visibleCreateSessionLocalRows(snapshot, state);
-  const projects = snapshot.projects.map((project) => ({
-    project,
-    collapsed: state.collapsedProjectIds.has(project.id),
-    rows: mergeDashboardRows(
+  const groupBySessionId = new Map<SessionId, DashboardGroupView>();
+  for (const group of snapshot.sessionGroups) {
+    for (const sessionId of group.sessionIds) {
+      groupBySessionId.set(sessionId, group);
+    }
+  }
+  const projects = snapshot.projects.map((project): ProjectRows => {
+    const rows = mergeDashboardRows(
       sessionRows.filter((row) => row.worktree.projectId === project.id),
       localRows.filter((row) => row.projectId === project.id),
       state,
     ).map((row) =>
       row.type === "session" ? sessionPayload(row.row, state) : createLocalPayload(row.row),
-    ),
-  }));
+    );
+    const groups = snapshot.sessionGroups
+      .filter((group) => group.projectId === project.id)
+      .map((group) => ({
+        group,
+        collapsed: state.collapsedGroupIds.has(group.id),
+        rows: rows.filter(
+          (row): row is DashboardSessionPayload =>
+            row.type === "session" && groupBySessionId.get(row.row.id)?.id === group.id,
+        ),
+      }));
+    return {
+      project,
+      collapsed: state.collapsedProjectIds.has(project.id),
+      rows,
+      rootRows: rows.filter(
+        (row) => row.type === "createLocalRow" || groupBySessionId.get(row.row.id) === undefined,
+      ),
+      groups,
+      orderingMode: state.groupOrderingMode,
+    };
+  });
   const persistentFilter = selectDashboardPersistentFilter({
-    candidates: projects.flatMap((project) =>
-      project.rows.map((row) => persistentFilterCandidate(rowIdForPayload(row), row)),
-    ),
+    candidates: projects.flatMap((project) => [
+      ...project.rootRows.map((row) => persistentFilterCandidate(rowIdForPayload(row), row)),
+      ...project.groups.flatMap(({ group, rows }) =>
+        rows.map((row) => persistentFilterCandidate(rowIdForPayload(row), row, group.id)),
+      ),
+    ]),
     projects: projects.map(({ project }) => ({
       projectId: project.id,
       projectLabel: project.label,
+    })),
+    groups: snapshot.sessionGroups.map((group) => ({
+      groupId: group.id,
+      projectId: group.projectId,
+      groupLabel: group.name,
     })),
     screen: activeScreen,
     ...(state.persistentFilter === undefined ? {} : { applied: state.persistentFilter }),
@@ -175,10 +245,7 @@ function dashboardRoots(
   projection: DashboardPersistentFilterProjection | undefined,
 ): DashboardTreeNode[] {
   const applied = projection?.source === "applied" && projection.active;
-  const visibleProjects = applied
-    ? projects.filter(({ project }) => projection.projects.get(project.id)?.matched === true)
-    : projects;
-  return visibleProjects.flatMap((projectRows, index) => [
+  return projects.flatMap((projectRows, index) => [
     ...(index === 0 ? [] : [projectGapNode(projectRows.project.id)]),
     projectNode(projectRows, projection, applied),
   ]);
@@ -189,10 +256,15 @@ function projectNode(
   projection: DashboardPersistentFilterProjection | undefined,
   applied: boolean,
 ): DashboardTreeNode {
-  const visibleRows = applied
-    ? projectRows.rows.filter((row) => projection?.rows.get(rowIdForPayload(row))?.matched === true)
-    : projectRows.rows;
-  const children: DashboardTreeNode[] = visibleRows.map((row) => rowNode(row, projection));
+  const visibleRootRows = admittedRows(projectRows.rootRows, projection, applied);
+  const groupNodes = [...projectRows.groups]
+    .sort(compareProjectGroups)
+    .map((group) => groupNode(group, projection, applied));
+  const rootNodes = visibleRootRows.map((row) => rowNode(row, projection));
+  const children =
+    projectRows.orderingMode === "groups-first"
+      ? [...groupNodes, ...rootNodes]
+      : interleaveGroupAndRootNodes(groupNodes, rootNodes);
   if (projectRows.rows.length === 0) {
     children.push(emptyProjectNode(projectRows.project));
   }
@@ -210,6 +282,83 @@ function projectNode(
     defaultCell: "identity",
     ...(children.length === 0 ? {} : { children, expanded: !projectRows.collapsed }),
   };
+}
+
+function groupNode(
+  groupRows: ProjectGroupRows,
+  projection: DashboardPersistentFilterProjection | undefined,
+  applied: boolean,
+): DashboardTreeNode {
+  const visibleRows = admittedRows(groupRows.rows, projection, applied);
+  const match = projection?.groups.get(groupRows.group.id);
+  const payload: DashboardGroupHeaderPayload = {
+    type: "groupHeader",
+    group: groupRows.group,
+    collapsed: groupRows.collapsed,
+    sessionCount: groupRows.group.sessionIds.length,
+    visibleSessionCount: visibleRows.length,
+    ...(match === undefined ? {} : { persistentFilterMatch: match }),
+  };
+  const children = visibleRows.map((row) => rowNode(row, projection));
+  return {
+    id: dashboardRowIds.group(groupRows.group.id),
+    payload,
+    cells: GROUP_CELLS,
+    defaultCell: "identity",
+    ...(children.length === 0 ? {} : { children, expanded: !groupRows.collapsed }),
+  };
+}
+
+function admittedRows<Row extends DashboardSessionPayload | DashboardCreateLocalRowPayload>(
+  rows: readonly Row[],
+  projection: DashboardPersistentFilterProjection | undefined,
+  applied: boolean,
+): Row[] {
+  return applied
+    ? rows.filter((row) => projection?.rows.get(rowIdForPayload(row))?.matched === true)
+    : [...rows];
+}
+
+function compareProjectGroups(left: ProjectGroupRows, right: ProjectGroupRows): number {
+  return (
+    left.group.name.localeCompare(right.group.name) || left.group.id.localeCompare(right.group.id)
+  );
+}
+
+function interleaveGroupAndRootNodes(
+  groupNodes: readonly DashboardTreeNode[],
+  rootNodes: readonly DashboardTreeNode[],
+): DashboardTreeNode[] {
+  return [
+    ...groupNodes.map((node, index) => ({
+      kind: "group" as const,
+      label: node.payload.type === "groupHeader" ? node.payload.group.name : "",
+      index,
+      node,
+    })),
+    ...rootNodes.map((node, index) => ({
+      kind: "row" as const,
+      label:
+        node.payload.type === "session" || node.payload.type === "createLocalRow"
+          ? node.payload.presentation.title
+          : "",
+      index,
+      node,
+    })),
+  ]
+    .sort((left, right) => {
+      const labelOrder = left.label.localeCompare(right.label);
+      if (labelOrder !== 0) {
+        return labelOrder;
+      }
+      if (left.kind !== right.kind) {
+        return left.kind === "group" ? -1 : 1;
+      }
+      return left.kind === "group"
+        ? left.node.id.localeCompare(right.node.id)
+        : left.index - right.index;
+    })
+    .map(({ node }) => node);
 }
 
 function rowNode(
@@ -309,12 +458,14 @@ function createSessionRowPresentation(
 function persistentFilterCandidate(
   id: DashboardRowId,
   payload: DashboardSessionPayload | DashboardCreateLocalRowPayload,
+  groupId?: SessionGroupId,
 ): DashboardPersistentFilterCandidate {
   if (payload.type === "session") {
     return {
       kind: "session",
       id,
       projectId: payload.row.worktree.projectId,
+      ...(groupId === undefined ? {} : { groupId }),
       visibleFields: payload.presentation,
       conditionValues: {
         status: payload.pendingStart === undefined ? payload.row.session.status.value : "starting",
@@ -410,13 +561,18 @@ function decorateDashboardProjection(
   persistentFilter: DashboardPersistentFilterProjection | undefined,
 ): DashboardTreeProjection {
   const rowById = new Map<DashboardRowId, DashboardTreeRow>();
+  const focusedRow =
+    focus === undefined || !projection.visibleIndexById.has(focus.rowId)
+      ? undefined
+      : projection.rowById.get(focus.rowId);
   for (const row of projection.rowById.values()) {
-    const decorated: DashboardTreeRow = {
-      ...row,
-      ...(focus?.rowId === row.id && row.cells.includes(focus.cellId)
-        ? { focusedCellId: focus.cellId }
-        : {}),
-    };
+    let decorated: DashboardTreeRow = row;
+    if (focus?.rowId === row.id && row.cells.includes(focus.cellId)) {
+      decorated = { ...decorated, focusedCellId: focus.cellId };
+    }
+    if (row.payload.type === "groupHeader" && focusedRow?.parentId === row.id) {
+      decorated = { ...decorated, containsFocusedRow: true };
+    }
     rowById.set(row.id, decorated);
   }
   const visibleRows = projection.visibleRows.map((row) => {

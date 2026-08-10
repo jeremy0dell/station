@@ -42,6 +42,52 @@ export function createDashboardSnapshot(): StationSnapshot {
   ]);
 }
 
+export function createGroupedDashboardSnapshot(): StationSnapshot {
+  const snapshot = createDashboardSnapshot();
+  return {
+    ...snapshot,
+    sessionGroups: [
+      {
+        id: "group_active",
+        projectId: "web",
+        name: "Active work",
+        sessionIds: ["ses_wt_web_attention", "ses_wt_web_idle"],
+        version: 1,
+        createdAt: fixtureNow,
+        updatedAt: fixtureNow,
+      },
+      {
+        id: "group_build",
+        projectId: "web",
+        name: "Build",
+        sessionIds: ["ses_wt_web_working"],
+        parentGroupId: "group_active",
+        version: 1,
+        createdAt: fixtureNow,
+        updatedAt: fixtureNow,
+      },
+      {
+        id: "group_empty",
+        projectId: "web",
+        name: "Empty",
+        sessionIds: [],
+        version: 1,
+        createdAt: fixtureNow,
+        updatedAt: fixtureNow,
+      },
+      {
+        id: "group_api",
+        projectId: "api",
+        name: "Queue",
+        sessionIds: ["ses_wt_api_working"],
+        version: 1,
+        createdAt: fixtureNow,
+        updatedAt: fixtureNow,
+      },
+    ],
+  };
+}
+
 export function createCommandSnapshot(
   state: "none" | "idle" = "idle",
   options: { dirty?: boolean } = {},

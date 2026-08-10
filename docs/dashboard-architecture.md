@@ -95,16 +95,32 @@ Station renderers
 
 `selectors/dashboardTree.ts` is the sole dashboard hierarchy adapter. It joins
 canonical sessions to worktree metadata, merges optimistic creates, applies
-filter and collapse state, and projects Project roots, children, and inert gaps.
+filter and collapse state, and projects Project roots, direct Group blocks,
+project-root sessions, and inert gaps. `snapshot.sessionGroups` is the exclusive
+membership authority; optional parent links are deliberately flattened, while
+optimistic create rows remain at the project root until canonical replacement.
+The renderer-local `GroupOrderingMode` chooses Groups-first or whole-block
+alphabetical interleaving without changing canonical arrays.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
 visibility, and a supplied eligibility policy; it has no dashboard or terminal
 knowledge and is not a package entrypoint.
+
+Project and Group collapse sets remain renderer-local and survive snapshot
+replacement even when an ID is temporarily absent. Persistent filtering admits
+session rows through one candidate projection while retaining durable Project
+and Group containers; Group-name matches provide member text context, member
+matches retain their Group header, and container match ranges remain semantic
+renderer inputs. Group payload counts distinguish canonical direct membership
+from filter-admitted renderable members before collapse and viewport clipping.
 
 Dashboard state owns one stable `{ rowId, cellId }` cursor. Named policies bind
 the generic controller to ordinary dashboard traversal, canonical-session-only
 chooser traversal, and needs-attention traversal. Reconciliation preserves the
 exact row and cell when possible, moves a collapse-hidden child to its visible
 collapsed ancestor, and otherwise uses deterministic next/previous fallback.
+Group rows use `identity`, `quickSession`, and `menu`; only identity toggles
+collapse in this slice. A focused direct visible member decorates its Group with
+`containsFocusedRow`, leaving color and ring presentation to the renderer.
 
 The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,
 decorated tree rows, and the viewport contract. `DashboardViewport.rows` is the

@@ -3,6 +3,7 @@ import type {
   ProjectId,
   ProviderId,
   SafeError,
+  SessionGroupId,
   SessionId,
   StationSnapshot,
   TuiWidgetConfig,
@@ -11,7 +12,7 @@ import type {
 import type { EditableTextInputState } from "../components/EditableTextInput/editing.js";
 import type { AddProjectFlowState } from "../flows/addProject/types.js";
 import type { NewSessionFlowState } from "../flows/newSession.js";
-import type { DashboardFocus } from "../selectors/dashboardTree.js";
+import type { DashboardFocus, GroupOrderingMode } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
 import type { TuiLocalRows } from "./localRows.js";
 import type { ReadonlyDeep } from "./readonly.js";
@@ -71,6 +72,8 @@ export type TuiViewState = {
   /** Dashboard-local applied filter; absence means no persistent filter is applied. */
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds: ReadonlySet<string>;
+  collapsedGroupIds: ReadonlySet<SessionGroupId>;
+  groupOrderingMode: GroupOrderingMode;
   scrollOffset: number;
   terminalRows: number;
   localRows: TuiLocalRows;
@@ -200,6 +203,8 @@ export type CreateInitialTuiStateOptions = {
   initialSnapshot?: StationSnapshot;
   persistentFilter?: DashboardPersistentFilter;
   collapsedProjectIds?: Iterable<string>;
+  collapsedGroupIds?: Iterable<SessionGroupId>;
+  groupOrderingMode?: GroupOrderingMode;
   scrollOffset?: number;
   terminalRows?: number;
   localRows?: TuiLocalRows;

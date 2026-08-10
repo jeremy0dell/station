@@ -10,6 +10,8 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     toasts: [],
     observerConnectionStatus: { state: "connected" },
     collapsedProjectIds: new Set(options.collapsedProjectIds ?? []),
+    collapsedGroupIds: new Set(options.collapsedGroupIds ?? []),
+    groupOrderingMode: options.groupOrderingMode ?? "groups-first",
     scrollOffset: options.scrollOffset ?? 0,
     terminalRows: options.terminalRows ?? 24,
     localRows: options.localRows ?? createEmptyTuiLocalRows(),

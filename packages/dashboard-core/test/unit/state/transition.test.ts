@@ -13,6 +13,7 @@ import {
   createCommandSnapshot,
   createDashboardSnapshot,
   createExternalAgentSnapshot,
+  createGroupedDashboardSnapshot,
   createZeroWorktreeSnapshot,
 } from "../../fixtures/snapshots.js";
 
@@ -1168,7 +1169,7 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("resets dashboard scroll when a filter is applied", () => {
+  it("clamps dashboard scroll across durable filter containers", () => {
     const opened = handleTuiKey(
       createInitialTuiState({
         initialSnapshot: createDashboardSnapshot(),
@@ -1181,7 +1182,24 @@ describe("TUI screen transitions", () => {
     const transition = handleTuiKey(typed.state, { input: "\r", return: true });
 
     expect(transition.state.persistentFilter).toEqual({ query: "nav" });
-    expect(transition.state.scrollOffset).toBe(0);
+    expect(transition.state.scrollOffset).toBe(1);
+  });
+
+  it("preserves Group collapse and ordering while applying and clearing a filter", () => {
+    const base = createInitialTuiState({
+      initialSnapshot: createGroupedDashboardSnapshot(),
+      collapsedGroupIds: ["group_active"],
+      groupOrderingMode: "alphabetical-interleaved",
+    });
+    const opened = handleTuiKey(base, { input: "/" });
+    const typed = handleTuiKey(opened.state, { input: "active" });
+    const applied = handleTuiKey(typed.state, { input: "\r", return: true }).state;
+    const cleared = handleTuiKey(applied, { input: "", escape: true }).state;
+
+    expect(applied.collapsedGroupIds).toEqual(base.collapsedGroupIds);
+    expect(applied.groupOrderingMode).toBe("alphabetical-interleaved");
+    expect(cleared.collapsedGroupIds).toEqual(base.collapsedGroupIds);
+    expect(cleared.groupOrderingMode).toBe("alphabetical-interleaved");
   });
 
   it("clamps dashboard scroll after collapsing a project", () => {

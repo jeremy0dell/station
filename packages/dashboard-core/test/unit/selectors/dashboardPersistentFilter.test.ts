@@ -64,6 +64,7 @@ describe("dashboard persistent filter selector", () => {
         agent: [],
         activity: [],
         projectLabel: [],
+        groupLabel: [],
       },
     });
     expect(projection?.rows.get("create:beta")?.dimmed).toBe(true);
@@ -243,6 +244,41 @@ describe("dashboard persistent filter selector", () => {
       labelRanges: [{ start: 0, end: 5 }],
     });
     expect(unmatched?.projects.get("empty")).toEqual({ matched: false, labelRanges: [] });
+  });
+
+  it("uses Group names as member context and member matches as retained Group context", () => {
+    const sessionCandidate = candidates[0];
+    if (sessionCandidate === undefined) throw new Error("expected session candidate");
+    const groupedCandidates: DashboardPersistentFilterCandidate[] = [
+      { ...sessionCandidate, groupId: "group_active" },
+    ];
+    const groups = [
+      { groupId: "group_active", projectId: "web", groupLabel: "Active work" },
+      { groupId: "group_empty", projectId: "web", groupLabel: "Empty" },
+    ];
+    const byGroup = selectDashboardPersistentFilter({
+      candidates: groupedCandidates,
+      projects,
+      groups,
+      screen: { name: "dashboard" },
+      applied: { query: "active" },
+    });
+    const byMember = selectDashboardPersistentFilter({
+      candidates: groupedCandidates,
+      projects,
+      groups,
+      screen: { name: "dashboard" },
+      applied: { query: "alpha" },
+    });
+
+    expect(byGroup?.rows.get("session:alpha")?.ranges.groupLabel).toEqual([{ start: 0, end: 6 }]);
+    expect(byGroup?.groups.get("group_active")).toEqual({
+      matched: true,
+      labelRanges: [{ start: 0, end: 6 }],
+    });
+    expect(byMember?.groups.get("group_active")?.matched).toBe(true);
+    expect(byMember?.groups.get("group_empty")?.matched).toBe(false);
+    expect(byMember?.projects.get("web")?.matched).toBe(true);
   });
 
   it("treats a blank editing query as a recoverable all-match preview", () => {

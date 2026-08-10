@@ -27,7 +27,10 @@ type DashboardPolicy = TreeGridNavigationPolicy<
 >;
 
 const dashboardPolicy: DashboardPolicy = ({ payload }) =>
-  payload.type === "projectHeader" || payload.type === "session" || payload.type === "emptyProject";
+  payload.type === "projectHeader" ||
+  payload.type === "groupHeader" ||
+  payload.type === "session" ||
+  payload.type === "emptyProject";
 
 // This one policy protects canonical-session-only chooser entry, movement,
 // reconciliation, Enter, and slot behavior; callers use only the bound wrappers below.
@@ -66,7 +69,7 @@ export function clearDashboardFocus(state: DashboardState): DashboardState {
   return cleared;
 }
 
-/** Moves vertically through project, canonical-session, and empty-action rows. */
+/** Moves vertically through Project, Group, canonical-session, and empty-action rows. */
 export function moveDashboardCursor(state: DashboardState, delta: -1 | 1): DashboardState {
   return moveCursor(state, delta, dashboardPolicy);
 }
