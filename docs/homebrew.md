@@ -2,6 +2,13 @@
 
 Homebrew installation is not currently supported for Station.
 
+`stn update` does not change that distribution policy. When the running `stn`
+already resolves into a Homebrew Cellar or Caskroom owned by a custom package,
+the `homebrew` update adapter reports the exact `brew upgrade --formula` or
+`brew upgrade --cask` command and defers to it. Station runs that native command
+only with explicit `stn update --drive-package-manager`; it does not install a
+tap, formula, or cask.
+
 The public installation path for experimental pre-alpha
 `v0.0.0-pre-alpha.5.1` is the exact-tag native installer documented in
 [Install Station](install.md). Do not use the historical tap for public

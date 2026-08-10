@@ -12301,6 +12301,57 @@
       "dependencies": []
     },
     {
+      "path": "apps/cli/src/commands/update.ts",
+      "declaration": "runUpdateCommand",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Composes install-channel selection, mutation, and fresh-build runtime crossover for the CLI.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/host/index.ts",
+          "declaration": "runHostCommand",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/devCheckoutUpdate.ts",
+          "declaration": "createDevCheckoutUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/homebrewUpdate.ts",
+          "declaration": "createHomebrewUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/installerBinaryUpdate.ts",
+          "declaration": "createInstallerBinaryUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/miseUpdate.ts",
+          "declaration": "createMiseUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        },
+        {
+          "path": "apps/cli/src/update/npmGlobalUpdate.ts",
+          "declaration": "createNpmGlobalUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
       "path": "apps/cli/src/ingress/command.ts",
       "declaration": "runProviderIngressCommand",
       "kind": "function",
@@ -12828,6 +12879,86 @@
           "edgeKind": "type-only"
         }
       ]
+    },
+    {
+      "path": "apps/cli/src/update/devCheckoutUpdate.ts",
+      "declaration": "createDevCheckoutUpdateChannel",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates a clean upstream-tracking source checkout into a pinned fast-forward rebuild.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/updateChannel.ts",
+          "declaration": "UpdateChannel",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/homebrewUpdate.ts",
+      "declaration": "createHomebrewUpdateChannel",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates Homebrew Cellar or Caskroom ownership into a native brew update plan.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/updateChannel.ts",
+          "declaration": "UpdateChannel",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/installerBinaryUpdate.ts",
+      "declaration": "createInstallerBinaryUpdateChannel",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates installer receipt and release evidence into a verified binary update.",
+      "dependencies": []
+    },
+    {
+      "path": "apps/cli/src/update/miseUpdate.ts",
+      "declaration": "createMiseUpdateChannel",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates mise's active tool installation into its configured-range upgrade command.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/updateChannel.ts",
+          "declaration": "UpdateChannel",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/npmGlobalUpdate.ts",
+      "declaration": "createNpmGlobalUpdateChannel",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Translates npm's global package and bin ownership into a pinned package-manager update.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/update/updateChannel.ts",
+          "declaration": "UpdateChannel",
+          "kind": "interface",
+          "role": "DRIVEN PORT",
+          "edgeKind": "type-only"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/update/updateChannel.ts",
+      "declaration": "UpdateChannel",
+      "kind": "interface",
+      "role": "DRIVEN PORT",
+      "purpose": "Defines one install owner's typed detect, plan, and apply lifecycle.",
+      "dependencies": []
     },
     {
       "path": "apps/observer/src/commands/harnessLaunchPreflight.ts",

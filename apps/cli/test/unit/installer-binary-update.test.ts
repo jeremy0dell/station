@@ -300,6 +300,7 @@ describe("installer-binary apply", () => {
       previousVersion: CURRENT_VERSION,
       installedVersion: TARGET_VERSION,
       executablePath: fixture.executablePath,
+      successorCli: [fixture.executablePath],
       warnings: [],
     });
 

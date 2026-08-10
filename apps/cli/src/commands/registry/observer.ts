@@ -15,6 +15,7 @@ export const observerCliCommand: CliCommandNode = {
     "stn observer start",
     "stn observer status",
     "stn observer stop",
+    "stn observer restart",
     "stn observer reap [--force]",
   ],
   options: [
@@ -43,6 +44,13 @@ export const observerCliCommand: CliCommandNode = {
       description: "Stop the observer for the configured socket.",
       usage: ["stn observer stop"],
       examples: ["pnpm stn observer stop"],
+    },
+    {
+      name: "restart",
+      description: "Replace or start the Observer through build-precedence lifecycle policy.",
+      usage: ["stn observer restart [--timeout-ms <ms>]"],
+      options: [{ name: "--timeout-ms <ms>", description: "Override the startup health timeout." }],
+      examples: ["pnpm stn observer restart"],
     },
     {
       name: "reap",
