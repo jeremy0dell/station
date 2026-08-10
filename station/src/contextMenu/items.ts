@@ -101,12 +101,20 @@ function buildStationItems(
   if (target.kind !== "dashboardCell") {
     return [noActionsItem()];
   }
-  const row = selectDashboardViewport(state.snapshot, state).rowById.get(target.rowId);
-  switch (row?.payload.type) {
+  const viewport = selectDashboardViewport(state.snapshot, state);
+  const row = viewport.rowById.get(target.rowId);
+  if (row === undefined || !row.cells.includes(target.cellId)) {
+    return [noActionsItem()];
+  }
+  switch (row.payload.type) {
     case "projectHeader":
       return buildProjectItems(row.payload.project.id, state);
-    case "session":
-      return buildSessionItems(row.payload.row, state);
+    case "session": {
+      const sessionRow = row.payload.row;
+      return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
+        ? buildSessionItems(sessionRow, state)
+        : [noActionsItem()];
+    }
     case "createLocalRow":
     case "emptyProject":
     case "projectGap":

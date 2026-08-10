@@ -3,7 +3,7 @@ import {
   type DashboardRowId,
   selectDashboardTree,
 } from "../selectors/dashboardTree.js";
-import { focusDashboardCursor } from "./dashboardFocus.js";
+import { focusResolvedDashboardCursor } from "./dashboardFocus.js";
 import { activateDashboardRow } from "./rowActivation.js";
 import { toggleDashboardProjectCollapsed } from "./screens/projectCollapse.js";
 import { openProjectDefaultAgentPicker } from "./screens/projectDefaultAgent.js";
@@ -24,7 +24,7 @@ export function focusDashboardCell(
   if (row === undefined || !tree.visibleIndexById.has(rowId) || !row.cells.includes(cellId)) {
     return state;
   }
-  return focusDashboardCursor(state, { rowId, cellId });
+  return focusResolvedDashboardCursor(state, tree, { rowId, cellId });
 }
 
 export function activateDashboardCell(
@@ -40,7 +40,7 @@ export function activateDashboardCell(
   if (row === undefined || !tree.visibleIndexById.has(rowId) || !row.cells.includes(cellId)) {
     return { state };
   }
-  const focused = focusDashboardCell(state, rowId, cellId);
+  const focused = focusResolvedDashboardCursor(state, tree, { rowId, cellId });
   switch (row.payload.type) {
     case "projectHeader":
       return activateProjectCell(focused, row.payload.project.id, cellId);

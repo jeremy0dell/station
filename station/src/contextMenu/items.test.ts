@@ -173,6 +173,90 @@ describe("buildContextMenuItems", () => {
     ]);
   });
 
+  it("keeps hidden and pending dashboard sessions inert", () => {
+    const store = createStationStore();
+    const snapshot = manyProjectsSnapshot();
+    const session = snapshot.sessions.find(({ id }) => id === STATION_IDLE_SESSION_ID);
+    if (session === undefined) throw new Error("fixture is missing the Station session");
+    const baseLocalRows = {
+      pendingCreate: [],
+      failedCreate: [],
+      pendingRemove: [],
+      pendingStart: [],
+    };
+    const states = [
+      createInitialTuiState({ initialSnapshot: snapshot, collapsedProjectIds: ["station"] }),
+      createInitialTuiState({ initialSnapshot: snapshot, terminalRows: 8 }),
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        localRows: {
+          ...baseLocalRows,
+          pendingStart: [
+            {
+              localId: `start:${session.worktreeId}`,
+              projectId: session.projectId,
+              worktreeId: session.worktreeId,
+              branch: "pending-start",
+              createdAt: "2026-08-10T00:00:00.000Z",
+            },
+          ],
+        },
+      }),
+      createInitialTuiState({
+        initialSnapshot: snapshot,
+        localRows: {
+          ...baseLocalRows,
+          pendingRemove: [
+            {
+              localId: `remove:${session.worktreeId}`,
+              projectId: session.projectId,
+              worktreeId: session.worktreeId,
+              branch: "pending-remove",
+              createdAt: "2026-08-10T00:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    ];
+
+    for (const stationState of states) {
+      expect(
+        buildContextMenuItems(
+          {
+            kind: "station",
+            target: {
+              kind: "dashboardCell",
+              rowId: dashboardRowIds.session(STATION_IDLE_SESSION_ID),
+              cellId: "identity",
+            },
+          },
+          store.getState(),
+          stationState,
+        ).map(({ id }) => id),
+      ).toEqual(["station.noActions"]);
+    }
+  });
+
+  it("rejects cells that do not belong to the targeted dashboard row", () => {
+    const store = createStationStore();
+    const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });
+
+    expect(
+      buildContextMenuItems(
+        {
+          kind: "station",
+          target: {
+            kind: "dashboardCell",
+            rowId: dashboardRowIds.session(STATION_IDLE_SESSION_ID),
+            cellId: "shell",
+          },
+        },
+        store.getState(),
+        stationState,
+      ).map(({ id }) => id),
+    ).toEqual(["station.noActions"]);
+  });
+
   it("keeps retained Station sessions actionable without a current agent", () => {
     const store = createStationStore();
     const stationState = createInitialTuiState({ initialSnapshot: manyProjectsSnapshot() });

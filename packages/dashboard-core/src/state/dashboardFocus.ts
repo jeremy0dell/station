@@ -46,20 +46,9 @@ export function focusDashboardSession(state: DashboardState, sessionId: SessionI
     preferredCell: "identity",
     policy: dashboardPolicy,
   });
-  return cursor === undefined ? clearDashboardFocus(state) : focusCursor(state, tree, cursor);
-}
-
-/** Focuses one exact visible dashboard cell and follows it within the terminal viewport. */
-export function focusDashboardCursor(
-  state: DashboardState,
-  cursor: DashboardFocus,
-): DashboardState {
-  if (state.snapshot === undefined) {
-    return state;
-  }
-  const tree = dashboardTree(state);
-  const exact = exactCursor(tree, cursor, dashboardPolicy);
-  return exact === undefined ? state : focusCursor(state, tree, exact);
+  return cursor === undefined
+    ? clearDashboardFocus(state)
+    : focusResolvedDashboardCursor(state, tree, cursor);
 }
 
 /** Removes transient dashboard focus without disturbing other view state. */
@@ -96,7 +85,7 @@ export function moveDashboardCursorHorizontal(
     direction: delta < 0 ? "left" : "right",
     policy: dashboardPolicy,
   });
-  return sameCursor(moved, cursor) ? state : focusCursor(state, tree, moved);
+  return sameCursor(moved, cursor) ? state : focusResolvedDashboardCursor(state, tree, moved);
 }
 
 /** Moves remove/rename/fork choice focus across selectable canonical sessions only. */
@@ -121,11 +110,11 @@ export function focusNextNeedsMe(state: DashboardState): DashboardState {
       !sameCursor(moved, current) &&
       exactCursor(tree, moved, needsAttentionPolicy) !== undefined
     ) {
-      return focusCursor(state, tree, moved);
+      return focusResolvedDashboardCursor(state, tree, moved);
     }
   }
   const first = firstCursor(tree, needsAttentionPolicy);
-  return first === undefined ? state : focusCursor(state, tree, first);
+  return first === undefined ? state : focusResolvedDashboardCursor(state, tree, first);
 }
 
 /** Returns the focused row only while chooser policy still permits committing it. */
@@ -168,7 +157,7 @@ export function reconcileDashboardFocus(
   });
   return reconciled === undefined
     ? clearDashboardFocus(withClampedScroll(next, nextTree.visibleRows.length))
-    : focusCursor(next, nextTree, reconciled);
+    : focusResolvedDashboardCursor(next, nextTree, reconciled);
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {
@@ -188,7 +177,7 @@ function moveCursor(state: DashboardState, delta: -1 | 1, policy: DashboardPolic
     const entered = enterCursor(state, tree, delta, policy);
     return entered === undefined
       ? scrollDashboard(state, delta)
-      : focusCursor(state, tree, entered);
+      : focusResolvedDashboardCursor(state, tree, entered);
   }
   const moved = moveTreeGridCursor({
     projection: tree,
@@ -196,7 +185,7 @@ function moveCursor(state: DashboardState, delta: -1 | 1, policy: DashboardPolic
     direction: delta < 0 ? "up" : "down",
     policy,
   });
-  return sameCursor(moved, current) ? state : focusCursor(state, tree, moved);
+  return sameCursor(moved, current) ? state : focusResolvedDashboardCursor(state, tree, moved);
 }
 
 function enterCursor(
@@ -259,7 +248,8 @@ function exactCursor(
   return resolved?.cellId === cursor.cellId ? resolved : undefined;
 }
 
-function focusCursor(
+/** Applies a resolved dashboard cursor and follows it within the terminal viewport. */
+export function focusResolvedDashboardCursor(
   state: DashboardState,
   tree: DashboardTreeProjection,
   cursor: DashboardFocus,
