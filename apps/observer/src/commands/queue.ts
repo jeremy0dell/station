@@ -383,6 +383,7 @@ function commandScope(command: StationCommand): string {
     case "sessionGroup.create":
     case "sessionGroup.rename":
     case "sessionGroup.updateMembership":
+    case "sessionGroup.reparent":
     case "sessionGroup.delete":
       return `project:${command.payload.projectId}`;
     case "observer.reconcile":

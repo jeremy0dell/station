@@ -231,6 +231,15 @@
       "remove": []
     }
   },
+  "sessionGroupReparent": {
+    "type": "sessionGroup.reparent",
+    "payload": {
+      "projectId": "web",
+      "groupId": "grp_active",
+      "expectedVersion": 3,
+      "parentGroupId": "grp_parent"
+    }
+  },
   "sessionGroupDelete": {
     "type": "sessionGroup.delete",
     "payload": {

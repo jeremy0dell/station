@@ -116,6 +116,208 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
     }
   });
 
+  it("reparents and detaches Groups with immediate flat snapshot convergence", async () => {
+    const test = await fixture();
+    const providerReads = vi.spyOn(test.providers.worktree, "listWorktrees");
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Parent" },
+    });
+    await test.dispatch({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Child" },
+    });
+
+    const reparent = await test.dispatch({
+      type: "sessionGroup.reparent",
+      payload: {
+        projectId: "web",
+        groupId: "grp_2",
+        expectedVersion: 1,
+        parentGroupId: "grp_1",
+      },
+    });
+    expect(reparent.status).toBe("succeeded");
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_1", version: 1 }),
+      expect.objectContaining({ id: "grp_2", parentGroupId: "grp_1", version: 2 }),
+    ]);
+    expect(
+      (await test.persistence.listEvents({ commandId: reparent.id })).map((event) => event.type),
+    ).toEqual(["command.accepted", "command.started", "sessionGroup.updated", "command.succeeded"]);
+
+    const sameParent = await test.dispatch({
+      type: "sessionGroup.reparent",
+      payload: {
+        projectId: "web",
+        groupId: "grp_2",
+        expectedVersion: 2,
+        parentGroupId: "grp_1",
+      },
+    });
+    const rootToRoot = await test.dispatch({
+      type: "sessionGroup.reparent",
+      payload: { projectId: "web", groupId: "grp_1", expectedVersion: 1 },
+    });
+    for (const commandId of [sameParent.id, rootToRoot.id]) {
+      expect((await test.persistence.listEvents({ commandId })).map((event) => event.type)).toEqual(
+        ["command.accepted", "command.started", "command.succeeded"],
+      );
+    }
+
+    const detach = await test.dispatch({
+      type: "sessionGroup.reparent",
+      payload: { projectId: "web", groupId: "grp_2", expectedVersion: 2 },
+    });
+    expect(detach.status).toBe("succeeded");
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_1", version: 1 }),
+      expect.not.objectContaining({ parentGroupId: expect.anything() }),
+    ]);
+    expect(test.core.getSnapshot().sessionGroups[1]).toMatchObject({ id: "grp_2", version: 3 });
+    expect(providerReads).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid reparent ancestry with typed errors and no Group mutation", async () => {
+    const test = await fixture();
+    for (const [projectId, name] of [
+      ["web", "Parent"],
+      ["web", "Child"],
+      ["web", "Grandchild"],
+      ["api", "API"],
+    ] as const) {
+      await test.dispatch({ type: "sessionGroup.create", payload: { projectId, name } });
+    }
+    await test.dispatch({
+      type: "sessionGroup.reparent",
+      payload: {
+        projectId: "web",
+        groupId: "grp_2",
+        expectedVersion: 1,
+        parentGroupId: "grp_1",
+      },
+    });
+    await test.dispatch({
+      type: "sessionGroup.reparent",
+      payload: {
+        projectId: "web",
+        groupId: "grp_3",
+        expectedVersion: 1,
+        parentGroupId: "grp_2",
+      },
+    });
+    const before = await test.persistence.listSessionGroups();
+
+    const cases: Array<{ command: StationCommand; code: string }> = [
+      {
+        command: {
+          type: "sessionGroup.reparent",
+          payload: {
+            projectId: "web",
+            groupId: "grp_2",
+            expectedVersion: 2,
+            parentGroupId: "grp_missing",
+          },
+        },
+        code: "SESSION_GROUP_NOT_FOUND",
+      },
+      {
+        command: {
+          type: "sessionGroup.reparent",
+          payload: {
+            projectId: "web",
+            groupId: "grp_2",
+            expectedVersion: 2,
+            parentGroupId: "grp_4",
+          },
+        },
+        code: "SESSION_GROUP_PROJECT_MISMATCH",
+      },
+      {
+        command: {
+          type: "sessionGroup.reparent",
+          payload: {
+            projectId: "web",
+            groupId: "grp_2",
+            expectedVersion: 2,
+            parentGroupId: "grp_2",
+          },
+        },
+        code: "SESSION_GROUP_PARENT_SELF",
+      },
+      {
+        command: {
+          type: "sessionGroup.reparent",
+          payload: {
+            projectId: "web",
+            groupId: "grp_1",
+            expectedVersion: 1,
+            parentGroupId: "grp_3",
+          },
+        },
+        code: "SESSION_GROUP_PARENT_CYCLE",
+      },
+      {
+        command: {
+          type: "sessionGroup.reparent",
+          payload: { projectId: "web", groupId: "grp_2", expectedVersion: 1 },
+        },
+        code: "SESSION_GROUP_VERSION_CONFLICT",
+      },
+    ];
+    for (const { command, code } of cases) {
+      const failed = await test.dispatch(command);
+      expect(failed).toMatchObject({ status: "failed", error: { code } });
+      expect(
+        (await test.persistence.listEvents({ commandId: failed.id })).map((event) => event.type),
+      ).toEqual(["command.accepted", "command.started", "command.failed"]);
+    }
+    await expect(test.persistence.listSessionGroups()).resolves.toEqual(before);
+  });
+
+  it("terminates on corrupt persisted ancestry and rejects it before commit", async () => {
+    if (storage !== "SQLite") return;
+    const test = await fixture();
+    for (const name of ["A", "B", "X"]) {
+      await test.dispatch({
+        type: "sessionGroup.create",
+        payload: { projectId: "web", name },
+      });
+    }
+    if (test.sqlite === undefined) throw new Error("Expected SQLite persistence.");
+    const setParent = test.sqlite.database.prepare(
+      "UPDATE session_groups SET parent_group_id = ? WHERE id = ?",
+    );
+    setParent.run("grp_2", "grp_1");
+    setParent.run("grp_1", "grp_2");
+
+    const listed = await test.persistence.listSessionGroups();
+    expect(listed.map((group) => group.id)).toEqual(["grp_1", "grp_2", "grp_3"]);
+    await expect(
+      test.persistence.reparentSessionGroup({
+        id: "grp_3",
+        expectedVersion: 1,
+        parentGroupId: "grp_1",
+      }),
+    ).rejects.toBeDefined();
+    const failed = await test.dispatch({
+      type: "sessionGroup.reparent",
+      payload: {
+        projectId: "web",
+        groupId: "grp_3",
+        expectedVersion: 1,
+        parentGroupId: "grp_1",
+      },
+    });
+    expect(failed).toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_GROUP_PARENT_GRAPH_INVALID" },
+    });
+    expect(
+      (await test.persistence.listSessionGroups()).find((group) => group.id === "grp_3"),
+    ).not.toHaveProperty("parentGroupId");
+  });
+
   it("projects only the command project without repairing durable memberships", async () => {
     const test = await fixture();
     await test.dispatch({
@@ -321,6 +523,81 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
     ]);
   });
 
+  it("deletes one Group, reparents direct children, and publishes canonical child updates first", async () => {
+    const test = await fixture();
+    const before = test.core.getSnapshot();
+    for (const [name, initialSessionIds] of [
+      ["Root", undefined],
+      ["Parent", ["ses_web_a"]],
+      ["Child A", undefined],
+      ["Child B", undefined],
+      ["Grandchild", undefined],
+    ] as const) {
+      await test.dispatch({
+        type: "sessionGroup.create",
+        payload: {
+          projectId: "web",
+          name,
+          ...(initialSessionIds === undefined ? {} : { initialSessionIds: [...initialSessionIds] }),
+        },
+      });
+    }
+    for (const [groupId, parentGroupId] of [
+      ["grp_2", "grp_1"],
+      ["grp_3", "grp_2"],
+      ["grp_4", "grp_2"],
+      ["grp_5", "grp_3"],
+    ] as const) {
+      await test.dispatch({
+        type: "sessionGroup.reparent",
+        payload: { projectId: "web", groupId, expectedVersion: 1, parentGroupId },
+      });
+    }
+
+    const deleted = await test.dispatch({
+      type: "sessionGroup.delete",
+      payload: { projectId: "web", groupId: "grp_2", expectedVersion: 2 },
+    });
+    expect(deleted.status).toBe("succeeded");
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_1", version: 1, sessionIds: [] }),
+      expect.objectContaining({ id: "grp_3", parentGroupId: "grp_1", version: 3 }),
+      expect.objectContaining({ id: "grp_4", parentGroupId: "grp_1", version: 3 }),
+      expect.objectContaining({ id: "grp_5", parentGroupId: "grp_3", version: 2 }),
+    ]);
+    expect(test.core.getSnapshot().sessions).toEqual(before.sessions);
+    expect(test.core.getSnapshot().rows).toEqual(before.rows);
+    expect(
+      (await test.persistence.listEvents({ commandId: deleted.id })).map((event) =>
+        event.event.type === "sessionGroup.updated"
+          ? `${event.type}:${event.event.group.id}`
+          : event.type,
+      ),
+    ).toEqual([
+      "command.accepted",
+      "command.started",
+      "sessionGroup.updated:grp_3",
+      "sessionGroup.updated:grp_4",
+      "sessionGroup.removed",
+      "command.succeeded",
+    ]);
+
+    const repeated = await test.dispatch({
+      type: "sessionGroup.delete",
+      payload: { projectId: "web", groupId: "grp_2", expectedVersion: 2 },
+    });
+    expect(repeated).toMatchObject({
+      status: "failed",
+      error: { code: "SESSION_GROUP_NOT_FOUND" },
+    });
+    expect(test.core.getSnapshot().sessionGroups).toEqual([
+      expect.objectContaining({ id: "grp_1", version: 1 }),
+      expect.objectContaining({ id: "grp_3", version: 3 }),
+      expect.objectContaining({ id: "grp_4", version: 3 }),
+      expect.objectContaining({ id: "grp_5", version: 2 }),
+    ]);
+  });
+
   it("deletes only Group organization and reports generated id collisions", async () => {
     const test = await fixture({ repeatedGroupId: true });
     const before = test.core.getSnapshot();
@@ -356,6 +633,7 @@ type GroupCommandFixture = {
   providers: ProviderRegistry;
   core: ObserverCore;
   queue: CommandQueue;
+  sqlite: ReturnType<typeof openObserverSqlite> | undefined;
   publishedEvents: StationEvent[];
   dispatch(
     command: StationCommand,
@@ -422,6 +700,7 @@ async function createFixture(
     providers,
     core,
     queue,
+    sqlite,
     publishedEvents,
     dispatch: async (command) => {
       const receipt = await queue.dispatch(command);

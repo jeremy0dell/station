@@ -4,7 +4,7 @@ import type {
   SessionGroupView,
   SessionView,
 } from "@station/contracts";
-import type { SessionGroupStore } from "../persistence/index.js";
+import type { SessionGroupRepairEvidence, SessionGroupStore } from "../persistence/index.js";
 
 export type SessionGroupProjection = {
   sessionGroups: SessionGroupView[];
@@ -14,7 +14,7 @@ export type SessionGroupProjection = {
 /**
  * USE CASE
  *
- * Repairs durable Group membership against canonical sessions and projects configured Groups.
+ * Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics.
  */
 export async function reconcileSessionGroups(input: {
   store?: SessionGroupStore | undefined;
@@ -26,23 +26,13 @@ export async function reconcileSessionGroups(input: {
     return { sessionGroups: [], errors: [] };
   }
 
-  const pruned = await input.store.pruneSessionGroupMemberships({
+  const repaired = await input.store.repairSessionGroups({
     sessions: input.sessions.map((session) => ({ id: session.id, projectId: session.projectId })),
     updatedAt: input.updatedAt,
   });
-  if (!pruned.ok) {
-    throw new Error(`Unexpected Session Group prune conflict: ${pruned.reason}`);
-  }
-
-  const groups = await input.store.listSessionGroups();
+  const groups = repaired.groups;
   const configuredProjectIds = new Set(input.projects.map((project) => project.id));
-  const errors: SafeError[] = pruned.groups.map((group) => ({
-    tag: "SessionGroupReconcileError",
-    code: "SESSION_GROUP_MEMBERSHIP_REPAIRED",
-    message: `Session Group ${group.id} contained membership outside the canonical project sessions.`,
-    hint: "The invalid membership was removed while the Group definition was preserved.",
-    projectId: group.projectId,
-  }));
+  const errors: SafeError[] = repaired.repairs.map((repair) => repairError(repair));
   for (const group of groups) {
     if (configuredProjectIds.has(group.projectId)) continue;
     errors.push({
@@ -67,7 +57,7 @@ export async function reconcileSessionGroups(input: {
 /**
  * POLICY
  *
- * Selects configured Groups and orders their canonical direct membership deterministically.
+ * Projects configured Groups as a flat deterministic parent-before-child array with canonical direct membership.
  */
 export function projectSessionGroups(input: {
   groups: readonly SessionGroupView[];
@@ -106,6 +96,7 @@ export function projectSessionGroups(input: {
         if (parent !== undefined && parent.projectId === group.projectId) emit(parent);
         visiting.delete(group.id);
       }
+      if (emitted.has(group.id)) return;
       emitted.add(group.id);
       ordered.push(group);
     };
@@ -114,4 +105,41 @@ export function projectSessionGroups(input: {
     }
   }
   return ordered;
+}
+
+function repairError(repair: SessionGroupRepairEvidence): SafeError {
+  switch (repair.reason) {
+    case "invalid_membership":
+      return {
+        tag: "SessionGroupReconcileError",
+        code: "SESSION_GROUP_MEMBERSHIP_REPAIRED",
+        message: `Session Group ${repair.groupId} contained membership outside the canonical project sessions.`,
+        hint: "The invalid membership was removed while the Group definition was preserved.",
+        projectId: repair.projectId,
+      };
+    case "missing_parent":
+      return {
+        tag: "SessionGroupReconcileError",
+        code: "SESSION_GROUP_PARENT_MISSING_REPAIRED",
+        message: `Session Group ${repair.groupId} referenced a missing parent Group.`,
+        hint: "The invalid parent relationship was cleared while the Group definition was preserved.",
+        projectId: repair.projectId,
+      };
+    case "cross_project_parent":
+      return {
+        tag: "SessionGroupReconcileError",
+        code: "SESSION_GROUP_PARENT_PROJECT_REPAIRED",
+        message: `Session Group ${repair.groupId} referenced a parent Group in another project.`,
+        hint: "The cross-project parent relationship was cleared while both definitions were preserved.",
+        projectId: repair.projectId,
+      };
+    case "parent_cycle":
+      return {
+        tag: "SessionGroupReconcileError",
+        code: "SESSION_GROUP_PARENT_CYCLE_REPAIRED",
+        message: `Session Group ${repair.groupId} participated in a parent cycle.`,
+        hint: "The cycle participant was moved to the project root while its definition was preserved.",
+        projectId: repair.projectId,
+      };
+  }
 }

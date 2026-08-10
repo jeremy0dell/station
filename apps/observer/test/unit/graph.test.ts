@@ -199,23 +199,28 @@ describe("observer graph derivation", () => {
       ...input,
     });
 
-    expect(
-      projectSessionGroups({
-        projects,
-        sessions: snapshot.sessions,
-        groups: [
-          group({
-            id: "grp_web_child",
-            projectId: "web",
-            parentGroupId: "grp_web_parent",
-            sessionIds: ["ses_wt_web_group", "ses_missing"],
-          }),
-          group({ id: "grp_removed_project", projectId: "removed" }),
-          group({ id: "grp_api_empty", projectId: "api" }),
-          group({ id: "grp_web_parent", projectId: "web" }),
-        ],
-      }),
-    ).toEqual([
+    const projected = projectSessionGroups({
+      projects,
+      sessions: snapshot.sessions,
+      groups: [
+        group({
+          id: "grp_web_grandchild",
+          projectId: "web",
+          parentGroupId: "grp_web_child",
+        }),
+        group({
+          id: "grp_web_child",
+          projectId: "web",
+          parentGroupId: "grp_web_parent",
+          sessionIds: ["ses_wt_web_group", "ses_missing"],
+        }),
+        group({ id: "grp_removed_project", projectId: "removed" }),
+        group({ id: "grp_api_empty", projectId: "api" }),
+        group({ id: "grp_web_parent", projectId: "web" }),
+      ],
+    });
+
+    expect(projected).toEqual([
       expect.objectContaining({ id: "grp_api_empty", sessionIds: [] }),
       expect.objectContaining({ id: "grp_web_parent", sessionIds: [] }),
       expect.objectContaining({
@@ -223,7 +228,14 @@ describe("observer graph derivation", () => {
         parentGroupId: "grp_web_parent",
         sessionIds: ["ses_wt_web_group"],
       }),
+      expect.objectContaining({
+        id: "grp_web_grandchild",
+        parentGroupId: "grp_web_child",
+        sessionIds: [],
+      }),
     ]);
+    expect(projected.every((item) => !("children" in item))).toBe(true);
+    expect(projected.flatMap((item) => item.sessionIds)).toEqual(["ses_wt_web_group"]);
   });
 
   it("projects one provider health result without rebuilding unrelated alerts", () => {

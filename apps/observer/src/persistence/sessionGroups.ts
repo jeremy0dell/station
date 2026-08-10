@@ -3,7 +3,12 @@ import {
   type SessionGroupView,
   SessionGroupViewSchema,
 } from "@station/contracts";
-import type { SessionGroupMemberExpectation, SessionGroupStoreResult } from "./types.js";
+import type {
+  SessionGroupMemberExpectation,
+  SessionGroupRepairEvidence,
+  SessionGroupRepairResult,
+  SessionGroupStoreResult,
+} from "./types.js";
 
 type Assignment = { groupId: SessionGroupId; projectId: string };
 
@@ -15,6 +20,12 @@ export type SessionGroupPersistenceState = {
 export type SessionGroupMutation = {
   state: SessionGroupPersistenceState;
   result: SessionGroupStoreResult;
+  changed: boolean;
+};
+
+export type SessionGroupRepairMutation = {
+  state: SessionGroupPersistenceState;
+  result: SessionGroupRepairResult;
   changed: boolean;
 };
 
@@ -53,11 +64,17 @@ export function listSessionGroups(state: SessionGroupPersistenceState): SessionG
     const projectGroups = byProject.get(projectId) ?? [];
     const groupsById = new Map(projectGroups.map((group) => [group.id, group]));
     const emitted = new Set<string>();
+    const visiting = new Set<string>();
     const emit = (group: SessionGroupView): void => {
       if (emitted.has(group.id)) return;
-      const parent =
-        group.parentGroupId === undefined ? undefined : groupsById.get(group.parentGroupId);
-      if (parent !== undefined) emit(parent);
+      if (!visiting.has(group.id)) {
+        visiting.add(group.id);
+        const parent =
+          group.parentGroupId === undefined ? undefined : groupsById.get(group.parentGroupId);
+        if (parent !== undefined) emit(parent);
+        visiting.delete(group.id);
+      }
+      if (emitted.has(group.id)) return;
       emitted.add(group.id);
       ordered.push(structuredClone(group));
     };
@@ -195,10 +212,20 @@ export function reparentSessionGroup(
       throw new Error("Group parent must share its project.");
     }
     let ancestor: SessionGroupView | undefined = parent;
+    const visited = new Set<SessionGroupId>();
     while (ancestor !== undefined) {
       if (ancestor.id === child.value.id) throw new Error("Group parents must not form a cycle.");
-      ancestor =
-        ancestor.parentGroupId === undefined ? undefined : state.groups.get(ancestor.parentGroupId);
+      if (visited.has(ancestor.id)) throw new Error("Group parent ancestry must be acyclic.");
+      visited.add(ancestor.id);
+      if (ancestor.parentGroupId === undefined) break;
+      const parentAncestor = state.groups.get(ancestor.parentGroupId);
+      if (parentAncestor === undefined) {
+        throw new Error("Group parent ancestry references a missing Group.");
+      }
+      if (parentAncestor.projectId !== child.value.projectId) {
+        throw new Error("Group parent ancestry must stay within its project.");
+      }
+      ancestor = parentAncestor;
     }
   }
   const draft = cloneSessionGroupState(state);
@@ -232,26 +259,122 @@ export function deleteSessionGroup(
   return success(draft, [...touched], true);
 }
 
-export function pruneSessionGroupMemberships(
+export function repairSessionGroups(
   state: SessionGroupPersistenceState,
   input: { sessions: Array<{ id: string; projectId: string }>; updatedAt: string },
-): SessionGroupMutation {
+): SessionGroupRepairMutation {
   const validSessions = new Map(input.sessions.map((session) => [session.id, session.projectId]));
   const draft = cloneSessionGroupState(state);
   const touched = new Set<SessionGroupId>();
+  const repairs: SessionGroupRepairEvidence[] = [];
+  const repairKeys = new Set<string>();
+  const recordRepair = (repair: SessionGroupRepairEvidence): void => {
+    const key = `${repair.groupId}\u0000${repair.reason}`;
+    if (repairKeys.has(key)) return;
+    repairKeys.add(key);
+    repairs.push(repair);
+  };
   for (const [sessionId, assignment] of draft.assignments) {
     const group = draft.groups.get(assignment.groupId);
+    if (group === undefined) {
+      throw new Error("Session Group assignment references a missing Group.");
+    }
     if (
-      group === undefined ||
       validSessions.get(sessionId) !== group.projectId ||
       assignment.projectId !== group.projectId
     ) {
       draft.assignments.delete(sessionId);
-      if (group !== undefined) touched.add(group.id);
+      touched.add(group.id);
+      recordRepair({
+        reason: "invalid_membership",
+        groupId: group.id,
+        projectId: group.projectId,
+      });
     }
   }
+
+  const orderedGroups = [...draft.groups.values()].sort(
+    (left, right) =>
+      left.projectId.localeCompare(right.projectId) || left.id.localeCompare(right.id),
+  );
+  for (const group of orderedGroups) {
+    if (group.parentGroupId === undefined) continue;
+    const parent = draft.groups.get(group.parentGroupId);
+    const reason =
+      parent === undefined
+        ? "missing_parent"
+        : parent.projectId !== group.projectId
+          ? "cross_project_parent"
+          : undefined;
+    if (reason === undefined) continue;
+    const next = { ...group };
+    delete next.parentGroupId;
+    draft.groups.set(group.id, SessionGroupViewSchema.parse(next));
+    touched.add(group.id);
+    recordRepair({
+      reason,
+      groupId: group.id,
+      projectId: group.projectId,
+      parentGroupId: group.parentGroupId,
+    });
+  }
+
+  const resolved = new Set<SessionGroupId>();
+  for (const start of orderedGroups) {
+    if (resolved.has(start.id)) continue;
+    const path: SessionGroupId[] = [];
+    const pathIndex = new Map<SessionGroupId, number>();
+    let currentId: SessionGroupId | undefined = start.id;
+    while (currentId !== undefined && !resolved.has(currentId)) {
+      const cycleStart = pathIndex.get(currentId);
+      if (cycleStart !== undefined) {
+        // Root only cycle participants so incoming non-cycle descendants keep their repaired attachment.
+        for (const groupId of path.slice(cycleStart)) {
+          const group = draft.groups.get(groupId);
+          if (group?.parentGroupId === undefined) {
+            throw new Error("Session Group cycle repair lost its parent edge.");
+          }
+          const parentGroupId = group.parentGroupId;
+          const next = { ...group };
+          delete next.parentGroupId;
+          draft.groups.set(group.id, SessionGroupViewSchema.parse(next));
+          touched.add(group.id);
+          recordRepair({
+            reason: "parent_cycle",
+            groupId: group.id,
+            projectId: group.projectId,
+            parentGroupId,
+          });
+        }
+        break;
+      }
+      pathIndex.set(currentId, path.length);
+      path.push(currentId);
+      const group = draft.groups.get(currentId);
+      if (group === undefined) throw new Error("Session Group parent references a missing Group.");
+      currentId = group.parentGroupId;
+    }
+    for (const groupId of path) resolved.add(groupId);
+  }
+
   touchGroups(draft, touched, input.updatedAt);
-  return success(draft, [...touched], touched.size > 0);
+  const reasonOrder = {
+    invalid_membership: 0,
+    missing_parent: 1,
+    cross_project_parent: 2,
+    parent_cycle: 3,
+  } as const;
+  repairs.sort(
+    (left, right) =>
+      left.projectId.localeCompare(right.projectId) ||
+      left.groupId.localeCompare(right.groupId) ||
+      reasonOrder[left.reason] - reasonOrder[right.reason],
+  );
+  return {
+    state: draft,
+    changed: touched.size > 0,
+    result: { groups: listSessionGroups(draft), repairs },
+  };
 }
 
 function expectedGroup(

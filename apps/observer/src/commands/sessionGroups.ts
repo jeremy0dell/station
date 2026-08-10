@@ -57,6 +57,7 @@ export function createSessionGroupCommandHandlers(
           ? undefined
           : requireProjectGroup(beforeById, command.payload.groupId, projectId);
       validateCommandSessions(command, snapshot, beforeById);
+      validateReparentCommand(command, target, beforeById);
 
       const at = nowIso(options.clock);
       context.beginCommit();
@@ -110,6 +111,7 @@ export function createSessionGroupCommandHandlers(
     "sessionGroup.create": handle,
     "sessionGroup.rename": handle,
     "sessionGroup.updateMembership": handle,
+    "sessionGroup.reparent": handle,
     "sessionGroup.delete": handle,
   };
 }
@@ -119,6 +121,7 @@ function sessionGroupCommand(context: CommandHandlerContext): SessionGroupComman
     case "sessionGroup.create":
     case "sessionGroup.rename":
     case "sessionGroup.updateMembership":
+    case "sessionGroup.reparent":
     case "sessionGroup.delete":
       return context.command;
     default:
@@ -177,12 +180,58 @@ async function mutateSessionGroups(input: {
       }
       return persistence.updateSessionGroupMembership(membershipInput);
     }
+    case "sessionGroup.reparent": {
+      const reparentInput: Parameters<SessionGroupStore["reparentSessionGroup"]>[0] = {
+        id: command.payload.groupId,
+        expectedVersion: command.payload.expectedVersion,
+        updatedAt: at,
+      };
+      if (command.payload.parentGroupId !== undefined) {
+        reparentInput.parentGroupId = command.payload.parentGroupId;
+      }
+      return persistence.reparentSessionGroup(reparentInput);
+    }
     case "sessionGroup.delete":
       return persistence.deleteSessionGroup({
         id: command.payload.groupId,
         expectedVersion: command.payload.expectedVersion,
         updatedAt: at,
       });
+  }
+}
+
+function validateReparentCommand(
+  command: SessionGroupCommand,
+  target: SessionGroupView | undefined,
+  groups: ReadonlyMap<string, SessionGroupView>,
+): void {
+  if (command.type !== "sessionGroup.reparent" || command.payload.parentGroupId === undefined) {
+    return;
+  }
+  if (target === undefined) {
+    throw groupMissingError(command.payload.groupId, command.payload.projectId);
+  }
+  if (command.payload.parentGroupId === target.id) {
+    throw groupParentSelfError(target.projectId);
+  }
+
+  let ancestor = requireProjectGroup(
+    groups,
+    command.payload.parentGroupId,
+    command.payload.projectId,
+  );
+  const visited = new Set<SessionGroupId>();
+  while (true) {
+    // Reaching the target rejects the proposed edge; revisiting anything else exposes prior corruption.
+    if (ancestor.id === target.id) throw groupParentCycleError(target.projectId);
+    if (visited.has(ancestor.id)) throw groupParentGraphInvalidError(target.projectId);
+    visited.add(ancestor.id);
+    if (ancestor.parentGroupId === undefined) return;
+    const parent = groups.get(ancestor.parentGroupId);
+    if (parent === undefined || parent.projectId !== target.projectId) {
+      throw groupParentGraphInvalidError(target.projectId);
+    }
+    ancestor = parent;
   }
 }
 
@@ -261,7 +310,11 @@ function sessionGroupConflict(
       };
     case "not_found":
       return groupMissingError(
-        command.type === "sessionGroup.create" ? "generated" : command.payload.groupId,
+        command.type === "sessionGroup.create"
+          ? "generated"
+          : command.type === "sessionGroup.reparent"
+            ? (command.payload.parentGroupId ?? command.payload.groupId)
+            : command.payload.groupId,
         projectId,
       );
     case "stale_version":
@@ -281,6 +334,36 @@ function sessionGroupConflict(
         projectId,
       };
   }
+}
+
+function groupParentSelfError(projectId: string): SafeError {
+  return {
+    tag: "CommandValidationError",
+    code: "SESSION_GROUP_PARENT_SELF",
+    message: "A Session Group cannot be its own parent.",
+    hint: "Choose another Group in the same project or move this Group to the project root.",
+    projectId,
+  };
+}
+
+function groupParentCycleError(projectId: string): SafeError {
+  return {
+    tag: "CommandValidationError",
+    code: "SESSION_GROUP_PARENT_CYCLE",
+    message: "The requested parent would create a Session Group cycle.",
+    hint: "Choose a Group outside the target Group's descendants.",
+    projectId,
+  };
+}
+
+function groupParentGraphInvalidError(projectId: string): SafeError {
+  return {
+    tag: "CommandValidationError",
+    code: "SESSION_GROUP_PARENT_GRAPH_INVALID",
+    message: "The requested parent belongs to an invalid persisted Group ancestry.",
+    hint: "Reconcile the Observer to repair Group parentage, then refresh and retry.",
+    projectId,
+  };
 }
 
 function projectMissingError(projectId: string): SafeError {

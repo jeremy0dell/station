@@ -73,21 +73,21 @@ const closeTerminalCommand: StationCommand = {
   },
 };
 
-const renameSessionGroupCommand: StationCommand = {
-  type: "sessionGroup.rename",
-  payload: {
-    projectId: "web",
-    groupId: "grp_web",
-    expectedVersion: 1,
-    name: "Web",
-  },
-};
-
 const createSessionGroupCommand: StationCommand = {
   type: "sessionGroup.create",
   payload: {
     projectId: "web",
     name: "Another web Group",
+  },
+};
+
+const reparentSessionGroupCommand: StationCommand = {
+  type: "sessionGroup.reparent",
+  payload: {
+    projectId: "web",
+    groupId: "grp_web",
+    expectedVersion: 1,
+    parentGroupId: "grp_parent",
   },
 };
 
@@ -380,11 +380,11 @@ describe("observer command queue", () => {
       starts.push(commandId);
       if (commandId === "cmd_1") await firstBlocked;
     };
-    queue.registerHandler("sessionGroup.rename", handler);
+    queue.registerHandler("sessionGroup.reparent", handler);
     queue.registerHandler("sessionGroup.create", handler);
 
     await Promise.all([
-      queue.dispatch(renameSessionGroupCommand),
+      queue.dispatch(reparentSessionGroupCommand),
       queue.dispatch(createSessionGroupCommand),
       queue.dispatch(createApiSessionGroupCommand),
     ]);

@@ -5294,10 +5294,22 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupRepairResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations."
+          "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -7347,10 +7359,22 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupRepairResult",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations."
+          "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships."
         },
         {
           "name": "SessionGroupStoreConflictReason",
@@ -7684,7 +7708,7 @@
           "name": "SessionGroupStore",
           "kind": "interface",
           "role": "DRIVEN PORT",
-          "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations."
+          "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships."
         },
         {
           "name": "SessionStore",
@@ -7726,6 +7750,7 @@
             "ProviderObservationsIngressDedupeResult",
             "RecordProviderObservationInput",
             "SessionGroupMemberExpectation",
+            "SessionGroupRepairResult",
             "SessionGroupStoreResult",
             "SessionHarnessDerivedStateRepair",
             "SessionTurnReadinessMutation",
@@ -7990,13 +8015,13 @@
           "purpose": null
         },
         {
-          "name": "pruneSessionGroupMemberships",
+          "name": "renameSessionGroup",
           "kind": "function",
           "role": null,
           "purpose": null
         },
         {
-          "name": "renameSessionGroup",
+          "name": "repairSessionGroups",
           "kind": "function",
           "role": null,
           "purpose": null
@@ -8020,6 +8045,12 @@
           "purpose": null
         },
         {
+          "name": "SessionGroupRepairMutation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
           "name": "updateSessionGroupMembership",
           "kind": "function",
           "role": null,
@@ -8031,7 +8062,12 @@
           "specifier": "./types.js",
           "resolvedPath": "apps/observer/src/persistence/types.ts",
           "edgeKind": "type-only",
-          "bindings": ["SessionGroupMemberExpectation", "SessionGroupStoreResult"]
+          "bindings": [
+            "SessionGroupMemberExpectation",
+            "SessionGroupRepairEvidence",
+            "SessionGroupRepairResult",
+            "SessionGroupStoreResult"
+          ]
         },
         {
           "specifier": "@station/contracts",
@@ -8636,6 +8672,18 @@
         },
         {
           "name": "SessionGroupMemberExpectation",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupRepairEvidence",
+          "kind": "type",
+          "role": null,
+          "purpose": null
+        },
+        {
+          "name": "SessionGroupRepairResult",
           "kind": "type",
           "role": null,
           "purpose": null
@@ -9472,13 +9520,13 @@
           "name": "projectSessionGroups",
           "kind": "function",
           "role": "POLICY",
-          "purpose": "Selects configured Groups and orders their canonical direct membership deterministically."
+          "purpose": "Projects configured Groups as a flat deterministic parent-before-child array with canonical direct membership."
         },
         {
           "name": "reconcileSessionGroups",
           "kind": "function",
           "role": "USE CASE",
-          "purpose": "Repairs durable Group membership against canonical sessions and projects configured Groups."
+          "purpose": "Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics."
         },
         {
           "name": "SessionGroupProjection",
@@ -9492,7 +9540,7 @@
           "specifier": "../persistence/index.js",
           "resolvedPath": "apps/observer/src/persistence/index.ts",
           "edgeKind": "type-only",
-          "bindings": ["SessionGroupStore"]
+          "bindings": ["SessionGroupRepairEvidence", "SessionGroupStore"]
         },
         {
           "specifier": "@station/contracts",
@@ -13359,7 +13407,7 @@
       "declaration": "SessionGroupStore",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations.",
+      "purpose": "Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships.",
       "dependencies": []
     },
     {
@@ -13530,7 +13578,7 @@
       "declaration": "projectSessionGroups",
       "kind": "function",
       "role": "POLICY",
-      "purpose": "Selects configured Groups and orders their canonical direct membership deterministically.",
+      "purpose": "Projects configured Groups as a flat deterministic parent-before-child array with canonical direct membership.",
       "dependencies": []
     },
     {
@@ -13538,7 +13586,7 @@
       "declaration": "reconcileSessionGroups",
       "kind": "function",
       "role": "USE CASE",
-      "purpose": "Repairs durable Group membership against canonical sessions and projects configured Groups.",
+      "purpose": "Repairs durable Group membership and parentage against canonical state, then projects configured Groups with reason-specific diagnostics.",
       "dependencies": [
         {
           "path": "apps/observer/src/persistence/ports.ts",
