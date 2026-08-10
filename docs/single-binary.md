@@ -494,8 +494,12 @@ defer by default; only `--drive-package-manager` executes their native command.
 
 After an applied update, the newly installed launcher restarts the Observer and
 therefore supplies the candidate build identity to the existing precedence
-policy. Optional `--handoff[=processes|screen]` then delegates live PTY transfer
-to the existing Station Host protocol. The immutable current public
+policy. Mutation-capable updates preflight and preserve a busy compatible Host
+with `processes` fidelity by default, then delegate live PTY transfer to the
+existing Station Host protocol through that successor launcher. Bare
+`--handoff` retains the default fidelity, `--handoff=screen` requests semantic
+snapshots, and `--no-handoff` explicitly leaves the incumbent in place with a
+stale-Host warning. The immutable current public
 `v0.0.0-pre-alpha.5.1` installer predates the receipt, so a later exact-tag
 manual install is required once before automatic updates can own an existing
 layout.

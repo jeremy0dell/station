@@ -57,5 +57,6 @@ describe("registered stn update command", () => {
     expect(result).toMatchObject({ code: 0, outputFormat: "text" });
     expect(result.output).toContain("--drive-package-manager");
     expect(result.output).toContain("--handoff[=processes|screen]");
+    expect(result.output).toContain("--no-handoff");
   });
 });

@@ -67,7 +67,9 @@ async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHando
   };
   const status = await runHostCommand(["status"], { config: input.config }, targetDeps);
   if (status.action !== "status") throw new Error("Host status returned the wrong action.");
-  if (status.probe === "absent" || status.probe === "stale") return { kind: "not-needed" };
+  if (status.probe === "absent" || status.probe === "stale") {
+    return { kind: "not-needed" };
+  }
   if (status.probe !== "listening" || status.compatibility === undefined) {
     throw updateErrorFromUnknown(undefined, {
       code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
@@ -79,12 +81,20 @@ async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHando
     throw updateErrorFromUnknown(undefined, {
       code: "UPDATE_HOST_HANDOFF_REFUSED",
       message: "The active Station Host protocol cannot hand off to the target build.",
-      hint: "Finish or preserve the live terminals before upgrading without handoff.",
+      hint: "Account for every live terminal before retrying with --no-handoff; the next TUI may refuse the incumbent Host.",
     });
   }
-  if (status.compatibility.action === "reuse" || status.livePtyCount === 0) {
+  if (status.compatibility.action === "reuse") {
     return { kind: "not-needed" };
   }
+  if (status.livePtyCount === undefined) {
+    throw updateErrorFromUnknown(undefined, {
+      code: "UPDATE_HOST_HANDOFF_PREFLIGHT_FAILED",
+      message: "The active Station Host inventory could not be inspected before update.",
+      hint: status.error ?? "Run stn host status and resolve its reported error before retrying.",
+    });
+  }
+  if (status.livePtyCount === 0) return { kind: "not-needed" };
   const planned = await runHostCommand(
     ["handoff", "--dry-run", "--fidelity", request.handoff],
     { config: input.config },
@@ -103,7 +113,7 @@ async function resolveHostHandoff(input: UpdateScenarioInput): Promise<HostHando
 /**
  * ADAPTER
  *
- * Resolves the selected update path and translates optional Host preflight into handoff intent.
+ * Resolves the selected update path and preflights default Host preservation before mutation.
  */
 export async function resolveUpdateScenario(input: UpdateScenarioInput): Promise<UpdateScenario> {
   const { selected, request } = input;

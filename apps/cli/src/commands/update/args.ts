@@ -10,7 +10,7 @@ export type UpdateRequest = {
 };
 
 const updateUsage =
-  "Usage: stn update [--channel <installer-binary|dev-checkout|homebrew|npm-global|mise>] [--dry-run] [--json] [--drive-package-manager] [--handoff[=processes|screen]]";
+  "Usage: stn update [--channel <installer-binary|dev-checkout|homebrew|npm-global|mise>] [--dry-run] [--json] [--drive-package-manager] [--handoff[=processes|screen] | --no-handoff]";
 
 function isUpdateChannelId(value: string | undefined): value is UpdateChannelId {
   return value !== undefined && updateChannelIds.some((channel) => channel === value);
@@ -21,7 +21,8 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
   let mode: UpdateRequest["mode"] = "apply";
   let output: UpdateRequest["output"] = "text";
   let packageManager: UpdateRequest["packageManager"] = "defer";
-  let handoff: HostHandoffFidelity | undefined;
+  let handoff: HostHandoffFidelity | undefined = "processes";
+  let handoffConfigured = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--channel") {
@@ -50,15 +51,23 @@ export function parseUpdateRequest(args: readonly string[]): UpdateRequest {
       continue;
     }
     if (arg === "--handoff") {
-      if (handoff !== undefined) throw new Error("--handoff may be provided only once.");
+      if (handoffConfigured) throw new Error("Host handoff may be configured only once.");
+      handoffConfigured = true;
       handoff = "processes";
       continue;
     }
     if (arg?.startsWith("--handoff=")) {
-      if (handoff !== undefined) throw new Error("--handoff may be provided only once.");
+      if (handoffConfigured) throw new Error("Host handoff may be configured only once.");
       const value = arg.slice("--handoff=".length);
       if (value !== "processes" && value !== "screen") throw new Error(updateUsage);
+      handoffConfigured = true;
       handoff = value;
+      continue;
+    }
+    if (arg === "--no-handoff") {
+      if (handoffConfigured) throw new Error("Host handoff may be configured only once.");
+      handoffConfigured = true;
+      handoff = undefined;
       continue;
     }
     throw new Error(updateUsage);

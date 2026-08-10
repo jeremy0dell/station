@@ -674,9 +674,12 @@ Host compatibility is display `buildVersion` + protocol major only — not
 
 - Source and a binary that report the **same** display version **reuse** the host;
   `stn host handoff` refuses as unnecessary.
-- Different display versions with matching protocol are `replace`; busy hosts still
-  default to `HOST_UPGRADE_BLOCKED` until someone opts into handoff. The successor
-  packaging follows the requesting CLI (`bun hostMain.ts` vs `<stn> __station-host`).
+- Different display versions with matching protocol are `replace`. Direct TUI
+  launches still default to `HOST_UPGRADE_BLOCKED` until
+  `STATION_HOST_HANDOFF=1` opts into handoff; mutation-capable `stn update` runs
+  preflight and preserves a busy Host with `processes` fidelity by default. The
+  successor packaging follows the requesting CLI (`bun hostMain.ts` vs
+  `<stn> __station-host`).
 - Protocol major skew never handoffs.
 - Both sides must target the same socket/state dir (same config). Global state and
   a worktree `.dev-state` are different islands.
