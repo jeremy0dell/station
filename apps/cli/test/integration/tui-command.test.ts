@@ -140,6 +140,39 @@ function warmObserverDeps(version: string): ObserverProcessDeps {
   };
 }
 
+type TuiUpdateProbe = NonNullable<TuiCommandDeps["updateProbes"]>[number];
+type TuiUpdatePlan = NonNullable<Awaited<ReturnType<TuiUpdateProbe["detectAndPlan"]>>>["plan"];
+
+function updateProbe(
+  overrides: Partial<TuiUpdatePlan> = {},
+  apply?: NonNullable<Awaited<ReturnType<TuiUpdateProbe["detectAndPlan"]>>>["apply"],
+): TuiUpdateProbe {
+  const plan: TuiUpdatePlan = {
+    channel: "installer-binary",
+    status: "update-available",
+    currentVersion: "1.0.0",
+    targetVersion: "1.1.0",
+    currentCli: ["stn"],
+    ...overrides,
+  };
+  return {
+    channel: plan.channel,
+    detectAndPlan: async () => ({
+      channel: plan.channel,
+      plan,
+      apply:
+        apply ??
+        (async () => ({
+          channel: plan.channel,
+          status: "updated",
+          previousVersion: plan.currentVersion,
+          installedVersion: plan.targetVersion,
+          warnings: [],
+        })),
+    }),
+  };
+}
+
 describe("CLI tui command", () => {
   beforeEach(() => {
     delete process.env.STATION_PANE;
@@ -289,6 +322,235 @@ describe("CLI tui command", () => {
     // renderer resolves, then fires as "tui-startup".
     expect(reconciles).toEqual([]);
     await vi.waitFor(() => expect(reconciles).toEqual(["tui-startup"]));
+  });
+
+  it("prints one actionable update notice after native renderer cleanup without applying", async () => {
+    const fixture = await createTempState();
+    const events: string[] = [];
+    const apply = vi.fn(async () => ({
+      channel: "installer-binary" as const,
+      status: "updated" as const,
+      previousVersion: "1.0.0",
+      installedVersion: "1.1.0",
+      warnings: [],
+    }));
+    const probe = updateProbe({}, apply);
+    const detectAndPlan = vi.fn(async (operation = {}) => {
+      events.push("discovery-started");
+      expect(operation.signal?.aborted).toBe(false);
+      const planned = await probe.detectAndPlan(operation);
+      events.push("discovery-completed");
+      return planned;
+    });
+    const writeUpdateNotice = vi.fn((notice: string) => {
+      events.push("notice-written");
+      expect(notice).toBe("Station 1.1.0 is available — run `stn update`\n");
+    });
+
+    const resultPromise = runTuiCommand(
+      [],
+      { config: fixture.config },
+      {
+        observer: runningObserverDeps(),
+        spawnRenderer: async () => {
+          events.push("renderer-started");
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          events.push("renderer-cleaned-up");
+          return { status: "exited", code: 0 };
+        },
+        updateProbes: [{ channel: "installer-binary", detectAndPlan }],
+        writeUpdateNotice,
+      },
+    );
+
+    await expect(resultPromise).resolves.toEqual({ status: "exited", code: 0 });
+    expect(events).toEqual([
+      "renderer-started",
+      "discovery-started",
+      "discovery-completed",
+      "renderer-cleaned-up",
+      "notice-written",
+    ]);
+    expect(detectAndPlan).toHaveBeenCalledOnce();
+    expect(apply).not.toHaveBeenCalled();
+    expect(writeUpdateNotice).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    {
+      label: "current plan",
+      probes: [updateProbe({ status: "current", targetVersion: "1.0.0" })],
+    },
+    {
+      label: "same-version revision-only plan",
+      probes: [
+        updateProbe({
+          channel: "dev-checkout",
+          currentVersion: "1.0.0-dev",
+          targetVersion: "1.0.0-dev",
+          currentRevision: "aaaaaaaa",
+          targetRevision: "bbbbbbbb",
+          currentCli: ["node", "apps/cli/dist/main.js"],
+        }),
+      ],
+    },
+    {
+      label: "missing owner",
+      probes: [
+        {
+          channel: "installer-binary" as const,
+          detectAndPlan: async () => undefined,
+        },
+      ],
+    },
+    {
+      label: "ambiguous owner",
+      probes: [updateProbe(), updateProbe({ channel: "homebrew" })],
+    },
+    {
+      label: "failed discovery",
+      probes: [
+        {
+          channel: "installer-binary" as const,
+          detectAndPlan: async () => {
+            throw new Error("release lookup failed");
+          },
+        },
+      ],
+    },
+  ] satisfies Array<{
+    label: string;
+    probes: TuiUpdateProbe[];
+  }>)("omits the update notice for $label", async ({ probes }) => {
+    const fixture = await createTempState();
+    const writeUpdateNotice = vi.fn();
+
+    await expect(
+      runTuiCommand(
+        [],
+        { config: fixture.config },
+        {
+          observer: runningObserverDeps(),
+          spawnRenderer: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return { status: "exited", code: 0 };
+          },
+          updateProbes: probes,
+          writeUpdateNotice,
+        },
+      ),
+    ).resolves.toEqual({ status: "exited", code: 0 });
+
+    expect(writeUpdateNotice).not.toHaveBeenCalled();
+  });
+
+  it("aborts unfinished discovery without awaiting it", async () => {
+    const fixture = await createTempState();
+    let discoveryStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      discoveryStarted = resolve;
+    });
+    let discoverySignal: AbortSignal | undefined;
+    const detectAndPlan = vi.fn(
+      (operation = {}) =>
+        new Promise<never>((_resolve, reject) => {
+          discoverySignal = operation.signal;
+          discoveryStarted();
+          operation.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
+        }),
+    );
+    const writeUpdateNotice = vi.fn();
+
+    await expect(
+      runTuiCommand(
+        [],
+        { config: fixture.config },
+        {
+          observer: runningObserverDeps(),
+          spawnRenderer: async () => {
+            await started;
+            return { status: "exited", code: 0 };
+          },
+          updateProbes: [{ channel: "installer-binary", detectAndPlan }],
+          writeUpdateNotice,
+        },
+      ),
+    ).resolves.toEqual({ status: "exited", code: 0 });
+
+    expect(detectAndPlan).toHaveBeenCalledOnce();
+    expect(discoverySignal?.aborted).toBe(true);
+    expect(writeUpdateNotice).not.toHaveBeenCalled();
+  });
+
+  it("never discovers updates for popup or fake-dashboard renderers", async () => {
+    const fixture = await createTempState();
+    const detectAndPlan = vi.fn(async () => undefined);
+    const updateProbes = [{ channel: "installer-binary" as const, detectAndPlan }];
+    const writeUpdateNotice = vi.fn();
+    const spawnRenderer = vi.fn(async () => ({ status: "exited" as const, code: 0 }));
+
+    await expect(
+      runTuiCommand(
+        ["--popup"],
+        { config: fixture.config },
+        {
+          observer: runningObserverDeps(),
+          spawnRenderer,
+          updateProbes,
+          writeUpdateNotice,
+        },
+      ),
+    ).resolves.toEqual({ status: "exited", code: 0 });
+    await expect(
+      runTuiCommand(
+        ["--dev-fake-dashboard"],
+        { config: fixture.config },
+        { spawnRenderer, updateProbes, writeUpdateNotice },
+      ),
+    ).resolves.toEqual({ status: "exited", code: 0 });
+
+    expect(spawnRenderer).toHaveBeenCalledTimes(2);
+    expect(detectAndPlan).not.toHaveBeenCalled();
+    expect(writeUpdateNotice).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "nonzero exit",
+      result: { status: "exited" as const, code: 1 },
+    },
+    {
+      label: "signal-bearing exit",
+      result: {
+        status: "exited" as const,
+        code: 0,
+        exitCode: null,
+        signal: "SIGTERM" as const,
+      },
+    },
+  ])("omits the update notice after a $label", async ({ result }) => {
+    const fixture = await createTempState();
+    const writeUpdateNotice = vi.fn();
+
+    await expect(
+      runTuiCommand(
+        [],
+        { config: fixture.config },
+        {
+          observer: runningObserverDeps(),
+          spawnRenderer: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return result;
+          },
+          updateProbes: [updateProbe()],
+          writeUpdateNotice,
+        },
+      ),
+    ).resolves.toEqual(result);
+
+    expect(writeUpdateNotice).not.toHaveBeenCalled();
   });
 
   it("reports slow observer startup before opening the native renderer", async () => {

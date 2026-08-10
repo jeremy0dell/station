@@ -3,22 +3,16 @@ import {
   type ExternalCommandRunner,
   runExternalCommand,
   type StationBuildInfo,
-  stationBuildInfo,
 } from "@station/runtime";
 import type { CliRunResult } from "../cliTypes.js";
 import type { CliEnv } from "../env.js";
 import type { ExecutableArgv } from "../selfExec.js";
 import {
-  createUpdateChannelProbe,
   type PlannedUpdateChannel,
   selectUpdateChannel,
   type UpdateChannelProbe,
 } from "../update/channelDetection.js";
-import { createDevCheckoutUpdateChannel } from "../update/devCheckoutUpdate.js";
-import { createHomebrewUpdateChannel } from "../update/homebrewUpdate.js";
-import { createInstallerBinaryUpdateChannel } from "../update/installerBinaryUpdate.js";
-import { createMiseUpdateChannel } from "../update/miseUpdate.js";
-import { createNpmGlobalUpdateChannel } from "../update/npmGlobalUpdate.js";
+import { createDefaultUpdateProbes } from "../update/defaultUpdateProbes.js";
 import type { UpdateApplyReportBase, UpdateCommandArgv } from "../update/updateChannel.js";
 import { updateErrorFromUnknown } from "../update/updateError.js";
 import type { HostCommandDeps } from "./host/index.js";
@@ -94,38 +88,6 @@ export async function runUpdateCommand(
     case "apply-update":
       return executeSelectedUpdate(selected, scenario, report, request, options, deps);
   }
-}
-
-function createDefaultUpdateProbes(
-  options: UpdateCommandOptions,
-  deps: UpdateCommandDeps,
-): UpdateChannelProbe[] {
-  const buildInfo = deps.buildInfo ?? stationBuildInfo;
-  const runtimePath = deps.executablePath ?? process.execPath;
-  const shared = {
-    runtimePath,
-    ...(options.env?.PATH === undefined ? {} : { pathEnv: options.env.PATH }),
-    ...(deps.commandRunner === undefined ? {} : { commandRunner: deps.commandRunner }),
-  };
-  return [
-    createUpdateChannelProbe(
-      createInstallerBinaryUpdateChannel({
-        buildInfo,
-        ...(deps.executablePath === undefined ? {} : { executablePath: deps.executablePath }),
-        ...(deps.commandRunner === undefined ? {} : { commandRunner: deps.commandRunner }),
-      }),
-    ),
-    createUpdateChannelProbe(
-      createDevCheckoutUpdateChannel({
-        cliEntryPath: options.cliEntryPath,
-        buildInfo,
-        ...shared,
-      }),
-    ),
-    createUpdateChannelProbe(createHomebrewUpdateChannel(shared)),
-    createUpdateChannelProbe(createNpmGlobalUpdateChannel(shared)),
-    createUpdateChannelProbe(createMiseUpdateChannel(shared)),
-  ];
 }
 
 async function executeSelectedUpdate(

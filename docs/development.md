@@ -401,6 +401,23 @@ pnpm smoke:release
 pnpm smoke:install
 ```
 
+The native TUI exit-notice lifecycle has focused CLI and documentation coverage:
+
+```bash
+env -u STATION_OPENCODE_PLUGIN_BODY_PATH pnpm exec vitest run \
+  --config config/vitest/vitest.integration.config.ts \
+  apps/cli/test/integration/tui-command.test.ts
+pnpm exec vitest run \
+  --config config/vitest/vitest.diagnostics.config.ts \
+  tests/diagnostics/release-readiness-docs.test.ts
+```
+
+For manual UX verification, use an older published native binary, enter the
+fullscreen TUI long enough for discovery to finish, and exit normally. Confirm
+the notice appears once after terminal restoration. Then confirm an immediate
+exit, popup exit, abnormal exit, and same-version development checkout print no
+notice. The check is advisory and must not run `apply` or delay either edge.
+
 Native Station per-TTY ownership has a focused Bun suite and a private real-PTY
 acceptance lane:
 
