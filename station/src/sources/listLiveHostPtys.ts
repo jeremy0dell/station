@@ -21,12 +21,27 @@ type ListClient = {
   dispose(): void;
 };
 
+export type BusyHostHandoffInput = {
+  socketPath: string;
+  expectedBuildVersion: string;
+};
+
 export type ListLiveHostPtysDeps = {
   /** Test seam; production dials the host unix socket. */
   createClient?: (socketPath: string) => ListClient;
   timeoutMs?: number;
   expectedBuildVersion?: string;
+  env?: Readonly<Record<string, string | undefined>>;
+  /** Runs only after bounded admission finds an eligible busy replacement Host. */
+  handoffBusyHost?: (
+    input: BusyHostHandoffInput,
+  ) => Promise<readonly HostListEntry[]>;
 };
+
+type HostPtyNegotiation =
+  | { kind: "listed"; entries: readonly HostListEntry[] }
+  | { kind: "cold" }
+  | { kind: "handoff"; refusal: unknown };
 
 function hostCompatibilityUnconfirmed() {
   return stationHostSafeError(
@@ -43,24 +58,43 @@ async function negotiateHostPtys(
   client: ListClient,
   expectedBuildVersion: string,
   state: { incompatibleHostDetected: boolean },
-): Promise<readonly HostListEntry[] | undefined> {
+  handoffEnabled: boolean,
+): Promise<HostPtyNegotiation> {
   const health = await client.health();
   const compatibility = classifyHostCompatibility(health, expectedBuildVersion);
 
   switch (compatibility.action) {
     case "reuse":
-      return client.list();
+      return { kind: "listed", entries: await client.list() };
     case "replace":
       state.incompatibleHostDetected = true;
-      await client.stopIfIdle(expectedBuildVersion);
-      return undefined;
+      try {
+        await client.stopIfIdle(expectedBuildVersion);
+        return { kind: "cold" };
+      } catch (error) {
+        if (
+          handoffEnabled &&
+          isStationHostCompatibilityError(error) &&
+          error.code === "HOST_UPGRADE_BLOCKED"
+        ) {
+          return { kind: "handoff", refusal: error };
+        }
+        throw error;
+      }
     case "refuse":
       state.incompatibleHostDetected = true;
       assertHostReusable(health, expectedBuildVersion);
-      return undefined;
+      return { kind: "cold" };
   }
 }
 
+/**
+ * ADAPTER
+ *
+ * Lists reusable Host PTYs after bounded compatibility admission. Exact
+ * `STATION_HOST_HANDOFF=1` may negotiate one busy same-protocol replacement
+ * outside that bound; successor listing failures stay visible to prevent cold restore.
+ */
 export async function listLiveHostPtys(
   socketPath: string,
   deps: ListLiveHostPtysDeps = {},
@@ -74,21 +108,27 @@ export async function listLiveHostPtys(
     deps.createClient?.(socketPath) ??
     createStationHostClient({ socketPath, expectedBuildVersion });
   const state = { incompatibleHostDetected: false };
-  const operation = negotiateHostPtys(client, expectedBuildVersion, state);
+  const operation = negotiateHostPtys(
+    client,
+    expectedBuildVersion,
+    state,
+    (deps.env ?? process.env).STATION_HOST_HANDOFF === "1",
+  );
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<undefined>((resolve, reject) => {
+  const timeout = new Promise<HostPtyNegotiation>((resolve, reject) => {
     timeoutId = setTimeout(() => {
       if (state.incompatibleHostDetected) {
         reject(hostCompatibilityUnconfirmed());
       } else {
-        resolve(undefined);
+        resolve({ kind: "cold" });
       }
     }, timeoutMs);
   });
 
+  let result: HostPtyNegotiation;
   try {
     // Promise.race observes a losing operation's late rejection after the timeout settles.
-    return await Promise.race([operation, timeout]);
+    result = await Promise.race([operation, timeout]);
   } catch (error) {
     if (isStationHostCompatibilityError(error)) {
       throw error;
@@ -103,5 +143,17 @@ export async function listLiveHostPtys(
     }
     // Closes the socket — also cancels the in-flight list() on the timeout path.
     client.dispose();
+  }
+
+  switch (result.kind) {
+    case "listed":
+      return result.entries;
+    case "cold":
+      return undefined;
+    case "handoff":
+      if (deps.handoffBusyHost === undefined) {
+        throw result.refusal;
+      }
+      return deps.handoffBusyHost({ socketPath, expectedBuildVersion });
   }
 }

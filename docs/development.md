@@ -651,7 +651,7 @@ binary pair for day-to-day validation):
 
 ```bash
 pnpm --dir station test:pty          # includes hostHandoff.smoke (STATION_PTY_SMOKE=1)
-pnpm test:e2e:host-upgrade           # focused A→B refuse + opt-in handoff smoke
+pnpm test:e2e:host-upgrade           # A→B refuse, gated TUI handoff, and warm-reattach smoke
 ```
 
 The smoke uses test-only `--build-version` overrides on `hostMain` (requires
@@ -662,7 +662,9 @@ opt-in (`HOST_UPGRADE_BLOCKED`, child survives), negotiated
 child PID, idle `stopIfIdle` remains the empty-host path, multi-PTY + abort +
 recovery, and a packaging-shape handoff (source-style `bun hostMain` → trampoline
 successor argv, proving adopt still works when the successor is not launched with
-the same command prefix). Set `STATION_BINARY_PATH=/path/to/stn` to additionally
+the same command prefix), plus the native TUI inventory path building a warm
+restore plan from successor PTYs and receiving replayed and later live output.
+Set `STATION_BINARY_PATH=/path/to/stn` to additionally
 exercise a real compiled `__station-host` successor in that packaging case.
 
 ### Source ↔ binary and `station:devbox`
@@ -692,12 +694,16 @@ pnpm stn host handoff --fidelity processes|screen
 pnpm station:devbox status           # warns if host build ≠ this checkout's CLI
 ```
 
-Manual UX check (optional): isolated config with `station_persistent_agents = true`,
-start a hosted terminal, leave a long command running, exit the UI, then run
-`stn host handoff` from the newer build. Without opt-in, B must still report
-`HOST_UPGRADE_BLOCKED`. Legacy or different-protocol hosts refuse automatic
-replacement and must be stopped explicitly only after their sessions are
-accounted for.
+Manual UX check (optional): use one isolated config/state directory with
+`station_persistent_agents = true`. Launch build A, start a hosted pane, print a
+marker, leave a long command running, record its pane PID and PTY instance, and
+exit the UI. Launch build B without `STATION_HOST_HANDOFF`; it must report the
+unchanged `HOST_UPGRADE_BLOCKED` refusal while A's pane PID stays alive. Then run
+the same native TUI launch as `STATION_HOST_HANDOFF=1 <build-B-stn>` against that
+state. The pane must warm-reattach with the same PID and PTY instance, show the
+pre-handoff marker, and display new live output. Legacy or different-protocol
+Hosts still refuse handoff and must be stopped explicitly only after their
+sessions are accounted for.
 
 ## Hosted Workflow Security
 

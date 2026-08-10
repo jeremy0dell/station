@@ -257,11 +257,12 @@ describe("ensureStationHostRunning", () => {
   it("preserves a different-build host when live PTYs block its idle shutdown", async () => {
     const socket = await liveSocket();
     const { socketPath } = socket;
+    const refusal = stationHostSafeError(
+      "HOST_UPGRADE_BLOCKED",
+      "Host build older-build owns 2 live terminals; requested build is test-build.",
+    );
     const stopIfIdle = vi.fn(async () => {
-      throw stationHostSafeError(
-        "HOST_UPGRADE_BLOCKED",
-        "Host build older-build owns 2 live terminals; requested build is test-build.",
-      );
+      throw refusal;
     });
     const spawnHost = vi.fn(
       (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
@@ -292,6 +293,9 @@ describe("ensureStationHostRunning", () => {
         status: "unavailable",
         error: { code: "HOST_UPGRADE_BLOCKED" },
       });
+      if (handle.status === "unavailable") {
+        expect(handle.error).toBe(refusal);
+      }
       expect(spawnHost).not.toHaveBeenCalled();
       await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
@@ -407,7 +411,15 @@ describe("ensureStationHostRunning", () => {
       );
 
       // complete committed but the incumbent socket never released.
-      expect(handle).toMatchObject({ status: "unavailable" });
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: {
+          code: "HOST_UNREACHABLE",
+          hint: expect.stringContaining(
+            "Parked bridges remain under the state dir for successor recovery.",
+          ),
+        },
+      });
       expect(abortHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
     } finally {
@@ -479,10 +491,102 @@ describe("ensureStationHostRunning", () => {
         },
       );
 
-      expect(handle).toMatchObject({ status: "unavailable" });
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: {
+          code: "HOST_UPGRADE_BLOCKED",
+          message: "Host build older-build owns 1 live terminal.",
+          hint: expect.stringContaining("socket closed mid-complete (HOST_UNREACHABLE)"),
+        },
+      });
       expect(abortHandoff).toHaveBeenCalledOnce();
       expect(spawnHost).not.toHaveBeenCalled();
       await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
+    } finally {
+      await socket.close();
+    }
+  });
+
+  it("reports parked recovery when abort cannot prove incumbent restoration", async () => {
+    const socket = await liveSocket();
+    const { socketPath } = socket;
+    const spawnHost = vi.fn(
+      (_input: SpawnStationHostInput): ChildProcessLike => ({ pid: 999, unref: () => undefined }),
+    );
+    try {
+      const handle = await ensureStationHostRunning(
+        {
+          socketPath,
+          stateDir: tmpdir(),
+          hostCommand: ["bun", "/tmp/hostMain.ts"],
+          expectedBuildVersion,
+          handoff: { fidelity: "processes" },
+        },
+        {
+          clientFactory: () =>
+            fakeClient({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "older-build",
+              }),
+              stopIfIdle: async () => {
+                throw stationHostSafeError(
+                  "HOST_UPGRADE_BLOCKED",
+                  "Host build older-build owns 1 live terminal.",
+                );
+              },
+              beginHandoff: async () => ({
+                manifest: {
+                  "pty-1": {
+                    bridgeProtocolVersion: 2 as const,
+                    bridgePid: 4242,
+                    controlSocket: "/tmp/pty-1.sock",
+                    command: "/bin/sh",
+                    cols: 80,
+                    rows: 24,
+                    ptyInstanceId: "instance-pty-1",
+                    identity: {
+                      kind: "agent" as const,
+                      terminalTargetId: "native:wt-1",
+                      worktreeId: "wt-1",
+                      projectId: "proj-1",
+                      sessionId: "ses-1",
+                      worktreePath: "/repo/wt-1",
+                      harnessProvider: "claude",
+                    },
+                  },
+                },
+                fidelity: "processes" as const,
+                released: ["pty-1"],
+                skipped: [],
+              }),
+              completeHandoff: async () => {
+                throw stationHostSafeError("HOST_UNREACHABLE", "complete acknowledgement lost");
+              },
+              abortHandoff: async () => ({
+                adopted: [],
+                failed: [{ ptyId: "pty-1", reason: "bridge unavailable" }],
+              }),
+            }),
+          spawnHost,
+        },
+      );
+
+      expect(handle).toMatchObject({
+        status: "unavailable",
+        error: {
+          code: "HOST_UNREACHABLE",
+          message: "complete acknowledgement lost",
+          hint: expect.stringContaining(
+            "Parked bridges remain under the state dir for successor recovery.",
+          ),
+        },
+      });
+      if (handle.status === "unavailable") {
+        expect(handle.error.hint).not.toContain("existing host and terminals were preserved");
+      }
+      expect(spawnHost).not.toHaveBeenCalled();
     } finally {
       await socket.close();
     }
@@ -572,7 +676,7 @@ describe("ensureStationHostRunning", () => {
     }
   });
 
-  it("opt-in handoff aborts and refuses when beginHandoff fails", async () => {
+  it("opt-in handoff preserves the original refusal when beginHandoff fails", async () => {
     const socket = await liveSocket();
     const { socketPath } = socket;
     const abortHandoff = vi.fn(async () => ({ adopted: [], failed: [] }));
@@ -616,8 +720,15 @@ describe("ensureStationHostRunning", () => {
 
       expect(handle).toMatchObject({
         status: "unavailable",
+        error: {
+          code: "HOST_UPGRADE_BLOCKED",
+          message: "Host build older-build owns 1 live terminal.",
+          hint: expect.stringContaining(
+            "The host is already draining or handing off. (HOST_HANDOFF_INVALID_STATE)",
+          ),
+        },
       });
-      expect(abortHandoff).toHaveBeenCalledOnce();
+      expect(abortHandoff).not.toHaveBeenCalled();
       expect(spawnHost).not.toHaveBeenCalled();
       await expect(probeUnixSocket(socketPath)).resolves.toMatchObject({ status: "listening" });
     } finally {
