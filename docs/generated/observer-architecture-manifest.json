@@ -12305,11 +12305,11 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Composes install-channel selection, mutation, and fresh-build runtime crossover for the CLI.",
+      "purpose": "Selects one owned install channel, resolves the requested update scenario, and crosses runtimes through the successor launcher after mutation.",
       "dependencies": [
         {
-          "path": "apps/cli/src/commands/host/index.ts",
-          "declaration": "runHostCommand",
+          "path": "apps/cli/src/commands/update/scenario.ts",
+          "declaration": "resolveUpdateScenario",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
@@ -12345,6 +12345,22 @@
         {
           "path": "apps/cli/src/update/npmGlobalUpdate.ts",
           "declaration": "createNpmGlobalUpdateChannel",
+          "kind": "function",
+          "role": "ADAPTER",
+          "edgeKind": "runtime"
+        }
+      ]
+    },
+    {
+      "path": "apps/cli/src/commands/update/scenario.ts",
+      "declaration": "resolveUpdateScenario",
+      "kind": "function",
+      "role": "ADAPTER",
+      "purpose": "Resolves the selected update path and translates optional Host preflight into handoff intent.",
+      "dependencies": [
+        {
+          "path": "apps/cli/src/commands/host/index.ts",
+          "declaration": "runHostCommand",
           "kind": "function",
           "role": "ADAPTER",
           "edgeKind": "runtime"
