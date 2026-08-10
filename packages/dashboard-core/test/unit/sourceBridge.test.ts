@@ -1,6 +1,7 @@
 import type { StationClientConnectionState } from "@station/client";
 import type { SafeError, StationSnapshot } from "@station/contracts";
 import { describe, expect, it } from "vitest";
+import { dashboardRowIds } from "../../src/selectors/dashboardTree.js";
 import { createInitialTuiState } from "../../src/state/screen.js";
 import { applySnapshotSourceState } from "../../src/state/sourceBridge.js";
 import type { DashboardState } from "../../src/state/types.js";
@@ -53,9 +54,8 @@ describe("applySnapshotSourceState", () => {
     const initial = createInitialTuiState({
       initialSnapshot: snapshot,
       dashboardFocus: {
-        kind: "projectHeader",
-        projectId: "web",
-        control: "defaultAgent",
+        rowId: dashboardRowIds.project("web"),
+        cellId: "defaultAgent",
       },
     });
     const withoutWeb = {
@@ -75,9 +75,8 @@ describe("applySnapshotSourceState", () => {
     );
 
     expect(replaced.dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "api",
-      control: "primary",
+      rowId: dashboardRowIds.project("api"),
+      cellId: "identity",
     });
   });
 
@@ -85,7 +84,7 @@ describe("applySnapshotSourceState", () => {
     const snapshot = createZeroWorktreeSnapshot();
     const initial = createInitialTuiState({
       initialSnapshot: snapshot,
-      dashboardFocus: { kind: "emptyProjectAction", projectId: "web" },
+      dashboardFocus: { rowId: dashboardRowIds.empty("web"), cellId: "addSession" },
     });
     const connected = { state: "connected" as const, since: NOW };
 
@@ -94,7 +93,10 @@ describe("applySnapshotSourceState", () => {
       { snapshot: { ...snapshot, generatedAt: "2026-05-20T12:01:00.000Z" }, connection: connected },
       NOW,
     );
-    expect(preserved.dashboardFocus).toEqual({ kind: "emptyProjectAction", projectId: "web" });
+    expect(preserved.dashboardFocus).toEqual({
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
 
     const reconciled = applySnapshotSourceState(
       initial,
@@ -102,8 +104,8 @@ describe("applySnapshotSourceState", () => {
       NOW,
     );
     expect(reconciled.dashboardFocus).toEqual({
-      kind: "session",
-      sessionId: "ses_wt_web_working",
+      rowId: dashboardRowIds.session("ses_wt_web_working"),
+      cellId: "identity",
     });
   });
 

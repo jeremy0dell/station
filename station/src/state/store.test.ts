@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { selectWelcomeCanContinue, selectWelcomeVisible } from "./selectors.js";
 import { createStationStore } from "./store.js";
 import {
@@ -691,7 +692,7 @@ describe("createStationStore", () => {
     store.actions.openOverlay(STATION_OVERLAY_ID);
 
     store.actions.openContextMenu(
-      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       { x: 9, y: 5 },
     );
 
@@ -735,7 +736,7 @@ describe("createStationStore", () => {
     const paneId = agentWorktreePaneId(rowId);
     const removedPaneId = agentWorktreePaneId(removedRowId);
     const menu = {
-      target: { kind: "station" as const, target: { kind: "row" as const, rowId } },
+      target: { kind: "station" as const, target: { kind: "dashboardCell" as const, rowId: dashboardRowIds.session(rowId), cellId: "identity" as const } },
       anchor: { x: 12, y: 6 },
       activeIndex: 0,
     };

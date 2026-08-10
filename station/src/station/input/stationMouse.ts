@@ -1,4 +1,5 @@
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
+import type { DashboardCellId, DashboardRowId } from "@station/dashboard-core/selectors";
 import { deriveTuiInputMode, isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core/state";
 import type {
   AddProjectActionId,
@@ -6,7 +7,6 @@ import type {
   ForkSessionActionId,
   NewSessionActionId,
   PersistentFilterActionId,
-  ProjectHeaderControl,
   ProjectSettingsItemId,
   RemoveWorktreeActionId,
   TuiInputMode,
@@ -26,14 +26,9 @@ export type DashboardMouseRuntime = {
 };
 
 export type StationMouseTarget =
-  | { kind: "row"; rowId: string }
-  | { kind: "projectHeader"; projectId: string }
+  | { kind: "dashboardCell"; rowId: DashboardRowId; cellId: DashboardCellId }
   | { kind: "link"; url: string }
   | { kind: "openShellForRow"; rowId: string }
-  | { kind: "openShellForProject"; projectId: string }
-  | { kind: "quickSessionForProject"; projectId: string }
-  | { kind: "emptyProjectAction"; projectId: string }
-  | { kind: "showDefaultAgentPickerForProject"; projectId: string }
   | { kind: "firstProjectAdd" }
   | { kind: "persistentFilterAction"; actionId: PersistentFilterActionId }
   | { kind: "persistentFilterConditionField"; field: DashboardFilterConditionField }
@@ -102,41 +97,25 @@ export function routeStationMouse(
   }
 
   switch (target.kind) {
-    case "row":
+    case "dashboardCell":
       if (ROW_INTERACTIVE_MODES.has(mode)) {
         if (mode === "dashboard") {
-          runtime.actions.dispatch({ type: "dashboard.row.activate", rowId: target.rowId });
-        } else {
+          runtime.actions.dispatch({
+            type: "dashboard.cell.activate",
+            rowId: target.rowId,
+            cellId: target.cellId,
+          });
+        } else if (target.cellId === "identity") {
           dispatchRowSlot(runtime, target.rowId);
         }
       }
       return { kind: "handled" };
     case "link":
       return mode === "dashboard" ? { kind: "open-url", url: target.url } : { kind: "handled" };
-    case "projectHeader":
-      activateProjectHeader(runtime, mode, target.projectId, "primary");
-      return { kind: "handled" };
     case "openShellForRow":
       if (mode === "dashboard") {
         runtime.actions.dispatch({ type: "dashboard.rowShell.open", rowId: target.rowId });
       }
-      return { kind: "handled" };
-    case "openShellForProject":
-      activateProjectHeader(runtime, mode, target.projectId, "shell");
-      return { kind: "handled" };
-    case "quickSessionForProject":
-      activateProjectHeader(runtime, mode, target.projectId, "quickSession");
-      return { kind: "handled" };
-    case "emptyProjectAction":
-      if (mode === "dashboard") {
-        runtime.actions.dispatch({
-          type: "dashboard.emptyProject.activate",
-          projectId: target.projectId,
-        });
-      }
-      return { kind: "handled" };
-    case "showDefaultAgentPickerForProject":
-      activateProjectHeader(runtime, mode, target.projectId, "defaultAgent");
       return { kind: "handled" };
     case "firstProjectAdd":
       if (mode === "dashboard") runtime.actions.dispatch({ type: "dashboard.addProject" });
@@ -251,17 +230,6 @@ export function stationMouseEventKind(event: StationMouseEvent): StationMouseEve
     return undefined;
   }
   return event.type === "down" && event.button === "left" ? "down" : undefined;
-}
-
-function activateProjectHeader(
-  runtime: DashboardMouseRuntime,
-  mode: TuiInputMode,
-  projectId: string,
-  actionId: ProjectHeaderControl,
-): void {
-  if (mode === "dashboard") {
-    runtime.actions.dispatch({ type: "dashboard.projectHeader.activate", projectId, actionId });
-  }
 }
 
 function routePersistentFilterConditionAction(

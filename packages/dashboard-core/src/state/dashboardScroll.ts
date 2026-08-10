@@ -1,5 +1,5 @@
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
-import { selectDashboardItems } from "../selectors/dashboardViewport.js";
+import { selectDashboardTree } from "../selectors/dashboardTree.js";
 import type { DashboardState } from "./types.js";
 
 export function scrollDashboard(state: DashboardState, delta: number): DashboardState {
@@ -26,7 +26,7 @@ function clampedScrollOffsetForState(state: DashboardState): number {
   }
   return clampDashboardScrollOffset({
     bodyRows: dashboardBodyRows(state.terminalRows),
-    itemCount: selectDashboardItems(state.snapshot, state).length,
+    itemCount: selectDashboardTree(state.snapshot, state, state.screen).visibleRows.length,
     scrollOffset: state.scrollOffset,
   });
 }

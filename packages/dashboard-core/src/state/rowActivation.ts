@@ -8,24 +8,6 @@ import { addTuiToast, STALE_DASHBOARD_TARGET_NOTICE } from "./toasts.js";
 import type { TuiTransition } from "./transition.js";
 import type { DashboardState } from "./types.js";
 
-/** Resolve a stable dashboard row identity before producing one activation operation. */
-export function activateDashboardRowById(state: DashboardState, rowId: string): TuiTransition {
-  const sessionRow =
-    state.snapshot === undefined ? undefined : selectDashboardSessionRow(state.snapshot, rowId);
-  if (sessionRow === undefined) {
-    return {
-      state: addTuiToast(state, STALE_DASHBOARD_TARGET_NOTICE),
-    };
-  }
-  if (
-    state.localRows.pendingStart.some((pending) => pending.worktreeId === sessionRow.worktree.id) ||
-    state.localRows.pendingRemove.some((pending) => pending.worktreeId === sessionRow.worktree.id)
-  ) {
-    return { state };
-  }
-  return activateDashboardRow(state, sessionRow);
-}
-
 /** Resolve a stable session identity before delegating row-scoped shell execution. */
 export function openDashboardRowShell(state: DashboardState, rowId: string): TuiTransition {
   const sessionRow =

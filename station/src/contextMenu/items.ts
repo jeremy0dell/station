@@ -2,6 +2,7 @@ import { normalize } from "node:path";
 import type { Automation } from "../config/stationConfig.js";
 import { MAIN_PANE_ID, worktreeIdFromAgentPaneId, type StationState } from "../state/types.js";
 import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import type { DashboardSessionRow } from "@station/dashboard-core/selectors";
 import { isExternalAgentRemovalUnavailable } from "@station/dashboard-core/state";
 import type { DashboardStateView } from "@station/dashboard-core/state";
 import type {
@@ -97,19 +98,35 @@ function buildStationItems(
   if (state?.screen.name !== "dashboard" || state.snapshot === undefined) {
     return [noActionsItem()];
   }
-  // Any project-header affordance (header text, [▾], [+], [+sh]) opens the
-  // project menu, so a right-click anywhere on the header row is consistent.
-  const projectId = projectIdFromStationTarget(target);
-  if (projectId !== undefined) {
-    return buildProjectItems(projectId, state);
-  }
-  if (target.kind !== "row") {
+  if (target.kind !== "dashboardCell") {
     return [noActionsItem()];
   }
-  const row = selectDashboardViewport(state.snapshot, state).rowChoices.find(
-    (choice) => choice.value.id === target.rowId,
-  )?.value;
-  if (row === undefined) {
+  const viewport = selectDashboardViewport(state.snapshot, state);
+  const row = viewport.rowById.get(target.rowId);
+  if (row === undefined || !row.cells.includes(target.cellId)) {
+    return [noActionsItem()];
+  }
+  switch (row.payload.type) {
+    case "projectHeader":
+      return buildProjectItems(row.payload.project.id, state);
+    case "session": {
+      const sessionRow = row.payload.row;
+      return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
+        ? buildSessionItems(sessionRow, state)
+        : [noActionsItem()];
+    }
+    case "createLocalRow":
+    case "emptyProject":
+    case "projectGap":
+      return [noActionsItem()];
+  }
+}
+
+function buildSessionItems(
+  row: DashboardSessionRow,
+  state: DashboardStateView,
+): readonly ContextMenuItem[] {
+  if (state.snapshot === undefined) {
     return [noActionsItem()];
   }
   const project = state.snapshot.projects.find(
@@ -140,21 +157,6 @@ function buildStationItems(
     });
   }
   return items.length === 0 ? [noActionsItem()] : items;
-}
-
-/** The projectId behind any project-scoped station mouse target, else undefined. */
-function projectIdFromStationTarget(
-  target: Extract<ContextMenuTarget, { kind: "station" }>["target"],
-): string | undefined {
-  switch (target.kind) {
-    case "projectHeader":
-    case "openShellForProject":
-    case "quickSessionForProject":
-    case "showDefaultAgentPickerForProject":
-      return target.projectId;
-    default:
-      return undefined;
-  }
 }
 
 function buildProjectItems(

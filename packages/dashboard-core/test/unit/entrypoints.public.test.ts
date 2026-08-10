@@ -34,6 +34,8 @@ const SELECTORS_VALUES = [
   "selectDashboardViewport",
   "selectDashboardSessionRows",
   "selectFleetSummary",
+  "dashboardRowGridInput",
+  "dashboardRowIds",
   "dashboardTableHeaderModel",
   "layoutWorktreeRowGrid",
 ];
@@ -61,4 +63,15 @@ describe("dashboard-core role entrypoints", () => {
       expect(names.filter((name) => PRIVATE_MODELS.includes(name))).toEqual([]);
     });
   }
+
+  it("keeps generic tree-grid mechanics private", () => {
+    expect(Object.keys(selectorsEntry)).not.toEqual(
+      expect.arrayContaining([
+        "projectTreeGrid",
+        "treeGridCursorForRow",
+        "moveTreeGridCursor",
+        "reconcileTreeGridCursor",
+      ]),
+    );
+  });
 });

@@ -1,23 +1,12 @@
 import stringWidth from "string-width";
-import type { DashboardPersistentFilterRowMatch } from "../../selectors/dashboardPersistentFilter.js";
-import type {
-  DashboardSessionOverflow,
-  DashboardViewportItem,
-} from "../../selectors/dashboardViewport.js";
+import type { DashboardSessionOverflow } from "../../selectors/dashboardViewport.js";
 import type {
   DashboardScreenView,
   DashboardSnapshotView,
   DashboardStateView,
 } from "../../state/types.js";
-import type { RowGridRowInput } from "../WorktreeRow/layout.js";
-import {
-  type WorktreeRowTextHighlights,
-  worktreeRowGridInput,
-  worktreeStyleRowGridInput,
-} from "../WorktreeRow/rowInput.js";
 
 type DashboardProjectView = DashboardSnapshotView["projects"][number];
-type DashboardFocusView = DashboardStateView["dashboardFocus"];
 type DashboardObserverConnectionStatusView = DashboardStateView["observerConnectionStatus"];
 
 export type DashboardHeaderStatus = {
@@ -132,121 +121,6 @@ export function scrollIndicatorLabel(
     return `▲ ${overflow.above} ${plural(overflow.above, "session")} above`;
   }
   return `▼ ${overflow.below} below · showing ${overflow.visible} of ${overflow.total}`;
-}
-
-export function rowGridInputForViewportItem(
-  item: DashboardViewportItem,
-  keyByRow: ReadonlyMap<string, string>,
-  dashboardFocus?: DashboardFocusView,
-): RowGridRowInput | undefined {
-  if (item.type !== "session" && item.type !== "createLocalRow") {
-    return undefined;
-  }
-  const decorations = rowDecorationsForViewportItem(item, dashboardFocus);
-  if (item.type === "session") {
-    if (item.pendingRemove !== undefined) {
-      return worktreeStyleRowGridInput({
-        id: item.id,
-        slot: undefined,
-        marker: { kind: "throbber", variant: "braille" },
-        title: item.presentation.title,
-        activity: item.presentation.activity ?? "",
-        activityImportance: "meaningful",
-        activityOverflow: "rowSlack",
-        ...decorations,
-      });
-    }
-    if (item.pendingStart !== undefined) {
-      return worktreeStyleRowGridInput({
-        id: item.id,
-        slot: keyByRow.get(item.row.id),
-        marker: { kind: "throbber", variant: "braille" },
-        title: item.presentation.title,
-        activity: item.presentation.activity ?? "",
-        activityImportance: "meaningful",
-        activityOverflow: "rowSlack",
-        ...decorations,
-      });
-    }
-    return worktreeRowGridInput({
-      id: item.id,
-      row: item.row.presentation,
-      slot: keyByRow.get(item.row.id),
-      presentation: {
-        title: item.presentation.title,
-        agent: item.presentation.agent ?? "",
-        activity: item.presentation.activity ?? "",
-      },
-      ...decorations,
-    });
-  }
-  if (item.row.status === "failed") {
-    return worktreeStyleRowGridInput({
-      id: item.id,
-      slot: undefined,
-      marker: { kind: "text", text: "!" },
-      title: item.presentation.title,
-      activity: item.presentation.activity ?? "",
-      activityImportance: "meaningful",
-      activityOverflow: "rowSlack",
-      color: "red",
-      ...decorations,
-    });
-  }
-  return worktreeStyleRowGridInput({
-    id: item.id,
-    slot: undefined,
-    marker: { kind: "throbber", variant: "braille" },
-    title: item.presentation.title,
-    agent: item.presentation.agent ?? "",
-    activity: item.presentation.activity ?? "",
-    activityImportance: "meaningful",
-    activityOverflow: "rowSlack",
-    ...decorations,
-  });
-}
-
-type DashboardRowViewportItem = Extract<
-  DashboardViewportItem,
-  { type: "session" | "createLocalRow" }
->;
-
-type DashboardRowDecorations = {
-  focused?: true;
-  textHighlights?: WorktreeRowTextHighlights;
-  dimmed?: true;
-};
-
-function rowDecorationsForViewportItem(
-  item: DashboardRowViewportItem,
-  dashboardFocus: DashboardFocusView,
-): DashboardRowDecorations {
-  const decorations: DashboardRowDecorations = {};
-  if (
-    item.type === "session" &&
-    dashboardFocus?.kind === "session" &&
-    item.row.id === dashboardFocus.sessionId
-  ) {
-    decorations.focused = true;
-  }
-  const match = item.persistentFilterMatch;
-  if (match !== undefined) {
-    decorations.textHighlights = persistentFilterRowHighlights(match);
-    if (match.dimmed) {
-      decorations.dimmed = true;
-    }
-  }
-  return decorations;
-}
-
-function persistentFilterRowHighlights(
-  match: DashboardPersistentFilterRowMatch,
-): WorktreeRowTextHighlights {
-  return {
-    title: match.ranges.title,
-    agent: match.ranges.agent,
-    activity: match.ranges.activity,
-  };
 }
 
 export type SnapshotLoadingLine = {

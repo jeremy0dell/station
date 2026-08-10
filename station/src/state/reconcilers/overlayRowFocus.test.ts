@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { StationSnapshot } from "@station/contracts";
 import type { DashboardRuntime, DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { manyProjectsSnapshot } from "../../station/fixtures/scenarios.js";
 import { makeStationTestRuntime } from "../../station/test/support/makeStationTestRuntime.js";
 import { createStationStore, type StationStore } from "../store.js";
@@ -29,8 +30,8 @@ describe("createOverlayRowFocusReconciler", () => {
       stationStore.actions.openOverlay(STATION_OVERLAY_ID);
 
       expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
-        kind: "session",
-        sessionId: FIRST_SESSION_ID,
+        rowId: dashboardRowIds.session(FIRST_SESSION_ID),
+        cellId: "identity",
       });
       dispose();
     }
@@ -74,7 +75,10 @@ describe("createOverlayRowFocusReconciler", () => {
       const stationStore = createStationStore({ boot: "empty" });
       arrangePane(stationStore);
       const dashboardRuntime = loadedViewStore({
-        dashboardFocus: { kind: "session", sessionId: SECOND_SESSION_ID },
+        dashboardFocus: {
+          rowId: dashboardRowIds.session(SECOND_SESSION_ID),
+          cellId: "identity",
+        },
         scrollOffset: 2,
       });
       const initialOffset = dashboardRuntime.state.getState().scrollOffset;
@@ -98,8 +102,8 @@ describe("createOverlayRowFocusReconciler", () => {
 
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
     expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
-      kind: "session",
-      sessionId: FIRST_SESSION_ID,
+      rowId: dashboardRowIds.session(FIRST_SESSION_ID),
+      cellId: "identity",
     });
 
     stationStore.actions.closeOverlay();
@@ -108,8 +112,8 @@ describe("createOverlayRowFocusReconciler", () => {
     stationStore.actions.focusPane("pane-second");
     stationStore.actions.openOverlay(STATION_OVERLAY_ID);
     expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
-      kind: "session",
-      sessionId: SECOND_SESSION_ID,
+      rowId: dashboardRowIds.session(SECOND_SESSION_ID),
+      cellId: "identity",
     });
     dispose();
   });
@@ -127,13 +131,16 @@ describe("createOverlayRowFocusReconciler", () => {
     const firstSnapshot = manyProjectsSnapshot();
     fixture.source.setSnapshot(firstSnapshot);
     expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
-      kind: "session",
-      sessionId: FIRST_SESSION_ID,
+      rowId: dashboardRowIds.session(FIRST_SESSION_ID),
+      cellId: "identity",
     });
 
     dashboardRuntime.actions.handleKey({ input: "", downArrow: true });
     const navigatedFocus = dashboardRuntime.state.getState().dashboardFocus;
-    expect(navigatedFocus).not.toEqual({ kind: "session", sessionId: FIRST_SESSION_ID });
+    expect(navigatedFocus).not.toEqual({
+      rowId: dashboardRowIds.session(FIRST_SESSION_ID),
+      cellId: "identity",
+    });
 
     dashboardRuntime.actions.dispatch({ type: "dashboard.scroll", delta: 1 });
     const scrolledOffset = dashboardRuntime.state.getState().scrollOffset;
@@ -182,8 +189,8 @@ describe("createOverlayRowFocusReconciler", () => {
     dashboardRuntime.actions.focusDashboardSession(SECOND_SESSION_ID);
     stationStore.actions.closeOverlay();
     expect(dashboardRuntime.state.getState().dashboardFocus).toEqual({
-      kind: "session",
-      sessionId: SECOND_SESSION_ID,
+      rowId: dashboardRowIds.session(SECOND_SESSION_ID),
+      cellId: "identity",
     });
   });
 });

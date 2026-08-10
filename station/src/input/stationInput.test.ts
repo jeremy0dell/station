@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { selectActivePaneId, selectStationOverlayVisible } from "../state/selectors.js";
 import { createStationStore } from "../state/store.js";
 import {
@@ -999,7 +1000,17 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     });
     store.actions.openOverlay(STATION_OVERLAY_ID);
     const rightClickRow = (rowId = "ses_wt_station_idle"): boolean =>
-      runtime.dispatchMouse({ kind: "station", target: { kind: "row", rowId } }, RIGHT_DOWN);
+      runtime.dispatchMouse(
+        {
+          kind: "station",
+          target: {
+            kind: "dashboardCell",
+            rowId: dashboardRowIds.session(rowId),
+            cellId: "identity",
+          },
+        },
+        RIGHT_DOWN,
+      );
     return { runtime, store, dashboardRuntime, rightClickRow };
   }
 
@@ -1123,7 +1134,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
 
     // Right-click a project header opens the project menu: [Set Default Agent, Project Settings…].
     runtime.dispatchMouse(
-      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       RIGHT_DOWN,
     );
     expect(runtime.handleSequence("\r")).toBe(true);
@@ -1139,7 +1150,7 @@ describe("createStationInputRuntime STATION context-menu actions", () => {
     const { runtime, store, dashboardRuntime } = contextMenuHarness();
 
     runtime.dispatchMouse(
-      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       RIGHT_DOWN,
     );
     // Menu order: Set Default Agent, Project Settings… — one down reaches settings.

@@ -1,15 +1,12 @@
 import type { ProjectId, SessionId } from "@station/contracts";
 import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
+import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
-import { focusDashboardProjectHeader } from "./dashboardFocus.js";
+import { activateDashboardCell } from "./dashboardCells.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
-import {
-  activateEmptyProjectAction,
-  activateProjectHeaderControl,
-} from "./projectHeaderActions.js";
-import { activateDashboardRowById, openDashboardRowShell } from "./rowActivation.js";
+import { openDashboardRowShell } from "./rowActivation.js";
 import { tuiScreenBehavior } from "./screenBehavior.js";
 import { handleAddProjectAction, selectAddProjectRow } from "./screens/addProjectScreen.js";
 import { handleFirstProjectAddAction } from "./screens/dashboard.js";
@@ -51,7 +48,6 @@ import type { TuiRuntimeContext, TuiTransition } from "./transition.js";
 import type {
   DashboardFilterConditionField,
   DashboardState,
-  ProjectHeaderControl,
   ProjectSettingsItemId,
 } from "./types.js";
 
@@ -83,7 +79,7 @@ export type PersistentFilterActionId = "persistentFilter.edit" | "persistentFilt
 /** User-interaction subset of {@link DashboardAction}, shared by pointer and keyboard activation. */
 export type TuiSemanticAction =
   | { type: "dashboard.addProject" }
-  | { type: "dashboard.row.activate"; rowId: SessionId }
+  | { type: "dashboard.cell.activate"; rowId: DashboardRowId; cellId: DashboardCellId }
   | { type: "dashboard.rowShell.open"; rowId: SessionId }
   | { type: PersistentFilterActionId }
   | {
@@ -99,12 +95,6 @@ export type TuiSemanticAction =
   | { type: "persistentFilter.condition.close" }
   | { type: "persistentFilter.condition.done" }
   | { type: "persistentFilter.applyDraft" }
-  | {
-      type: "dashboard.projectHeader.activate";
-      projectId: ProjectId;
-      actionId: ProjectHeaderControl;
-    }
-  | { type: "dashboard.emptyProject.activate"; projectId: ProjectId }
   | { type: "addProject.activate"; actionId: AddProjectActionId }
   | { type: "newSession.activate"; actionId: NewSessionActionId }
   | { type: "removeWorktree.activate"; actionId: RemoveWorktreeActionId }
@@ -114,11 +104,6 @@ export type TuiSemanticAction =
 /** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
 export type DashboardStateAction =
   | { type: "dashboard.scroll"; delta: number }
-  | {
-      type: "dashboard.projectHeader.focus";
-      projectId: ProjectId;
-      control: ProjectHeaderControl;
-    }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
   | { type: "addProject.selectRow"; index: number }
   | { type: "screen.clickAway" }
@@ -145,8 +130,8 @@ export function handleTuiAction(
   switch (action.type) {
     case "dashboard.addProject":
       return handleFirstProjectAddAction(state, context);
-    case "dashboard.row.activate":
-      return activateDashboardRowById(state, action.rowId);
+    case "dashboard.cell.activate":
+      return activateDashboardCell(state, action.rowId, action.cellId);
     case "dashboard.rowShell.open":
       return openDashboardRowShell(state, action.rowId);
     case "persistentFilter.edit":
@@ -167,10 +152,6 @@ export function handleTuiAction(
       return stateTransition(donePersistentFilterConditionEditor(state));
     case "persistentFilter.applyDraft":
       return applyDashboardPersistentFilter(state);
-    case "dashboard.projectHeader.activate":
-      return activateProjectHeaderControl(state, action.projectId, action.actionId);
-    case "dashboard.emptyProject.activate":
-      return activateEmptyProjectAction(state, action.projectId);
     case "addProject.activate":
       return handleAddProjectAction(state, action.actionId);
     case "newSession.activate":
@@ -193,8 +174,6 @@ function handleDashboardStateAction(
   switch (action.type) {
     case "dashboard.scroll":
       return stateTransition(scrollDashboard(state, action.delta));
-    case "dashboard.projectHeader.focus":
-      return stateTransition(focusDashboardProjectHeader(state, action.projectId, action.control));
     case "projectSettings.focusItem":
       return stateTransition(focusProjectSettingsItem(state, action.itemId));
     case "addProject.selectRow":

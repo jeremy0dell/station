@@ -7,6 +7,7 @@ import { testRender } from "@opentui/react/test-utils";
 import { nativeStationTheme, StationThemeProvider } from "../theme/index.js";
 import type { StationClientCommandCompletion } from "@station/client";
 import type { StationSnapshot } from "@station/contracts";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import type { TopRowWidgetRuntimeDeps, TuiConfig } from "@station/dashboard-core/widgets";
 import type { StationMouseEvent } from "../input/mouse.js";
 import { createStation, StationApp } from "./createStation.js";
@@ -128,7 +129,7 @@ describe("Station app composition", () => {
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => {
       const focus = station.composition.dashboard.state.getState().dashboardFocus;
-      return focus?.kind === "session" && focus.sessionId === "ses_wt_station_working";
+      return focus?.rowId === dashboardRowIds.session("ses_wt_station_working");
     });
 
     station.setup.mockInput.pressKey("o", { ctrl: true });
@@ -138,7 +139,7 @@ describe("Station app composition", () => {
     station.setup.mockInput.pressKey("o", { ctrl: true });
     await waitFor(() => {
       const focus = station.composition.dashboard.state.getState().dashboardFocus;
-      return focus?.kind === "session" && focus.sessionId === "ses_wt_station_idle";
+      return focus?.rowId === dashboardRowIds.session("ses_wt_station_idle");
     });
   });
 
@@ -318,7 +319,7 @@ describe("Station app composition", () => {
     await station.setup.renderOnce();
 
     station.composition.stationInput.dispatchMouse(
-      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       RIGHT_DOWN,
     );
     expect(station.store.getState().input.contextMenu?.target.kind).toBe("station");
@@ -463,8 +464,9 @@ describe("Station app composition", () => {
     teardowns.push(() => composition.dispose());
     composition.start();
     composition.dashboard.actions.dispatch({
-      type: "dashboard.emptyProject.activate",
-      projectId: project.id,
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty(project.id),
+      cellId: "addSession",
     });
 
     const firstDisposal = composition.disposeForHotReload();

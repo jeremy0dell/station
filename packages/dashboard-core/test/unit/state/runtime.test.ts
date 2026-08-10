@@ -7,6 +7,7 @@ import type {
   WorktreeRow,
 } from "@station/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import type {
   TuiFolderEntry,
   TuiFolderReadResult,
@@ -193,15 +194,14 @@ describe("dashboard runtime", () => {
     });
 
     store.actions.dispatch({
-      type: "dashboard.projectHeader.activate",
-      projectId: "web",
-      actionId: "shell",
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.project("web"),
+      cellId: "shell",
     });
 
     expect(focusAtInvocation).toEqual({
-      kind: "projectHeader",
-      projectId: "web",
-      control: "shell",
+      rowId: dashboardRowIds.project("web"),
+      cellId: "shell",
     });
     expect(capabilities.shellRequests).toEqual([{ kind: "project", projectId: "web" }]);
   });
@@ -220,35 +220,18 @@ describe("dashboard runtime", () => {
       capabilities,
     });
 
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
 
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: "web",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
     });
     expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
     expect(capabilities.quickCreateRequests).toHaveLength(1);
-  });
-
-  it("routes state-only actions through the transition executor", () => {
-    const snapshot = createDashboardSnapshot();
-    const store = createTestDashboardRuntime({
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-    });
-
-    const result = store.actions.dispatch({
-      type: "dashboard.projectHeader.focus",
-      projectId: "web",
-      control: "defaultAgent",
-    });
-
-    expect(result).toBeUndefined();
-    expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "web",
-      control: "defaultAgent",
-    });
   });
 
   it("owns failed optimistic rows without exposing mutation methods", async () => {
@@ -272,7 +255,11 @@ describe("dashboard runtime", () => {
       initialState: { terminalRows: 42 },
     });
 
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
     expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(0);
     expect(store.state.getState().localRows.failedCreate).toHaveLength(1);
@@ -298,13 +285,21 @@ describe("dashboard runtime", () => {
       capabilities,
     });
 
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
     expect(store.state.getState().localRows.pendingCreate).toHaveLength(1);
     const stateAtDisposal = store.state.getState();
     const firstDisposal = store.dispose();
     const secondDisposal = store.dispose();
 
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
     store.actions.pushToast({ kind: "info", message: "late" });
     expect(secondDisposal).toBe(firstDisposal);
     expect(capabilities.quickCreateRequests).toHaveLength(1);
@@ -359,9 +354,17 @@ describe("dashboard runtime", () => {
       capabilities,
     });
 
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "web" });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
     await vi.advanceTimersByTimeAsync(1);
-    store.actions.dispatch({ type: "dashboard.emptyProject.activate", projectId: "api" });
+    store.actions.dispatch({
+      type: "dashboard.cell.activate",
+      rowId: dashboardRowIds.empty("api"),
+      cellId: "addSession",
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     expect(store.state.getState().localRows.failedCreate).toHaveLength(2);

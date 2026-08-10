@@ -6,6 +6,7 @@
 // coordination store, and terminal passthrough is untouched when the
 // overlay is down.
 import { describe, expect, it } from "bun:test";
+import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import { dashboardExecution } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
 import {
@@ -443,7 +444,7 @@ describe("station input through the station runtime", () => {
 
     expect(
       runtime.dispatchMouse(
-        { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+        { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
         LEFT_DOWN,
       ),
     ).toBe(true);
@@ -523,7 +524,7 @@ describe("station input through the station runtime", () => {
     const { view, runtime } = makeRuntime(false);
 
     runtime.dispatchMouse(
-      { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       LEFT_DOWN,
     );
     expect([...view.state.getState().collapsedProjectIds]).toEqual([]);
@@ -541,14 +542,14 @@ describe("station input through the station runtime", () => {
 
     expect(
       runtime.dispatchMouse(
-        { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+        { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
         RIGHT_DOWN,
       ),
     ).toBe(true);
 
     expect([...view.state.getState().collapsedProjectIds]).toEqual([]);
     expect(station.getState().input.contextMenu).toMatchObject({
-      target: { kind: "station", target: { kind: "projectHeader", projectId: "station" } },
+      target: { kind: "station", target: { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" } },
       anchor: { x: 8, y: 4 },
     });
     expect(station.getState().input.focus).toEqual({ kind: "contextMenu" });
