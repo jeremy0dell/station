@@ -1,6 +1,7 @@
 import {
   type ApplyStationEventResult,
   createStationClientRuntime,
+  executeObserverCommand,
   type StationClientRefreshOutcome,
   type StationClientRuntime,
 } from "@station/client";
@@ -11,7 +12,12 @@ import {
   FakeObserverService,
   wrappedConnectError,
 } from "../support/fakeObserverService.js";
-import { createCommandSnapshot, createZeroWorktreeSnapshot } from "../support/snapshots.js";
+import {
+  createCommandSnapshot,
+  createZeroWorktreeSnapshot,
+  fixtureNow,
+  sessionGroup,
+} from "../support/snapshots.js";
 
 const RECONNECT_OPTIONS = { initialDelayMs: 5, maxDelayMs: 20 } as const;
 
@@ -55,6 +61,62 @@ describe("observer client runtime", () => {
     await waitFor(() => runtime.getState() !== before);
     expect(runtime.getState().snapshot?.rows[0]?.display.statusLabel).toBe("working");
     expect(before.snapshot?.rows[0]?.display.statusLabel).toBe("idle");
+  });
+
+  it("converges event-only Group create, rename, membership, and removal", async () => {
+    const initial = createCommandSnapshot("idle");
+    const memberId = initial.sessions[0]?.id;
+    if (memberId === undefined) throw new Error("Expected an idle fixture session.");
+    const service = new FakeObserverService(initial);
+    const runtime = track(
+      createStationClientRuntime({
+        service,
+        initialSnapshot: initial,
+        reconnect: RECONNECT_OPTIONS,
+      }),
+    );
+    runtime.start();
+    await waitFor(() => service.subscribeCount === 1);
+
+    const created = sessionGroup({ sessionIds: [memberId] });
+    service.setSnapshot({ ...initial, sessionGroups: [created] });
+    service.emit(groupUpdatedEvent(created));
+    await waitFor(() => runtime.getState().snapshot?.sessionGroups.length === 1);
+    expect(runtime.getState().snapshot?.sessionGroups).toEqual([created]);
+    expect(service.loadCount).toBe(1);
+
+    const renamed = sessionGroup({
+      name: "Renamed work",
+      sessionIds: [memberId],
+      version: 2,
+      updatedAt: "2026-05-20T12:01:00.000Z",
+    });
+    service.emit(groupUpdatedEvent(renamed));
+    await waitFor(() => runtime.getState().snapshot?.sessionGroups[0]?.version === 2);
+    expect(runtime.getState().snapshot?.sessionGroups).toEqual([renamed]);
+    expect(service.loadCount).toBe(1);
+
+    const membership = sessionGroup({
+      name: "Renamed work",
+      version: 3,
+      updatedAt: "2026-05-20T12:02:00.000Z",
+    });
+    service.setSnapshot({ ...initial, sessionGroups: [membership] });
+    service.emit(groupUpdatedEvent(membership));
+    await waitFor(() => runtime.getState().snapshot?.sessionGroups[0]?.version === 3);
+    expect(runtime.getState().snapshot?.sessionGroups).toEqual([membership]);
+    expect(service.loadCount).toBe(2);
+
+    service.emit({
+      type: "sessionGroup.removed",
+      at: fixtureNow,
+      commandId: "cmd_group_removed",
+      projectId: "web",
+      groupId: membership.id,
+    });
+    await waitFor(() => runtime.getState().snapshot?.sessionGroups.length === 0);
+    expect(runtime.getState().snapshot?.sessionGroups).toEqual([]);
+    expect(service.loadCount).toBe(2);
   });
 
   it("notifies subscribers on changes and stops after unsubscribe", async () => {
@@ -127,6 +189,30 @@ describe("observer client runtime", () => {
     await waitFor(() => runtime.getState().snapshot?.counts.worktrees === 0);
     expect(runtime.getState().connection.state).toBe("connected");
     expect(service.loadCount).toBe(1);
+  });
+
+  it("replaces a ghost Group after a subscription gap", async () => {
+    const canonical = createCommandSnapshot("idle");
+    const ghost = {
+      ...canonical,
+      sessionGroups: [sessionGroup({ id: "grp_ghost", name: "Ghost" })],
+    };
+    const service = new FakeObserverService(canonical);
+    const runtime = track(
+      createStationClientRuntime({
+        service,
+        initialSnapshot: ghost,
+        reconnect: RECONNECT_OPTIONS,
+      }),
+    );
+    runtime.start();
+    await waitFor(() => service.subscribeCount === 1);
+
+    service.endSubscriptions();
+
+    await waitFor(() => service.subscribeCount === 2);
+    await waitFor(() => runtime.getState().snapshot?.sessionGroups.length === 0);
+    expect(runtime.getState().snapshot).toBe(canonical);
   });
 
   it("marks connect-classified subscription failures displayOnly and preserves since", async () => {
@@ -367,6 +453,39 @@ describe("observer client runtime", () => {
     expect(service.waitedForCommandIds).toEqual([receipt.commandId]);
   });
 
+  it("resolves successful Group execution only after runtime state is canonical", async () => {
+    const initial = createCommandSnapshot("idle");
+    const canonical = {
+      ...initial,
+      sessionGroups: [sessionGroup({ id: "grp_loaded", name: "Loaded" })],
+    };
+    const service = new DeferredLoadService(canonical);
+    const runtime = track(
+      createStationClientRuntime({
+        service,
+        initialSnapshot: initial,
+        reconnect: RECONNECT_OPTIONS,
+      }),
+    );
+    runtime.start();
+    await waitFor(() => service.subscribeCount === 1);
+
+    let settled = false;
+    const execution = executeObserverCommand(runtime.service, {
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Loaded" },
+    }).finally(() => {
+      settled = true;
+    });
+    await waitFor(() => service.loadCount === 1);
+    expect(settled).toBe(false);
+    expect(runtime.getState().snapshot).toBe(initial);
+
+    service.releaseLoads();
+    await expect(execution).resolves.toMatchObject({ status: "succeeded" });
+    expect(runtime.getState().snapshot).toBe(canonical);
+  });
+
   it("exposes inFlightRefresh while a load is pending", async () => {
     const service = new DeferredLoadService(createCommandSnapshot("idle"));
     const runtime = track(createStationClientRuntime({ service, reconnect: RECONNECT_OPTIONS }));
@@ -412,6 +531,17 @@ function rowUpdateEvent(): StationEvent {
         reason: "Harness reported active generation.",
       },
     },
+  };
+}
+
+function groupUpdatedEvent(
+  group: ReturnType<typeof sessionGroup>,
+): Extract<StationEvent, { type: "sessionGroup.updated" }> {
+  return {
+    type: "sessionGroup.updated",
+    at: fixtureNow,
+    commandId: "cmd_group_updated",
+    group,
   };
 }
 
