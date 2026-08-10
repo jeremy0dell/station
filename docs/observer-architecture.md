@@ -265,6 +265,11 @@ and reloads after later gaps or events that cannot be reduced safely. The runtim
 also owns the `ObserverService` used by UI operations: caller snapshot loads and
 reconcile results commit to the same canonical client state before their promises
 resolve, so a later incremental event cannot reduce from an older side-loaded base.
+Complete Group events remain sequence-free: clients reduce only monotonic updates
+that preserve existing relationships and graph-safe removals, then use the same
+bounded canonical refresh chain for creates, membership or parent changes, version
+divergence, and invalid candidates. Accepted Group commands also load that canonical
+state after terminal completion without changing Observer mutation or publication ordering.
 Dashboard projection subscribes to that state and never constructs a second client
 runtime.
 
