@@ -196,8 +196,12 @@ describe("release readiness docs", () => {
     expect(singleBinary).toContain("six assets");
     expect(singleBinary).toContain("workflow cannot enforce the precondition itself");
     expect(singleBinary).toContain("station-installer-binary-v1");
-    expect(singleBinary).toContain("adds no update command or runtime crossover");
+    expect(singleBinary).toContain("`stn update` composes it with");
+    expect(singleBinary).toContain("Manager-owned channels");
     expect(install).toContain("Automatic-update ownership");
+    expect(install).toContain("stn update --dry-run --json");
+    expect(install).toContain("stn update --drive-package-manager");
+    expect(install).toContain("--handoff=processes|screen");
     expect(install).toContain("existing installations continue to work but are not enrolled");
     expect(development).toMatch(/workflow never\s+publishes\s+the draft automatically/);
     expect(development).toContain("accepted-release-candidate-0.0.0-pre-alpha.5.1");

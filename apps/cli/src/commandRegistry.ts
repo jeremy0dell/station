@@ -15,6 +15,7 @@ import { reconcileCliCommand } from "./commands/registry/reconcile.js";
 import { setupCliCommand } from "./commands/registry/setup.js";
 import { snapshotCliCommand } from "./commands/registry/snapshot.js";
 import { tuiCliCommand } from "./commands/registry/tui.js";
+import { updateCliCommand } from "./commands/registry/update.js";
 import { worktrunkCliCommand } from "./commands/registry/worktrunk.js";
 
 export type {
@@ -55,6 +56,7 @@ export const cliCommandRegistry: CliCommandNode = {
     setupCliCommand,
     snapshotCliCommand,
     tuiCliCommand,
+    updateCliCommand,
     worktrunkCliCommand,
   ],
 };

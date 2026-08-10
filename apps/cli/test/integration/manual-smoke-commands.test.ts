@@ -156,6 +156,8 @@ describe("CLI manual-smoke commands", () => {
     const projectAdd = await runCli(["project", "add", fixtureRootPath(), "--help"]);
     const setupCheck = await runCli(["setup", "check", "--json", "--help"]);
     const doctor = await runCli(["doctor", "--project", "demo", "--help"]);
+    const update = await runCli(["update", "--drive-package-manager", "--help"]);
+    const observerRestart = await runCli(["observer", "restart", "--help"]);
     const hookInstall = await runCli([
       "hooks",
       "install",
@@ -171,6 +173,10 @@ describe("CLI manual-smoke commands", () => {
     expect(textOutput(setupCheck)).toContain("Usage:\n  stn setup check [--json] [--no-brew]");
     expect(doctor).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(doctor)).toContain("Usage:\n  stn doctor [--project <id>]");
+    expect(update).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(update)).toContain("--handoff[=processes|screen]");
+    expect(observerRestart).toMatchObject({ code: 0, outputFormat: "text" });
+    expect(textOutput(observerRestart)).toContain("stn observer restart");
     expect(hookInstall).toMatchObject({ code: 0, outputFormat: "text" });
     expect(textOutput(hookInstall)).toContain(
       "Usage:\n  stn hooks install <target> --yes [options]",
