@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import type { SetupConfigMutationPlan } from "@station/config";
+import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
 import {
   type HarnessSelectionFacts,
   type HarnessSelectionResolution,
   planSetup,
   resolveHarnessSelection,
   type SetupPlanningIntent,
-  type SupportedHarnessId,
 } from "@station/setup-core";
 import { resolveSetupMessage } from "@station/setup-messages";
 import { describe, expect, it } from "vitest";
@@ -67,7 +67,7 @@ function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
 }
 
 function resolveSetupHarnessSelection(
-  ...arguments_: [setupFacts: SetupFacts, selectedIds?: readonly SupportedHarnessId[]]
+  ...arguments_: [setupFacts: SetupFacts, selectedIds?: readonly CliSetupHarnessId[]]
 ): HarnessSelectionResolution {
   const [setupFacts, selectedIds] = arguments_;
   return resolveHarnessSelection(
@@ -79,10 +79,15 @@ function resolveSetupHarnessSelection(
 }
 
 function coreSelectionFacts(setupFacts: SetupFacts): HarnessSelectionFacts {
-  const config: HarnessSelectionFacts["config"] =
-    setupFacts.config.status === "valid"
-      ? { status: "valid", defaultHarness: setupFacts.config.defaults.harness }
-      : { status: setupFacts.config.status };
+  let config: HarnessSelectionFacts["config"];
+  if (setupFacts.config.status === "valid") {
+    const defaultHarness = CliSetupHarnessIdSchema.safeParse(setupFacts.config.defaults.harness);
+    config = defaultHarness.success
+      ? { status: "valid", defaultHarness: defaultHarness.data }
+      : { status: "unsupported" };
+  } else {
+    config = { status: setupFacts.config.status };
+  }
   return {
     config,
     harnesses: setupFacts.harnesses.map((harness) => ({
@@ -631,6 +636,26 @@ describe("setup plan projection", () => {
     ).toEqual([
       ["codex-hooks", true],
       ["opencode-hooks", true],
+    ]);
+    expect(plan.actions.find((action) => action.id === "codex-hooks")?.command).toEqual([
+      "/tmp/bin/stn",
+      "--config",
+      "/tmp/config.toml",
+      "hooks",
+      "install",
+      "codex",
+      "--yes",
+      "--hook-bin",
+      "/tmp/bin/stn-ingress",
+    ]);
+    expect(plan.actions.find((action) => action.id === "opencode-hooks")?.command).toEqual([
+      "/tmp/bin/stn",
+      "--config",
+      "/tmp/config.toml",
+      "hooks",
+      "install",
+      "opencode",
+      "--yes",
     ]);
     expect(plan.actions.some((action) => action.id === "pi-hooks")).toBe(false);
   });
@@ -1511,7 +1536,7 @@ function validConfigFact(
   };
 }
 
-function harnesses(available: readonly SupportedHarnessId[]): SetupHarnessFact[] {
+function harnesses(available: readonly CliSetupHarnessId[]): SetupHarnessFact[] {
   return (["codex", "cursor", "opencode", "pi"] as const).map((id) => ({
     id,
     label: id,

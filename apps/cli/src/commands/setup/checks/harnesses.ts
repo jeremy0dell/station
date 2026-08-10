@@ -1,32 +1,14 @@
+import type { CliSetupHarnessId } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupHarnessFact, SupportedHarnessId } from "../adapters/inspectionTypes.js";
+import type { SetupHarnessFact } from "../adapters/inspectionTypes.js";
+import { SETUP_HARNESS_DEFINITIONS, type SetupHarnessDefinition } from "../harnessDefinitions.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
-
-export type HarnessDefinition = {
-  id: SupportedHarnessId;
-  label: string;
-  envKey: string;
-  defaultCommand: string;
-};
-
-export const harnessDefinitions: readonly HarnessDefinition[] = [
-  { id: "codex", label: "Codex", envKey: "STATION_CODEX_BIN", defaultCommand: "codex" },
-  {
-    id: "cursor",
-    label: "Cursor Agent",
-    envKey: "STATION_CURSOR_AGENT_BIN",
-    defaultCommand: "agent",
-  },
-  { id: "opencode", label: "OpenCode", envKey: "STATION_OPENCODE_BIN", defaultCommand: "opencode" },
-  { id: "pi", label: "Pi", envKey: "STATION_PI_BIN", defaultCommand: "pi" },
-  { id: "claude", label: "Claude Code", envKey: "STATION_CLAUDE_BIN", defaultCommand: "claude" },
-] as const;
 
 export type CheckHarnessesOptions = {
   runner?: ExternalCommandRunner;
@@ -34,7 +16,7 @@ export type CheckHarnessesOptions = {
   cwd?: string;
   homeDir?: string;
   configuredHarnesses?: readonly string[];
-  configuredCommands?: Readonly<Partial<Record<SupportedHarnessId, string>>>;
+  configuredCommands?: Readonly<Partial<Record<CliSetupHarnessId, string>>>;
 };
 
 export async function checkSetupHarnesses(
@@ -42,27 +24,31 @@ export async function checkSetupHarnesses(
 ): Promise<SetupHarnessFact[]> {
   const env = setupEnv(options.env);
   const facts: SetupHarnessFact[] = [];
-  for (const definition of harnessDefinitions) {
+  for (const definition of Object.values(SETUP_HARNESS_DEFINITIONS)) {
     facts.push(await checkHarness(definition, env, options));
   }
   return facts;
 }
 
 async function checkHarness(
-  definition: HarnessDefinition,
+  definition: SetupHarnessDefinition,
   env: CliEnv,
   options: CheckHarnessesOptions,
 ): Promise<SetupHarnessFact> {
   const configuredCommand = options.configuredCommands?.[definition.id];
-  const environmentCommand = env[definition.envKey];
-  const command = configuredCommand ?? environmentCommand ?? definition.defaultCommand;
+  const environmentCommand = env[definition.commandEnvVar];
+  const command = configuredCommand ?? environmentCommand ?? definition.commandFallback;
   const defaultCommandHomeDir =
     options.configuredHarnesses?.includes(definition.id) !== true &&
     configuredCommand === undefined &&
     environmentCommand === undefined
       ? options.homeDir
       : undefined;
-  for (const candidate of harnessCommandCandidates(definition.id, command, defaultCommandHomeDir)) {
+  for (const candidate of harnessCommandCandidates(
+    command,
+    defaultCommandHomeDir,
+    definition.additionalUserCommandDirectories,
+  )) {
     try {
       const input: ExternalCommandInput = {
         command: candidate,
@@ -104,14 +90,16 @@ function parseHarnessVersion(output: string): string | undefined {
 }
 
 function harnessCommandCandidates(
-  id: SupportedHarnessId,
   command: string,
   homeDir: string | undefined,
+  additionalUserCommandDirectories: readonly string[] | undefined,
 ): string[] {
   if (command.includes("/") || homeDir === undefined) {
     return [command];
   }
   const candidates = [command, `${homeDir}/.local/bin/${command}`];
-  if (id === "opencode") candidates.push(`${homeDir}/.opencode/bin/${command}`);
+  for (const directory of additionalUserCommandDirectories ?? []) {
+    candidates.push(`${homeDir}/${directory}/${command}`);
+  }
   return candidates;
 }

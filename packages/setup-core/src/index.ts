@@ -1,12 +1,10 @@
 export { performSetupOperation } from "./execution/performOperation.js";
-export {
-  type HarnessSelectionFacts,
-  type HarnessSelectionResolution,
-  type HarnessTrackingAssessment,
-  type HarnessTrackingFacts,
-  type SetupPlanningFacts,
-  type SupportedHarnessId,
-  supportedHarnessIds,
+export type {
+  HarnessSelectionFacts,
+  HarnessSelectionResolution,
+  HarnessTrackingAssessment,
+  HarnessTrackingFacts,
+  SetupPlanningFacts,
 } from "./model/facts.js";
 export type { SetupEditableIntent, SetupPlanningIntent } from "./model/intent.js";
 export type {

@@ -1,14 +1,13 @@
-export const supportedHarnessIds = ["codex", "cursor", "opencode", "pi", "claude"] as const;
-
-export type SupportedHarnessId = (typeof supportedHarnessIds)[number];
+import type { CliSetupHarnessId } from "@station/contracts";
 
 export type HarnessSelectionFacts = {
   readonly config:
     | { readonly status: "missing" }
     | { readonly status: "invalid" }
-    | { readonly status: "valid"; readonly defaultHarness: string };
+    | { readonly status: "unsupported" }
+    | { readonly status: "valid"; readonly defaultHarness: CliSetupHarnessId };
   readonly harnesses: readonly {
-    readonly id: SupportedHarnessId;
+    readonly id: CliSetupHarnessId;
     readonly availability: "available" | "unavailable";
   }[];
 };
@@ -17,8 +16,8 @@ export type HarnessSelectionResolution =
   | {
       readonly outcome: "selected";
       readonly source: "configured" | "explicit" | "inferred";
-      readonly requiredHarnessIds: readonly SupportedHarnessId[];
-      readonly defaultHarness: SupportedHarnessId;
+      readonly requiredHarnessIds: readonly CliSetupHarnessId[];
+      readonly defaultHarness: CliSetupHarnessId;
     }
   | {
       readonly outcome: "invalid";
@@ -30,7 +29,7 @@ export type HarnessSelectionResolution =
     }
   | {
       readonly outcome: "ambiguous";
-      readonly candidateHarnessIds: readonly SupportedHarnessId[];
+      readonly candidateHarnessIds: readonly CliSetupHarnessId[];
     }
   | { readonly outcome: "cancelled" };
 
@@ -92,7 +91,7 @@ export type SetupPlanningFacts = {
           | "dubious-ownership";
       };
   readonly harnessSelection: HarnessSelectionFacts;
-  readonly installableHarnessIds: readonly SupportedHarnessId[];
+  readonly installableHarnessIds: readonly CliSetupHarnessId[];
   readonly config: {
     readonly state: "missing" | "valid" | "invalid";
     readonly write: "none" | "create" | "update" | "blocked";
@@ -114,7 +113,7 @@ export type SetupPlanningFacts = {
   };
   readonly worktrunkHooks: "ready" | "missing" | "not-applicable";
   readonly harnessTracking: readonly {
-    readonly harnessId: SupportedHarnessId;
+    readonly harnessId: CliSetupHarnessId;
     readonly assessment: HarnessTrackingAssessment;
     readonly required: boolean;
     readonly persistedIntent: boolean;

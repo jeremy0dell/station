@@ -191,7 +191,7 @@ describe("planSetup", () => {
 
   it.each([
     ["invalid-config", { config: { status: "invalid" } }],
-    ["unsupported-configured-default", { config: { status: "valid", defaultHarness: "crush" } }],
+    ["unsupported-configured-default", { config: { status: "unsupported" } }],
   ] as const)("derives the %s selection failure", (reason, selectionConfig) => {
     const plan = planSetup(
       facts({

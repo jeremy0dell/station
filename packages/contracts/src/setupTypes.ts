@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const CliSetupHarnessIdSchema = z.enum(["codex", "cursor", "opencode", "pi", "claude"]);
 
+export type CliSetupHarnessId = z.infer<typeof CliSetupHarnessIdSchema>;
+
 export const CliSetupCheckSchema = z
   .object({
     id: z.string().min(1),

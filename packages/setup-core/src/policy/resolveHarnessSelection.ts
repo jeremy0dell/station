@@ -1,9 +1,5 @@
-import {
-  type HarnessSelectionFacts,
-  type HarnessSelectionResolution,
-  type SupportedHarnessId,
-  supportedHarnessIds,
-} from "../model/facts.js";
+import type { CliSetupHarnessId } from "@station/contracts";
+import type { HarnessSelectionFacts, HarnessSelectionResolution } from "../model/facts.js";
 import type { HarnessSelectionIntent } from "../model/intent.js";
 
 /**
@@ -17,10 +13,11 @@ export function resolveHarnessSelection(
 ): HarnessSelectionResolution {
   if (intent.kind === "cancelled") return { outcome: "cancelled" };
 
-  const configuredDefault = configuredDefaultHarness(facts);
-  if (facts.config.status === "valid" && configuredDefault === undefined) {
+  if (facts.config.status === "unsupported") {
     return { outcome: "invalid", reason: "unsupported-configured-default" };
   }
+  const configuredDefault =
+    facts.config.status === "valid" ? facts.config.defaultHarness : undefined;
 
   if (intent.kind === "explicit") {
     const explicitHarnessIds = uniqueHarnessIds(intent.harnessIds);
@@ -72,12 +69,6 @@ export function resolveHarnessSelection(
   };
 }
 
-function configuredDefaultHarness(facts: HarnessSelectionFacts): SupportedHarnessId | undefined {
-  if (facts.config.status !== "valid") return undefined;
-  const defaultHarness = facts.config.defaultHarness;
-  return supportedHarnessIds.find((harnessId) => harnessId === defaultHarness);
-}
-
-function uniqueHarnessIds(ids: readonly SupportedHarnessId[]): SupportedHarnessId[] {
+function uniqueHarnessIds(ids: readonly CliSetupHarnessId[]): CliSetupHarnessId[] {
   return ids.filter((id, index) => ids.indexOf(id) === index);
 }

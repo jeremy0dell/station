@@ -14,6 +14,7 @@ import {
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
+  type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { runExternalCommand, safeErrorFromUnknown } from "@station/runtime";
@@ -55,11 +56,15 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: false,
 };
 
-const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions> = {
+export const claudeHarnessCommandDefinition = {
   id: "claude",
   displayName: "Claude Code",
   commandEnvVar: "STATION_CLAUDE_BIN",
   commandFallback: "claude",
+} as const satisfies TerminalBoundHarnessCommandDefinition;
+
+const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions> = {
+  ...claudeHarnessCommandDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.claude].resume.
@@ -88,7 +93,11 @@ const claudeSpec: TerminalBoundHarnessProviderSpec<ClaudeHarnessProviderOptions>
 };
 
 function command(options: ClaudeHarnessProviderOptions): string {
-  return harnessCommand(options, "STATION_CLAUDE_BIN", "claude");
+  return harnessCommand(
+    options,
+    claudeHarnessCommandDefinition.commandEnvVar,
+    claudeHarnessCommandDefinition.commandFallback,
+  );
 }
 
 function hookPathOptions(

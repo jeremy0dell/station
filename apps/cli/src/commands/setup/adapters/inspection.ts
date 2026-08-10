@@ -1,5 +1,5 @@
 import type { SetupConfigMutationPlan } from "@station/config";
-import { CliSetupHarnessIdSchema } from "@station/contracts";
+import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
 import { safeErrorFromUnknown } from "@station/runtime";
 import {
   assessHarnessTracking,
@@ -11,9 +11,9 @@ import {
   type SetupOperationOutcome,
   type SetupPlanningFacts,
   type SetupPlanningIntent,
-  type SupportedHarnessId,
 } from "@station/setup-core";
 import { type CollectSetupFactsOptions, collectSetupFacts } from "../checks/system.js";
+import { SETUP_HARNESS_DEFINITIONS } from "../harnessDefinitions.js";
 import { setupToolDefinitions } from "../toolDefinitions.js";
 import type { SetupCommandDeps, SetupCommandOptions } from "../types.js";
 import { planSetupConfigMutationForInspection } from "./config.js";
@@ -160,14 +160,14 @@ async function collectHarnessTrackingFacts(input: {
   return { ...input.facts, harnessTracking };
 }
 
-function selectedHarnessIds(selection: HarnessSelectionResolution): readonly SupportedHarnessId[] {
+function selectedHarnessIds(selection: HarnessSelectionResolution): readonly CliSetupHarnessId[] {
   return selection.outcome === "selected" ? selection.requiredHarnessIds : [];
 }
 
 function relevantHarnessTrackingIds(input: {
   readonly facts: Pick<SetupFacts, "config" | "harnesses">;
   readonly selection: HarnessSelectionResolution;
-}): SupportedHarnessId[] {
+}): CliSetupHarnessId[] {
   const configuredHarnessIds =
     input.facts.config.status === "valid"
       ? [input.facts.config.defaults.harness, ...input.facts.config.configuredHarnesses].flatMap(
@@ -185,15 +185,13 @@ function relevantHarnessTrackingIds(input: {
   );
 }
 
-function harnessSupportsSetupHooks(
-  harnessId: SupportedHarnessId,
-): harnessId is "claude" | "codex" | "cursor" | "opencode" {
-  return harnessId !== "pi";
+function harnessSupportsSetupHooks(harnessId: CliSetupHarnessId): boolean {
+  return SETUP_HARNESS_DEFINITIONS[harnessId].providerHook !== undefined;
 }
 
 async function probeHarnessTrackingFact(
   facts: SetupFacts,
-  harnessId: SupportedHarnessId,
+  harnessId: CliSetupHarnessId,
   deps: SetupCommandDeps,
 ): Promise<SetupHarnessTrackingFact> {
   if (!harnessSupportsSetupHooks(harnessId)) {
@@ -345,9 +343,13 @@ function normalizeHarnessSelectionFacts(facts: SetupFacts): HarnessSelectionFact
     case "invalid":
       config = { status: "invalid" };
       break;
-    case "valid":
-      config = { status: "valid", defaultHarness: facts.config.defaults.harness };
+    case "valid": {
+      const defaultHarness = CliSetupHarnessIdSchema.safeParse(facts.config.defaults.harness);
+      config = defaultHarness.success
+        ? { status: "valid", defaultHarness: defaultHarness.data }
+        : { status: "unsupported" };
       break;
+    }
     default:
       return assertNever(facts.config);
   }
@@ -380,7 +382,7 @@ function normalizeHarnessTracking(
 
 function coreHarnessTrackingFacts(
   facts: SetupFacts,
-  harnessId: SupportedHarnessId,
+  harnessId: CliSetupHarnessId,
   fact: SetupFacts["harnessTracking"][number] | undefined,
 ): HarnessTrackingFacts {
   if (!harnessSupportsSetupHooks(harnessId)) {

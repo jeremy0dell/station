@@ -2,10 +2,10 @@ import { dirname } from "node:path";
 import type { ClaudeHookInstallResult } from "@station/claude";
 import type { CodexHookInstallResult } from "@station/codex";
 import { emptyConfig } from "@station/config";
+import type { CliSetupHarnessId } from "@station/contracts";
 import type { CursorHookInstallResult } from "@station/cursor";
 import type { OpenCodePluginInstallResult } from "@station/opencode";
 import type { ExternalCommandInput, ExternalCommandResult } from "@station/runtime";
-import type { SupportedHarnessId } from "@station/setup-core";
 import { describe, expect, it } from "vitest";
 import {
   createHarnessTrackingAdapter,
@@ -478,7 +478,7 @@ function providerInstallResult(
   };
 }
 
-function trackingOperation(harnessId: SupportedHarnessId) {
+function trackingOperation(harnessId: CliSetupHarnessId) {
   return {
     id: `prepare-harness-tracking:${harnessId}` as const,
     kind: "prepare-harness-tracking" as const,

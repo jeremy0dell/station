@@ -1,6 +1,7 @@
 import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
+import { CliSetupHarnessIdSchema } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandResult,
@@ -20,6 +21,7 @@ import { checkSetupBun } from "../../src/commands/setup/checks/bun.js";
 import { setupProbeTimeoutMs } from "../../src/commands/setup/checks/constants.js";
 import { checkSetupDiffViewer } from "../../src/commands/setup/checks/diffViewer.js";
 import { checkSetupGit } from "../../src/commands/setup/checks/git.js";
+import { checkSetupHarnesses } from "../../src/commands/setup/checks/harnesses.js";
 import { checkSetupLaunchers } from "../../src/commands/setup/checks/launchers.js";
 import { checkSetupStateDir } from "../../src/commands/setup/checks/stateDir.js";
 import {
@@ -36,10 +38,15 @@ import { checkSetupXcode } from "../../src/commands/setup/checks/xcode.js";
 import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
 
 function buildSetupPlan(facts: SetupFacts) {
-  const config: HarnessSelectionFacts["config"] =
-    facts.config.status === "valid"
-      ? { status: "valid", defaultHarness: facts.config.defaults.harness }
-      : { status: facts.config.status };
+  let config: HarnessSelectionFacts["config"];
+  if (facts.config.status === "valid") {
+    const defaultHarness = CliSetupHarnessIdSchema.safeParse(facts.config.defaults.harness);
+    config = defaultHarness.success
+      ? { status: "valid", defaultHarness: defaultHarness.data }
+      : { status: "unsupported" };
+  } else {
+    config = { status: facts.config.status };
+  }
   const selectionFacts: HarnessSelectionFacts = {
     config,
     harnesses: facts.harnesses.map((harness) => ({
@@ -70,6 +77,24 @@ describe("setup dependency checks", () => {
     await Promise.all(
       tempRoots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
     );
+  });
+
+  it("checks harnesses with canonical labels, commands, and fact order", async () => {
+    const facts = await checkSetupHarnesses({
+      runner: fakeRunner([], {
+        "codex --version": "codex 1.2.3\n",
+        "opencode --version": "opencode 3.4.5\n",
+        "claude --version": "claude 6.7.8\n",
+      }),
+    });
+
+    expect(facts.map(({ id, label, status, command }) => [id, label, status, command])).toEqual([
+      ["codex", "Codex", "ok", "codex"],
+      ["cursor", "Cursor Agent", "missing", "agent"],
+      ["opencode", "OpenCode", "ok", "opencode"],
+      ["pi", "Pi", "missing", "pi"],
+      ["claude", "Claude Code", "ok", "claude"],
+    ]);
   });
 
   it("creates and proves a writable private state directory", async () => {

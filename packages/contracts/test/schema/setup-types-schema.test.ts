@@ -5,7 +5,6 @@ import {
   CliSetupPlanSchema,
   CliSetupSummarySchema,
 } from "@station/contracts";
-import { supportedHarnessIds } from "@station/setup-core";
 import { describe, expect, it } from "vitest";
 
 const plan = {
@@ -175,7 +174,13 @@ describe("CLI setup schemas", () => {
     expect("selectedHarness" in summary).toBe(false);
   });
 
-  it("keeps the intentionally duplicated wire harness enum aligned with setup-core", () => {
-    expect(CliSetupHarnessIdSchema.options).toEqual([...supportedHarnessIds]);
+  it("pins the canonical setup-managed harness vocabulary", () => {
+    expect(CliSetupHarnessIdSchema.options).toEqual([
+      "codex",
+      "cursor",
+      "opencode",
+      "pi",
+      "claude",
+    ]);
   });
 });

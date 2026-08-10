@@ -51,6 +51,51 @@ describe("setup inspection adapter", () => {
     ]);
   });
 
+  it("derives tracking capability for every setup-managed harness", () => {
+    const input = facts();
+    const planning = normalizeSetupPlanningFacts(
+      {
+        ...input,
+        harnesses: [
+          { id: "codex", label: "Codex", status: "ok", command: "codex" },
+          { id: "cursor", label: "Cursor Agent", status: "ok", command: "agent" },
+          { id: "opencode", label: "OpenCode", status: "ok", command: "opencode" },
+          { id: "pi", label: "Pi", status: "ok", command: "pi" },
+          { id: "claude", label: "Claude Code", status: "ok", command: "claude" },
+        ],
+        harnessTracking: [
+          { harnessId: "codex", capability: "supported", requested: true, installed: true },
+          { harnessId: "cursor", capability: "supported", requested: true, installed: true },
+          { harnessId: "opencode", capability: "supported", requested: true, installed: true },
+          { harnessId: "pi", capability: "unsupported" },
+          { harnessId: "claude", capability: "supported", requested: true, installed: true },
+        ],
+        config: {
+          ...input.config,
+          configuredHarnesses: ["codex", "cursor", "opencode", "pi", "claude"],
+          configuredHookHarnesses: ["codex", "cursor", "opencode", "claude"],
+        },
+      },
+      {
+        outcome: "selected",
+        source: "explicit",
+        requiredHarnessIds: ["codex", "cursor", "opencode", "pi", "claude"],
+        defaultHarness: "codex",
+      },
+      undefined,
+    );
+
+    expect(
+      planning.harnessTracking.map(({ harnessId, assessment }) => [harnessId, assessment.state]),
+    ).toEqual([
+      ["codex", "prepared"],
+      ["cursor", "prepared"],
+      ["opencode", "prepared"],
+      ["pi", "not-applicable"],
+      ["claude", "prepared"],
+    ]);
+  });
+
   it("plans config previews with selected tracking and detected custom commands", async () => {
     const input = facts();
     const plan = await planSetupConfigMutationForInspection({

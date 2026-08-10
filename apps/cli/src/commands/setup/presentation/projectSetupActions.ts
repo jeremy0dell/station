@@ -2,6 +2,7 @@ import type { SetupConfigMutationPlan } from "@station/config";
 import type { SetupOperation, SetupToolInstallOperation } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
+import { resolveSetupHarnessInstallation } from "../harnessInstallation.js";
 import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupPresentationHarnessSelection, SetupViewAction } from "./setupViewTypes.js";
 
@@ -124,6 +125,12 @@ export function projectSetupOperationActions(input: {
       const label =
         facts.harnesses.find((harness) => harness.id === operation.harnessId)?.label ??
         operation.harnessId;
+      const installation = resolveSetupHarnessInstallation({
+        harnessId: operation.harnessId,
+        brewAvailable: facts.brew.status === "ok",
+        homeDir: facts.homeDir,
+        macos: facts.xcode.applicable,
+      });
       return [
         {
           id: `install-harness-${operation.harnessId}`,
@@ -132,7 +139,7 @@ export function projectSetupOperationActions(input: {
           tier: "required",
           selected: operation.selected,
           label: setupMessageRef("action.install-label", { label }),
-          explanation: harnessInstallerMessage({ harnessId: operation.harnessId, facts }),
+          explanation: installation.message,
         },
       ];
     }
@@ -164,30 +171,6 @@ export function projectSetupOperationActions(input: {
       return [];
     default:
       return assertNeverOperation(operation);
-  }
-}
-
-function harnessInstallerMessage(input: {
-  readonly harnessId: Extract<SetupOperation, { kind: "install-harness" }>["harnessId"];
-  readonly facts: SetupFacts;
-}) {
-  const { harnessId, facts } = input;
-  const macBrewAvailable = facts.xcode.applicable && facts.brew.status === "ok";
-  switch (harnessId) {
-    case "codex":
-      return setupMessageRef(macBrewAvailable ? "installer.codex-brew" : "installer.codex-script");
-    case "cursor":
-      return setupMessageRef("installer.cursor-script");
-    case "opencode":
-      return setupMessageRef(
-        facts.brew.status === "ok" ? "installer.opencode-brew" : "installer.opencode-script",
-      );
-    case "pi":
-      return setupMessageRef(facts.brew.status === "ok" ? "installer.pi-brew" : "installer.pi-npm");
-    case "claude":
-      return setupMessageRef(macBrewAvailable ? "installer.claude-brew" : "installer.claude-npm");
-    default:
-      return assertNeverHarness(harnessId);
   }
 }
 
@@ -267,8 +250,4 @@ function projectConfigWriteActions(input: {
 
 function assertNeverOperation(operation: never): never {
   throw new Error(`Unsupported setup operation: ${String(operation)}`);
-}
-
-function assertNeverHarness(harness: never): never {
-  throw new Error(`Unsupported setup harness: ${String(harness)}`);
 }

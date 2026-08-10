@@ -1,9 +1,8 @@
+import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import {
-  type HarnessSelectionFacts,
-  resolveHarnessSelection,
-  supportedHarnessIds,
-} from "../../src/index.js";
+import { type HarnessSelectionFacts, resolveHarnessSelection } from "../../src/index.js";
+
+const harnessIds: readonly CliSetupHarnessId[] = ["codex", "cursor", "opencode", "pi", "claude"];
 
 describe("resolveHarnessSelection", () => {
   it("preserves a supported configured default even when it is unavailable", () => {
@@ -11,6 +10,23 @@ describe("resolveHarnessSelection", () => {
       resolveHarnessSelection(selectionFacts({ config: "codex", available: ["pi"] }), {
         kind: "automatic",
       }),
+    ).toEqual({
+      outcome: "selected",
+      source: "configured",
+      requiredHarnessIds: ["codex"],
+      defaultHarness: "codex",
+    });
+  });
+
+  it("preserves a supported configured default when its availability fact is absent", () => {
+    expect(
+      resolveHarnessSelection(
+        {
+          config: { status: "valid", defaultHarness: "codex" },
+          harnesses: [{ id: "pi", availability: "unavailable" }],
+        },
+        { kind: "automatic" },
+      ),
     ).toEqual({
       outcome: "selected",
       source: "configured",
@@ -132,16 +148,19 @@ describe("resolveHarnessSelection", () => {
 
 function selectionFacts(input: {
   config: "missing" | "invalid" | string;
-  available: readonly (typeof supportedHarnessIds)[number][];
-  order?: readonly (typeof supportedHarnessIds)[number][];
+  available: readonly CliSetupHarnessId[];
+  order?: readonly CliSetupHarnessId[];
 }): HarnessSelectionFacts {
-  const order = input.order ?? supportedHarnessIds;
+  const order = input.order ?? harnessIds;
+  const defaultHarness = CliSetupHarnessIdSchema.safeParse(input.config);
   const config: HarnessSelectionFacts["config"] =
     input.config === "missing"
       ? { status: "missing" }
       : input.config === "invalid"
         ? { status: "invalid" }
-        : { status: "valid", defaultHarness: input.config };
+        : defaultHarness.success
+          ? { status: "valid", defaultHarness: defaultHarness.data }
+          : { status: "unsupported" };
   return {
     config,
     harnesses: order.map((id) => ({

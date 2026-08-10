@@ -1639,7 +1639,14 @@ describe("guided setup command", () => {
               message.includes("Write and activate core Station config")
             );
           },
-          async selectMany() {
+          async selectMany(request) {
+            expect(request.choices.map(({ value }) => value)).toEqual([
+              "claude",
+              "codex",
+              "cursor",
+              "opencode",
+              "pi",
+            ]);
             return ["codex"];
           },
         },

@@ -1,11 +1,9 @@
-import type {
-  SetupPlan,
-  SetupSessionOperationOutcome,
-  SupportedHarnessId,
-} from "@station/setup-core";
+import type { CliSetupHarnessId } from "@station/contracts";
+import type { SetupPlan, SetupSessionOperationOutcome } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { setupLauncherExecutable } from "../checks/launchers.js";
+import { SETUP_HARNESS_DEFINITIONS } from "../harnessDefinitions.js";
 import { launcherPathDirectory } from "./projectSetupChecks.js";
 import type {
   ProjectSetupView,
@@ -161,7 +159,7 @@ function projectApplyPresentation(input: {
 function preparedHarnesses(input: {
   readonly plan: SetupPlan;
   readonly facts: SetupFacts;
-}): readonly { readonly id: SupportedHarnessId; readonly label: string }[] {
+}): readonly { readonly id: CliSetupHarnessId; readonly label: string }[] {
   const { plan, facts } = input;
   return plan.evidence.harnessTracking.flatMap((tracking) => {
     if (tracking.assessment.state !== "prepared") return [];
@@ -172,7 +170,7 @@ function preparedHarnesses(input: {
 
 function harnessTrackingCommand(input: {
   readonly facts: SetupFacts;
-  readonly harnessId: "claude" | "codex" | "cursor" | "opencode" | "pi";
+  readonly harnessId: CliSetupHarnessId;
 }): readonly string[] {
   const { facts, harnessId } = input;
   const command = [
@@ -184,7 +182,7 @@ function harnessTrackingCommand(input: {
     harnessId,
     "--yes",
   ];
-  if (harnessId === "claude" || harnessId === "codex" || harnessId === "cursor") {
+  if (SETUP_HARNESS_DEFINITIONS[harnessId].providerHook?.supportsHookBin === true) {
     command.push("--hook-bin", setupLauncherExecutable(facts.launchers.ingress));
   }
   return command;

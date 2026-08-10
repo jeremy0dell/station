@@ -64,28 +64,32 @@ export type HarnessIngestSpec = {
   ) => HarnessEventObservation[] | Promise<HarnessEventObservation[]>;
 };
 
-export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProviderOptions> = {
+export type TerminalBoundHarnessCommandDefinition = {
   id: ProviderId;
   displayName: string;
   commandEnvVar: string;
   commandFallback: string;
-  baseCapabilities: HarnessCapabilities;
-  resumeFromOptions?: (options: TOpts) => boolean;
-  health: HarnessHealthSpec;
-  buildLaunch: (
-    options: TOpts,
-    request: BuildHarnessLaunchRequest,
-  ) => HarnessLaunchPlan | Promise<HarnessLaunchPlan>;
-  classifyRun: (run: HarnessRunObservation) => HarnessStatusObservation;
-  ingestEvent?: HarnessIngestSpec;
-  acceptsPersistedEvent?: (observation: HarnessEventObservation) => boolean;
-  doctorChecks?: (
-    options: TOpts,
-    context?: ProviderDoctorContext,
-  ) => Promise<ProviderDoctorCheck[]>;
-  version?: HarnessVersionSpec;
-  hooksStatus?: (options: TOpts, context?: ProviderDoctorContext) => Promise<HarnessHooksStatus>;
 };
+
+export type TerminalBoundHarnessProviderSpec<TOpts extends CommonHarnessProviderOptions> =
+  TerminalBoundHarnessCommandDefinition & {
+    baseCapabilities: HarnessCapabilities;
+    resumeFromOptions?: (options: TOpts) => boolean;
+    health: HarnessHealthSpec;
+    buildLaunch: (
+      options: TOpts,
+      request: BuildHarnessLaunchRequest,
+    ) => HarnessLaunchPlan | Promise<HarnessLaunchPlan>;
+    classifyRun: (run: HarnessRunObservation) => HarnessStatusObservation;
+    ingestEvent?: HarnessIngestSpec;
+    acceptsPersistedEvent?: (observation: HarnessEventObservation) => boolean;
+    doctorChecks?: (
+      options: TOpts,
+      context?: ProviderDoctorContext,
+    ) => Promise<ProviderDoctorCheck[]>;
+    version?: HarnessVersionSpec;
+    hooksStatus?: (options: TOpts, context?: ProviderDoctorContext) => Promise<HarnessHooksStatus>;
+  };
 
 export function createTerminalBoundHarnessProvider<TOpts extends CommonHarnessProviderOptions>(
   spec: TerminalBoundHarnessProviderSpec<TOpts>,

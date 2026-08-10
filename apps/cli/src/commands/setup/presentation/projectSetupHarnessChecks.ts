@@ -1,4 +1,5 @@
-import type { HarnessTrackingAssessment, SetupPlan, SupportedHarnessId } from "@station/setup-core";
+import type { CliSetupHarnessId } from "@station/contracts";
+import type { HarnessTrackingAssessment, SetupPlan } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import type {
@@ -72,7 +73,7 @@ function projectHarnessCheck(input: {
   readonly facts: SetupFacts;
   readonly selection: SetupPresentationHarnessSelection;
   readonly available: readonly SetupFacts["harnesses"][number][];
-  readonly unavailable: readonly SupportedHarnessId[];
+  readonly unavailable: readonly CliSetupHarnessId[];
   readonly details: SetupViewCheck["details"];
 }): SetupViewCheck {
   const { plan, facts, selection, available, unavailable, details } = input;
@@ -134,7 +135,7 @@ function projectHarnessTrackingCheck(input: {
   readonly plan: SetupPlan;
   readonly facts: SetupFacts;
   readonly selection: SetupPresentationHarnessSelection;
-  readonly harnessId: SupportedHarnessId;
+  readonly harnessId: CliSetupHarnessId;
 }): SetupViewCheck {
   const { plan, facts, selection, harnessId } = input;
   const assessment = plan.evidence.harnessTracking.find(
@@ -189,7 +190,7 @@ function trackingOwnershipDetails(
 function trackingPresentation(input: {
   readonly assessment: HarnessTrackingAssessment;
   readonly detail: string | undefined;
-  readonly harnessId: SupportedHarnessId;
+  readonly harnessId: CliSetupHarnessId;
   readonly label: string;
   readonly unavailableStatus: "missing" | "warning";
   readonly required: boolean;

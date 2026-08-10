@@ -6,13 +6,13 @@ import {
   type SetupConfigMutationInput,
   type SetupConfigMutationPlan,
 } from "@station/config";
+import type { CliSetupHarnessId } from "@station/contracts";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
 import type {
   HarnessSelectionResolution,
   SetupConfigMutationPort,
   SetupConfigWriteOperation,
   SetupOperationOutcome,
-  SupportedHarnessId,
 } from "@station/setup-core";
 import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 import type { SetupFacts } from "./inspectionTypes.js";
@@ -80,7 +80,7 @@ export async function planSetupConfigMutationForInspection(input: {
   readonly facts: SetupFacts;
   readonly selection: HarnessSelectionResolution;
   readonly trackingIntent: {
-    readonly harnessIds: readonly SupportedHarnessId[];
+    readonly harnessIds: readonly CliSetupHarnessId[];
     readonly installWorktrunkHooks: boolean;
   };
 }): Promise<SetupConfigMutationPlan> {

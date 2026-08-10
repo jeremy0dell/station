@@ -15,6 +15,7 @@ import {
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
+  type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { safeErrorFromUnknown } from "@station/runtime";
@@ -53,11 +54,15 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: true,
 };
 
-const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> = {
+export const codexHarnessCommandDefinition = {
   id: "codex",
   displayName: "Codex",
   commandEnvVar: "STATION_CODEX_BIN",
   commandFallback: "codex",
+} as const satisfies TerminalBoundHarnessCommandDefinition;
+
+const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> = {
+  ...codexHarnessCommandDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.codex].resume.
@@ -87,7 +92,11 @@ const codexSpec: TerminalBoundHarnessProviderSpec<CodexHarnessProviderOptions> =
 };
 
 function command(options: CodexHarnessProviderOptions): string {
-  return harnessCommand(options, "STATION_CODEX_BIN", "codex");
+  return harnessCommand(
+    options,
+    codexHarnessCommandDefinition.commandEnvVar,
+    codexHarnessCommandDefinition.commandFallback,
+  );
 }
 
 function buildLaunch(
