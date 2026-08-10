@@ -5,7 +5,7 @@
 import { describe, expect, it } from "bun:test";
 import type { ProviderId, StationSnapshot } from "@station/contracts";
 import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
-import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { dashboardRowIds, selectDashboardViewport } from "@station/dashboard-core/selectors";
 import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
 import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
@@ -135,7 +135,7 @@ describe("routeStationMouse", () => {
     const worktreeId = "wt_station_idle";
     const rowId = `ses_${worktreeId}`;
 
-    const outcome = routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, store);
+    const outcome = routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.session(rowId), cellId: "identity" }, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
     // The dashboard click no longer dispatches the start-or-focus slot key, so
@@ -147,7 +147,7 @@ describe("routeStationMouse", () => {
     const store = makeStore(snapshotWithHarness("station", "ghost"));
 
     const outcome = routeStationMouse(
-      { kind: "row", rowId: "ses_wt_station_idle" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.session("ses_wt_station_idle"), cellId: "identity" },
       LEFT_DOWN,
       store,
     );
@@ -157,16 +157,13 @@ describe("routeStationMouse", () => {
     expect(store.state.getState().toasts).toEqual([]);
   });
 
-  it("reports a dashboard click on a stale row", () => {
+  it("keeps a stale dashboard cell inert", () => {
     const store = makeStore();
 
-    const outcome = routeStationMouse({ kind: "row", rowId: "wt_nope" }, LEFT_DOWN, store);
+    const outcome = routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.session("wt_nope"), cellId: "identity" }, LEFT_DOWN, store);
 
     expect(outcome).toEqual({ kind: "handled" });
-    expect(store.state.getState().toasts.at(-1)?.toast).toMatchObject({
-      kind: "info",
-      message: "That dashboard item is no longer available.",
-    });
+    expect(store.state.getState().toasts).toEqual([]);
   });
 
   it("chooses the clicked row in remove mode, same as the slot key", () => {
@@ -177,7 +174,7 @@ describe("routeStationMouse", () => {
     keyed.actions.handleKey({ input: "X" });
     const slot = slotForRow(keyed, rowId);
 
-    routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, clicked);
+    routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.session(rowId), cellId: "identity" }, LEFT_DOWN, clicked);
     keyed.actions.handleKey({ input: slot });
 
     expect(clicked.state.getState().screen).toEqual(keyed.state.getState().screen);
@@ -249,7 +246,7 @@ describe("routeStationMouse", () => {
     keyed.actions.handleKey({ input: "F" });
     const slot = slotForRow(keyed, rowId);
 
-    routeStationMouse({ kind: "row", rowId }, LEFT_DOWN, clicked);
+    routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.session(rowId), cellId: "identity" }, LEFT_DOWN, clicked);
     keyed.actions.handleKey({ input: slot });
 
     const clickedScreen = clicked.state.getState().screen;
@@ -363,7 +360,7 @@ describe("routeStationMouse", () => {
     const before = store.state.getState();
 
     const outcome = routeStationMouse(
-      { kind: "row", rowId: "ses_wt_station_idle" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.session("ses_wt_station_idle"), cellId: "identity" },
       LEFT_DOWN,
       store,
     );
@@ -522,19 +519,18 @@ describe("routeStationMouse", () => {
   it("toggles project collapse on header click, dashboard mode only", () => {
     const store = makeStore();
 
-    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedProjectIds]).toEqual(["station"]);
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "station",
-      control: "primary",
+      rowId: dashboardRowIds.project("station"),
+      cellId: "identity",
     });
 
-    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
 
     store.actions.handleKey({ input: "H" });
-    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
   });
 
@@ -543,14 +539,14 @@ describe("routeStationMouse", () => {
     const snapshot = store.state.getState().snapshot;
     if (snapshot === undefined) throw new Error("expected snapshot");
     const visibleSessions = () =>
-      selectDashboardViewport(snapshot, store.state.getState()).items.filter(
-        (item) => item.type === "session",
+      selectDashboardViewport(snapshot, store.state.getState()).rows.filter(
+        (row) => row.payload.type === "session",
       ).length;
 
     expect(visibleSessions()).toBeGreaterThan(0);
-    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" }, LEFT_DOWN, store);
     expect(visibleSessions()).toBe(0);
-    routeStationMouse({ kind: "projectHeader", projectId: "station" }, LEFT_DOWN, store);
+    routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" }, LEFT_DOWN, store);
     expect(visibleSessions()).toBeGreaterThan(0);
   });
 
@@ -651,7 +647,7 @@ describe("routeStationMouse", () => {
     const before = store.state.getState().screen;
 
     const outcome = routeStationMouse(
-      { kind: "projectHeader", projectId: "station" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" },
       RIGHT_DOWN,
       store,
     );
@@ -727,15 +723,14 @@ describe("routeStationMouse", () => {
   it("opens a shell pane for a project header click at the project root", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
-      { kind: "openShellForProject", projectId: "station" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "shell" },
       LEFT_DOWN,
       store,
     );
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "station",
-      control: "shell",
+      rowId: dashboardRowIds.project("station"),
+      cellId: "shell",
     });
   });
 
@@ -767,7 +762,7 @@ describe("routeStationMouse", () => {
       kind: "handled",
     });
     expect(
-      routeStationMouse({ kind: "openShellForProject", projectId: "station" }, LEFT_DOWN, store),
+      routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "shell" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
   });
 
@@ -779,37 +774,36 @@ describe("routeStationMouse", () => {
       kind: "handled",
     });
     expect(
-      routeStationMouse({ kind: "openShellForProject", projectId: "ghost" }, LEFT_DOWN, store),
+      routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("ghost"), cellId: "shell" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
   });
 
   it("dispatches [+] Quick Session through the semantic capability path", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
-      { kind: "quickSessionForProject", projectId: "station" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "quickSession" },
       LEFT_DOWN,
       store,
     );
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "station",
-      control: "quickSession",
+      rowId: dashboardRowIds.project("station"),
+      cellId: "quickSession",
     });
   });
 
   it("routes the empty-project action through semantic Quick Session", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
-      { kind: "emptyProjectAction", projectId: "empty-project" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.empty("empty-project"), cellId: "addSession" },
       LEFT_DOWN,
       store,
     );
 
     expect(outcome).toEqual({ kind: "handled" });
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: "empty-project",
+      rowId: dashboardRowIds.empty("empty-project"),
+      cellId: "addSession",
     });
   });
 
@@ -818,14 +812,14 @@ describe("routeStationMouse", () => {
 
     expect(
       routeStationMouse(
-        { kind: "emptyProjectAction", projectId: "empty-project" },
+        { kind: "dashboardCell", rowId: dashboardRowIds.empty("empty-project"), cellId: "addSession" },
         LEFT_DOWN,
         store,
       ),
     ).toEqual({ kind: "handled" });
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: "empty-project",
+      rowId: dashboardRowIds.empty("empty-project"),
+      cellId: "addSession",
     });
     expect(store.state.getState().toasts.at(-1)?.toast.kind).toBe("error");
   });
@@ -833,10 +827,10 @@ describe("routeStationMouse", () => {
   it("keeps stale and modal empty-project targets inert", () => {
     const stale = makeStore();
     expect(
-      routeStationMouse({ kind: "emptyProjectAction", projectId: "ghost" }, LEFT_DOWN, stale),
+      routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.empty("ghost"), cellId: "addSession" }, LEFT_DOWN, stale),
     ).toEqual({ kind: "handled" });
     expect(
-      routeStationMouse({ kind: "emptyProjectAction", projectId: "station" }, LEFT_DOWN, stale),
+      routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.empty("station"), cellId: "addSession" }, LEFT_DOWN, stale),
     ).toEqual({ kind: "handled" });
     expect(stale.state.getState().dashboardFocus).toBeUndefined();
 
@@ -844,7 +838,7 @@ describe("routeStationMouse", () => {
     modal.actions.handleKey({ input: "H" });
     expect(
       routeStationMouse(
-        { kind: "emptyProjectAction", projectId: "empty-project" },
+        { kind: "dashboardCell", rowId: dashboardRowIds.empty("empty-project"), cellId: "addSession" },
         LEFT_DOWN,
         modal,
       ),
@@ -857,7 +851,7 @@ describe("routeStationMouse", () => {
     const store = makeStore(snapshotWithBareProject("station"));
 
     expect(
-      routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
+      routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "quickSession" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
     expect(store.state.getState().localRows.pendingCreate).toEqual([]);
     const toast = store.state.getState().toasts.at(-1)?.toast;
@@ -867,9 +861,8 @@ describe("routeStationMouse", () => {
     });
     expect(toast?.hint).toContain("config --local core.bare false");
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "station",
-      control: "quickSession",
+      rowId: dashboardRowIds.project("station"),
+      cellId: "quickSession",
     });
   });
 
@@ -878,11 +871,11 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "/" }); // enter filter mode
 
     expect(
-      routeStationMouse({ kind: "quickSessionForProject", projectId: "station" }, LEFT_DOWN, store),
+      routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "quickSession" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
     expect(
       routeStationMouse(
-        { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+        { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "defaultAgent" },
         LEFT_DOWN,
         store,
       ),
@@ -892,14 +885,14 @@ describe("routeStationMouse", () => {
   it("treats an unresolvable project as an inert click for quick-session", () => {
     const store = makeStore();
     expect(
-      routeStationMouse({ kind: "quickSessionForProject", projectId: "ghost" }, LEFT_DOWN, store),
+      routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("ghost"), cellId: "quickSession" }, LEFT_DOWN, store),
     ).toEqual({ kind: "handled" });
   });
 
   it("opens the project default-agent picker via [▾]", () => {
     const store = makeStore();
     const outcome = routeStationMouse(
-      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "defaultAgent" },
       LEFT_DOWN,
       store,
     );
@@ -912,9 +905,8 @@ describe("routeStationMouse", () => {
       expect(screen.projectId).toBe("station");
     }
     expect(store.state.getState().dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "station",
-      control: "defaultAgent",
+      rowId: dashboardRowIds.project("station"),
+      cellId: "defaultAgent",
     });
   });
 
@@ -922,7 +914,7 @@ describe("routeStationMouse", () => {
     const fixture = makeStationTestRuntime({ terminalRows: 12 });
     const store = fixture.runtime;
     routeStationMouse(
-      { kind: "showDefaultAgentPickerForProject", projectId: "station" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "defaultAgent" },
       LEFT_DOWN,
       store,
     );
@@ -950,7 +942,7 @@ describe("routeStationMouse", () => {
     const store = makeStore();
     // Ghost project: no mutation, no router effect.
     routeStationMouse(
-      { kind: "showDefaultAgentPickerForProject", projectId: "ghost" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.project("ghost"), cellId: "defaultAgent" },
       LEFT_DOWN,
       store,
     );

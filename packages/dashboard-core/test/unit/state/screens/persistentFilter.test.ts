@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { selectDashboardItems } from "../../../../src/selectors/dashboardViewport.js";
+import { dashboardRowIds } from "../../../../src/selectors/dashboardTree.js";
+import { selectDashboardViewport } from "../../../../src/selectors/dashboardViewport.js";
 import { createInitialTuiState, replaceSnapshot } from "../../../../src/state/screen.js";
 import { handleTuiKey } from "../../../../src/state/transition.js";
 import { createDashboardSnapshot } from "../../../fixtures/snapshots.js";
@@ -58,7 +59,10 @@ describe("persistent-filter screen", () => {
       initialSnapshot: createDashboardSnapshot(),
       scrollOffset: 3,
       terminalRows: 10,
-      dashboardFocus: { kind: "session", sessionId: "ses_wt_web_idle" },
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_web_idle"),
+        cellId: "identity",
+      },
     });
     const opened = handle(base, { input: "/" });
     const typed = handle(opened, { input: "  NaV  " });
@@ -90,7 +94,10 @@ describe("persistent-filter screen", () => {
     const base = createInitialTuiState({
       initialSnapshot: snapshot,
       persistentFilter: { query: "working" },
-      dashboardFocus: { kind: "session", sessionId: "ses_wt_api_working" },
+      dashboardFocus: {
+        rowId: dashboardRowIds.session("ses_wt_api_working"),
+        cellId: "identity",
+      },
     });
     const opened = handle(base, { input: "/" });
     const edited = handle(opened, { input: " missing" });
@@ -103,12 +110,14 @@ describe("persistent-filter screen", () => {
 
     const replaced = replaceSnapshot(edited, withoutApi);
     expect(
-      selectDashboardItems(withoutApi, replaced).filter((item) => item.type === "session"),
+      selectDashboardViewport(withoutApi, replaced).rows.filter(
+        (row) => row.payload.type === "session",
+      ),
     ).toHaveLength(6);
 
     const cancelled = handle(replaced, { input: "", escape: true });
     expect(cancelled.persistentFilter).toEqual({ query: "working" });
-    expect(selectDashboardItems(withoutApi, cancelled).map((item) => item.id)).toEqual([
+    expect(selectDashboardViewport(withoutApi, cancelled).rows.map((row) => row.id)).toEqual([
       "project:web",
       "session:ses_wt_web_working",
     ]);

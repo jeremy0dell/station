@@ -1,6 +1,6 @@
 import type { ProjectId } from "@station/contracts";
 import { selectProjectChooserChoices } from "../../../selectors/selectors.js";
-import { toggleDashboardProjectCollapsed } from "../../projectHeaderActions.js";
+import { toggleDashboardProjectCollapsed } from "../../screens/projectCollapse.js";
 import { openProjectSettings } from "../../screens/projectSettings.js";
 import type { DashboardState } from "../../types.js";
 import { flatPickerSpec } from "../flatPicker.js";

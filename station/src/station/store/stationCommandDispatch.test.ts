@@ -5,7 +5,7 @@ import type { StationEvent, StationSnapshot } from "@station/contracts";
 import { afterEach, describe, expect, it } from "bun:test";
 import { createObserverActivationCapabilities, createObserverManagedSessionCapabilities, dashboardExecution } from "@station/dashboard-core/runtime";
 import type { DashboardCapabilities } from "@station/dashboard-core/runtime";
-import { selectDashboardViewport } from "@station/dashboard-core/selectors";
+import { dashboardRowIds, selectDashboardViewport } from "@station/dashboard-core/selectors";
 import { createObserverStationClient } from "../../sources/observerStationClient.js";
 import type { StationClient } from "../../sources/types.js";
 import { waitFor } from "../../terminal/testing/waitFor.js";
@@ -89,7 +89,7 @@ describe("station command dispatch through the shared client", () => {
     const { fake, store } = await makeLiveStore();
 
     const outcome = routeStationMouse(
-      { kind: "row", rowId: "ses_wt_station_idle" },
+      { kind: "dashboardCell", rowId: dashboardRowIds.session("ses_wt_station_idle"), cellId: "identity" },
       LEFT_DOWN,
       store,
     );
@@ -125,7 +125,15 @@ describe("station command dispatch through the shared client", () => {
     };
     const { fake, store } = await makeLiveStore(snapshot);
 
-    const outcome = routeStationMouse({ kind: "row", rowId: external.id }, LEFT_DOWN, store);
+    const outcome = routeStationMouse(
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.session(external.id),
+        cellId: "identity",
+      },
+      LEFT_DOWN,
+      store,
+    );
 
     expect(outcome).toEqual({ kind: "handled" });
     await waitFor(() => fake.waitedForCommandIds.length === 1);

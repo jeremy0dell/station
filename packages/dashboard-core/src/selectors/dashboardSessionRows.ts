@@ -15,30 +15,6 @@ export type DashboardSessionRow = {
   presentation: DashboardWorktreeRowView;
 };
 
-export type SelectProjectGroupsOptions = {
-  /** Includes canonical children while preserving the stored collapsed marker. */
-  includeCollapsedRows?: boolean;
-};
-
-export function selectProjectGroups(
-  snapshot: DashboardSnapshotView,
-  state: DashboardViewState,
-  options: SelectProjectGroupsOptions = {},
-) {
-  const sessionRows = selectDashboardSessionRows(snapshot);
-  return snapshot.projects.map((project) => {
-    const collapsed = state.collapsedProjectIds.has(project.id);
-    const matchingRows = sessionRows
-      .filter((row) => row.worktree.projectId === project.id)
-      .sort((left, right) => compareRows(left, right, state.localRows));
-    return {
-      project,
-      rows: collapsed && options.includeCollapsedRows !== true ? [] : matchingRows,
-      collapsed,
-    };
-  });
-}
-
 export function selectDashboardSessionRows(snapshot: DashboardSnapshotView): DashboardSessionRow[] {
   const worktreesById = new Map(snapshot.rows.map((row) => [row.id, row]));
   return snapshot.sessions.flatMap((session) => {
@@ -85,21 +61,6 @@ export function sessionRowDisplayTitle(
   localRows: DashboardLocalRowsView,
 ): string {
   return pendingRenameTitles(localRows)[row.session.id]?.title ?? row.worktree.title;
-}
-
-function compareRows(
-  left: DashboardSessionRow,
-  right: DashboardSessionRow,
-  localRows: DashboardLocalRowsView,
-): number {
-  return (
-    sessionRowDisplayTitle(left, localRows).localeCompare(
-      sessionRowDisplayTitle(right, localRows),
-    ) ||
-    left.worktree.branch.localeCompare(right.worktree.branch) ||
-    left.worktree.path.localeCompare(right.worktree.path) ||
-    left.id.localeCompare(right.id)
-  );
 }
 
 function dashboardSessionRow(

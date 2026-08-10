@@ -470,22 +470,22 @@ negotiation, SGR parsing, PTY delivery, or tmux forwarding.
 Native Station and the fullscreen/tmux dashboard route normalized pointer targets through the same
 semantic router; the standalone adapter only consumes its URL-presentation outcome. Workflow controls
 dispatch renderer-neutral actions through `DashboardActions.dispatch(...)`; direct hotkeys
-and focused Enter decode to the same pure intents before transitions or capability execution. Dashboard-core
-owns action availability and resolution, while native Station and standalone/tmux inject their
-terminal-specific capabilities at composition. Session rows are resolved by their exact current row
-ID before dispatching one semantic activation action, so pointer, focused Enter, and slot keys share
-the same focus, start, resume, and managed-pane behavior.
-Pending rows remain inert; stale targets show bounded, deduplicated feedback. Project-header
-segments dispatch one `dashboard.projectHeader.activate` action, so a click first focuses the exact
-segment and then follows the same activation path as focused Enter. Wheel events over child rows use
+and focused Enter identify the same row/cell intent before transitions or capability execution.
+Dashboard-core owns action availability and resolution, while native Station and standalone/tmux
+inject their terminal-specific capabilities at composition. Every Project, Session, and Add Session
+pointer emits one `dashboardCell` target; dashboard mode resolves it through the current tree and
+dispatches `dashboard.cell.activate`, the same activation used by focused Enter. Invalid, hidden,
+filtered, pending, or stale cells remain inert. Wheel events over child rows use
 dashboard scrolling, and active modal surfaces intercept background clicks and scrolling.
 
 Dashboard focus follows rendered order through each project header, its visible session rows, or the
-stable Add Session action rendered when that project is empty. Entering a header vertically always
-selects `primary`; Left/Right then moves, without wrapping, through `primary` → `shell` →
+stable Add Session action rendered when that project is empty. The cursor is one branded
+`{ rowId, cellId }` identity. Entering a header vertically always selects `identity`; Left/Right then
+moves, without wrapping, through `identity` → `shell` →
 `quickSession` → `defaultAgent`. Up/Down leaves any header segment immediately, and Left/Right on a
 session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
-session-only traversal, as do slot keys and next-needs-me. `N` continues to open the session flow
+visible, selectable canonical-session traversal; slots and Enter resolve through that same chooser
+policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
 without changing dashboard focus. Gaps and optimistic create rows remain non-focusable.
 
 Focused compact controls use the canonical theme's stronger bounded
@@ -498,7 +498,7 @@ component-local, temporarily supersedes the focus background, and reveals persis
 again when the pointer leaves; no focus glyph is added.
 
 Collapse moves focus from a hidden session or empty-project action to that project's header
-`primary` and clamps scrolling; expanding and moving Down reaches the first visible child again.
+`identity` cell and clamps scrolling; expanding and moving Down reaches the first visible child again.
 Snapshot replacement and accepted filter changes preserve stable focus identity, otherwise choose
 the next focusable item at the old position before the preceding item; resize preserves identity
 and scrolls it into view. The Default Agent picker retains its header focus beneath the screen, so
@@ -522,7 +522,8 @@ Native and standalone rendering expose the same project actions. Header Quick Se
 empty-project button emit the same core quick-session request through the injected managed-session
 capability: native Station hosts the session in a Station pane, while the standalone dashboard
 dispatches the configured terminal default. Pointer clicks use
-`dashboard.emptyProject.activate`; focused Enter routes through the same core activation helper.
+`dashboard.cell.activate` with the empty row's `addSession` cell; focused Enter routes through the
+same core activation helper.
 Blocked activation keeps Add Session focused while showing the existing error; stale targets are
 inert. Accepted activation retains the bounded Add Session focus until an optimistic create row
 replaces the empty row. The agent-picker uses the shared project-default screen transition. Link

@@ -4,18 +4,24 @@
 import { TextAttributes } from "@opentui/core";
 import {
   dashboardTableHeaderModel,
+  dashboardRowGridInput,
   fleetCountsLabel,
   emptyProjectLabel,
   FIRST_RUN_BODY_LABEL,
-  rowGridInputForViewportItem,
  } from "@station/dashboard-core/selectors";
 import { layoutWorktreeRowGrid, textSegment, truncateCells } from "@station/dashboard-core/selectors";
 import type { RowGridLayout, RowGridRowInput } from "@station/dashboard-core/selectors";
 import { selectDashboardViewport, selectFleetSummary } from "@station/dashboard-core/selectors";
-import type { DashboardViewportItem, FleetSummary } from "@station/dashboard-core/selectors";
-import type { DashboardScreenView, DashboardSnapshotView, DashboardViewState } from "@station/dashboard-core/state";
-
-type DashboardFocusView = DashboardViewState["dashboardFocus"];
+import type {
+  DashboardRowId,
+  DashboardTreeRow,
+  FleetSummary,
+} from "@station/dashboard-core/selectors";
+import type {
+  DashboardScreenView,
+  DashboardSnapshotView,
+  DashboardViewState,
+} from "@station/dashboard-core/state";
 import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
@@ -46,10 +52,9 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
     : dashboardRowLayouts(
-        viewport.visibleItems,
+        viewport.rows,
         keyByRow,
         contentColumns,
-        viewState.dashboardFocus,
       );
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
@@ -80,9 +85,8 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
       ) : (
         <DashboardBody
           columns={contentColumns}
-          items={viewport.visibleItems}
+          rows={viewport.rows}
           layoutByItem={layoutByItem}
-          dashboardFocus={viewState.dashboardFocus}
         />
       )}
       <DashboardScrollIndicatorView direction="below" overflow={viewport.sessionOverflow} />
@@ -170,13 +174,12 @@ function columnHeaderRowInput(): RowGridRowInput {
 
 // The header shares the rows' grid layout so its columns align and shed in lockstep.
 function dashboardRowLayouts(
-  items: readonly DashboardViewportItem[],
+  rows: readonly DashboardTreeRow[],
   keyByRow: ReadonlyMap<string, string>,
   columns: number,
-  dashboardFocus?: DashboardFocusView,
 ): { headerLayout: RowGridLayout | undefined; layoutByItem: Map<string, RowGridLayout> } {
-  const rowInputs = items.flatMap((item) => {
-    const input = rowGridInputForViewportItem(item, keyByRow, dashboardFocus);
+  const rowInputs = rows.flatMap((row) => {
+    const input = dashboardRowGridInput(row, keyByRow);
     return input === undefined ? [] : [input];
   });
   const layouts = layoutWorktreeRowGrid({
@@ -194,57 +197,49 @@ function dashboardRowLayouts(
 
 function DashboardBody({
   columns,
-  items,
+  rows,
   layoutByItem,
-  dashboardFocus,
 }: {
   columns: number;
-  items: readonly DashboardViewportItem[];
+  rows: readonly DashboardTreeRow[];
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
-  dashboardFocus?: DashboardFocusView;
 }) {
   return (
     <box flexDirection="column" flexGrow={1}>
-      {items.map((item) => (
-        <DashboardViewportRow
-          key={item.id}
+      {rows.map((row) => (
+        <DashboardRow
+          key={row.id}
           columns={columns}
-          item={item}
-          layout={layoutByItem.get(item.id)}
-          dashboardFocus={dashboardFocus}
+          row={row}
+          layout={layoutByItem.get(row.id)}
         />
       ))}
     </box>
   );
 }
 
-function DashboardViewportRow({
+function DashboardRow({
   columns,
-  item,
+  row,
   layout,
-  dashboardFocus,
 }: {
   columns: number;
-  item: DashboardViewportItem;
+  row: DashboardTreeRow;
   layout: RowGridLayout | undefined;
-  dashboardFocus?: DashboardFocusView;
 }) {
   const theme = useStationTheme();
-  switch (item.type) {
+  switch (row.payload.type) {
     case "projectGap":
       return <box height={1} />;
     case "projectHeader":
       return (
         <ProjectHeaderView
           columns={columns}
-          project={item.project}
-          collapsed={item.collapsed}
-          persistentFilterMatch={item.persistentFilterMatch}
-          focus={
-            dashboardFocus?.kind === "projectHeader" && dashboardFocus.projectId === item.project.id
-              ? dashboardFocus.control
-              : undefined
-          }
+          rowId={row.id}
+          project={row.payload.project}
+          collapsed={row.payload.collapsed}
+          persistentFilterMatch={row.payload.persistentFilterMatch}
+          focusedCellId={row.focusedCellId}
         />
       );
     case "emptyProject":
@@ -252,20 +247,17 @@ function DashboardViewportRow({
         <box flexDirection="row" height={1}>
           <text fg={toOpenTuiColor(theme.text.muted)}>{emptyProjectLabel()}</text>
           <EmptySessionButton
-            projectId={item.project.id}
-            focused={
-              dashboardFocus?.kind === "emptyProjectAction" &&
-              dashboardFocus.projectId === item.project.id
-            }
+            rowId={row.id}
+            focused={row.focusedCellId === "addSession"}
           />
         </box>
       );
     case "session":
       return layout === undefined ? null : (
         <SessionRowLine
-          rowId={item.row.id}
+          rowId={row.id}
           layout={layout}
-          focused={dashboardFocus?.kind === "session" && dashboardFocus.sessionId === item.row.id}
+          focused={row.focusedCellId === "identity"}
         />
       );
     case "createLocalRow":
@@ -283,7 +275,7 @@ function SessionRowLine({
   layout,
   focused,
 }: {
-  rowId: string;
+  rowId: DashboardRowId;
   layout: RowGridLayout;
   focused?: boolean;
 }) {
@@ -307,7 +299,7 @@ function SessionRowLine({
         <text
           width="100%"
           fg={toOpenTuiColor(theme.text.primary)}
-          {...stationMouseProps(dispatch, { kind: "row", rowId })}
+          {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "identity" })}
         >
           <Segments segments={layout.segments} />
         </text>
@@ -340,7 +332,7 @@ function FirstProjectButton({ columns }: { columns: number }) {
 const EMPTY_SESSION_BUTTON_LABEL = "[ + add session ]";
 
 /** Paints and activates only the empty project's bounded Add Session cells. */
-function EmptySessionButton({ projectId, focused }: { projectId: string; focused: boolean }) {
+function EmptySessionButton({ rowId, focused }: { rowId: DashboardRowId; focused: boolean }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
   const [hover, setHover] = useStationHoverState();
@@ -354,7 +346,7 @@ function EmptySessionButton({ projectId, focused }: { projectId: string; focused
       flexShrink={0}
       fg={toOpenTuiColor(hover ? theme.text.inverse : theme.action.primary)}
       {...background}
-      {...stationMouseProps(dispatch, { kind: "emptyProjectAction", projectId })}
+      {...stationMouseProps(dispatch, { kind: "dashboardCell", rowId, cellId: "addSession" })}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
     >

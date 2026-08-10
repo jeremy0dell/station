@@ -1,185 +1,142 @@
-import type { ProjectId, SessionId } from "@station/contracts";
+import type { SessionId } from "@station/contracts";
 import { clampDashboardScrollOffset, dashboardBodyRows } from "../components/Dashboard/layout.js";
 import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import {
-  type DashboardViewportItem,
-  selectDashboardItems,
-} from "../selectors/dashboardViewport.js";
+  type DashboardCellId,
+  type DashboardFocus,
+  type DashboardRowId,
+  type DashboardTreePayload,
+  type DashboardTreeProjection,
+  type DashboardTreeRow,
+  dashboardRowIds,
+  selectDashboardTree,
+} from "../selectors/dashboardTree.js";
+import {
+  moveTreeGridCursor,
+  reconcileTreeGridCursor,
+  type TreeGridNavigationPolicy,
+  treeGridCursorForRow,
+} from "../treeGrid.js";
 import { scrollDashboard } from "./dashboardScroll.js";
-import { activateDashboardRow } from "./rowActivation.js";
-import type { TuiTransition } from "./transition.js";
-import type { DashboardFocus, DashboardState, ProjectHeaderControl } from "./types.js";
+import type { DashboardState } from "./types.js";
 
-type SessionItem = Extract<DashboardViewportItem, { type: "session" }>;
-type ProjectHeaderItem = Extract<DashboardViewportItem, { type: "projectHeader" }>;
-type EmptyProjectItem = Extract<DashboardViewportItem, { type: "emptyProject" }>;
-type FocusableItem = SessionItem | ProjectHeaderItem | EmptyProjectItem;
+type DashboardPolicy = TreeGridNavigationPolicy<
+  DashboardRowId,
+  DashboardCellId,
+  DashboardTreePayload
+>;
 
-const PROJECT_HEADER_CONTROLS: readonly ProjectHeaderControl[] = [
-  "primary",
-  "shell",
-  "quickSession",
-  "defaultAgent",
-];
+const dashboardPolicy: DashboardPolicy = ({ payload }) =>
+  payload.type === "projectHeader" || payload.type === "session" || payload.type === "emptyProject";
+
+// This one policy protects canonical-session-only chooser entry, movement,
+// reconciliation, Enter, and slot behavior; callers use only the bound wrappers below.
+const chooserPolicy: DashboardPolicy = ({ payload }) =>
+  payload.type === "session" &&
+  payload.pendingRemove === undefined &&
+  payload.pendingStart === undefined;
+
+const needsAttentionPolicy: DashboardPolicy = ({ payload }) =>
+  payload.type === "session" && rowNeedsYou(payload.row);
 
 /** Focuses the visible dashboard row for a canonical session identity. */
 export function focusDashboardSession(state: DashboardState, sessionId: SessionId): DashboardState {
   if (state.snapshot === undefined) {
     return clearDashboardFocus(state);
   }
-  const items = selectDashboardItems(state.snapshot, state);
-  const index = items.findIndex((item) => item.type === "session" && item.row.id === sessionId);
-  return index === -1
+  const tree = dashboardTree(state);
+  const cursor = treeGridCursorForRow({
+    projection: tree,
+    rowId: dashboardRowIds.session(sessionId),
+    preferredCell: "identity",
+    policy: dashboardPolicy,
+  });
+  return cursor === undefined
     ? clearDashboardFocus(state)
-    : focusItem(state, items, index, { kind: "session", sessionId });
-}
-
-/** Focuses one control on a currently visible project header. */
-export function focusDashboardProjectHeader(
-  state: DashboardState,
-  projectId: ProjectId,
-  control: ProjectHeaderControl,
-): DashboardState {
-  if (state.snapshot === undefined) {
-    return state;
-  }
-  const items = selectDashboardItems(state.snapshot, state);
-  const index = items.findIndex(
-    (item) => item.type === "projectHeader" && item.project.id === projectId,
-  );
-  return index === -1
-    ? state
-    : focusItem(state, items, index, { kind: "projectHeader", projectId, control });
-}
-
-/** Focuses the stable action rendered for a currently empty project. */
-export function focusDashboardEmptyProjectAction(
-  state: DashboardState,
-  projectId: ProjectId,
-): DashboardState {
-  if (state.snapshot === undefined) {
-    return state;
-  }
-  const items = selectDashboardItems(state.snapshot, state);
-  const index = items.findIndex(
-    (item) => item.type === "emptyProject" && item.project.id === projectId,
-  );
-  return index === -1
-    ? state
-    : focusItem(state, items, index, { kind: "emptyProjectAction", projectId });
+    : focusResolvedDashboardCursor(state, tree, cursor);
 }
 
 /** Removes transient dashboard focus without disturbing other view state. */
 export function clearDashboardFocus(state: DashboardState): DashboardState {
+  if (state.dashboardFocus === undefined) {
+    return state;
+  }
   const cleared = { ...state };
   delete cleared.dashboardFocus;
   return cleared;
 }
 
-// Vertical dashboard traversal includes project headers and empty-project actions, while row
-// chooser traversal deliberately uses moveDashboardSessionFocus to remain session-only.
-export function moveDashboardFocus(state: DashboardState, delta: -1 | 1): DashboardState {
-  return moveFocus(state, delta, "dashboard");
+/** Moves vertically through project, canonical-session, and empty-action rows. */
+export function moveDashboardCursor(state: DashboardState, delta: -1 | 1): DashboardState {
+  return moveCursor(state, delta, dashboardPolicy);
 }
 
-/** Moves remove/rename/fork choice focus across sessions without visiting headers. */
-export function moveDashboardSessionFocus(state: DashboardState, delta: -1 | 1): DashboardState {
-  return moveFocus(state, delta, "session");
+/** Moves within the current row's ordered cells, clamping without wrapping. */
+export function moveDashboardCursorHorizontal(
+  state: DashboardState,
+  delta: -1 | 1,
+): DashboardState {
+  if (state.snapshot === undefined || state.dashboardFocus === undefined) {
+    return state;
+  }
+  const tree = dashboardTree(state);
+  const cursor = exactCursor(tree, state.dashboardFocus, dashboardPolicy);
+  if (cursor === undefined) {
+    return state;
+  }
+  const moved = moveTreeGridCursor({
+    projection: tree,
+    cursor,
+    direction: delta < 0 ? "left" : "right",
+    policy: dashboardPolicy,
+  });
+  return sameCursor(moved, cursor) ? state : focusResolvedDashboardCursor(state, tree, moved);
 }
 
-/** Moves within a focused project header, clamping at both ends without wrapping. */
-export function moveDashboardFocusHorizontal(state: DashboardState, delta: -1 | 1): DashboardState {
-  const focus = state.dashboardFocus;
-  if (focus?.kind !== "projectHeader" || state.snapshot === undefined) {
-    return state;
-  }
-  const items = selectDashboardItems(state.snapshot, state);
-  const index = focusedItemIndex(items, focus);
-  if (index === undefined) {
-    return state;
-  }
-  const position = PROJECT_HEADER_CONTROLS.indexOf(focus.control);
-  const nextPosition = Math.min(PROJECT_HEADER_CONTROLS.length - 1, Math.max(0, position + delta));
-  const control = PROJECT_HEADER_CONTROLS[nextPosition];
-  if (control === undefined || control === focus.control) {
-    return state;
-  }
-  return focusItem(state, items, index, { ...focus, control });
+/** Moves remove/rename/fork choice focus across selectable canonical sessions only. */
+export function moveDashboardChooserCursor(state: DashboardState, delta: -1 | 1): DashboardState {
+  return moveCursor(state, delta, chooserPolicy);
 }
 
 export function focusNextNeedsMe(state: DashboardState): DashboardState {
   if (state.snapshot === undefined) {
     return state;
   }
-  const items = selectDashboardItems(state.snapshot, state);
-  const candidates = focusableIndexes(items, "session").filter((index) => {
-    const item = items[index] as SessionItem;
-    return rowNeedsYou(item.row);
-  });
-  if (candidates.length === 0) {
-    return state;
+  const tree = dashboardTree(state);
+  const current = state.dashboardFocus;
+  if (current !== undefined && tree.visibleIndexById.has(current.rowId)) {
+    const moved = moveTreeGridCursor({
+      projection: tree,
+      cursor: current,
+      direction: "down",
+      policy: needsAttentionPolicy,
+    });
+    if (
+      !sameCursor(moved, current) &&
+      exactCursor(tree, moved, needsAttentionPolicy) !== undefined
+    ) {
+      return focusResolvedDashboardCursor(state, tree, moved);
+    }
   }
-  const current = focusedItemIndex(items, state.dashboardFocus) ?? -1;
-  const next = candidates.find((index) => index > current) ?? candidates[0];
-  return next === undefined ? state : focusItem(state, items, next);
+  const first = firstCursor(tree, needsAttentionPolicy);
+  return first === undefined ? state : focusResolvedDashboardCursor(state, tree, first);
 }
 
-export function activateFocusedDashboardRow(state: DashboardState): TuiTransition {
-  const row = focusedSelectableRow(state);
-  return row === undefined ? { state } : activateDashboardRow(state, row);
-}
-
-/** Returns the focused visible project-header identity for activation. */
-export function focusedProjectHeaderControl(
-  state: DashboardState,
-): Extract<DashboardFocus, { kind: "projectHeader" }> | undefined {
-  const focus = state.dashboardFocus;
-  if (focus?.kind !== "projectHeader" || state.snapshot === undefined) {
+/** Returns the focused row only while chooser policy still permits committing it. */
+export function focusedChooserSession(state: DashboardState): DashboardSessionRow | undefined {
+  if (state.snapshot === undefined || state.dashboardFocus === undefined) {
     return undefined;
   }
-  const items = selectDashboardItems(state.snapshot, state);
-  return focusedItemIndex(items, focus) === undefined ? undefined : focus;
-}
-
-/** Returns the focused empty-project action only while its row remains rendered. */
-export function focusedEmptyProjectAction(
-  state: DashboardState,
-): Extract<DashboardFocus, { kind: "emptyProjectAction" }> | undefined {
-  const focus = state.dashboardFocus;
-  if (focus?.kind !== "emptyProjectAction" || state.snapshot === undefined) {
+  const tree = dashboardTree(state);
+  const cursor = exactCursor(tree, state.dashboardFocus, chooserPolicy);
+  if (cursor === undefined) {
     return undefined;
   }
-  const items = selectDashboardItems(state.snapshot, state);
-  return focusedItemIndex(items, focus) === undefined ? undefined : focus;
+  const row = tree.rowById.get(cursor.rowId);
+  return row?.payload.type === "session" ? row.payload.row : undefined;
 }
 
-/**
- * The focused row only when it is currently committable: present in the filtered
- * view (not collapsed or searched away) and not mid-operation. The choose-row
- * trio's ↵ resolves through this so it cannot act on a row the slot path and
- * dashboard activation both refuse.
- */
-export function focusedSelectableRow(state: DashboardState): DashboardSessionRow | undefined {
-  if (state.snapshot === undefined || state.dashboardFocus?.kind !== "session") {
-    return undefined;
-  }
-  const items = selectDashboardItems(state.snapshot, state);
-  const index = focusedItemIndex(items, state.dashboardFocus);
-  const item = index === undefined ? undefined : items[index];
-  if (
-    item?.type !== "session" ||
-    item.pendingRemove !== undefined ||
-    item.pendingStart !== undefined
-  ) {
-    return undefined;
-  }
-  return item.row;
-}
-
-/**
- * Preserves stable focus across dashboard list-shape changes, preferring a hidden child's
- * collapsed parent before falling forward or backward by rendered position.
- */
+/** Preserves stable cell identity before collapse ancestry and positional fallback. */
 export function reconcileDashboardFocus(
   previous: DashboardState,
   next: DashboardState,
@@ -187,203 +144,175 @@ export function reconcileDashboardFocus(
   if (next.snapshot === undefined) {
     return clearDashboardFocus(withClampedScroll(next, 0));
   }
-  const nextItems = selectDashboardItems(next.snapshot, next);
-  const nextFocusable = focusableIndexes(nextItems, "dashboard");
-  if (!hasFocusableIndexes(nextFocusable)) {
-    return clearDashboardFocus(withClampedScroll(next, nextItems.length));
-  }
-
+  const nextTree = dashboardTree(next);
   const focus = previous.dashboardFocus;
   if (focus === undefined) {
-    return withClampedScroll(next, nextItems.length);
+    return withClampedScroll(next, nextTree.visibleRows.length);
   }
-  const retainedIndex = focusedItemIndex(nextItems, focus);
-  if (retainedIndex !== undefined) {
-    return focusItem(next, nextItems, retainedIndex, focus);
+  if (previous.snapshot === undefined) {
+    return clearDashboardFocus(withClampedScroll(next, nextTree.visibleRows.length));
   }
-
-  const previousItems =
-    previous.snapshot === undefined ? [] : selectDashboardItems(previous.snapshot, previous);
-  const previousIndex = focusedItemIndex(previousItems, focus);
-  if (previousIndex === undefined) {
-    return clearDashboardFocus(withClampedScroll(next, nextItems.length));
-  }
-  const parentHeaderIndex = collapsedParentHeaderIndex(next, nextItems, focus);
-  if (parentHeaderIndex !== undefined) {
-    return focusItem(next, nextItems, parentHeaderIndex);
-  }
-  const following = nextFocusable.find((index) => index >= previousIndex);
-  return focusItem(next, nextItems, following ?? lastFocusableIndex(nextFocusable));
-}
-
-function collapsedParentHeaderIndex(
-  state: DashboardState,
-  items: readonly DashboardViewportItem[],
-  focus: DashboardFocus,
-): number | undefined {
-  let projectId: ProjectId | undefined;
-  if (focus.kind === "session") {
-    projectId = state.snapshot?.sessions.find(
-      (session) => session.id === focus.sessionId,
-    )?.projectId;
-  } else if (focus.kind === "emptyProjectAction") {
-    projectId = focus.projectId;
-  }
-  if (projectId === undefined || !state.collapsedProjectIds.has(projectId)) {
-    return undefined;
-  }
-  const index = items.findIndex(
-    (item) => item.type === "projectHeader" && item.project.id === projectId,
-  );
-  return index === -1 ? undefined : index;
+  const previousTree = dashboardTree(previous);
+  const policy = navigationPolicy(next);
+  const reconciled = reconcileTreeGridCursor({
+    previous: previousTree,
+    next: nextTree,
+    cursor: focus,
+    policy,
+  });
+  return reconciled === undefined
+    ? clearDashboardFocus(withClampedScroll(next, nextTree.visibleRows.length))
+    : focusResolvedDashboardCursor(next, nextTree, reconciled);
 }
 
 export function rowNeedsYou(row: DashboardSessionRow): boolean {
   return row.presentation.display.alert;
 }
 
-function moveFocus(
-  state: DashboardState,
-  delta: -1 | 1,
-  mode: "dashboard" | "session",
-): DashboardState {
+function moveCursor(state: DashboardState, delta: -1 | 1, policy: DashboardPolicy): DashboardState {
   if (state.snapshot === undefined) {
     return scrollDashboard(state, delta);
   }
-  const items = selectDashboardItems(state.snapshot, state);
-  const focusable = focusableIndexes(items, mode);
-  if (!hasFocusableIndexes(focusable)) {
-    return scrollDashboard(state, delta);
-  }
-  const current = focusedItemIndex(items, state.dashboardFocus);
+  const tree = dashboardTree(state);
+  const current =
+    state.dashboardFocus === undefined
+      ? undefined
+      : exactCursor(tree, state.dashboardFocus, policy);
   if (current === undefined) {
-    return focusItem(state, items, enterFocusIndex(state, items, focusable, delta));
+    const entered = enterCursor(state, tree, delta, policy);
+    return entered === undefined
+      ? scrollDashboard(state, delta)
+      : focusResolvedDashboardCursor(state, tree, entered);
   }
-  const currentPosition = focusable.indexOf(current);
-  if (currentPosition === -1) {
-    return focusItem(state, items, enterFocusIndex(state, items, focusable, delta));
-  }
-  const next = focusable[currentPosition + delta] ?? current;
-  return next === current ? state : focusItem(state, items, next);
+  const moved = moveTreeGridCursor({
+    projection: tree,
+    cursor: current,
+    direction: delta < 0 ? "up" : "down",
+    policy,
+  });
+  return sameCursor(moved, current) ? state : focusResolvedDashboardCursor(state, tree, moved);
 }
 
-function focusableIndexes(
-  items: readonly DashboardViewportItem[],
-  mode: "dashboard" | "session",
-): number[] {
-  return items.flatMap((item, index) =>
-    item.type === "session" ||
-    (mode === "dashboard" && (item.type === "projectHeader" || item.type === "emptyProject"))
-      ? [index]
-      : [],
-  );
-}
-
-function focusedItemIndex(
-  items: readonly DashboardViewportItem[],
-  focus: DashboardFocus | undefined,
-): number | undefined {
-  if (focus === undefined) {
-    return undefined;
-  }
-  const index = items.findIndex((item) => focusMatchesItem(focus, item));
-  return index === -1 ? undefined : index;
-}
-
-function focusMatchesItem(focus: DashboardFocus, item: DashboardViewportItem): boolean {
-  switch (focus.kind) {
-    case "session":
-      return item.type === "session" && item.row.id === focus.sessionId;
-    case "projectHeader":
-      return item.type === "projectHeader" && item.project.id === focus.projectId;
-    case "emptyProjectAction":
-      return item.type === "emptyProject" && item.project.id === focus.projectId;
-  }
-}
-
-// With no cursor yet (or a stale one), enter where the user is looking: the
-// first/last focusable item inside the current viewport.
-function enterFocusIndex(
+function enterCursor(
   state: DashboardState,
-  items: readonly DashboardViewportItem[],
-  focusable: readonly [number, ...number[]],
+  tree: DashboardTreeProjection,
   delta: -1 | 1,
-): number {
-  const { bodyRows, offset } = viewportWindow(state, items.length);
-  const visible = focusable.filter((index) => index >= offset && index < offset + bodyRows);
-  const fallback = delta > 0 ? focusable[0] : lastFocusableIndex(focusable);
-  const entered = delta > 0 ? visible[0] : visible.at(-1);
-  return entered ?? fallback;
-}
-
-function hasFocusableIndexes(
-  indexes: readonly number[],
-): indexes is readonly [number, ...number[]] {
-  return indexes.length > 0;
-}
-
-function lastFocusableIndex(indexes: readonly [number, ...number[]]): number {
-  let last = indexes[0];
-  for (const index of indexes) {
-    last = index;
+  policy: DashboardPolicy,
+): DashboardFocus | undefined {
+  const { bodyRows, offset } = viewportWindow(state, tree.visibleRows.length);
+  const visibleRows = tree.visibleRows.slice(offset, offset + bodyRows);
+  const orderedRows = delta > 0 ? visibleRows : [...visibleRows].reverse();
+  for (const row of orderedRows) {
+    const cursor = cursorForRow(tree, row, policy);
+    if (cursor !== undefined) {
+      return cursor;
+    }
   }
-  return last;
+  const fallbackRows = delta > 0 ? tree.visibleRows : [...tree.visibleRows].reverse();
+  for (const row of fallbackRows) {
+    const cursor = cursorForRow(tree, row, policy);
+    if (cursor !== undefined) {
+      return cursor;
+    }
+  }
+  return undefined;
 }
 
-function focusItem(
+function firstCursor(
+  tree: DashboardTreeProjection,
+  policy: DashboardPolicy,
+): DashboardFocus | undefined {
+  for (const row of tree.visibleRows) {
+    const cursor = cursorForRow(tree, row, policy);
+    if (cursor !== undefined) {
+      return cursor;
+    }
+  }
+  return undefined;
+}
+
+function cursorForRow(
+  tree: DashboardTreeProjection,
+  row: DashboardTreeRow,
+  policy: DashboardPolicy,
+): DashboardFocus | undefined {
+  return treeGridCursorForRow({ projection: tree, rowId: row.id, policy });
+}
+
+function exactCursor(
+  tree: DashboardTreeProjection,
+  cursor: DashboardFocus,
+  policy: DashboardPolicy,
+): DashboardFocus | undefined {
+  const resolved = treeGridCursorForRow({
+    projection: tree,
+    rowId: cursor.rowId,
+    preferredCell: cursor.cellId,
+    policy,
+  });
+  return resolved?.cellId === cursor.cellId ? resolved : undefined;
+}
+
+/** Applies a resolved dashboard cursor and follows it within the terminal viewport. */
+export function focusResolvedDashboardCursor(
   state: DashboardState,
-  items: readonly DashboardViewportItem[],
-  index: number,
-  focus?: DashboardFocus,
+  tree: DashboardTreeProjection,
+  cursor: DashboardFocus,
 ): DashboardState {
-  const item = items[index];
-  if (
-    item === undefined ||
-    (item.type !== "session" && item.type !== "projectHeader" && item.type !== "emptyProject")
-  ) {
+  const index = tree.visibleIndexById.get(cursor.rowId);
+  if (index === undefined) {
     return state;
   }
-  const { bodyRows, offset } = viewportWindow(state, items.length);
+  const { bodyRows, offset } = viewportWindow(state, tree.visibleRows.length);
   let scrollOffset = offset;
   if (index < offset) {
     scrollOffset = index;
   } else if (index >= offset + bodyRows) {
     scrollOffset = index - bodyRows + 1;
   }
-  return {
-    ...state,
-    dashboardFocus: focus ?? focusForItem(item),
-    scrollOffset,
-  };
-}
-
-function focusForItem(item: FocusableItem): DashboardFocus {
-  switch (item.type) {
-    case "session":
-      return { kind: "session", sessionId: item.row.id };
-    case "projectHeader":
-      return { kind: "projectHeader", projectId: item.project.id, control: "primary" };
-    case "emptyProject":
-      return { kind: "emptyProjectAction", projectId: item.project.id };
+  if (sameCursor(state.dashboardFocus, cursor) && scrollOffset === state.scrollOffset) {
+    return state;
   }
+  return { ...state, dashboardFocus: cursor, scrollOffset };
 }
 
-function withClampedScroll(state: DashboardState, itemCount: number): DashboardState {
-  const { offset } = viewportWindow(state, itemCount);
+function withClampedScroll(state: DashboardState, rowCount: number): DashboardState {
+  const { offset } = viewportWindow(state, rowCount);
   return offset === state.scrollOffset ? state : { ...state, scrollOffset: offset };
 }
 
 function viewportWindow(
   state: DashboardState,
-  itemCount: number,
+  rowCount: number,
 ): { bodyRows: number; offset: number } {
   const bodyRows = dashboardBodyRows(state.terminalRows);
   return {
     bodyRows,
     offset: clampDashboardScrollOffset({
       bodyRows,
-      itemCount,
+      itemCount: rowCount,
       scrollOffset: state.scrollOffset,
     }),
   };
+}
+
+function navigationPolicy(state: DashboardState): DashboardPolicy {
+  const screen = state.screen;
+  return (screen.name === "removeWorktree" ||
+    screen.name === "renameSession" ||
+    screen.name === "fork") &&
+    screen.step === "chooseSlot"
+    ? chooserPolicy
+    : dashboardPolicy;
+}
+
+function dashboardTree(state: DashboardState): DashboardTreeProjection {
+  if (state.snapshot === undefined) {
+    throw new Error("Dashboard tree requires a snapshot.");
+  }
+  return selectDashboardTree(state.snapshot, state, state.screen);
+}
+
+function sameCursor(left: DashboardFocus | undefined, right: DashboardFocus | undefined): boolean {
+  return left?.rowId === right?.rowId && left?.cellId === right?.cellId;
 }

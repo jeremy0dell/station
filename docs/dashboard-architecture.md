@@ -72,6 +72,52 @@ Semantic execution enters through capabilities selected at composition
 replacement or synthetic key replay. The runtime owns subscriptions, timers,
 operation bookkeeping, and cancellation; disposal is idempotent and testable.
 
+## Dashboard hierarchy, cursor, and viewport
+
+Dashboard structure has one projection path:
+
+```text
+canonical snapshot + dashboard-local state
+        |
+        v
+selectDashboardTree
+  branded row IDs, typed payloads, ordered cells
+        |
+        +--> pure tree-grid projection and cursor reconciliation
+        |
+        v
+selectDashboardViewport
+  terminal clipping, scroll counts, and visible session slots
+        |
+        v
+Station renderers
+```
+
+`selectors/dashboardTree.ts` is the sole dashboard hierarchy adapter. It joins
+canonical sessions to worktree metadata, merges optimistic creates, applies
+filter and collapse state, and projects Project roots, children, and inert gaps.
+The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
+visibility, and a supplied eligibility policy; it has no dashboard or terminal
+knowledge and is not a package entrypoint.
+
+Dashboard state owns one stable `{ rowId, cellId }` cursor. Named policies bind
+the generic controller to ordinary dashboard traversal, canonical-session-only
+chooser traversal, and needs-attention traversal. Reconciliation preserves the
+exact row and cell when possible, moves a collapse-hidden child to its visible
+collapsed ancestor, and otherwise uses deterministic next/previous fallback.
+
+The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,
+decorated tree rows, and the viewport contract. `DashboardViewport.rows` is the
+terminal-clipped sequence; `DashboardViewport.rowById` is the exact full tree
+lookup used by input and context-menu boundaries. Renderers do not construct or
+parse row IDs and do not maintain a second flattened hierarchy.
+
+Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
+activation and focused Enter resolve that cell through the current visible tree
+and dispatch the same `dashboard.cell.activate` transition. Invalid, hidden,
+filtered, or stale cell targets are inert. Chooser modes accept only canonical
+session identity cells and retain their existing slot semantics.
+
 ## Package surface
 
 The `exports` map publishes exactly four role entrypoints; there is no root

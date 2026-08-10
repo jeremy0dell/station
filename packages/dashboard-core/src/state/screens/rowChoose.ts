@@ -1,7 +1,7 @@
 import type { SessionId } from "@station/contracts";
 import { selectDashboardViewport } from "../../selectors/dashboardViewport.js";
 import { choiceValueByKey } from "../../selectors/selectors.js";
-import { focusedSelectableRow, moveDashboardSessionFocus } from "../dashboardFocus.js";
+import { focusedChooserSession, moveDashboardChooserCursor } from "../dashboardFocus.js";
 import { scrollDashboard } from "../dashboardScroll.js";
 import { isSlotKey } from "../keymap.js";
 import { isReturnKey, type TuiKey } from "../keys.js";
@@ -22,10 +22,10 @@ export function handleDashboardRowChoiceKey(
   commit: (state: DashboardState, rowId: SessionId) => TuiTransition,
 ): TuiTransition {
   if (key.upArrow === true) {
-    return { state: moveDashboardSessionFocus(state, -1) };
+    return { state: moveDashboardChooserCursor(state, -1) };
   }
   if (key.downArrow === true) {
-    return { state: moveDashboardSessionFocus(state, 1) };
+    return { state: moveDashboardChooserCursor(state, 1) };
   }
   // The wheel still pans the viewport without moving the cursor.
   if (key.mouseScroll !== undefined) {
@@ -35,7 +35,7 @@ export function handleDashboardRowChoiceKey(
     return { state };
   }
   if (isReturnKey(key)) {
-    const row = focusedSelectableRow(state);
+    const row = focusedChooserSession(state);
     return row === undefined ? { state } : commit(state, row.id);
   }
   if (isSlotKey(key)) {

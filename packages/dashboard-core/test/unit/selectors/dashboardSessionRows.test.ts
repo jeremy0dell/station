@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   selectDashboardSessionRows,
-  selectProjectGroups,
   sessionForWorktreeRow,
   sessionRowDisplayTitle,
 } from "../../../src/selectors/dashboardSessionRows.js";
-import { createInitialTuiState } from "../../../src/state/screen.js";
-import type { TuiViewState } from "../../../src/state/types.js";
 import { createDashboardSnapshot, createExternalAgentSnapshot } from "../../fixtures/snapshots.js";
 
 const STATUS_DISPLAYS = {
@@ -64,34 +61,6 @@ describe("dashboard session rows", () => {
         reason,
       });
     }
-  });
-
-  it("owns project grouping, ordering, and stored collapse", () => {
-    const snapshot = createDashboardSnapshot();
-    const state: TuiViewState = {
-      ...createInitialTuiState({ initialSnapshot: snapshot }),
-      collapsedProjectIds: new Set(["web"]),
-    };
-
-    expect(
-      selectProjectGroups(snapshot, state)
-        .flatMap((group) => group.rows)
-        .map((candidate) => candidate.id),
-    ).toEqual(["ses_wt_api_working"]);
-    const complete = selectProjectGroups(snapshot, state, {
-      includeCollapsedRows: true,
-    });
-    expect(complete.find((group) => group.project.id === "web")).toMatchObject({
-      collapsed: true,
-      rows: [
-        expect.objectContaining({ id: "ses_wt_web_working" }),
-        expect.objectContaining({ id: "ses_wt_web_attention" }),
-        expect.objectContaining({ id: "ses_wt_web_exited" }),
-        expect.objectContaining({ id: "ses_wt_web_idle" }),
-        expect.objectContaining({ id: "ses_wt_web_unknown" }),
-        expect.objectContaining({ id: "ses_wt_web_stuck" }),
-      ],
-    });
   });
 
   it("resolves optimistic title overrides at the session-row boundary", () => {

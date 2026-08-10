@@ -6,6 +6,7 @@ import {
   newSessionIntentForAction,
   transitionNewSessionFlow,
 } from "../../../src/flows/newSession.js";
+import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import { handleTuiAction } from "../../../src/state/actions.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import {
@@ -243,7 +244,7 @@ describe("primary workflow interaction parity", () => {
   });
 
   it.each([
-    ["primary", 0],
+    ["identity", 0],
     ["shell", 1],
     ["quickSession", 2],
     ["defaultAgent", 3],
@@ -251,7 +252,11 @@ describe("primary workflow interaction parity", () => {
     const base = createInitialTuiState({ initialSnapshot: createDashboardSnapshot() });
     const semantic = handleTuiAction(
       base,
-      { type: "dashboard.projectHeader.activate", projectId: "web", actionId },
+      {
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.project("web"),
+        cellId: actionId,
+      },
       context,
     );
 
@@ -262,9 +267,8 @@ describe("primary workflow interaction parity", () => {
     const keyboard = handleTuiKey(keyboardState, { input: "\r", return: true }, context);
 
     expect(semantic.state.dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "web",
-      control: actionId,
+      rowId: dashboardRowIds.project("web"),
+      cellId: actionId,
     });
     expect(semantic.state.screen).toEqual(keyboard.state.screen);
     expect(semantic.state.collapsedProjectIds).toEqual(keyboard.state.collapsedProjectIds);
@@ -286,7 +290,11 @@ describe("primary workflow interaction parity", () => {
     const base = createInitialTuiState({ initialSnapshot: createZeroWorktreeSnapshot() });
     const semantic = handleTuiAction(
       base,
-      { type: "dashboard.emptyProject.activate", projectId: "web" },
+      {
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.empty("web"),
+        cellId: "addSession",
+      },
       context,
     );
     const focused = handleTuiKey(
@@ -297,8 +305,8 @@ describe("primary workflow interaction parity", () => {
     const keyboard = handleTuiKey(focused, { input: "\r", return: true }, context);
 
     expect(semantic.state.dashboardFocus).toEqual({
-      kind: "emptyProjectAction",
-      projectId: "web",
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
     });
     expect(semantic.state.dashboardFocus).toEqual(keyboard.state.dashboardFocus);
     expect(semantic.operations?.[0]).toMatchObject({
@@ -325,17 +333,16 @@ describe("primary workflow interaction parity", () => {
     const blocked = handleTuiAction(
       state,
       {
-        type: "dashboard.projectHeader.activate",
-        projectId: "web",
-        actionId: "quickSession",
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.project("web"),
+        cellId: "quickSession",
       },
       context,
     );
     expect(blocked.operations).toBeUndefined();
     expect(blocked.state.dashboardFocus).toEqual({
-      kind: "projectHeader",
-      projectId: "web",
-      control: "quickSession",
+      rowId: dashboardRowIds.project("web"),
+      cellId: "quickSession",
     });
     expect(blocked.state.toasts.at(-1)?.toast.kind).toBe("error");
 
@@ -350,19 +357,26 @@ describe("primary workflow interaction parity", () => {
     };
     const empty = handleTuiAction(
       createInitialTuiState({ initialSnapshot: unavailableEmpty }),
-      { type: "dashboard.emptyProject.activate", projectId: "web" },
+      {
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.empty("web"),
+        cellId: "addSession",
+      },
       context,
     );
     expect(empty.operations).toBeUndefined();
-    expect(empty.state.dashboardFocus).toEqual({ kind: "emptyProjectAction", projectId: "web" });
+    expect(empty.state.dashboardFocus).toEqual({
+      rowId: dashboardRowIds.empty("web"),
+      cellId: "addSession",
+    });
     expect(empty.state.toasts.at(-1)?.toast.kind).toBe("error");
 
     const stale = handleTuiAction(
       state,
       {
-        type: "dashboard.projectHeader.activate",
-        projectId: "ghost",
-        actionId: "shell",
+        type: "dashboard.cell.activate",
+        rowId: dashboardRowIds.project("ghost"),
+        cellId: "shell",
       },
       context,
     );

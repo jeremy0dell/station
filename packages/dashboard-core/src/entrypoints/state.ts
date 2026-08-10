@@ -95,7 +95,6 @@ export type {
   DashboardSnapshotView,
   DashboardStateView,
   DashboardViewState,
-  ProjectHeaderControl,
   ProjectSettingsItemId,
   TuiToastEntry,
   WidgetSettingsFocus,

@@ -20,7 +20,6 @@ export {
   headerStrip,
   observerHeaderStatusForConnection,
   projectHeaderLabelParts,
-  rowGridInputForViewportItem,
   scrollIndicatorLabel,
   snapshotLoadingLines,
 } from "../components/Dashboard/content.js";
@@ -34,6 +33,7 @@ export type {
   DashboardFooterModel,
 } from "../components/Dashboard/footer.js";
 export { dashboardFooterModel } from "../components/Dashboard/footer.js";
+export { dashboardRowGridInput } from "../components/Dashboard/rowGridInput.js";
 export type {
   DashboardFilterHeaderModel,
   DashboardFilterHeaderSegment,
@@ -108,8 +108,14 @@ export {
   sessionRowDisplayTitle,
 } from "../selectors/dashboardSessionRows.js";
 export type {
+  DashboardCellId,
+  DashboardRowId,
+  DashboardTreeRow,
+} from "../selectors/dashboardTree.js";
+export { dashboardRowIds } from "../selectors/dashboardTree.js";
+export type {
   DashboardSessionOverflow,
-  DashboardViewportItem,
+  DashboardViewport,
 } from "../selectors/dashboardViewport.js";
 export { selectDashboardViewport } from "../selectors/dashboardViewport.js";
 export type { FleetSummary } from "../selectors/fleetSummary.js";
