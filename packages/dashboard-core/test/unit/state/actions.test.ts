@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { dashboardRowIds } from "../../../src/selectors/dashboardTree.js";
 import type { DashboardStateAction } from "../../../src/state/actions.js";
 import { handleTuiAction } from "../../../src/state/actions.js";
-import { focusDashboardCell } from "../../../src/state/dashboardCells.js";
 import { scrollDashboard } from "../../../src/state/dashboardScroll.js";
 import { createInitialTuiState } from "../../../src/state/screen.js";
 import { tuiScreenBehavior } from "../../../src/state/screenBehavior.js";
@@ -47,16 +46,6 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
     action: { type: "dashboard.scroll", delta: 5 },
     state: scrollingDashboardState,
     reduce: (state) => scrollDashboard(state, 5),
-  },
-  {
-    name: "dashboard.cell.focus",
-    action: {
-      type: "dashboard.cell.focus",
-      rowId: dashboardRowIds.project("web"),
-      cellId: "quickSession",
-    },
-    state: dashboardState,
-    reduce: (state) => focusDashboardCell(state, dashboardRowIds.project("web"), "quickSession"),
   },
   {
     name: "projectSettings.focusItem",
@@ -137,11 +126,6 @@ const STATE_ACTION_CASES: readonly StateActionCase[] = [
 ];
 
 const STALE_STATE_ACTIONS: readonly DashboardStateAction[] = [
-  {
-    type: "dashboard.cell.focus",
-    rowId: dashboardRowIds.project("missing"),
-    cellId: "identity",
-  },
   { type: "projectSettings.focusItem", itemId: "agent" },
   { type: "addProject.selectRow", index: 0 },
   { type: "screen.clickAway" },

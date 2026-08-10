@@ -118,7 +118,6 @@ function buildStationItems(
     case "createLocalRow":
     case "emptyProject":
     case "projectGap":
-    case undefined:
       return [noActionsItem()];
   }
 }

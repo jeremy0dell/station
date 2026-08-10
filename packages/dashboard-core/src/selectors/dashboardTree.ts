@@ -99,18 +99,17 @@ export type DashboardTreePayload =
   | DashboardEmptyProjectPayload
   | DashboardProjectGapPayload;
 
-export type DashboardTreeRow = Omit<
-  TreeGridRow<DashboardCellId, DashboardTreePayload>,
-  "id" | "parentId"
+export type DashboardTreeRow = TreeGridRow<
+  DashboardRowId,
+  DashboardCellId,
+  DashboardTreePayload
 > & {
-  readonly id: DashboardRowId;
-  readonly parentId?: DashboardRowId;
   /** Cursor decoration rebuilds row objects; row identity is not cursor-independent. */
   readonly focusedCellId?: DashboardCellId;
 };
 
 export type DashboardTreeProjection = Omit<
-  TreeGridProjection<DashboardCellId, DashboardTreePayload>,
+  TreeGridProjection<DashboardRowId, DashboardCellId, DashboardTreePayload>,
   "rowById" | "visibleRows"
 > & {
   readonly rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>;
@@ -118,13 +117,7 @@ export type DashboardTreeProjection = Omit<
   readonly persistentFilter?: DashboardPersistentFilterProjection;
 };
 
-type DashboardTreeNode = Omit<
-  TreeGridNode<DashboardCellId, DashboardTreePayload>,
-  "id" | "children"
-> & {
-  readonly id: DashboardRowId;
-  readonly children?: readonly DashboardTreeNode[];
-};
+type DashboardTreeNode = TreeGridNode<DashboardRowId, DashboardCellId, DashboardTreePayload>;
 
 type MergedDashboardRow =
   | { readonly type: "session"; readonly row: DashboardSessionRow }
@@ -170,10 +163,8 @@ export function selectDashboardTree(
     ...(state.persistentFilter === undefined ? {} : { applied: state.persistentFilter }),
   });
   const roots = dashboardRoots(projects, persistentFilter);
-  const idByValue = dashboardIdsByValue(roots);
   return decorateDashboardProjection(
     projectTreeGrid(roots),
-    idByValue,
     state.dashboardFocus,
     persistentFilter,
   );
@@ -359,9 +350,11 @@ function visibleCreateSessionLocalRows(
     }),
   );
   return [
-    ...state.localRows.pendingCreate.map((row) => ({ ...row, status: "pending" as const })),
+    ...state.localRows.pendingCreate
+      .filter((row) => !canonicalProjectBranches.has(`${row.projectId}\u0000${row.branch}`))
+      .map((row) => ({ ...row, status: "pending" as const })),
     ...state.localRows.failedCreate.map((row) => ({ ...row, status: "failed" as const })),
-  ].filter((row) => !canonicalProjectBranches.has(`${row.projectId}\u0000${row.branch}`));
+  ];
 }
 
 function mergeDashboardRows(
@@ -411,72 +404,33 @@ function rowIdForPayload(
     : dashboardRowIds.create(payload.row.localId);
 }
 
-function dashboardIdsByValue(
-  roots: readonly DashboardTreeNode[],
-): ReadonlyMap<string, DashboardRowId> {
-  const ids = new Map<string, DashboardRowId>();
-  const visit = (node: DashboardTreeNode): void => {
-    ids.set(node.id, node.id);
-    for (const child of node.children ?? []) {
-      visit(child);
-    }
-  };
-  for (const root of roots) {
-    visit(root);
-  }
-  return ids;
-}
-
 function decorateDashboardProjection(
-  projection: TreeGridProjection<DashboardCellId, DashboardTreePayload>,
-  idByValue: ReadonlyMap<string, DashboardRowId>,
+  projection: TreeGridProjection<DashboardRowId, DashboardCellId, DashboardTreePayload>,
   focus: DashboardFocus | undefined,
   persistentFilter: DashboardPersistentFilterProjection | undefined,
 ): DashboardTreeProjection {
   const rowById = new Map<DashboardRowId, DashboardTreeRow>();
   for (const row of projection.rowById.values()) {
-    const id = requiredDashboardId(idByValue, row.id);
     const decorated: DashboardTreeRow = {
-      id,
-      payload: row.payload,
-      cells: row.cells,
-      depth: row.depth,
-      ...(row.defaultCell === undefined ? {} : { defaultCell: row.defaultCell }),
-      ...(row.parentId === undefined
-        ? {}
-        : { parentId: requiredDashboardId(idByValue, row.parentId) }),
-      ...(focus?.rowId === id && row.cells.includes(focus.cellId)
+      ...row,
+      ...(focus?.rowId === row.id && row.cells.includes(focus.cellId)
         ? { focusedCellId: focus.cellId }
         : {}),
     };
-    rowById.set(id, decorated);
+    rowById.set(row.id, decorated);
   }
+  const visibleRows = projection.visibleRows.map((row) => {
+    const decorated = rowById.get(row.id);
+    if (decorated === undefined) {
+      throw new Error(`Projected dashboard row is missing: ${row.id}`);
+    }
+    return decorated;
+  });
   return {
     rowById,
-    visibleRows: projection.visibleRows.map((row) =>
-      requiredDashboardRow(rowById, requiredDashboardId(idByValue, row.id)),
-    ),
+    visibleRows,
     visibleIndexById: projection.visibleIndexById,
     collapsedAncestorById: projection.collapsedAncestorById,
     ...(persistentFilter === undefined ? {} : { persistentFilter }),
   };
-}
-
-function requiredDashboardId(ids: ReadonlyMap<string, DashboardRowId>, id: string): DashboardRowId {
-  const dashboardId = ids.get(id);
-  if (dashboardId === undefined) {
-    throw new Error(`Dashboard row id was not constructed by dashboardRowIds: ${id}`);
-  }
-  return dashboardId;
-}
-
-function requiredDashboardRow(
-  rows: ReadonlyMap<DashboardRowId, DashboardTreeRow>,
-  id: DashboardRowId,
-): DashboardTreeRow {
-  const row = rows.get(id);
-  if (row === undefined) {
-    throw new Error(`Projected dashboard row is missing: ${id}`);
-  }
-  return row;
 }

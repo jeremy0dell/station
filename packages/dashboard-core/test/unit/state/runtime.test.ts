@@ -234,26 +234,6 @@ describe("dashboard runtime", () => {
     expect(capabilities.quickCreateRequests).toHaveLength(1);
   });
 
-  it("routes state-only actions through the transition executor", () => {
-    const snapshot = createDashboardSnapshot();
-    const store = createTestDashboardRuntime({
-      service: new FakeTuiObserverService(snapshot),
-      initialSnapshot: snapshot,
-    });
-
-    const result = store.actions.dispatch({
-      type: "dashboard.cell.focus",
-      rowId: dashboardRowIds.project("web"),
-      cellId: "defaultAgent",
-    });
-
-    expect(result).toBeUndefined();
-    expect(store.state.getState().dashboardFocus).toEqual({
-      rowId: dashboardRowIds.project("web"),
-      cellId: "defaultAgent",
-    });
-  });
-
   it("owns failed optimistic rows without exposing mutation methods", async () => {
     vi.useFakeTimers();
     const snapshot = createZeroWorktreeSnapshot();

@@ -119,6 +119,47 @@ describe("dashboard tree", () => {
     });
   });
 
+  it("keeps failed optimistic rows when their project branch is represented", () => {
+    const snapshot = createDashboardSnapshot();
+    const state = createInitialTuiState({
+      initialSnapshot: snapshot,
+      localRows: {
+        pendingCreate: [
+          {
+            localId: "represented-pending",
+            projectId: "web",
+            title: "Pending launch",
+            branch: "fix-nav-mobile",
+            createdAt: "2026-05-31T12:00:00.000Z",
+          },
+        ],
+        failedCreate: [
+          {
+            localId: "represented-failed",
+            projectId: "web",
+            title: "Failed launch",
+            branch: "fix-nav-mobile",
+            error: { tag: "ClientObserverError", code: "FAILED", message: "Launch failed." },
+            expiresAt: Date.now() + 4_000,
+          },
+        ],
+        pendingRemove: [],
+        pendingStart: [],
+      },
+    });
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+
+    expect(tree.rowById.has(dashboardRowIds.create("represented-pending"))).toBe(false);
+    expect(tree.rowById.get(dashboardRowIds.create("represented-failed"))).toMatchObject({
+      cells: [],
+      payload: {
+        type: "createLocalRow",
+        row: { status: "failed" },
+        presentation: { title: "Failed launch", activity: "Launch failed." },
+      },
+    });
+  });
+
   it("retains collapse-hidden descendants in lookup with their visible collapsed ancestor", () => {
     const snapshot = createDashboardSnapshot();
     const state = createInitialTuiState({

@@ -4,6 +4,7 @@ import type { DashboardSessionRow } from "../selectors/dashboardSessionRows.js";
 import {
   type DashboardCellId,
   type DashboardFocus,
+  type DashboardRowId,
   type DashboardTreePayload,
   type DashboardTreeProjection,
   type DashboardTreeRow,
@@ -19,7 +20,11 @@ import {
 import { scrollDashboard } from "./dashboardScroll.js";
 import type { DashboardState } from "./types.js";
 
-type DashboardPolicy = TreeGridNavigationPolicy<DashboardCellId, DashboardTreePayload>;
+type DashboardPolicy = TreeGridNavigationPolicy<
+  DashboardRowId,
+  DashboardCellId,
+  DashboardTreePayload
+>;
 
 const dashboardPolicy: DashboardPolicy = ({ payload }) =>
   payload.type === "projectHeader" || payload.type === "session" || payload.type === "emptyProject";

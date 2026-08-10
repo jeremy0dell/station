@@ -14,12 +14,12 @@ function node(
   id: string,
   cells: readonly Cell[],
   options: {
-    children?: readonly TreeGridNode<Cell, Payload>[];
+    children?: readonly TreeGridNode<string, Cell, Payload>[];
     defaultCell?: Cell;
     expanded?: boolean;
     kind?: Payload["kind"];
   } = {},
-): TreeGridNode<Cell, Payload> {
+): TreeGridNode<string, Cell, Payload> {
   return {
     id,
     payload: { kind: options.kind ?? "leaf" },

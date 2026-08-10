@@ -3,7 +3,7 @@ import type { AddProjectActionId } from "../flows/addProject/actions.js";
 import type { NewSessionActionId } from "../flows/newSession.js";
 import type { DashboardCellId, DashboardRowId } from "../selectors/dashboardTree.js";
 import type { ClientNotice } from "../services/types.js";
-import { activateDashboardCell, focusDashboardCell } from "./dashboardCells.js";
+import { activateDashboardCell } from "./dashboardCells.js";
 import { scrollDashboard } from "./dashboardScroll.js";
 import type { TuiKey } from "./keys.js";
 import { openDashboardRowShell } from "./rowActivation.js";
@@ -104,7 +104,6 @@ export type TuiSemanticAction =
 /** State-only dashboard events for focus, screen, selection, scrolling, and widget transitions. */
 export type DashboardStateAction =
   | { type: "dashboard.scroll"; delta: number }
-  | { type: "dashboard.cell.focus"; rowId: DashboardRowId; cellId: DashboardCellId }
   | { type: "projectSettings.focusItem"; itemId: ProjectSettingsItemId }
   | { type: "addProject.selectRow"; index: number }
   | { type: "screen.clickAway" }
@@ -175,8 +174,6 @@ function handleDashboardStateAction(
   switch (action.type) {
     case "dashboard.scroll":
       return stateTransition(scrollDashboard(state, action.delta));
-    case "dashboard.cell.focus":
-      return stateTransition(focusDashboardCell(state, action.rowId, action.cellId));
     case "projectSettings.focusItem":
       return stateTransition(focusProjectSettingsItem(state, action.itemId));
     case "addProject.selectRow":

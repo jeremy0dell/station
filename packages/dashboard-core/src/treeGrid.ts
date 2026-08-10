@@ -1,28 +1,28 @@
 /** Normalized immutable structural input for a tree-grid projection. */
-export type TreeGridNode<CellId extends string, Payload> = {
-  readonly id: string;
+export type TreeGridNode<RowId extends string, CellId extends string, Payload> = {
+  readonly id: RowId;
   readonly payload: Payload;
   readonly cells: readonly CellId[];
   readonly defaultCell?: CellId;
-  readonly children?: readonly TreeGridNode<CellId, Payload>[];
+  readonly children?: readonly TreeGridNode<RowId, CellId, Payload>[];
   readonly expanded?: boolean;
 };
 
-export type TreeGridRow<CellId extends string, Payload> = {
-  readonly id: string;
+export type TreeGridRow<RowId extends string, CellId extends string, Payload> = {
+  readonly id: RowId;
   readonly payload: Payload;
   readonly cells: readonly CellId[];
   readonly defaultCell?: CellId;
   readonly depth: number;
-  readonly parentId?: string;
+  readonly parentId?: RowId;
 };
 
 /** All supplied nodes plus the visible preorder and collapse ancestry needed for recovery. */
-export type TreeGridProjection<CellId extends string, Payload> = {
-  readonly rowById: ReadonlyMap<string, TreeGridRow<CellId, Payload>>;
-  readonly visibleRows: readonly TreeGridRow<CellId, Payload>[];
-  readonly visibleIndexById: ReadonlyMap<string, number>;
-  readonly collapsedAncestorById: ReadonlyMap<string, string>;
+export type TreeGridProjection<RowId extends string, CellId extends string, Payload> = {
+  readonly rowById: ReadonlyMap<RowId, TreeGridRow<RowId, CellId, Payload>>;
+  readonly visibleRows: readonly TreeGridRow<RowId, CellId, Payload>[];
+  readonly visibleIndexById: ReadonlyMap<RowId, number>;
+  readonly collapsedAncestorById: ReadonlyMap<RowId, RowId>;
 };
 
 /** Stable row and cell identity independent of a row's structural parent. */
@@ -34,24 +34,24 @@ export type TreeGridCursor<RowId extends string, CellId extends string> = {
 export type TreeGridDirection = "up" | "down" | "left" | "right";
 
 /** One eligibility rule shared by cursor creation, movement, and reconciliation. */
-export type TreeGridNavigationPolicy<CellId extends string, Payload> = (
-  row: TreeGridRow<CellId, Payload>,
+export type TreeGridNavigationPolicy<RowId extends string, CellId extends string, Payload> = (
+  row: TreeGridRow<RowId, CellId, Payload>,
 ) => boolean;
 
-export function projectTreeGrid<CellId extends string, Payload>(
-  roots: readonly TreeGridNode<CellId, Payload>[],
-): TreeGridProjection<CellId, Payload> {
-  const rowById = new Map<string, TreeGridRow<CellId, Payload>>();
-  const visibleRows: TreeGridRow<CellId, Payload>[] = [];
-  const visibleIndexById = new Map<string, number>();
-  const collapsedAncestorById = new Map<string, string>();
+export function projectTreeGrid<RowId extends string, CellId extends string, Payload>(
+  roots: readonly TreeGridNode<RowId, CellId, Payload>[],
+): TreeGridProjection<RowId, CellId, Payload> {
+  const rowById = new Map<RowId, TreeGridRow<RowId, CellId, Payload>>();
+  const visibleRows: TreeGridRow<RowId, CellId, Payload>[] = [];
+  const visibleIndexById = new Map<RowId, number>();
+  const collapsedAncestorById = new Map<RowId, RowId>();
 
   const visit = (
-    node: TreeGridNode<CellId, Payload>,
+    node: TreeGridNode<RowId, CellId, Payload>,
     depth: number,
-    parentId: string | undefined,
+    parentId: RowId | undefined,
     visible: boolean,
-    collapsedAncestorId: string | undefined,
+    collapsedAncestorId: RowId | undefined,
   ): void => {
     if (rowById.has(node.id)) {
       throw new Error(`Duplicate tree-grid row id: ${node.id}`);
@@ -62,7 +62,7 @@ export function projectTreeGrid<CellId extends string, Payload>(
       );
     }
 
-    const row: TreeGridRow<CellId, Payload> = {
+    const row: TreeGridRow<RowId, CellId, Payload> = {
       id: node.id,
       payload: node.payload,
       cells: node.cells,
@@ -97,11 +97,11 @@ export function projectTreeGrid<CellId extends string, Payload>(
   return { rowById, visibleRows, visibleIndexById, collapsedAncestorById };
 }
 
-export function treeGridCursorForRow<CellId extends string, Payload, RowId extends string>(input: {
-  projection: TreeGridProjection<CellId, Payload>;
+export function treeGridCursorForRow<RowId extends string, CellId extends string, Payload>(input: {
+  projection: TreeGridProjection<RowId, CellId, Payload>;
   rowId: RowId;
   preferredCell?: CellId;
-  policy?: TreeGridNavigationPolicy<CellId, Payload>;
+  policy?: TreeGridNavigationPolicy<RowId, CellId, Payload>;
 }): TreeGridCursor<RowId, CellId> | undefined {
   const row = input.projection.rowById.get(input.rowId);
   if (
@@ -118,11 +118,11 @@ export function treeGridCursorForRow<CellId extends string, Payload, RowId exten
   return cellId === undefined ? undefined : { rowId: input.rowId, cellId };
 }
 
-export function moveTreeGridCursor<CellId extends string, Payload, RowId extends string>(input: {
-  projection: TreeGridProjection<CellId, Payload>;
+export function moveTreeGridCursor<RowId extends string, CellId extends string, Payload>(input: {
+  projection: TreeGridProjection<RowId, CellId, Payload>;
   cursor: TreeGridCursor<RowId, CellId>;
   direction: TreeGridDirection;
-  policy?: TreeGridNavigationPolicy<CellId, Payload>;
+  policy?: TreeGridNavigationPolicy<RowId, CellId, Payload>;
 }): TreeGridCursor<RowId, CellId> {
   const row = input.projection.rowById.get(input.cursor.rowId);
   const visibleIndex = input.projection.visibleIndexById.get(input.cursor.rowId);
@@ -156,7 +156,7 @@ export function moveTreeGridCursor<CellId extends string, Payload, RowId extends
     if (candidate === undefined || !rowEligible(candidate, input.policy)) {
       continue;
     }
-    const cursor = cursorForProjectedRow<RowId, CellId, Payload>(candidate);
+    const cursor = cursorForProjectedRow(candidate);
     if (cursor !== undefined) {
       return cursor;
     }
@@ -165,14 +165,14 @@ export function moveTreeGridCursor<CellId extends string, Payload, RowId extends
 }
 
 export function reconcileTreeGridCursor<
+  RowId extends string,
   CellId extends string,
   Payload,
-  RowId extends string,
 >(input: {
-  previous: TreeGridProjection<CellId, Payload>;
-  next: TreeGridProjection<CellId, Payload>;
+  previous: TreeGridProjection<RowId, CellId, Payload>;
+  next: TreeGridProjection<RowId, CellId, Payload>;
   cursor: TreeGridCursor<RowId, CellId>;
-  policy?: TreeGridNavigationPolicy<CellId, Payload>;
+  policy?: TreeGridNavigationPolicy<RowId, CellId, Payload>;
 }): TreeGridCursor<RowId, CellId> | undefined {
   const exact = treeGridCursorForRow({
     projection: input.next,
@@ -190,7 +190,7 @@ export function reconcileTreeGridCursor<
   if (collapsedAncestorId !== undefined) {
     const collapsedAncestor = treeGridCursorForRow({
       projection: input.next,
-      rowId: collapsedAncestorId as RowId,
+      rowId: collapsedAncestorId,
       ...(input.policy === undefined ? {} : { policy: input.policy }),
     });
     if (collapsedAncestor !== undefined) {
@@ -205,7 +205,7 @@ export function reconcileTreeGridCursor<
   for (let index = previousIndex; index < input.next.visibleRows.length; index += 1) {
     const row = input.next.visibleRows[index];
     if (row !== undefined && rowEligible(row, input.policy)) {
-      return cursorForProjectedRow<RowId, CellId, Payload>(row);
+      return cursorForProjectedRow(row);
     }
   }
   for (
@@ -215,28 +215,28 @@ export function reconcileTreeGridCursor<
   ) {
     const row = input.next.visibleRows[index];
     if (row !== undefined && rowEligible(row, input.policy)) {
-      return cursorForProjectedRow<RowId, CellId, Payload>(row);
+      return cursorForProjectedRow(row);
     }
   }
   return undefined;
 }
 
-function rowEligible<CellId extends string, Payload>(
-  row: TreeGridRow<CellId, Payload>,
-  policy: TreeGridNavigationPolicy<CellId, Payload> | undefined,
+function rowEligible<RowId extends string, CellId extends string, Payload>(
+  row: TreeGridRow<RowId, CellId, Payload>,
+  policy: TreeGridNavigationPolicy<RowId, CellId, Payload> | undefined,
 ): boolean {
   return row.cells.length > 0 && (policy?.(row) ?? true);
 }
 
-function defaultCell<CellId extends string, Payload>(
-  row: TreeGridRow<CellId, Payload>,
+function defaultCell<RowId extends string, CellId extends string, Payload>(
+  row: TreeGridRow<RowId, CellId, Payload>,
 ): CellId | undefined {
   return row.defaultCell ?? row.cells[0];
 }
 
 function cursorForProjectedRow<RowId extends string, CellId extends string, Payload>(
-  row: TreeGridRow<CellId, Payload>,
+  row: TreeGridRow<RowId, CellId, Payload>,
 ): TreeGridCursor<RowId, CellId> | undefined {
   const cellId = defaultCell(row);
-  return cellId === undefined ? undefined : { rowId: row.id as RowId, cellId };
+  return cellId === undefined ? undefined : { rowId: row.id, cellId };
 }

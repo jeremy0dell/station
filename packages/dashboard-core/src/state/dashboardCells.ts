@@ -11,22 +11,6 @@ import { submitQuickSession } from "./screens/quickSession.js";
 import type { TuiTransition } from "./transition.js";
 import type { DashboardState } from "./types.js";
 
-export function focusDashboardCell(
-  state: DashboardState,
-  rowId: DashboardRowId,
-  cellId: DashboardCellId,
-): DashboardState {
-  if (state.snapshot === undefined) {
-    return state;
-  }
-  const tree = selectDashboardTree(state.snapshot, state, state.screen);
-  const row = tree.rowById.get(rowId);
-  if (row === undefined || !tree.visibleIndexById.has(rowId) || !row.cells.includes(cellId)) {
-    return state;
-  }
-  return focusResolvedDashboardCursor(state, tree, { rowId, cellId });
-}
-
 export function activateDashboardCell(
   state: DashboardState,
   rowId: DashboardRowId,
