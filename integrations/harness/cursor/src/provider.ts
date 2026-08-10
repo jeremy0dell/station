@@ -13,6 +13,7 @@ import {
   harnessCommand,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
+  type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { safeErrorFromUnknown } from "@station/runtime";
@@ -45,18 +46,15 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: false,
 };
 
-export const cursorHarnessProviderDefinition = {
+export const cursorHarnessCommandDefinition = {
   id: "cursor",
   displayName: "Cursor",
   commandEnvVar: "STATION_CURSOR_AGENT_BIN",
   commandFallback: "agent",
-} as const satisfies Pick<
-  TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>,
-  "id" | "displayName" | "commandEnvVar" | "commandFallback"
->;
+} as const satisfies TerminalBoundHarnessCommandDefinition;
 
 const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions> = {
-  ...cursorHarnessProviderDefinition,
+  ...cursorHarnessCommandDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.cursor].resume.
@@ -86,8 +84,8 @@ const cursorSpec: TerminalBoundHarnessProviderSpec<CursorHarnessProviderOptions>
 function command(options: CursorHarnessProviderOptions): string {
   return harnessCommand(
     options,
-    cursorHarnessProviderDefinition.commandEnvVar,
-    cursorHarnessProviderDefinition.commandFallback,
+    cursorHarnessCommandDefinition.commandEnvVar,
+    cursorHarnessCommandDefinition.commandFallback,
   );
 }
 

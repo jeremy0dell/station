@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PROVIDER_HOOK_DEFINITIONS } from "../../src/commands/providerHookDefinitions.js";
-import {
-  SETUP_HARNESS_DEFINITIONS,
-  setupHarnessDefinitions,
-} from "../../src/commands/setup/harnessDefinitions.js";
+import { SETUP_HARNESS_DEFINITIONS } from "../../src/commands/setup/harnessDefinitions.js";
+
+const setupHarnessDefinitions = Object.values(SETUP_HARNESS_DEFINITIONS);
 
 describe("setup harness definitions", () => {
   it("pins the complete CLI metadata and canonical fact order", () => {

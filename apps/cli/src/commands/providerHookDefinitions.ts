@@ -31,5 +31,3 @@ export const PROVIDER_HOOK_DEFINITIONS = {
     hookScriptFlag: "--plugin-path",
   },
 } as const;
-
-export const providerHookDefinitions = Object.values(PROVIDER_HOOK_DEFINITIONS);

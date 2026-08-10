@@ -1,6 +1,7 @@
 import { access, chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
+import { CliSetupHarnessIdSchema } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandResult,
@@ -37,10 +38,15 @@ import { checkSetupXcode } from "../../src/commands/setup/checks/xcode.js";
 import { createJsonSetupPresenter } from "../../src/commands/setup/presenters/json.js";
 
 function buildSetupPlan(facts: SetupFacts) {
-  const config: HarnessSelectionFacts["config"] =
-    facts.config.status === "valid"
-      ? { status: "valid", defaultHarness: facts.config.defaults.harness }
-      : { status: facts.config.status };
+  let config: HarnessSelectionFacts["config"];
+  if (facts.config.status === "valid") {
+    const defaultHarness = CliSetupHarnessIdSchema.safeParse(facts.config.defaults.harness);
+    config = defaultHarness.success
+      ? { status: "valid", defaultHarness: defaultHarness.data }
+      : { status: "unsupported" };
+  } else {
+    config = { status: facts.config.status };
+  }
   const selectionFacts: HarnessSelectionFacts = {
     config,
     harnesses: facts.harnesses.map((harness) => ({

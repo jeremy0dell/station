@@ -32,5 +32,6 @@ export {
   harnessHealth,
   harnessHookDoctorOptions,
   harnessHooksStatusFrom,
+  type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "./provider.js";

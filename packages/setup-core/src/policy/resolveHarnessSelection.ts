@@ -13,10 +13,11 @@ export function resolveHarnessSelection(
 ): HarnessSelectionResolution {
   if (intent.kind === "cancelled") return { outcome: "cancelled" };
 
-  const configuredDefault = configuredDefaultHarness(facts);
-  if (facts.config.status === "valid" && configuredDefault === undefined) {
+  if (facts.config.status === "unsupported") {
     return { outcome: "invalid", reason: "unsupported-configured-default" };
   }
+  const configuredDefault =
+    facts.config.status === "valid" ? facts.config.defaultHarness : undefined;
 
   if (intent.kind === "explicit") {
     const explicitHarnessIds = uniqueHarnessIds(intent.harnessIds);
@@ -66,12 +67,6 @@ export function resolveHarnessSelection(
     requiredHarnessIds: [inferredHarness],
     defaultHarness: inferredHarness,
   };
-}
-
-function configuredDefaultHarness(facts: HarnessSelectionFacts): CliSetupHarnessId | undefined {
-  if (facts.config.status !== "valid") return undefined;
-  const defaultHarness = facts.config.defaultHarness;
-  return facts.harnesses.find((harness) => harness.id === defaultHarness)?.id;
 }
 
 function uniqueHarnessIds(ids: readonly CliSetupHarnessId[]): CliSetupHarnessId[] {

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { SetupConfigMutationPlan } from "@station/config";
-import type { CliSetupHarnessId } from "@station/contracts";
+import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
 import {
   type HarnessSelectionFacts,
   type HarnessSelectionResolution,
@@ -79,10 +79,15 @@ function resolveSetupHarnessSelection(
 }
 
 function coreSelectionFacts(setupFacts: SetupFacts): HarnessSelectionFacts {
-  const config: HarnessSelectionFacts["config"] =
-    setupFacts.config.status === "valid"
-      ? { status: "valid", defaultHarness: setupFacts.config.defaults.harness }
-      : { status: setupFacts.config.status };
+  let config: HarnessSelectionFacts["config"];
+  if (setupFacts.config.status === "valid") {
+    const defaultHarness = CliSetupHarnessIdSchema.safeParse(setupFacts.config.defaults.harness);
+    config = defaultHarness.success
+      ? { status: "valid", defaultHarness: defaultHarness.data }
+      : { status: "unsupported" };
+  } else {
+    config = { status: setupFacts.config.status };
+  }
   return {
     config,
     harnesses: setupFacts.harnesses.map((harness) => ({

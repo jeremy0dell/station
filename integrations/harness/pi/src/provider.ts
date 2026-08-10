@@ -8,6 +8,7 @@ import {
   type CommonHarnessProviderOptions,
   createTerminalBoundHarnessProvider,
   harnessCommand,
+  type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { classifyPiRunStatus } from "./classify.js";
@@ -40,18 +41,15 @@ const baseCapabilities: HarnessCapabilities = {
 const minimumPiVersion = [0, 80, 5] as const;
 const minimumPiVersionText = minimumPiVersion.join(".");
 
-export const piHarnessProviderDefinition = {
+export const piHarnessCommandDefinition = {
   id: "pi",
   displayName: "Pi",
   commandEnvVar: "STATION_PI_BIN",
   commandFallback: "pi",
-} as const satisfies Pick<
-  TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions>,
-  "id" | "displayName" | "commandEnvVar" | "commandFallback"
->;
+} as const satisfies TerminalBoundHarnessCommandDefinition;
 
 const piSpec: TerminalBoundHarnessProviderSpec<PiHarnessProviderOptions> = {
-  ...piHarnessProviderDefinition,
+  ...piHarnessCommandDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.pi].resume.
@@ -116,8 +114,8 @@ function compareVersion(
 function command(options: PiHarnessProviderOptions): string {
   return harnessCommand(
     options,
-    piHarnessProviderDefinition.commandEnvVar,
-    piHarnessProviderDefinition.commandFallback,
+    piHarnessCommandDefinition.commandEnvVar,
+    piHarnessCommandDefinition.commandFallback,
   );
 }
 

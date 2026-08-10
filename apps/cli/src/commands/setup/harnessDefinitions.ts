@@ -1,9 +1,9 @@
-import { claudeHarnessProviderDefinition } from "@station/claude";
-import { codexHarnessProviderDefinition } from "@station/codex";
+import { claudeHarnessCommandDefinition } from "@station/claude";
+import { codexHarnessCommandDefinition } from "@station/codex";
 import type { CliSetupHarnessId } from "@station/contracts";
-import { cursorHarnessProviderDefinition } from "@station/cursor";
-import { openCodeHarnessProviderDefinition } from "@station/opencode";
-import { piHarnessProviderDefinition } from "@station/pi";
+import { cursorHarnessCommandDefinition } from "@station/cursor";
+import { openCodeHarnessCommandDefinition } from "@station/opencode";
+import { piHarnessCommandDefinition } from "@station/pi";
 import { PROVIDER_HOOK_DEFINITIONS } from "../providerHookDefinitions.js";
 
 type ProviderHookDefinition =
@@ -33,35 +33,33 @@ type SetupHarnessDefinitionMap = {
  */
 export const SETUP_HARNESS_DEFINITIONS: SetupHarnessDefinitionMap = {
   codex: {
-    ...codexHarnessProviderDefinition,
-    label: codexHarnessProviderDefinition.displayName,
+    ...codexHarnessCommandDefinition,
+    label: codexHarnessCommandDefinition.displayName,
     guidedRank: 1,
     providerHook: PROVIDER_HOOK_DEFINITIONS.codex,
   },
   cursor: {
-    ...cursorHarnessProviderDefinition,
+    ...cursorHarnessCommandDefinition,
     label: "Cursor Agent",
     guidedRank: 2,
     providerHook: PROVIDER_HOOK_DEFINITIONS.cursor,
   },
   opencode: {
-    ...openCodeHarnessProviderDefinition,
-    label: openCodeHarnessProviderDefinition.displayName,
+    ...openCodeHarnessCommandDefinition,
+    label: openCodeHarnessCommandDefinition.displayName,
     guidedRank: 3,
     additionalUserCommandDirectories: [".opencode/bin"],
     providerHook: PROVIDER_HOOK_DEFINITIONS.opencode,
   },
   pi: {
-    ...piHarnessProviderDefinition,
-    label: piHarnessProviderDefinition.displayName,
+    ...piHarnessCommandDefinition,
+    label: piHarnessCommandDefinition.displayName,
     guidedRank: 4,
   },
   claude: {
-    ...claudeHarnessProviderDefinition,
-    label: claudeHarnessProviderDefinition.displayName,
+    ...claudeHarnessCommandDefinition,
+    label: claudeHarnessCommandDefinition.displayName,
     guidedRank: 0,
     providerHook: PROVIDER_HOOK_DEFINITIONS.claude,
   },
 };
-
-export const setupHarnessDefinitions = Object.values(SETUP_HARNESS_DEFINITIONS);

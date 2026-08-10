@@ -13,6 +13,7 @@ import {
   createTerminalBoundHarnessProvider,
   harnessCommand,
   harnessHealth,
+  type TerminalBoundHarnessCommandDefinition,
   type TerminalBoundHarnessProviderSpec,
 } from "@station/harness-shared";
 import { safeErrorFromUnknown } from "@station/runtime";
@@ -49,18 +50,15 @@ const baseCapabilities: HarnessCapabilities = {
   supportsModifiedEnterSoftNewline: false,
 };
 
-export const openCodeHarnessProviderDefinition = {
+export const openCodeHarnessCommandDefinition = {
   id: "opencode",
   displayName: "OpenCode",
   commandEnvVar: "STATION_OPENCODE_BIN",
   commandFallback: "opencode",
-} as const satisfies Pick<
-  TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOptions>,
-  "id" | "displayName" | "commandEnvVar" | "commandFallback"
->;
+} as const satisfies TerminalBoundHarnessCommandDefinition;
 
 const openCodeSpec: TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOptions> = {
-  ...openCodeHarnessProviderDefinition,
+  ...openCodeHarnessCommandDefinition,
   baseCapabilities,
   // Adapter support alone is not enough; resume stays invisible unless explicitly enabled
   // by [harness.opencode].resume.
@@ -90,8 +88,8 @@ const openCodeSpec: TerminalBoundHarnessProviderSpec<OpenCodeHarnessProviderOpti
 function command(options: OpenCodeHarnessProviderOptions): string {
   return harnessCommand(
     options,
-    openCodeHarnessProviderDefinition.commandEnvVar,
-    openCodeHarnessProviderDefinition.commandFallback,
+    openCodeHarnessCommandDefinition.commandEnvVar,
+    openCodeHarnessCommandDefinition.commandFallback,
   );
 }
 

@@ -7,5 +7,5 @@ export { piHookAdapter } from "./hookAdapter.js";
 export {
   createPiHarnessProvider,
   type PiHarnessProviderOptions,
-  piHarnessProviderDefinition,
+  piHarnessCommandDefinition,
 } from "./provider.js";

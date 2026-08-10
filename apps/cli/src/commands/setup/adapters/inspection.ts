@@ -343,9 +343,13 @@ function normalizeHarnessSelectionFacts(facts: SetupFacts): HarnessSelectionFact
     case "invalid":
       config = { status: "invalid" };
       break;
-    case "valid":
-      config = { status: "valid", defaultHarness: facts.config.defaults.harness };
+    case "valid": {
+      const defaultHarness = CliSetupHarnessIdSchema.safeParse(facts.config.defaults.harness);
+      config = defaultHarness.success
+        ? { status: "valid", defaultHarness: defaultHarness.data }
+        : { status: "unsupported" };
       break;
+    }
     default:
       return assertNever(facts.config);
   }

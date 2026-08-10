@@ -4,7 +4,8 @@ export type HarnessSelectionFacts = {
   readonly config:
     | { readonly status: "missing" }
     | { readonly status: "invalid" }
-    | { readonly status: "valid"; readonly defaultHarness: string };
+    | { readonly status: "unsupported" }
+    | { readonly status: "valid"; readonly defaultHarness: CliSetupHarnessId };
   readonly harnesses: readonly {
     readonly id: CliSetupHarnessId;
     readonly availability: "available" | "unavailable";

@@ -6,7 +6,7 @@ import {
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
 import type { SetupHarnessFact } from "../adapters/inspectionTypes.js";
-import { type SetupHarnessDefinition, setupHarnessDefinitions } from "../harnessDefinitions.js";
+import { SETUP_HARNESS_DEFINITIONS, type SetupHarnessDefinition } from "../harnessDefinitions.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
 
@@ -24,7 +24,7 @@ export async function checkSetupHarnesses(
 ): Promise<SetupHarnessFact[]> {
   const env = setupEnv(options.env);
   const facts: SetupHarnessFact[] = [];
-  for (const definition of setupHarnessDefinitions) {
+  for (const definition of Object.values(SETUP_HARNESS_DEFINITIONS)) {
     facts.push(await checkHarness(definition, env, options));
   }
   return facts;

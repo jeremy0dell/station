@@ -1,4 +1,4 @@
-import type { CliSetupHarnessId } from "@station/contracts";
+import { type CliSetupHarnessId, CliSetupHarnessIdSchema } from "@station/contracts";
 import { describe, expect, it } from "vitest";
 import { type HarnessSelectionFacts, resolveHarnessSelection } from "../../src/index.js";
 
@@ -10,6 +10,23 @@ describe("resolveHarnessSelection", () => {
       resolveHarnessSelection(selectionFacts({ config: "codex", available: ["pi"] }), {
         kind: "automatic",
       }),
+    ).toEqual({
+      outcome: "selected",
+      source: "configured",
+      requiredHarnessIds: ["codex"],
+      defaultHarness: "codex",
+    });
+  });
+
+  it("preserves a supported configured default when its availability fact is absent", () => {
+    expect(
+      resolveHarnessSelection(
+        {
+          config: { status: "valid", defaultHarness: "codex" },
+          harnesses: [{ id: "pi", availability: "unavailable" }],
+        },
+        { kind: "automatic" },
+      ),
     ).toEqual({
       outcome: "selected",
       source: "configured",
@@ -135,12 +152,15 @@ function selectionFacts(input: {
   order?: readonly CliSetupHarnessId[];
 }): HarnessSelectionFacts {
   const order = input.order ?? harnessIds;
+  const defaultHarness = CliSetupHarnessIdSchema.safeParse(input.config);
   const config: HarnessSelectionFacts["config"] =
     input.config === "missing"
       ? { status: "missing" }
       : input.config === "invalid"
         ? { status: "invalid" }
-        : { status: "valid", defaultHarness: input.config };
+        : defaultHarness.success
+          ? { status: "valid", defaultHarness: defaultHarness.data }
+          : { status: "unsupported" };
   return {
     config,
     harnesses: order.map((id) => ({
