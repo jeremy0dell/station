@@ -3,14 +3,14 @@ import { describe, expect, it } from "bun:test";
 import type {
   StationTerminalProcess,
   StationTerminalSpawnOptions,
-} from "../terminal/types.js";
-import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
-import { createPtyTable } from "./ptyTable.js";
+} from "../../terminal/types.js";
+import { createScriptedTerminal, type ScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
+import { createPtyTable } from "../ptyTable.js";
 import {
   type SemanticTerminalModel,
   TerminalSnapshotPendingError,
   TerminalSnapshotUnavailableError,
-} from "./semanticTerminalSnapshot.js";
+} from "../semanticTerminalSnapshot.js";
 
 const baseParams: HostSpawnParams = {
   kind: "agent",

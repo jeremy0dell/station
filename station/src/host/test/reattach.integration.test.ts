@@ -8,11 +8,11 @@ import {
   type HostSpawnResult,
 } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
-import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
-import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
-import { createStationVtScreen } from "../terminal/vt/screen.js";
-import type { PtyTableOptions } from "./ptyTable.js";
-import { type StationHostInstance, startStationHost } from "./startHost.js";
+import { createScriptedTerminal, type ScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
+import { createHostAttachedTerminal } from "../../terminal/pty/hostAttachedTerminal.js";
+import { createStationVtScreen } from "../../terminal/vt/screen.js";
+import type { PtyTableOptions } from "../ptyTable.js";
+import { type StationHostInstance, startStationHost } from "../startHost.js";
 
 const noopLogger = { log: async () => undefined } as never;
 const identity = {

@@ -2,7 +2,7 @@ import type { UiLifecycleEventInputFor } from "@station/contracts";
 import type { UiLifecycleRecorder } from "@station/observability";
 import type { HostClientIdentity } from "@station/host";
 import { describe, expect, it } from "bun:test";
-import { createHostLifecycleWitness } from "./hostLifecycle.js";
+import { createHostLifecycleWitness } from "../hostLifecycle.js";
 
 const spawnRef = {
   terminalTargetId: "native:wt-1",

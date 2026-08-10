@@ -104,7 +104,7 @@ When these disagree, reconcile from config, providers, and current observer stat
 
 ## Station UI Module Layout
 
-Within `station/`, when a directory outgrows a handful of files, keep its public surface and composition root at the directory root and push internal concern-clusters into lowercase subdirs — mirroring `terminal/`'s `protocol|pty|registry` and `state/`'s `reducers|reconcilers`. For example `input/` keeps the consumed hubs (`router`, `mouse`) and the `stationInput` composition root at root, with `keymap/` and `runtime/` beneath. Colocate each test beside its source and move it with the source. Add an `index.ts` barrel only when a directory's public symbols would otherwise be reached through deep subpaths; skip it when the public surface already sits at the root.
+Within `station/`, when a directory outgrows a handful of files, keep its public surface and composition root at the directory root and push internal concern-clusters into lowercase subdirs — mirroring `terminal/`'s `protocol|pty|registry` and `state/`'s `reducers|reconcilers`. For example `input/` keeps the consumed hubs (`router`, `mouse`) and the `stationInput` composition root at root, with `keymap/` and `runtime/` beneath. Large runtime directories such as `host/` and `terminal/pty/` keep their tests in one lowercase `test/` child; smaller concerns may colocate tests beside their source. Add an `index.ts` barrel only when a directory's public symbols would otherwise be reached through deep subpaths; skip it when the public surface already sits at the root.
 
 Observer layout follows ownership and dependency direction rather than this UI-specific shape.
 See [Observer Architecture](observer-architecture.md).

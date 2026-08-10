@@ -2,18 +2,18 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
-import { createStationVtScreen } from "../terminal/vt/screen.js";
-import { resolveXtermCellHyperlink } from "../terminal/vt/xtermHyperlinks.js";
+import { createStationVtScreen } from "../../terminal/vt/screen.js";
+import { resolveXtermCellHyperlink } from "../../terminal/vt/xtermHyperlinks.js";
 import {
   SemanticTerminalSnapshot,
   terminalSnapshotFailure,
   TerminalSnapshotPendingError,
   TerminalSnapshotUnavailableError,
-} from "./semanticTerminalSnapshot.js";
+} from "../semanticTerminalSnapshot.js";
 import {
   type PinnedXtermAttributes,
   unsupportedXtermCellAttributeDetail,
-} from "./xtermSnapshotAttributes.js";
+} from "../xtermSnapshotAttributes.js";
 
 const CSI = "\x1b[";
 const CURSOR_UNDERLINED_LINK =

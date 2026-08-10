@@ -4,11 +4,11 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createScriptedTerminal, type ScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
-import type { StationTerminalProcess } from "../terminal/types.js";
-import { waitFor } from "../terminal/testing/waitFor.js";
-import { writeScrollbackExport } from "./orphanBridges.js";
-import { createPtyTable, type PtyAdoptionTarget, type PtyAdoptedTerminal } from "./ptyTable.js";
+import { createScriptedTerminal, type ScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
+import type { StationTerminalProcess } from "../../terminal/types.js";
+import { waitFor } from "../../terminal/testing/waitFor.js";
+import { writeScrollbackExport } from "../orphanBridges.js";
+import { createPtyTable, type PtyAdoptionTarget, type PtyAdoptedTerminal } from "../ptyTable.js";
 
 const baseParams: HostSpawnParams = {
   kind: "agent",

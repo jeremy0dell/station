@@ -10,16 +10,16 @@ import {
 } from "@station/contracts";
 import { createStationHostClient } from "@station/host";
 import { describe, expect, it } from "bun:test";
-import { waitFor } from "../terminal/testing/waitFor.js";
+import { waitFor } from "../../terminal/testing/waitFor.js";
 import {
   bridgeControlSocketPath,
   bridgeParkStatePath,
   ptyBridgesDirectory,
   readBridgeParkState,
-} from "./orphanBridges.js";
-import { createPtyTable } from "./ptyTable.js";
+} from "../orphanBridges.js";
+import { createPtyTable } from "../ptyTable.js";
 
-const HOST_ENTRY = fileURLToPath(new URL("./hostMain.ts", import.meta.url));
+const HOST_ENTRY = fileURLToPath(new URL("../hostMain.ts", import.meta.url));
 
 // Real node-pty + a real detached host process. Gated like the other PTY smokes
 // so a plain `bun test` stays hermetic; run with STATION_PTY_SMOKE=1.

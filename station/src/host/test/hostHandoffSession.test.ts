@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { createHostHandoffSession } from "./hostHandoffSession.js";
-import type { PtyTable } from "./ptyTable.js";
+import { createHostHandoffSession } from "../hostHandoffSession.js";
+import type { PtyTable } from "../ptyTable.js";
 
 function fakeTable(overrides: Partial<PtyTable> = {}): PtyTable {
   return {

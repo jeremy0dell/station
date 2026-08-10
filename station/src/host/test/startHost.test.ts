@@ -8,13 +8,13 @@ import {
   type HostSpawnResult,
 } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
-import { paneInputBytes } from "../input/runtime/sequenceNormalize.js";
-import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
-import { StationTerminalSpawnError } from "../terminal/pty/errors.js";
-import { createPtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
-import { waitFor } from "../terminal/testing/waitFor.js";
-import { type StationHostInstance, startStationHost } from "./startHost.js";
+import { paneInputBytes } from "../../input/runtime/sequenceNormalize.js";
+import { createHostAttachedTerminal } from "../../terminal/pty/hostAttachedTerminal.js";
+import { StationTerminalSpawnError } from "../../terminal/pty/errors.js";
+import { createPtyRegistry } from "../../terminal/registry/ptyRegistry.js";
+import { createScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
+import { waitFor } from "../../terminal/testing/waitFor.js";
+import { type StationHostInstance, startStationHost } from "../startHost.js";
 
 // startStationHost only calls logger.log; a no-op keeps the host test off the FS.
 const noopLogger = { log: async () => undefined } as never;
