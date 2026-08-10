@@ -109,6 +109,8 @@ function buildStationItems(
   switch (row.payload.type) {
     case "projectHeader":
       return buildProjectItems(row.payload.project.id, state);
+    case "groupHeader":
+      return [noActionsItem()];
     case "session": {
       const sessionRow = row.payload.row;
       return viewport.rowChoices.some((choice) => choice.value.id === sessionRow.id)
