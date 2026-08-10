@@ -217,7 +217,7 @@ areas contain the following responsibilities:
 | Area | Current responsibility | Adopted ownership |
 | --- | --- | --- |
 | `commands/` | command queue, routing, scopes, cancellation, launch preflight, terminal-intent execution, Group mutation, and command use cases | Driving application behavior; launch preflight, terminal-intent execution, and Group mutation coordinate their narrow ports as use cases. |
-| `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `run.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
+| `reconcile/` | provider reads, correlation, graph construction, Group projection, and core state | Reconcile-owned Group repair, command-local Group projection, and deterministic policies; provider I/O remains at its driven edges. `reconcileResult.ts` owns the `ReconcileTiming` result record returned by `runReconcileOnce`, while `core.ts` re-exports it for compatibility. |
 | `hooks/` | hook/report ingestion, dedupe, readiness, spool I/O, and ingress queue | Ingress use cases and queue orchestration separated from filesystem spool adapters. |
 | `runtime/` | API assembly, process lifecycle, scheduling, event delivery, server bridge, and external launch | Observer composition plus application operations; transport and infrastructure stay at the edge. |
 | `stationLogger.ts`, `commands/projectConfigWriter.ts` | Observer-private logging and authoritative project-configuration capabilities | Driven application ports free of JSONL records and configuration/home-path plumbing. |
@@ -896,11 +896,12 @@ participate. Nonliteral dynamic module edges fail because their ownership cannot
 be resolved. External literal dynamics such as `bun:sqlite` and `node:sqlite`
 remain recorded external edges rather than source-cycle members.
 
-The current Observer graph contains 139 production modules and no strongly
+The current Observer graph contains 145 production modules and no strongly
 connected component. `migrations/migration.ts` now owns
 `ObserverSqliteMigration`, so numbered migration declarations do not depend on
-their ordered aggregator. `reconcile/run.ts` owns `ReconcileTiming`, so the
-reconcile use case no longer depends back on its calling core facade.
+their ordered aggregator. `reconcile/reconcileResult.ts` owns
+`ReconcileTiming`, so the reconcile use case no longer depends back on its
+calling core facade.
 
 The reproducible evidence is committed at
 `docs/generated/observer-architecture-manifest.json`. It inventories every
