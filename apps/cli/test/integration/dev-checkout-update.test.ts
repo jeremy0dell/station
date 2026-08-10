@@ -22,7 +22,7 @@ describe("dev-checkout update channel", () => {
     const preparationCommands: ExternalCommandInput[] = [];
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
-      pathEnv: process.env.PATH ?? "",
+      pathEnv: fixture.pathEnv,
       buildInfo: () => ({
         compiled: false,
         version: "1.0.0",
@@ -94,7 +94,7 @@ describe("dev-checkout update channel", () => {
 
   it("requires Bun before admitting a development checkout", async () => {
     const fixture = await checkoutFixture();
-    const pathEnv = await toolPath(fixture.root, ["git", "pnpm"]);
+    const pathEnv = await toolPath(fixture.root, ["git", "pnpm"], "missing-bun-bin");
     let commandRan = false;
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
@@ -117,10 +117,9 @@ describe("dev-checkout update channel", () => {
 
   it("rejects a missing pinned Bun executable before fast-forwarding", async () => {
     const fixture = await checkoutFixture();
-    const pathEnv = await toolPath(fixture.root, ["git", "pnpm", "bun"]);
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
-      pathEnv,
+      pathEnv: fixture.pathEnv,
       buildInfo: () => ({
         compiled: false,
         version: "1.0.0",
@@ -142,7 +141,7 @@ describe("dev-checkout update channel", () => {
     const preparationCommands: ExternalCommandInput[] = [];
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
-      pathEnv: process.env.PATH ?? "",
+      pathEnv: fixture.pathEnv,
       buildInfo: () => ({
         compiled: false,
         version: "1.0.0",
@@ -198,7 +197,7 @@ describe("dev-checkout update channel", () => {
     const fixture = await checkoutFixture();
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
-      pathEnv: process.env.PATH ?? "",
+      pathEnv: fixture.pathEnv,
       buildInfo: () => ({
         compiled: false,
         version: "1.0.0",
@@ -231,7 +230,7 @@ describe("dev-checkout update channel", () => {
     await writeFile(join(fixture.checkout, "dirty.txt"), "dirty\n");
     const channel = createDevCheckoutUpdateChannel({
       cliEntryPath: fixture.cliEntryPath,
-      pathEnv: process.env.PATH ?? "",
+      pathEnv: fixture.pathEnv,
       buildInfo: () => ({
         compiled: false,
         version: "1.0.0",
@@ -274,11 +273,18 @@ async function checkoutFixture() {
   const targetRevision = await git(checkout, ["rev-parse", "HEAD"]);
   await run("git", ["push", "origin", "main"], checkout);
   await run("git", ["reset", "--hard", currentRevision], checkout);
-  return { root, checkout, cliEntryPath, currentRevision, targetRevision };
+  const pathEnv = await devToolPath(root);
+  return { root, checkout, cliEntryPath, currentRevision, targetRevision, pathEnv };
 }
 
-async function toolPath(root: string, commands: string[]): Promise<string> {
-  const bin = join(root, "test-bin");
+async function devToolPath(root: string): Promise<string> {
+  const bin = await toolPath(root, ["git", "pnpm"]);
+  await writeFile(join(bin, "bun"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  return bin;
+}
+
+async function toolPath(root: string, commands: string[], directory = "test-bin"): Promise<string> {
+  const bin = join(root, directory);
   await mkdir(bin, { recursive: true });
   for (const command of commands) {
     const executable = await resolveExecutablePath(command);
