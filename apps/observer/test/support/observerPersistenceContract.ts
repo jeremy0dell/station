@@ -2331,7 +2331,7 @@ export function observerPersistenceContract(
         });
       });
 
-      it("validates parentage and reparents children when deleting a Group", async () => {
+      it("reparents, detaches, and rejects invalid parentage atomically", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await persistence.createSessionGroup({
             id: "group_root",
@@ -2350,9 +2350,55 @@ export function observerPersistenceContract(
             id: "group_child",
             projectId: "web",
             name: "Child",
-            parentGroupId: "group_parent",
             createdAt: earlier,
           });
+          await persistence.createSessionGroup({
+            id: "group_other_project",
+            projectId: "api",
+            name: "Other project",
+            createdAt: earlier,
+          });
+          await expect(
+            persistence.reparentSessionGroup({
+              id: "group_child",
+              expectedVersion: 1,
+              parentGroupId: "group_parent",
+              updatedAt: now,
+            }),
+          ).resolves.toEqual({
+            ok: true,
+            groups: [
+              expect.objectContaining({
+                id: "group_child",
+                parentGroupId: "group_parent",
+                version: 2,
+              }),
+            ],
+          });
+          await expect(
+            persistence.reparentSessionGroup({
+              id: "group_child",
+              expectedVersion: 2,
+              parentGroupId: "group_parent",
+              updatedAt: later,
+            }),
+          ).resolves.toEqual({
+            ok: true,
+            groups: [expect.objectContaining({ id: "group_child", version: 2 })],
+          });
+          await expect(
+            persistence.reparentSessionGroup({
+              id: "group_child",
+              expectedVersion: 1,
+            }),
+          ).resolves.toEqual({ ok: false, reason: "stale_version" });
+          await expect(
+            persistence.reparentSessionGroup({
+              id: "group_child",
+              expectedVersion: 2,
+              parentGroupId: "missing",
+            }),
+          ).resolves.toEqual({ ok: false, reason: "not_found" });
           await expectPersistenceFailure(
             persistence.reparentSessionGroup({
               id: "group_root",
@@ -2360,13 +2406,83 @@ export function observerPersistenceContract(
               parentGroupId: "group_child",
             }),
           );
+          await expectPersistenceFailure(
+            persistence.reparentSessionGroup({
+              id: "group_child",
+              expectedVersion: 2,
+              parentGroupId: "group_child",
+            }),
+          );
+          await expectPersistenceFailure(
+            persistence.reparentSessionGroup({
+              id: "group_child",
+              expectedVersion: 2,
+              parentGroupId: "group_other_project",
+            }),
+          );
           await expect(
             persistence.reparentSessionGroup({
               id: "group_child",
-              expectedVersion: 1,
-              parentGroupId: "missing",
+              expectedVersion: 2,
+              updatedAt: later,
             }),
-          ).resolves.toEqual({ ok: false, reason: "not_found" });
+          ).resolves.toEqual({
+            ok: true,
+            groups: [expect.not.objectContaining({ parentGroupId: expect.anything() })],
+          });
+          await expect(
+            persistence.reparentSessionGroup({ id: "group_root", expectedVersion: 1 }),
+          ).resolves.toEqual({
+            ok: true,
+            groups: [expect.objectContaining({ id: "group_root", version: 1 })],
+          });
+          expect(
+            (await persistence.listSessionGroups()).map((group) => ({
+              id: group.id,
+              parentGroupId: group.parentGroupId,
+              version: group.version,
+            })),
+          ).toEqual([
+            { id: "group_other_project", parentGroupId: undefined, version: 1 },
+            { id: "group_child", parentGroupId: undefined, version: 3 },
+            { id: "group_root", parentGroupId: undefined, version: 1 },
+            { id: "group_parent", parentGroupId: "group_root", version: 1 },
+          ]);
+        });
+      });
+
+      it("deletes only direct organization and reparents direct children once", async () => {
+        await withPersistence(createFixture, async ({ persistence }) => {
+          await persistence.createSessionGroup({
+            id: "group_root",
+            projectId: "web",
+            name: "Root",
+            createdAt: earlier,
+          });
+          await persistence.createSessionGroup({
+            id: "group_parent",
+            projectId: "web",
+            name: "Parent",
+            parentGroupId: "group_root",
+            initialMembers: [{ sessionId: "ses_direct", projectId: "web", expectedGroupId: null }],
+            createdAt: earlier,
+          });
+          for (const id of ["group_child_a", "group_child_b"]) {
+            await persistence.createSessionGroup({
+              id,
+              projectId: "web",
+              name: id,
+              parentGroupId: "group_parent",
+              createdAt: earlier,
+            });
+          }
+          await persistence.createSessionGroup({
+            id: "group_grandchild",
+            projectId: "web",
+            name: "Grandchild",
+            parentGroupId: "group_child_a",
+            createdAt: earlier,
+          });
           const deleted = await persistence.deleteSessionGroup({
             id: "group_parent",
             expectedVersion: 1,
@@ -2376,20 +2492,46 @@ export function observerPersistenceContract(
             ok: true,
             groups: [
               expect.objectContaining({
-                id: "group_child",
+                id: "group_child_a",
+                parentGroupId: "group_root",
+                version: 2,
+              }),
+              expect.objectContaining({
+                id: "group_child_b",
                 parentGroupId: "group_root",
                 version: 2,
               }),
             ],
           });
-          expect((await persistence.listSessionGroups()).map((group) => group.id)).toEqual([
-            "group_root",
-            "group_child",
+          await expect(
+            persistence.deleteSessionGroup({
+              id: "group_parent",
+              expectedVersion: 1,
+              updatedAt: later,
+            }),
+          ).resolves.toEqual({ ok: false, reason: "not_found" });
+          expect(await persistence.listSessionGroups()).toEqual([
+            expect.objectContaining({ id: "group_root", version: 1, sessionIds: [] }),
+            expect.objectContaining({
+              id: "group_child_a",
+              parentGroupId: "group_root",
+              version: 2,
+            }),
+            expect.objectContaining({
+              id: "group_child_b",
+              parentGroupId: "group_root",
+              version: 2,
+            }),
+            expect.objectContaining({
+              id: "group_grandchild",
+              parentGroupId: "group_child_a",
+              version: 1,
+            }),
           ]);
         });
       });
 
-      it("prunes invalid memberships while preserving empty definitions", async () => {
+      it("repairs invalid memberships once and returns all durable Groups with evidence", async () => {
         await withPersistence(createFixture, async ({ persistence }) => {
           await persistence.createSessionGroup({
             id: "group_prune",
@@ -2401,21 +2543,33 @@ export function observerPersistenceContract(
             ],
             createdAt: earlier,
           });
+          await persistence.createSessionGroup({
+            id: "group_untouched",
+            projectId: "web",
+            name: "Untouched",
+            createdAt: earlier,
+          });
           await expect(
-            persistence.pruneSessionGroupMemberships({
+            persistence.repairSessionGroups({
               sessions: [{ id: "ses_keep", projectId: "other" }],
               updatedAt: now,
             }),
           ).resolves.toEqual({
-            ok: true,
-            groups: [expect.objectContaining({ id: "group_prune", sessionIds: [], version: 2 })],
+            groups: [
+              expect.objectContaining({ id: "group_prune", sessionIds: [], version: 2 }),
+              expect.objectContaining({ id: "group_untouched", sessionIds: [], version: 1 }),
+            ],
+            repairs: [{ reason: "invalid_membership", groupId: "group_prune", projectId: "web" }],
           });
           await expect(
-            persistence.pruneSessionGroupMemberships({ sessions: [], updatedAt: later }),
-          ).resolves.toEqual({ ok: true, groups: [] });
-          await expect(persistence.listSessionGroups()).resolves.toEqual([
-            expect.objectContaining({ id: "group_prune", sessionIds: [], version: 2 }),
-          ]);
+            persistence.repairSessionGroups({ sessions: [], updatedAt: later }),
+          ).resolves.toEqual({
+            groups: [
+              expect.objectContaining({ id: "group_prune", sessionIds: [], version: 2 }),
+              expect.objectContaining({ id: "group_untouched", sessionIds: [], version: 1 }),
+            ],
+            repairs: [],
+          });
         });
       });
     });

@@ -381,10 +381,11 @@ persisted with trace correlation, and published. A failed command does not
 poison the following command in its scope.
 
 Recorded `sessionGroup.create`, `sessionGroup.rename`,
-`sessionGroup.updateMembership`, and `sessionGroup.delete` commands serialize by
+`sessionGroup.updateMembership`, `sessionGroup.reparent`, and `sessionGroup.delete` commands serialize by
 project. Inside the snapshot-writer turn they validate configured-project and
-canonical-session identity, enter a non-cancellable commit immediately before calling
-`SessionGroupStore`, and project only the command project without reconcile repair.
+canonical-session identity plus requested parent ancestry, enter a non-cancellable commit
+immediately before calling `SessionGroupStore`, and project only the command project without
+reconcile repair.
 Changed Group events derive from the mutation result and are persisted and published in
 canonical order before command success; validated no-ops emit no Group event. This path
 does not read providers or publish `observer.reconciled`.
@@ -428,11 +429,12 @@ target agents.
 
 Reconcile reads worktree and terminal actors, derives the worktree context for
 harness reads, applies cached metadata and durable overlays, resolves one effective display title
-per current worktree, and correlates canonical sessions. It then prunes durable Group memberships
-against those sessions, excludes but retains definitions for unconfigured projects, projects
-configured Groups deterministically, persists the same title records with the result, and replaces
-the in-memory snapshot. Membership repair and excluded definitions contribute provider-neutral
-errors to the reconcile timing record. Existing canonical titles win; missing authority initializes from
+per current worktree, and correlates canonical sessions. It then atomically repairs durable Group
+membership and parent relationships, excludes but retains definitions for unconfigured projects,
+projects configured Groups as a flat deterministic parent-before-child array, persists the same
+title records with the result, and replaces the in-memory snapshot. Reason-specific relationship
+repair and excluded definitions contribute provider-neutral errors to the reconcile timing record.
+Existing canonical titles win; missing authority initializes from
 the best non-ended custom session evidence before branch fallback, using insert-only reconcile
 persistence so stale evidence cannot overwrite a concurrent rename. It then
 publishes state-change and reconcile events and schedules metadata refresh.
@@ -734,9 +736,10 @@ when it changes several tables:
   fresh-session seeding, confirmed worktree retirement, and canonical-title/recovery import keep
   their multi-table changes atomic.
 - `SessionGroupStore` owns Group definitions, exclusive direct membership, parent changes,
-  deletion-to-ungroup with child reparenting, and reconcile pruning. Stale versions and expected
-  assignments return conflicts without throwing; invariant or storage failures roll back the
-  complete conversation. Empty definitions remain durable.
+  deletion-to-ungroup with child reparenting, and atomic reconcile repair of parseable membership
+  and parent relationships. Stale versions and expected assignments return conflicts without
+  throwing; invariant or storage failures roll back the complete conversation. Empty definitions
+  remain durable.
 - `WorktreeMetadataStore` owns current change, pull-request, and check metadata
   plus its expiry.
 

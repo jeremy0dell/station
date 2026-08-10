@@ -58,13 +58,39 @@ describe("production Observer SQLite smoke", () => {
           ),
         ).status,
       ).toBe("succeeded");
+      for (const name of ["Durable parent", "Durable child"]) {
+        const created = jsonObject(
+          runStnJson(
+            ["--config", configPath, "command", "dispatch", "--stdin", "--wait"],
+            env,
+            JSON.stringify({
+              type: "sessionGroup.create",
+              payload: { projectId, name },
+            }),
+          ),
+        );
+        expect(created.status).toBe("succeeded");
+      }
+      const createdGroups = StationSnapshotSchema.parse(
+        runStnJson(["--config", configPath, "snapshot", "--json"], env),
+      ).sessionGroups;
+      const parent = createdGroups.find((group) => group.name === "Durable parent");
+      const child = createdGroups.find((group) => group.name === "Durable child");
+      if (parent === undefined || child === undefined) {
+        throw new Error("Expected both durable Group definitions.");
+      }
       const dispatchedOutput = jsonObject(
         runStnJson(
           ["--config", configPath, "command", "dispatch", "--stdin", "--wait"],
           env,
           JSON.stringify({
-            type: "sessionGroup.create",
-            payload: { projectId, name: "Durable empty Group" },
+            type: "sessionGroup.reparent",
+            payload: {
+              projectId,
+              groupId: child.id,
+              expectedVersion: child.version,
+              parentGroupId: parent.id,
+            },
           }),
         ),
       );
@@ -75,10 +101,30 @@ describe("production Observer SQLite smoke", () => {
       expect(command).toMatchObject({
         status: "succeeded",
         command: {
-          type: "sessionGroup.create",
-          payload: { projectId, name: "Durable empty Group" },
+          type: "sessionGroup.reparent",
+          payload: { projectId, groupId: child.id, parentGroupId: parent.id },
         },
       });
+      expect(
+        StationSnapshotSchema.parse(runStnJson(["--config", configPath, "snapshot", "--json"], env))
+          .sessionGroups,
+      ).toEqual([
+        expect.objectContaining({
+          id: parent.id,
+          projectId,
+          name: "Durable parent",
+          sessionIds: [],
+          version: 1,
+        }),
+        expect.objectContaining({
+          id: child.id,
+          projectId,
+          name: "Durable child",
+          parentGroupId: parent.id,
+          sessionIds: [],
+          version: 2,
+        }),
+      ]);
       const firstHealth = await client.health();
       expect(firstHealth.sqlite).toMatchObject({
         path: databasePath,
@@ -105,11 +151,19 @@ describe("production Observer SQLite smoke", () => {
           .sessionGroups,
       ).toEqual([
         expect.objectContaining({
-          id: expect.stringMatching(/^grp_/),
+          id: parent.id,
           projectId,
-          name: "Durable empty Group",
+          name: "Durable parent",
           sessionIds: [],
           version: 1,
+        }),
+        expect.objectContaining({
+          id: child.id,
+          projectId,
+          name: "Durable child",
+          parentGroupId: parent.id,
+          sessionIds: [],
+          version: 2,
         }),
       ]);
       const secondHealth = await client.health();

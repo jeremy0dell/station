@@ -211,6 +211,133 @@ describe("observer reconcile persistence", () => {
     sqlite.close();
   });
 
+  it("repairs missing, cross-project, and cyclic Group parentage deterministically", async () => {
+    const groupConfig: StationConfig = {
+      ...config,
+      projects: [
+        ...config.projects,
+        {
+          id: "api",
+          label: "api",
+          root: "/tmp/station/api",
+          defaults: {
+            harness: "fake-harness",
+            terminal: "fake-terminal",
+            layout: "agent-shell",
+          },
+          worktrunk: { enabled: true },
+        },
+      ],
+    };
+    const { sqlite, persistence, core } = createTestObserverCore({
+      config: groupConfig,
+      providers: providersWithOneSession(),
+      clock: { now: () => new Date(now) },
+    });
+    await persistence.createSessionGroup({
+      id: "grp_a_combined",
+      projectId: "web",
+      name: "Combined",
+      initialMembers: [{ sessionId: "ses_missing", projectId: "web", expectedGroupId: null }],
+      createdAt: now,
+    });
+    for (const [id, projectId] of [
+      ["grp_b_cross", "web"],
+      ["grp_c_api_parent", "api"],
+      ["grp_d_self", "web"],
+      ["grp_e_cycle_a", "web"],
+      ["grp_e_cycle_b", "web"],
+      ["grp_f_descendant", "web"],
+    ] as const) {
+      await persistence.createSessionGroup({ id, projectId, name: id, createdAt: now });
+    }
+    const setParent = sqlite.database.prepare(
+      "UPDATE session_groups SET parent_group_id = ? WHERE id = ?",
+    );
+    setParent.run("grp_missing", "grp_a_combined");
+    setParent.run("grp_c_api_parent", "grp_b_cross");
+    setParent.run("grp_d_self", "grp_d_self");
+    setParent.run("grp_e_cycle_b", "grp_e_cycle_a");
+    setParent.run("grp_e_cycle_a", "grp_e_cycle_b");
+    setParent.run("grp_e_cycle_a", "grp_f_descendant");
+
+    const snapshot = await core.reconcile("session-group-parent-repair");
+    expect(() => StationSnapshotSchema.parse(snapshot)).not.toThrow();
+    const groups = new Map(snapshot.sessionGroups.map((group) => [group.id, group]));
+    for (const id of [
+      "grp_a_combined",
+      "grp_b_cross",
+      "grp_d_self",
+      "grp_e_cycle_a",
+      "grp_e_cycle_b",
+    ]) {
+      expect(groups.get(id)).not.toHaveProperty("parentGroupId");
+      expect(groups.get(id)).toMatchObject({ version: 2 });
+    }
+    expect(groups.get("grp_a_combined")).toMatchObject({ sessionIds: [] });
+    expect(groups.get("grp_f_descendant")).toMatchObject({
+      parentGroupId: "grp_e_cycle_a",
+      version: 1,
+    });
+    expect(groups.get("grp_c_api_parent")).toMatchObject({ version: 1 });
+    expect(core.getHealth().lastReconcile?.errors.map((error) => error.code)).toEqual([
+      "SESSION_GROUP_MEMBERSHIP_REPAIRED",
+      "SESSION_GROUP_PARENT_MISSING_REPAIRED",
+      "SESSION_GROUP_PARENT_PROJECT_REPAIRED",
+      "SESSION_GROUP_PARENT_CYCLE_REPAIRED",
+      "SESSION_GROUP_PARENT_CYCLE_REPAIRED",
+      "SESSION_GROUP_PARENT_CYCLE_REPAIRED",
+    ]);
+
+    const repeated = await core.reconcile("session-group-parent-repair-repeat");
+    expect(() => StationSnapshotSchema.parse(repeated)).not.toThrow();
+    expect((await persistence.listSessionGroups()).map((group) => group.version)).toEqual([
+      1, 2, 2, 2, 2, 2, 1,
+    ]);
+    expect(
+      core.getHealth().lastReconcile?.errors.filter((error) => error.code.includes("_REPAIRED")),
+    ).toEqual([]);
+    sqlite.close();
+  });
+
+  it("rolls back the complete Group relationship repair when a later write fails", async () => {
+    const { sqlite, persistence } = createTestObserverCore({
+      config,
+      providers: providersWithOneSession(),
+      clock: { now: () => new Date(now) },
+    });
+    for (const id of ["grp_a", "grp_b"]) {
+      await persistence.createSessionGroup({
+        id,
+        projectId: "web",
+        name: id,
+        createdAt: now,
+      });
+    }
+    sqlite.database.exec(`
+      UPDATE session_groups SET parent_group_id = 'missing' WHERE id IN ('grp_a', 'grp_b');
+      CREATE TRIGGER reject_group_b_repair
+      BEFORE UPDATE ON session_groups
+      WHEN OLD.id = 'grp_b'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced Group repair failure');
+      END;
+    `);
+
+    await expect(
+      persistence.repairSessionGroups({ sessions: [], updatedAt: "2026-05-20T12:01:00.000Z" }),
+    ).rejects.toBeDefined();
+    expect(
+      sqlite.database
+        .prepare("SELECT id, parent_group_id, version FROM session_groups ORDER BY id")
+        .all(),
+    ).toEqual([
+      { id: "grp_a", parent_group_id: "missing", version: 1 },
+      { id: "grp_b", parent_group_id: "missing", version: 1 },
+    ]);
+    sqlite.close();
+  });
+
   it("preserves empty Groups and retains excluded-project definitions outside the snapshot", async () => {
     const { sqlite, persistence, core } = createTestObserverCore({
       config,
@@ -229,6 +356,9 @@ describe("observer reconcile persistence", () => {
       name: "Retained",
       createdAt: now,
     });
+    sqlite.database
+      .prepare("UPDATE session_groups SET parent_group_id = ? WHERE id = ?")
+      .run("grp_missing", "grp_removed_empty");
 
     const snapshot = await core.reconcile("session-group-excluded-project");
 
@@ -236,9 +366,16 @@ describe("observer reconcile persistence", () => {
       expect.objectContaining({ id: "grp_web_empty", sessionIds: [], version: 1 }),
     ]);
     await expect(persistence.listSessionGroups()).resolves.toEqual([
-      expect.objectContaining({ id: "grp_removed_empty", projectId: "removed" }),
+      expect.objectContaining({ id: "grp_removed_empty", projectId: "removed", version: 2 }),
       expect.objectContaining({ id: "grp_web_empty", projectId: "web" }),
     ]);
+    expect((await persistence.listSessionGroups())[0]).not.toHaveProperty("parentGroupId");
+    expect(core.getHealth().lastReconcile?.errors).toContainEqual(
+      expect.objectContaining({
+        code: "SESSION_GROUP_PARENT_MISSING_REPAIRED",
+        projectId: "removed",
+      }),
+    );
     expect(core.getHealth().lastReconcile?.errors).toContainEqual(
       expect.objectContaining({
         code: "SESSION_GROUP_PROJECT_EXCLUDED",
