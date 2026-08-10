@@ -2,6 +2,7 @@ import {
   type HarnessCapabilities,
   type ProjectView,
   type ProviderHealth,
+  type SessionGroupView,
   type SessionView,
   STATION_SCHEMA_VERSION,
   type StationSnapshot,
@@ -41,6 +42,31 @@ export function createCommandSnapshot(
 
 export function createZeroWorktreeSnapshot(): StationSnapshot {
   return snapshotFromRows([]);
+}
+
+export function sessionGroup(
+  input: {
+    id?: SessionGroupView["id"];
+    projectId?: SessionGroupView["projectId"];
+    name?: string;
+    sessionIds?: SessionGroupView["sessionIds"];
+    parentGroupId?: SessionGroupView["parentGroupId"];
+    version?: number;
+    createdAt?: string;
+    updatedAt?: string;
+  } = {},
+): SessionGroupView {
+  const built: SessionGroupView = {
+    id: input.id ?? "grp_web_1",
+    projectId: input.projectId ?? "web",
+    name: input.name ?? "Active work",
+    sessionIds: input.sessionIds ?? [],
+    version: input.version ?? 1,
+    createdAt: input.createdAt ?? fixtureNow,
+    updatedAt: input.updatedAt ?? fixtureNow,
+  };
+  if (input.parentGroupId !== undefined) built.parentGroupId = input.parentGroupId;
+  return built;
 }
 
 export function row(input: {
