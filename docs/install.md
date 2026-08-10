@@ -295,14 +295,18 @@ preparation command fails, the checkout remains at the verified target and the
 report lists the complete frozen-install, build, repair, and relink sequence to
 resume safely.
 
+Before mutation, `stn update` defaults to preserving a busy compatible Host with
+preflighted `processes` handoff. Absent, stale, reusable, and idle Hosts need no handoff;
+uncertain preservation fails closed, and deferred package-manager updates skip
+Host inspection. Use `--handoff=screen` for semantic snapshots or
+`--no-handoff` to leave the incumbent in place with a stale-Host warning.
+
 After channel apply completes, the new launcher runs `stn observer restart`, so
 Observer build precedence is evaluated by the installed build rather than the
-old process. The Station Host is unchanged unless `--handoff` or
-`--handoff=processes|screen` is passed. A requested handoff is preflighted before
-installation and revalidated by the existing Host protocol during transfer.
-Failures report completed phases, sanitized evidence, and exact recovery
-commands; a verified install or Git fast-forward is not rolled back after a
-later preparation or runtime-crossover failure.
+old process. The same successor launcher then performs any preflighted Host
+handoff. Failures report completed phases, sanitized evidence, and exact
+recovery commands; a verified install or Git fast-forward is not rolled back
+after a later preparation or runtime-crossover failure.
 
 The `installer-binary` channel may own only compiled installations carrying the
 receipt. Detection is local and network-free. Before release discovery and

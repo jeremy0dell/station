@@ -16,22 +16,30 @@ describe("runHostCommand", () => {
       onConnection: () => undefined,
     });
     const dispose = vi.fn();
+    const requestedBuilds: string[] = [];
     try {
       const result = await runHostCommand(
         ["status"],
         { config: fixture.config },
         {
           expectedBuildVersion: requestingBuild,
-          clientFactory: () =>
-            ({
+          clientFactory: (_socketPath, expectedBuildVersion) => {
+            requestedBuilds.push(expectedBuildVersion);
+            return {
               health: async () => ({
                 ok: true,
                 protocolVersion: HOST_PROTOCOL_VERSION,
                 buildVersion: "older-build",
               }),
-              list: async () => [{ ptyId: "pty-1", pid: 42, alive: true }],
+              list: async () => {
+                if (expectedBuildVersion !== "older-build") {
+                  throw new Error("wrong inventory identity");
+                }
+                return [{ ptyId: "pty-1", pid: 42, alive: true }];
+              },
               dispose,
-            }) as never,
+            } as never;
+          },
         },
       );
 
@@ -42,7 +50,8 @@ describe("runHostCommand", () => {
         handoffEligible: true,
         compatibility: { action: "replace" },
       });
-      expect(dispose).toHaveBeenCalledOnce();
+      expect(requestedBuilds).toEqual([requestingBuild, "older-build"]);
+      expect(dispose).toHaveBeenCalledTimes(2);
     } finally {
       await server.close();
     }

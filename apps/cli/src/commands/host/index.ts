@@ -149,15 +149,21 @@ async function runHostStatus(input: {
     result.health = health;
     const compatibility = classifyHostCompatibility(health, input.expectedBuildVersion);
     result.compatibility = compatibility;
+    // Inventory stays read-only but must pass the client's exact incumbent-build gate.
+    const inventoryClient =
+      compatibility.action === "replace"
+        ? input.clientFactory(input.socketPath, compatibility.runningBuildVersion)
+        : client;
     try {
-      const ptys = await client.list();
+      const ptys = await inventoryClient.list();
       result.ptys = ptys;
       result.livePtyCount = ptys.length;
       result.handoffEligible = compatibility.action === "replace" && ptys.length > 0;
     } catch (error) {
-      // list requires matching identity; status still reports health/compat
       result.error = error instanceof Error ? error.message : String(error);
       result.handoffEligible = compatibility.action === "replace";
+    } finally {
+      if (inventoryClient !== client) inventoryClient.dispose();
     }
     return result;
   } catch (error) {

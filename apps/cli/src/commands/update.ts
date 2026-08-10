@@ -65,7 +65,7 @@ type ExecutableUpdateScenario = Extract<
 /**
  * ADAPTER
  *
- * Selects one owned install channel, honors channel-owned apply recovery, and crosses runtimes through the successor launcher after mutation.
+ * Selects one owned install channel, preflights default live Host preservation, and crosses runtimes through the successor launcher after mutation.
  */
 export async function runUpdateCommand(
   args: readonly string[],
@@ -153,6 +153,13 @@ async function executeSelectedUpdate(
   report.steps.push(
     updateStep("apply", "completed", `Installed Station ${applied.installedVersion}.`),
   );
+  if (scenario.hostHandoff.kind === "not-requested") {
+    report.warnings.push({
+      tag: "UpdateWarning",
+      code: "UPDATE_HOST_HANDOFF_DISABLED",
+      message: "Host handoff was disabled; the next TUI may refuse the incumbent Host.",
+    });
+  }
 
   if (applied.successorCli === undefined) {
     return failedUpdateResult(
@@ -185,7 +192,7 @@ async function crossOverRuntime(
   options: UpdateCommandOptions,
   commandRunner: ExternalCommandRunner | undefined,
 ): Promise<CliRunResult> {
-  // Crossover must use the successor launcher: Observer first, then optional Host handoff.
+  // Crossover must use the successor launcher: Observer first, then any planned Host handoff.
   const observerCommand = stationCommand(successorCli, options.configPath, ["observer", "restart"]);
   try {
     await runCrossover(observerCommand, commandRunner);
@@ -260,6 +267,6 @@ function retryUpdateCommand(
     "update",
     ...(request.channel === undefined ? [] : ["--channel", request.channel]),
     ...(request.packageManager === "drive" ? ["--drive-package-manager"] : []),
-    ...(request.handoff === undefined ? [] : [`--handoff=${request.handoff}`]),
+    ...(request.handoff === undefined ? ["--no-handoff"] : [`--handoff=${request.handoff}`]),
   ]);
 }
