@@ -256,13 +256,59 @@ The installer:
 
 ### Automatic-update ownership
 
-This change does not add an update command. It establishes a future
-`installer-binary` channel that may own only compiled installations carrying
-the exact installer receipt above. Detection is local and network-free. Before
-release discovery and again at the installer's locked commit boundary, the
-channel binds the physical `stn` hash, device, and inode plus the device and
-inode of both launchers and the receipt. A missing or changed path is refused
-before mutation.
+`stn update` detects the installation owner, resolves its current and target
+builds, and either applies the update or defers to that owner. Review the same
+plan without mutation in text or JSON:
+
+```sh
+stn update --dry-run
+stn update --dry-run --json
+```
+
+The supported channel IDs are:
+
+- `installer-binary`: requires the exact installer receipt above, verifies a
+  complete GitHub release and checksums, then delegates the locked atomic swap
+  to the verified `install.sh`;
+- `dev-checkout`: requires Git, pnpm, and Bun plus a clean attached branch with
+  an upstream, fetches and fast-forwards to the planned SHA, prepares the root
+  and `station/` dependencies with frozen lockfiles, rebuilds the root, restores
+  the Station UI's nested `@station` links and native helper, then relinks the
+  launchers;
+- `homebrew`: recognizes an already Homebrew-owned formula or cask;
+- `npm-global`: recognizes the global package whose `stn` bin entry owns the
+  running CLI; and
+- `mise`: recognizes the active tool installation whose `bin/stn` owns the
+  running CLI.
+
+Homebrew, npm-global, and mise print their exact native upgrade command and
+return `deferred` by default. `stn update --drive-package-manager` explicitly
+allows Station to execute that command. This does not make those managers
+supported public Station distribution channels; it preserves manager ownership
+for installations that already use them. Use `--channel <id>` to resolve an
+ambiguous installation, but explicit selection never bypasses ownership proof.
+
+Dev-checkout preparation runs after every fast-forward rather than guessing from
+the changed files. It may take longer and access package registries, but it does
+not install or upgrade Git, Node.js, pnpm, Bun, or other system tools. If a
+preparation command fails, the checkout remains at the verified target and the
+report lists the complete frozen-install, build, repair, and relink sequence to
+resume safely.
+
+After channel apply completes, the new launcher runs `stn observer restart`, so
+Observer build precedence is evaluated by the installed build rather than the
+old process. The Station Host is unchanged unless `--handoff` or
+`--handoff=processes|screen` is passed. A requested handoff is preflighted before
+installation and revalidated by the existing Host protocol during transfer.
+Failures report completed phases, sanitized evidence, and exact recovery
+commands; a verified install or Git fast-forward is not rolled back after a
+later preparation or runtime-crossover failure.
+
+The `installer-binary` channel may own only compiled installations carrying the
+receipt. Detection is local and network-free. Before release discovery and
+again at the installer's locked commit boundary, it binds the physical `stn`
+hash, device, and inode plus the device and inode of both launchers and the
+receipt. A missing or changed path is refused before mutation.
 
 The current public `v0.0.0-pre-alpha.5.1` installer is immutable and predates
 this receipt, so existing installations continue to work but are not enrolled

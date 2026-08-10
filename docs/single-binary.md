@@ -486,9 +486,16 @@ sole runtime commit point.
 The receipt is `<install-dir>/.station-install-receipt`, a regular non-symlink
 `0600` file containing exactly `station-installer-binary-v1`. A valid existing
 receipt keeps its inode. A missing receipt is published without clobbering only
-after binary commit; a malformed receipt is refused. The future
-`installer-binary` update channel requires this ownership marker, but this
-slice adds no update command or runtime crossover. The immutable current public
+after binary commit; a malformed receipt is refused. The `installer-binary`
+adapter requires this ownership marker. `stn update` composes it with
+dev-checkout, Homebrew, npm-global, and mise adapters behind the same local
+detect, remote plan, and revalidated apply lifecycle. Manager-owned channels
+defer by default; only `--drive-package-manager` executes their native command.
+
+After an applied update, the newly installed launcher restarts the Observer and
+therefore supplies the candidate build identity to the existing precedence
+policy. Optional `--handoff[=processes|screen]` then delegates live PTY transfer
+to the existing Station Host protocol. The immutable current public
 `v0.0.0-pre-alpha.5.1` installer predates the receipt, so a later exact-tag
 manual install is required once before automatic updates can own an existing
 layout.

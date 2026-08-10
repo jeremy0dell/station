@@ -27,7 +27,12 @@ import {
   requireUnchangedInstallerInstallation,
   sameInstallerInstallation,
 } from "./installerInstallation.js";
-import type { UpdateChannel, UpdateOperationOptions } from "./updateChannel.js";
+import type {
+  UpdateApplyReportBase,
+  UpdateChannel,
+  UpdateOperationOptions,
+  UpdatePlanBase,
+} from "./updateChannel.js";
 import {
   appendUpdateErrorHint,
   type UpdateErrorFallback,
@@ -58,19 +63,17 @@ export type InstallerBinaryDetection = InstallerInstallation & {
 type InstallerBinaryPlanBase = InstallerBinaryDetection & {
   current: NativeBinaryRelease;
   target: NativeBinaryRelease;
+  targetVersion: string;
 };
 
 export type InstallerBinaryUpdatePlan =
-  | (InstallerBinaryPlanBase & { status: "current" })
-  | (InstallerBinaryPlanBase & { status: "update-available" });
+  | (InstallerBinaryPlanBase & UpdatePlanBase & { status: "current" })
+  | (InstallerBinaryPlanBase & UpdatePlanBase & { status: "update-available" });
 
-export type InstallerBinaryUpdateReport = {
+export type InstallerBinaryUpdateReport = UpdateApplyReportBase & {
   status: "installed";
   channel: typeof channel;
-  previousVersion: string;
-  installedVersion: string;
   executablePath: string;
-  warnings: RuntimeSafeError[];
 };
 
 export type InstallerBinaryUpdateChannel = UpdateChannel<
@@ -98,15 +101,16 @@ const InstallerBinaryDetectionSchema = InstallerInstallationSchema.extend({
 }).strict();
 const InstallerBinaryUpdatePlanSchema = InstallerBinaryDetectionSchema.extend({
   status: z.literal("update-available"),
+  targetVersion: z.string().min(1),
+  currentCli: z.array(z.string().min(1)).min(1),
   current: z.unknown(),
   target: z.unknown(),
 }).strict();
 
 /**
- * Creates the installer-owned binary channel. Detection requires the ownership receipt,
- * and apply delegates mutation only after the installer locks and rechecks every planned identity.
+ * ADAPTER
  *
- * @knipignore Follow-up #514 will compose this channel into the public update command.
+ * Translates installer receipt and release evidence into a verified binary update.
  */
 export function createInstallerBinaryUpdateChannel(
   deps: InstallerBinaryUpdateChannelDeps = {},
@@ -124,6 +128,7 @@ export function createInstallerBinaryUpdateChannel(
     deps.removeTempDir ?? ((path: string) => rm(path, { recursive: true, force: true }));
 
   return {
+    id: channel,
     async detect(options = {}) {
       const info = buildInfo();
       const targetPlatform = nativeTarget(platform, architecture);
@@ -209,6 +214,8 @@ export function createInstallerBinaryUpdateChannel(
           status: "current",
           current: releases.current,
           target: releases.current,
+          targetVersion: releases.current.version,
+          currentCli: [detection.executablePath],
         };
       }
 
@@ -217,6 +224,8 @@ export function createInstallerBinaryUpdateChannel(
         status: "update-available",
         current: releases.current,
         target: releases.latest,
+        targetVersion: releases.latest.version,
+        currentCli: [detection.executablePath],
       };
     },
 
@@ -437,6 +446,7 @@ async function validateApplyPlan(
     !isCanonicalNativeRelease(updatePlan.target) ||
     updatePlan.current.tag !== updatePlan.currentTag ||
     updatePlan.current.version !== updatePlan.currentVersion ||
+    updatePlan.target.version !== updatePlan.targetVersion ||
     comparePublication(updatePlan.current, updatePlan.target) >= 0
   ) {
     throw planInvalid();
@@ -455,6 +465,7 @@ function installedReport(
     previousVersion: plan.current.version,
     installedVersion: plan.target.version,
     executablePath: plan.executablePath,
+    successorCli: [plan.executablePath],
     warnings,
   };
 }
