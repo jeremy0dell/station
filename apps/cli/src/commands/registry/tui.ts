@@ -47,11 +47,15 @@ async function runTuiCliCommand(context: CliCommandRunContext) {
   if (context.options.observerDeps !== undefined) tuiDeps.observer = context.options.observerDeps;
   const tuiEnv = context.options.tuiDeps?.env ?? context.options.env;
   if (tuiEnv !== undefined) tuiDeps.env = tuiEnv;
-  tuiDeps.updateProbes ??= createDefaultUpdateProbes({
-    cliEntryPath: context.cliEntryPath,
-    ...(tuiEnv === undefined ? {} : { env: tuiEnv }),
-  });
-  tuiDeps.writeUpdateNotice ??= (notice) => process.stdout.write(notice);
+  if (tuiDeps.updateProbes === undefined) {
+    tuiDeps.updateProbes = createDefaultUpdateProbes({
+      cliEntryPath: context.cliEntryPath,
+      ...(tuiEnv === undefined ? {} : { env: tuiEnv }),
+    });
+  }
+  if (tuiDeps.writeUpdateNotice === undefined) {
+    tuiDeps.writeUpdateNotice = (notice) => process.stdout.write(notice);
+  }
   const result = await runTuiCommand(context.args, loadedCommandOptions(context), tuiDeps);
   return { code: result.code, output: result };
 }
