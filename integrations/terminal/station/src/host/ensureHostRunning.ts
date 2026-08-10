@@ -91,7 +91,8 @@ type IncumbentHostDecision =
  *
  * Preserves inaccessible Host ownership and defers definite stale reclaim to
  * the child binder while retaining compatibility-aware idle replacement and an
- * opt-in busy-host live handoff path.
+ * opt-in busy-host live handoff path. Pre-commit failure restores the incumbent
+ * refusal; after completion commits, parked PTYs remain available to a successor.
  */
 export async function ensureStationHostRunning(
   options: EnsureStationHostOptions,
@@ -267,6 +268,7 @@ async function negotiateIncumbentHost(input: {
         fidelity: input.handoff.fidelity,
         socketPath: input.socketPath,
         timeoutMs: input.timeoutMs,
+        refusal: error,
       });
     }
     return {
@@ -290,34 +292,109 @@ async function tryLiveHandoff(input: {
   fidelity: HostHandoffFidelity;
   socketPath: string;
   timeoutMs: number;
+  refusal: SafeError;
 }): Promise<IncumbentHostDecision> {
-  let completed = false;
+  let begun: Awaited<ReturnType<StationHostClient["beginHandoff"]>>;
   try {
-    const begun = await input.client.beginHandoff(input.expectedBuildVersion, input.fidelity);
-    await input.client.completeHandoff();
-    completed = true;
-    await waitForSocketRelease(input.socketPath, input.timeoutMs);
-    return { outcome: "start-with-handoff", manifest: begun.manifest };
-  } catch (handoffError) {
-    // Abort only before complete commits; afterward parks belong to a successor.
-    if (!completed) {
-      try {
-        await input.client.abortHandoff();
-      } catch {
-        // ignore
-      }
-    }
+    begun = await input.client.beginHandoff(input.expectedBuildVersion, input.fidelity);
+  } catch (error) {
     return {
       outcome: "unavailable",
-      error: stationHostErrorFromUnknown(handoffError, {
-        code: "HOST_VERSION_INCOMPATIBLE",
-        message: "Station host live handoff could not be completed safely.",
-        hint: completed
-          ? "Handoff completed but the incumbent socket did not release in time. Parked bridges remain under the state dir for a successor retry."
-          : "The existing host and terminals were preserved when possible. Retry, or reopen with the running build.",
-      }),
+      error: refusalWithHandoffEvidence(
+        input.refusal,
+        stationHostErrorFromUnknown(error, {
+          code: "HOST_HANDOFF_INVALID_STATE",
+          message: "Station host live handoff could not begin safely.",
+        }),
+      ),
     };
   }
+
+  try {
+    await input.client.completeHandoff();
+  } catch (error) {
+    const handoffFailure = stationHostErrorFromUnknown(error, {
+      code: "HOST_UNREACHABLE",
+      message: "Station host live handoff could not be completed safely.",
+    });
+    try {
+      const abort = await input.client.abortHandoff();
+      if (restoredEveryManifestEntry(abort, begun.manifest)) {
+        return {
+          outcome: "unavailable",
+          error: refusalWithHandoffEvidence(input.refusal, handoffFailure),
+        };
+      }
+      return {
+        outcome: "unavailable",
+        error: parkedHandoffFailure(
+          handoffFailure,
+          stationHostSafeError(
+            "HOST_HANDOFF_MANIFEST_INVALID",
+            "Incumbent Host restoration did not recover every parked terminal.",
+          ),
+        ),
+      };
+    } catch (abortError) {
+      return {
+        outcome: "unavailable",
+        error: parkedHandoffFailure(
+          handoffFailure,
+          stationHostErrorFromUnknown(abortError, {
+            code: "HOST_HANDOFF_INVALID_STATE",
+            message: "Incumbent Host restoration could not be confirmed.",
+          }),
+        ),
+      };
+    }
+  }
+
+  try {
+    await waitForSocketRelease(input.socketPath, input.timeoutMs);
+    return { outcome: "start-with-handoff", manifest: begun.manifest };
+  } catch (error) {
+    return {
+      outcome: "unavailable",
+      error: parkedHandoffFailure(
+        stationHostErrorFromUnknown(error, {
+          code: "HOST_UNREACHABLE",
+          message: "Completed Station host handoff did not release the incumbent socket.",
+        }),
+      ),
+    };
+  }
+}
+
+function restoredEveryManifestEntry(
+  report: { adopted: readonly string[]; failed: readonly { ptyId: string }[] },
+  manifest: PtyHandoffManifest,
+): boolean {
+  if (report.failed.length > 0) return false;
+  const expected = Object.keys(manifest).sort();
+  return (
+    report.adopted.length === expected.length &&
+    [...report.adopted].sort().every((ptyId, index) => ptyId === expected[index])
+  );
+}
+
+function refusalWithHandoffEvidence(refusal: SafeError, failure: SafeError): SafeError {
+  const evidence = `Handoff failed: ${failure.message} (${failure.code}).`;
+  return {
+    ...refusal,
+    hint: refusal.hint === undefined ? evidence : `${refusal.hint} ${evidence}`,
+  };
+}
+
+function parkedHandoffFailure(failure: SafeError, restorationFailure?: SafeError): SafeError {
+  const evidence =
+    restorationFailure === undefined
+      ? undefined
+      : `Incumbent restoration was not confirmed: ${restorationFailure.message} (${restorationFailure.code}).`;
+  const guidance = "Parked bridges remain under the state dir for successor recovery.";
+  return {
+    ...failure,
+    hint: [evidence, guidance].filter((part) => part !== undefined).join(" "),
+  };
 }
 
 export async function adoptHandoffManifest(
@@ -352,7 +429,7 @@ export async function adoptHandoffManifest(
   }
 }
 
-function isUpgradeBlocked(error: unknown): boolean {
+function isUpgradeBlocked(error: unknown): error is SafeError {
   return isStationHostCompatibilityError(error) && error.code === "HOST_UPGRADE_BLOCKED";
 }
 

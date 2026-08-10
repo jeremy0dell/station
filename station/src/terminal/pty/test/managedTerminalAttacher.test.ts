@@ -27,7 +27,7 @@ function hostEntry(overrides: Partial<HostListEntry> = {}): HostListEntry {
 }
 
 describe("createStationHostManagedTerminalAttacher", () => {
-  it("resolves one live matching agent to a lazy host terminal factory", async () => {
+  it("resolves one live successor agent to a lazy factory with the same PTY instance", async () => {
     const created: HostAttachedTerminalOptions[] = [];
     const scripted = createScriptedTerminal();
     const listed = [
@@ -106,6 +106,7 @@ describe("createStationHostManagedTerminalAttacher", () => {
   });
 
   it("propagates host compatibility failures without a local fallback", async () => {
+    let created = false;
     const attacher = createStationHostManagedTerminalAttacher("/run/station-host.sock", {
       listHost: async () => {
         throw new StationHostProviderError(
@@ -113,10 +114,15 @@ describe("createStationHostManagedTerminalAttacher", () => {
           "Station host version is incompatible.",
         );
       },
+      createTerminal: () => {
+        created = true;
+        return createScriptedTerminal().terminal;
+      },
     });
 
     await expect(attacher.resolve(ATTACHMENT, "ses-agent")).rejects.toMatchObject({
       code: "HOST_VERSION_INCOMPATIBLE",
     });
+    expect(created).toBe(false);
   });
 });

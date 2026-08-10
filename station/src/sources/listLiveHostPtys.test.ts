@@ -38,7 +38,17 @@ function entry(): HostListEntry {
 
 describe("listLiveHostPtys", () => {
   it("returns undefined when the socket file is absent (boot stays cold)", async () => {
-    expect(await listLiveHostPtys("/no/such/station-host.sock")).toBeUndefined();
+    let handedOff = false;
+    expect(
+      await listLiveHostPtys("/no/such/station-host.sock", {
+        env: { STATION_HOST_HANDOFF: "1" },
+        handoffBusyHost: async () => {
+          handedOff = true;
+          return [];
+        },
+      }),
+    ).toBeUndefined();
+    expect(handedOff).toBe(false);
   });
 
   it("reuses a same-build host, returns its live entries, and disposes the client", async () => {
@@ -46,7 +56,9 @@ describe("listLiveHostPtys", () => {
     try {
       const entries = [entry()];
       let disposed = false;
+      let handedOff = false;
       const result = await listLiveHostPtys(path, {
+        env: { STATION_HOST_HANDOFF: "1" },
         expectedBuildVersion: EXPECTED_BUILD_VERSION,
         createClient: () => ({
           health: async () => ({
@@ -58,9 +70,14 @@ describe("listLiveHostPtys", () => {
           stopIfIdle: async () => ({ stopping: true }),
           dispose: () => (disposed = true),
         }),
+        handoffBusyHost: async () => {
+          handedOff = true;
+          return [];
+        },
       });
       expect(result).toBe(entries);
       expect(disposed).toBe(true);
+      expect(handedOff).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -202,6 +219,131 @@ describe("listLiveHostPtys", () => {
           }),
         }),
       ).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  for (const gate of [undefined, "", "true", "0", "yes"]) {
+    it(`preserves the exact busy-host refusal when the handoff gate is ${String(gate)}`, async () => {
+      const { dir, path } = tempSocketPath();
+      const refusal = new StationHostProviderError(
+        "HOST_UPGRADE_BLOCKED",
+        "Cannot upgrade while a live terminal is hosted.",
+        { hint: "Original refusal hint." },
+      );
+      let handedOff = false;
+      try {
+        let caught: unknown;
+        try {
+          await listLiveHostPtys(path, {
+            env: { STATION_HOST_HANDOFF: gate },
+            expectedBuildVersion: EXPECTED_BUILD_VERSION,
+            createClient: () => ({
+              health: async () => ({
+                ok: true,
+                protocolVersion: HOST_PROTOCOL_VERSION,
+                buildVersion: "build-old",
+              }),
+              list: async () => [],
+              stopIfIdle: async () => {
+                throw refusal;
+              },
+              dispose: () => {},
+            }),
+            handoffBusyHost: async () => {
+              handedOff = true;
+              return [];
+            },
+          });
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBe(refusal);
+        expect(handedOff).toBe(false);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it("hands off only after a gated busy replacement and returns successor inventory", async () => {
+    const { dir, path } = tempSocketPath();
+    let disposed = false;
+    let listedIncumbent = false;
+    const successor = [entry()];
+    try {
+      const result = await listLiveHostPtys(path, {
+        env: { STATION_HOST_HANDOFF: "1" },
+        expectedBuildVersion: EXPECTED_BUILD_VERSION,
+        createClient: () => ({
+          health: async () => ({
+            ok: true,
+            protocolVersion: HOST_PROTOCOL_VERSION,
+            buildVersion: "build-old",
+          }),
+          list: async () => {
+            listedIncumbent = true;
+            return [];
+          },
+          stopIfIdle: async () => {
+            throw new StationHostProviderError(
+              "HOST_UPGRADE_BLOCKED",
+              "Cannot upgrade while a live terminal is hosted.",
+            );
+          },
+          dispose: () => (disposed = true),
+        }),
+        handoffBusyHost: async (input) => {
+          expect(disposed).toBe(true);
+          expect(input).toEqual({
+            socketPath: path,
+            expectedBuildVersion: EXPECTED_BUILD_VERSION,
+          });
+          return successor;
+        },
+      });
+
+      expect(result).toBe(successor);
+      expect(listedIncumbent).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("propagates gated handoff failure instead of treating the successor as absent", async () => {
+    const { dir, path } = tempSocketPath();
+    try {
+      await expect(
+        listLiveHostPtys(path, {
+          env: { STATION_HOST_HANDOFF: "1" },
+          expectedBuildVersion: EXPECTED_BUILD_VERSION,
+          createClient: () => ({
+            health: async () => ({
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: "build-old",
+            }),
+            list: async () => [],
+            stopIfIdle: async () => {
+              throw new StationHostProviderError(
+                "HOST_UPGRADE_BLOCKED",
+                "Cannot upgrade while a live terminal is hosted.",
+              );
+            },
+            dispose: () => {},
+          }),
+          handoffBusyHost: async () => {
+            throw new StationHostProviderError(
+              "HOST_HANDOFF_MANIFEST_INVALID",
+              "Successor inventory failed.",
+            );
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "HOST_HANDOFF_MANIFEST_INVALID",
+        message: "Successor inventory failed.",
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

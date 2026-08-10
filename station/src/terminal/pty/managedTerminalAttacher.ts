@@ -32,7 +32,13 @@ type ManagedTerminalAttacherDeps = {
   createTerminal?: (options: HostAttachedTerminalOptions) => StationTerminalProcess;
 };
 
-/** Bind Host inventory and terminal factories at renderer composition for managed attachments. */
+/**
+ * ADAPTER
+ *
+ * Binds gate-negotiated Host inventory to advertised managed attachments at
+ * renderer composition. Resolution failure remains terminal and never permits
+ * a local spawn fallback.
+ */
 export function createStationHostManagedTerminalAttacher(
   hostSocketPath: string,
   deps: ManagedTerminalAttacherDeps = {},

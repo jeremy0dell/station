@@ -9,17 +9,28 @@ station_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_root="$(cd "${station_root}/.." && pwd)"
 target_dir="${station_root}/node_modules/@station"
 
-linked_packages=(client config contracts dashboard-core runtime protocol observability station-host)
+linked_packages=(client config contracts dashboard-core runtime protocol observability station-host terminal)
 linked_apps=(cli observer)
+
+function source_path_for_package() {
+  local package="$1"
+  if [[ "${package}" == "terminal" ]]; then
+    echo "integrations/terminal/station"
+  else
+    echo "packages/${package}"
+  fi
+}
 
 # dashboard-core publishes role entrypoints instead of a root barrel, so its
 # build-presence probe uses a role entrypoint rather than dist/index.js.
 function dist_entry_for_package() {
   local package="$1"
+  local source_path
+  source_path="$(source_path_for_package "${package}")"
   if [[ "${package}" == "dashboard-core" ]]; then
-    echo "${repo_root}/packages/${package}/dist/entrypoints/runtime.js"
+    echo "${repo_root}/${source_path}/dist/entrypoints/runtime.js"
   else
-    echo "${repo_root}/packages/${package}/dist/index.js"
+    echo "${repo_root}/${source_path}/dist/index.js"
   fi
 }
 
@@ -62,7 +73,7 @@ for package in "${linked_packages[@]}"; do
   # station-host publishes as @station/host (the redundant qualifier is dropped),
   # so the symlink name strips the leading station- while the source dir keeps it.
   link_name="${package#station-}"
-  ln -sfn "../../../packages/${package}" "${target_dir}/${link_name}"
+  ln -sfn "../../../$(source_path_for_package "${package}")" "${target_dir}/${link_name}"
 done
 for app in "${linked_apps[@]}"; do
   ln -sfn "../../../apps/${app}" "${target_dir}/${app}"
