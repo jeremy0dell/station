@@ -14660,7 +14660,7 @@
       "declaration": "ensureStationHostRunning",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path.",
+      "purpose": "Preserves inaccessible Host ownership and defers definite stale reclaim to the child binder while retaining compatibility-aware idle replacement and an opt-in busy-host live handoff path. Pre-commit failure restores the incumbent refusal; after completion commits, parked PTYs remain available to a successor.",
       "dependencies": [
         {
           "path": "packages/protocol/src/transport.ts",

@@ -1,9 +1,12 @@
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import type { UiShutdownReason } from "@station/contracts";
 import { createStationHostClient } from "@station/host";
 import { componentLogPath, createJsonlLogger, toSafeError } from "@station/observability";
+import { stationBuildInfo } from "@station/runtime";
+import { ensureStationHostRunning } from "@station/terminal";
 import { Profiler } from "react";
 import { loadStationConfig } from "./config/stationConfig.js";
 import { loadStationTuiConfig } from "./config/tuiConfig.js";
@@ -76,6 +79,20 @@ function readShellAutoCloseOverlay(value: string | undefined): boolean {
   );
 }
 
+function stationHostSuccessorCommand(
+  env: Readonly<Record<string, string | undefined>>,
+): readonly [string, ...string[]] {
+  if (stationBuildInfo().compiled) {
+    return [process.execPath, "__station-host"];
+  }
+  const configuredEntry = env.STATION_HOST_ENTRY;
+  const hostEntry =
+    configuredEntry !== undefined && configuredEntry.length > 0
+      ? configuredEntry
+      : fileURLToPath(new URL("./host/hostMain.ts", import.meta.url));
+  return [env.STATION_BUN ?? "bun", hostEntry];
+}
+
 /**
  * Callable native OpenTUI process entry and semantic lifecycle witness boundary.
  * It acquires TTY ownership before other startup work, binds one validated run
@@ -130,7 +147,8 @@ async function startStationMain(
   // lifecycle calls start() again — a guarded no-op.
   stationClient.start();
 
-  const configsLoading = Promise.all([loadStationConfig({ env }), loadStationTuiConfig({ env })]);
+  const stationConfigLoading = loadStationConfig({ env });
+  const configsLoading = Promise.all([stationConfigLoading, loadStationTuiConfig({ env })]);
 
   const uiContext = resolveUiRunContext({
     env,
@@ -166,6 +184,41 @@ async function startStationMain(
 
   const createHostClient = (socketPath: string) =>
     createStationHostClient({ socketPath, uiContext });
+  const handoffBusyHost = async (input: {
+    socketPath: string;
+    expectedBuildVersion: string;
+  }) => {
+    const handoffClient = createStationHostClient({
+      socketPath: input.socketPath,
+      expectedBuildVersion: input.expectedBuildVersion,
+      uiContext,
+    });
+    try {
+      const stationConfig = await stationConfigLoading;
+      const ensured = await ensureStationHostRunning(
+        {
+          socketPath: input.socketPath,
+          stateDir: stationConfig.stateDir,
+          hostCommand: stationHostSuccessorCommand(env),
+          expectedBuildVersion: input.expectedBuildVersion,
+          handoff: { fidelity: "processes" },
+        },
+        { clientFactory: () => handoffClient },
+      );
+      if (ensured.status === "unavailable") {
+        throw ensured.error;
+      }
+      return await ensured.client.list();
+    } finally {
+      handoffClient.dispose();
+    }
+  };
+  const listHostPtys = (socketPath: string) =>
+    listLiveHostPtys(socketPath, {
+      env,
+      createClient: createHostClient,
+      handoffBusyHost,
+    });
   const createHostTerminal = (terminalOptions: HostAttachedTerminalOptions) =>
     createHostAttachedTerminal({ ...terminalOptions, uiContext });
   const auxShellPlacement =
@@ -176,7 +229,7 @@ async function startStationMain(
     hostSocketPath === undefined
       ? undefined
       : createStationHostManagedTerminalAttacher(hostSocketPath, {
-          listHost: (socketPath) => listLiveHostPtys(socketPath, { createClient: createHostClient }),
+          listHost: listHostPtys,
           createTerminal: createHostTerminal,
         });
 
@@ -187,7 +240,7 @@ async function startStationMain(
     liveHostPtys =
       hostSocketPath === undefined
         ? undefined
-        : await listLiveHostPtys(hostSocketPath, { createClient: createHostClient });
+        : await listHostPtys(hostSocketPath);
   } catch (error) {
     const safeError = toSafeError(error, {
       tag: "TerminalProviderError",

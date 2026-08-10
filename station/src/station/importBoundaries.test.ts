@@ -25,6 +25,7 @@ const LINKED_STATION_PACKAGES = new Set([
   "observer",
   "protocol",
   "runtime",
+  "terminal",
 ]);
 const LINKED_STATION_VIEW_PACKAGES = new Set([
   "client",
@@ -448,6 +449,9 @@ const DASHBOARD_RUNTIME_IMPORT_INVENTORY = [
   "station/store/dashboardRuntime.ts: import DashboardRuntime from @station/dashboard-core/runtime",
 ] as const;
 const DASHBOARD_INTERNAL_IMPORT_INVENTORY = [] as const;
+const TERMINAL_INTEGRATION_IMPORT_INVENTORY = [
+  "main.tsx: import ensureStationHostRunning from @station/terminal",
+] as const;
 
 describe("station production boundaries", () => {
   it("finds every production layer and excludes test support", () => {
@@ -483,6 +487,17 @@ describe("station production boundaries", () => {
       ),
     ).sort();
     expect(failures).toEqual([]);
+  });
+
+  it("confines the terminal integration to native composition", () => {
+    const imports = PRODUCTION_MODULES.flatMap((module) =>
+      moduleReferencesOf(module).flatMap((reference) =>
+        reference.specifier === "@station/terminal"
+          ? referenceDescriptors(module, reference)
+          : [],
+      ),
+    ).sort();
+    expect(imports).toEqual([...TERMINAL_INTEGRATION_IMPORT_INVENTORY].sort());
   });
 
   it("keeps the Station client-source tree independent of dashboard-core", () => {

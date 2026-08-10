@@ -520,6 +520,7 @@ Advanced development/demo overrides:
 | `STATION_PTY_ORPHAN_TTL_MS` | Host PTY orphan-bridge park lifetime | Positive integer of milliseconds an unadopted parked bridge keeps its PTY alive before self-reaping. Defaults to 24 hours; an unparsable or non-positive value falls back to the default. |
 | `STATION_BUN` | Source/development Station host launches | Bun executable path/name for source/development host launches; fallback is `bun`. |
 | `STATION_HOST_ENTRY` | Source/development Station host launches | Non-standard source/development override for the host entry file. Usually leave unset. |
+| `STATION_HOST_HANDOFF` | Native Station TUI build-upgrade launch | Only exact `1` opts a busy same-protocol older Host into negotiated handoff with fixed `processes` fidelity, followed by warm pane reattach. There is no prompt, launcher flag, or config key; absent, empty, `true`, and every other value preserve the existing visible refusal. |
 | `STATION_INGRESS_BIN` | Generated Pi/OpenCode hook transport | Development/testing override for `stn-ingress`; fallback is the PATH name `stn-ingress`. |
 | `STATION_DASHBOARD_COMMAND` | CLI TUI launcher | Explicit command override for the observer-backed, command-capable, pane-free dashboard renderer. Development/testing only. |
 | `STATION_TUI_COMMAND` / `STATION_TUI_SESSION_NAME` | tmux popup registry | Development popup routing overrides. |
