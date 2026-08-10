@@ -59,7 +59,8 @@ No single layer owns all truth.
 - Observer SQLite is durable observer memory for commands, events, correlations, explicit Station-session lifecycle, project-local Session Group definitions and exclusive membership, canonical worktree display titles keyed by project and worktree, provider observations, and current metadata cache rows.
 - Observer snapshots are the normalized current graph exposed to clients. `rows` is configured
   worktree inventory; `sessions` is canonical session membership; and `sessionGroups` is the
-  normalized project-local organizational projection. `WorktreeRow.title` is the
+  flat project-local organizational projection, retaining optional parent relationships in
+  deterministic parent-before-child order. `WorktreeRow.title` is the
   display authority, while `SessionView.title` is its lifecycle projection. Session and activity
   counts derive from `sessions`, while worktree counts derive from `rows`.
 - JSONL logs and debug bundles are diagnostic evidence, not runtime truth.

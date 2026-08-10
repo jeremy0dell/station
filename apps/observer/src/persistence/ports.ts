@@ -32,6 +32,7 @@ import type {
   ProviderObservationsIngressDedupeResult,
   RecordProviderObservationInput,
   SessionGroupMemberExpectation,
+  SessionGroupRepairResult,
   SessionGroupStoreResult,
   SessionHarnessDerivedStateRepair,
   SessionTurnReadinessMutation,
@@ -218,7 +219,7 @@ export interface SessionStore {
 /**
  * DRIVEN PORT
  *
- * Maintains durable project-local Group definitions, exclusive membership, and parentage through atomic stale-write-safe conversations.
+ * Maintains durable project-local Group definitions, exclusive membership, parentage, and atomic reconcile repair of parseable relationships.
  */
 export interface SessionGroupStore {
   listSessionGroups(): Promise<SessionGroupView[]>;
@@ -254,10 +255,10 @@ export interface SessionGroupStore {
     expectedVersion: number;
     updatedAt?: string;
   }): Promise<SessionGroupStoreResult>;
-  pruneSessionGroupMemberships(input: {
+  repairSessionGroups(input: {
     sessions: Array<{ id: string; projectId: string }>;
     updatedAt?: string;
-  }): Promise<SessionGroupStoreResult>;
+  }): Promise<SessionGroupRepairResult>;
 }
 
 /**

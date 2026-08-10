@@ -306,6 +306,17 @@ export type UpdateSessionGroupMembershipPayload = z.infer<
   typeof UpdateSessionGroupMembershipPayloadSchema
 >;
 
+export const ReparentSessionGroupPayloadSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    groupId: SessionGroupIdSchema,
+    expectedVersion: z.number().int().positive(),
+    parentGroupId: SessionGroupIdSchema.optional(),
+  })
+  .strict();
+
+export type ReparentSessionGroupPayload = z.infer<typeof ReparentSessionGroupPayloadSchema>;
+
 export const DeleteSessionGroupPayloadSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -337,6 +348,7 @@ export const StationCommandTypeSchema = z.enum([
   "sessionGroup.create",
   "sessionGroup.rename",
   "sessionGroup.updateMembership",
+  "sessionGroup.reparent",
   "sessionGroup.delete",
 ]);
 
@@ -429,6 +441,10 @@ export const UpdateSessionGroupMembershipCommandSchema = z
   })
   .strict();
 
+export const ReparentSessionGroupCommandSchema = z
+  .object({ type: z.literal("sessionGroup.reparent"), payload: ReparentSessionGroupPayloadSchema })
+  .strict();
+
 export const DeleteSessionGroupCommandSchema = z
   .object({ type: z.literal("sessionGroup.delete"), payload: DeleteSessionGroupPayloadSchema })
   .strict();
@@ -454,6 +470,7 @@ export const StationCommandSchema = z.discriminatedUnion("type", [
   CreateSessionGroupCommandSchema,
   RenameSessionGroupCommandSchema,
   UpdateSessionGroupMembershipCommandSchema,
+  ReparentSessionGroupCommandSchema,
   DeleteSessionGroupCommandSchema,
 ]);
 
