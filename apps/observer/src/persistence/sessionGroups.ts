@@ -17,15 +17,9 @@ export type SessionGroupPersistenceState = {
   assignments: Map<string, Assignment>;
 };
 
-export type SessionGroupMutation = {
+export type SessionGroupMutation<TResult = SessionGroupStoreResult> = {
   state: SessionGroupPersistenceState;
-  result: SessionGroupStoreResult;
-  changed: boolean;
-};
-
-export type SessionGroupRepairMutation = {
-  state: SessionGroupPersistenceState;
-  result: SessionGroupRepairResult;
+  result: TResult;
   changed: boolean;
 };
 
@@ -262,7 +256,7 @@ export function deleteSessionGroup(
 export function repairSessionGroups(
   state: SessionGroupPersistenceState,
   input: { sessions: Array<{ id: string; projectId: string }>; updatedAt: string },
-): SessionGroupRepairMutation {
+): SessionGroupMutation<SessionGroupRepairResult> {
   const validSessions = new Map(input.sessions.map((session) => [session.id, session.projectId]));
   const draft = cloneSessionGroupState(state);
   const touched = new Set<SessionGroupId>();

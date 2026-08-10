@@ -275,7 +275,7 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
     await expect(test.persistence.listSessionGroups()).resolves.toEqual(before);
   });
 
-  it("terminates on corrupt persisted ancestry and rejects it before commit", async () => {
+  it("rejects missing, cross-project, and cyclic corrupt ancestry before commit", async () => {
     if (storage !== "SQLite") return;
     const test = await fixture();
     for (const name of ["A", "B", "X"]) {
@@ -288,34 +288,54 @@ describe.each(storageKinds)("recorded Session Group commands with %s persistence
     const setParent = test.sqlite.database.prepare(
       "UPDATE session_groups SET parent_group_id = ? WHERE id = ?",
     );
+    const rejectCorruptAncestry = async (): Promise<void> => {
+      await expect(
+        test.persistence.reparentSessionGroup({
+          id: "grp_3",
+          expectedVersion: 1,
+          parentGroupId: "grp_1",
+        }),
+      ).rejects.toBeDefined();
+      const failed = await test.dispatch({
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_3",
+          expectedVersion: 1,
+          parentGroupId: "grp_1",
+        },
+      });
+      expect(failed).toMatchObject({
+        status: "failed",
+        error: { code: "SESSION_GROUP_PARENT_GRAPH_INVALID" },
+      });
+      const target = (await test.persistence.listSessionGroups()).find(
+        (group) => group.id === "grp_3",
+      );
+      expect(target).toMatchObject({ version: 1 });
+      expect(target).not.toHaveProperty("parentGroupId");
+    };
+
     setParent.run("grp_2", "grp_1");
     setParent.run("grp_1", "grp_2");
+    expect((await test.persistence.listSessionGroups()).map((group) => group.id)).toEqual([
+      "grp_1",
+      "grp_2",
+      "grp_3",
+    ]);
+    await rejectCorruptAncestry();
 
-    const listed = await test.persistence.listSessionGroups();
-    expect(listed.map((group) => group.id)).toEqual(["grp_1", "grp_2", "grp_3"]);
-    await expect(
-      test.persistence.reparentSessionGroup({
-        id: "grp_3",
-        expectedVersion: 1,
-        parentGroupId: "grp_1",
-      }),
-    ).rejects.toBeDefined();
-    const failed = await test.dispatch({
-      type: "sessionGroup.reparent",
-      payload: {
-        projectId: "web",
-        groupId: "grp_3",
-        expectedVersion: 1,
-        parentGroupId: "grp_1",
-      },
+    setParent.run("grp_missing", "grp_1");
+    setParent.run(null, "grp_2");
+    await rejectCorruptAncestry();
+
+    await test.persistence.createSessionGroup({
+      id: "grp_api",
+      projectId: "api",
+      name: "API",
     });
-    expect(failed).toMatchObject({
-      status: "failed",
-      error: { code: "SESSION_GROUP_PARENT_GRAPH_INVALID" },
-    });
-    expect(
-      (await test.persistence.listSessionGroups()).find((group) => group.id === "grp_3"),
-    ).not.toHaveProperty("parentGroupId");
+    setParent.run("grp_api", "grp_1");
+    await rejectCorruptAncestry();
   });
 
   it("projects only the command project without repairing durable memberships", async () => {

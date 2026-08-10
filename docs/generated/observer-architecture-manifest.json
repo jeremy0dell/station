@@ -8045,12 +8045,6 @@
           "purpose": null
         },
         {
-          "name": "SessionGroupRepairMutation",
-          "kind": "type",
-          "role": null,
-          "purpose": null
-        },
-        {
           "name": "updateSessionGroupMembership",
           "kind": "function",
           "role": null,
