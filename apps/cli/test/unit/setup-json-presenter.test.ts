@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import type { SetupConfigMutationPlan } from "@station/config";
+import type { CliSetupHarnessId } from "@station/contracts";
 import {
   type HarnessSelectionFacts,
   type HarnessSelectionResolution,
   planSetup,
   resolveHarnessSelection,
   type SetupPlanningIntent,
-  type SupportedHarnessId,
 } from "@station/setup-core";
 import { resolveSetupMessage } from "@station/setup-messages";
 import { describe, expect, it } from "vitest";
@@ -67,7 +67,7 @@ function buildSetupPlans(...arguments_: [SetupFacts, BuildSetupPlanOptions?]) {
 }
 
 function resolveSetupHarnessSelection(
-  ...arguments_: [setupFacts: SetupFacts, selectedIds?: readonly SupportedHarnessId[]]
+  ...arguments_: [setupFacts: SetupFacts, selectedIds?: readonly CliSetupHarnessId[]]
 ): HarnessSelectionResolution {
   const [setupFacts, selectedIds] = arguments_;
   return resolveHarnessSelection(
@@ -1531,7 +1531,7 @@ function validConfigFact(
   };
 }
 
-function harnesses(available: readonly SupportedHarnessId[]): SetupHarnessFact[] {
+function harnesses(available: readonly CliSetupHarnessId[]): SetupHarnessFact[] {
   return (["codex", "cursor", "opencode", "pi"] as const).map((id) => ({
     id,
     label: id,

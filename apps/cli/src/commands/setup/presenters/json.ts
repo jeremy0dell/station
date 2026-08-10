@@ -3,17 +3,13 @@ import type { SetupConfigMutationPlan } from "@station/config";
 import {
   type CliSetupAction,
   type CliSetupCheck,
+  type CliSetupHarnessId,
   CliSetupHarnessIdSchema,
   type CliSetupPlan,
   CliSetupPlanSchema,
   type ProviderHookArtifactOwnership,
 } from "@station/contracts";
-import type {
-  HarnessTrackingAssessment,
-  SetupOperation,
-  SetupPlan,
-  SupportedHarnessId,
-} from "@station/setup-core";
+import type { HarnessTrackingAssessment, SetupOperation, SetupPlan } from "@station/setup-core";
 import { stationUiInstallHint } from "../../../stationWorkspace.js";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
 import { SetupHarnessTrackingFactSchema } from "../adapters/inspectionTypes.js";
@@ -24,8 +20,8 @@ import { SETUP_TOOL_DEFINITIONS } from "../toolDefinitions.js";
 
 type SetupHarnessSelection = {
   readonly source: CliSetupPlan["summary"]["selectionSource"];
-  readonly requiredHarnessIds: readonly SupportedHarnessId[];
-  readonly defaultHarness?: SupportedHarnessId;
+  readonly requiredHarnessIds: readonly CliSetupHarnessId[];
+  readonly defaultHarness?: CliSetupHarnessId;
 };
 
 export type JsonSetupPresenterInput = {
@@ -426,7 +422,7 @@ function harnessTrackingChecks(
 function harnessTrackingCheck(
   plan: SetupPlan,
   facts: SetupFacts,
-  harnessId: SupportedHarnessId,
+  harnessId: CliSetupHarnessId,
   required: boolean,
   selectionSource: SetupHarnessSelection["source"],
 ): CliSetupCheck {
@@ -470,7 +466,7 @@ function harnessTrackingCheck(
 function harnessTrackingPresentation(
   assessment: HarnessTrackingAssessment,
   fact: SetupFacts["harnessTracking"][number] | undefined,
-  harnessId: SupportedHarnessId,
+  harnessId: CliSetupHarnessId,
   harnessLabel: string,
   required: boolean,
 ): Pick<CliSetupCheck, "status" | "message"> {
@@ -943,7 +939,7 @@ function liveTmuxPopupAction(facts: SetupFacts, selected: boolean): CliSetupActi
   };
 }
 
-function harnessHookInstallCommand(facts: SetupFacts, harness: SupportedHarnessId): string[] {
+function harnessHookInstallCommand(facts: SetupFacts, harness: CliSetupHarnessId): string[] {
   const command = [
     setupLauncherExecutable(facts.launchers.station),
     "--config",

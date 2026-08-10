@@ -19,6 +19,7 @@ import {
   stationHostSocketPath,
 } from "@station/config";
 import type {
+  CliSetupHarnessId,
   HarnessCapabilities,
   HarnessHooksStatus,
   HarnessPermissionMode,
@@ -50,7 +51,6 @@ import {
 import { createPiHarnessProvider, type PiHarnessProviderOptions, piHookAdapter } from "@station/pi";
 import { safeErrorFromUnknown, systemClock, toIsoTimestamp } from "@station/runtime";
 import { ScriptedAgentHarnessProvider } from "@station/scripted-harness";
-import type { SupportedHarnessId } from "@station/setup-core";
 import { createStationHostController, StationTerminalProvider } from "@station/terminal";
 import { TmuxProvider } from "@station/tmux";
 import { WorktrunkProvider, worktrunkHookAdapter } from "@station/worktrunk";
@@ -92,7 +92,7 @@ type HarnessProviderBuilderRegistry = Record<KnownHarnessProviderId, HarnessProv
  * or contacting the Observer.
  */
 export async function probeHarnessHooksStatus(
-  harnessId: SupportedHarnessId,
+  harnessId: CliSetupHarnessId,
   configPath: string,
   runtimeOptions: ProviderHookRuntimeOptions = {},
 ): Promise<HarnessHooksStatus | undefined> {

@@ -1,9 +1,10 @@
 import type { TmuxConfig } from "@station/config";
-import { CliSetupHarnessIdSchema, ProviderHookArtifactOwnershipSchema } from "@station/contracts";
-import type { SupportedHarnessId } from "@station/setup-core";
+import {
+  type CliSetupHarnessId,
+  CliSetupHarnessIdSchema,
+  ProviderHookArtifactOwnershipSchema,
+} from "@station/contracts";
 import { z } from "zod";
-
-export type { SupportedHarnessId } from "@station/setup-core";
 
 export type SetupMode = "check" | "plan" | "apply";
 
@@ -114,7 +115,7 @@ export type SetupGitFact =
   | SetupGitRepositoryFailureFact;
 
 export type SetupHarnessFact = {
-  id: SupportedHarnessId;
+  id: CliSetupHarnessId;
   label: string;
   status: "ok" | "missing";
   command: string;

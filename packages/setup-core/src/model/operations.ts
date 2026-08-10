@@ -1,5 +1,5 @@
-import type { SafeError } from "@station/contracts";
-import type { SetupToolId, SupportedHarnessId } from "./facts.js";
+import type { CliSetupHarnessId, SafeError } from "@station/contracts";
+import type { SetupToolId } from "./facts.js";
 
 type SetupOperationBase<
   Id extends string,
@@ -23,12 +23,12 @@ export type SetupToolInstallOperation = SetupOperationBase<
 };
 
 export type SetupHarnessInstallOperation = SetupOperationBase<
-  `install-harness:${SupportedHarnessId}`,
+  `install-harness:${CliSetupHarnessId}`,
   "install-harness",
   "required",
   boolean
 > & {
-  readonly harnessId: SupportedHarnessId;
+  readonly harnessId: CliSetupHarnessId;
 };
 
 export type SetupHomebrewInstallOperation = SetupOperationBase<
@@ -76,12 +76,12 @@ export type SetupWorktrunkTrackingOperation = SetupOperationBase<
 >;
 
 export type SetupHarnessTrackingOperation = SetupOperationBase<
-  `prepare-harness-tracking:${SupportedHarnessId}`,
+  `prepare-harness-tracking:${CliSetupHarnessId}`,
   "prepare-harness-tracking",
   "required" | "recommended",
   boolean
 > & {
-  readonly harnessId: SupportedHarnessId;
+  readonly harnessId: CliSetupHarnessId;
 };
 
 export type SetupConfigWriteOperation = SetupOperationBase<
@@ -91,9 +91,9 @@ export type SetupConfigWriteOperation = SetupOperationBase<
   true
 > & {
   readonly change: "create" | "update";
-  readonly defaultHarnessId: SupportedHarnessId;
-  readonly harnessIds: readonly SupportedHarnessId[];
-  readonly trackingHarnessIds: readonly SupportedHarnessId[];
+  readonly defaultHarnessId: CliSetupHarnessId;
+  readonly harnessIds: readonly CliSetupHarnessId[];
+  readonly trackingHarnessIds: readonly CliSetupHarnessId[];
   readonly installWorktrunkTracking: boolean;
 };
 
@@ -131,7 +131,7 @@ export type SetupToolPackageTarget = {
 
 export type SetupHarnessPackageTarget = {
   readonly kind: "harness";
-  readonly id: SupportedHarnessId;
+  readonly id: CliSetupHarnessId;
 };
 
 export type SetupBootstrapPackageTarget = {
@@ -164,7 +164,7 @@ export type SetupPackageInstallerCommit = {
 
 export type SetupProviderTrackingCommit = {
   readonly kind: "provider-tracking";
-  readonly provider: "worktrunk" | SupportedHarnessId;
+  readonly provider: "worktrunk" | CliSetupHarnessId;
   readonly changed: boolean;
   readonly backupPaths?: readonly string[];
 };

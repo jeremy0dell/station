@@ -1,11 +1,11 @@
 import { chmod, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { CliSetupHarnessId } from "@station/contracts";
 import type {
   SetupHarnessInstallOperation,
   SetupPackageInstallOperation,
   SetupToolInstallOperation,
-  SupportedHarnessId,
 } from "@station/setup-core";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SetupFacts } from "../../src/commands/setup/adapters/inspectionTypes.js";
@@ -22,9 +22,9 @@ describe("setup package installation adapter", () => {
   });
 
   it("uses canonical installers for setup tools and supported macOS agents", async () => {
-    const commands = new Map<SupportedHarnessId, readonly string[]>();
+    const commands = new Map<CliSetupHarnessId, readonly string[]>();
     const toolCommands: string[] = [];
-    let activeHarness: SupportedHarnessId | undefined;
+    let activeHarness: CliSetupHarnessId | undefined;
     const execute = createSetupOperationAdapter({
       facts: packageFacts({ brewAvailable: true, macos: true }),
       deps: {
@@ -167,7 +167,7 @@ describe("setup package installation adapter", () => {
 
 const harnessInstallOrder = ["codex", "cursor", "opencode", "pi", "claude"] as const;
 
-function harnessInstallOperation(harnessId: SupportedHarnessId): SetupHarnessInstallOperation {
+function harnessInstallOperation(harnessId: CliSetupHarnessId): SetupHarnessInstallOperation {
   return {
     id: `install-harness:${harnessId}`,
     kind: "install-harness",

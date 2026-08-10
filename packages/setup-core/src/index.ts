@@ -5,7 +5,6 @@ export type {
   HarnessTrackingAssessment,
   HarnessTrackingFacts,
   SetupPlanningFacts,
-  SupportedHarnessId,
 } from "./model/facts.js";
 export type { SetupEditableIntent, SetupPlanningIntent } from "./model/intent.js";
 export type {

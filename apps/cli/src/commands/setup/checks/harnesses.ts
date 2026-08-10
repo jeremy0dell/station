@@ -1,10 +1,11 @@
+import type { CliSetupHarnessId } from "@station/contracts";
 import {
   type ExternalCommandInput,
   type ExternalCommandRunner,
   runExternalCommand,
 } from "@station/runtime";
 import type { CliEnv } from "../../../env.js";
-import type { SetupHarnessFact, SupportedHarnessId } from "../adapters/inspectionTypes.js";
+import type { SetupHarnessFact } from "../adapters/inspectionTypes.js";
 import { type SetupHarnessDefinition, setupHarnessDefinitions } from "../harnessDefinitions.js";
 import { setupProbeTimeoutMs } from "./constants.js";
 import { commandEnv, setupEnv } from "./env.js";
@@ -15,7 +16,7 @@ export type CheckHarnessesOptions = {
   cwd?: string;
   homeDir?: string;
   configuredHarnesses?: readonly string[];
-  configuredCommands?: Readonly<Partial<Record<SupportedHarnessId, string>>>;
+  configuredCommands?: Readonly<Partial<Record<CliSetupHarnessId, string>>>;
 };
 
 export async function checkSetupHarnesses(

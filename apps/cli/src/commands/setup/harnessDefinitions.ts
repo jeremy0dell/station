@@ -1,9 +1,9 @@
 import { claudeHarnessProviderDefinition } from "@station/claude";
 import { codexHarnessProviderDefinition } from "@station/codex";
+import type { CliSetupHarnessId } from "@station/contracts";
 import { cursorHarnessProviderDefinition } from "@station/cursor";
 import { openCodeHarnessProviderDefinition } from "@station/opencode";
 import { piHarnessProviderDefinition } from "@station/pi";
-import type { SupportedHarnessId } from "@station/setup-core";
 import { PROVIDER_HOOK_DEFINITIONS } from "../providerHookDefinitions.js";
 
 type ProviderHookDefinition =
@@ -11,7 +11,7 @@ type ProviderHookDefinition =
 type HarnessProviderHookDefinition = Exclude<ProviderHookDefinition, { readonly id: "worktrunk" }>;
 
 export type SetupHarnessDefinition = {
-  readonly id: SupportedHarnessId;
+  readonly id: CliSetupHarnessId;
   readonly displayName: string;
   readonly commandEnvVar: string;
   readonly commandFallback: string;
@@ -22,7 +22,7 @@ export type SetupHarnessDefinition = {
 };
 
 type SetupHarnessDefinitionMap = {
-  readonly [Harness in SupportedHarnessId]: SetupHarnessDefinition & {
+  readonly [Harness in CliSetupHarnessId]: SetupHarnessDefinition & {
     readonly id: Harness;
   };
 };

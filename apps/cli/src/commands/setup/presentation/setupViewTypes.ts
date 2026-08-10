@@ -1,5 +1,10 @@
-import type { CliSetupAction, CliSetupCheck, CliSetupPlan } from "@station/contracts";
-import type { SetupOperation, SetupPlan, SupportedHarnessId } from "@station/setup-core";
+import type {
+  CliSetupAction,
+  CliSetupCheck,
+  CliSetupHarnessId,
+  CliSetupPlan,
+} from "@station/contracts";
+import type { SetupOperation, SetupPlan } from "@station/setup-core";
 import type { SetupMessageRef } from "@station/setup-messages";
 
 export type SetupDisplayDetail = {
@@ -47,7 +52,7 @@ export type SetupApplyPresentation =
   | {
       readonly kind: "complete";
       readonly preparedHarnesses: readonly {
-        readonly id: SupportedHarnessId;
+        readonly id: CliSetupHarnessId;
         readonly label: string;
       }[];
       readonly showCodexReview: boolean;
@@ -69,8 +74,8 @@ export type SetupViewResult = SetupPlan["result"] & {
 
 export type SetupPresentationHarnessSelection = {
   readonly source: CliSetupPlan["summary"]["selectionSource"];
-  readonly requiredHarnessIds: readonly SupportedHarnessId[];
-  readonly defaultHarness?: SupportedHarnessId;
+  readonly requiredHarnessIds: readonly CliSetupHarnessId[];
+  readonly defaultHarness?: CliSetupHarnessId;
 };
 
 export type ProjectSetupView = {
@@ -80,7 +85,7 @@ export type ProjectSetupView = {
   readonly selection: {
     readonly source: SetupPresentationHarnessSelection["source"];
     readonly summary: SetupMessageRef;
-    readonly defaultHarness?: SupportedHarnessId;
+    readonly defaultHarness?: CliSetupHarnessId;
   };
   readonly checks: readonly SetupViewCheck[];
   readonly actions: readonly SetupViewAction[];

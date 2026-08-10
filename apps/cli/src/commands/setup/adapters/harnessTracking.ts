@@ -1,11 +1,11 @@
 import type { ClaudeHookInstallResult } from "@station/claude";
 import type { CodexHookInstallResult } from "@station/codex";
 import { type LoadedStationConfig, loadConfig } from "@station/config";
-import type { ProviderHookArtifactOwner } from "@station/contracts";
+import type { CliSetupHarnessId, ProviderHookArtifactOwner } from "@station/contracts";
 import type { CursorHookInstallResult } from "@station/cursor";
 import type { OpenCodePluginInstallResult } from "@station/opencode";
 import { publicSafeErrorFromUnknown } from "@station/runtime";
-import type { SetupHarnessTrackingPort, SupportedHarnessId } from "@station/setup-core";
+import type { SetupHarnessTrackingPort } from "@station/setup-core";
 import type { CliEnv } from "../../../env.js";
 import {
   type ProviderHooksCommandOptions,
@@ -185,7 +185,7 @@ function singleBackupPath(path: string | undefined): readonly string[] {
   return path === undefined ? [] : [path];
 }
 
-function providerTrackingError(provider: SupportedHarnessId) {
+function providerTrackingError(provider: CliSetupHarnessId) {
   return {
     tag: "SetupProviderTrackingError",
     code: "SETUP_PROVIDER_TRACKING_FAILED",

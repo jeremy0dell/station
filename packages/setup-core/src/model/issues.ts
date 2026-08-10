@@ -1,4 +1,5 @@
-import type { SetupToolId, SupportedHarnessId } from "./facts.js";
+import type { CliSetupHarnessId } from "@station/contracts";
+import type { SetupToolId } from "./facts.js";
 
 type SetupIssueBase<Code extends string, Tier extends "required" | "recommended"> = {
   readonly code: Code;
@@ -41,7 +42,7 @@ export type SetupHarnessSelectionAmbiguousIssue = SetupIssueBase<
   "harness-selection-ambiguous",
   "required"
 > & {
-  readonly candidateHarnessIds: readonly SupportedHarnessId[];
+  readonly candidateHarnessIds: readonly CliSetupHarnessId[];
 };
 
 export type SetupConfigUnreadyIssue = SetupIssueBase<"config-unready", "required"> & {
@@ -86,7 +87,7 @@ export type SetupHarnessTrackingUnpreparedIssue = SetupIssueBase<
   "harness-tracking-unprepared",
   "required" | "recommended"
 > & {
-  readonly harnessId: SupportedHarnessId;
+  readonly harnessId: CliSetupHarnessId;
   readonly state: "probe-failed" | "disabled" | "artifact-missing-or-drifted";
 };
 

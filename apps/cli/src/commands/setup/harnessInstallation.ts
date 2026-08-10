@@ -1,8 +1,8 @@
-import type { SupportedHarnessId } from "@station/setup-core";
+import type { CliSetupHarnessId } from "@station/contracts";
 import { setupMessageRef } from "@station/setup-messages";
 
 export function resolveSetupHarnessInstallation(input: {
-  readonly harnessId: SupportedHarnessId;
+  readonly harnessId: CliSetupHarnessId;
   readonly brewAvailable: boolean;
   readonly homeDir: string;
   readonly macos: boolean;

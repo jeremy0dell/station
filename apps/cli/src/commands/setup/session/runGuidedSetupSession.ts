@@ -1,5 +1,9 @@
 import { basename } from "node:path";
-import { CliSetupHarnessIdSchema, type SafeError } from "@station/contracts";
+import {
+  type CliSetupHarnessId,
+  CliSetupHarnessIdSchema,
+  type SafeError,
+} from "@station/contracts";
 import {
   assessSetupPlan,
   type SetupEditableIntent,
@@ -7,7 +11,6 @@ import {
   type SetupOperationOutcome,
   type SetupOperationProgress,
   type SetupSessionState,
-  type SupportedHarnessId,
 } from "@station/setup-core";
 import { setupMessageRef } from "@station/setup-messages";
 import type { SetupFacts } from "../adapters/inspectionTypes.js";
@@ -32,7 +35,7 @@ type CreateGuidedSetupComposition = (
 ) => SetupComposition;
 
 type GuidedHarnessSelection =
-  | { readonly kind: "selected"; readonly harnessIds: SupportedHarnessId[] }
+  | { readonly kind: "selected"; readonly harnessIds: CliSetupHarnessId[] }
   | { readonly kind: "cancelled" }
   | { readonly kind: "blocked" };
 
@@ -187,7 +190,7 @@ async function driveGuidedSession(
     projection = await currentProjection(composition);
     if (projection === undefined) return finishIncomplete(composition);
     const installerChoices = installerPromptChoices(projection, presenter);
-    let installHarnesses: SupportedHarnessId[] | undefined;
+    let installHarnesses: CliSetupHarnessId[] | undefined;
     while (installHarnesses === undefined) {
       const answer = await selectMany(composition, {
         message: installerSelectionMessage(presenter, installerChoices.length),
@@ -316,7 +319,7 @@ async function driveGuidedSession(
     return finishIncomplete(composition);
   }
 
-  const installHarnessTracking: SupportedHarnessId[] = [];
+  const installHarnessTracking: CliSetupHarnessId[] = [];
   for (const issue of projection.session.plan.issues) {
     if (issue.code !== "harness-tracking-unprepared" || issue.tier !== "required") continue;
     const label = presenter.text(
@@ -503,7 +506,7 @@ async function selectHarnesses(
       composition.guided.logWarn(presenter.text(setupMessageRef("guided.invalid-selection")));
       continue;
     }
-    const defaultHarness = answer.value as SupportedHarnessId;
+    const defaultHarness = answer.value as CliSetupHarnessId;
     return {
       kind: "selected",
       harnessIds: [defaultHarness, ...selectedHarnesses.filter((id) => id !== defaultHarness)],
@@ -525,7 +528,7 @@ function installerPromptChoices(
   projection: Extract<SetupSessionProjection, { status: "projected" }>,
   presenter: TextSetupPresenter,
 ): SetupPromptChoice[] {
-  const choices: (SetupPromptChoice & { readonly value: SupportedHarnessId })[] =
+  const choices: (SetupPromptChoice & { readonly value: CliSetupHarnessId })[] =
     projection.session.plan?.operations.flatMap((operation) => {
       if (operation.kind !== "install-harness") return [];
       const action = projection.view.actions.find(
@@ -547,7 +550,7 @@ function installerPromptChoices(
   );
 }
 
-function parseHarnessIds(values: readonly string[]): SupportedHarnessId[] {
+function parseHarnessIds(values: readonly string[]): CliSetupHarnessId[] {
   return values.flatMap((value) => {
     const parsed = CliSetupHarnessIdSchema.safeParse(value);
     return parsed.success ? [parsed.data] : [];
@@ -586,7 +589,7 @@ function installerSelectionMessage(presenter: TextSetupPresenter, count: number)
 function unavailableRequiredHarnesses(
   projection: Extract<SetupSessionProjection, { status: "projected" }>,
   facts: SetupFacts,
-): SupportedHarnessId[] {
+): CliSetupHarnessId[] {
   const plan = projection.session.plan;
   if (plan?.selection.outcome !== "selected") return [];
   return plan.selection.requiredHarnessIds.filter(
@@ -765,7 +768,7 @@ function operationLabel(composition: SetupComposition, operation: SetupOperation
   return composition.text.text(setupMessageRef("label.setup-operation"));
 }
 
-function harnessLabel(facts: SetupFacts | undefined, harnessId: SupportedHarnessId): string {
+function harnessLabel(facts: SetupFacts | undefined, harnessId: CliSetupHarnessId): string {
   return (
     facts?.harnesses.find((harness) => harness.id === harnessId)?.label ??
     SETUP_HARNESS_DEFINITIONS[harnessId].label
