@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { TerminalProcessEmitter } from "./terminalProcessEmitter.js";
+import { TerminalProcessEmitter } from "../terminalProcessEmitter.js";
 
 describe("TerminalProcessEmitter", () => {
   it("replays data emitted before the first subscriber", () => {

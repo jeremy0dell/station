@@ -8,13 +8,13 @@ import {
   type HostSpawnResult,
 } from "@station/host";
 import { afterEach, describe, expect, it } from "bun:test";
-import { paneInputBytes } from "../input/runtime/sequenceNormalize.js";
-import { createHostAttachedTerminal } from "../terminal/pty/hostAttachedTerminal.js";
-import { StationTerminalSpawnError } from "../terminal/pty/errors.js";
-import { createPtyRegistry } from "../terminal/registry/ptyRegistry.js";
-import { createScriptedTerminal } from "../terminal/testing/scriptedTerminal.js";
-import { waitFor } from "../terminal/testing/waitFor.js";
-import { type StationHostInstance, startStationHost } from "./startHost.js";
+import { paneInputBytes } from "../../input/runtime/sequenceNormalize.js";
+import { createHostAttachedTerminal } from "../../terminal/pty/hostAttachedTerminal.js";
+import { StationTerminalSpawnError } from "../../terminal/pty/errors.js";
+import { createPtyRegistry } from "../../terminal/registry/ptyRegistry.js";
+import { createScriptedTerminal } from "../../terminal/testing/scriptedTerminal.js";
+import { waitFor } from "../../terminal/testing/waitFor.js";
+import { type StationHostInstance, startStationHost } from "../startHost.js";
 
 // startStationHost only calls logger.log; a no-op keeps the host test off the FS.
 const noopLogger = { log: async () => undefined } as never;
@@ -211,7 +211,8 @@ describe("startStationHost", () => {
       expect(listed).toHaveLength(1);
       expect(listed[0]).toMatchObject({ ptyId, worktreeId: "wt-1", alive: true });
 
-      await client.write(ptyId, "ls\n");
+      const attachment = await client.attach(attachExpectation(spawned), "controller");
+      await attachment.write("ls\n");
       expect(scripted.helpers.writes).toEqual(["ls\n"]);
 
       // Idempotent: re-spawning the same worktree returns the same PTY.
@@ -276,7 +277,7 @@ describe("startStationHost", () => {
       const { ptyId } = spawned;
 
       scripted.helpers.emitData("scroll-"); // captured into the ring before attach
-      const attachment = await client.attach(attachExpectation(spawned));
+      const attachment = await client.attach(attachExpectation(spawned), "viewer");
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -292,6 +293,67 @@ describe("startStationHost", () => {
       expect((await client.list())[0]).toMatchObject({ ptyId, alive: true });
     } finally {
       client.dispose();
+    }
+  });
+
+  it("fans out output while serializing two clients through one controller lease", async () => {
+    const scripted = createScriptedTerminal({ cols: 80, rows: 24 });
+    const socketPath = await startOnTempSocket({ createTerminal: () => scripted.terminal });
+    const firstClient = testClient(socketPath);
+    const secondClient = testClient(socketPath);
+    try {
+      const spawned = await firstClient.spawn({
+        ...identity,
+        command: "claude",
+        args: [],
+        cwd: "/repo/wt-1",
+        cols: 80,
+        rows: 24,
+      });
+      const expectation = attachExpectation(spawned);
+      const first = await firstClient.attach(expectation, "controller");
+      const second = await secondClient.attach(expectation, "viewer");
+      const firstFrames = first.frames[Symbol.asyncIterator]();
+      const secondFrames = second.frames[Symbol.asyncIterator]();
+
+      scripted.helpers.emitData("shared");
+      await expect(firstFrames.next()).resolves.toMatchObject({ value: { data: "shared" } });
+      await expect(secondFrames.next()).resolves.toMatchObject({ value: { data: "shared" } });
+      await expect(second.resize(40, 10)).rejects.toMatchObject({
+        code: "HOST_CONTROL_REVOKED",
+      });
+      expect(scripted.helpers.resizes).toEqual([]);
+
+      await expect(second.claimControl()).resolves.toMatchObject({
+        role: "controller",
+        controlEpoch: 2,
+      });
+      await expect(firstFrames.next()).resolves.toMatchObject({
+        value: {
+          type: "control-revoked",
+          attachmentId: first.ack.attachmentId,
+          controlEpoch: 2,
+        },
+      });
+      await expect(first.write("stale")).rejects.toMatchObject({
+        code: "HOST_CONTROL_REVOKED",
+      });
+      await second.resize(100, 30);
+      await second.write("accepted");
+      expect(scripted.helpers.resizes).toEqual([{ cols: 100, rows: 30 }]);
+      expect(scripted.helpers.writes).toEqual(["accepted"]);
+
+      await second.detach();
+      await expect(first.write("not-promoted")).rejects.toMatchObject({
+        code: "HOST_CONTROL_REVOKED",
+      });
+      await expect(first.claimControl()).resolves.toMatchObject({
+        role: "controller",
+        controlEpoch: 3,
+      });
+    } finally {
+      firstClient.dispose();
+      secondClient.dispose();
     }
   });
 
@@ -313,7 +375,7 @@ describe("startStationHost", () => {
       const expected = "\x1b[r\x1b[999;1H\n\n\n\x1b[H\x1b[48;1H\x1b[J";
 
       scripted.helpers.emitData(input);
-      const attachment = await client.attach(attachExpectation(spawned));
+      const attachment = await client.attach(attachExpectation(spawned), "viewer");
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -348,7 +410,7 @@ describe("startStationHost", () => {
         cols: 80,
         rows: 24,
       });
-      const initial = await client.attach(attachExpectation(spawned));
+      const initial = await client.attach(attachExpectation(spawned), "viewer");
       await initial.detach();
 
       scripted.helpers.emitData("overflowing-history");
@@ -437,12 +499,15 @@ describe("startStationHost", () => {
 
       // A first-class diagnosable failure — never a silent fall-through to respawn.
       await expect(
-        client.attach({
-          ...identity,
-          terminalTargetId: "native:missing",
-          ptyId: "pty-missing",
-          ptyInstanceId: "missing-instance",
-        }),
+        client.attach(
+          {
+            ...identity,
+            terminalTargetId: "native:missing",
+            ptyId: "pty-missing",
+            ptyInstanceId: "missing-instance",
+          },
+          "viewer",
+        ),
       ).rejects.toMatchObject({
         tag: "TerminalProviderError",
         provider: "native",
@@ -502,7 +567,7 @@ describe("startStationHost", () => {
       });
 
       agent.helpers.emitData("scrollback");
-      const attachment = await client.attach(attachExpectation(spawned));
+      const attachment = await client.attach(attachExpectation(spawned), "viewer");
       expect(attachment.ack.replay).toEqual({
         kind: "raw-complete",
         initialCols: 80,
@@ -824,7 +889,7 @@ describe("startStationHost", () => {
           rows: 24,
         }),
       ).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
-      await expect(client.attach(attachExpectation(spawned))).rejects.toMatchObject({
+      await expect(client.attach(attachExpectation(spawned), "viewer")).rejects.toMatchObject({
         code: "HOST_UPGRADE_BLOCKED",
       });
       await client.abortHandoff();

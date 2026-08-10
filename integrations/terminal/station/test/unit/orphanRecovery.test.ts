@@ -119,8 +119,6 @@ function fakeHostClient(overrides: Partial<StationHostClient> = {}): StationHost
       ptyInstanceId: "instance-unused",
       pid: 1,
     }),
-    write: async () => undefined,
-    resize: async () => undefined,
     list: async () => [],
     focus: async () => undefined,
     close: async () => ({ closed: true }),

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStationHostClient } from "@station/host";
 import { expect, it } from "bun:test";
-import { runStationHostMain } from "./hostMain.js";
+import { runStationHostMain } from "../hostMain.js";
 
 it("releases the packaged PTY runtime when the protocol stops an idle host", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "station-host-main-"));

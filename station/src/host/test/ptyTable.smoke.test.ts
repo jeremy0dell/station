@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { fileURLToPath } from "node:url";
-import { createPtyTable } from "./ptyTable.js";
+import { createPtyTable } from "../ptyTable.js";
 
 const PI_CAPABILITIES_PROBE = fileURLToPath(
-  new URL("../terminal/pty/fixtures/piCapabilitiesProbe.ts", import.meta.url),
+  new URL("../../terminal/pty/fixtures/piCapabilitiesProbe.ts", import.meta.url),
 );
 
 // Real node-pty spawn. Gated like the other PTY smokes so a plain `bun test`

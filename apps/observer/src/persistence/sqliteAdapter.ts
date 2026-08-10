@@ -48,11 +48,13 @@ export function createSqliteObserverPersistence(
   const now = () => toIsoTimestamp(clock.now());
   const transaction = <T>(task: (database: SqlDatabase) => T): Promise<T> =>
     Effect.runPromise(runSqliteTransactionEffect(options.sqlite, task));
-  const sessionGroupMutation = (
-    mutate: (
-      state: sessionGroupStore.SessionGroupPersistenceState,
-    ) => sessionGroupStore.SessionGroupMutation,
-  ) =>
+  const sessionGroupMutation = <T>(
+    mutate: (state: sessionGroupStore.SessionGroupPersistenceState) => {
+      state: sessionGroupStore.SessionGroupPersistenceState;
+      result: T;
+      changed: boolean;
+    },
+  ): Promise<T> =>
     transaction((database) => {
       const before = sessionGroupSqlite.readSessionGroupState(database);
       const mutation = mutate(before);
@@ -332,9 +334,9 @@ export function createSqliteObserverPersistence(
         }),
       ),
 
-    pruneSessionGroupMemberships: (input) =>
+    repairSessionGroups: (input) =>
       sessionGroupMutation((state) =>
-        sessionGroupStore.pruneSessionGroupMemberships(state, {
+        sessionGroupStore.repairSessionGroups(state, {
           ...input,
           updatedAt: input.updatedAt ?? now(),
         }),

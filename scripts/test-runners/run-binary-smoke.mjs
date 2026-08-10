@@ -754,7 +754,7 @@ async function runBinarySmoke() {
       cols: 80,
       rows: 24,
     });
-    const attachment = await hostClient.attach({ ...ptyIdentity, ...spawned });
+    const attachment = await hostClient.attach({ ...ptyIdentity, ...spawned }, "viewer");
     if (!ptyOnly) {
       const lowerBuild = orderedSameVersionBuilds?.[0];
       const higherBuild = orderedSameVersionBuilds?.[1];
@@ -1831,7 +1831,10 @@ async function executeStressRound(context) {
     cols: 80,
     rows: 24,
   });
-  context.attachment = await context.hostClient.attach({ ...ptyIdentity, ...context.spawnedPty });
+  context.attachment = await context.hostClient.attach(
+    { ...ptyIdentity, ...context.spawnedPty },
+    "viewer",
+  );
   mark("hostPtyReadyMs");
 
   const higherStartup = await runObserverStart(

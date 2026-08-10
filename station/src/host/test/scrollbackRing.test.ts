@@ -1,6 +1,6 @@
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "bun:test";
-import { ScrollbackRing } from "./scrollbackRing.js";
+import { ScrollbackRing } from "../scrollbackRing.js";
 
 const SIZE = { cols: 80, rows: 24 };
 

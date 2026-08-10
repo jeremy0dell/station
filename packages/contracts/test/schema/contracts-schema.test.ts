@@ -1369,6 +1369,27 @@ describe("contract schemas", () => {
       },
       "atomic reassignment and ungrouping expectations",
     );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_child",
+          expectedVersion: 3,
+          parentGroupId: "grp_parent",
+        },
+      },
+      "Group reparenting",
+    );
+    expectParses(
+      StationCommandSchema,
+      {
+        type: "sessionGroup.reparent",
+        payload: { projectId: "web", groupId: "grp_child", expectedVersion: 3 },
+      },
+      "Group root detachment",
+    );
 
     const invalidCommands = [
       {
@@ -1425,6 +1446,41 @@ describe("contract schemas", () => {
       {
         type: "sessionGroup.delete",
         payload: { projectId: "web", groupId: "grp_target", expectedVersion: 1, extra: true },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          parentGroupId: null,
+        },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          parentGroupId: "   ",
+        },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 0,
+        },
+      },
+      {
+        type: "sessionGroup.reparent",
+        payload: {
+          projectId: "web",
+          groupId: "grp_target",
+          expectedVersion: 1,
+          unexpected: true,
+        },
       },
       {
         type: "sessionGroup.updateMembership",
