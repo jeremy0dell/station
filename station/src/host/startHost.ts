@@ -264,9 +264,9 @@ function buildHostHandlers(input: {
         return { closed: ptyTable.close(ptyId) };
       },
     },
-    attach: (params, registration) => {
+    attach: (params, attachmentId) => {
       handoff.assertNotDraining();
-      return ptyTable.attach(params, registration.attachmentId, params.intent);
+      return ptyTable.attach(params, attachmentId, params.intent);
     },
     // Draining is set before the ack, and close starts only after it is written, excluding spawn and response-loss races.
     afterUnaryResponseSent: (method) => {

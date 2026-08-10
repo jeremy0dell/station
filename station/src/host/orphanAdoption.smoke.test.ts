@@ -160,12 +160,12 @@ if (SMOKE) {
 
         // I/O flows again through the adopted bridge.
         const controller = await table.attach(listed!, "att-orphan", "controller");
-        controller.write(controller.controlState, "back-alive\n");
+        controller.write(controller.controlState.controlEpoch, "back-alive\n");
         await waitFor(
           () => table.snapshot(ptyId).rawChunks.join("").includes("adopted-back-alive"),
           5_000,
         );
-        controller.resize(controller.controlState, 100, 30);
+        controller.resize(controller.controlState.controlEpoch, 100, 30);
         expect(table.snapshot(ptyId).cols).toEqual(100);
         expect(processAlive(originalPid)).toEqual(true);
       } finally {

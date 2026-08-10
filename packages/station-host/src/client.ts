@@ -67,7 +67,6 @@ export type StationHostClientOptions = {
  * iterator and detach operation release only this attempt, even after replacement.
  */
 export type HostAttachment = {
-  attachmentId: string;
   ack: HostAttachAck;
   /** Latest Host-confirmed capability and role, including targeted revocations. */
   readonly controlState: HostControlState;
@@ -100,10 +99,10 @@ export type StationHostClient = {
   list(): Promise<HostListResult["ptys"]>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
-  /** Attach only when the acknowledgement matches the complete identity proof; defaults to controller intent. */
+  /** Attach only with an explicit role and a matching complete identity proof. */
   attach(
     expectation: HostPtyAttachExpectation,
-    intent?: HostAttachmentIntent,
+    intent: HostAttachmentIntent,
   ): Promise<HostAttachment>;
   /** Send a one-way shutdown notification, then gracefully close the connection. */
   dispose(): void;
@@ -380,7 +379,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           sink.updateControlState({
             attachmentId: frame.attachmentId,
             controlEpoch: frame.controlEpoch,
-            role: frame.role,
+            role: "viewer",
           });
         }
         queue.push(frame);
@@ -430,7 +429,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },
     close: (ptyId) => request("host.close", { ptyId, confirm: true }, HostCloseResultSchema),
-    attach: async (expectation, intent = "controller") => {
+    attach: async (expectation, intent) => {
       const requestedRef: HostPtyRef = {
         terminalTargetId: expectation.terminalTargetId,
         ptyId: expectation.ptyId,
@@ -477,7 +476,6 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         sink.register(ack);
       }
       return {
-        attachmentId: ack.attachmentId,
         ack,
         get controlState() {
           return sink.controlState;

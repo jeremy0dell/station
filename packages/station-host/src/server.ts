@@ -9,13 +9,13 @@ import {
 } from "./errors.js";
 import {
   type HostAttachAck,
-  type HostAttachmentCapability,
   type HostAttachParams,
   HostAttachParamsSchema,
   HostClaimControlParamsSchema,
   type HostClientIdentity,
   HostClientShutdownNotificationSchema,
   type HostCompatibilityIdentity,
+  type HostControlEpoch,
   type HostControlState,
   HostDetachParamsSchema,
   type HostFrame,
@@ -37,15 +37,9 @@ export type HostAttachmentSource = {
   readonly controlState: HostControlState;
   /** Reclaim mutation authority for this registered attachment without presenting a stale epoch. */
   claimControl(): HostControlState;
-  /** Capability-aware mutation handlers reject viewers and stale epochs before reaching the PTY. */
-  write(capability: HostAttachmentCapability, data: string): void;
-  resize(capability: HostAttachmentCapability, cols: number, rows: number): void;
-};
-
-/** Server-issued attachment registration passed to the Host composition boundary. */
-export type HostAttachmentRegistration = {
-  attachmentId: string;
-  client: HostClientIdentity;
+  /** The connection registry binds attachment identity; the table still rejects a stale epoch. */
+  write(controlEpoch: HostControlEpoch, data: string): void;
+  resize(controlEpoch: HostControlEpoch, cols: number, rows: number): void;
 };
 
 /**
@@ -63,7 +57,7 @@ export type HostHandlers = {
   >;
   attach?: (
     params: HostAttachParams,
-    registration: HostAttachmentRegistration,
+    attachmentId: string,
   ) => HostAttachmentSource | Promise<HostAttachmentSource>;
   /** Called only after a successful unary response has been written to the connection. */
   afterUnaryResponseSent?: (method: string) => void;
@@ -231,13 +225,7 @@ async function handleMessage(
       return;
     }
     try {
-      attachment.source.write(
-        {
-          attachmentId: params.data.attachmentId,
-          controlEpoch: params.data.controlEpoch,
-        },
-        params.data.data,
-      );
+      attachment.source.write(params.data.controlEpoch, params.data.data);
       connection.send(hostSuccess(request.id, { ok: true }));
     } catch (error) {
       failFromHandler(connection, logger, request.id, "host.write", error);
@@ -257,14 +245,7 @@ async function handleMessage(
       return;
     }
     try {
-      attachment.source.resize(
-        {
-          attachmentId: params.data.attachmentId,
-          controlEpoch: params.data.controlEpoch,
-        },
-        params.data.cols,
-        params.data.rows,
-      );
+      attachment.source.resize(params.data.controlEpoch, params.data.cols, params.data.rows);
       connection.send(hostSuccess(request.id, { ok: true }));
     } catch (error) {
       failFromHandler(connection, logger, request.id, "host.resize", error);
@@ -300,21 +281,17 @@ async function handleMessage(
   handlers.afterUnaryResponseSent?.(request.method);
 }
 
-function removeAttachmentRegistration(state: ConnectionState, attachment: ActiveAttachment): void {
+/** Release one registered attachment while retaining its last authoritative control evidence. */
+function releaseAttachmentRegistration(
+  state: ConnectionState,
+  attachment: ActiveAttachment,
+): Promise<IteratorResult<HostFrame>> | undefined {
   if (state.attachments.get(attachment.attachmentId) === attachment) {
     state.attachments.delete(attachment.attachmentId);
   }
   if (state.attachmentByPty.get(attachment.ptyId) === attachment) {
     state.attachmentByPty.delete(attachment.ptyId);
   }
-}
-
-/** Release one registered attachment while retaining its last authoritative control evidence. */
-function releaseAttachmentRegistration(
-  state: ConnectionState,
-  attachment: ActiveAttachment,
-): Promise<IteratorResult<HostFrame>> | undefined {
-  removeAttachmentRegistration(state, attachment);
   attachment.detachedControlState ??= attachment.source.controlState;
   // Registry removal precedes synchronous iterator return so no concurrent request can retain authority.
   return attachment.iterator.return?.();
@@ -433,7 +410,7 @@ async function runAttach(
   const attachmentId = `att_${randomUUID()}`;
   try {
     params = HostAttachParamsSchema.parse(rawParams);
-    attachment = await handlers.attach(params, { attachmentId, client: state.client });
+    attachment = await handlers.attach(params, attachmentId);
     if (attachment.ack.attachmentId !== attachmentId || !isSameHostPtyRef(params, attachment.ack)) {
       await attachment.frames[Symbol.asyncIterator]().return?.();
       throw stationHostSafeError(

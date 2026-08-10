@@ -208,7 +208,7 @@ describe("createPtyTable", () => {
     const partial = "before\x1b[1;23r\x1b[";
 
     scripted.helpers.emitData(partial);
-    controller.resize(controller.controlState, 100, 30);
+    controller.resize(controller.controlState.controlEpoch, 100, 30);
 
     expect(await iterator.next()).toMatchObject({ value: { type: "data", data: "before" } });
     expect(await iterator.next()).toMatchObject({
@@ -299,7 +299,7 @@ describe("createPtyTable", () => {
 
     const attaching = attach(table, liveRef(table, ptyId));
     scripted.helpers.emitData("during");
-    controller.resize(controller.controlState, 100, 30);
+    controller.resize(controller.controlState.controlEpoch, 100, 30);
     capture.resolve(["snapshot-at-boundary"]);
     const attached = await attaching;
     const frames = attached.frames[Symbol.asyncIterator]();
@@ -552,8 +552,8 @@ describe("createPtyTable", () => {
     const { table, scripteds } = tableWithScripted();
     const { ptyId } = table.spawn(baseParams);
     const controller = await attach(table, liveRef(table, ptyId), "controller");
-    controller.write(controller.controlState, "ls\n");
-    controller.resize(controller.controlState, 1, 0); // below MIN_COLS/MIN_ROWS — clamps to 2x1
+    controller.write(controller.controlState.controlEpoch, "ls\n");
+    controller.resize(controller.controlState.controlEpoch, 1, 0); // below MIN_COLS/MIN_ROWS — clamps to 2x1
     expect(scripteds[0]?.helpers.writes).toEqual(["ls\n"]);
     expect(scripteds[0]?.helpers.resizes).toEqual([{ cols: 2, rows: 1 }]);
     expect(table.list()[0]).toMatchObject({ cols: 2, rows: 1 });
@@ -629,13 +629,6 @@ describe("createPtyTable", () => {
     expect(table.list().map((entry) => entry.ptyId)).toEqual(["pty-2"]); // one, not two
   });
 
-  it("throws HOST_PTY_NOT_FOUND for an unknown PTY", () => {
-    const { table } = tableWithScripted();
-    expect(() =>
-      table.write("pty-nope", { attachmentId: "missing", controlEpoch: 0 }, "x"),
-    ).toThrow();
-  });
-
   it("attach acks an atomic scrollback snapshot, then streams live frames", async () => {
     const { table, scripted } = singleTable();
     const { ptyId } = table.spawn(baseParams);
@@ -707,7 +700,7 @@ describe("createPtyTable", () => {
     const iterator = controller.frames[Symbol.asyncIterator]();
 
     scripted.helpers.emitData("before-resize");
-    controller.resize(controller.controlState, 5, 4);
+    controller.resize(controller.controlState.controlEpoch, 5, 4);
     scripted.helpers.emitData("after-resize");
 
     const frames = await Promise.all([iterator.next(), iterator.next(), iterator.next()]);
@@ -736,8 +729,8 @@ describe("createPtyTable", () => {
     const controller = await attach(table, liveRef(table, ptyId), "controller");
 
     scripted.helpers.emitData("1234567890abcdefghij");
-    controller.resize(controller.controlState, 5, 4);
-    controller.resize(controller.controlState, 10, 4);
+    controller.resize(controller.controlState.controlEpoch, 5, 4);
+    controller.resize(controller.controlState.controlEpoch, 10, 4);
 
     expect((await attach(table, liveRef(table, ptyId))).ack.replay).toEqual({
       kind: "raw-complete",
@@ -778,7 +771,7 @@ describe("createPtyTable", () => {
 
     expect(first.controlState).toMatchObject({ role: "controller", controlEpoch: 1 });
     expect(viewer.controlState).toMatchObject({ role: "viewer", controlEpoch: 1 });
-    expect(() => viewer.resize(viewer.controlState, 40, 10)).toThrow();
+    expect(() => viewer.resize(viewer.controlState.controlEpoch, 40, 10)).toThrow();
     expect(scripted.helpers.resizes).toEqual([]);
 
     expect(viewer.claimControl()).toMatchObject({ role: "controller", controlEpoch: 2 });
@@ -787,17 +780,15 @@ describe("createPtyTable", () => {
         type: "control-revoked",
         attachmentId: first.ack.attachmentId,
         controlEpoch: 2,
-        role: "viewer",
-        reason: "control_claimed",
       },
     });
     expect(first.controlState).toMatchObject({ role: "viewer", controlEpoch: 2 });
     expect(() =>
-      first.write({ attachmentId: first.ack.attachmentId, controlEpoch: 1 }, "stale"),
+      first.write(1, "stale"),
     ).toThrow();
     expect(scripted.helpers.writes).toEqual([]);
 
-    viewer.write(viewer.controlState, "accepted");
+    viewer.write(viewer.controlState.controlEpoch, "accepted");
     expect(scripted.helpers.writes).toEqual(["accepted"]);
     expect(viewer.claimControl()).toEqual(viewer.controlState);
     expect(viewer.controlState.controlEpoch).toBe(2);
@@ -810,7 +801,7 @@ describe("createPtyTable", () => {
     const viewer = await attach(table, liveRef(table, ptyId));
 
     await controller.frames[Symbol.asyncIterator]().return?.();
-    expect(() => viewer.write(viewer.controlState, "not-promoted")).toThrow();
+    expect(() => viewer.write(viewer.controlState.controlEpoch, "not-promoted")).toThrow();
     expect(scripted.helpers.writes).toEqual([]);
     expect(viewer.claimControl()).toMatchObject({ role: "controller", controlEpoch: 2 });
   });

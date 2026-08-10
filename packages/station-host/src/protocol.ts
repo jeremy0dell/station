@@ -174,7 +174,6 @@ export type HostAttachmentIntent = z.infer<typeof HostAttachmentIntentSchema>;
 
 /** Host-confirmed mutation role for one live attachment. */
 export const HostAttachmentRoleSchema = z.enum(["controller", "viewer"]);
-export type HostAttachmentRole = z.infer<typeof HostAttachmentRoleSchema>;
 
 /** Monotonic per-PTY mutation generation, beginning at zero before the first grant. */
 export const HostControlEpochSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -184,7 +183,6 @@ export type HostControlEpoch = z.infer<typeof HostControlEpochSchema>;
 export const HostAttachmentCapabilitySchema = z
   .object({ attachmentId: idSchema, controlEpoch: HostControlEpochSchema })
   .strict();
-export type HostAttachmentCapability = z.infer<typeof HostAttachmentCapabilitySchema>;
 
 /** Current Host-confirmed capability and role for one attachment. */
 export const HostControlStateSchema = HostAttachmentCapabilitySchema.extend({
@@ -194,24 +192,20 @@ export type HostControlState = z.infer<typeof HostControlStateSchema>;
 
 /** Claim uses only the connection-scoped Host attachment identity; stale viewers present no epoch. */
 export const HostClaimControlParamsSchema = z.object({ attachmentId: idSchema }).strict();
-export type HostClaimControlParams = z.infer<typeof HostClaimControlParamsSchema>;
 
 /** Successful control claim returns the current role and newly granted epoch. */
 export const HostClaimControlResultSchema = HostControlStateSchema;
-export type HostClaimControlResult = z.infer<typeof HostClaimControlResultSchema>;
 
 /** Capability-bound input mutation; no bare PTY identity is accepted. */
 export const HostWriteParamsSchema = HostAttachmentCapabilitySchema.extend({
   data: z.string(),
 }).strict();
-export type HostWriteParams = z.infer<typeof HostWriteParamsSchema>;
 
 /** Capability-bound geometry mutation; no bare PTY identity is accepted. */
 export const HostResizeParamsSchema = HostAttachmentCapabilitySchema.extend({
   cols: z.number().int(),
   rows: z.number().int(),
 }).strict();
-export type HostResizeParams = z.infer<typeof HostResizeParamsSchema>;
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
 /** Live inventory entry whose reference and immutable identity derive from one table entry. */
 export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
@@ -426,12 +420,6 @@ export const HostDetachParamsSchema = z
     reason: UiLifecycleDetachReasonSchema.extract(["explicit_detach", "client_shutdown"]),
   })
   .strict();
-/** Why a new controller replaced the attachment named by a targeted revocation frame. */
-export const HostControlReplacementReasonSchema = z.enum([
-  "controller_attached",
-  "control_claimed",
-]);
-export type HostControlReplacementReason = z.infer<typeof HostControlReplacementReasonSchema>;
 /** Attachment-targeted notice that a replacement controller committed a newer epoch. */
 export const HostControlRevokedFrameSchema = z
   .object({
@@ -439,11 +427,8 @@ export const HostControlRevokedFrameSchema = z
     ptyId: idSchema,
     attachmentId: idSchema,
     controlEpoch: HostControlEpochSchema,
-    role: z.literal("viewer"),
-    reason: HostControlReplacementReasonSchema,
   })
   .strict();
-export type HostControlRevokedFrame = z.infer<typeof HostControlRevokedFrameSchema>;
 export const HostFrameSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("data"), ptyId: idSchema, data: z.string() }).strict(),
   z

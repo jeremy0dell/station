@@ -308,8 +308,8 @@ describe("serveHostConnection", () => {
       server,
       {
         hostIdentity: { protocolVersion: HOST_PROTOCOL_VERSION, buildVersion: "test-build" },
-        attach: (params, registration) => {
-          state = { ...state, attachmentId: registration.attachmentId };
+        attach: (params, attachmentId) => {
+          state = { ...state, attachmentId };
           return {
             ack: {
               subscribed: true,
@@ -459,11 +459,11 @@ describe("serveHostConnection", () => {
     const lifecycle: Array<Parameters<NonNullable<HostServerLogger["onLifecycle"]>>[0]> = [];
     const client = wire(
       {
-        attach: (_params, registration) =>
+        attach: (_params, attachmentId) =>
           attachmentSource(
             {
               subscribed: true,
-              attachmentId: registration.attachmentId,
+              attachmentId,
               controlEpoch: 1,
               role: "controller",
               ...ptyIdentity(ptyRef("p1").terminalTargetId),
@@ -492,7 +492,7 @@ describe("serveHostConnection", () => {
         onLifecycle: (event) => lifecycle.push(event),
       },
     );
-    const attachment = await client.attach(ptyExpectation("p1"));
+    const attachment = await client.attach(ptyExpectation("p1"), "controller");
     expect(attachment.ack.replay.events).toEqual([
       { type: "data", data: "snap" },
       { type: "resize", cols: 100, rows: 30 },
@@ -536,7 +536,7 @@ describe("serveHostConnection", () => {
       event: "host.attachment.detached",
       attributes: {
         ptyId: "p1",
-        attachmentId: attachment.attachmentId,
+        attachmentId: attachment.ack.attachmentId,
         controlEpoch: 1,
         role: "controller",
         reason: "explicit_detach",
@@ -550,12 +550,12 @@ describe("serveHostConnection", () => {
         }),
         expect.objectContaining({
           kind: "host.attachment.attached",
-          attachmentId: attachment.attachmentId,
+          attachmentId: attachment.ack.attachmentId,
           ptyId: "p1",
         }),
         expect.objectContaining({
           kind: "host.attachment.detached",
-          attachmentId: attachment.attachmentId,
+          attachmentId: attachment.ack.attachmentId,
           reason: "explicit_detach",
         }),
       ]),
@@ -581,8 +581,8 @@ describe("serveHostConnection", () => {
       role: "viewer",
     };
     const client = wire({
-      attach: (params, registration) => {
-        state = { attachmentId: registration.attachmentId, controlEpoch: 0, role: "viewer" };
+      attach: (params, attachmentId) => {
+        state = { attachmentId, controlEpoch: 0, role: "viewer" };
         return {
           ack: {
             subscribed: true,
@@ -611,11 +611,11 @@ describe("serveHostConnection", () => {
             state = { ...state, controlEpoch: 1, role: "controller" };
             return state;
           },
-          write(capability, data) {
-            mutations.push({ kind: "write", capability, data });
+          write(controlEpoch, data) {
+            mutations.push({ kind: "write", controlEpoch, data });
           },
-          resize(capability, cols, rows) {
-            mutations.push({ kind: "resize", capability, cols, rows });
+          resize(controlEpoch, cols, rows) {
+            mutations.push({ kind: "resize", controlEpoch, cols, rows });
           },
         };
       },
@@ -629,15 +629,12 @@ describe("serveHostConnection", () => {
     expect(mutations).toEqual([
       {
         kind: "write",
-        capability: { attachmentId: attachment.attachmentId, controlEpoch: 1 },
+        controlEpoch: 1,
         data: "input",
       },
       {
         kind: "resize",
-        capability: {
-          attachmentId: attachment.attachmentId,
-          controlEpoch: 1,
-        },
+        controlEpoch: 1,
         cols: 100,
         rows: 30,
       },
@@ -771,13 +768,13 @@ describe("serveHostConnection", () => {
   it("keeps simultaneous attach streams isolated by PTY id", async () => {
     const streams = new Map<string, ReturnType<typeof controllableStream>>();
     const client = wire({
-      attach: (params, registration) => {
+      attach: (params, attachmentId) => {
         const stream = controllableStream();
         streams.set(params.ptyId, stream);
         return attachmentSource(
           {
             subscribed: true,
-            attachmentId: registration.attachmentId,
+            attachmentId,
             controlEpoch: 1,
             role: "controller",
             ...ptyIdentity(params.terminalTargetId),
@@ -800,8 +797,8 @@ describe("serveHostConnection", () => {
       },
     });
 
-    const first = await client.attach(ptyExpectation("p1"));
-    const second = await client.attach(ptyExpectation("p2"));
+    const first = await client.attach(ptyExpectation("p1"), "controller");
+    const second = await client.attach(ptyExpectation("p2"), "controller");
     expect(first.ack.replay.events).toEqual([{ type: "data", data: "snap-p1" }]);
     expect(second.ack.replay.events).toEqual([{ type: "data", data: "snap-p2" }]);
 
@@ -838,13 +835,13 @@ describe("serveHostConnection", () => {
   it("keeps replacement routing owned by the latest attachment attempt", async () => {
     const streams: ReturnType<typeof controllableStream>[] = [];
     const client = wire({
-      attach: (params, registration) => {
+      attach: (params, attachmentId) => {
         const stream = controllableStream();
         streams.push(stream);
         return attachmentSource(
           {
             subscribed: true,
-            attachmentId: registration.attachmentId,
+            attachmentId,
             controlEpoch: 1,
             role: "controller",
             ...ptyIdentity(params.terminalTargetId),
@@ -867,9 +864,9 @@ describe("serveHostConnection", () => {
       },
     });
 
-    const first = await client.attach(ptyExpectation("p1"));
+    const first = await client.attach(ptyExpectation("p1"), "controller");
     const firstIterator = first.frames[Symbol.asyncIterator]();
-    const second = await client.attach(ptyExpectation("p1"));
+    const second = await client.attach(ptyExpectation("p1"), "controller");
     const secondIterator = second.frames[Symbol.asyncIterator]();
 
     await expect(firstIterator.next()).resolves.toEqual({ done: true, value: undefined });
@@ -890,11 +887,11 @@ describe("serveHostConnection", () => {
   it("rejects a mismatched handler acknowledgement before registering the stream", async () => {
     const stream = controllableStream();
     const client = wire({
-      attach: (params, registration) =>
+      attach: (params, attachmentId) =>
         attachmentSource(
           {
             subscribed: true,
-            attachmentId: registration.attachmentId,
+            attachmentId,
             controlEpoch: 1,
             role: "controller",
             ...ptyIdentity(params.terminalTargetId),
@@ -916,7 +913,7 @@ describe("serveHostConnection", () => {
         ),
     });
 
-    await expect(client.attach(ptyExpectation("p1"))).rejects.toMatchObject({
+    await expect(client.attach(ptyExpectation("p1"), "controller")).rejects.toMatchObject({
       code: "HOST_ATTACHMENT_MISMATCH",
     });
     expect(stream.isEnded()).toBe(true);

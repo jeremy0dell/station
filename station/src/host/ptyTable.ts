@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
   type HostAttachAck,
-  type HostAttachmentCapability,
   type HostAttachmentIntent,
   type HostAttachmentSource,
-  type HostControlReplacementReason,
+  type HostControlEpoch,
   type HostControlState,
   type HostExitFrame,
   type HostFrame,
@@ -100,17 +99,6 @@ export type PtySnapshot = {
 export type PtyTable = {
   /** Reuse only identical targets; failed activation frees both indexes and disposes new resources. */
   spawn(params: HostSpawnParams): PtySpawnOutcome;
-  /** Grant or retain control for one registered attachment; viewers present no current epoch. */
-  claimControl(ptyId: string, attachmentId: string): HostControlState;
-  /** Write only when the Host-issued attachment capability is the current controller epoch. */
-  write(ptyId: string, capability: HostAttachmentCapability, data: string): void;
-  /** Resize only when the Host-issued attachment capability is the current controller epoch. */
-  resize(
-    ptyId: string,
-    capability: HostAttachmentCapability,
-    cols: number,
-    rows: number,
-  ): void;
   list(): HostListEntry[];
   snapshot(ptyId: string): PtySnapshot;
   /**
@@ -192,7 +180,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     return {
       attachmentId: attachment.attachmentId,
       controlEpoch: entry.controlEpoch,
-      role: attachment.role,
+      role:
+        entry.controllerAttachmentId === attachment.attachmentId ? "controller" : "viewer",
     };
   }
 
@@ -201,7 +190,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     const attachments = [...entry.attachments.values()];
     entry.attachments.clear();
     for (const attachment of attachments) {
-      attachment.role = "viewer";
       attachment.end();
     }
   }
@@ -217,22 +205,20 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     if (entry.controllerAttachmentId === attachment.attachmentId) {
       entry.controllerAttachmentId = undefined;
     }
-    attachment.role = "viewer";
     attachment.end();
   }
 
   function grantControl(
     entry: PtyEntry,
     attachment: PtyAttachment,
-    reason: HostControlReplacementReason,
+    reason: "controller_attached" | "control_claimed",
   ): HostControlState {
     if (entry.controllerAttachmentId === attachment.attachmentId) {
-      attachment.role = "controller";
       emit("pty.control.granted", {
         ptyId: entry.ptyId,
         attachmentId: attachment.attachmentId,
         controlEpoch: entry.controlEpoch,
-        role: attachment.role,
+        role: "controller",
         reason: "idempotent_reclaim",
       });
       return controlState(entry, attachment);
@@ -250,10 +236,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         : entry.attachments.get(entry.controllerAttachmentId);
     entry.controlEpoch += 1;
     entry.controllerAttachmentId = attachment.attachmentId;
-    attachment.role = "controller";
-    if (previous !== undefined) {
-      previous.role = "viewer";
-    }
 
     // Commit the new controller and epoch before the former controller observes revocation.
     if (previous !== undefined) {
@@ -262,8 +244,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         ptyId: entry.ptyId,
         attachmentId: previous.attachmentId,
         controlEpoch: entry.controlEpoch,
-        role: "viewer",
-        reason,
       });
       emit("pty.control.revoked", {
         ptyId: entry.ptyId,
@@ -277,7 +257,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       ptyId: entry.ptyId,
       attachmentId: attachment.attachmentId,
       controlEpoch: entry.controlEpoch,
-      role: attachment.role,
+      role: "controller",
       reason,
     });
     return controlState(entry, attachment);
@@ -285,27 +265,30 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
   function rejectMutation(
     entry: PtyEntry,
-    capability: HostAttachmentCapability,
+    attachment: PtyAttachment,
+    presentedEpoch: HostControlEpoch,
     mutation: "write" | "resize",
   ): never {
-    const attachment = entry.attachments.get(capability.attachmentId);
+    const registered = entry.attachments.get(attachment.attachmentId) === attachment;
     const reason =
-      attachment === undefined
+      !registered
         ? "unknown_attachment"
-        : attachment.role !== "controller"
+        : entry.controllerAttachmentId !== attachment.attachmentId
           ? "viewer"
-          : entry.controllerAttachmentId !== attachment.attachmentId
-            ? "revoked"
-            : "stale_epoch";
-    emit("pty.control.rejected", {
+          : "stale_epoch";
+    const attributes: Record<string, unknown> = {
       ptyId: entry.ptyId,
-      attachmentId: capability.attachmentId,
+      attachmentId: attachment.attachmentId,
       controlEpoch: entry.controlEpoch,
-      presentedEpoch: capability.controlEpoch,
-      role: attachment?.role ?? "viewer",
+      presentedEpoch,
       mutation,
       reason,
-    });
+    };
+    if (registered) {
+      attributes.role =
+        entry.controllerAttachmentId === attachment.attachmentId ? "controller" : "viewer";
+    }
+    emit("pty.control.rejected", attributes);
     throw new StationHostProviderError(
       "HOST_CONTROL_REVOKED",
       "Station Host rejected a mutation from a viewer or stale attachment capability.",
@@ -314,28 +297,27 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
 
   function requireController(
     entry: PtyEntry,
-    capability: HostAttachmentCapability,
+    attachment: PtyAttachment,
+    presentedEpoch: HostControlEpoch,
     mutation: "write" | "resize",
-  ): PtyAttachment {
-    const attachment = entry.attachments.get(capability.attachmentId);
+  ): void {
     if (
-      attachment === undefined ||
-      attachment.role !== "controller" ||
+      entry.attachments.get(attachment.attachmentId) !== attachment ||
       entry.controllerAttachmentId !== attachment.attachmentId ||
-      capability.controlEpoch !== entry.controlEpoch
+      presentedEpoch !== entry.controlEpoch
     ) {
-      return rejectMutation(entry, capability, mutation);
+      rejectMutation(entry, attachment, presentedEpoch, mutation);
     }
-    return attachment;
   }
 
   function guardedResize(
     entry: PtyEntry,
-    capability: HostAttachmentCapability,
+    attachment: PtyAttachment,
+    controlEpoch: HostControlEpoch,
     cols: number,
     rows: number,
   ): void {
-    requireController(entry, capability, "resize");
+    requireController(entry, attachment, controlEpoch, "resize");
     // A compatibility parser may retain an incomplete pre-resize sequence;
     // publish it before the geometry barrier so its production order survives.
     publishOutput(entry, entry.outputCompatibility.flush());
@@ -646,29 +628,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       };
     },
 
-    claimControl(ptyId, attachmentId) {
-      const entry = requireEntry(ptyId);
-      const attachment = entry.attachments.get(attachmentId);
-      if (attachment === undefined) {
-        throw new StationHostProviderError(
-          "HOST_CONTROL_REVOKED",
-          "Station Host rejected control claim for an unknown attachment.",
-        );
-      }
-      return grantControl(entry, attachment, "control_claimed");
-    },
-
-    write(ptyId, capability, data) {
-      const entry = requireEntry(ptyId);
-      requireController(entry, capability, "write");
-      entry.terminal.write(data);
-    },
-
-    resize(ptyId, capability, cols, rows) {
-      const entry = requireEntry(ptyId);
-      guardedResize(entry, capability, cols, rows);
-    },
-
     list() {
       const list: HostListEntry[] = [];
       for (const entry of entriesByPtyId.values()) {
@@ -735,7 +694,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       });
       attachment = {
         attachmentId,
-        role: "viewer",
         sink: (frame) => {
           stream.push(frame);
           if (frame.type === "exit") {
@@ -835,12 +793,12 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           return controlState(entry, attachment);
         },
         claimControl: () => grantControl(entry, attachment, "control_claimed"),
-        write: (capability, data) => {
-          requireController(entry, capability, "write");
+        write: (controlEpoch, data) => {
+          requireController(entry, attachment, controlEpoch, "write");
           entry.terminal.write(data);
         },
-        resize: (capability, cols, rows) => {
-          guardedResize(entry, capability, cols, rows);
+        resize: (controlEpoch, cols, rows) => {
+          guardedResize(entry, attachment, controlEpoch, cols, rows);
         },
       };
     },

@@ -145,9 +145,9 @@ describe("createPtyTable registry adoption", () => {
     });
 
     const controller = await table.attach(table.list()[0]!, "att-registry", "controller");
-    controller.write(controller.controlState, "forwarded\n");
+    controller.write(controller.controlState.controlEpoch, "forwarded\n");
     expect(scripted.helpers.writes).toEqual(["forwarded\n"]);
-    controller.resize(controller.controlState, 101, 31);
+    controller.resize(controller.controlState.controlEpoch, 101, 31);
     expect(scripted.helpers.resizes).toEqual([{ cols: 101, rows: 31 }]);
 
     // Adoption replays data into the ring exactly like spawn.

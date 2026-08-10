@@ -268,7 +268,7 @@ if (SMOKE) {
         const listed = await clientB.list();
         expect(listed).toHaveLength(2);
         expect(listed.map((entry) => entry.pid).sort()).toEqual([...childPids].sort());
-        const attachment = await clientB.attach(listed[0]!);
+        const attachment = await clientB.attach(listed[0]!, "viewer");
         expect(attachment.ack.ptyId).toEqual(listed[0]!.ptyId);
         await attachment.detach();
         expect(childPids.every((pid) => processAlive(pid))).toEqual(true);
@@ -314,7 +314,7 @@ if (SMOKE) {
         const attachExpectation = (await clientA.list())[0]!;
 
         await clientA.beginHandoff("0.0.0-host-b", "processes");
-        await expect(clientA.attach(attachExpectation)).rejects.toMatchObject({
+        await expect(clientA.attach(attachExpectation, "viewer")).rejects.toMatchObject({
           code: "HOST_UPGRADE_BLOCKED",
         });
         const aborted = await clientA.abortHandoff();
@@ -323,7 +323,7 @@ if (SMOKE) {
         expect(await clientA.list()).toHaveLength(1);
         expect(processAlive(childPid)).toEqual(true);
         expect(processAlive(hostA.pid as number)).toEqual(true);
-        const attachment = await clientA.attach(attachExpectation);
+        const attachment = await clientA.attach(attachExpectation, "viewer");
         await attachment.detach();
       } finally {
         clientA.dispose();

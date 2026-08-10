@@ -1,6 +1,7 @@
 import {
   type HostAttachAck,
   type HostAttachment,
+  type HostAttachmentIntent,
   type HostControlState,
   type HostFrame,
   type HostPtyAttachExpectation,
@@ -83,7 +84,6 @@ function controllableAttachment(
     }
   };
   const attachment: HostAttachment = {
-    attachmentId: ack.attachmentId,
     ack,
     get controlState() {
       return controlState;
@@ -139,7 +139,7 @@ function controllableAttachment(
         controlState = {
           attachmentId: frame.attachmentId,
           controlEpoch: frame.controlEpoch,
-          role: frame.role,
+          role: "viewer",
         };
       }
       queue.push(frame);
@@ -344,6 +344,53 @@ describe("createHostAttachedTerminal", () => {
     terminal.write("interactive");
     await flush();
     expect(mutations).toEqual(["claim", "resize:120x40", "write:interactive"]);
+  });
+
+  it("reconnects a revoked attachment as a viewer until input reclaims control", async () => {
+    const first = controllableAttachment(ack({ attachmentId: "att-old" }));
+    const second = controllableAttachment(
+      ack({ attachmentId: "att-new", role: "viewer", controlEpoch: 2 }),
+    );
+    const intents: HostAttachmentIntent[] = [];
+    let clientCreations = 0;
+    const terminal = createHostAttachedTerminal({
+      hostSocketPath: "/tmp/x.sock",
+      ptyRef: PTY_EXPECTATION,
+      size: { cols: 80, rows: 24 },
+      clientFactory: () => {
+        const selected = clientCreations === 0 ? first : second;
+        clientCreations += 1;
+        return clientForAttach(async (_expectation, intent) => {
+          intents.push(intent);
+          return selected.attachment;
+        });
+      },
+      sleep: async () => {},
+    });
+
+    await flush();
+    first.push({
+      type: "control-revoked",
+      ptyId: "pty-1",
+      attachmentId: "att-old",
+      controlEpoch: 2,
+    });
+    await flush();
+    terminal.resize({ cols: 120, rows: 40 });
+    first.endStream();
+    await flush();
+    await flush();
+
+    expect(intents).toEqual(["controller", "viewer"]);
+    expect(second.state.claims()).toBe(0);
+    expect(second.state.resizes).toEqual([]);
+
+    terminal.write("interactive");
+    await flush();
+    expect(second.state.claims()).toBe(1);
+    expect(second.state.resizes).toEqual([{ cols: 120, rows: 40 }]);
+    expect(second.state.writes).toEqual(["interactive"]);
+    terminal.dispose();
   });
 
   it("reclaims and retries the unsent write after a racing control rejection", async () => {

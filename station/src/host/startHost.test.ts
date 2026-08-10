@@ -211,7 +211,7 @@ describe("startStationHost", () => {
       expect(listed).toHaveLength(1);
       expect(listed[0]).toMatchObject({ ptyId, worktreeId: "wt-1", alive: true });
 
-      const attachment = await client.attach(attachExpectation(spawned));
+      const attachment = await client.attach(attachExpectation(spawned), "controller");
       await attachment.write("ls\n");
       expect(scripted.helpers.writes).toEqual(["ls\n"]);
 
@@ -311,7 +311,7 @@ describe("startStationHost", () => {
         rows: 24,
       });
       const expectation = attachExpectation(spawned);
-      const first = await firstClient.attach(expectation);
+      const first = await firstClient.attach(expectation, "controller");
       const second = await secondClient.attach(expectation, "viewer");
       const firstFrames = first.frames[Symbol.asyncIterator]();
       const secondFrames = second.frames[Symbol.asyncIterator]();
@@ -331,9 +331,8 @@ describe("startStationHost", () => {
       await expect(firstFrames.next()).resolves.toMatchObject({
         value: {
           type: "control-revoked",
-          attachmentId: first.attachmentId,
+          attachmentId: first.ack.attachmentId,
           controlEpoch: 2,
-          role: "viewer",
         },
       });
       await expect(first.write("stale")).rejects.toMatchObject({
@@ -500,12 +499,15 @@ describe("startStationHost", () => {
 
       // A first-class diagnosable failure — never a silent fall-through to respawn.
       await expect(
-        client.attach({
-          ...identity,
-          terminalTargetId: "native:missing",
-          ptyId: "pty-missing",
-          ptyInstanceId: "missing-instance",
-        }),
+        client.attach(
+          {
+            ...identity,
+            terminalTargetId: "native:missing",
+            ptyId: "pty-missing",
+            ptyInstanceId: "missing-instance",
+          },
+          "viewer",
+        ),
       ).rejects.toMatchObject({
         tag: "TerminalProviderError",
         provider: "native",
@@ -887,7 +889,7 @@ describe("startStationHost", () => {
           rows: 24,
         }),
       ).rejects.toMatchObject({ code: "HOST_UPGRADE_BLOCKED" });
-      await expect(client.attach(attachExpectation(spawned))).rejects.toMatchObject({
+      await expect(client.attach(attachExpectation(spawned), "viewer")).rejects.toMatchObject({
         code: "HOST_UPGRADE_BLOCKED",
       });
       await client.abortHandoff();

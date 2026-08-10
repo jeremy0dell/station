@@ -3,6 +3,7 @@ import {
   createStationHostClient,
   STATION_HOST_PROVIDER_ID,
   type HostAttachment,
+  type HostAttachmentIntent,
   type HostFrame,
   type HostPtyAttachExpectation,
   type HostSpawnParamsInput,
@@ -84,11 +85,8 @@ type AttachAttemptOutcome =
 
 type AttachmentPreparationState = { replayed: boolean };
 
-type PendingWrite = { data: string };
-
 type AttachmentMutationState = {
   opened: HostAttachment;
-  generation: number;
   geometryDirty: boolean;
   repaintPending: boolean;
   controlLost: boolean;
@@ -135,9 +133,9 @@ export type HostAttachedTerminalOptions = {
  * Host-attached `StationTerminalProcess`: attach as controller or viewer, replay,
  * then stream live data and Host-confirmed geometry. User input reclaims control
  * when needed, synchronizes the latest renderer geometry before the buffered
- * write, and retries normal revocation races. Reconnect replaces the capability
- * generation, degraded replay nudges remain controller-only, and `dispose()` only
- * detaches.
+ * write, and retries normal revocation races. Reconnect preserves the last
+ * Host-confirmed role, degraded replay nudges remain controller-only, and
+ * `dispose()` only detaches.
  */
 export function createHostAttachedTerminal(
   options: HostAttachedTerminalOptions,
@@ -168,9 +166,9 @@ export function createHostAttachedTerminal(
     (size: StationTerminalSize) => void | Promise<void>
   >();
   const pendingData: string[] = [];
-  const pendingWrites: PendingWrite[] = [];
+  const pendingWrites: string[] = [];
   let mutationState: AttachmentMutationState | undefined;
-  let attachmentGeneration = 0;
+  let attachmentIntent: HostAttachmentIntent = "controller";
   let size = options.size;
   // The size the host PTY last CONFIRMED applying (not the size we asked for);
   // a persistent gap between this and `size` is geometry divergence.
@@ -241,7 +239,6 @@ export function createHostAttachedTerminal(
     unavailable = true;
     lastUnavailable = event;
     mutationState = undefined;
-    attachmentGeneration += 1;
     ackedSize = undefined;
     pendingWrites.length = 0;
     for (const listener of unavailableListeners) {
@@ -351,7 +348,7 @@ export function createHostAttachedTerminal(
   };
 
   const isCurrentMutationState = (state: AttachmentMutationState): boolean =>
-    !disposed && mutationState === state && attachmentGeneration === state.generation;
+    !disposed && mutationState === state;
 
   const isControlRevoked = (error: unknown): boolean =>
     toSafeError(error, HOST_DATA_PLANE_FALLBACK).code === "HOST_CONTROL_REVOKED";
@@ -406,10 +403,11 @@ export function createHostAttachedTerminal(
         if (pendingWrites.length === 0) {
           return;
         }
-        await state.opened.claimControl();
+        const controlState = await state.opened.claimControl();
         if (!isCurrentMutationState(state)) {
           return;
         }
+        attachmentIntent = controlState.role;
         state.controlLost = false;
         state.geometryDirty = true;
       }
@@ -427,11 +425,9 @@ export function createHostAttachedTerminal(
           return;
         }
         // Geometry and any replay repaint nudge must settle before the first buffered input.
-        await state.opened.write(pending.data);
-        // A successful response is the write acknowledgement even if reconnect invalidated this generation.
-        if (pendingWrites[0] === pending) {
-          pendingWrites.shift();
-        }
+        await state.opened.write(pending);
+        // A successful response is the write acknowledgement even if reconnect invalidated this attachment.
+        pendingWrites.shift();
         if (!isCurrentMutationState(state)) {
           return;
         }
@@ -440,6 +436,7 @@ export function createHostAttachedTerminal(
           throw error;
         }
         state.controlLost = true;
+        attachmentIntent = "viewer";
         state.geometryDirty = true;
         if (pendingWrites.length === 0) {
           return;
@@ -467,26 +464,6 @@ export function createHostAttachedTerminal(
         emitDiagnostic(toSafeError(error, HOST_DATA_PLANE_FALLBACK).message);
       }
     });
-  };
-
-  const beginMutationGeneration = (
-    opened: HostAttachment,
-    isReconnect: boolean,
-  ): AttachmentMutationState => {
-    attachmentGeneration += 1;
-    const state: AttachmentMutationState = {
-      opened,
-      generation: attachmentGeneration,
-      geometryDirty: opened.controlState.role === "controller" || pendingWrites.length > 0,
-      repaintPending:
-        isReconnect ||
-        opened.ack.replay.kind === "live-reset-recovery" ||
-        opened.ack.replay.events.some((event) => event.type === "data"),
-      controlLost: false,
-      running: undefined,
-    };
-    mutationState = state;
-    return state;
   };
 
   const consumeAttachmentFrames = async (
@@ -522,6 +499,7 @@ export function createHostAttachedTerminal(
           break;
         case "control-revoked":
           state.controlLost = true;
+          attachmentIntent = "viewer";
           state.geometryDirty = true;
           if (pendingWrites.length > 0 && isCurrentMutationState(state)) {
             scheduleMutationPump(state);
@@ -572,7 +550,18 @@ export function createHostAttachedTerminal(
     }
     // Failures after replay must clear before replaying the next ring snapshot.
     state.replayed = true;
-    const mutations = beginMutationGeneration(opened, isReconnect);
+    attachmentIntent = opened.controlState.role;
+    const mutations: AttachmentMutationState = {
+      opened,
+      geometryDirty: opened.controlState.role === "controller" || pendingWrites.length > 0,
+      repaintPending:
+        isReconnect ||
+        opened.ack.replay.kind === "live-reset-recovery" ||
+        opened.ack.replay.events.some((event) => event.type === "data"),
+      controlLost: false,
+      running: undefined,
+    };
+    mutationState = mutations;
     await runMutationPump(mutations);
     if (!isCurrentMutationState(mutations)) {
       return false;
@@ -610,7 +599,7 @@ export function createHostAttachedTerminal(
     // earn the healthy-connection retry reset.
     let connectedAt: number | undefined;
     try {
-      const opened = await client.attach(ptyExpectation);
+      const opened = await client.attach(ptyExpectation, attachmentIntent);
       if (!acceptAttachedPty(opened)) {
         return { kind: "complete" };
       }
@@ -642,7 +631,6 @@ export function createHostAttachedTerminal(
     ackedSize = undefined;
     const previousMutations = mutationState;
     mutationState = undefined;
-    attachmentGeneration += 1;
     if (previousMutations?.running !== undefined) {
       await previousMutations.running.catch(() => undefined);
     }
@@ -819,7 +807,7 @@ export function createHostAttachedTerminal(
       if (disposed || exited || unavailable) {
         return;
       }
-      pendingWrites.push({ data });
+      pendingWrites.push(data);
       const state = mutationState;
       if (state !== undefined) {
         scheduleMutationPump(state);
@@ -862,7 +850,6 @@ export function createHostAttachedTerminal(
       }
       disposed = true;
       mutationState = undefined;
-      attachmentGeneration += 1;
       dataListeners.clear();
       exitListeners.clear();
       diagnosticListeners.clear();

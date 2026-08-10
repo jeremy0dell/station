@@ -1,5 +1,4 @@
 import type {
-  HostAttachmentRole,
   HostControlEpoch,
   HostExitFrame,
   HostFrame,
@@ -22,10 +21,9 @@ export function clampSize(cols: number, rows: number): StationTerminalSize {
   return { cols: Math.max(MIN_COLS, cols), rows: Math.max(MIN_ROWS, rows) };
 }
 
-/** One output attachment and its current mutation role for this PTY lifetime. */
+/** One output attachment; controller authority is derived only from the owning PTY entry. */
 export type PtyAttachment = {
   attachmentId: string;
-  role: HostAttachmentRole;
   sink(frame: HostFrame): void;
   end(): void;
 };

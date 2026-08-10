@@ -44,7 +44,6 @@ function fakeClient(spawns: unknown[]): StationHostClient {
     [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<HostFrame>>(() => {}) }),
   };
   const attachment: HostAttachment = {
-    attachmentId: "att-test",
     ack: {
       subscribed: true,
       attachmentId: "att-test",

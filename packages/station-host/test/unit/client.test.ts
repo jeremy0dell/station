@@ -530,7 +530,7 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
 
-    const attachment = await client.attach(PTY_EXPECTATION);
+    const attachment = await client.attach(PTY_EXPECTATION, "controller");
     await expect(attachment.frames[Symbol.asyncIterator]().next()).resolves.toMatchObject({
       value: { data: "after-ack" },
     });
@@ -570,10 +570,10 @@ describe("createStationHostClient", () => {
       expectedBuildVersion: "test-build",
       connect: async () => clientConn,
     });
-    const current = await client.attach(PTY_EXPECTATION);
+    const current = await client.attach(PTY_EXPECTATION, "controller");
     const iterator = current.frames[Symbol.asyncIterator]();
 
-    await expect(client.attach(PTY_EXPECTATION)).rejects.toMatchObject({
+    await expect(client.attach(PTY_EXPECTATION, "controller")).rejects.toMatchObject({
       code: "HOST_ATTACH_GONE",
     });
     server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "still-current" });
@@ -609,8 +609,8 @@ describe("createStationHostClient", () => {
       expectedBuildVersion: "test-build",
       connect: async () => clientConn,
     });
-    const old = await client.attach(PTY_EXPECTATION);
-    const current = await client.attach(PTY_EXPECTATION);
+    const old = await client.attach(PTY_EXPECTATION, "controller");
+    const current = await client.attach(PTY_EXPECTATION, "controller");
     const iterator = current.frames[Symbol.asyncIterator]();
 
     await expect(old.detach()).rejects.toMatchObject({ code: "HOST_REQUEST_FAILED" });
@@ -658,7 +658,7 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
 
-    const attachment = await client.attach(PTY_EXPECTATION);
+    const attachment = await client.attach(PTY_EXPECTATION, "controller");
     expect(attachment.controlState).toEqual({
       attachmentId: "att-host-1",
       controlEpoch: 2,
@@ -705,8 +705,6 @@ describe("createStationHostClient", () => {
             ptyId: PTY_REF.ptyId,
             attachmentId: "att-host-1",
             controlEpoch: 2,
-            role: "viewer",
-            reason: "controller_attached",
           });
         }
       }
@@ -717,7 +715,7 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
 
-    const attachment = await client.attach(PTY_EXPECTATION);
+    const attachment = await client.attach(PTY_EXPECTATION, "controller");
     await expect(attachment.frames[Symbol.asyncIterator]().next()).resolves.toMatchObject({
       value: { type: "control-revoked", controlEpoch: 2 },
     });
@@ -786,7 +784,7 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
 
-    await expect(client.attach(PTY_EXPECTATION)).rejects.toMatchObject({
+    await expect(client.attach(PTY_EXPECTATION, "controller")).rejects.toMatchObject({
       code: "HOST_ATTACHMENT_MISMATCH",
     });
     await expect(detached.promise).resolves.toBeUndefined();
