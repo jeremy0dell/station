@@ -32,12 +32,14 @@ const projects = [
   { projectId: "api", projectLabel: "API" },
   { projectId: "empty", projectLabel: "Empty Project" },
 ];
+const groups = [];
 
 describe("dashboard persistent filter selector", () => {
   it("lets an editing draft override the applied query and returns every visible match range", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: {
         name: "persistentFilter",
         draft: { value: "  ALPHA  ", cursor: 9 },
@@ -74,6 +76,7 @@ describe("dashboard persistent filter selector", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: {
         name: "persistentFilter",
         draft: { value: "", cursor: 0 },
@@ -105,18 +108,21 @@ describe("dashboard persistent filter selector", () => {
     const byAgent = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "pi" },
     });
     const byStatus = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "WORK" },
     });
     const byProject = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "console" },
     });
@@ -133,6 +139,7 @@ describe("dashboard persistent filter selector", () => {
     const byStatuses = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: {
         query: "",
@@ -150,6 +157,7 @@ describe("dashboard persistent filter selector", () => {
     const byProjectAndAgent = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: {
         query: "pending",
@@ -170,6 +178,7 @@ describe("dashboard persistent filter selector", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: {
         query: "",
@@ -187,6 +196,7 @@ describe("dashboard persistent filter selector", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "feature" },
     });
@@ -211,12 +221,14 @@ describe("dashboard persistent filter selector", () => {
     const byExpansion = selectDashboardPersistentFilter({
       candidates: sourceCandidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "X" },
     });
     const byAccent = selectDashboardPersistentFilter({
       candidates: sourceCandidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "é" },
     });
@@ -229,12 +241,14 @@ describe("dashboard persistent filter selector", () => {
     const byLabel = selectDashboardPersistentFilter({
       candidates: [],
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "empty" },
     });
     const unmatched = selectDashboardPersistentFilter({
       candidates: [],
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "missing" },
     });
@@ -285,6 +299,7 @@ describe("dashboard persistent filter selector", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: {
         name: "persistentFilter",
         draft: { value: "   ", cursor: 3 },
@@ -306,6 +321,7 @@ describe("dashboard persistent filter selector", () => {
     const projection = selectDashboardPersistentFilter({
       candidates,
       projects,
+      groups,
       screen: { name: "dashboard" },
       applied: { query: "missing" },
     });
@@ -317,7 +333,12 @@ describe("dashboard persistent filter selector", () => {
 
   it("returns no projection when neither a draft nor applied state exists", () => {
     expect(
-      selectDashboardPersistentFilter({ candidates, projects, screen: { name: "dashboard" } }),
+      selectDashboardPersistentFilter({
+        candidates,
+        projects,
+        groups,
+        screen: { name: "dashboard" },
+      }),
     ).toBeUndefined();
   });
 });

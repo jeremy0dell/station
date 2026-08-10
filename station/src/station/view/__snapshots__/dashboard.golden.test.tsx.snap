@@ -407,9 +407,9 @@ FILTER working · Status=Working                2/10 matches
 ▼ observer  3 sessions · 3 agents             [sh] [qs] [▾] 
  [2] ⠋ provider-hooks          opencode  working      #16 … 
                                                             
+▼ scripts  2 sessions · 2 agents              [sh] [qs] [▾] 
                                                             
-                                                            
-                                                            
+▼ empty-project  0 sessions                   [sh] [qs] [▾] 
                                                             
 ─────────────────────────────────────────────────────────── 
 / edit  Esc clear  ↵ activate  N new  Q:close               

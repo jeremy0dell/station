@@ -328,6 +328,21 @@ describe("dashboard tree", () => {
     ).toBeUndefined();
   });
 
+  it("does not decorate containment for an invalid focused cell", () => {
+    const snapshot = createGroupedDashboardSnapshot();
+    const memberId = dashboardRowIds.session("ses_wt_web_idle");
+    const state = {
+      ...createInitialTuiState({ initialSnapshot: snapshot }),
+      dashboardFocus: { rowId: memberId, cellId: "menu" } as const,
+    };
+    const tree = selectDashboardTree(snapshot, state, state.screen);
+
+    expect(tree.rowById.get(memberId)?.focusedCellId).toBeUndefined();
+    expect(
+      tree.rowById.get(dashboardRowIds.group("group_active"))?.containsFocusedRow,
+    ).toBeUndefined();
+  });
+
   it("retains Group containers and reports admitted direct members under an applied filter", () => {
     const snapshot = createGroupedDashboardSnapshot();
     const state = createInitialTuiState({

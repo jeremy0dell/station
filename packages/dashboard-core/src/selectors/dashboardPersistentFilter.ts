@@ -98,7 +98,7 @@ export function selectDashboardPersistentFilter({
 }: {
   candidates: readonly DashboardPersistentFilterCandidate[];
   projects: readonly DashboardPersistentFilterProjectCandidate[];
-  groups?: readonly DashboardPersistentFilterGroupCandidate[];
+  groups: readonly DashboardPersistentFilterGroupCandidate[];
   screen: DashboardScreenView;
   applied?: DashboardPersistentFilterView;
 }): DashboardPersistentFilterProjection | undefined {
@@ -119,7 +119,7 @@ export function selectDashboardPersistentFilter({
     projectLabelRanges.set(project.projectId, matchRanges(project.projectLabel, foldedQuery));
   }
   const groupLabelRanges = new Map<SessionGroupId, DashboardPersistentFilterMatchRange[]>();
-  for (const group of groups ?? []) {
+  for (const group of groups) {
     groupLabelRanges.set(group.groupId, matchRanges(group.groupLabel, foldedQuery));
   }
 
@@ -165,7 +165,7 @@ export function selectDashboardPersistentFilter({
 
   const groupMatches = new Map<SessionGroupId, DashboardPersistentFilterGroupMatch>();
   const projectsWithMatchedGroups = new Set<ProjectId>();
-  for (const group of groups ?? []) {
+  for (const group of groups) {
     const labelRanges = groupLabelRanges.get(group.groupId) ?? [];
     const projectAllowed = selectedProjects.size === 0 || selectedProjects.has(group.projectId);
     const textAllowsGroup = foldedQuery.length === 0 || labelRanges.length > 0;

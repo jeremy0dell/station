@@ -157,7 +157,6 @@ type ProjectRows = {
   readonly rows: readonly (DashboardSessionPayload | DashboardCreateLocalRowPayload)[];
   readonly rootRows: readonly (DashboardSessionPayload | DashboardCreateLocalRowPayload)[];
   readonly groups: readonly ProjectGroupRows[];
-  readonly orderingMode: GroupOrderingMode;
 };
 
 type ProjectGroupRows = {
@@ -171,11 +170,32 @@ const GROUP_CELLS = ["identity", "quickSession", "menu"] as const;
 const SESSION_CELLS = ["identity"] as const;
 const EMPTY_PROJECT_CELLS = ["addSession"] as const;
 
+/** Projects canonical snapshot and local dashboard state through one normalized tree-grid path. */
 export function selectDashboardTree(
   snapshot: DashboardSnapshotView,
   state: DashboardViewState,
   activeScreen: DashboardScreenView,
 ): DashboardTreeProjection {
+  // Normalize membership once so filtering and tree construction cannot diverge.
+  const projects = projectRowsForSnapshot(snapshot, state);
+  // Filtering annotates and admits rows from that model; it never creates a parallel hierarchy.
+  const persistentFilter = selectTreePersistentFilter(
+    projects,
+    snapshot.sessionGroups,
+    activeScreen,
+    state.persistentFilter,
+  );
+  const projection = projectTreeGrid(
+    dashboardRoots(projects, persistentFilter, state.groupOrderingMode),
+  );
+  // Focus decorates the finished projection and never becomes structural authority.
+  return decorateDashboardProjection(projection, state.dashboardFocus, persistentFilter);
+}
+
+function projectRowsForSnapshot(
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewState,
+): ProjectRows[] {
   const sessionRows = selectDashboardSessionRows(snapshot);
   const localRows = visibleCreateSessionLocalRows(snapshot, state);
   const groupBySessionId = new Map<SessionId, DashboardGroupView>();
@@ -210,10 +230,149 @@ export function selectDashboardTree(
         (row) => row.type === "createLocalRow" || groupBySessionId.get(row.row.id) === undefined,
       ),
       groups,
-      orderingMode: state.groupOrderingMode,
     };
   });
-  const persistentFilter = selectDashboardPersistentFilter({
+  return projects;
+}
+
+function visibleCreateSessionLocalRows(
+  snapshot: DashboardSnapshotView,
+  state: DashboardViewState,
+): DashboardCreateSessionLocalRow[] {
+  const rowsById = new Map(snapshot.rows.map((row) => [row.id, row]));
+  const canonicalProjectBranches = new Set(
+    snapshot.sessions.flatMap((session) => {
+      const row = rowsById.get(session.worktreeId);
+      return row === undefined ? [] : [`${session.projectId}\u0000${row.branch}`];
+    }),
+  );
+  return [
+    ...state.localRows.pendingCreate
+      .filter((row) => !canonicalProjectBranches.has(`${row.projectId}\u0000${row.branch}`))
+      .map((row) => ({ ...row, status: "pending" as const })),
+    ...state.localRows.failedCreate.map((row) => ({ ...row, status: "failed" as const })),
+  ];
+}
+
+function mergeDashboardRows(
+  rows: readonly DashboardSessionRow[],
+  localRows: readonly DashboardCreateSessionLocalRow[],
+  state: DashboardViewState,
+): MergedDashboardRow[] {
+  return [
+    ...rows.map((row) => ({ type: "session" as const, row })),
+    ...localRows.map((row) => ({ type: "createLocalRow" as const, row })),
+  ].sort((left, right) => compareDashboardRows(left, right, state));
+}
+
+function compareDashboardRows(
+  left: MergedDashboardRow,
+  right: MergedDashboardRow,
+  state: DashboardViewState,
+): number {
+  return (
+    rowTitle(left, state).localeCompare(rowTitle(right, state)) ||
+    rowBranch(left).localeCompare(rowBranch(right)) ||
+    (left.type === right.type
+      ? rowStableId(left).localeCompare(rowStableId(right))
+      : left.type === "session"
+        ? -1
+        : 1)
+  );
+}
+
+function rowTitle(row: MergedDashboardRow, state: DashboardViewState): string {
+  return row.type === "session" ? sessionRowDisplayTitle(row.row, state.localRows) : row.row.title;
+}
+
+function rowBranch(row: MergedDashboardRow): string {
+  return row.type === "session" ? row.row.worktree.branch : row.row.branch;
+}
+
+function rowStableId(row: MergedDashboardRow): string {
+  return row.type === "session" ? row.row.id : row.row.localId;
+}
+
+function sessionPayload(
+  row: DashboardSessionRow,
+  state: DashboardViewState,
+): DashboardSessionPayload {
+  const displayTitle = sessionRowDisplayTitle(row, state.localRows);
+  const pendingRemove = state.localRows.pendingRemove.find(
+    (localRow) => localRow.worktreeId === row.worktree.id,
+  );
+  const pendingStart = state.localRows.pendingStart.find(
+    (localRow) => localRow.worktreeId === row.worktree.id,
+  );
+  return {
+    type: "session",
+    row,
+    displayTitle,
+    presentation: sessionRowPresentation(row, displayTitle, pendingRemove, pendingStart),
+    ...(pendingRemove === undefined ? {} : { pendingRemove }),
+    ...(pendingStart === undefined ? {} : { pendingStart }),
+  };
+}
+
+function createLocalPayload(row: DashboardCreateSessionLocalRow): DashboardCreateLocalRowPayload {
+  return {
+    type: "createLocalRow",
+    row,
+    presentation: createSessionRowPresentation(row),
+  };
+}
+
+function sessionRowPresentation(
+  row: DashboardSessionRow,
+  displayTitle: string,
+  pendingRemove: DashboardPendingRemoveWorktreeRowView | undefined,
+  pendingStart: DashboardPendingStartAgentRowView | undefined,
+): DashboardPersistentFilterVisibleFields {
+  if (pendingRemove !== undefined) {
+    return { title: displayTitle, activity: "removing session..." };
+  }
+  if (pendingStart !== undefined) {
+    return {
+      title: displayTitle,
+      activity: pendingStart.operation === "resumeAgent" ? "resuming..." : "starting...",
+    };
+  }
+  const visibleFields = worktreeRowVisibleFields(row.presentation, displayTitle);
+  return {
+    title: visibleFields.title,
+    agent: visibleFields.agent,
+    activity: visibleFields.activity,
+  };
+}
+
+function createSessionRowPresentation(
+  row: DashboardCreateSessionLocalRow,
+): DashboardPersistentFilterVisibleFields {
+  if (row.status === "failed") {
+    return { title: row.title, activity: row.error.message };
+  }
+  return {
+    title: row.title,
+    agent: row.harnessProvider ?? "",
+    activity: "starting session...",
+  };
+}
+
+function rowIdForPayload(
+  payload: DashboardSessionPayload | DashboardCreateLocalRowPayload,
+): DashboardRowId {
+  return payload.type === "session"
+    ? dashboardRowIds.session(payload.row.id)
+    : dashboardRowIds.create(payload.row.localId);
+}
+
+function selectTreePersistentFilter(
+  projects: readonly ProjectRows[],
+  groups: readonly DashboardGroupView[],
+  screen: DashboardScreenView,
+  applied: DashboardViewState["persistentFilter"],
+): DashboardPersistentFilterProjection | undefined {
+  return selectDashboardPersistentFilter({
     candidates: projects.flatMap((project) => [
       ...project.rootRows.map((row) => persistentFilterCandidate(rowIdForPayload(row), row)),
       ...project.groups.flatMap(({ group, rows }) =>
@@ -224,30 +383,59 @@ export function selectDashboardTree(
       projectId: project.id,
       projectLabel: project.label,
     })),
-    groups: snapshot.sessionGroups.map((group) => ({
+    groups: groups.map((group) => ({
       groupId: group.id,
       projectId: group.projectId,
       groupLabel: group.name,
     })),
-    screen: activeScreen,
-    ...(state.persistentFilter === undefined ? {} : { applied: state.persistentFilter }),
+    screen,
+    ...(applied === undefined ? {} : { applied }),
   });
-  const roots = dashboardRoots(projects, persistentFilter);
-  return decorateDashboardProjection(
-    projectTreeGrid(roots),
-    state.dashboardFocus,
-    persistentFilter,
-  );
+}
+
+function persistentFilterCandidate(
+  id: DashboardRowId,
+  payload: DashboardSessionPayload | DashboardCreateLocalRowPayload,
+  groupId?: SessionGroupId,
+): DashboardPersistentFilterCandidate {
+  if (payload.type === "session") {
+    return {
+      kind: "session",
+      id,
+      projectId: payload.row.worktree.projectId,
+      ...(groupId === undefined ? {} : { groupId }),
+      visibleFields: payload.presentation,
+      conditionValues: {
+        status: payload.pendingStart === undefined ? payload.row.session.status.value : "starting",
+        agent: payload.row.session.harness.provider,
+      },
+    };
+  }
+  const conditionValues: DashboardPersistentFilterCandidate["conditionValues"] = {};
+  if (payload.row.status === "pending") {
+    conditionValues.status = "starting";
+    if (payload.row.harnessProvider !== undefined) {
+      conditionValues.agent = payload.row.harnessProvider;
+    }
+  }
+  return {
+    kind: "optimistic",
+    id,
+    projectId: payload.row.projectId,
+    visibleFields: payload.presentation,
+    conditionValues,
+  };
 }
 
 function dashboardRoots(
   projects: readonly ProjectRows[],
   projection: DashboardPersistentFilterProjection | undefined,
+  orderingMode: GroupOrderingMode,
 ): DashboardTreeNode[] {
   const applied = projection?.source === "applied" && projection.active;
   return projects.flatMap((projectRows, index) => [
     ...(index === 0 ? [] : [projectGapNode(projectRows.project.id)]),
-    projectNode(projectRows, projection, applied),
+    projectNode(projectRows, projection, applied, orderingMode),
   ]);
 }
 
@@ -255,6 +443,7 @@ function projectNode(
   projectRows: ProjectRows,
   projection: DashboardPersistentFilterProjection | undefined,
   applied: boolean,
+  orderingMode: GroupOrderingMode,
 ): DashboardTreeNode {
   const visibleRootRows = admittedRows(projectRows.rootRows, projection, applied);
   const groupNodes = [...projectRows.groups]
@@ -262,7 +451,7 @@ function projectNode(
     .map((group) => groupNode(group, projection, applied));
   const rootNodes = visibleRootRows.map((row) => rowNode(row, projection));
   const children =
-    projectRows.orderingMode === "groups-first"
+    orderingMode === "groups-first"
       ? [...groupNodes, ...rootNodes]
       : interleaveGroupAndRootNodes(groupNodes, rootNodes);
   if (projectRows.rows.length === 0) {
@@ -313,10 +502,10 @@ function admittedRows<Row extends DashboardSessionPayload | DashboardCreateLocal
   rows: readonly Row[],
   projection: DashboardPersistentFilterProjection | undefined,
   applied: boolean,
-): Row[] {
+): readonly Row[] {
   return applied
     ? rows.filter((row) => projection?.rows.get(rowIdForPayload(row))?.matched === true)
-    : [...rows];
+    : rows;
 }
 
 function compareProjectGroups(left: ProjectGroupRows, right: ProjectGroupRows): number {
@@ -390,184 +579,23 @@ function projectGapNode(projectId: ProjectId): DashboardTreeNode {
   };
 }
 
-function sessionPayload(
-  row: DashboardSessionRow,
-  state: DashboardViewState,
-): DashboardSessionPayload {
-  const displayTitle = sessionRowDisplayTitle(row, state.localRows);
-  const pendingRemove = state.localRows.pendingRemove.find(
-    (localRow) => localRow.worktreeId === row.worktree.id,
-  );
-  const pendingStart = state.localRows.pendingStart.find(
-    (localRow) => localRow.worktreeId === row.worktree.id,
-  );
-  return {
-    type: "session",
-    row,
-    displayTitle,
-    presentation: sessionRowPresentation(row, displayTitle, pendingRemove, pendingStart),
-    ...(pendingRemove === undefined ? {} : { pendingRemove }),
-    ...(pendingStart === undefined ? {} : { pendingStart }),
-  };
-}
-
-function createLocalPayload(row: DashboardCreateSessionLocalRow): DashboardCreateLocalRowPayload {
-  return {
-    type: "createLocalRow",
-    row,
-    presentation: createSessionRowPresentation(row),
-  };
-}
-
-function sessionRowPresentation(
-  row: DashboardSessionRow,
-  displayTitle: string,
-  pendingRemove: DashboardPendingRemoveWorktreeRowView | undefined,
-  pendingStart: DashboardPendingStartAgentRowView | undefined,
-): DashboardPersistentFilterVisibleFields {
-  if (pendingRemove !== undefined) {
-    return { title: displayTitle, activity: "removing session..." };
-  }
-  if (pendingStart !== undefined) {
-    return {
-      title: displayTitle,
-      activity: pendingStart.operation === "resumeAgent" ? "resuming..." : "starting...",
-    };
-  }
-  const visibleFields = worktreeRowVisibleFields(row.presentation, displayTitle);
-  return {
-    title: visibleFields.title,
-    agent: visibleFields.agent,
-    activity: visibleFields.activity,
-  };
-}
-
-function createSessionRowPresentation(
-  row: DashboardCreateSessionLocalRow,
-): DashboardPersistentFilterVisibleFields {
-  if (row.status === "failed") {
-    return { title: row.title, activity: row.error.message };
-  }
-  return {
-    title: row.title,
-    agent: row.harnessProvider ?? "",
-    activity: "starting session...",
-  };
-}
-
-function persistentFilterCandidate(
-  id: DashboardRowId,
-  payload: DashboardSessionPayload | DashboardCreateLocalRowPayload,
-  groupId?: SessionGroupId,
-): DashboardPersistentFilterCandidate {
-  if (payload.type === "session") {
-    return {
-      kind: "session",
-      id,
-      projectId: payload.row.worktree.projectId,
-      ...(groupId === undefined ? {} : { groupId }),
-      visibleFields: payload.presentation,
-      conditionValues: {
-        status: payload.pendingStart === undefined ? payload.row.session.status.value : "starting",
-        agent: payload.row.session.harness.provider,
-      },
-    };
-  }
-  const conditionValues: DashboardPersistentFilterCandidate["conditionValues"] = {};
-  if (payload.row.status === "pending") {
-    conditionValues.status = "starting";
-    if (payload.row.harnessProvider !== undefined) {
-      conditionValues.agent = payload.row.harnessProvider;
-    }
-  }
-  return {
-    kind: "optimistic",
-    id,
-    projectId: payload.row.projectId,
-    visibleFields: payload.presentation,
-    conditionValues,
-  };
-}
-
-function visibleCreateSessionLocalRows(
-  snapshot: DashboardSnapshotView,
-  state: DashboardViewState,
-): DashboardCreateSessionLocalRow[] {
-  const rowsById = new Map(snapshot.rows.map((row) => [row.id, row]));
-  const canonicalProjectBranches = new Set(
-    snapshot.sessions.flatMap((session) => {
-      const row = rowsById.get(session.worktreeId);
-      return row === undefined ? [] : [`${session.projectId}\u0000${row.branch}`];
-    }),
-  );
-  return [
-    ...state.localRows.pendingCreate
-      .filter((row) => !canonicalProjectBranches.has(`${row.projectId}\u0000${row.branch}`))
-      .map((row) => ({ ...row, status: "pending" as const })),
-    ...state.localRows.failedCreate.map((row) => ({ ...row, status: "failed" as const })),
-  ];
-}
-
-function mergeDashboardRows(
-  rows: readonly DashboardSessionRow[],
-  localRows: readonly DashboardCreateSessionLocalRow[],
-  state: DashboardViewState,
-): MergedDashboardRow[] {
-  return [
-    ...rows.map((row) => ({ type: "session" as const, row })),
-    ...localRows.map((row) => ({ type: "createLocalRow" as const, row })),
-  ].sort((left, right) => compareDashboardRows(left, right, state));
-}
-
-function compareDashboardRows(
-  left: MergedDashboardRow,
-  right: MergedDashboardRow,
-  state: DashboardViewState,
-): number {
-  return (
-    rowTitle(left, state).localeCompare(rowTitle(right, state)) ||
-    rowBranch(left).localeCompare(rowBranch(right)) ||
-    (left.type === right.type
-      ? rowStableId(left).localeCompare(rowStableId(right))
-      : left.type === "session"
-        ? -1
-        : 1)
-  );
-}
-
-function rowTitle(row: MergedDashboardRow, state: DashboardViewState): string {
-  return row.type === "session" ? sessionRowDisplayTitle(row.row, state.localRows) : row.row.title;
-}
-
-function rowBranch(row: MergedDashboardRow): string {
-  return row.type === "session" ? row.row.worktree.branch : row.row.branch;
-}
-
-function rowStableId(row: MergedDashboardRow): string {
-  return row.type === "session" ? row.row.id : row.row.localId;
-}
-
-function rowIdForPayload(
-  payload: DashboardSessionPayload | DashboardCreateLocalRowPayload,
-): DashboardRowId {
-  return payload.type === "session"
-    ? dashboardRowIds.session(payload.row.id)
-    : dashboardRowIds.create(payload.row.localId);
-}
-
 function decorateDashboardProjection(
   projection: TreeGridProjection<DashboardRowId, DashboardCellId, DashboardTreePayload>,
   focus: DashboardFocus | undefined,
   persistentFilter: DashboardPersistentFilterProjection | undefined,
 ): DashboardTreeProjection {
   const rowById = new Map<DashboardRowId, DashboardTreeRow>();
-  const focusedRow =
+  const focusedRowCandidate =
     focus === undefined || !projection.visibleIndexById.has(focus.rowId)
       ? undefined
       : projection.rowById.get(focus.rowId);
+  const focusedRow =
+    focus !== undefined && focusedRowCandidate?.cells.includes(focus.cellId)
+      ? focusedRowCandidate
+      : undefined;
   for (const row of projection.rowById.values()) {
     let decorated: DashboardTreeRow = row;
-    if (focus?.rowId === row.id && row.cells.includes(focus.cellId)) {
+    if (focus !== undefined && focusedRow?.id === row.id) {
       decorated = { ...decorated, focusedCellId: focus.cellId };
     }
     if (row.payload.type === "groupHeader" && focusedRow?.parentId === row.id) {
