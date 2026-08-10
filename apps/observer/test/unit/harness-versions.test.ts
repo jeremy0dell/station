@@ -2,7 +2,7 @@ import type { HarnessProvider } from "@station/contracts";
 import { FakeHarnessProvider, FakeTerminalProvider, FakeWorktreeProvider } from "@station/testing";
 import { describe, expect, it } from "vitest";
 import { ProviderRegistry } from "../../src/providers/registry.js";
-import { harnessesFromRegistry } from "../../src/reconcile/run.js";
+import { harnessesFromRegistry } from "../../src/reconcile/snapshotSeed.js";
 
 const now = "2026-06-19T12:00:00.000Z";
 
