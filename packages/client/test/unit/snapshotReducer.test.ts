@@ -1,7 +1,7 @@
 import { applyStationEvent } from "@station/client";
 import type { AgentState, StationEvent, WorktreeRow } from "@station/contracts";
 import { describe, expect, it } from "vitest";
-import { createCommandSnapshot, fixtureNow, row } from "../support/snapshots.js";
+import { createCommandSnapshot, fixtureNow, row, sessionGroup } from "../support/snapshots.js";
 
 describe("client snapshot reducer", () => {
   it("applies direct worktree row updates without requesting a snapshot refresh", () => {
@@ -199,6 +199,143 @@ describe("client snapshot reducer", () => {
     expect(updated.needsSnapshotRefresh).toBe(true);
   });
 
+  it("applies monotonic Group renames and ignores duplicate or older events", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const memberId = snapshot.sessions[0]?.id;
+    if (memberId === undefined) throw new Error("Expected an idle fixture session.");
+    const current = sessionGroup({ sessionIds: [memberId] });
+    snapshot.sessionGroups = [current];
+    const renamed = sessionGroup({
+      name: "Renamed work",
+      sessionIds: [memberId],
+      version: 2,
+      updatedAt: "2026-05-20T12:01:00.000Z",
+    });
+
+    const applied = applyStationEvent(snapshot, groupUpdatedEvent(renamed));
+    expect(applied.needsSnapshotRefresh).toBe(false);
+    expect(applied.snapshot.sessionGroups).toEqual([renamed]);
+
+    const duplicate = applyStationEvent(applied.snapshot, groupUpdatedEvent(renamed));
+    expect(duplicate).toEqual({
+      snapshot: applied.snapshot,
+      needsSnapshotRefresh: false,
+      notices: [],
+    });
+
+    const older = applyStationEvent(
+      applied.snapshot,
+      groupUpdatedEvent(sessionGroup({ name: "Stale", sessionIds: [memberId] })),
+    );
+    expect(older.snapshot).toBe(applied.snapshot);
+    expect(older.needsSnapshotRefresh).toBe(false);
+  });
+
+  it("refreshes without partial Group state for creates, divergence, and structural updates", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const memberId = snapshot.sessions[0]?.id;
+    if (memberId === undefined) throw new Error("Expected an idle fixture session.");
+    const current = sessionGroup({ sessionIds: [memberId] });
+    const destination = sessionGroup({ id: "grp_web_2", name: "Destination" });
+    snapshot.sessionGroups = [current, destination];
+
+    const events: StationEvent[] = [
+      groupUpdatedEvent(sessionGroup({ id: "grp_web_new", name: "Created" })),
+      groupUpdatedEvent(sessionGroup({ name: "Divergent", sessionIds: [memberId] })),
+      groupUpdatedEvent(
+        sessionGroup({
+          id: destination.id,
+          name: destination.name,
+          sessionIds: [memberId],
+          version: 2,
+          updatedAt: "2026-05-20T12:01:00.000Z",
+        }),
+      ),
+      groupUpdatedEvent(
+        sessionGroup({
+          sessionIds: [memberId],
+          parentGroupId: destination.id,
+          version: 2,
+          updatedAt: "2026-05-20T12:01:00.000Z",
+        }),
+      ),
+    ];
+
+    for (const event of events) {
+      const result = applyStationEvent(snapshot, event);
+      expect(result.snapshot).toBe(snapshot);
+      expect(result.needsSnapshotRefresh).toBe(true);
+    }
+  });
+
+  it("refreshes when an otherwise safe Group replacement fails snapshot validation", () => {
+    const snapshot = createCommandSnapshot("idle");
+    snapshot.sessionGroups = [sessionGroup()];
+
+    const result = applyStationEvent(
+      snapshot,
+      groupUpdatedEvent(
+        sessionGroup({
+          name: "Invalid timestamp",
+          version: 2,
+          updatedAt: "2026-05-20T11:59:00.000Z",
+        }),
+      ),
+    );
+
+    expect(result.snapshot).toBe(snapshot);
+    expect(result.needsSnapshotRefresh).toBe(true);
+  });
+
+  it("removes Groups only when the resulting graph remains valid", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const parent = sessionGroup({ id: "grp_parent", name: "Parent" });
+    const child = sessionGroup({ id: "grp_child", name: "Child", parentGroupId: parent.id });
+    snapshot.sessionGroups = [parent, child];
+
+    const blocked = applyStationEvent(snapshot, groupRemovedEvent(parent.id));
+    expect(blocked.snapshot).toBe(snapshot);
+    expect(blocked.needsSnapshotRefresh).toBe(true);
+
+    const removedChild = applyStationEvent(snapshot, groupRemovedEvent(child.id));
+    expect(removedChild.needsSnapshotRefresh).toBe(false);
+    expect(removedChild.snapshot.sessionGroups).toEqual([parent]);
+
+    const duplicate = applyStationEvent(removedChild.snapshot, groupRemovedEvent(child.id));
+    expect(duplicate.snapshot).toBe(removedChild.snapshot);
+    expect(duplicate.needsSnapshotRefresh).toBe(false);
+  });
+
+  it("removes deleted sessions from Groups before requesting canonical state", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const memberId = snapshot.sessions[0]?.id;
+    if (memberId === undefined) throw new Error("Expected an idle fixture session.");
+    snapshot.sessionGroups = [sessionGroup({ sessionIds: [memberId] })];
+
+    const result = applyStationEvent(snapshot, { type: "session.removed", sessionId: memberId });
+
+    expect(result.snapshot.sessions).toEqual([]);
+    expect(result.snapshot.sessionGroups[0]?.sessionIds).toEqual([]);
+    expect(result.needsSnapshotRefresh).toBe(true);
+  });
+
+  it("removes worktree sessions from Groups and refreshes only when membership changed", () => {
+    const snapshot = createCommandSnapshot("idle");
+    const worktreeId = snapshot.rows[0]?.id;
+    const memberId = snapshot.sessions[0]?.id;
+    if (worktreeId === undefined || memberId === undefined) {
+      throw new Error("Expected an idle fixture worktree and session.");
+    }
+    snapshot.sessionGroups = [sessionGroup({ sessionIds: [memberId] })];
+
+    const result = applyStationEvent(snapshot, { type: "worktree.removed", worktreeId });
+
+    expect(result.snapshot.rows).toEqual([]);
+    expect(result.snapshot.sessions).toEqual([]);
+    expect(result.snapshot.sessionGroups[0]?.sessionIds).toEqual([]);
+    expect(result.needsSnapshotRefresh).toBe(true);
+  });
+
   it.each([
     ["needs_attention", "Codex requested permission.", false],
     ["stuck", "Codex stopped making progress.", true],
@@ -304,6 +441,24 @@ describe("client snapshot reducer", () => {
     ]);
   });
 
+  it.each([
+    "SESSION_GROUP_VERSION_CONFLICT",
+    "SESSION_GROUP_ASSIGNMENT_CONFLICT",
+  ])("refreshes without an event-path notice for %s", (code) => {
+    const snapshot = createCommandSnapshot("idle");
+    const result = applyStationEvent(snapshot, {
+      type: "command.failed",
+      commandId: "cmd_group_conflict",
+      error: {
+        tag: "CommandConflictError",
+        code,
+        message: "The Group changed.",
+      },
+    });
+
+    expect(result).toEqual({ snapshot, needsSnapshotRefresh: true, notices: [] });
+  });
+
   it("requests snapshot refresh after reconcile and provider health events", () => {
     const snapshot = createCommandSnapshot("idle");
     const reconciled = applyStationEvent(snapshot, {
@@ -336,5 +491,28 @@ function agentForState(state: AgentState, reason: string): NonNullable<WorktreeR
     confidence: "high",
     reason,
     updatedAt: fixtureNow,
+  };
+}
+
+function groupUpdatedEvent(
+  group: ReturnType<typeof sessionGroup>,
+): Extract<StationEvent, { type: "sessionGroup.updated" }> {
+  return {
+    type: "sessionGroup.updated",
+    at: fixtureNow,
+    commandId: "cmd_group_updated",
+    group,
+  };
+}
+
+function groupRemovedEvent(
+  groupId: ReturnType<typeof sessionGroup>["id"],
+): Extract<StationEvent, { type: "sessionGroup.removed" }> {
+  return {
+    type: "sessionGroup.removed",
+    at: fixtureNow,
+    commandId: "cmd_group_removed",
+    projectId: "web",
+    groupId,
   };
 }

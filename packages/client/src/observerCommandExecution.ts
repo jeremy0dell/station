@@ -1,4 +1,9 @@
-import type { CommandReceipt, SafeError, StationCommand } from "@station/contracts";
+import type {
+  CommandReceipt,
+  SafeError,
+  StationCommand,
+  StationSnapshot,
+} from "@station/contracts";
 import { toSafeError } from "./errors.js";
 import type { ObserverService } from "./types.js";
 
@@ -8,6 +13,7 @@ import type { ObserverService } from "./types.js";
  *
  * Accepted receipts stay attached to completion and thrown-wait outcomes so
  * callers can preserve command and trace identity in diagnostics or notices.
+ * Accepted Group terminal outcomes are returned only after a canonical load.
  */
 export type ObserverCommandExecutionResult =
   | { status: "rejected"; receipt: CommandReceipt; error: SafeError }
@@ -26,6 +32,9 @@ type ExecuteObserverCommandOptions = {
 /**
  * Dispatch a typed Observer command through the shared client service and
  * normalize rejection, acceptance, completion, and thrown failures once.
+ *
+ * Accepted Group commands load canonical state after terminal completion. A
+ * stale single-session assignment failure names that session's loaded destination.
  *
  * This helper owns no optimistic UI policy and performs no renderer, provider,
  * or Station Host behavior.
@@ -58,12 +67,19 @@ export async function executeObserverCommand(
 
   try {
     const completion = await service.waitForCommandCompletion(receipt.commandId);
+    const snapshot = command.type.startsWith("sessionGroup.")
+      ? await service.loadSnapshot()
+      : undefined;
     return completion.status === "succeeded"
       ? { status: "succeeded", receipt }
       : {
           status: "failed",
           receipt,
-          error: withReceiptIdentity(completion.error, receipt),
+          error: normalizeGroupAssignmentConflict(
+            withReceiptIdentity(completion.error, receipt),
+            command,
+            snapshot,
+          ),
         };
   } catch (error: unknown) {
     return {
@@ -72,6 +88,38 @@ export async function executeObserverCommand(
       error: withReceiptIdentity(normalizeThrownFailure(error, options.clientLabel), receipt),
     };
   }
+}
+
+function normalizeGroupAssignmentConflict(
+  error: SafeError,
+  command: StationCommand,
+  snapshot: StationSnapshot | undefined,
+): SafeError {
+  if (
+    error.code !== "SESSION_GROUP_ASSIGNMENT_CONFLICT" ||
+    command.type !== "sessionGroup.updateMembership" ||
+    snapshot === undefined
+  ) {
+    return error;
+  }
+  const referencedSessions = [...(command.payload.add ?? []), ...(command.payload.remove ?? [])];
+  if (referencedSessions.length !== 1) {
+    return error;
+  }
+  const sessionId = referencedSessions[0]?.sessionId;
+  if (sessionId === undefined || !snapshot.sessions.some((session) => session.id === sessionId)) {
+    return error;
+  }
+  const destination = snapshot.sessionGroups.find((group) => group.sessionIds.includes(sessionId));
+  return {
+    ...error,
+    message:
+      destination === undefined
+        ? "The session's Group changed; it is now ungrouped."
+        : `The session's Group changed; it is now in "${destination.name}".`,
+    hint: "Review the canonical destination before retrying the membership change.",
+    sessionId,
+  };
 }
 
 function normalizeThrownFailure(error: unknown, clientLabel: string | undefined): SafeError {
