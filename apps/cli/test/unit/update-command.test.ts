@@ -9,6 +9,7 @@ import { selectUpdateChannel, type UpdateChannelProbe } from "../../src/update/c
 import type {
   UpdateApplyReportBase,
   UpdateChannelId,
+  UpdateCommandArgv,
   UpdatePlanBase,
 } from "../../src/update/updateChannel.js";
 
@@ -250,7 +251,7 @@ describe("stn update command", () => {
     });
   });
 
-  it("retains a retry command when applying the update fails", async () => {
+  it("retains the generic retry command when another channel apply fails", async () => {
     const fixture = probeFixture("installer-binary");
     fixture.apply.mockRejectedValueOnce(new Error("apply failed"));
     const result = await runUpdateCommand(
@@ -286,6 +287,55 @@ describe("stn update command", () => {
         ],
       },
     });
+  });
+
+  it("renders every dev-checkout preparation recovery command in JSON and text", async () => {
+    const recoveryCommands: UpdateCommandArgv[] = [
+      ["/opt/pnpm", "--dir", "/repo", "install", "--frozen-lockfile"],
+      ["/opt/bun", "--cwd", "/repo/station", "install", "--frozen-lockfile"],
+      ["/opt/pnpm", "--dir", "/repo", "build"],
+      ["/opt/bun", "run", "--cwd", "/repo/station", "link:station"],
+      ["/opt/bun", "run", "--cwd", "/repo/station", "repair:node-pty"],
+      ["/opt/pnpm", "--dir", "/repo", "station:link"],
+    ];
+    const preparationFailure = {
+      tag: "UpdateError",
+      code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED",
+      message: "The development checkout could not be prepared.",
+    };
+    const fixture = probeFixture("dev-checkout", {
+      applyRecoveryCommands: () => recoveryCommands,
+    });
+    fixture.apply.mockRejectedValue(preparationFailure);
+
+    const json = await runUpdateCommand(["--channel", "dev-checkout", "--json"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo: testBuildInfo,
+    });
+    const text = await runUpdateCommand(["--channel", "dev-checkout"], commandOptions(), {
+      probes: [fixture.probe],
+      buildInfo: testBuildInfo,
+    });
+
+    expect(json).toMatchObject({
+      code: 1,
+      output: {
+        status: "failed",
+        error: { code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED" },
+        recoveryCommands,
+      },
+    });
+    expect(text).toMatchObject({ code: 1, outputFormat: "text" });
+    for (const command of [
+      "/opt/pnpm --dir /repo install --frozen-lockfile",
+      "/opt/bun --cwd /repo/station install --frozen-lockfile",
+      "/opt/pnpm --dir /repo build",
+      "/opt/bun run --cwd /repo/station link:station",
+      "/opt/bun run --cwd /repo/station repair:node-pty",
+      "/opt/pnpm --dir /repo station:link",
+    ]) {
+      expect(text.output).toContain(command);
+    }
   });
 
   it("restarts the Observer before an opted-in live Host handoff", async () => {
@@ -424,6 +474,7 @@ function probeFixture(
     planStatus?: UpdatePlanBase["status"];
     managerCommand?: readonly [string, ...string[]];
     applyReport?: UpdateApplyReportBase;
+    applyRecoveryCommands?: (error: unknown) => readonly UpdateCommandArgv[] | undefined;
   } = {},
 ) {
   const plan: UpdatePlanBase = {
@@ -447,7 +498,14 @@ function probeFixture(
   );
   const probe: UpdateChannelProbe = {
     channel,
-    detectAndPlan: async () => ({ channel, plan, apply }),
+    detectAndPlan: async () => ({
+      channel,
+      plan,
+      apply,
+      ...(overrides.applyRecoveryCommands === undefined
+        ? {}
+        : { applyRecoveryCommands: overrides.applyRecoveryCommands }),
+    }),
   };
   return { probe, apply };
 }

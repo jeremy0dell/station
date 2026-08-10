@@ -2,6 +2,7 @@ import { readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 import {
   type ExternalCommandRunner,
+  isSafeError,
   normalizeCancellationError,
   resolveExecutablePath,
   runExternalCommand,
@@ -12,6 +13,7 @@ import { z } from "zod";
 import type {
   UpdateApplyReportBase,
   UpdateChannel,
+  UpdateCommandArgv,
   UpdateOperationOptions,
   UpdatePlanBase,
 } from "./updateChannel.js";
@@ -33,6 +35,7 @@ export type DevCheckoutDetection = {
   runtimePath: string;
   gitPath: string;
   pnpmPath: string;
+  bunPath: string;
 };
 
 export type DevCheckoutUpdatePlan = UpdatePlanBase &
@@ -62,7 +65,7 @@ export type DevCheckoutUpdateChannelDeps = {
 /**
  * ADAPTER
  *
- * Translates a clean upstream-tracking source checkout into a pinned fast-forward rebuild.
+ * Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking.
  */
 export function createDevCheckoutUpdateChannel(
   deps: DevCheckoutUpdateChannelDeps,
@@ -185,21 +188,20 @@ export function createDevCheckoutUpdateChannel(
       await runGit(plan, ["merge", "--ff-only", plan.targetRevision], deps.commandRunner, options);
 
       try {
-        await runExternalCommand(
-          commandInput(plan.pnpmPath, ["build"], plan.repoRoot, options),
-          deps.commandRunner,
-        );
-        await runExternalCommand(
-          commandInput(plan.pnpmPath, ["station:link"], plan.repoRoot, options),
-          deps.commandRunner,
-        );
+        for (const command of devCheckoutPreparationCommands(plan)) {
+          await runExternalCommand(
+            commandInput(command.executable, command.args, command.cwd, options),
+            deps.commandRunner,
+          );
+        }
       } catch (error) {
         const cancellation = normalizeCancellationError(error);
         if (cancellation !== undefined) throw cancellation;
         throw updateErrorFromUnknown(error, {
-          code: "UPDATE_BUILD_FAILED",
-          message: "The development checkout advanced but Station could not be rebuilt and linked.",
-          hint: `Run '${plan.pnpmPath} --dir ${plan.repoRoot} build' and '${plan.pnpmPath} --dir ${plan.repoRoot} station:link'.`,
+          code: "UPDATE_DEV_CHECKOUT_PREPARE_FAILED",
+          message:
+            "The development checkout advanced but its dependencies, build, or links could not be prepared.",
+          hint: "Run the reported preparation commands before retrying Station.",
         });
       }
 
@@ -233,7 +235,69 @@ export function createDevCheckoutUpdateChannel(
         warnings: [],
       };
     },
+    applyRecoveryCommands(plan, error) {
+      if (
+        !isSafeError(error) ||
+        error.tag !== "UpdateError" ||
+        error.code !== "UPDATE_DEV_CHECKOUT_PREPARE_FAILED"
+      ) {
+        return undefined;
+      }
+      return devCheckoutPreparationCommands(plan).map(({ recoveryCommand }) => recoveryCommand);
+    },
   };
+}
+
+type DevCheckoutPreparationCommand = {
+  executable: string;
+  args: string[];
+  cwd: string;
+  recoveryCommand: UpdateCommandArgv;
+};
+
+function devCheckoutPreparationCommands(
+  plan: DevCheckoutUpdatePlan,
+): DevCheckoutPreparationCommand[] {
+  const stationRoot = resolve(plan.repoRoot, "station");
+  // Bun installation prunes the manual @station links, and recreating them requires fresh root dist output.
+  return [
+    {
+      executable: plan.pnpmPath,
+      args: ["install", "--frozen-lockfile"],
+      cwd: plan.repoRoot,
+      recoveryCommand: [plan.pnpmPath, "--dir", plan.repoRoot, "install", "--frozen-lockfile"],
+    },
+    {
+      executable: plan.bunPath,
+      args: ["install", "--frozen-lockfile"],
+      cwd: stationRoot,
+      recoveryCommand: [plan.bunPath, "--cwd", stationRoot, "install", "--frozen-lockfile"],
+    },
+    {
+      executable: plan.pnpmPath,
+      args: ["build"],
+      cwd: plan.repoRoot,
+      recoveryCommand: [plan.pnpmPath, "--dir", plan.repoRoot, "build"],
+    },
+    {
+      executable: plan.bunPath,
+      args: ["run", "link:station"],
+      cwd: stationRoot,
+      recoveryCommand: [plan.bunPath, "run", "--cwd", stationRoot, "link:station"],
+    },
+    {
+      executable: plan.bunPath,
+      args: ["run", "repair:node-pty"],
+      cwd: stationRoot,
+      recoveryCommand: [plan.bunPath, "run", "--cwd", stationRoot, "repair:node-pty"],
+    },
+    {
+      executable: plan.pnpmPath,
+      args: ["station:link"],
+      cwd: plan.repoRoot,
+      recoveryCommand: [plan.pnpmPath, "--dir", plan.repoRoot, "station:link"],
+    },
+  ];
 }
 
 async function detectDevCheckout(
@@ -245,7 +309,8 @@ async function detectDevCheckout(
   const executableOptions = deps.pathEnv === undefined ? {} : { pathEnv: deps.pathEnv };
   const gitPath = await resolveExecutablePath("git", executableOptions);
   const pnpmPath = await resolveExecutablePath("pnpm", executableOptions);
-  if (gitPath === undefined || pnpmPath === undefined) return undefined;
+  const bunPath = await resolveExecutablePath("bun", executableOptions);
+  if (gitPath === undefined || pnpmPath === undefined || bunPath === undefined) return undefined;
   try {
     const cliEntryPath = await realpath(deps.cliEntryPath);
     const runtimePath = await realpath(deps.runtimePath ?? process.execPath);
@@ -273,6 +338,7 @@ async function detectDevCheckout(
       runtimePath,
       gitPath,
       pnpmPath,
+      bunPath,
     } satisfies DevCheckoutDetection;
     detection.currentRevision = await gitLine(
       detection,
@@ -307,7 +373,8 @@ async function requireSameDetection(
     current.cliEntryPath !== expected.cliEntryPath ||
     current.runtimePath !== expected.runtimePath ||
     current.gitPath !== expected.gitPath ||
-    current.pnpmPath !== expected.pnpmPath
+    current.pnpmPath !== expected.pnpmPath ||
+    current.bunPath !== expected.bunPath
   ) {
     throw stalePlan("The development checkout changed after planning.");
   }

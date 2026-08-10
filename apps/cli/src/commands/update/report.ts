@@ -181,14 +181,14 @@ export function failedUpdateResult(
   report: UpdateCommandReport,
   phase: UpdateCommandStep["id"],
   error: unknown,
-  recoveryCommand: UpdateCommandArgv,
+  recoveryCommands: readonly UpdateCommandArgv[],
   output: UpdateRequest["output"],
 ): CliRunResult {
   const safeError = publicSafeErrorFromUnknown(error, updateFailureFallback);
   report.status = "failed";
   report.error = safeError;
-  report.recoveryCommands.push(recoveryCommand);
-  report.steps.push(updateStep(phase, "failed", safeError.message, recoveryCommand));
+  report.recoveryCommands.push(...recoveryCommands);
+  report.steps.push(updateStep(phase, "failed", safeError.message, recoveryCommands[0]));
   if (phase === "apply") {
     report.steps.push(
       updateStep("observer-restart", "skipped", "The update did not reach runtime crossover."),

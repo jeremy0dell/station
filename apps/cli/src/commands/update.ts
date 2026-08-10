@@ -65,7 +65,7 @@ type ExecutableUpdateScenario = Extract<
 /**
  * ADAPTER
  *
- * Selects one owned install channel, resolves the requested update scenario, and crosses runtimes through the successor launcher after mutation.
+ * Selects one owned install channel, honors channel-owned apply recovery, and crosses runtimes through the successor launcher after mutation.
  */
 export async function runUpdateCommand(
   args: readonly string[],
@@ -140,13 +140,10 @@ async function executeSelectedUpdate(
   try {
     applied = await selected.apply({ drivePackageManager: scenario.drivePackageManager });
   } catch (error) {
-    return failedUpdateResult(
-      report,
-      "apply",
-      error,
+    const recoveryCommands = selected.applyRecoveryCommands?.(error) ?? [
       retryUpdateCommand(selected.plan.currentCli, options.configPath, request),
-      request.output,
-    );
+    ];
+    return failedUpdateResult(report, "apply", error, recoveryCommands, request.output);
   }
 
   report.warnings.push(...applied.warnings);
@@ -165,7 +162,7 @@ async function executeSelectedUpdate(
         code: "UPDATE_CROSSOVER_INVALID",
         message: "The update committed without identifying its successor Station launcher.",
       }),
-      retryUpdateCommand(selected.plan.currentCli, options.configPath, request),
+      [retryUpdateCommand(selected.plan.currentCli, options.configPath, request)],
       request.output,
     );
   }
@@ -200,7 +197,7 @@ async function crossOverRuntime(
       ),
     );
   } catch (error) {
-    return failedUpdateResult(report, "observer-restart", error, observerCommand, request.output);
+    return failedUpdateResult(report, "observer-restart", error, [observerCommand], request.output);
   }
 
   if (hostHandoff.kind === "handoff") {
@@ -213,7 +210,7 @@ async function crossOverRuntime(
     try {
       await runCrossover(hostCommand, commandRunner);
     } catch (error) {
-      return failedUpdateResult(report, "host-handoff", error, hostCommand, request.output);
+      return failedUpdateResult(report, "host-handoff", error, [hostCommand], request.output);
     }
   }
 

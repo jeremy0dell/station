@@ -46,7 +46,7 @@ export type UpdateOperationOptions = {
 /**
  * DRIVEN PORT
  *
- * Defines one install owner's typed detect, plan, and apply lifecycle.
+ * Defines one install owner's typed detect, plan, apply, and optional adapter-owned recovery lifecycle.
  */
 export interface UpdateChannel<
   Detection extends UpdateDetectionBase = UpdateDetectionBase,
@@ -57,4 +57,5 @@ export interface UpdateChannel<
   detect(options?: UpdateOperationOptions): Promise<Detection | undefined>;
   plan(detection: Detection, options?: UpdateOperationOptions): Promise<Plan>;
   apply(plan: Plan, options?: UpdateOperationOptions): Promise<Report>;
+  applyRecoveryCommands?(plan: Plan, error: unknown): readonly UpdateCommandArgv[] | undefined;
 }

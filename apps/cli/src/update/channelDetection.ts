@@ -2,6 +2,7 @@ import type {
   UpdateApplyReportBase,
   UpdateChannel,
   UpdateChannelId,
+  UpdateCommandArgv,
   UpdateDetectionBase,
   UpdateOperationOptions,
   UpdatePlanBase,
@@ -12,6 +13,7 @@ export type PlannedUpdateChannel = {
   channel: UpdateChannelId;
   plan: UpdatePlanBase;
   apply(options?: UpdateOperationOptions): Promise<UpdateApplyReportBase>;
+  applyRecoveryCommands?(error: unknown): readonly UpdateCommandArgv[] | undefined;
 };
 
 export type UpdateChannelProbe = {
@@ -30,10 +32,14 @@ export function createUpdateChannelProbe<
       const detection = await channel.detect(options);
       if (detection === undefined) return undefined;
       const plan = await channel.plan(detection, options);
+      const applyRecoveryCommands = channel.applyRecoveryCommands;
       return {
         channel: channel.id,
         plan,
         apply: (applyOptions = {}) => channel.apply(plan, applyOptions),
+        ...(applyRecoveryCommands === undefined
+          ? {}
+          : { applyRecoveryCommands: (error: unknown) => applyRecoveryCommands(plan, error) }),
       };
     },
   };

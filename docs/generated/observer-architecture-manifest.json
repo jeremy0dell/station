@@ -12305,7 +12305,7 @@
       "declaration": "runUpdateCommand",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Selects one owned install channel, resolves the requested update scenario, and crosses runtimes through the successor launcher after mutation.",
+      "purpose": "Selects one owned install channel, honors channel-owned apply recovery, and crosses runtimes through the successor launcher after mutation.",
       "dependencies": [
         {
           "path": "apps/cli/src/commands/update/scenario.ts",
@@ -12901,7 +12901,7 @@
       "declaration": "createDevCheckoutUpdateChannel",
       "kind": "function",
       "role": "ADAPTER",
-      "purpose": "Translates a clean upstream-tracking source checkout into a pinned fast-forward rebuild.",
+      "purpose": "Translates a clean upstream-tracking checkout into a pinned fast-forward with frozen dependency preparation, rebuild, and relinking.",
       "dependencies": [
         {
           "path": "apps/cli/src/update/updateChannel.ts",
@@ -12973,7 +12973,7 @@
       "declaration": "UpdateChannel",
       "kind": "interface",
       "role": "DRIVEN PORT",
-      "purpose": "Defines one install owner's typed detect, plan, and apply lifecycle.",
+      "purpose": "Defines one install owner's typed detect, plan, apply, and optional adapter-owned recovery lifecycle.",
       "dependencies": []
     },
     {
