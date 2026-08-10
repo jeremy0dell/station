@@ -436,6 +436,47 @@ describe("buildContextMenuItems", () => {
     });
   });
 
+  it("keeps every Group-header target inert", () => {
+    const store = createStationStore();
+    const snapshot = manyProjectsSnapshot();
+    const session = snapshot.sessions.find(({ id }) => id === STATION_IDLE_SESSION_ID);
+    if (session === undefined) throw new Error("fixture is missing the Station session");
+    const stationState = createInitialTuiState({
+      initialSnapshot: {
+        ...snapshot,
+        sessionGroups: [
+          {
+            id: "grp_station_active",
+            projectId: session.projectId,
+            name: "Active work",
+            sessionIds: [session.id],
+            version: 1,
+            createdAt: snapshot.generatedAt,
+            updatedAt: snapshot.generatedAt,
+          },
+        ],
+      },
+    });
+
+    for (const cellId of ["identity", "quickSession", "menu"] as const) {
+      const items = buildContextMenuItems(
+        {
+          kind: "station",
+          target: {
+            kind: "dashboardCell",
+            rowId: dashboardRowIds.group("grp_station_active"),
+            cellId,
+          },
+        },
+        store.getState(),
+        stationState,
+      );
+
+      expect(items.map(({ id }) => id)).toEqual(["station.noActions"]);
+      expect(resolveContextMenuAction(items[0])).toBeUndefined();
+    }
+  });
+
   it("keeps STATION row actions inert off the dashboard screen", () => {
     const store = createStationStore();
     const stationState = {

@@ -253,6 +253,8 @@ describe("dashboard golden frames", () => {
     const frame = setup.captureCharFrame();
     expect(frame).toMatchSnapshot();
     expect(frame).toContain("FILTER working · Status=Working");
+    expect(frame).toContain("▼ scripts");
+    expect(frame).toContain("▼ empty-project");
     expect(frame).toContain("/ edit");
     expect(frame).toContain("Esc clear");
   });

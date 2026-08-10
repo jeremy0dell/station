@@ -357,6 +357,8 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Treat `snapshot.sessions` as session-membership and session/activity-count truth. Dashboard rows,
   filtering, selection, and actions project those sessions and join `snapshot.rows` only for checkout
   metadata; bare worktrees remain inventory and do not appear in the primary session list.
+  `snapshot.sessionGroups` exclusively organizes those sessions under their Project; the current
+  dashboard flattens optional parent links and leaves optimistic creates at the Project root.
 - `terminal.focusable` describes external dashboard control, not native Station
   interaction. Native row activation resolves an advertised managed attachment
   and creates or reveals the local pane without dispatching `terminal.focus`;
@@ -388,10 +390,10 @@ reattach; pane borders and neighboring panes must remain unlinked.
 `/` opens a single-line editor in the complete table-header row. Its draft starts
 from the dashboard-local applied free text and structured conditions. Editing performs a
 deterministic, locale-neutral case-insensitive soft preview over the complete session and
-optimistic-row universe plus project labels. Folded match offsets map back to source text before
+optimistic-row universe plus Project and Group labels. Folded match offsets map back to source text before
 highlighting. Every rendered row keeps its current order, slot, collapse visibility, and viewport
-position; visible text matches receive bounded highlight spans, while nonmatching rows and project
-headers are dimmed. Matches inside collapsed projects contribute to the global count and header
+position; visible text matches receive bounded highlight spans, while nonmatching rows and container
+headers are dimmed. Matches inside collapsed Projects or Groups contribute to the global count and header
 state without revealing the children during editing. The header includes the live row count and any
 above-viewport context. A valid zero-result draft stays editable and uses an amber `0/N matches`
 cue rather than an error state. Long drafts follow the caret horizontally and never wrap into the
@@ -423,16 +425,16 @@ markers ensure mode and selection do not rely on color.
 
 `Enter` from text editing applies any draft containing free text or conditions to optional
 dashboard-local state; applying a completely blank draft removes that state. `Ctrl-U` clears both
-parts of the draft. An applied filter is a hard projection: nonmatching sessions, optimistic rows,
-projects, and orphaned project gaps are omitted without changing canonical order. A project-label
-text match or a Project condition retains all of that project's children unless another row
-condition narrows them, while Status and Agent matches retain only matching rows and their project
-context. Matching children of a collapsed project remain hidden until its disclosure is expanded.
-Project collapse stays interactive while the filter is applied, so the marker and visible children
-always agree; clearing the filter leaves the user's latest collapse choices intact.
+parts of the draft. An applied filter is a hard row projection: nonmatching sessions and optimistic
+rows are omitted without changing canonical order, while durable Project and Group containers and
+their existing gaps remain. A Project- or Group-label text match retains its direct candidate rows
+unless another row condition narrows them; a member match retains both containers as context.
+Matching children of a collapsed Project or Group remain hidden until disclosure is expanded.
+Both collapse sets stay interactive while the filter is applied, and clearing the filter leaves the
+latest collapse choices intact.
 
-Free text is intentionally limited to text visible in project headers and session rows: project
-label, displayed title, agent, and activity. Hidden branch values, provider identifiers, raw status
+Free text is intentionally limited to text visible in Project/Group headers and session rows:
+Project label, Group name, displayed title, agent, and activity. Hidden branch values, provider identifiers, raw status
 values, and generated diagnostic reasons are not searched because they cannot provide a stable,
 user-verifiable result. Structured matching is `free text AND Status AND Project AND Agent`, with
 OR across selected values inside one field. Status uses normalized `AgentState`; Project and Agent
@@ -455,7 +457,7 @@ applied filter; covered footer targets remain inert outside dashboard mode.
 | `/` at wide and minimum width | Header editor; live highlights/dimming/global count; no wrapping |
 | Editing `Esc` | Restores the prior hard applied projection |
 | `Enter`, then dashboard `Esc` | Hard-projects matches, then restores the unfiltered/collapsed view without closing |
-| Zero matches | Amber, recoverable soft preview; applying yields an empty dashboard projection |
+| Zero matches | Amber, recoverable soft preview; applying retains durable Project/Group context with zero admitted rows |
 | Hidden metadata only | Ignores metadata that is not rendered in the dashboard |
 | Condition entry | `Tab`, `S/P/A`, slots/arrows/Space, header back/close, bottom Done, and final `F` Apply share core transitions |
 | Applied footer pointer | `/ edit` and `Esc clear` share the keyboard transitions |
@@ -478,11 +480,12 @@ dispatches `dashboard.cell.activate`, the same activation used by focused Enter.
 filtered, pending, or stale cells remain inert. Wheel events over child rows use
 dashboard scrolling, and active modal surfaces intercept background clicks and scrolling.
 
-Dashboard focus follows rendered order through each project header, its visible session rows, or the
-stable Add Session action rendered when that project is empty. The cursor is one branded
+Dashboard focus follows rendered order through each Project header, its direct Group blocks and
+project-root sessions, or the stable Add Session action rendered when that Project is empty. The cursor is one branded
 `{ rowId, cellId }` identity. Entering a header vertically always selects `identity`; Left/Right then
-moves, without wrapping, through `identity` → `shell` →
-`quickSession` → `defaultAgent`. Up/Down leaves any header segment immediately, and Left/Right on a
+moves without wrapping through `identity` → `shell` → `quickSession` → `defaultAgent` for Projects
+and `identity` → `quickSession` → `menu` for Groups. Group identity toggles collapse; Group quick
+session and menu remain focus-preserving no-ops until their workflow slices land. Up/Down leaves any header segment immediately, and Left/Right on a
 session row or empty-project action is inert. Remove, rename, and fork row choosers retain a separate
 visible, selectable canonical-session traversal; slots and Enter resolve through that same chooser
 policy. Next-needs-me uses its own canonical-session policy. `N` continues to open the session flow
@@ -497,14 +500,20 @@ remain inert and unpainted. Wide and compact labels preserve the same control id
 component-local, temporarily supersedes the focus background, and reveals persistent keyboard focus
 again when the pointer leaves; no focus glyph is added.
 
-Collapse moves focus from a hidden session or empty-project action to that project's header
-`identity` cell and clamps scrolling; expanding and moving Down reaches the first visible child again.
+Group collapse moves a hidden direct member to that Group's identity; Project collapse remains the
+outer ancestor and moves any hidden descendant to the Project identity. A focused Group identity
+stays focused when toggled, and a focused member exposes semantic `containsFocusedRow` containment.
+Expanding and moving Down reaches the first visible child again.
 Snapshot replacement and accepted filter changes preserve stable focus identity, otherwise choose
 the next focusable item at the old position before the preceding item; resize preserves identity
 and scrolls it into view. The Default Agent picker retains its header focus beneath the screen, so
 Escape, click-away, unchanged selection, and a successful change return to `defaultAgent`; project
 removal while open uses the same deterministic focus fallback. The dashboard footer describes Enter
 as `activate` because it may activate a session row, project-header control, or empty-project action.
+
+This dashboard-core contract intentionally adds no Group pixels or hit boxes. #538 owns the explicit
+OpenTUI Group row, disclosure/count layout, colors, focus and containment rings, responsive shedding,
+hover, and native/standalone pointer presentation; it consumes the same tree rows and activation path.
 
 Bounded screens use one active-screen overlay layer. Dashboard-core exposes the narrow
 `TuiScreenBehavior` contract, and the owning screen module supplies its safe `clickAway`

@@ -99,6 +99,7 @@ export {
 } from "../selectors/dashboardFilterConditions.js";
 
 export type {
+  DashboardPersistentFilterGroupMatch,
   DashboardPersistentFilterProjection,
   DashboardPersistentFilterProjectMatch,
 } from "../selectors/dashboardPersistentFilter.js";
@@ -109,8 +110,10 @@ export {
 } from "../selectors/dashboardSessionRows.js";
 export type {
   DashboardCellId,
+  DashboardGroupHeaderPayload,
   DashboardRowId,
   DashboardTreeRow,
+  GroupOrderingMode,
 } from "../selectors/dashboardTree.js";
 export { dashboardRowIds } from "../selectors/dashboardTree.js";
 export type {

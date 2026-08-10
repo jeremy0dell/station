@@ -19,6 +19,8 @@ import type {
   DashboardFilterFooterSegment,
   DashboardFilterHeaderModel,
   DashboardFooterModel,
+  DashboardGroupHeaderPayload,
+  DashboardPersistentFilterGroupMatch,
   DashboardRowId,
   DashboardSessionRow,
   DashboardTableHeaderModel,
@@ -26,6 +28,7 @@ import type {
   DashboardViewport,
   EditableTextInputState,
   FleetSummary,
+  GroupOrderingMode,
   RowGridLayout,
 } from "../../src/entrypoints/selectors.js";
 import type {
@@ -79,6 +82,9 @@ export type EntrypointTypecheckWitness = [
   DashboardRowId,
   DashboardCellId,
   DashboardTreeRow,
+  DashboardGroupHeaderPayload,
+  DashboardPersistentFilterGroupMatch,
+  GroupOrderingMode,
   DashboardViewport,
   FleetSummary,
   DashboardTableHeaderModel,

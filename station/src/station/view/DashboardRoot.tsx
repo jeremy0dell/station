@@ -43,6 +43,8 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
   const screen = useStore(state, (state) => state.screen);
   const persistentFilter = useStore(state, (state) => state.persistentFilter);
   const collapsedProjectIds = useStore(state, (state) => state.collapsedProjectIds);
+  const collapsedGroupIds = useStore(state, (state) => state.collapsedGroupIds);
+  const groupOrderingMode = useStore(state, (state) => state.groupOrderingMode);
   const scrollOffset = useStore(state, (state) => state.scrollOffset);
   const dashboardFocus = useStore(state, (state) => state.dashboardFocus);
   const selection = useStore(state, (state) => state.selection);
@@ -126,6 +128,8 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
           snapshot={snapshot}
           viewState={{
             collapsedProjectIds,
+            collapsedGroupIds,
+            groupOrderingMode,
             scrollOffset,
             terminalRows: rows,
             localRows,
