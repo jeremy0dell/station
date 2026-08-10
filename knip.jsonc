@@ -64,7 +64,7 @@
         "src/bin/stnMain.ts!",
         "src/host/hostMain.ts!",
         "src/terminal/pty/localPtyBridge.cjs!",
-        "src/host/e2eReattachDemo.ts",
+        "scripts/e2eReattachDemo.ts",
         "src/host/listHostAgents.ts",
         "src/**/*.{test,spec}.{ts,tsx}",
         "src/**/*.smoke.test.ts",

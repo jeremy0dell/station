@@ -13,6 +13,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts"],
   "exclude": ["src/station/test/**"]
 }
