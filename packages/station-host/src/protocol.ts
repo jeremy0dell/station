@@ -13,7 +13,7 @@ import { z } from "zod";
  * Standalone host wire contract: same NDJSON transport as observer protocol,
  * separate router/envelope so observer contracts stay free of node-pty internals.
  */
-export const HOST_PROTOCOL_VERSION = 7;
+export const HOST_PROTOCOL_VERSION = 8;
 
 const idSchema = z.string().min(1);
 const RIS = "\x1bc";
@@ -168,10 +168,44 @@ export type HostSpawnParams = z.infer<typeof HostSpawnParamsSchema>;
 export const HostSpawnResultSchema = HostPtyRefSchema.extend({ pid: z.number().int() }).strict();
 export type HostSpawnResult = z.infer<typeof HostSpawnResultSchema>;
 
-export const HostWriteParamsSchema = z.object({ ptyId: idSchema, data: z.string() }).strict();
-export const HostResizeParamsSchema = z
-  .object({ ptyId: idSchema, cols: z.number().int(), rows: z.number().int() })
+/** Client attach intent; controller intent may atomically replace the current controller. */
+export const HostAttachmentIntentSchema = z.enum(["controller", "viewer"]);
+export type HostAttachmentIntent = z.infer<typeof HostAttachmentIntentSchema>;
+
+/** Host-confirmed mutation role for one live attachment. */
+export const HostAttachmentRoleSchema = z.enum(["controller", "viewer"]);
+
+/** Monotonic per-PTY mutation generation, beginning at zero before the first grant. */
+export const HostControlEpochSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export type HostControlEpoch = z.infer<typeof HostControlEpochSchema>;
+
+/** Host-issued capability required by every PTY input or geometry mutation. */
+export const HostAttachmentCapabilitySchema = z
+  .object({ attachmentId: idSchema, controlEpoch: HostControlEpochSchema })
   .strict();
+
+/** Current Host-confirmed capability and role for one attachment. */
+export const HostControlStateSchema = HostAttachmentCapabilitySchema.extend({
+  role: HostAttachmentRoleSchema,
+}).strict();
+export type HostControlState = z.infer<typeof HostControlStateSchema>;
+
+/** Claim uses only the connection-scoped Host attachment identity; stale viewers present no epoch. */
+export const HostClaimControlParamsSchema = z.object({ attachmentId: idSchema }).strict();
+
+/** Successful control claim returns the current role and newly granted epoch. */
+export const HostClaimControlResultSchema = HostControlStateSchema;
+
+/** Capability-bound input mutation; no bare PTY identity is accepted. */
+export const HostWriteParamsSchema = HostAttachmentCapabilitySchema.extend({
+  data: z.string(),
+}).strict();
+
+/** Capability-bound geometry mutation; no bare PTY identity is accepted. */
+export const HostResizeParamsSchema = HostAttachmentCapabilitySchema.extend({
+  cols: z.number().int(),
+  rows: z.number().int(),
+}).strict();
 export const HostOkResultSchema = z.object({ ok: z.literal(true) }).strict();
 /** Live inventory entry whose reference and immutable identity derive from one table entry. */
 export const HostListEntrySchema = HostPtyWireIdentitySchema.extend({
@@ -287,8 +321,10 @@ export type HostAdoptRegistryParams = z.infer<typeof HostAdoptRegistryParamsSche
 export const HostAdoptRegistryResultSchema = HostAbortHandoffResultSchema;
 export type HostAdoptRegistryResult = z.infer<typeof HostAdoptRegistryResultSchema>;
 
-/** Exact PTY-lifetime reference plus per-attempt lifecycle correlation. */
-export const HostAttachParamsSchema = HostPtyRefSchema.extend({ attachmentId: idSchema }).strict();
+/** Exact PTY-lifetime reference plus the requested initial mutation role. */
+export const HostAttachParamsSchema = HostPtyRefSchema.extend({
+  intent: HostAttachmentIntentSchema,
+}).strict();
 export type HostAttachParams = z.infer<typeof HostAttachParamsSchema>;
 
 export const HostReplayDataEventSchema = z
@@ -340,15 +376,18 @@ export const HostReplaySchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 /**
- * Attach acknowledgement captured atomically with the live listener and echoing
- * the exact PTY reference plus immutable identity. Raw replay
- * preserves production geometry; exact semantic and control-only reset recovery
- * both begin at the Host's current geometry, with reset recovery anchored before
- * the client geometry nudge.
+ * Attach acknowledgement captured atomically with the live listener, including
+ * the Host-issued attachment identity, role, epoch, exact PTY reference, and
+ * immutable identity. Raw replay preserves production geometry; exact semantic
+ * and control-only reset recovery both begin at the Host's current geometry,
+ * with reset recovery anchored before the client geometry nudge.
  */
 export const HostAttachAckSchema = HostPtyWireIdentitySchema.merge(HostPtyRefSchema)
   .extend({
     subscribed: z.literal(true),
+    attachmentId: idSchema,
+    controlEpoch: HostControlEpochSchema,
+    role: HostAttachmentRoleSchema,
     pid: z.number().int(),
     cols: z.number().int(),
     rows: z.number().int(),
@@ -377,9 +416,17 @@ export type HostAttachAck = z.infer<typeof HostAttachAckSchema>;
 
 export const HostDetachParamsSchema = z
   .object({
-    ptyId: idSchema,
     attachmentId: idSchema,
     reason: UiLifecycleDetachReasonSchema.extract(["explicit_detach", "client_shutdown"]),
+  })
+  .strict();
+/** Attachment-targeted notice that a replacement controller committed a newer epoch. */
+export const HostControlRevokedFrameSchema = z
+  .object({
+    type: z.literal("control-revoked"),
+    ptyId: idSchema,
+    attachmentId: idSchema,
+    controlEpoch: HostControlEpochSchema,
   })
   .strict();
 export const HostFrameSchema = z.discriminatedUnion("type", [
@@ -401,6 +448,7 @@ export const HostFrameSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   z.object({ type: z.literal("focus"), ptyId: idSchema }).strict(),
+  HostControlRevokedFrameSchema,
 ]);
 export type HostFrame = z.infer<typeof HostFrameSchema>;
 export type HostExitFrame = Extract<HostFrame, { type: "exit" }>;

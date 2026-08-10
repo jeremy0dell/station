@@ -10,16 +10,16 @@ import {
 } from "@station/contracts";
 import { createStationHostClient } from "@station/host";
 import { describe, expect, it } from "bun:test";
-import { waitFor } from "../terminal/testing/waitFor.js";
+import { waitFor } from "../../terminal/testing/waitFor.js";
 import {
   bridgeControlSocketPath,
   bridgeParkStatePath,
   ptyBridgesDirectory,
   readBridgeParkState,
-} from "./orphanBridges.js";
-import { createPtyTable } from "./ptyTable.js";
+} from "../orphanBridges.js";
+import { createPtyTable } from "../ptyTable.js";
 
-const HOST_ENTRY = fileURLToPath(new URL("./hostMain.ts", import.meta.url));
+const HOST_ENTRY = fileURLToPath(new URL("../hostMain.ts", import.meta.url));
 
 // Real node-pty + a real detached host process. Gated like the other PTY smokes
 // so a plain `bun test` stays hermetic; run with STATION_PTY_SMOKE=1.
@@ -159,12 +159,13 @@ if (SMOKE) {
         expect(listed?.terminalTargetId).toEqual("native:kill9");
 
         // I/O flows again through the adopted bridge.
-        table.write(ptyId, "back-alive\n");
+        const controller = await table.attach(listed!, "att-orphan", "controller");
+        controller.write(controller.controlState.controlEpoch, "back-alive\n");
         await waitFor(
           () => table.snapshot(ptyId).rawChunks.join("").includes("adopted-back-alive"),
           5_000,
         );
-        table.resize(ptyId, 100, 30);
+        controller.resize(controller.controlState.controlEpoch, 100, 30);
         expect(table.snapshot(ptyId).cols).toEqual(100);
         expect(processAlive(originalPid)).toEqual(true);
       } finally {

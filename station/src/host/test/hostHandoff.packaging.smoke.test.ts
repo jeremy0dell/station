@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createStationHostClient } from "@station/host";
 import { describe, expect, it } from "bun:test";
 
-const HOST_ENTRY = fileURLToPath(new URL("./hostMain.ts", import.meta.url));
+const HOST_ENTRY = fileURLToPath(new URL("../hostMain.ts", import.meta.url));
 const SMOKE = process.env.STATION_PTY_SMOKE === "1";
 const BINARY_PATH = process.env.STATION_BINARY_PATH;
 

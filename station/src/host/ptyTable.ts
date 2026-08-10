@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   type HostAttachAck,
+  type HostAttachmentIntent,
   type HostAttachmentSource,
+  type HostControlEpoch,
+  type HostControlState,
   type HostExitFrame,
   type HostFrame,
   type HostListEntry,
@@ -26,7 +29,12 @@ import {
   bridgeControlSocketPath,
   bridgeParkStatePath,
 } from "./orphanBridges.js";
-import { clampSize, type PtyEntry, type PtyEntryInit } from "./ptyEntry.js";
+import {
+  clampSize,
+  type PtyAttachment,
+  type PtyEntry,
+  type PtyEntryInit,
+} from "./ptyEntry.js";
 import {
   createPtyHandoff,
   type PtyAdoptionReport,
@@ -91,8 +99,6 @@ export type PtySnapshot = {
 export type PtyTable = {
   /** Reuse only identical targets; failed activation frees both indexes and disposes new resources. */
   spawn(params: HostSpawnParams): PtySpawnOutcome;
-  write(ptyId: string, data: string): void;
-  resize(ptyId: string, cols: number, rows: number): void;
   list(): HostListEntry[];
   snapshot(ptyId: string): PtySnapshot;
   /**
@@ -102,7 +108,11 @@ export type PtyTable = {
    * retains the sink and returns mode-restoring, cursor-anchoring control VT
    * with no history.
    */
-  attach(ptyRef: HostPtyRef): Promise<HostAttachmentSource>;
+  attach(
+    ptyRef: HostPtyRef,
+    attachmentId: string,
+    intent: HostAttachmentIntent,
+  ): Promise<HostAttachmentSource>;
   /** Guarded kill: dispose the PTY, broadcast exit to attached clients, drop it. */
   close(ptyId: string): boolean;
   /** Best-effort focus: broadcast a focus frame to attached clients. */
@@ -127,6 +137,7 @@ export type PtyTable = {
    * failed PTY id or target remains visible; invalid manifests fail closed.
    */
   adoptRegistry(manifest: unknown): Promise<PtyAdoptionReport>;
+  /** End every attachment and clear controller authority before disposing owned PTYs. */
   disposeAll(): void;
 };
 
@@ -160,9 +171,170 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
   }
 
   function broadcast(entry: PtyEntry, frame: HostFrame): void {
-    for (const sink of [...entry.sinks]) {
-      sink(frame);
+    for (const attachment of [...entry.attachments.values()]) {
+      attachment.sink(frame);
     }
+  }
+
+  function controlState(entry: PtyEntry, attachment: PtyAttachment): HostControlState {
+    return {
+      attachmentId: attachment.attachmentId,
+      controlEpoch: entry.controlEpoch,
+      role:
+        entry.controllerAttachmentId === attachment.attachmentId ? "controller" : "viewer",
+    };
+  }
+
+  function endAttachments(entry: PtyEntry): void {
+    entry.controllerAttachmentId = undefined;
+    const attachments = [...entry.attachments.values()];
+    entry.attachments.clear();
+    for (const attachment of attachments) {
+      attachment.end();
+    }
+  }
+
+  function detachAttachment(
+    entry: PtyEntry,
+    attachment: PtyAttachment,
+  ): void {
+    if (entry.attachments.get(attachment.attachmentId) !== attachment) {
+      return;
+    }
+    entry.attachments.delete(attachment.attachmentId);
+    if (entry.controllerAttachmentId === attachment.attachmentId) {
+      entry.controllerAttachmentId = undefined;
+    }
+    attachment.end();
+  }
+
+  function grantControl(
+    entry: PtyEntry,
+    attachment: PtyAttachment,
+    reason: "controller_attached" | "control_claimed",
+  ): HostControlState {
+    if (entry.controllerAttachmentId === attachment.attachmentId) {
+      emit("pty.control.granted", {
+        ptyId: entry.ptyId,
+        attachmentId: attachment.attachmentId,
+        controlEpoch: entry.controlEpoch,
+        role: "controller",
+        reason: "idempotent_reclaim",
+      });
+      return controlState(entry, attachment);
+    }
+    if (entry.controlEpoch === Number.MAX_SAFE_INTEGER) {
+      throw new StationHostProviderError(
+        "HOST_CONTROL_REVOKED",
+        "Station Host PTY control epoch is exhausted.",
+      );
+    }
+
+    const previous =
+      entry.controllerAttachmentId === undefined
+        ? undefined
+        : entry.attachments.get(entry.controllerAttachmentId);
+    entry.controlEpoch += 1;
+    entry.controllerAttachmentId = attachment.attachmentId;
+
+    // Commit the new controller and epoch before the former controller observes revocation.
+    if (previous !== undefined) {
+      previous.sink({
+        type: "control-revoked",
+        ptyId: entry.ptyId,
+        attachmentId: previous.attachmentId,
+        controlEpoch: entry.controlEpoch,
+      });
+      emit("pty.control.revoked", {
+        ptyId: entry.ptyId,
+        attachmentId: previous.attachmentId,
+        controlEpoch: entry.controlEpoch,
+        role: "viewer",
+        reason,
+      });
+    }
+    emit("pty.control.granted", {
+      ptyId: entry.ptyId,
+      attachmentId: attachment.attachmentId,
+      controlEpoch: entry.controlEpoch,
+      role: "controller",
+      reason,
+    });
+    return controlState(entry, attachment);
+  }
+
+  function rejectMutation(
+    entry: PtyEntry,
+    attachment: PtyAttachment,
+    presentedEpoch: HostControlEpoch,
+    mutation: "write" | "resize",
+  ): never {
+    const registered = entry.attachments.get(attachment.attachmentId) === attachment;
+    const reason =
+      !registered
+        ? "unknown_attachment"
+        : entry.controllerAttachmentId !== attachment.attachmentId
+          ? "viewer"
+          : "stale_epoch";
+    const attributes: Record<string, unknown> = {
+      ptyId: entry.ptyId,
+      attachmentId: attachment.attachmentId,
+      controlEpoch: entry.controlEpoch,
+      presentedEpoch,
+      mutation,
+      reason,
+    };
+    if (registered) {
+      attributes.role =
+        entry.controllerAttachmentId === attachment.attachmentId ? "controller" : "viewer";
+    }
+    emit("pty.control.rejected", attributes);
+    throw new StationHostProviderError(
+      "HOST_CONTROL_REVOKED",
+      "Station Host rejected a mutation from a viewer or stale attachment capability.",
+    );
+  }
+
+  function requireController(
+    entry: PtyEntry,
+    attachment: PtyAttachment,
+    presentedEpoch: HostControlEpoch,
+    mutation: "write" | "resize",
+  ): void {
+    if (
+      entry.attachments.get(attachment.attachmentId) !== attachment ||
+      entry.controllerAttachmentId !== attachment.attachmentId ||
+      presentedEpoch !== entry.controlEpoch
+    ) {
+      rejectMutation(entry, attachment, presentedEpoch, mutation);
+    }
+  }
+
+  function guardedResize(
+    entry: PtyEntry,
+    attachment: PtyAttachment,
+    controlEpoch: HostControlEpoch,
+    cols: number,
+    rows: number,
+  ): void {
+    requireController(entry, attachment, controlEpoch, "resize");
+    // A compatibility parser may retain an incomplete pre-resize sequence;
+    // publish it before the geometry barrier so its production order survives.
+    publishOutput(entry, entry.outputCompatibility.flush());
+    const size = clampSize(cols, rows);
+    entry.cols = size.cols;
+    entry.rows = size.rows;
+    entry.ring.resize(size);
+    entry.semantic.resize(size.cols, size.rows);
+    // Publish first so output synchronously triggered by TIOCSWINSZ is ordered
+    // after the geometry it was produced for on every attachment.
+    broadcast(entry, {
+      type: "resize",
+      ptyId: entry.ptyId,
+      cols: entry.cols,
+      rows: entry.rows,
+    });
+    entry.terminal.resize(size);
   }
 
   function publishOutput(entry: PtyEntry, data: string): void {
@@ -197,6 +369,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
     if (entriesByTarget.get(entry.identity.terminalTargetId) === entry) {
       entriesByTarget.delete(entry.identity.terminalTargetId);
     }
+    endAttachments(entry);
   }
 
   // Broadcast a terminal exit, release the terminal's resources, and drop the entry.
@@ -257,7 +430,8 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       rows,
       compatibilityRewriteReported: false,
       exited: false,
-      sinks: new Set(),
+      controlEpoch: 0,
+      attachments: new Map(),
       subscriptions: [],
     };
   }
@@ -454,31 +628,6 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       };
     },
 
-    write(ptyId, data) {
-      requireEntry(ptyId).terminal.write(data);
-    },
-
-    resize(ptyId, cols, rows) {
-      const entry = requireEntry(ptyId);
-      // A compatibility parser may retain an incomplete pre-resize sequence;
-      // publish it before the geometry barrier so its production order survives.
-      publishOutput(entry, entry.outputCompatibility.flush());
-      const size = clampSize(cols, rows);
-      entry.cols = size.cols;
-      entry.rows = size.rows;
-      entry.ring.resize(size);
-      entry.semantic.resize(size.cols, size.rows);
-      // Publish first so output synchronously triggered by TIOCSWINSZ is ordered
-      // after the geometry it was produced for on every attachment.
-      broadcast(entry, {
-        type: "resize",
-        ptyId: entry.ptyId,
-        cols: entry.cols,
-        rows: entry.rows,
-      });
-      entry.terminal.resize(size);
-    },
-
     list() {
       const list: HostListEntry[] = [];
       for (const entry of entriesByPtyId.values()) {
@@ -510,7 +659,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
       };
     },
 
-    async attach(ptyRef) {
+    async attach(ptyRef, attachmentId, intent) {
       const byPtyId = entriesByPtyId.get(ptyRef.ptyId);
       const byTarget = entriesByTarget.get(ptyRef.terminalTargetId);
       if (byPtyId === undefined && byTarget === undefined) {
@@ -533,19 +682,27 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         );
       }
       const entry = byPtyId;
-      let sink: ((frame: HostFrame) => void) | undefined;
+      if (entry.attachments.has(attachmentId)) {
+        throw new StationHostProviderError(
+          "HOST_ATTACHMENT_MISMATCH",
+          "Station Host issued a duplicate attachment identity for this PTY.",
+        );
+      }
+      let attachment: PtyAttachment;
       const stream = createFrameStream(() => {
-        if (sink !== undefined) {
-          entry.sinks.delete(sink);
-        }
+        detachAttachment(entry, attachment);
       });
-      sink = (frame) => {
-        stream.push(frame);
-        if (frame.type === "exit") {
-          stream.end();
-        }
+      attachment = {
+        attachmentId,
+        sink: (frame) => {
+          stream.push(frame);
+          if (frame.type === "exit") {
+            stream.end();
+          }
+        },
+        end: stream.end,
       };
-      entry.sinks.add(sink);
+      entry.attachments.set(attachmentId, attachment);
 
       const raw = entry.ring.snapshot();
       const recorded = {
@@ -576,10 +733,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         } catch (error) {
           captureDurationMs = performance.now() - captureStartedAt;
           if (entry.exited || !entriesByPtyId.has(ptyRef.ptyId)) {
-            if (sink !== undefined) {
-              entry.sinks.delete(sink);
-            }
-            stream.end();
+            detachAttachment(entry, attachment);
             throw new StationHostProviderError(
               "HOST_ATTACH_GONE",
               `Host PTY "${ptyRef.ptyId}" exited while its snapshot was captured.`,
@@ -597,10 +751,7 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
               resetData: error.resetData,
             };
           } else {
-            if (sink !== undefined) {
-              entry.sinks.delete(sink);
-            }
-            stream.end();
+            detachAttachment(entry, attachment);
             const pending = error instanceof TerminalSnapshotPendingError;
             throw new StationHostProviderError(
               pending ? "HOST_SNAPSHOT_PENDING" : "HOST_SNAPSHOT_FAILED",
@@ -612,8 +763,19 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
           }
         }
       }
+      let state: HostControlState;
+      try {
+        state =
+          intent === "controller"
+            ? grantControl(entry, attachment, "controller_attached")
+            : controlState(entry, attachment);
+      } catch (error) {
+        detachAttachment(entry, attachment);
+        throw error;
+      }
       const ack: HostAttachAck = {
         subscribed: true,
+        ...state,
         ...entry.identity,
         ptyId: entry.ptyId,
         ptyInstanceId: entry.ptyInstanceId,
@@ -623,7 +785,22 @@ export function createPtyTable(options: PtyTableOptions = {}): PtyTable {
         exited: false,
         replay,
       };
-      return { ack, frames: stream.frames, captureDurationMs };
+      return {
+        ack,
+        frames: stream.frames,
+        captureDurationMs,
+        get controlState() {
+          return controlState(entry, attachment);
+        },
+        claimControl: () => grantControl(entry, attachment, "control_claimed"),
+        write: (controlEpoch, data) => {
+          requireController(entry, attachment, controlEpoch, "write");
+          entry.terminal.write(data);
+        },
+        resize: (controlEpoch, cols, rows) => {
+          guardedResize(entry, attachment, controlEpoch, cols, rows);
+        },
+      };
     },
 
     close(ptyId) {

@@ -389,8 +389,6 @@ function fakeHostClient(over: Partial<StationHostClient> = {}): StationHostClien
       ptyInstanceId: "instance-pty-1",
       pid: 99,
     }),
-    write: async () => undefined,
-    resize: async () => undefined,
     list: async () => [] as HostListEntry[],
     focus: async () => undefined,
     close: async () => ({ closed: true }),

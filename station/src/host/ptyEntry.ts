@@ -1,4 +1,9 @@
-import type { HostExitFrame, HostFrame, HostPtyIdentity } from "@station/host";
+import type {
+  HostControlEpoch,
+  HostExitFrame,
+  HostFrame,
+  HostPtyIdentity,
+} from "@station/host";
 import type { PtyOutputCompatibility } from "../terminal/ptyOutputCompatibility.js";
 import type {
   StationTerminalDisposable,
@@ -16,6 +21,13 @@ export function clampSize(cols: number, rows: number): StationTerminalSize {
   return { cols: Math.max(MIN_COLS, cols), rows: Math.max(MIN_ROWS, rows) };
 }
 
+/** One output attachment; controller authority is derived only from the owning PTY entry. */
+export type PtyAttachment = {
+  attachmentId: string;
+  sink(frame: HostFrame): void;
+  end(): void;
+};
+
 export type PtyEntry = {
   ptyId: string;
   /** Opaque identity retained unchanged for this entry's complete PTY lifetime. */
@@ -31,7 +43,11 @@ export type PtyEntry = {
   rows: number;
   exited: boolean;
   lastExit?: HostExitFrame;
-  sinks: Set<(frame: HostFrame) => void>;
+  /** Monotonic controller generation; zero means this PTY has never granted control. */
+  controlEpoch: HostControlEpoch;
+  /** The sole attachment currently allowed to mutate the child, when one exists. */
+  controllerAttachmentId?: string;
+  attachments: Map<string, PtyAttachment>;
   subscriptions: StationTerminalDisposable[];
 };
 

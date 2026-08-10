@@ -16,13 +16,16 @@ import {
   HostAdoptRegistryResultSchema,
   type HostAttachAck,
   HostAttachAckSchema,
+  type HostAttachmentIntent,
   type HostBeginHandoffResult,
   HostBeginHandoffResultSchema,
+  HostClaimControlResultSchema,
   type HostClientIdentity,
   HostClientIdentitySchema,
   HostCloseResultSchema,
   type HostCompleteHandoffResult,
   HostCompleteHandoffResultSchema,
+  type HostControlState,
   type HostFrame,
   HostFrameSchema,
   type HostHealthResult,
@@ -64,10 +67,15 @@ export type StationHostClientOptions = {
  * iterator and detach operation release only this attempt, even after replacement.
  */
 export type HostAttachment = {
-  attachmentId: string;
   ack: HostAttachAck;
+  /** Latest Host-confirmed capability and role, including targeted revocations. */
+  readonly controlState: HostControlState;
   frames: AsyncIterable<HostFrame>;
+  /** Reclaim control for this connection-scoped attachment without presenting a stale epoch. */
+  claimControl(): Promise<HostControlState>;
+  /** Mutate only through this attachment's current Host-issued capability. */
   write(data: string): Promise<void>;
+  /** Mutate geometry only through this attachment's current Host-issued capability. */
   resize(cols: number, rows: number): Promise<void>;
   detach(): Promise<void>;
 };
@@ -88,13 +96,14 @@ export type StationHostClient = {
   /** Lifecycle-only: adopt a parked manifest on a successor host. */
   adoptRegistry(manifest: PtyHandoffManifest): Promise<HostAdoptRegistryResult>;
   spawn(params: HostSpawnParamsInput): Promise<HostSpawnResult>;
-  write(ptyId: string, data: string): Promise<void>;
-  resize(ptyId: string, cols: number, rows: number): Promise<void>;
   list(): Promise<HostListResult["ptys"]>;
   focus(ptyId: string): Promise<void>;
   close(ptyId: string): Promise<{ closed: boolean }>;
-  /** Attach only when the acknowledgement matches the complete client-held identity proof. */
-  attach(expectation: HostPtyAttachExpectation): Promise<HostAttachment>;
+  /** Attach only with an explicit role and a matching complete identity proof. */
+  attach(
+    expectation: HostPtyAttachExpectation,
+    intent: HostAttachmentIntent,
+  ): Promise<HostAttachment>;
   /** Send a one-way shutdown notification, then gracefully close the connection. */
   dispose(): void;
 };
@@ -115,6 +124,9 @@ type Pending = {
 type FrameSink = {
   readonly frames: AsyncIterable<HostFrame>;
   readonly ended: boolean;
+  readonly controlState: HostControlState;
+  register(ack: HostAttachAck): void;
+  updateControlState(state: HostControlState): void;
   push(frame: HostFrame): void;
   end(): void;
   release(): void;
@@ -126,7 +138,8 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
   const expectedBuildVersion = options.expectedBuildVersion ?? stationBuildInfo().version;
   const pending = new Map<string, Pending>();
-  const sinks = new Map<string, FrameSink>();
+  const sinksByPty = new Map<string, FrameSink>();
+  const sinksByAttachment = new Map<string, FrameSink>();
   const allSinks = new Set<FrameSink>();
   let connection: NdjsonConnection | undefined;
   let connecting: Promise<NdjsonConnection> | undefined;
@@ -146,7 +159,8 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     for (const sink of allSinks) {
       sink.end();
     }
-    sinks.clear();
+    sinksByPty.clear();
+    sinksByAttachment.clear();
     connection = undefined;
     connecting = undefined;
     compatibilityCheck = undefined;
@@ -168,7 +182,11 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         }
         const frame = HostFrameSchema.safeParse(message);
         if (frame.success) {
-          sinks.get(frame.data.ptyId)?.push(frame.data);
+          if (frame.data.type === "control-revoked") {
+            sinksByAttachment.get(frame.data.attachmentId)?.push(frame.data);
+          } else {
+            sinksByPty.get(frame.data.ptyId)?.push(frame.data);
+          }
         }
       }
       teardown(
@@ -277,10 +295,13 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     return rawRequest(method, params, schema, true);
   }
 
-  function createSink(ptyId: string): FrameSink {
+  function createSink(): FrameSink {
     const queue: HostFrame[] = [];
     const waiters: Array<(result: IteratorResult<HostFrame>) => void> = [];
     let ended = false;
+    let ptyId: string | undefined;
+    let attachmentId: string | undefined;
+    let state: HostControlState | undefined;
     const drain = () => {
       while (waiters.length > 0 && (queue.length > 0 || ended)) {
         const waiter = waiters.shift();
@@ -322,9 +343,44 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
       get ended() {
         return ended;
       },
+      get controlState() {
+        if (state === undefined) {
+          throw new StationHostProviderError(
+            "HOST_CONTROL_REVOKED",
+            "Station Host attachment control state is unavailable.",
+          );
+        }
+        return state;
+      },
+      register: (ack) => {
+        ptyId = ack.ptyId;
+        attachmentId = ack.attachmentId;
+        state = {
+          attachmentId: ack.attachmentId,
+          controlEpoch: ack.controlEpoch,
+          role: ack.role,
+        };
+        sinksByPty.set(ptyId, sink);
+        sinksByAttachment.set(attachmentId, sink);
+      },
+      updateControlState: (next) => {
+        if (
+          attachmentId === next.attachmentId &&
+          (state === undefined || next.controlEpoch >= state.controlEpoch)
+        ) {
+          state = next;
+        }
+      },
       push: (frame) => {
         if (ended) {
           return;
+        }
+        if (frame.type === "control-revoked") {
+          sink.updateControlState({
+            attachmentId: frame.attachmentId,
+            controlEpoch: frame.controlEpoch,
+            role: "viewer",
+          });
         }
         queue.push(frame);
         drain();
@@ -338,8 +394,11 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         drain();
       },
       release: () => {
-        if (sinks.get(ptyId) === sink) {
-          sinks.delete(ptyId);
+        if (ptyId !== undefined && sinksByPty.get(ptyId) === sink) {
+          sinksByPty.delete(ptyId);
+        }
+        if (attachmentId !== undefined && sinksByAttachment.get(attachmentId) === sink) {
+          sinksByAttachment.delete(attachmentId);
         }
         sink.end();
       },
@@ -365,18 +424,12 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
     adoptRegistry: (manifest) =>
       request("host.adoptRegistry", { manifest }, HostAdoptRegistryResultSchema),
     spawn: (params) => request("host.spawn", params, HostSpawnResultSchema),
-    write: async (ptyId, data) => {
-      await request("host.write", { ptyId, data }, HostOkResultSchema);
-    },
-    resize: async (ptyId, cols, rows) => {
-      await request("host.resize", { ptyId, cols, rows }, HostOkResultSchema);
-    },
     list: async () => (await request("host.list", undefined, HostListResultSchema)).ptys,
     focus: async (ptyId) => {
       await request("host.focus", { ptyId }, HostOkResultSchema);
     },
     close: (ptyId) => request("host.close", { ptyId, confirm: true }, HostCloseResultSchema),
-    attach: async (expectation) => {
+    attach: async (expectation, intent) => {
       const requestedRef: HostPtyRef = {
         terminalTargetId: expectation.terminalTargetId,
         ptyId: expectation.ptyId,
@@ -392,11 +445,10 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         harnessProvider: expectation.harnessProvider,
       };
       const { ptyId } = requestedRef;
-      const attachmentId = `att_${randomUUID()}`;
-      const sink = createSink(ptyId);
+      const sink = createSink();
       let ack: HostAttachAck;
       try {
-        ack = await request("host.attach", { ...requestedRef, attachmentId }, HostAttachAckSchema);
+        ack = await request("host.attach", { ...requestedRef, intent }, HostAttachAckSchema);
       } catch (error) {
         sink.release();
         throw error;
@@ -405,7 +457,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         try {
           await request(
             "host.detach",
-            { ptyId, attachmentId, reason: "explicit_detach" },
+            { attachmentId: ack.attachmentId, reason: "explicit_detach" },
             HostOkResultSchema,
           );
         } catch {
@@ -419,19 +471,36 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
         );
       }
       // The server acknowledges before it can send frames, so routing starts only after validation.
-      sinks.get(ptyId)?.release();
+      sinksByPty.get(ptyId)?.release();
       if (!sink.ended) {
-        sinks.set(ptyId, sink);
+        sink.register(ack);
       }
       return {
-        attachmentId,
         ack,
+        get controlState() {
+          return sink.controlState;
+        },
         frames: sink.frames,
+        claimControl: async () => {
+          const state = await request(
+            "host.claimControl",
+            { attachmentId: ack.attachmentId },
+            HostClaimControlResultSchema,
+          );
+          sink.updateControlState(state);
+          return sink.controlState;
+        },
         write: async (data) => {
-          await request("host.write", { ptyId, data }, HostOkResultSchema);
+          const { attachmentId, controlEpoch } = sink.controlState;
+          await request("host.write", { attachmentId, controlEpoch, data }, HostOkResultSchema);
         },
         resize: async (cols, rows) => {
-          await request("host.resize", { ptyId, cols, rows }, HostOkResultSchema);
+          const { attachmentId, controlEpoch } = sink.controlState;
+          await request(
+            "host.resize",
+            { attachmentId, controlEpoch, cols, rows },
+            HostOkResultSchema,
+          );
         },
         detach: async () => {
           // Ask the host to detach first, then release the local sink — but always
@@ -439,7 +508,7 @@ export function createStationHostClient(options: StationHostClientOptions): Stat
           try {
             await request(
               "host.detach",
-              { ptyId, attachmentId, reason: "explicit_detach" },
+              { attachmentId: ack.attachmentId, reason: "explicit_detach" },
               HostOkResultSchema,
             );
           } finally {

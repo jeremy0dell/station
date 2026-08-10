@@ -5,6 +5,8 @@ import {
   HostClientShutdownNotificationSchema,
   HostFrameSchema,
   HostRequestSchema,
+  HostResizeParamsSchema,
+  HostWriteParamsSchema,
   hostFailure,
   hostSuccess,
   stationHostSafeError,
@@ -32,6 +34,9 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms, "
 function attachAck(overrides: Record<string, unknown> = {}) {
   return {
     subscribed: true,
+    attachmentId: "att-host-1",
+    controlEpoch: 1,
+    role: "controller",
     ...PTY_IDENTITY,
     ...PTY_REF,
     pid: 42,
@@ -177,9 +182,46 @@ describe("createStationHostClient", () => {
     expect(HostFrameSchema.safeParse({ ...frame, rows: 0 }).success).toBe(false);
   });
 
+  it("accepts only safe attachment epochs and capability-bound mutation shapes", () => {
+    expect(
+      HostWriteParamsSchema.safeParse({
+        attachmentId: "att-1",
+        controlEpoch: 1,
+        data: "input",
+      }).success,
+    ).toBe(true);
+    expect(
+      HostWriteParamsSchema.safeParse({
+        attachmentId: "att-1",
+        controlEpoch: 1,
+        ptyId: "pty-1",
+        data: "input",
+      }).success,
+    ).toBe(false);
+    expect(
+      HostResizeParamsSchema.safeParse({
+        attachmentId: "att-1",
+        controlEpoch: 1.5,
+        cols: 80,
+        rows: 24,
+      }).success,
+    ).toBe(false);
+    expect(
+      HostResizeParamsSchema.safeParse({
+        attachmentId: "att-1",
+        controlEpoch: Number.MAX_SAFE_INTEGER + 1,
+        cols: 80,
+        rows: 24,
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts only strict ordered replay events", () => {
     const ack = {
       subscribed: true,
+      attachmentId: "att-host-1",
+      controlEpoch: 1,
+      role: "controller",
       ...PTY_IDENTITY,
       ...PTY_REF,
       pid: 42,
@@ -488,7 +530,7 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
 
-    const attachment = await client.attach(PTY_EXPECTATION);
+    const attachment = await client.attach(PTY_EXPECTATION, "controller");
     await expect(attachment.frames[Symbol.asyncIterator]().next()).resolves.toMatchObject({
       value: { data: "after-ack" },
     });
@@ -528,10 +570,10 @@ describe("createStationHostClient", () => {
       expectedBuildVersion: "test-build",
       connect: async () => clientConn,
     });
-    const current = await client.attach(PTY_EXPECTATION);
+    const current = await client.attach(PTY_EXPECTATION, "controller");
     const iterator = current.frames[Symbol.asyncIterator]();
 
-    await expect(client.attach(PTY_EXPECTATION)).rejects.toMatchObject({
+    await expect(client.attach(PTY_EXPECTATION, "controller")).rejects.toMatchObject({
       code: "HOST_ATTACH_GONE",
     });
     server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "still-current" });
@@ -567,13 +609,117 @@ describe("createStationHostClient", () => {
       expectedBuildVersion: "test-build",
       connect: async () => clientConn,
     });
-    const old = await client.attach(PTY_EXPECTATION);
-    const current = await client.attach(PTY_EXPECTATION);
+    const old = await client.attach(PTY_EXPECTATION, "controller");
+    const current = await client.attach(PTY_EXPECTATION, "controller");
     const iterator = current.frames[Symbol.asyncIterator]();
 
     await expect(old.detach()).rejects.toMatchObject({ code: "HOST_REQUEST_FAILED" });
     server.send({ type: "data", ptyId: PTY_REF.ptyId, data: "newer" });
     await expect(iterator.next()).resolves.toMatchObject({ value: { data: "newer" } });
+    client.dispose();
+  });
+
+  it("defaults attach to controller intent and binds claims and mutations to the Host capability", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    const operational: Array<{ method: string; params: unknown }> = [];
+    void (async () => {
+      for await (const message of server.messages()) {
+        if (HostClientShutdownNotificationSchema.safeParse(message).success) continue;
+        const request = HostRequestSchema.parse(message);
+        if (request.method === "host.health") {
+          server.send(
+            hostSuccess(request.id, {
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: "test-build",
+            }),
+          );
+          continue;
+        }
+        operational.push({ method: request.method, params: request.params });
+        if (request.method === "host.attach") {
+          server.send(hostSuccess(request.id, attachAck({ role: "viewer", controlEpoch: 2 })));
+        } else if (request.method === "host.claimControl") {
+          server.send(
+            hostSuccess(request.id, {
+              attachmentId: "att-host-1",
+              controlEpoch: 3,
+              role: "controller",
+            }),
+          );
+        } else {
+          server.send(hostSuccess(request.id, { ok: true }));
+        }
+      }
+    })();
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+
+    const attachment = await client.attach(PTY_EXPECTATION, "controller");
+    expect(attachment.controlState).toEqual({
+      attachmentId: "att-host-1",
+      controlEpoch: 2,
+      role: "viewer",
+    });
+    await attachment.claimControl();
+    await attachment.write("input");
+    await attachment.resize(100, 30);
+
+    expect(operational).toEqual([
+      { method: "host.attach", params: { ...PTY_REF, intent: "controller" } },
+      { method: "host.claimControl", params: { attachmentId: "att-host-1" } },
+      {
+        method: "host.write",
+        params: { attachmentId: "att-host-1", controlEpoch: 3, data: "input" },
+      },
+      {
+        method: "host.resize",
+        params: { attachmentId: "att-host-1", controlEpoch: 3, cols: 100, rows: 30 },
+      },
+    ]);
+    client.dispose();
+  });
+
+  it("routes targeted revocation and updates the attachment control state", async () => {
+    const { client: clientConn, server } = inMemoryNdjsonConnectionPair();
+    void (async () => {
+      for await (const message of server.messages()) {
+        if (HostClientShutdownNotificationSchema.safeParse(message).success) continue;
+        const request = HostRequestSchema.parse(message);
+        if (request.method === "host.health") {
+          server.send(
+            hostSuccess(request.id, {
+              ok: true,
+              protocolVersion: HOST_PROTOCOL_VERSION,
+              buildVersion: "test-build",
+            }),
+          );
+        } else if (request.method === "host.attach") {
+          server.send(hostSuccess(request.id, attachAck()));
+          await delay(0);
+          server.send({
+            type: "control-revoked",
+            ptyId: PTY_REF.ptyId,
+            attachmentId: "att-host-1",
+            controlEpoch: 2,
+          });
+        }
+      }
+    })();
+    const client = createStationHostClient({
+      socketPath: "unused",
+      expectedBuildVersion: "test-build",
+      connect: async () => clientConn,
+    });
+
+    const attachment = await client.attach(PTY_EXPECTATION, "controller");
+    await expect(attachment.frames[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { type: "control-revoked", controlEpoch: 2 },
+    });
+    expect(attachment.controlState).toMatchObject({ role: "viewer", controlEpoch: 2 });
     client.dispose();
   });
 
@@ -608,6 +754,9 @@ describe("createStationHostClient", () => {
           server.send(
             hostSuccess(request.id, {
               subscribed: true,
+              attachmentId: "att-host-1",
+              controlEpoch: 1,
+              role: "controller",
               ...PTY_IDENTITY,
               ...PTY_REF,
               [field]: value,
@@ -635,7 +784,7 @@ describe("createStationHostClient", () => {
       connect: async () => clientConn,
     });
 
-    await expect(client.attach(PTY_EXPECTATION)).rejects.toMatchObject({
+    await expect(client.attach(PTY_EXPECTATION, "controller")).rejects.toMatchObject({
       code: "HOST_ATTACHMENT_MISMATCH",
     });
     await expect(detached.promise).resolves.toBeUndefined();
