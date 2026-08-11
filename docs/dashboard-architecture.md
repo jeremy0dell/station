@@ -96,9 +96,12 @@ Station renderers
 `selectors/dashboardTree.ts` is the sole dashboard hierarchy adapter. It joins
 canonical sessions to worktree metadata, merges optimistic creates, applies
 filter and collapse state, and projects Project roots, direct Group blocks,
-project-root sessions, and inert gaps. `snapshot.sessionGroups` is the exclusive
-membership authority; optional parent links are deliberately flattened, while
-optimistic create rows remain at the project root until canonical replacement.
+project-root sessions, inert Group closing-frame rows, and inert gaps. Every
+expanded Group ends with one cell-less frame row, including an empty Group, so
+the visible ring has truthful viewport height without gaining focus, a slot, or
+an action. `snapshot.sessionGroups` is the exclusive membership authority;
+optional parent links are deliberately flattened, while optimistic create rows
+remain at the project root until canonical replacement.
 The renderer-local `GroupOrderingMode` chooses Groups-first or whole-block
 alphabetical interleaving without changing canonical arrays.
 The internal `treeGrid.ts` controller knows only immutable nodes, ordered cells,
@@ -119,14 +122,22 @@ chooser traversal, and needs-attention traversal. Reconciliation preserves the
 exact row and cell when possible, moves a collapse-hidden child to its visible
 collapsed ancestor, and otherwise uses deterministic next/previous fallback.
 Group rows use `identity`, `quickSession`, and `menu`; only identity toggles
-collapse in this slice. A focused direct visible member decorates its Group with
+collapse in this slice, while the exact `[qs]` and `[▾]` targets remain
+focusable no-ops. A focused direct visible member decorates its Group with
 `containsFocusedRow`, leaving color and ring presentation to the renderer.
 
 The selectors entrypoint exposes branded dashboard row IDs, dashboard cell IDs,
 decorated tree rows, and the viewport contract. `DashboardViewport.rows` is the
 terminal-clipped sequence; `DashboardViewport.rowById` is the exact full tree
 lookup used by input and context-menu boundaries. Renderers do not construct or
-parse row IDs and do not maintain a second flattened hierarchy.
+parse row IDs and do not maintain a second flattened hierarchy. Station renders
+the clipped sequence directly, resolves Group ownership through `parentId` and
+`rowById`, and computes one shared session grid two columns narrower whenever
+Groups exist. Root sessions start at column zero; Group members add inert side
+rails around that same grid. Quiet rings use the hairline role, a focused Group
+header uses the working role, and member focus dims that working ring while the
+member keeps ordinary keyboard-focus or hover treatment. Frame edges clip and
+scroll as ordinary projected rows.
 
 Pointer targets identify one `dashboardCell`. In dashboard mode both pointer
 activation and focused Enter resolve that cell through the current visible tree

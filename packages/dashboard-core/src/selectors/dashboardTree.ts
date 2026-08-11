@@ -38,6 +38,8 @@ export type DashboardRowId = string & {
 export const dashboardRowIds = {
   project: (projectId: ProjectId): DashboardRowId => `project:${projectId}` as DashboardRowId,
   group: (groupId: SessionGroupId): DashboardRowId => `group:${groupId}` as DashboardRowId,
+  groupFrameEnd: (groupId: SessionGroupId): DashboardRowId =>
+    `group-frame-end:${groupId}` as DashboardRowId,
   session: (sessionId: SessionId): DashboardRowId => `session:${sessionId}` as DashboardRowId,
   create: (localId: string): DashboardRowId => `create:${localId}` as DashboardRowId,
   empty: (projectId: ProjectId): DashboardRowId => `empty:${projectId}` as DashboardRowId,
@@ -74,6 +76,7 @@ export type DashboardProjectHeaderPayload = {
   readonly type: "projectHeader";
   readonly project: DashboardProjectView;
   readonly collapsed: boolean;
+  readonly groupCount: number;
   readonly persistentFilterMatch?: DashboardPersistentFilterProjectMatch;
 };
 
@@ -88,6 +91,12 @@ export type DashboardGroupHeaderPayload = {
   readonly sessionCount: number;
   readonly visibleSessionCount: number;
   readonly persistentFilterMatch?: DashboardPersistentFilterGroupMatch;
+};
+
+/** Inert closing-frame row that consumes viewport height without focus cells or selection slots. */
+export type DashboardGroupFrameEndPayload = {
+  readonly type: "groupFrameEnd";
+  readonly groupId: SessionGroupId;
 };
 
 export type DashboardSessionPayload = {
@@ -120,6 +129,7 @@ export type DashboardProjectGapPayload = {
 export type DashboardTreePayload =
   | DashboardProjectHeaderPayload
   | DashboardGroupHeaderPayload
+  | DashboardGroupFrameEndPayload
   | DashboardSessionPayload
   | DashboardCreateLocalRowPayload
   | DashboardEmptyProjectPayload
@@ -462,6 +472,7 @@ function projectNode(
     type: "projectHeader",
     project: projectRows.project,
     collapsed: projectRows.collapsed,
+    groupCount: projectRows.groups.length,
     ...(match === undefined ? {} : { persistentFilterMatch: match }),
   };
   return {
@@ -488,13 +499,25 @@ function groupNode(
     visibleSessionCount: visibleRows.length,
     ...(match === undefined ? {} : { persistentFilterMatch: match }),
   };
-  const children = visibleRows.map((row) => rowNode(row, projection));
+  const children = [
+    ...visibleRows.map((row) => rowNode(row, projection)),
+    groupFrameEndNode(groupRows.group.id),
+  ];
   return {
     id: dashboardRowIds.group(groupRows.group.id),
     payload,
     cells: GROUP_CELLS,
     defaultCell: "identity",
-    ...(children.length === 0 ? {} : { children, expanded: !groupRows.collapsed }),
+    children,
+    expanded: !groupRows.collapsed,
+  };
+}
+
+function groupFrameEndNode(groupId: SessionGroupId): DashboardTreeNode {
+  return {
+    id: dashboardRowIds.groupFrameEnd(groupId),
+    payload: { type: "groupFrameEnd", groupId },
+    cells: [],
   };
 }
 

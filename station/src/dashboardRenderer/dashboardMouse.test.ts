@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { dashboardRowIds } from "@station/dashboard-core/selectors";
 import type { StationMouseEvent } from "../input/mouse.js";
+import { groupedManyProjectsSnapshot } from "../station/fixtures/scenarios.js";
 import { makeStationTestRuntime } from "../station/test/support/makeStationTestRuntime.js";
 import { routeDashboardMouse } from "./dashboardMouse.js";
 
@@ -43,5 +44,29 @@ describe("routeDashboardMouse", () => {
     );
 
     expect(opened).toEqual(["https://example.com/docs"]);
+  });
+
+  it("preserves Group cell behavior through the standalone mouse adapter", () => {
+    const { runtime } = makeStationTestRuntime({ snapshot: groupedManyProjectsSnapshot() });
+    const rowId = dashboardRowIds.group("group_design_refresh");
+
+    routeDashboardMouse(
+      { kind: "dashboardCell", rowId, cellId: "identity" },
+      LEFT_DOWN,
+      runtime,
+      () => {},
+    );
+    expect([...runtime.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
+
+    for (const cellId of ["quickSession", "menu"] as const) {
+      routeDashboardMouse(
+        { kind: "dashboardCell", rowId, cellId },
+        LEFT_DOWN,
+        runtime,
+        () => {},
+      );
+      expect(runtime.state.getState().dashboardFocus).toEqual({ rowId, cellId });
+      expect([...runtime.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
+    }
   });
 });

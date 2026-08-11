@@ -119,6 +119,7 @@ function buildStationItems(
     }
     case "createLocalRow":
     case "emptyProject":
+    case "groupFrameEnd":
     case "projectGap":
       return [noActionsItem()];
   }
