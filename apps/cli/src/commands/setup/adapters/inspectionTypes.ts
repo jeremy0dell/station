@@ -119,6 +119,7 @@ export type SetupHarnessFact = {
   label: string;
   status: "ok" | "missing";
   command: string;
+  resolvedPath?: string;
   version?: string;
   rawVersion?: string;
   message?: string;
