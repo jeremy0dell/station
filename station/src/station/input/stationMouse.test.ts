@@ -8,7 +8,11 @@ import type { DashboardRuntimeOptions } from "@station/dashboard-core/runtime";
 import { dashboardRowIds, selectDashboardViewport } from "@station/dashboard-core/selectors";
 import { addProjectSelectedIndex, removeProjectConfirmPhrase } from "@station/dashboard-core/state";
 import type { StationMouseEvent } from "../../input/mouse.js";
-import { manyProjectsSnapshot, noProjectsSnapshot } from "../fixtures/scenarios.js";
+import {
+  groupedManyProjectsSnapshot,
+  manyProjectsSnapshot,
+  noProjectsSnapshot,
+} from "../fixtures/scenarios.js";
 import {
   makeStationTestRuntime,
   type StationTestDashboardRuntime,
@@ -532,6 +536,45 @@ describe("routeStationMouse", () => {
     store.actions.handleKey({ input: "H" });
     routeStationMouse({ kind: "dashboardCell", rowId: dashboardRowIds.project("station"), cellId: "identity" }, LEFT_DOWN, store);
     expect([...store.state.getState().collapsedProjectIds]).toEqual([]);
+  });
+
+  it("routes Group identity, quick-session, menu, and frame targets through one cell contract", () => {
+    const store = makeStore(groupedManyProjectsSnapshot());
+    const groupId = dashboardRowIds.group("group_design_refresh");
+
+    routeStationMouse(
+      { kind: "dashboardCell", rowId: groupId, cellId: "identity" },
+      LEFT_DOWN,
+      store,
+    );
+    expect([...store.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
+    expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId: "identity" });
+
+    for (const cellId of ["quickSession", "menu"] as const) {
+      routeStationMouse({ kind: "dashboardCell", rowId: groupId, cellId }, LEFT_DOWN, store);
+      expect([...store.state.getState().collapsedGroupIds]).toEqual(["group_design_refresh"]);
+      expect(store.state.getState().dashboardFocus).toEqual({ rowId: groupId, cellId });
+      expect(store.state.getState().screen).toEqual({ name: "dashboard" });
+    }
+
+    const beforeFrame = store.state.getState();
+    routeStationMouse(
+      {
+        kind: "dashboardCell",
+        rowId: dashboardRowIds.groupFrameEnd("group_design_refresh"),
+        cellId: "identity",
+      },
+      LEFT_DOWN,
+      store,
+    );
+    expect(store.state.getState()).toEqual(beforeFrame);
+
+    routeStationMouse(
+      { kind: "dashboardCell", rowId: groupId, cellId: "identity" },
+      LEFT_DOWN,
+      store,
+    );
+    expect([...store.state.getState().collapsedGroupIds]).toEqual([]);
   });
 
   it("keeps project disclosure interactive while a persistent filter is applied", () => {

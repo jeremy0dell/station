@@ -373,6 +373,8 @@ reattach; pane borders and neighboring panes must remain unlinked.
 - Treat the active UI as the full terminal canvas. Layout code should account for the terminal viewport, not a decorative parent container.
 - Native Station owns its opaque Station canvas. The standalone dashboard uses opaque terminal-default background intent for its unaccented canvas, panels, prompts, Help surface, and toasts; this behavior is provider-neutral and does not use transparency.
 - Keep header, body, footer, overlays, prompts, and toasts from overlapping at narrow or short terminal sizes.
+- Render canonical Groups as contiguous blocks in the projected row order. An expanded Group uses its header as the top edge, inert side rails around direct members, and one inert closing-frame row; an empty expanded Group therefore has a header and closing edge only. A collapsed Group keeps the bounded identity, `[qs]`, and `[▾]` targets but omits its members and closing edge. Only identity collapses in this slice; `[qs]` and `[▾]` are focusable no-ops.
+- Group rings use the quiet hairline role by default, bright working color while the header is focused, and dim working color while a direct member has focus. Exact target focus uses compact focus; member focus and hover keep the ordinary dashboard fills. Borders, separators, whitespace, and closing rows are inert, and viewport clipping may show any ordinary edge of the projected block without renderer-owned regrouping.
 - The tmux popup runs the same interactive observer-backed dashboard without
   native Station panes. Its close behavior and footer copy must match popup
   semantics, such as `q/esc:close` when a warm dismissal is expected. `Ctrl-O`

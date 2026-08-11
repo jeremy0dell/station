@@ -26,6 +26,8 @@ import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
 } from "./DashboardTableHeaderView.js";
+import { GroupFrameEndView, GroupFrameRailView } from "./GroupFrameView.js";
+import { GroupHeaderView } from "./GroupHeaderView.js";
 import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";
@@ -45,6 +47,8 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
   const viewport = selectDashboardViewport(snapshot, viewState, screen);
   const contentColumns = Math.max(1, Math.floor(columns) - 1);
   const firstRun = snapshot.projects.length === 0;
+  const rowGridColumns =
+    snapshot.sessionGroups.length === 0 ? contentColumns : Math.max(1, contentColumns - 2);
   const fleet = selectFleetSummary(snapshot);
   const keyByRow = new Map(
     viewport.displayRowChoices.map((choice) => [choice.value.id, choice.key]),
@@ -52,9 +56,9 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
   const { headerLayout, layoutByItem } = firstRun
     ? { headerLayout: undefined, layoutByItem: new Map<string, RowGridLayout>() }
     : dashboardRowLayouts(
-        viewport.rows,
+        [...viewport.rowById.values()],
         keyByRow,
-        contentColumns,
+        rowGridColumns,
       );
   const tableHeader = dashboardTableHeaderModel({
     layout: headerLayout,
@@ -86,6 +90,7 @@ export function DashboardView({ snapshot, viewState, screen, columns = 80 }: Das
         <DashboardBody
           columns={contentColumns}
           rows={viewport.rows}
+          rowById={viewport.rowById}
           layoutByItem={layoutByItem}
         />
       )}
@@ -198,10 +203,12 @@ function dashboardRowLayouts(
 function DashboardBody({
   columns,
   rows,
+  rowById,
   layoutByItem,
 }: {
   columns: number;
   rows: readonly DashboardTreeRow[];
+  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>;
   layoutByItem: ReadonlyMap<string, RowGridLayout>;
 }) {
   return (
@@ -211,6 +218,7 @@ function DashboardBody({
           key={row.id}
           columns={columns}
           row={row}
+          rowById={rowById}
           layout={layoutByItem.get(row.id)}
         />
       ))}
@@ -221,13 +229,17 @@ function DashboardBody({
 function DashboardRow({
   columns,
   row,
+  rowById,
   layout,
 }: {
   columns: number;
   row: DashboardTreeRow;
+  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>;
   layout: RowGridLayout | undefined;
 }) {
   const theme = useStationTheme();
+  // Resolve Group containment through projected ancestry so renderers never decode row IDs.
+  const groupRow = groupHeaderParent(row, rowById);
   switch (row.payload.type) {
     case "projectGap":
       return <box height={1} />;
@@ -238,8 +250,27 @@ function DashboardRow({
           rowId={row.id}
           project={row.payload.project}
           collapsed={row.payload.collapsed}
+          groupCount={row.payload.groupCount}
           persistentFilterMatch={row.payload.persistentFilterMatch}
           focusedCellId={row.focusedCellId}
+        />
+      );
+    case "groupHeader":
+      return (
+        <GroupHeaderView
+          columns={columns}
+          rowId={row.id}
+          payload={row.payload}
+          focusedCellId={row.focusedCellId}
+          containsFocusedRow={row.containsFocusedRow}
+        />
+      );
+    case "groupFrameEnd":
+      return groupRow === undefined ? null : (
+        <GroupFrameEndView
+          columns={columns}
+          focusedHeader={groupRow.focusedCellId !== undefined}
+          containsFocusedRow={groupRow.containsFocusedRow === true}
         />
       );
     case "emptyProject":
@@ -258,6 +289,7 @@ function DashboardRow({
           rowId={row.id}
           layout={layout}
           focused={row.focusedCellId === "identity"}
+          groupRow={groupRow}
         />
       );
     case "createLocalRow":
@@ -274,10 +306,12 @@ function SessionRowLine({
   rowId,
   layout,
   focused,
+  groupRow,
 }: {
   rowId: DashboardRowId;
   layout: RowGridLayout;
   focused?: boolean;
+  groupRow?: DashboardTreeRow | undefined;
 }) {
   const theme = useStationTheme();
   const dispatch = useStationMouse();
@@ -288,8 +322,13 @@ function SessionRowLine({
     : focused === true
       ? { backgroundColor: toOpenTuiColor(theme.interaction.keyboardFocus) }
       : {};
-  return (
-    <box flexDirection="row" width="100%" height={1} {...background}>
+  const content = (
+    <box
+      flexDirection="row"
+      height={1}
+      {...(groupRow === undefined ? { width: "100%" as const } : { flexGrow: 1 })}
+      {...background}
+    >
       <box
         flexGrow={1}
         height={1}
@@ -307,6 +346,31 @@ function SessionRowLine({
       </box>
     </box>
   );
+  if (groupRow === undefined) {
+    return content;
+  }
+  const frame = {
+    focusedHeader: groupRow.focusedCellId !== undefined,
+    containsFocusedRow: groupRow.containsFocusedRow === true,
+  };
+  return (
+    <box flexDirection="row" width="100%" height={1}>
+      <GroupFrameRailView text="│" {...frame} />
+      {content}
+      <GroupFrameRailView text="│" {...frame} />
+    </box>
+  );
+}
+
+function groupHeaderParent(
+  row: DashboardTreeRow,
+  rowById: ReadonlyMap<DashboardRowId, DashboardTreeRow>,
+): DashboardTreeRow | undefined {
+  if (row.parentId === undefined) {
+    return undefined;
+  }
+  const parent = rowById.get(row.parentId);
+  return parent?.payload.type === "groupHeader" ? parent : undefined;
 }
 
 function FirstProjectButton({ columns }: { columns: number }) {

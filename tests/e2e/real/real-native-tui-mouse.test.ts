@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -84,6 +84,14 @@ describeReal("real native Station mouse input", () => {
       codexCommand,
       installCodexHooks: true,
     });
+    await writeFile(
+      config.configPath,
+      `${(await readFile(config.configPath, "utf8")).replace(
+        "[harness.codex]\n",
+        "[harness.codex]\nresume = true\n",
+      )}\n[feature_flags]\nsession_resume_agent = true\nstation_persistent_agents = true\n`,
+      "utf8",
+    );
     await runStationJson(env, {
       configPath: config.configPath,
       args: ["hooks", "install", "codex", "--yes"],
@@ -92,6 +100,7 @@ describeReal("real native Station mouse input", () => {
     });
     const nativeSession = uniqueTmuxSession("station-real-native-mouse");
     const branch = `nm-${process.pid}-${Date.now().toString(36).slice(-6)}`;
+    const groupName = "Native mouse Group";
     const client = createRealObserverClient(config, 30_000);
     let commandId: string | undefined;
     let runtime: NativeRuntime | undefined;
@@ -161,6 +170,7 @@ describeReal("real native Station mouse input", () => {
           return (
             row !== undefined &&
             !worktreeHasLiveAgent(row) &&
+            row.recovery?.kind === "agent-resume" &&
             snapshot.sessions.some(
               (session) => session.worktreeId === row.id && session.origin === "station",
             )
@@ -170,10 +180,29 @@ describeReal("real native Station mouse input", () => {
         120_000,
       );
       const dormantRow = findRowByBranch(dormant, branch);
-      const previousSessionIds = new Set(
-        (dormant as StationSnapshot).sessions
-          .filter((session) => session.worktreeId === dormantRow.id)
-          .map((session) => session.id),
+      const dormantSession = dormant.sessions.find(
+        (session) => session.worktreeId === dormantRow.id && session.origin === "station",
+      );
+      if (dormantSession === undefined) {
+        throw new Error(`Observer did not retain a Station session for ${branch}.`);
+      }
+      const groupReceipt = await client.dispatch({
+        type: "sessionGroup.create",
+        payload: {
+          projectId: config.projectId,
+          name: groupName,
+          initialSessionIds: [dormantSession.id],
+        },
+      });
+      await waitForCommandRecord(client, groupReceipt.commandId, { timeoutMs: 30_000 });
+      await waitForSnapshot(
+        client,
+        (snapshot) =>
+          snapshot.sessionGroups.some(
+            (group) => group.name === groupName && group.sessionIds.includes(dormantSession.id),
+          ),
+        `Observer did not create ${groupName} for ${branch}.`,
+        30_000,
       );
 
       const launched = await launchNativeStationInTmux({
@@ -205,12 +234,56 @@ describeReal("real native Station mouse input", () => {
 
       const expanded = await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes("[shell]") && frame.includes(branch),
-        "The native-only Station overlay did not render its project action and real session.",
+        (frame) =>
+          frame.includes("[shell]") &&
+          frame.includes(`╭▼ ${groupName} 1 session`) &&
+          hasDashboardSessionRow(frame, branch),
+        "The native-only Station overlay did not render its Group and real session.",
       );
       expect(expanded).toContain("[shell]");
       const projectCell = cellForText(expanded, PROJECT_LABEL);
+      const groupCell = cellForText(expanded, groupName);
       const styleBefore = styledLineForText(await captureNativeFrame(runtime, true), PROJECT_LABEL);
+      const groupStyleBefore = styledLineForText(
+        await captureNativeFrame(runtime, true),
+        groupName,
+      );
+
+      await ptyClient.write(sgrMouse(35, groupCell));
+      await waitForStyledLineChange(
+        runtime,
+        groupName,
+        groupStyleBefore,
+        "Raw SGR motion did not reach the native Group-header hover state.",
+      );
+      await ptyClient.write(sgrMouse(35, { column: 1, row: 1 }));
+      for (let index = 0; index < 3; index += 1) {
+        await ptyClient.write(Buffer.from("\x1b[B", "utf8"));
+      }
+      await writeSgrClick(ptyClient, groupCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▶ ${groupName}`) && !hasDashboardSessionRow(frame, branch),
+        "One native SGR click did not collapse the focused member's Group exactly once.",
+      );
+      await ptyClient.write(Buffer.from("\r", "utf8"));
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▼ ${groupName}`) && hasDashboardSessionRow(frame, branch),
+        "Collapsed native Group focus did not restore to identity for Enter expansion.",
+      );
+      await writeSgrClick(ptyClient, groupCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▶ ${groupName}`) && !hasDashboardSessionRow(frame, branch),
+        "The deliberate native Group click did not collapse exactly once.",
+      );
+      await writeSgrClick(ptyClient, groupCell);
+      await waitForNativeFrame(
+        runtime,
+        (frame) => frame.includes(`▼ ${groupName}`) && hasDashboardSessionRow(frame, branch),
+        "The deliberate native Group click did not expand exactly once.",
+      );
 
       await ptyClient.write(sgrMouse(35, projectCell));
       await waitForStyledLineChange(
@@ -223,19 +296,19 @@ describeReal("real native Station mouse input", () => {
       await writeSgrClick(ptyClient, projectCell);
       await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
+        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !hasDashboardSessionRow(frame, branch),
         "One native SGR down/up click did not collapse the project exactly once.",
       );
       await writeSgrClick(ptyClient, projectCell);
       await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && frame.includes(branch),
+        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && hasDashboardSessionRow(frame, branch),
         "The first deliberate native click did not expand the project once.",
       );
       await writeSgrClick(ptyClient, projectCell);
       await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
+        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !hasDashboardSessionRow(frame, branch),
         "The second deliberate native click did not collapse the project once.",
       );
       await ptyClient.write(Buffer.from(`/${branch}\r`, "utf8"));
@@ -243,7 +316,7 @@ describeReal("real native Station mouse input", () => {
         runtime,
         (frame) =>
           frame.includes(`▶ ${PROJECT_LABEL}`) &&
-          !frame.includes(branch) &&
+          !hasDashboardSessionRow(frame, branch) &&
           frame.includes("/ edit") &&
           frame.includes("Esc clear"),
         "An applied native filter did not preserve the collapsed project disclosure.",
@@ -251,13 +324,13 @@ describeReal("real native Station mouse input", () => {
       await writeSgrClick(ptyClient, projectCell);
       await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && frame.includes(branch),
+        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && hasDashboardSessionRow(frame, branch),
         "The filtered native project did not expand to reveal its matching session.",
       );
       await writeSgrClick(ptyClient, projectCell);
       await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
+        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !hasDashboardSessionRow(frame, branch),
         "The filtered native project did not collapse its matching session.",
       );
 
@@ -336,7 +409,7 @@ describeReal("real native Station mouse input", () => {
         runtime,
         (frame) =>
           frame.includes(`▶ ${PROJECT_LABEL}`) &&
-          !frame.includes(branch) &&
+          !hasDashboardSessionRow(frame, branch) &&
           frame.includes("Status=Working") &&
           frame.includes("Esc clear"),
         "The native Apply filter control did not apply the complete staged filter.",
@@ -344,18 +417,27 @@ describeReal("real native Station mouse input", () => {
       await writeSgrClick(ptyClient, cellForText(reapplied, "Esc clear"));
       await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !frame.includes(branch),
+        (frame) => frame.includes(`▶ ${PROJECT_LABEL}`) && !hasDashboardSessionRow(frame, branch),
         "Clicking the native clear control did not restore the stored collapsed view.",
       );
 
       await writeSgrClick(ptyClient, projectCell);
       const reexpanded = await waitForNativeFrame(
         runtime,
-        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && frame.includes(branch),
+        (frame) => frame.includes(`▼ ${PROJECT_LABEL}`) && hasDashboardSessionRow(frame, branch),
         "The native project did not re-expand before row activation.",
       );
 
-      await writeSgrClick(ptyClient, cellForText(reexpanded, branch));
+      const sessionCell = cellForText(reexpanded, branch);
+      const sessionStyleBefore = styledLineForText(await captureNativeFrame(runtime, true), branch);
+      await ptyClient.write(sgrMouse(35, sessionCell));
+      await waitForStyledLineChange(
+        runtime,
+        branch,
+        sessionStyleBefore,
+        "Raw SGR motion did not reach the framed native session row.",
+      );
+      await writeSgrClick(ptyClient, sessionCell);
       await waitForNativeFrame(
         runtime,
         (frame) => !frame.includes("[shell]") && !frame.includes("[quick session]"),
@@ -369,13 +451,12 @@ describeReal("real native Station mouse input", () => {
           const row = snapshot.rows.find((candidate) => candidate.branch === branch);
           return (
             row?.agent?.harness === "codex" &&
-            row.agent.sessionId !== undefined &&
-            !previousSessionIds.has(row.agent.sessionId) &&
+            row.agent.sessionId === dormantSession.id &&
             row.terminal?.provider === "native" &&
             worktreeHasLiveAgent(row)
           );
         },
-        "The native row click did not start a new real Codex agent in the Observer snapshot.",
+        "The native row click did not resume the real Codex agent in the Observer snapshot.",
         120_000,
       );
       expect(findRowByBranch(active, branch).agent).toMatchObject({ harness: "codex" });
@@ -546,6 +627,10 @@ function cellForText(frame: string, needle: string): Cell {
     column: column + Math.floor(needle.length / 2) + 1,
     row: row + 1,
   };
+}
+
+function hasDashboardSessionRow(frame: string, branch: string): boolean {
+  return frame.split("\n").some((line) => line.includes(branch) && /\[[1-9a-z]\]/u.test(line));
 }
 
 function styledLineForText(frame: string, needle: string): string {

@@ -559,9 +559,9 @@ describeRealTmux("real tmux dev popup routing", () => {
     );
   }, 120_000);
 
-  it("uses click-only tracking without opening tmux's popup menu or latching hover", async () => {
+  it("routes grouped click-only input without opening tmux's popup menu or latching hover", async () => {
     const fixture = await createDashboardFixture(tmux);
-    fixture.env.STATION_SCENARIO = "many-projects";
+    fixture.env.STATION_SCENARIO = "grouped-many-projects";
     cleanup = () => cleanupDashboardFixture(fixture);
 
     await tmuxExec(fixture.wrapper, ["new-session", "-d", "-s", "base", "sleep 300"], fixture.env);
@@ -577,15 +577,15 @@ describeRealTmux("real tmux dev popup routing", () => {
     const dashboard = await waitForPaneContent(
       fixture,
       popup,
-      isManyProjectDashboardContent,
-      "many-project dashboard did not render for SGR characterization",
+      isGroupedManyProjectDashboardContent,
+      "grouped dashboard did not render for SGR characterization",
     );
     const nestedClient = await waitForNestedClient(fixture);
     const outerDimensions = await readOuterClientDimensions(fixture, fixture.ptyClient.clientName);
-    const headerCell = paneCell(dashboard, "▼ station");
-    const headerOuter = centeredPopupOuterCell(outerDimensions, nestedClient, headerCell);
+    const groupCell = paneCell(dashboard, "Design refresh");
+    const groupOuter = centeredPopupOuterCell(outerDimensions, nestedClient, groupCell);
     const blankOuter = centeredPopupOuterCell(outerDimensions, nestedClient, { col: 0, row: 0 });
-    const headerStyleBefore = await captureHiddenStyledLine(fixture, headerCell.row);
+    const groupStyleBefore = await captureHiddenStyledLine(fixture, groupCell.row);
     const mouseFlags = await tmuxExec(
       fixture.wrapper,
       [
@@ -620,55 +620,54 @@ describeRealTmux("real tmux dev popup routing", () => {
       );
 
       await fixture.ptyClient.write(sgrMouse(1, blankOuter));
-      await fixture.ptyClient.write(sgrMouse(33, headerOuter));
-      await fixture.ptyClient.write(sgrMouse(1, headerOuter, "m"));
+      await fixture.ptyClient.write(sgrMouse(33, groupOuter));
+      await fixture.ptyClient.write(sgrMouse(1, groupOuter, "m"));
       await fixture.ptyClient.write(sgrMouse(35, blankOuter));
       await timers.setTimeout(500);
       expect(
-        await captureHiddenStyledLine(fixture, headerCell.row),
-        "a button drag left the project-header hover style latched",
-      ).toBe(headerStyleBefore);
+        await captureHiddenStyledLine(fixture, groupCell.row),
+        "a button drag left the Group-header hover style latched",
+      ).toBe(groupStyleBefore);
 
-      await writeSgrClick(fixture.ptyClient, headerOuter);
+      for (let index = 0; index < 3; index += 1) {
+        await fixture.ptyClient.write(Buffer.from("\x1b[B", "utf8"));
+      }
+      await writeSgrClick(fixture.ptyClient, groupOuter);
       await waitForPaneContent(
         fixture,
         popup,
-        (content) => content.includes("▶ station") && !content.includes("station-overlay"),
-        "one outer SGR down/up click did not collapse exactly once",
+        (content) => content.includes("▶ Design refresh") && !content.includes("group-contracts"),
+        "one outer SGR down/up click did not collapse the focused member's Group exactly once",
       );
-      expect(
-        (await captureHiddenStyledLine(fixture, headerCell.row)).replace("▶", "▼"),
-        "a deliberate click left the project-header hover style latched",
-      ).toBe(headerStyleBefore);
-      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await fixture.ptyClient.write(Buffer.from("\r", "utf8"));
       await waitForPaneContent(
         fixture,
         popup,
-        (content) => content.includes("▼ station") && content.includes("station-overlay"),
-        "the first deliberate repeated click did not expand the project",
+        (content) => content.includes("▼ Design refresh") && content.includes("group-contracts"),
+        "member focus did not recover to the collapsed Group identity for Enter expansion",
       );
-      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await writeSgrClick(fixture.ptyClient, groupOuter);
       await waitForPaneContent(
         fixture,
         popup,
-        (content) => content.includes("▶ station") && !content.includes("station-overlay"),
-        "the second deliberate repeated click did not collapse the project",
+        (content) => content.includes("▶ Design refresh") && !content.includes("group-contracts"),
+        "the deliberate repeated click did not collapse the Group exactly once",
       );
-      await writeSgrClick(fixture.ptyClient, headerOuter);
+      await writeSgrClick(fixture.ptyClient, groupOuter);
       const expandedDashboard = await waitForPaneContent(
         fixture,
         popup,
-        (content) => content.includes("▼ station") && content.includes("docs-cleanup"),
-        "project did not re-expand before the wheel characterization",
+        (content) => content.includes("▼ Design refresh") && content.includes("group-contracts"),
+        "Group did not re-expand before the wheel characterization",
       );
-      const childCell = paneCell(expandedDashboard, "docs-cleanup");
+      const childCell = paneCell(expandedDashboard, "group-contracts");
       const childOuter = centeredPopupOuterCell(outerDimensions, nestedClient, childCell);
       await fixture.ptyClient.write(sgrMouse(65, childOuter));
       await waitForPaneContent(
         fixture,
         popup,
-        (content) => !content.includes("▼ station") && content.includes("docs-cleanup"),
-        "outer SGR wheel input over a child row did not change visible content",
+        (content) => !content.includes("▼ station") && content.includes("group-contracts"),
+        "outer SGR wheel input over a Group member did not change visible content",
       );
       expectNoTmuxPopupMenu();
     } finally {
@@ -2207,9 +2206,12 @@ function isDashboardContent(content: string): boolean {
   );
 }
 
-function isManyProjectDashboardContent(content: string): boolean {
+function isGroupedManyProjectDashboardContent(content: string): boolean {
   return (
-    content.includes("FLEET") && content.includes("station-overlay") && content.includes("? help")
+    content.includes("FLEET") &&
+    content.includes("╭▼ Design refresh") &&
+    content.includes("group-contracts") &&
+    content.includes("? help")
   );
 }
 
