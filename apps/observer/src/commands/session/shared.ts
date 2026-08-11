@@ -1,18 +1,19 @@
 import { randomUUID } from "node:crypto";
-import type {
-  EnsureAgentWorkspaceIntent,
-  HarnessResumeOptions,
-  ProviderId,
-  ProviderProjectConfig,
-  SafeError,
-  SessionId,
-  SessionView,
-  StationSnapshot,
-  TerminalLaunchProcessRequest,
-  TerminalLaunchProcessResult,
-  TerminalProvider,
-  WorktreeObservation,
-  WorktreeRow,
+import {
+  type EnsureAgentWorkspaceIntent,
+  type HarnessResumeOptions,
+  type ProviderId,
+  type ProviderProjectConfig,
+  type SafeError,
+  type SessionId,
+  type SessionView,
+  type StationSnapshot,
+  type TerminalLaunchProcessRequest,
+  type TerminalLaunchProcessResult,
+  type TerminalProvider,
+  type WorktreeObservation,
+  type WorktreeRow,
+  worktreeHasLiveAgent,
 } from "@station/contracts";
 import {
   type RuntimeClock,
@@ -79,7 +80,7 @@ export function findProjectOrThrow(
 }
 
 export function assertNoCurrentAgent(row: WorktreeRow | undefined): void {
-  if (row?.agent === undefined) {
+  if (!worktreeHasLiveAgent(row)) {
     return;
   }
   const error: SafeError = {
