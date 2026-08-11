@@ -39,6 +39,7 @@ function harness() {
   });
   return {
     capabilities,
+    source,
     store,
     opened,
     setActivationResult: (result: ManagedLaunchResult) => (activationResult = result),
@@ -141,5 +142,35 @@ describe("native dashboard capabilities", () => {
       kind: "failure",
       disposition: "retain-failed",
     });
+  });
+
+  it("waits for a native Quick Session to reach canonical state", async () => {
+    const fixture = harness();
+    const snapshot = manyProjectsSnapshot();
+    const project = snapshot.projects.find((candidate) => candidate.id === "station");
+    const session = snapshot.sessions.find((candidate) => candidate.projectId === "station");
+    if (project === undefined || session === undefined) throw new Error("station fixture missing");
+    const branch = "station-quick-group-123456";
+    const completion = fixture.capabilities.managedSessions.quickCreate({
+      project,
+      title: branch,
+      hiddenBranch: branch,
+      harness: "codex",
+    }).completion;
+    let settled = false;
+    void completion.then(() => {
+      settled = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    fixture.source.setSnapshot({
+      ...snapshot,
+      rows: snapshot.rows.map((row) =>
+        row.id === session.worktreeId ? { ...row, branch } : row,
+      ),
+    });
+    expect(await completion).toEqual({ kind: "success" });
   });
 });

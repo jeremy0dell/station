@@ -1,9 +1,8 @@
 import type { StationClientStateSource } from "@station/client";
-import type { ProviderId, WorktreeRow } from "@station/contracts";
+import type { ProviderId, SessionView, WorktreeRow } from "@station/contracts";
 import { STATION_HOST_PROVIDER_ID } from "@station/host";
 
-/** How long to wait for a freshly created worktree's row to reach the snapshot. */
-const WORKTREE_APPEAR_TIMEOUT_MS = 10_000;
+const CANONICAL_APPEAR_TIMEOUT_MS = 10_000;
 
 export function findWorktreeRowById(
   store: StationClientStateSource,
@@ -105,21 +104,45 @@ export function waitForWorktreeByBranch(
   projectId: string,
   branch: string,
 ): Promise<WorktreeRow | undefined> {
-  const existing = findWorktreeRowByBranch(store, projectId, branch);
+  return waitForCanonicalValue(store, () => findWorktreeRowByBranch(store, projectId, branch));
+}
+
+/** Wait for the session created on an exact Project branch to reach canonical client state. */
+export function waitForSessionByBranch(
+  store: StationClientStateSource,
+  projectId: string,
+  branch: string,
+): Promise<SessionView | undefined> {
+  return waitForCanonicalValue(store, () => {
+    const snapshot = store.getState().snapshot;
+    const worktree = snapshot?.rows.find(
+      (row) => row.projectId === projectId && row.branch === branch,
+    );
+    return snapshot?.sessions.find(
+      (session) => session.projectId === projectId && session.worktreeId === worktree?.id,
+    );
+  });
+}
+
+function waitForCanonicalValue<T>(
+  store: StationClientStateSource,
+  find: () => T | undefined,
+): Promise<T | undefined> {
+  const existing = find();
   if (existing !== undefined) {
     return Promise.resolve(existing);
   }
   return new Promise((resolve) => {
-    const settle = (row: WorktreeRow | undefined): void => {
+    const settle = (value: T | undefined): void => {
       clearTimeout(timer);
       unsubscribe();
-      resolve(row);
+      resolve(value);
     };
-    const timer = setTimeout(() => settle(undefined), WORKTREE_APPEAR_TIMEOUT_MS);
+    const timer = setTimeout(() => settle(undefined), CANONICAL_APPEAR_TIMEOUT_MS);
     const unsubscribe = store.subscribe(() => {
-      const row = findWorktreeRowByBranch(store, projectId, branch);
-      if (row !== undefined) {
-        settle(row);
+      const value = find();
+      if (value !== undefined) {
+        settle(value);
       }
     });
   });
