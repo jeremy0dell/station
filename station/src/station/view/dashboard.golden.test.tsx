@@ -221,6 +221,39 @@ describe("dashboard golden frames", () => {
     expect(interleaved.captureCharFrame()).toMatchSnapshot();
   });
 
+  it("frames a targeted pending Quick Session inside its Group", async () => {
+    const setup = await renderDashboard({
+      width: 80,
+      height: 40,
+      snapshot: groupedManyProjectsSnapshot(),
+      initialState: {
+        localRows: {
+          pendingCreate: [
+            {
+              localId: "create:station:quick-group",
+              projectId: "station",
+              title: "station-quick-group",
+              branch: "station-quick-group",
+              harnessProvider: "codex",
+              targetGroupId: "group_post_launch",
+              createdAt: "2026-08-11T00:00:00.000Z",
+            },
+          ],
+          failedCreate: [],
+          pendingRemove: [],
+          pendingStart: [],
+        },
+      },
+    });
+    const pendingLine = setup
+      .captureCharFrame()
+      .split("\n")
+      .find((line) => line.includes("station-quick-group"));
+
+    expect(pendingLine?.startsWith("│")).toBe(true);
+    expect(pendingLine?.trimEnd().endsWith("│")).toBe(true);
+  });
+
   it("renders filtered Group counts and clips framed blocks as ordinary rows", async () => {
     const snapshot = groupedManyProjectsSnapshot();
     const filtered = await renderDashboard({

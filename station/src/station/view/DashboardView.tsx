@@ -292,13 +292,30 @@ function DashboardRow({
           groupRow={groupRow}
         />
       );
-    case "createLocalRow":
+    case "createLocalRow": {
       // Local create rows have no slot and no activation target.
-      return layout === undefined ? null : (
-        <text fg={toOpenTuiColor(theme.text.primary)}>
+      if (layout === undefined) return null;
+      const content = (
+        <text
+          {...(groupRow === undefined ? {} : { flexGrow: 1 })}
+          fg={toOpenTuiColor(theme.text.primary)}
+        >
           <Segments segments={layout.segments} />
         </text>
       );
+      if (groupRow === undefined) return content;
+      const frame = {
+        focusedHeader: groupRow.focusedCellId !== undefined,
+        containsFocusedRow: groupRow.containsFocusedRow === true,
+      };
+      return (
+        <box flexDirection="row" width="100%" height={1}>
+          <GroupFrameRailView text="│" {...frame} />
+          {content}
+          <GroupFrameRailView text="│" {...frame} />
+        </box>
+      );
+    }
   }
 }
 
