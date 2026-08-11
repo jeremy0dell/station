@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCreateSessionCommand,
+  buildCreateSessionGroupCommand,
   buildFocusCommand,
   buildForkSessionCommand,
   buildRenameSessionCommand,
   buildResumeAgentCommand,
   buildStartAgentCommand,
+  buildUpdateSessionGroupMembershipCommand,
   cleanupForceRequired,
 } from "../../../src/state/commandBuilders.js";
 import { createCommandSnapshot, createDashboardSnapshot } from "../../fixtures/snapshots.js";
@@ -168,6 +170,29 @@ describe("TUI command builders", () => {
       payload: {
         sessionId: "ses_wt_web_idle",
         title: "Readable feature task",
+      },
+    });
+  });
+
+  it("builds strict Group create and expected membership commands", () => {
+    expect(buildCreateSessionGroupCommand({ projectId: "web", name: "  Launches  " })).toEqual({
+      type: "sessionGroup.create",
+      payload: { projectId: "web", name: "Launches" },
+    });
+    expect(
+      buildUpdateSessionGroupMembershipCommand({
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        sessionId: "ses_launches",
+      }),
+    ).toEqual({
+      type: "sessionGroup.updateMembership",
+      payload: {
+        projectId: "web",
+        groupId: "group_launches",
+        expectedVersion: 4,
+        add: [{ sessionId: "ses_launches", expectedGroupId: null }],
       },
     });
   });

@@ -967,7 +967,7 @@ describe("dashboard golden frames", () => {
       });
       const shellLabel = width < 90 ? "[sh]" : "[shell]";
       const quickLabel = width < 90 ? "[qs]" : "[quick session]";
-      const controls = ["primary", "shell", "quickSession", "defaultAgent"] as const;
+      const controls = ["primary", "shell", "quickSession", "menu"] as const;
 
       setup.store.actions.handleKey({ input: "", downArrow: true });
       for (let index = 0; index < controls.length; index += 1) {
@@ -991,7 +991,7 @@ describe("dashboard golden frames", () => {
           primary: 0,
           shell: shellStart,
           quickSession: quickStart,
-          defaultAgent: defaultStart,
+          menu: defaultStart,
         } as const;
         for (const [control, column] of Object.entries(samples)) {
           const background = spanBgHex(spanAtFrameCell(spans, row, column));
@@ -1065,7 +1065,7 @@ describe("dashboard golden frames", () => {
       {
         kind: "dashboardCell",
         rowId: dashboardRowIds.project("station"),
-        cellId: "defaultAgent",
+        cellId: "menu",
       },
     ]);
   });

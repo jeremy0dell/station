@@ -1,5 +1,9 @@
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
-import type { DashboardCellId, DashboardRowId } from "@station/dashboard-core/selectors";
+import type {
+  CreateGroupActionId,
+  DashboardCellId,
+  DashboardRowId,
+} from "@station/dashboard-core/selectors";
 import { deriveTuiInputMode, isRemoveProjectArmed, LIST_REGISTRY } from "@station/dashboard-core/state";
 import type {
   AddProjectActionId,
@@ -8,6 +12,7 @@ import type {
   NewSessionActionId,
   PersistentFilterActionId,
   ProjectSettingsItemId,
+  ProjectMenuInputActionId,
   RemoveWorktreeActionId,
   TuiInputMode,
  } from "@station/dashboard-core/state";
@@ -56,6 +61,8 @@ export type StationMouseTarget =
   | { kind: "addProjectRow"; index: number }
   | { kind: "addProjectAction"; actionId: AddProjectActionId }
   | { kind: "newSessionAction"; actionId: NewSessionActionId }
+  | { kind: "projectMenuAction"; actionId: ProjectMenuInputActionId }
+  | { kind: "createGroupAction"; actionId: CreateGroupActionId }
   | { kind: "renameSessionSubmit" }
   | { kind: "forkSessionAction"; actionId: ForkSessionActionId }
   | { kind: "screenBackdrop" }
@@ -204,6 +211,12 @@ export function routeStationMouse(
       return { kind: "handled" };
     case "newSessionAction":
       dispatchStationAction(runtime, { type: "newSession.activate", actionId: target.actionId });
+      return { kind: "handled" };
+    case "projectMenuAction":
+      dispatchStationAction(runtime, { type: "projectMenu.activate", actionId: target.actionId });
+      return { kind: "handled" };
+    case "createGroupAction":
+      dispatchStationAction(runtime, { type: "createGroup.activate", actionId: target.actionId });
       return { kind: "handled" };
     case "renameSessionSubmit":
       dispatchStationAction(runtime, { type: "renameSession.submit" });

@@ -6,7 +6,13 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand/react";
 import type { DashboardActions, DashboardStateSource } from "@station/dashboard-core/runtime";
-import { commandPromptRows, snapshotLoadingLines } from "@station/dashboard-core/selectors";
+import {
+  commandPromptRows,
+  dashboardBodyTop,
+  dashboardRowIds,
+  selectDashboardViewport,
+  snapshotLoadingLines,
+} from "@station/dashboard-core/selectors";
 import {
   activeTuiToast,
   isTuiToastHiddenByScreen,
@@ -121,22 +127,34 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
     );
   }
 
+  const viewState = {
+    collapsedProjectIds,
+    collapsedGroupIds,
+    groupOrderingMode,
+    scrollOffset,
+    terminalRows: rows,
+    localRows,
+    selection,
+    ...(persistentFilter === undefined ? {} : { persistentFilter }),
+    ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
+  };
+  const projectMenuAnchorTop =
+    screen.name === "projectMenu"
+      ? dashboardBodyTop() +
+        Math.max(
+          0,
+          selectDashboardViewport(snapshot, viewState, screen).rows.findIndex(
+            (row) => row.id === dashboardRowIds.project(screen.projectId),
+          ),
+        )
+      : undefined;
+
   return (
     <box width="100%" flexGrow={1} flexDirection="column">
       <StationHoverProvider value={backgroundHoverEnabled}>
         <DashboardView
           snapshot={snapshot}
-          viewState={{
-            collapsedProjectIds,
-            collapsedGroupIds,
-            groupOrderingMode,
-            scrollOffset,
-            terminalRows: rows,
-            localRows,
-            selection,
-            ...(persistentFilter === undefined ? {} : { persistentFilter }),
-            ...(dashboardFocus === undefined ? {} : { dashboardFocus }),
-          }}
+          viewState={viewState}
           screen={screen}
           columns={columns}
         />
@@ -153,6 +171,7 @@ export function DashboardRoot({ state, actions, columns, rows, onCopyNotice }: D
         localRows={localRows}
         widgets={liveWidgets}
         widgetsPersisted={widgetsPersisted}
+        {...(projectMenuAnchorTop === undefined ? {} : { projectMenuAnchorTop })}
       />
     </box>
   );

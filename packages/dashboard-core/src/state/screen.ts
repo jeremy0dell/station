@@ -32,11 +32,24 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
 }
 
 export function replaceSnapshot(state: DashboardState, snapshot: StationSnapshot): DashboardState {
+  const screen = reconcileProjectSurface(state, snapshot);
   const next: DashboardState = {
     ...state,
+    screen,
     snapshot,
     loading: false,
     localRows: pruneLocalRowsForSnapshot(state.localRows, snapshot),
   };
   return reconcileDashboardFocus(state, next);
+}
+
+function reconcileProjectSurface(
+  state: DashboardState,
+  snapshot: StationSnapshot,
+): DashboardState["screen"] {
+  const screen = state.screen;
+  if (screen.name !== "projectMenu" && screen.name !== "createGroup") return screen;
+  return snapshot.projects.some((project) => project.id === screen.projectId)
+    ? screen
+    : { name: "dashboard" };
 }
