@@ -432,6 +432,9 @@ function buildPiHarnessProvider({
   if (registryOptions.piExtensionPath !== undefined) {
     options.extensionPath = registryOptions.piExtensionPath;
   }
+  if (registryOptions.providerHookIngressLauncher !== undefined) {
+    options.hookBin = registryOptions.providerHookIngressLauncher;
+  }
   applyObserverPaths(options, config, false);
   return createPiHarnessProvider(options);
 }

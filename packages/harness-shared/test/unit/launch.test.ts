@@ -66,6 +66,17 @@ describe("harnessLaunchEnv", () => {
       HOME: "/tmp/cursor-home",
     });
   });
+
+  it("carries a canonical ingress launcher for in-process event delivery", () => {
+    const env = harnessLaunchEnv("pi", request(), {
+      hookBin: "/tmp/station/bin/stn-ingress",
+    });
+
+    expect(env).toMatchObject({
+      STATION_HARNESS_PROVIDER: "pi",
+      STATION_INGRESS_BIN: "/tmp/station/bin/stn-ingress",
+    });
+  });
 });
 
 function request(): BuildHarnessLaunchRequest {

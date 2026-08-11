@@ -91,8 +91,10 @@ export async function collectSetupFacts(options: CollectSetupFactsOptions): Prom
     env: CliEnv;
     cwd: string;
     homeDir: string;
+    access?: (path: string) => Promise<void>;
   } = { env, cwd, homeDir };
   if (options.runner !== undefined) commandInput.runner = options.runner;
+  if (options.access !== undefined) commandInput.access = options.access;
   const commandOptions = commandCheckOptions(commandInput);
   const dependencyInput: {
     runner?: ExternalCommandRunner;
@@ -390,6 +392,7 @@ function commandCheckOptions(input: {
   env: CliEnv;
   cwd: string;
   homeDir?: string;
+  access?: (path: string) => Promise<void>;
 }): CheckGitOptions & CheckHarnessesOptions {
   const options: CheckGitOptions & CheckHarnessesOptions = {
     env: input.env,
@@ -397,6 +400,7 @@ function commandCheckOptions(input: {
   };
   if (input.runner !== undefined) options.runner = input.runner;
   if (input.homeDir !== undefined) options.homeDir = input.homeDir;
+  if (input.access !== undefined) options.access = input.access;
   return options;
 }
 

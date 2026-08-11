@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import type { BuildHarnessLaunchRequest, HarnessLaunchPlan } from "@station/contracts";
 import {
+  type CommonLaunchEnvOptions,
   type CommonProviderDataInput,
   commonProviderData,
   harnessLaunchEnv,
@@ -8,13 +9,12 @@ import {
 } from "@station/harness-shared";
 import { PiHarnessProviderError } from "./errors.js";
 
-export type PiLaunchOptions = {
+export type PiLaunchOptions = Pick<
+  CommonLaunchEnvOptions,
+  "configPath" | "observerSocketPath" | "stateDir" | "hookSpoolDir" | "hookBin"
+> & {
   command?: string;
   extensionPath?: string;
-  configPath?: string;
-  observerSocketPath?: string;
-  stateDir?: string;
-  hookSpoolDir?: string;
 };
 
 export function buildPiLaunchPlan(
