@@ -25,6 +25,7 @@ export type ExternalCommandError = RuntimeSafeError & {
   tag: "ExternalCommandError";
   command: string;
   cwd?: string;
+  pathEnv?: string;
   exitCode?: number;
   signal?: string;
   stdoutSnippet?: string;
@@ -39,7 +40,7 @@ type SafeErrorChain = {
 
 type ExternalCommandFields = Pick<
   ExternalCommandDiagnosticDetail,
-  "command" | "cwd" | "exitCode" | "signal" | "stdoutSnippet" | "stderrSnippet"
+  "command" | "cwd" | "pathEnv" | "exitCode" | "signal" | "stdoutSnippet" | "stderrSnippet"
 >;
 
 const RuntimeSafeErrorViewSchema = SafeErrorSchema.strip();
@@ -261,6 +262,7 @@ function externalCommandFields(value: unknown): ExternalCommandFields | undefine
 
   const fields: ExternalCommandFields = { command: parsed.data.command };
   if (parsed.data.cwd !== undefined) fields.cwd = parsed.data.cwd;
+  if (parsed.data.pathEnv !== undefined) fields.pathEnv = parsed.data.pathEnv;
   if (parsed.data.exitCode !== undefined) fields.exitCode = parsed.data.exitCode;
   if (parsed.data.signal !== undefined) fields.signal = parsed.data.signal;
   if (parsed.data.stdoutSnippet !== undefined) fields.stdoutSnippet = parsed.data.stdoutSnippet;
@@ -292,6 +294,7 @@ function copyExternalCommandFields(
 ): void {
   target.command = fields.command;
   if (fields.cwd !== undefined) target.cwd = fields.cwd;
+  if (fields.pathEnv !== undefined) target.pathEnv = fields.pathEnv;
   if (fields.exitCode !== undefined) target.exitCode = fields.exitCode;
   if (fields.signal !== undefined) target.signal = fields.signal;
   if (fields.stdoutSnippet !== undefined) target.stdoutSnippet = fields.stdoutSnippet;
@@ -325,6 +328,7 @@ function copyExternalCommandDiagnosticDetail(
   };
   if (detail.provider !== undefined) copied.provider = detail.provider;
   if (detail.cwd !== undefined) copied.cwd = detail.cwd;
+  if (detail.pathEnv !== undefined) copied.pathEnv = detail.pathEnv;
   if (detail.exitCode !== undefined) copied.exitCode = detail.exitCode;
   if (detail.signal !== undefined) copied.signal = detail.signal;
   if (detail.stdoutSnippet !== undefined) copied.stdoutSnippet = detail.stdoutSnippet;

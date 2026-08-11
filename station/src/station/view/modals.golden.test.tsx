@@ -255,9 +255,8 @@ const CASES: ModalCase[] = [
     prepare: (state) => openRemoveWorktreeConfirmForRow(state, "run_wt_station_idle"),
     expect: [
       "Cannot delete worktree",
-      "This agent was started outside Station.",
-      "Station can see its status, but cannot stop it.",
-      "Stop or remove it from its original terminal or external tooling.",
+      "Station cannot stop the active agent.",
+      "Stop it in its terminal before deleting the worktree.",
       "Esc/Enter:close",
     ],
     reject: ["Delete (Y)", "Keep session (N)"],

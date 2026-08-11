@@ -100,6 +100,7 @@ function enrichedCommandDiagnostic(
   };
   const cwd = evidence?.cwd ?? input.cwd;
   if (cwd !== undefined) detail.cwd = cwd;
+  if (evidence?.pathEnv !== undefined) detail.pathEnv = evidence.pathEnv;
   if (evidence?.exitCode !== undefined) detail.exitCode = evidence.exitCode;
   if (evidence?.signal !== undefined) detail.signal = evidence.signal;
   if (evidence?.stdoutSnippet !== undefined) detail.stdoutSnippet = evidence.stdoutSnippet;

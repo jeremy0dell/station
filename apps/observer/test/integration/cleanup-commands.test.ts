@@ -570,7 +570,12 @@ describe("cleanup command handlers", () => {
   });
 
   it("force-removes an active worktree when the terminal-owned harness cannot stop natively", async () => {
-    const fixture = createFixture({ dirty: true, state: "working", harnessStopSupported: false });
+    const fixture = createFixture({
+      dirty: true,
+      state: "working",
+      harnessStopSupported: false,
+      terminalCloseable: true,
+    });
     await fixture.core.reconcile("pre-cleanup");
 
     const receipt = await fixture.queue.dispatch({
@@ -603,12 +608,45 @@ describe("cleanup command handlers", () => {
     ]);
     fixture.sqlite.close();
   });
+
+  it("refuses active worktree removal when neither harness nor terminal can stop it", async () => {
+    const fixture = createFixture({
+      dirty: true,
+      state: "working",
+      harnessStopSupported: false,
+      terminalCloseable: false,
+    });
+    await fixture.core.reconcile("pre-cleanup");
+
+    const receipt = await fixture.queue.dispatch({
+      type: "worktree.remove",
+      payload: {
+        worktreeId: "wt_web_cleanup",
+        projectId: "web",
+        expectedPath: "/tmp/station/web/cleanup",
+        expectedBranch: "cleanup",
+        expectedRegistrationIdentity: "git-registration:cleanup",
+        force: true,
+      },
+    });
+    await fixture.queue.drain();
+
+    await expect(fixture.persistence.getCommand(receipt.commandId)).resolves.toMatchObject({
+      status: "failed",
+      error: { code: "HARNESS_STOP_UNSUPPORTED" },
+    });
+    expect(fixture.harness.snapshot().stopped).toEqual([]);
+    expect(fixture.terminal.snapshot().closed).toEqual([]);
+    expect(fixture.worktree.snapshot().removed).toEqual([]);
+    fixture.sqlite.close();
+  });
 });
 
 function createFixture(input: {
   dirty?: boolean;
   state: "none" | "terminal" | "working" | "exited";
   harnessStopSupported?: boolean;
+  terminalCloseable?: boolean;
   terminalCloseTargetMissing?: boolean;
   projectRootPath?: boolean;
   terminalIntentRunner?: TerminalIntentRunner;
@@ -644,6 +682,9 @@ function createFixture(input: {
               worktreeId: "wt_web_cleanup",
               sessionId: "ses_web_cleanup",
               harnessRunId: "run_web_cleanup",
+              ...(input.terminalCloseable === undefined
+                ? {}
+                : { closeable: input.terminalCloseable }),
               now,
             }),
           ],

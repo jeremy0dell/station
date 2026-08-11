@@ -361,8 +361,15 @@ describe("TUI screen transitions", () => {
     });
   });
 
-  it("opens removal information without dispatching for an external unstoppable agent", () => {
-    const snapshot = createExternalAgentSnapshot();
+  it.each([
+    "external",
+    "station",
+  ] as const)("opens removal information without dispatching for an unstoppable %s agent", (origin) => {
+    const external = createExternalAgentSnapshot();
+    const snapshot = {
+      ...external,
+      sessions: external.sessions.map((session) => ({ ...session, origin })),
+    };
     const state = createInitialTuiState({ initialSnapshot: snapshot });
     const opened = handleTuiKey(handleTuiKey(state, { input: "X" }).state, { input: "4" });
 
@@ -384,6 +391,37 @@ describe("TUI screen transitions", () => {
     const escaped = handleTuiKey(opened.state, { input: "", escape: true });
     expect(escaped.state.screen).toEqual({ name: "dashboard" });
     expect(escaped.operations).toBeUndefined();
+  });
+
+  it("rechecks removal availability immediately before dispatch", () => {
+    const external = createExternalAgentSnapshot();
+    const codexHealth = external.providerHealth.codex;
+    if (codexHealth?.capabilities === undefined) {
+      throw new Error("External-agent fixture must expose Codex capabilities.");
+    }
+    const initiallyStoppable = {
+      ...external,
+      providerHealth: {
+        ...external.providerHealth,
+        codex: {
+          ...codexHealth,
+          capabilities: { ...codexHealth.capabilities, canStop: true },
+        },
+      },
+    };
+    const opened = handleTuiKey(
+      handleTuiKey(createInitialTuiState({ initialSnapshot: initiallyStoppable }), {
+        input: "X",
+      }).state,
+      { input: "4" },
+    ).state;
+    const changed = replaceSnapshot(opened, external);
+
+    const attempted = handleTuiKey(changed, { input: "y" });
+
+    expect(attempted.state.screen).toEqual({ name: "removeWorktree", step: "unavailable" });
+    expect(attempted.operations).toBeUndefined();
+    expect(attempted.state.localRows.pendingRemove).toEqual([]);
   });
 
   it("keeps removal confirmation when an external agent has an effective stop path", () => {

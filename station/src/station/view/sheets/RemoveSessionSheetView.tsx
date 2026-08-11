@@ -64,15 +64,13 @@ export function RemoveSessionSheetView({ screen, columns, rows }: RemoveSessionS
         minHeight={DETAIL_MIN_HEIGHT}
       >
         <SheetMessageLine width={contentWidth}>
-          This agent was started outside Station.
+          Station cannot stop the active agent.
         </SheetMessageLine>
         <SheetMessageLine width={contentWidth}>
-          Station can see its status, but cannot stop it.
+          Stop it in its terminal before deleting the worktree.
         </SheetMessageLine>
         <SheetLine width={contentWidth}> </SheetLine>
-        <SheetMessageLine width={contentWidth}>
-          Stop or remove it from its original terminal or external tooling.
-        </SheetMessageLine>
+        <SheetLine width={contentWidth}> </SheetLine>
         <SheetLine width={contentWidth}> </SheetLine>
         <SheetFooter width={contentWidth}>Esc/Enter:close</SheetFooter>
       </BottomSheetFrameView>

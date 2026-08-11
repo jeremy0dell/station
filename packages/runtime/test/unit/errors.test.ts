@@ -19,6 +19,7 @@ const commandDiagnostic = {
   operation: "provider.worktrunk.switch",
   command: "wt switch feature",
   cwd: "/tmp/project",
+  pathEnv: "/observer/bin:/usr/bin",
   exitCode: 1,
   stderrSnippet: "failed",
 };
@@ -188,6 +189,7 @@ describe("runtime safe error normalization", () => {
             command: "test",
             provider: undefined,
             cwd: undefined,
+            pathEnv: undefined,
             exitCode: undefined,
             signal: undefined,
             stdoutSnippet: undefined,
@@ -212,6 +214,7 @@ describe("runtime safe error normalization", () => {
     expect(Object.keys(command ?? {}).sort()).toEqual(["command", "operation", "type"]);
     expect(Object.hasOwn(command ?? {}, "provider")).toBe(false);
     expect(Object.hasOwn(command ?? {}, "cwd")).toBe(false);
+    expect(Object.hasOwn(command ?? {}, "pathEnv")).toBe(false);
     expect(Object.keys(removal ?? {}).sort()).toEqual([
       "canonicalPath",
       "observedBranch",
@@ -236,6 +239,7 @@ describe("runtime safe error normalization", () => {
         message: "External command failed.",
         command: "test",
         cwd: undefined,
+        pathEnv: undefined,
         exitCode: undefined,
         signal: undefined,
         stdoutSnippet: undefined,
@@ -254,6 +258,7 @@ describe("runtime safe error normalization", () => {
     ]);
     expect(Object.keys(diagnostic ?? {}).sort()).toEqual(["command", "operation", "type"]);
     expect(Object.hasOwn(diagnostic ?? {}, "cwd")).toBe(false);
+    expect(Object.hasOwn(diagnostic ?? {}, "pathEnv")).toBe(false);
     expect(Object.hasOwn(diagnostic ?? {}, "exitCode")).toBe(false);
   });
 });

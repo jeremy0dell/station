@@ -92,8 +92,9 @@ stn command get <commandId>
 
 `stn debug trace` searches existing bundles and structured logs. When a command
 error envelope includes diagnostics, the trace summary can include redacted
-external-command details: command, cwd, exit code, duration, and bounded
-stdout/stderr snippets. The compatibility `rootCauseCodes` field retains command, envelope, index, and
+external-command details: command, cwd, exit code, duration, bounded
+stdout/stderr snippets, and the effective `PATH` when executable lookup fails with
+`ENOENT`. The compatibility `rootCauseCodes` field retains command, envelope, index, and
 matching-log codes. Use `causeAssessment` for causal interpretation: only a
 correlated diagnostic-index root-cause declaration produces
 `explicit_root_cause`; an error code, retained signal, or exactly matched

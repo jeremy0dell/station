@@ -1,10 +1,18 @@
 import { parse } from "smol-toml";
 import { z } from "zod";
 import { loadConfigFromToml } from "../load/index.js";
+import { quoteTomlString } from "../tomlEdit.js";
 
 export type SetHarnessInstallHooksInTomlOptions = {
   harness: string;
   installHooks: boolean;
+  configPath?: string;
+  homeDir?: string;
+};
+
+export type SetHarnessCommandInTomlOptions = {
+  harness: string;
+  command: string;
   configPath?: string;
   homeDir?: string;
 };
@@ -20,6 +28,7 @@ type TomlLine = {
 
 const HEADER_SENTINEL = "__station_setup_install_hooks_table__";
 const InstallHooksAssignmentSchema = z.object({ install_hooks: z.boolean() }).strict();
+const CommandAssignmentSchema = z.object({ command: z.string() }).strict();
 
 export type HarnessConfigMutationError = Error & {
   tag: "HarnessConfigMutationError";
@@ -76,6 +85,47 @@ export async function setHarnessInstallHooksInToml(
     throw harnessConfigMutationError(
       "HARNESS_CONFIG_MUTATION_INVALID",
       `Could not set install_hooks in the harness.${options.harness} table.`,
+    );
+  }
+  return candidate;
+}
+
+export async function setHarnessCommandInToml(
+  source: string,
+  options: SetHarnessCommandInTomlOptions,
+): Promise<string> {
+  const lines = scanTomlLines(source);
+  const tableStart = lines.findIndex((line) => {
+    return line.code !== undefined && isHarnessTableHeader(line.code, options.harness);
+  });
+  if (tableStart === -1) {
+    throw harnessConfigMutationError(
+      "HARNESS_CONFIG_BLOCK_NOT_FOUND",
+      `Could not find the harness.${options.harness} table in config.toml.`,
+    );
+  }
+
+  const assignment = findCommandAssignment(
+    lines,
+    tableStart + 1,
+    nextTableLine(lines, tableStart + 1),
+  );
+  if (assignment === undefined) {
+    throw harnessConfigMutationError(
+      "HARNESS_CONFIG_MUTATION_INVALID",
+      `Could not find a single-line command in the harness.${options.harness} table.`,
+    );
+  }
+  const candidate = `${source.slice(0, assignment.valueStart)}${quoteTomlString(options.command)}${source.slice(assignment.valueEnd)}`;
+
+  const loadOptions: { configPath?: string; homeDir?: string } = {};
+  if (options.configPath !== undefined) loadOptions.configPath = options.configPath;
+  if (options.homeDir !== undefined) loadOptions.homeDir = options.homeDir;
+  const loaded = await loadConfigFromToml(candidate, loadOptions);
+  if (loaded.config.harness?.[options.harness]?.command !== options.command) {
+    throw harnessConfigMutationError(
+      "HARNESS_CONFIG_MUTATION_INVALID",
+      `Could not set command in the harness.${options.harness} table.`,
     );
   }
   return candidate;
@@ -190,6 +240,31 @@ function findInstallHooksAssignment(
   return undefined;
 }
 
+function findCommandAssignment(
+  lines: readonly TomlLine[],
+  start: number,
+  end: number,
+): { valueStart: number; valueEnd: number } | undefined {
+  for (let index = start; index < end; index += 1) {
+    const line = lines[index];
+    if (line?.code === undefined) continue;
+    const equals = topLevelEquals(line.code);
+    if (equals === -1) continue;
+    try {
+      if (!CommandAssignmentSchema.safeParse(parse(line.code)).success) continue;
+    } catch {
+      continue;
+    }
+    const value = singleLineStringValueRange(line.code, equals + 1);
+    if (value === undefined) continue;
+    return {
+      valueStart: line.start + value.start,
+      valueEnd: line.start + value.end,
+    };
+  }
+  return undefined;
+}
+
 function parseAnyTableHeader(code: string): boolean {
   const trimmed = code.trim();
   if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return false;
@@ -255,6 +330,29 @@ function booleanValueRange(
   return input.slice(valueEnd).trim().length === 0
     ? { start: valueStart, end: valueEnd }
     : undefined;
+}
+
+function singleLineStringValueRange(
+  input: string,
+  start: number,
+): { start: number; end: number } | undefined {
+  let valueStart = start;
+  while (input[valueStart] === " " || input[valueStart] === "\t") valueStart += 1;
+  const quote = input[valueStart];
+  if (quote !== '"' && quote !== "'") return undefined;
+
+  for (let index = valueStart + 1; index < input.length; index += 1) {
+    if (quote === '"' && input[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (input[index] !== quote) continue;
+    const valueEnd = index + 1;
+    return input.slice(valueEnd).trim().length === 0
+      ? { start: valueStart, end: valueEnd }
+      : undefined;
+  }
+  return undefined;
 }
 
 function endQuoteRun(input: string, start: number, quote: '"' | "'"): number {

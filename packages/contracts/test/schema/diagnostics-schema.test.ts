@@ -272,4 +272,16 @@ describe("diagnostics schemas", () => {
         .success,
     ).toBe(false);
   });
+
+  it("accepts an empty PATH in strict external-command evidence", () => {
+    const detail = {
+      type: "external_command",
+      operation: "provider.pi.health",
+      command: "pi --version",
+      pathEnv: "",
+    };
+
+    expect(DiagnosticDetailSchema.parse(detail)).toEqual(detail);
+    expect(DiagnosticDetailSchema.safeParse({ ...detail, environment: {} }).success).toBe(false);
+  });
 });

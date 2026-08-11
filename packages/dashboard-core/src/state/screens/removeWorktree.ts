@@ -63,14 +63,13 @@ export function handleRemoveWorktreeKey(state: DashboardState, key: TuiKey): Tui
   return handleConfirmKey(state, key);
 }
 
-export function isExternalAgentRemovalUnavailable(
+export function isAgentRemovalUnavailable(
   row: DashboardSessionRow,
   snapshot: DashboardSnapshotView,
 ): boolean {
   return snapshot.sessions.some(
     (session) =>
       session.worktreeId === row.worktree.id &&
-      session.origin === "external" &&
       isRunningAgentState(session.status.value) &&
       snapshot.providerHealth[session.harness.provider]?.capabilities?.canStop === false &&
       session.terminal?.closeable !== true,
@@ -93,7 +92,7 @@ export function openRemoveWorktreeConfirmForRow(
     return state;
   }
   const row = sessionRow.worktree;
-  if (isExternalAgentRemovalUnavailable(sessionRow, snapshot)) {
+  if (isAgentRemovalUnavailable(sessionRow, snapshot)) {
     return {
       ...state,
       screen: {
@@ -176,7 +175,7 @@ function deleteRemoveWorktree(
     };
   }
   const row = sessionRow.worktree;
-  if (isExternalAgentRemovalUnavailable(sessionRow, snapshot)) {
+  if (isAgentRemovalUnavailable(sessionRow, snapshot)) {
     return {
       state: {
         ...state,

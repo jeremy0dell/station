@@ -266,7 +266,7 @@ export async function resolveExecutablePath(
 
 export function externalCommandErrorFromUnknown(
   error: unknown,
-  input: Pick<ExternalCommandInput, "command" | "args" | "cwd">,
+  input: Pick<ExternalCommandInput, "command" | "args" | "cwd" | "env" | "unsetEnv">,
   cwdMissing = false,
 ): ExternalCommandError {
   const fallback = externalCommandFallback("EXTERNAL_COMMAND_FAILED", "External command failed.");
@@ -306,7 +306,8 @@ export function externalCommandErrorFromUnknown(
     normalized.stderrSnippet = stderrSnippet;
   }
 
-  normalized.diagnosticDetails = [externalCommandDiagnosticDetail(normalized)];
+  const pathEnv = normalized.code === "ENOENT" ? externalCommandEnvironment(input).PATH : undefined;
+  normalized.diagnosticDetails = [externalCommandDiagnosticDetail(normalized, pathEnv)];
 
   return normalized;
 }
@@ -414,7 +415,7 @@ function copySafeErrorContext(target: ExternalCommandError, safeError: RuntimeSa
   if (safeError.diagnosticId !== undefined) target.diagnosticId = safeError.diagnosticId;
 }
 
-function externalCommandDiagnosticDetail(error: ExternalCommandError) {
+function externalCommandDiagnosticDetail(error: ExternalCommandError, pathEnv: string | undefined) {
   const detail: NonNullable<RuntimeSafeError["diagnosticDetails"]>[number] = {
     type: "external_command",
     operation: `externalCommand.${error.command.split(" ")[0] ?? "command"}`,
@@ -422,6 +423,7 @@ function externalCommandDiagnosticDetail(error: ExternalCommandError) {
   };
   if (error.provider !== undefined) detail.provider = error.provider;
   if (error.cwd !== undefined) detail.cwd = error.cwd;
+  if (pathEnv !== undefined) detail.pathEnv = pathEnv;
   if (error.exitCode !== undefined) detail.exitCode = error.exitCode;
   if (error.signal !== undefined) detail.signal = error.signal;
   if (error.stdoutSnippet !== undefined) detail.stdoutSnippet = error.stdoutSnippet;

@@ -1,1 +1,1 @@
-export { setHarnessInstallHooksInToml } from "./installHooks.js";
+export { setHarnessCommandInToml, setHarnessInstallHooksInToml } from "./toml.js";

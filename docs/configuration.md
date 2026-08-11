@@ -172,6 +172,11 @@ Station extension in process and has no equivalent external hook artifact; Stati
 canonical `stn-ingress` launcher through `STATION_INGRESS_BIN` on each Pi launch so event delivery
 is not dependent on the pane or tmux server `PATH`.
 
+When setup updates an existing config, it replaces a selected harness's exact
+canonical bare command (for example, `pi`) with the different absolute executable
+that setup resolved. Custom aliases, authored paths, unselected harnesses, and
+unresolved commands remain byte-for-byte unchanged.
+
 Artifact preparation is not runtime delivery proof. In particular, Codex may
 still require review of Station's current hook definition through `/hooks`.
 Setup neither bypasses nor verifies that review.
