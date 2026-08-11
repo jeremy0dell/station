@@ -26,11 +26,8 @@ import {
   DashboardScrollIndicatorView,
   DashboardTableHeaderView,
 } from "./DashboardTableHeaderView.js";
-import {
-  GroupFrameEndView,
-  GroupFrameRailView,
-  GroupHeaderView,
-} from "./GroupHeaderView.js";
+import { GroupFrameEndView, GroupFrameRailView } from "./GroupFrameView.js";
+import { GroupHeaderView } from "./GroupHeaderView.js";
 import { ProjectHeaderView } from "./ProjectHeaderView.js";
 import { SegmentLinkTargets, Segments } from "./segments.js";
 import { Throbber } from "./Throbber.js";

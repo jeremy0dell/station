@@ -20,16 +20,12 @@ import {
   useStationHoverState,
   useStationMouse,
 } from "./stationMouseContext.js";
+import { GroupFrameText, type GroupFrameFocus } from "./GroupFrameView.js";
 
 const QUICK_SESSION_LABEL = "[qs]";
 const MENU_LABEL = "[▾]";
 const EXPANDED_FIXED_WIDTH = 1 + 1 + QUICK_SESSION_LABEL.length + 1 + MENU_LABEL.length + 1;
 const COLLAPSED_FIXED_WIDTH = 1 + 1 + QUICK_SESSION_LABEL.length + 1 + MENU_LABEL.length;
-
-type GroupFrameFocus = {
-  focusedHeader: boolean;
-  containsFocusedRow: boolean;
-};
 
 export function GroupHeaderView({
   columns,
@@ -254,52 +250,6 @@ function GroupActionTarget({
   );
 }
 
-export function GroupFrameRailView({
-  text,
-  focusedHeader,
-  containsFocusedRow,
-}: {
-  text: string;
-  focusedHeader: boolean;
-  containsFocusedRow: boolean;
-}) {
-  return (
-    <GroupFrameText
-      text={text}
-      focus={{ focusedHeader, containsFocusedRow }}
-    />
-  );
-}
-
-export function GroupFrameEndView({
-  columns,
-  focusedHeader,
-  containsFocusedRow,
-}: {
-  columns: number;
-  focusedHeader: boolean;
-  containsFocusedRow: boolean;
-}) {
-  const width = Math.max(1, Math.floor(columns));
-  const line = width < 2 ? truncateCells("╰", width) : `╰${"─".repeat(width - 2)}╯`;
-  return (
-    <GroupFrameText
-      text={line}
-      focus={{ focusedHeader, containsFocusedRow }}
-    />
-  );
-}
-
-function GroupFrameText({ text, focus }: { text: string; focus: GroupFrameFocus }) {
-  const theme = useStationTheme();
-  const presentation = groupFramePresentation(theme, focus);
-  return (
-    <text flexShrink={0} fg={presentation.fg} attributes={presentation.attributes}>
-      {text}
-    </text>
-  );
-}
-
 type GroupIdentityLayout = {
   prefix: string;
   name: string;
@@ -331,25 +281,6 @@ function groupIdentityLayout(
     name: visibleName,
     count: "",
     width: stringWidth(visiblePrefix) + stringWidth(visibleName),
-  };
-}
-
-function groupFramePresentation(theme: StationTheme, focus: GroupFrameFocus) {
-  if (focus.focusedHeader) {
-    return {
-      fg: toOpenTuiColor(theme.status.working),
-      attributes: TextAttributes.NONE,
-    };
-  }
-  if (focus.containsFocusedRow) {
-    return {
-      fg: toOpenTuiColor(theme.status.working),
-      attributes: TextAttributes.DIM,
-    };
-  }
-  return {
-    fg: toOpenTuiColor(theme.interaction.hairline),
-    attributes: TextAttributes.NONE,
   };
 }
 
